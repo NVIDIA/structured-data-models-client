@@ -68,7 +68,7 @@ INTERNAL_ALLOWLIST = {
     'NOTICE',
     'CHANGELOG.md',
     '.gitlab-ci.yml',
-    'docs/architecture.md',
+    'docs/about/architecture.md',
 }
 
 SHIPPED_SUFFIXES = {
@@ -89,7 +89,13 @@ def tracked_files() -> list[Path]:
     out = subprocess.check_output(
         ['git', '-C', str(REPO_ROOT), 'ls-files'], text=True
     )
-    return [REPO_ROOT / line for line in out.splitlines() if line]
+    # A file can be tracked and already deleted in the working tree; the scan
+    # is about what is there now.
+    return [
+        path
+        for path in (REPO_ROOT / line for line in out.splitlines() if line)
+        if path.is_file()
+    ]
 
 
 def check_spdx() -> int:

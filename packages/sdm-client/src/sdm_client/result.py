@@ -15,8 +15,10 @@ union. Here an explanation is an output field like any other:
 
 The frame's shape depends on the **task**, not the model. Classification and
 multiclass both give one row per entity -- multiclass carries a probability per
-class as columns rather than a row per class -- while ranking gives ``k`` rows
-per entity and forecasting one per step.
+class as columns rather than a row per class -- while forecasting gives one row per
+step. Ranking is the exception to the row-per-answer rule: the ``k`` ranked
+candidates arrive as a **list in one row**, under ``rankings``, because
+expanding them would make the frame's key no longer identify a row.
 
 Every row carries ``row_index``. It also carries ``id`` when the model has an
 entity key -- a single-table request may have none. **Join on the key when it

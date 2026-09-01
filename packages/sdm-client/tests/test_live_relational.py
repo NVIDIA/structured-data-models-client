@@ -181,19 +181,6 @@ def test_the_tabular_model_refuses_this_request_without_sending_it(
 
 
 @requires_relational
-def test_an_inference_option_the_endpoint_refuses_is_named_locally(query):
-    with pytest.raises(UnsupportedRequestError) as error:
-        request = query.materialize(
-            indices=[0, 1], inference_config={'output_type': 'quantiles'}
-        )
-        adapter_outputs = ('prediction',)
-        from sdm_client.adapters.relational import RelationalAdapter
-
-        list(RelationalAdapter().prediction_plan(request, adapter_outputs))
-    assert 'output_type' in str(error.value)
-
-
-@requires_relational
 def test_asking_for_a_field_the_model_does_not_produce_is_refused(
     client, query
 ):

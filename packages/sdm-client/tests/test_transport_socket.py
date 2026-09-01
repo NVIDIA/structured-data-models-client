@@ -30,6 +30,11 @@ from sdm_client.core.transport import (
 )
 from sdm_client.errors import NimRequestError, StructuredDataError
 
+# These bind a local socket, which a sandboxed or locked-down runner may
+# refuse. Marked so such a runner can deselect them rather than report a
+# failure it cannot act on.
+pytestmark = pytest.mark.socket
+
 _REFUSED_URL = 'http://127.0.0.1:1'
 _RETRY_AFTER_SECONDS = 3600
 _RETRY_AFTER_CAP_APPLIES = (

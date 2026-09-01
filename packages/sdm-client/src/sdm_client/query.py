@@ -82,9 +82,9 @@ def _engine() -> Any:
 class PredictiveQuery:
     r"""A question in PQL, bound to the tables that can answer it.
 
-    Constructing one parses and validates the query against the schema, so a
-    query that names a column that does not exist fails here rather than at
-    the endpoint.
+    Constructing one binds the text to a schema; the query is resolved against
+    that schema when it is materialized, which is also where a query naming a
+    column that does not exist is refused.
     """
 
     def __init__(
@@ -293,7 +293,10 @@ class PredictiveQuery:
         run_mode = _run_mode_for(num_context_samples)
 
         model = self._engine_model(engine)
-        query_def = model._parse_query(self.text)
+        # Resolve here rather than letting the engine default to its own
+        # profile: the profile is a public argument, so both paths have to
+        # honour it or it means different things depending on which was used.
+        query_def = self._resolve()
         task = model._get_task_table(
             query=query_def,
             indices=list(indices),

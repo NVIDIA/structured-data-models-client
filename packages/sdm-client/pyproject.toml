@@ -65,4 +65,7 @@ extend = "../../pyproject.toml"
 testpaths = ["tests"]
 xfail_strict = true
 addopts = ["--color=yes"]
-markers = ["live_nim: needs a running NIM"]
+markers = [
+    "live_nim: needs a running NIM",
+    "socket: binds a local socket; deselect where that is not permitted",
+]

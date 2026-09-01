@@ -105,13 +105,27 @@ def _validate_url(url: str, api_key: str | None) -> None:
         )
     if not parsed.hostname:
         raise ValueError(f'url is missing a host, got {shown!r}')
+    # A base URL is a scheme, a host and at most a path prefix. Routes are
+    # appended to this string, so a query or fragment produces a malformed
+    # request target -- and a credential placed there travels in the request
+    # line, where redaction never sees it.
+    if parsed.query or parsed.fragment:
+        raise ValueError(
+            'url must be a base endpoint without a query string or fragment; '
+            'pass a credential as api_key rather than in the URL'
+        )
+    # Userinfo is a credential too: `requests` turns it into an
+    # `Authorization: Basic` header. Checking only api_key let
+    # `http://user:secret@host` send it in the clear.
+    carries_credential = bool(api_key or parsed.username or parsed.password)
     if (
-        api_key
+        carries_credential
         and parsed.scheme == 'http'
         and parsed.hostname.lower() not in _LOCAL_HOSTS
     ):
+        what = 'an API key' if api_key else 'the credential in this URL'
         raise ValueError(
-            f'refusing to send an API key over plaintext HTTP; use an '
+            f'refusing to send {what} over plaintext HTTP; use an '
             f'https:// URL (or a localhost endpoint), got {shown!r}'
         )
 

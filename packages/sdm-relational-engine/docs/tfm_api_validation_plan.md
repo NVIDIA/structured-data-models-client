@@ -1,7 +1,7 @@
 # TFM API validation plan
 
 This plan lists the minimum validations needed to keep
-`scripts/generate_tfm_api.py`, the generated `sdm_relational_engine/client/generated/tfm_api.py`
+`scripts/generate_sdm_api.py` at the repository root, the generated `sdm_api/generated/tfm_api.py`
 models, and the handwritten client adapters aligned with the canonical OpenAPI spec
 from the `structured-data-api` repo at `../structured-data-api/nim-sd.openapi.yaml`.
 

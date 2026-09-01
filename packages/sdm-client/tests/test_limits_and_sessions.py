@@ -40,8 +40,13 @@ class _Gathered:
         self.inference: dict = {}
 
 
-def test_the_declared_limits_are_the_ones_the_endpoint_enforces():
-    """Read off the relational NIM; a change here should be deliberate."""
+def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
+    """A pin, not a probe.
+
+    These numbers were read from the relational NIM. This asserts they have
+    not drifted in the client, which is all it can do offline -- the live
+    suites are what check the endpoint still agrees.
+    """
     assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_max'] == 1_000
@@ -164,3 +169,66 @@ def test_the_relational_model_declares_the_deployment_it_was_read_from():
     # Only these inference options reach the wire; the engine defaults to more.
     assert 'output_type' not in runtime.inference_options
     assert 'num_estimators' in runtime.inference_options
+
+
+def test_an_inference_option_the_endpoint_refuses_is_named_locally():
+    """The engine defaults to sending more than this deployment accepts.
+
+    Dropping its defaults is safe; dropping something the caller asked for is
+    not, so that case is named. This needs no endpoint, which is why it lives
+    here rather than in the live suite.
+    """
+    request = _Gathered(payload(predict_rows=1, context_rows=10))
+    request.inference = {'inference_config': {'output_type': 'quantiles'}}
+    request.requested_inference = {
+        'inference_config': {'output_type': 'quantiles'}
+    }
+    request.payloads[0]['inference'] = {
+        'inference_config': {'output_type': 'quantiles', 'num_estimators': 1}
+    }
+    with pytest.raises(UnsupportedRequestError) as error:
+        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    assert 'output_type' in str(error.value)
+
+
+def test_an_engine_default_the_endpoint_refuses_is_dropped_quietly():
+    """It was never asked for, so trimming it changes nothing the caller wanted."""
+    request = _Gathered(payload(predict_rows=1, context_rows=10))
+    request.payloads[0]['inference'] = {
+        'inference_config': {'output_type': 'quantiles', 'num_estimators': 1}
+    }
+    plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    config = plans[0]['inference']['inference_config']
+    assert config == {'num_estimators': 1}
+
+
+def test_the_preflight_runs_through_a_real_materialized_request():
+    """The fakes above are tight, but they can drift from the real shape.
+
+    This one builds the request the same way ``materialize`` does, so the
+    adapter's preflight and the request type cannot diverge unnoticed.
+    """
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+
+    schema = Schema.from_data({'users': pd.DataFrame({'user_id': [1, 2]})})
+    request = Request.materialized(
+        payloads=(payload(predict_rows=3, context_rows=50),),
+        schema=schema,
+        query='PREDICT ... FOR EACH users.user_id',
+        indices=[1, 2, 3],
+    )
+    assert request.payloads
+    assert request.query.startswith('PREDICT')
+
+    plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    assert len(plans) == 1
+    assert plans[0]['model'] == 'kumo-relational'
+
+    with pytest.raises(UnsupportedRequestError):
+        list(
+            RelationalAdapter().prediction_plan(
+                request, ('prediction', 'explanation')
+            )
+        )

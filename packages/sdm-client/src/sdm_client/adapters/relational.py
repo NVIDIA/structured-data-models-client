@@ -243,17 +243,22 @@ class RelationalAdapter:
 def _named_entities(
     items: tuple[Any, ...], payload: dict[str, Any] | None
 ) -> list[Any]:
-    """Put the caller's entity back on each row.
+    """Put the caller's entity back on each row, and check it belongs there.
 
     Entity values never travel: the engine sends an opaque reference and an
     internal instance id, so a response's ``id`` is the transport key rather
-    than the user's key. The reference column carries the position of the
-    entity in what was asked for, and the graph holds the value at that
-    position, so the two together restore it.
+    than the user's key. The reference column carries the entity, and the
+    instance-id column carries the key the endpoint answers under, so the two
+    together restore the mapping.
 
     The mapping is read from the payload that produced this response, so a run
-    split into several calls maps each batch against its own rows rather than
-    against the first batch's.
+    split into several calls maps each batch against its own rows.
+
+    **A mismatch is an error, not a silent pass.** Rewriting an id is exactly
+    the operation that can misattribute an answer, so a row index that is
+    missing, out of range, repeated where it should not be, or whose id does
+    not match the instance this batch asked about, is refused rather than
+    handed back looking ordinary.
     """
     import dataclasses
 
@@ -269,13 +274,57 @@ def _named_entities(
     if reference is None:
         return list(items)
 
-    position = columns.index(reference)
-    entities = [row[position] for row in rows]
-    named = []
+    entities = [row[columns.index(reference)] for row in rows]
+    instances = (
+        [row[columns.index('instance_id')] for row in rows]
+        if 'instance_id' in columns
+        else None
+    )
+    # Forecasting answers several steps for one row, so a repeated index is
+    # expected there and nowhere else.
+    forecasting = any(
+        getattr(item, 'forecast_step', None) is not None for item in items
+    )
+
+    named: list[Any] = []
+    seen: set[int] = set()
     for item in items:
         index = item.row_index
-        if index is not None and 0 <= index < len(entities):
-            named.append(dataclasses.replace(item, id=str(entities[index])))
-        else:
-            named.append(item)
+        if index is None:
+            raise StructuredDataError(
+                'the response is missing a row_index, so its answer cannot be '
+                'attributed to an entity',
+                code='INVALID_RESPONSE',
+            )
+        if not 0 <= index < len(entities):
+            raise StructuredDataError(
+                f'the response names row_index {index}, and this batch asked '
+                f'about {len(entities)} rows',
+                code='INVALID_RESPONSE',
+            )
+        if not forecasting:
+            if index in seen:
+                raise StructuredDataError(
+                    f'the response answers row_index {index} more than once',
+                    code='INVALID_RESPONSE',
+                )
+            seen.add(index)
+        if (
+            instances is not None
+            and item.id is not None
+            and str(item.id) != str(instances[index])
+        ):
+            raise StructuredDataError(
+                f'the response pairs row_index {index} with id {item.id!r}, '
+                f'and this batch asked about {instances[index]!r} there',
+                code='INVALID_RESPONSE',
+            )
+        named.append(dataclasses.replace(item, id=str(entities[index])))
+
+    if not forecasting and len(seen) != len(entities):
+        missing = sorted(set(range(len(entities))) - seen)
+        raise StructuredDataError(
+            f'the response left row(s) {missing} unanswered',
+            code='INVALID_RESPONSE',
+        )
     return named

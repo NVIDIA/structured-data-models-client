@@ -492,12 +492,15 @@ def to_graph_definition(schema: Schema) -> Any:
 
     groups = [
         ColumnKeyGroup(
+            # The group is documented as sorted and deduped, and a ColumnKey
+            # has no ordering of its own, so sort on what it holds.
             columns=tuple(
                 sorted(
                     (
                         ColumnKey(link.source_table, link.source_column),
                         ColumnKey(link.target_table, link.target_column),
-                    )
+                    ),
+                    key=lambda key: (key.table_name, key.col_name),
                 )
             )
         )
