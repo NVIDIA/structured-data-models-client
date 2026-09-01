@@ -139,6 +139,7 @@ One hazard to document: two distributions would provide `predictive_query`, so n
 | `GraphDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
 | `Profile`, `Capabilities` | `sdm-pql` | What a model may be asked, as data. §6. |
 | Wire request/response, `InferenceSpec`, `OutputSpec` | `sdm-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
+| The DataFrame→wire encoder (`wire/`) | `sdm-client` | **Corrected during phase 2.** §8 first put this in `sdm-api`, but `wire/dtypes.py` imports numpy and pandas, which would cost `sdm-api` its zero-dependency property — the reason the split exists. `sdm-api` keeps the vocabulary; encoding a frame is client-side work. |
 | `Schema`, `Request`, `PredictionResult` | `sdm-client` | The public surface. |
 
 ---
@@ -453,7 +454,7 @@ Sources, named exactly:
 | ⟂ · `packages/kumo-relational-client/src/kumo_relational_client/adapters/relational.py` | `sdm_client/adapters/relational.py` | returns the unified `Request`/`PredictionResult` |
 | ⟂ · `.../kumo_relational_client/core/transport.py` | `sdm_client/core/transport.py` | none |
 | `kumo-tfm-nims/nvidia-sdfm-sdk` · `main` @ `befe915` · `packages/nemotron-predict-client/src/nemotron_predict/adapters/tabular.py` | `sdm_client/adapters/tabular.py` | model id `nemotron-tabular` → `kumo-tabular` |
-| ⟂ · `.../nemotron_predict/wire/{__init__,dtypes,tables}.py` | `sdm-api` | none |
+| ⟂ · `.../nemotron_predict/wire/{__init__,dtypes,tables}.py` | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
 | `kumo/predictive-query-language` · `main` · `src/predictive_query/` | `sdm-pql` | none — verbatim |
 
 Two hard-won behaviours to carry over deliberately: every redirect hop is closed rather than drained,

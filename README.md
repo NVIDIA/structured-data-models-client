@@ -11,9 +11,8 @@ This client builds the request, sends it to a NIM, and gives you back a
 DataFrame. Inference runs in the NIM, so this package downloads no weights and
 needs no GPU.
 
-> **Not shipped yet.** The sample below is the API this repository is being
-> built toward, and `sdm_client` does not exist on disk today. What *is*
-> installable right now is `sdm-api` and `sdm-pql`; see Status.
+> The relational path in this sample arrives in phase 4. The tabular path
+> below it works today against a running NIM.
 
 ```python
 from sdm_client import (
@@ -46,8 +45,8 @@ against it phase by phase. Nothing has been released.
 | Phase | | |
 |---|---|---|
 | 1 | Foundation — `sdm-api`, `sdm-pql`, CI | ✅ |
-| 2 | Client and the tabular model | in progress |
-| 3 | Connectors | |
+| 2 | Client and the tabular model | ✅ |
+| 3 | Connectors | in progress |
 | 4 | The relational model | |
 | 5 | `fit` and explanations | |
 | 6 | Docs and end-to-end | |

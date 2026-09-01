@@ -1,0 +1,172 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""The payload that goes out, and the frame that comes back."""
+
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+from sdm_api.generated.tfm_api import PredictionItem
+
+from sdm_client import PredictionResult, Request
+from sdm_client.adapters.tabular import TabularAdapter
+
+
+def request_for(task: str = 'classification', **kwargs) -> Request:
+    n = 12
+    context = pd.DataFrame(
+        {
+            'row_id': range(n),
+            'age': [20.0 + i for i in range(n)],
+            'label': [i % 2 for i in range(n)],
+        }
+    )
+    predict = pd.DataFrame({'row_id': [90, 91], 'age': [33.0, 41.0]})
+    return Request(
+        context=context,
+        predict=predict,
+        target='label',
+        task=task,
+        **kwargs,
+    )
+
+
+def envelope(task: str = 'classification', outputs=('prediction',)) -> dict:
+    return next(TabularAdapter().prediction_plan(request_for(task), outputs))
+
+
+def test_the_envelope_carries_every_section_the_contract_requires():
+    body = envelope()
+    for section in ('model', 'task', 'schema', 'context', 'predict', 'output'):
+        assert section in body, f'missing {section}'
+    assert body['model'] == 'kumo-tabular'
+
+
+def test_tables_are_encoded_as_the_arrays_format():
+    body = envelope()
+    table = body['context']['instance_table']
+    assert table['format'] == 'arrays'
+    assert table['columns'] == ['row_id', 'age', 'label']
+    assert len(table['rows']) == 12
+    assert table['rows'][0] == [0, 20.0, 0]
+
+
+def test_the_target_dtype_matches_the_schema_dtype_for_that_column():
+    """They must be equal; the endpoint answers 422 when they are not."""
+    body = envelope()
+    target = body['task']['target']
+    declared = body['schema']['instance_table']['columns'][
+        target['column_name']
+    ]
+    assert target['dtype'] == declared['dtype']
+
+
+def test_a_classification_target_is_declared_categorical_not_numerical():
+    """Inference is task-agnostic, so an integer label arrives numerical."""
+    columns = envelope('classification')['schema']['instance_table']['columns']
+    assert columns['label']['stype'] == 'categorical'
+
+
+def test_a_regression_target_is_not_forced_to_categorical():
+    columns = envelope('regression')['schema']['instance_table']['columns']
+    assert columns['label']['stype'] == 'numerical'
+
+
+def test_the_task_kind_is_sent_as_given_and_never_narrowed():
+    assert envelope('classification')['task']['kind'] == 'classification'
+
+
+def test_a_session_pins_the_context_and_scoring_sends_only_the_rows():
+    adapter = TabularAdapter()
+    request = request_for()
+    pinned = adapter.session_plan(request, ('prediction',))
+    assert set(pinned) == {'model', 'task', 'schema', 'context', 'metadata'}
+    assert 'predict' not in pinned
+
+    scoring = next(adapter.session_prediction_plan(request, ('prediction',)))
+    assert set(scoring) == {'predict', 'output', 'metadata'}
+    assert 'context' not in scoring
+
+
+def test_every_request_carries_an_id_that_correlates_it_with_server_logs():
+    assert envelope()['metadata']['request_id'].startswith('sdm-')
+
+
+def test_inference_knobs_travel_only_when_given():
+    assert 'inference' not in envelope()
+    request = request_for(inference={'num_context_samples': 500})
+    body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    assert body['inference'] == {'num_context_samples': 500}
+
+
+def result_with(*items: dict) -> PredictionResult:
+    return PredictionResult(
+        model='kumo-tabular',
+        request_id='r-1',
+        items=[PredictionItem.from_dict(item) for item in items],
+        metadata={},
+    )
+
+
+def test_a_classification_result_spreads_probabilities_into_columns():
+    frame = result_with(
+        {
+            'row_index': 0,
+            'prediction': 0,
+            'probabilities': {'0': 0.6, '1': 0.4},
+        },
+        {
+            'row_index': 1,
+            'prediction': 1,
+            'probabilities': {'0': 0.3, '1': 0.7},
+        },
+    ).to_pandas()
+    assert list(frame.columns) == [
+        'row_index',
+        'prediction',
+        'probability_0',
+        'probability_1',
+    ]
+    assert frame.loc[0, 'probability_0'] == pytest.approx(0.6)
+
+
+def test_a_regression_result_does_not_invent_probability_columns():
+    frame = result_with(
+        {'row_index': 0, 'prediction': 1.5},
+        {'row_index': 1, 'prediction': 2.5},
+    ).to_pandas()
+    assert 'probability_0' not in frame.columns
+    assert list(frame['prediction']) == [1.5, 2.5]
+
+
+def test_rows_come_back_ordered_by_row_index_whatever_order_they_arrived_in():
+    """The endpoint is not required to preserve request order."""
+    frame = result_with(
+        {'row_index': 2, 'prediction': 'c'},
+        {'row_index': 0, 'prediction': 'a'},
+        {'row_index': 1, 'prediction': 'b'},
+    ).to_pandas()
+    assert list(frame['row_index']) == [0, 1, 2]
+    assert list(frame['prediction']) == ['a', 'b', 'c']
+
+
+def test_the_entity_key_is_carried_when_the_model_has_one():
+    frame = result_with(
+        {'row_index': 0, 'id': 'user-7', 'prediction': 1}
+    ).to_pandas()
+    assert frame.loc[0, 'id'] == 'user-7'
+
+
+def test_an_explanation_is_absent_rather_than_a_different_return_type():
+    result = result_with({'row_index': 0, 'prediction': 1})
+    assert result.explanation is None
+    assert isinstance(result.to_pandas(), pd.DataFrame)
+
+
+def test_quantiles_are_spread_under_a_readable_prefix():
+    frame = result_with(
+        {'row_index': 0, 'prediction': 2.0, 'quantiles': {'0.5': 2.0}}
+    ).to_pandas()
+    assert 'quantile_0.5' in frame.columns

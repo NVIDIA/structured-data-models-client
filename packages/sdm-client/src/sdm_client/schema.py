@@ -1,0 +1,440 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""The tables a request is about, and what the model should make of them.
+
+A :class:`Schema` holds your tables, what each column means, and how the tables
+relate. One table or many is the same object -- a single-table model is the
+degenerate case of the same shape, not a second system, which is why this is
+not called a graph.
+
+Everything is inferred. You override only where inference is wrong:
+
+>>> schema = Schema.from_data({'users': users_df})
+>>> schema['users'].primary_key = 'user_id'
+>>> schema['users']['churn'].stype = 'categorical'
+
+Nothing here contacts a model. Inference reads your frames locally.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+import pandas as pd
+
+from sdm_client.errors import StructuredDataError
+from sdm_client.wire import UNTYPED, infer_tfm_dtype
+
+# Semantic types this client can declare. These are the contract's, and match
+# ``predictive_query.Stype`` one for one.
+SEMANTIC_TYPES = frozenset(
+    {
+        'ID',
+        'categorical',
+        'multicategorical',
+        'numerical',
+        'sequence',
+        'text',
+        'timestamp',
+    }
+)
+
+# Above this many distinct values, a string column is prose rather than a set
+# of labels. The exact number matters less than having one: a model encodes
+# the two differently, and 'text' on a 3-value column wastes the signal.
+_MAX_CATEGORICAL_CARDINALITY = 64
+
+# A column is only a candidate identifier if nearly every value is distinct.
+# Exactly 1.0 would reject a key with a single duplicated row, which is common
+# in an extract and still the column the user means.
+_KEY_UNIQUENESS = 0.99
+
+_KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
+
+
+@dataclass
+class Column:
+    r"""One column, and what the model should treat it as.
+
+    Attributes:
+        name: The column name, as it appears in the frame.
+        dtype: The wire dtype, e.g. ``'int64'`` or ``'timestamp[us]'``. Inferred
+            from the values; correcting it is rarely necessary.
+        stype: What the column *means* -- ``'numerical'``, ``'categorical'``,
+            ``'ID'``, ``'text'``, ``'timestamp'``. This is the one worth
+            correcting: it decides how the model encodes the column.
+    """
+
+    name: str
+    dtype: str
+    stype: str
+
+    def __post_init__(self) -> None:
+        self._check_stype(self.stype)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        if key == 'stype':
+            self._check_stype(value)
+        object.__setattr__(self, key, value)
+
+    @staticmethod
+    def _check_stype(value: Any) -> None:
+        if value not in SEMANTIC_TYPES:
+            raise StructuredDataError(
+                f'{value!r} is not a semantic type; use one of '
+                f'{sorted(SEMANTIC_TYPES)}',
+                code='INVALID_REQUEST',
+            )
+
+    def __repr__(self) -> str:
+        return (
+            f'Column({self.name!r}, dtype={self.dtype!r}, stype={self.stype!r})'
+        )
+
+
+@dataclass
+class Table:
+    r"""One table: its rows, its columns, and which column identifies a row.
+
+    Attributes:
+        name: The name the schema knows this table by. A query names columns
+            through it, so it is part of the interface rather than a label.
+        data: The rows.
+        columns: Column metadata, keyed by column name.
+        primary_key: The column identifying a row, or ``None``. A single-table
+            request needs none; a relational one needs one per table, and it is
+            inferred, so you rarely set it.
+        time_column: The column ordering rows in time, or ``None``. Only a
+            temporal question needs one.
+    """
+
+    name: str
+    data: pd.DataFrame
+    columns: dict[str, Column]
+    primary_key: str | Sequence[str] | None = None
+    time_column: str | None = None
+
+    def __getitem__(self, column: str) -> Column:
+        try:
+            return self.columns[column]
+        except KeyError:
+            raise StructuredDataError(
+                f'table {self.name!r} has no column {column!r}; it has '
+                f'{sorted(self.columns)}',
+                code='INVALID_REQUEST',
+            ) from None
+
+    def __contains__(self, column: object) -> bool:
+        return column in self.columns
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.columns)
+
+    def __len__(self) -> int:
+        return len(self.columns)
+
+    def __repr__(self) -> str:
+        key = f', primary_key={self.primary_key!r}' if self.primary_key else ''
+        time = f', time_column={self.time_column!r}' if self.time_column else ''
+        return (
+            f'Table({self.name!r}, {len(self.data)} rows, '
+            f'{len(self.columns)} columns{key}{time})'
+        )
+
+
+@dataclass(frozen=True)
+class Relationship:
+    r"""A foreign key: ``source_table.source_column`` points at a table's key.
+
+    Directed from the many side to the one side, which is the direction a join
+    reads and the direction the wire envelope carries.
+    """
+
+    source_table: str
+    source_column: str
+    target_table: str
+    target_column: str
+
+    def __repr__(self) -> str:
+        return (
+            f'{self.source_table}.{self.source_column} -> '
+            f'{self.target_table}.{self.target_column}'
+        )
+
+
+class Schema:
+    r"""The tables a request is about.
+
+    Build one with :meth:`from_data`. Index it by table name, and index a table
+    by column name:
+
+    >>> schema = Schema.from_data({'users': users, 'orders': orders})
+    >>> schema['orders']['price'].stype
+    'numerical'
+
+    One table and many tables are the same object. A single-table model simply
+    rejects a schema that has relationships, and says so before anything is
+    sent.
+    """
+
+    def __init__(
+        self,
+        tables: Mapping[str, Table],
+        relationships: Sequence[Relationship] = (),
+    ) -> None:
+        self._tables = dict(tables)
+        self.relationships = list(relationships)
+
+    @classmethod
+    def from_data(
+        cls,
+        tables: Mapping[str, pd.DataFrame],
+        *,
+        primary_keys: Mapping[str, str] | None = None,
+        time_columns: Mapping[str, str] | None = None,
+        relationships: Sequence[Relationship] | None = None,
+    ) -> Schema:
+        r"""Infer a schema from frames.
+
+        Args:
+            tables: Frames by table name. The name matters: a predictive query
+                names columns through it.
+            primary_keys: Overrides for the inferred key of a table.
+            time_columns: Overrides for the inferred time column of a table.
+            relationships: Overrides for the inferred relationships. Pass an
+                empty sequence to assert there are none.
+
+        Returns:
+            A schema with every dtype, semantic type, key, time column and
+            relationship filled in.
+
+        Raises:
+            StructuredDataError: If ``tables`` is empty, a value is not a
+                DataFrame, a name is not a string, or an override names
+                something that does not exist.
+        """
+        if not tables:
+            raise StructuredDataError(
+                'a schema needs at least one table', code='INVALID_REQUEST'
+            )
+
+        built: dict[str, Table] = {}
+        for name, frame in tables.items():
+            if not isinstance(name, str) or not name:
+                raise StructuredDataError(
+                    f'table names must be non-empty strings; got {name!r}',
+                    code='INVALID_REQUEST',
+                )
+            if not isinstance(frame, pd.DataFrame):
+                raise StructuredDataError(
+                    f'table {name!r} must be a pandas DataFrame, got '
+                    f'{type(frame).__name__}',
+                    code='INVALID_REQUEST',
+                )
+            built[name] = _infer_table(name, frame)
+
+        for name, key in (primary_keys or {}).items():
+            _require_table(built, name).primary_key = _require_column(
+                built, name, key
+            )
+        for name, column in (time_columns or {}).items():
+            _require_table(built, name).time_column = _require_column(
+                built, name, column
+            )
+
+        if relationships is None:
+            inferred = _infer_relationships(built)
+        else:
+            inferred = list(relationships)
+            for link in inferred:
+                _require_column(built, link.source_table, link.source_column)
+                _require_column(built, link.target_table, link.target_column)
+
+        schema = cls(built, inferred)
+        schema._mark_key_columns()
+        return schema
+
+    @property
+    def tables(self) -> dict[str, Table]:
+        r"""The tables, by name."""
+        return self._tables
+
+    def __getitem__(self, table: str) -> Table:
+        try:
+            return self._tables[table]
+        except KeyError:
+            raise StructuredDataError(
+                f'no table {table!r} in this schema; it has '
+                f'{sorted(self._tables)}',
+                code='INVALID_REQUEST',
+            ) from None
+
+    def __contains__(self, table: object) -> bool:
+        return table in self._tables
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._tables)
+
+    def __len__(self) -> int:
+        return len(self._tables)
+
+    def _mark_key_columns(self) -> None:
+        r"""Type every key column as an identifier.
+
+        A join key typed from its dtype alone becomes ``numerical``, which the
+        model then stores as a float, and the join against an integer key fails
+        downstream. Resolving keys as identifiers first is what stops that.
+        """
+        for table in self._tables.values():
+            for name in _as_key_tuple(table.primary_key):
+                if name in table.columns:
+                    table.columns[name].stype = 'ID'
+        for link in self.relationships:
+            source = self._tables.get(link.source_table)
+            if source is not None and link.source_column in source.columns:
+                source.columns[link.source_column].stype = 'ID'
+
+    def __repr__(self) -> str:
+        return (
+            f'Schema({len(self._tables)} tables: {sorted(self._tables)}, '
+            f'{len(self.relationships)} relationships)'
+        )
+
+
+def _require_table(tables: Mapping[str, Table], name: str) -> Table:
+    if name not in tables:
+        raise StructuredDataError(
+            f'no table {name!r} in this schema; it has {sorted(tables)}',
+            code='INVALID_REQUEST',
+        )
+    return tables[name]
+
+
+def _require_column(
+    tables: Mapping[str, Table], table: str, column: str
+) -> str:
+    if column not in _require_table(tables, table).columns:
+        raise StructuredDataError(
+            f'table {table!r} has no column {column!r}; it has '
+            f'{sorted(tables[table].columns)}',
+            code='INVALID_REQUEST',
+        )
+    return column
+
+
+def _as_key_tuple(key: str | Sequence[str] | None) -> tuple[str, ...]:
+    if key is None:
+        return ()
+    if isinstance(key, str):
+        return (key,)
+    return tuple(key)
+
+
+def _infer_table(name: str, frame: pd.DataFrame) -> Table:
+    if frame.columns.has_duplicates:
+        duplicates = sorted(
+            {str(c) for c in frame.columns[frame.columns.duplicated()]}
+        )
+        raise StructuredDataError(
+            f'table {name!r} has duplicate column name(s) {duplicates}',
+            code='INVALID_REQUEST',
+        )
+    non_strings = [c for c in frame.columns if not isinstance(c, str)]
+    if non_strings:
+        raise StructuredDataError(
+            f'table {name!r} column names must be strings; got {non_strings}',
+            code='INVALID_REQUEST',
+        )
+
+    columns = {
+        column: Column(
+            name=column,
+            dtype=_dtype_of(frame[column]),
+            stype=_stype_of(frame[column]),
+        )
+        for column in frame.columns
+    }
+    table = Table(name=name, data=frame, columns=columns)
+    table.primary_key = _infer_primary_key(frame, columns)
+    table.time_column = _infer_time_column(columns)
+    return table
+
+
+def _dtype_of(series: pd.Series) -> str:
+    dtype = infer_tfm_dtype(series)
+    # An all-null object column carries no type. Calling it a string is the
+    # safe fallback: it round-trips whatever arrives without claiming a width.
+    return 'string' if dtype == UNTYPED else dtype
+
+
+def _stype_of(series: pd.Series) -> str:
+    dtype = _dtype_of(series)
+    if dtype.startswith('timestamp'):
+        return 'timestamp'
+    if dtype in {'int32', 'int64', 'float32', 'float64'}:
+        return 'numerical'
+    if dtype == 'bool':
+        return 'categorical'
+    distinct = series.nunique(dropna=True)
+    return 'categorical' if distinct <= _MAX_CATEGORICAL_CARDINALITY else 'text'
+
+
+def _infer_primary_key(
+    frame: pd.DataFrame, columns: Mapping[str, Column]
+) -> str | None:
+    r"""The column that identifies a row, if one is obvious.
+
+    Requires both a key-shaped name and near-total uniqueness. Uniqueness
+    alone would nominate any high-cardinality measurement, and a name alone
+    would nominate a foreign key.
+    """
+    if len(frame) == 0:
+        return None
+    for name, column in columns.items():
+        lowered = name.lower()
+        if not lowered.endswith(_KEY_SUFFIXES):
+            continue
+        if column.stype == 'timestamp':
+            continue
+        distinct = frame[name].nunique(dropna=True)
+        if distinct >= len(frame) * _KEY_UNIQUENESS:
+            return name
+    return None
+
+
+def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
+    stamps = [name for name, c in columns.items() if c.stype == 'timestamp']
+    return stamps[0] if len(stamps) == 1 else None
+
+
+def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
+    r"""Link a column to another table's primary key of the same name.
+
+    Deliberately conservative: only an exact name match against a declared
+    primary key counts. A wrong link changes what the model is shown, and is
+    harder to notice than a missing one, which simply narrows the question.
+    """
+    keys = {
+        table.primary_key: name
+        for name, table in tables.items()
+        if isinstance(table.primary_key, str)
+    }
+    links = []
+    for name, table in tables.items():
+        for column in table.columns:
+            target = keys.get(column)
+            if target is None or target == name:
+                continue
+            links.append(
+                Relationship(
+                    source_table=name,
+                    source_column=column,
+                    target_table=target,
+                    target_column=column,
+                )
+            )
+    return links

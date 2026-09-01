@@ -56,8 +56,9 @@ test:
   stage: test
   extends: .python
   script:
-    - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]'
-    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests -q
+    - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]'
+    # Live-NIM tests are deselected: this job reaches no endpoint.
+    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests packages/sdm-client/tests -q -m 'not live_nim'
 
 # Blocking. Fetches the contract at the revision recorded in PROVENANCE.json,
 # proves the recorded digest is that revision's actual bytes, and proves the
