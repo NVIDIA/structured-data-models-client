@@ -13,9 +13,10 @@ union. Here an explanation is an output field like any other:
 >>> result.to_pandas()       # always a frame
 >>> result.explanation       # None unless you asked for it
 
-The frame's shape depends on the **task**, not the model: classification gives
-one row per entity, multiclass one row per entity per class, ranking ``k`` rows
-per entity, forecasting one row per entity per step.
+The frame's shape depends on the **task**, not the model. Classification and
+multiclass both give one row per entity -- multiclass carries a probability per
+class as columns rather than a row per class -- while ranking gives ``k`` rows
+per entity and forecasting one per step.
 
 Every row carries ``row_index``. It also carries ``id`` when the model has an
 entity key -- a single-table request may have none. **Join on the key when it

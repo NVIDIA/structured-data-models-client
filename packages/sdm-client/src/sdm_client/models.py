@@ -18,6 +18,18 @@ The declarations below are **read from the deployments**, not from a design
 document: ``tfm-serving``'s tabular adapter and the relational NIM's universal
 adapter each publish their own task and output lists, and these mirror them.
 Where a source document disagreed, the servers won.
+
+**A runtime contract describes a deployment, and there is more than one.** The
+relational declaration below is the shipping kumoml-backed NIM, which serves
+six task kinds and all seven output fields. A second, structured-data-models
+backed build of the same model id serves only classification and regression,
+and produces only ``prediction``, ``probabilities`` and ``quantiles``. Asking
+that one for a forecast passes the checks here and is refused by the endpoint.
+
+Reading this from the endpoint instead would settle it, but the Universal TFM
+contract has no capabilities route and ``/v1/models`` returns an id and nothing
+else. So this is the broader of the two on purpose: refusing locally what one
+deployment can answer would be worse than letting the other say no.
 """
 
 from __future__ import annotations

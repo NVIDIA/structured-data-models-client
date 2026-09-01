@@ -38,9 +38,10 @@ whose profile accepts it.
 
 ## Status
 
-Under construction. The architecture is settled and written down in
-[`docs/architecture.md`](docs/architecture.md); the packages are being built
-against it phase by phase. Nothing has been released.
+All seven phases are built and tested end to end against live NIMs. The
+architecture is written down in
+[`docs/about/architecture.md`](docs/about/architecture.md), and the packages follow it.
+Nothing has been released yet.
 
 | Phase | | |
 |---|---|---|
@@ -48,9 +49,9 @@ against it phase by phase. Nothing has been released.
 | 2 | Client and the tabular model | ✅ |
 | 3 | Connectors | ✅ |
 | 4 | The relational model | ✅ |
-| 5 | `fit` and explanations | in progress |
-| 6 | Docs and end-to-end | |
-| 7 | PQL for tabular | |
+| 5 | `fit` and explanations | ✅ |
+| 6 | Docs and end-to-end | ✅ |
+| 7 | PQL for tabular | ✅ |
 
 ## Packages
 
@@ -91,3 +92,26 @@ in this family of repositories before. See
 Apache-2.0. Each package carries its own copy of `LICENSE` so its
 `pyproject.toml` can reference it; those copies are the same terms as the root
 file, not additional ones.
+
+## Documentation
+
+Full documentation is under [`docs/`](docs/index.md):
+
+- [Overview](docs/about/overview.md) and [Architecture](docs/about/architecture.md)
+- [Prerequisites](docs/get-started/prerequisites.md), [Installation](docs/get-started/installation.md), [Quickstart](docs/get-started/quickstart.md)
+- [Prediction output](docs/reference/prediction-output.md) and [Limits](docs/reference/limits.md)
+
+## Testing
+
+```bash
+# everything that needs nothing running
+python -m pytest packages/*/tests -q -m 'not live_nim and not live_warehouse'
+
+# against a NIM you are running
+SDM_TABULAR_URL=http://localhost:8000 \
+SDM_RELATIONAL_URL=http://localhost:8001 \
+  python -m pytest packages/sdm-client/tests -m live_nim -q
+
+# against real warehouses
+python -m pytest packages/sdm-connectors/tests -m live_warehouse -q
+```

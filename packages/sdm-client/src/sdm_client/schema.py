@@ -451,3 +451,69 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
                 )
             )
     return links
+
+
+def to_graph_definition(schema: Schema) -> Any:
+    r"""This schema as the language's own graph definition.
+
+    The language resolves a query against names and types with no rows
+    attached, which is what this hands it. Built here rather than in the query
+    module so that a schema has exactly one translation into what PQL reads.
+    """
+    from predictive_query.schema.graph import (
+        ColumnKey,
+        ColumnKeyGroup,
+        GraphDefinition,
+    )
+    from predictive_query.schema.table import Column as PQLColumn
+    from predictive_query.schema.table import TableDefinition
+    from predictive_query.schema.typing import Dtype, Stype
+
+    tables = {}
+    for name, table in schema.tables.items():
+        columns = []
+        for column in table.columns.values():
+            try:
+                dtype = Dtype(
+                    _WIRE_TO_PQL_DTYPE.get(column.dtype, column.dtype)
+                )
+                stype = Stype(column.stype)
+            except ValueError:
+                continue
+            columns.append(
+                PQLColumn(name=column.name, stype=stype, dtype=dtype)
+            )
+        key = table.primary_key
+        tables[name] = TableDefinition(
+            cols=columns,
+            pkey=key if isinstance(key, str) else None,
+            time_col=table.time_column,
+        )
+
+    groups = [
+        ColumnKeyGroup(
+            columns=tuple(
+                sorted(
+                    (
+                        ColumnKey(link.source_table, link.source_column),
+                        ColumnKey(link.target_table, link.target_column),
+                    )
+                )
+            )
+        )
+        for link in schema.relationships
+    ]
+    return GraphDefinition(tables=tables, col_groups=groups)
+
+
+# The wire spells a few types differently from the language.
+_WIRE_TO_PQL_DTYPE = {
+    'int64': 'int',
+    'int32': 'int',
+    'float64': 'float',
+    'float32': 'float',
+    'timestamp[us]': 'time',
+    'timestamp[ns]': 'time',
+    'timestamp[ms]': 'time',
+    'timestamp[s]': 'time',
+}

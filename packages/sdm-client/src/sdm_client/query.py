@@ -38,6 +38,18 @@ if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
 # Gathering knobs a caller may pass through to the sampler. `run_mode` is
 # deliberately absent: it is a preset over these, and the client derives the
 # wire value from them rather than asking a caller to know the presets.
+# A resolved query reports a coarse problem type; the wire wants a task kind.
+# Only the coarse classification is emitted, because a tabular model narrows it
+# itself and guessing from cardinality is what the source design got wrong.
+_TASK_FOR_PROBLEM = {
+    'ProblemType.CLASSIFY': 'classification',
+    'CLASSIFY': 'classification',
+    'ProblemType.FORECAST': 'forecasting',
+    'FORECAST': 'forecasting',
+    'ProblemType.RANK': 'ranking',
+    'RANK': 'ranking',
+}
+
 _MATERIALIZE_OPTIONS = frozenset(
     {
         'anchor_time',
@@ -122,10 +134,10 @@ class PredictiveQuery:
         Args:
             indices: The entity keys to predict for. These are rows that exist
                 in the tables.
-            predict: Rows to score that are **not** in the tables. Reserved for
-                the single-table path and not yet accepted; a query cannot
-                enumerate rows it has never seen, which is why the rows are an
-                argument rather than something the query derives.
+            predict: Rows to score that are **not** in the tables. This is the
+                single-table path: a query enumerates rows the tables already
+                hold, so rows it has never seen have to be supplied rather
+                than derived. Mutually exclusive with ``indices``.
             num_context_samples: How many labelled examples to gather. The
                 client derives the endpoint's ``run_mode`` from this rather
                 than asking you to know its presets.
@@ -138,14 +150,15 @@ class PredictiveQuery:
             StructuredDataError: If neither ``indices`` nor ``predict`` is
                 given, if both are, or if an option is not one this accepts.
         """
-        if predict is not None:
+        if predict is not None and indices is not None:
             raise StructuredDataError(
-                'materialize(predict=...) is not supported yet: it is the '
-                'single-table path, where the rows to score are ones the '
-                'tables do not contain. Use Request(context=..., predict=...) '
-                'for that today',
+                'pass either indices=[...] to score rows the tables already '
+                'contain, or predict=<frame> to score rows they do not -- not '
+                'both',
                 code='INVALID_REQUEST',
             )
+        if predict is not None:
+            return self._materialize_rows(predict)
         if indices is None:
             raise StructuredDataError(
                 'materialize() needs the rows to score: pass indices=[...] '
@@ -191,6 +204,75 @@ class PredictiveQuery:
                 'inference_config': options.get('inference_config') or {}
             },
         )
+
+    def _materialize_rows(self, predict: pd.DataFrame) -> Request:
+        r"""Build a single-table request for rows the tables do not contain.
+
+        This is the answer to the question the source design left open. A
+        predictive query resolves against a schema, so it can only ever name
+        rows that are already there; scoring a new row means supplying it. The
+        query still earns its place -- it says which column is the target and
+        what kind of question this is -- so the two halves come from different
+        places on purpose.
+
+        The task kind is deliberately **not** narrowed here. A tabular model
+        accepts only the coarse ``classification`` and decides binary against
+        multiclass itself, and narrowing from the target's cardinality is the
+        guess that turns a two-class target into a multiclass one.
+        """
+        if len(self.schema) != 1:
+            raise StructuredDataError(
+                f'scoring supplied rows is the single-table path, and this '
+                f'schema has {len(self.schema)} tables. Use indices=[...] to '
+                f'score entities the tables already contain',
+                code='INVALID_REQUEST',
+            )
+
+        resolved = self._resolve()
+        table_name = next(iter(self.schema))
+        # The language names a column by its table; the wire names it alone.
+        target = resolved.target_column
+        if isinstance(target, str) and target.startswith(f'{table_name}.'):
+            target = target[len(table_name) + 1 :]
+        if target is None or target not in self.schema[table_name]:
+            raise StructuredDataError(
+                f'{self.text!r} does not predict a column of '
+                f'{table_name!r}, so there is nothing to score rows against',
+                code='INVALID_REQUEST',
+            )
+
+        return Request(
+            context=self.schema[table_name].data,
+            predict=predict,
+            target=target,
+            task=_TASK_FOR_PROBLEM.get(
+                str(resolved.problem_type), 'classification'
+            ),
+            schema=self.schema,
+            entity_table=table_name,
+        )
+
+    def _resolve(self) -> Any:
+        r"""Parse and validate this query, under this query's profile."""
+        from predictive_query import RELATIONAL, validate
+
+        from sdm_client.schema import to_graph_definition
+
+        profile = self._profile or RELATIONAL
+        resolved, response = validate(
+            self.text, to_graph_definition(self.schema), profile
+        )
+        if resolved is None or not response.ok:
+            reasons = (
+                '; '.join(error.message for error in response.errors)
+                or 'the query did not resolve'
+            )
+            raise StructuredDataError(
+                f'{self.text!r} is not a query {profile.capabilities.model} '
+                f'can answer: {reasons}',
+                code='INVALID_REQUEST',
+            )
+        return resolved
 
     def _gather(
         self,
@@ -255,6 +337,7 @@ class PredictiveQuery:
             )
         for part in parts:
             _check_limits(part, RELATIONAL_LIMITS)
+        _check_shape(self.schema, options, RELATIONAL_LIMITS)
         return tuple(part.payload for part in parts)
 
     def _engine_model(self, engine: Any) -> Any:
@@ -310,6 +393,26 @@ def _check_limits(part: Any, limits: Mapping[str, int]) -> None:
         raise StructuredDataError(
             f'this batch scores {len(rows)} rows and the endpoint accepts at '
             f'most {cap} for a {kind} task',
+            code='UNSUPPORTED_REQUEST',
+        )
+
+
+def _check_shape(
+    schema: Schema, options: Mapping[str, Any], limits: Mapping[str, int]
+) -> None:
+    r"""Refuse a graph wider or deeper than the endpoint will read."""
+    if len(schema) > limits['tables_max']:
+        raise StructuredDataError(
+            f'this schema has {len(schema)} tables and the endpoint reads at '
+            f'most {limits["tables_max"]}',
+            code='UNSUPPORTED_REQUEST',
+        )
+    neighbors = options.get('num_neighbors')
+    hops = len(neighbors) if neighbors else options.get('num_hops')
+    if hops is not None and hops > limits['hops_max']:
+        raise StructuredDataError(
+            f'this request samples {hops} hops and the endpoint reads at most '
+            f'{limits["hops_max"]}',
             code='UNSUPPORTED_REQUEST',
         )
 

@@ -200,3 +200,30 @@ def test_predictions_join_on_the_key_the_result_carries(client):
     )
     assert len(joined) == len(to_score)
     assert joined['prediction'].notna().all()
+
+
+@requires_tabular
+def test_a_tabular_question_runs_from_predictive_query_text(client):
+    """Phase 7: the query says what to predict, the rows say what to score.
+
+    Both halves come from different places on purpose. A query resolves against
+    a schema and so can only name rows that are already there; these are not.
+    """
+    pytest.importorskip('predictive_query')
+    from predictive_query import TABULAR
+
+    from sdm_client import PredictiveQuery
+
+    request = PredictiveQuery(
+        'PREDICT instance.churn FOR EACH instance.row_id',
+        {'instance': labelled()},
+        profile=TABULAR,
+    ).materialize(predict=unlabelled())
+
+    assert request.task.target.column_name == 'churn'
+    # Never narrowed: the model decides binary against multiclass itself.
+    assert request.task.kind == 'classification'
+
+    frame = client.predict(request, model=KumoTabular()).to_pandas()
+    assert len(frame) == 3
+    assert 'prediction' in frame.columns

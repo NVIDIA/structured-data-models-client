@@ -61,7 +61,9 @@ class RelationalAdapter:
     def prediction_plan(
         self, request: Request, outputs: tuple[str, ...]
     ) -> Iterator[dict[str, Any]]:
-        for payload in self._payloads(request):
+        payloads = self._payloads(request)
+        self._preflight(payloads, outputs)
+        for payload in payloads:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
             envelope['output'] = {'fields': list(outputs)}
@@ -177,6 +179,52 @@ class RelationalAdapter:
     def close(self) -> None:
         r"""Nothing to release: gathering happens in the query, which owns
         whatever it opened, and sending goes through the client's transport."""
+
+    def _preflight(
+        self, payloads: tuple[dict[str, Any], ...], outputs: tuple[str, ...]
+    ) -> None:
+        """Refuse what the endpoint enforces, before spending the round trip.
+
+        An explanation is the narrow case: the model explains one entity at a
+        time, and only within the smaller context budget. Sending more gets a
+        500 that names neither limit, so both are checked here.
+        """
+        if 'explanation' not in outputs:
+            return
+
+        limits = self.spec.runtime.limits
+        scored = sum(
+            len(
+                payload.get('predict', {})
+                .get('instance_table', {})
+                .get('rows', [])
+            )
+            for payload in payloads
+        )
+        allowed = limits['explanation_predict_rows']
+        if scored != allowed:
+            raise UnsupportedRequestError(
+                f'an explanation covers exactly {allowed} entity, and this '
+                f'request scores {scored}; ask for one at a time',
+                details={'model': self.spec.model_id, 'scored': scored},
+            )
+
+        context = sum(
+            len(
+                payload.get('context', {})
+                .get('instance_table', {})
+                .get('rows', [])
+            )
+            for payload in payloads
+        )
+        cap = limits['context_rows_fast']
+        if context > cap:
+            raise UnsupportedRequestError(
+                f'an explanation is only produced within the smaller context '
+                f'budget of {cap:,} rows, and this request gathered {context:,}. '
+                f'Re-materialize with num_context_samples={cap} or fewer',
+                details={'model': self.spec.model_id, 'context_rows': context},
+            )
 
     @staticmethod
     def _payloads(request: Request) -> tuple[dict[str, Any], ...]:

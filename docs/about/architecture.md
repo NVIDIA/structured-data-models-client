@@ -290,8 +290,10 @@ result.explanation  # None unless you asked for it
 Explanations are an **output field**, not a method. `explain=True` remains sugar for
 `outputs=[…, "explanation"]`.
 
-The DataFrame's shape depends on the **task**, not the model: classification gives one row per entity,
-multiclass one row per entity per class, ranking `k` rows, forecasting one row per step.
+The DataFrame's shape depends on the **task**, not the model. Verified against a live endpoint:
+classification and multiclass both give **one row per entity**, with multiclass carrying a
+probability per class as columns rather than a row per class. Ranking gives `k` rows per entity
+and forecasting one row per step. An earlier draft said multiclass gave a row per class; it does not.
 
 **Every row carries `row_index`. It also carries the entity key when the model has one** — tabular
 requests may have no key at all. Join on the key when present, otherwise on `row_index`.
@@ -319,6 +321,14 @@ doc — `tfm-serving/src/tfm_serving/adapters/tabular.py` and
 > against the live NIMs, and `ModelSpec.runtime` is corrected to whatever they answer.
 
 Asking a model for a field it does not produce fails client-side, naming what it does produce.
+
+> **A second relational build serves less.** The table above is the shipping
+> kumoml-backed NIM. A `structured-data-models`-backed build of the same model id serves
+> only classification and regression, and produces only `prediction`, `probabilities` and
+> `quantiles`. The client declares the broader one, because the contract has no
+> capabilities route to ask with — `/v1/models` returns an id and nothing else — and
+> refusing locally what one deployment can answer would be worse than letting the other
+> say no. Discovered by running against both.
 
 ---
 
