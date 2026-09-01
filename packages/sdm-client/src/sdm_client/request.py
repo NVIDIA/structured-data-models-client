@@ -236,12 +236,69 @@ class Request:
         self.context = Split(instance_table=context, related_tables=related)
         self.predict = Split(instance_table=predict, related_tables=related)
         self.inference = dict(inference or {})
+        self.requested_inference = dict(inference or {})
         self.entity_table = entity_table
+
+    @classmethod
+    def materialized(
+        cls,
+        *,
+        payloads: tuple[dict[str, Any], ...],
+        schema: Schema,
+        query: str,
+        indices: list[Any],
+        requested_inference: Mapping[str, Any] | None = None,
+    ) -> Request:
+        r"""A request whose data has already been gathered.
+
+        The predictive-query path does its gathering in ``materialize()``, so
+        what arrives here is one or more finished wire envelopes rather than
+        frames to encode. More than one when the run exceeds the endpoint's
+        per-call cap; the adapter sends each and the results are merged.
+
+        This is still one request. Batching is transport, and a caller reads
+        this object to see one question.
+        """
+        request = cls.__new__(cls)
+        request.schema = schema
+        first = payloads[0]
+        target = first.get('task', {}).get('target', {})
+        request.task = Task(
+            kind=first.get('task', {}).get('kind', 'classification'),
+            target=Target(
+                column_name=target.get('column_name', ''),
+                dtype=target.get('dtype', ''),
+            ),
+            entity_table=None,
+            options=dict(first.get('task', {}).get('options', {})),
+        )
+        empty = pd.DataFrame()
+        request.context = Split(instance_table=empty)
+        request.predict = Split(instance_table=empty)
+        request.inference = dict(first.get('inference', {}))
+        request.entity_table = next(iter(schema), 'instance')
+        request.query = query
+        request.indices = indices
+        request._payloads = payloads
+        # What the caller asked for, as distinct from what the engine filled
+        # in. An adapter may drop the engine's defaults silently; it must not
+        # drop something that was asked for.
+        request.requested_inference = dict(requested_inference or {})
+        return request
+
+    @property
+    def payloads(self) -> tuple[dict[str, Any], ...] | None:
+        r"""The gathered wire envelopes, when this came from a query."""
+        return getattr(self, '_payloads', None)
 
     @property
     def is_relational(self) -> bool:
         r"""Whether this request needs a model that can read related tables."""
-        return bool(self.context.related_tables or self.schema.relationships)
+        return bool(
+            self.context.related_tables
+            or self.schema.relationships
+            or len(self.schema) > 1
+        )
 
     @property
     def context_rows(self) -> int:

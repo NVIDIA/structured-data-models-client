@@ -78,6 +78,19 @@ KUMO_RELATIONAL = ModelSpec(
         ),
         explanation_formats=('feature_importance', 'subgraph'),
         limits=RELATIONAL_LIMITS,
+        # What the deployment accepts. The engine was written against a
+        # different backend and defaults to sending `output_type` and
+        # `target_transforms` as well, which this one refuses outright.
+        inference_options=frozenset(
+            {
+                'kind',
+                'num_estimators',
+                'column_shuffle',
+                'category_shuffle',
+                'hop_shuffle',
+                'class_shuffle',
+            }
+        ),
     ),
 )
 

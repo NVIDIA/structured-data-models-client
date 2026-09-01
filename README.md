@@ -47,8 +47,8 @@ against it phase by phase. Nothing has been released.
 | 1 | Foundation — `sdm-api`, `sdm-pql`, CI | ✅ |
 | 2 | Client and the tabular model | ✅ |
 | 3 | Connectors | ✅ |
-| 4 | The relational model | engine ported; adapter in progress |
-| 5 | `fit` and explanations | |
+| 4 | The relational model | ✅ |
+| 5 | `fit` and explanations | in progress |
 | 6 | Docs and end-to-end | |
 | 7 | PQL for tabular | |
 

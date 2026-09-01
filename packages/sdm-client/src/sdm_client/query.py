@@ -1,0 +1,352 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""Asking a question in PQL, and gathering the data that answers it.
+
+A predictive query says *what* to predict. It never says *which rows* to
+predict for -- that is always an explicit argument, because a query can only
+enumerate rows that are already in the tables:
+
+>>> query = PredictiveQuery(
+...     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+...     {'users': users_df, 'orders': orders_df},
+... )
+>>> request = query.materialize(indices=[1, 2, 3])
+
+:meth:`~PredictiveQuery.materialize` is the gathering step, and it is explicit
+because it is the expensive one: it parses the query, finds labelled examples
+in history, samples the neighbourhood of each entity, and encodes the result.
+Nothing is sent -- what comes back is a :class:`~sdm_client.Request` that any
+model whose profile accepts it can answer.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any
+
+import pandas as pd
+
+from sdm_client.errors import MissingExtraError, StructuredDataError
+from sdm_client.request import Request
+from sdm_client.schema import Schema
+
+if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
+    from predictive_query import Profile
+
+# Gathering knobs a caller may pass through to the sampler. `run_mode` is
+# deliberately absent: it is a preset over these, and the client derives the
+# wire value from them rather than asking a caller to know the presets.
+_MATERIALIZE_OPTIONS = frozenset(
+    {
+        'anchor_time',
+        'context_anchor_time',
+        'lag_timesteps',
+        'max_pq_iterations',
+        'num_hops',
+        'num_neighbors',
+        'random_seed',
+        'use_prediction_time',
+        'inference_config',
+        'exclude_cols_dict',
+        'return_embeddings',
+        'top_k',
+    }
+)
+
+
+def _engine() -> Any:
+    r"""The relational engine's ``rfm`` module, or the install that supplies it."""
+    try:
+        from sdm_relational_engine import rfm
+    except ImportError as error:  # pragma: no cover - exercised by extras
+        raise MissingExtraError(
+            'relational', 'sdm-relational-engine'
+        ) from error
+    return rfm
+
+
+class PredictiveQuery:
+    r"""A question in PQL, bound to the tables that can answer it.
+
+    Constructing one parses and validates the query against the schema, so a
+    query that names a column that does not exist fails here rather than at
+    the endpoint.
+    """
+
+    def __init__(
+        self,
+        query: str,
+        data: Schema | Mapping[str, pd.DataFrame],
+        *,
+        profile: Profile | None = None,
+    ) -> None:
+        r"""Bind ``query`` to ``data``.
+
+        Args:
+            query: The predictive query.
+            data: A :class:`~sdm_client.Schema`, or the frames to infer one
+                from. Passing frames directly is the common case: a caller
+                asking one question should not have to meet ``Schema`` first.
+            profile: What the query is for. Defaults to the relational
+                profile, which accepts the most. A capability may only reject,
+                so a narrower profile refuses more queries, never fewer.
+
+        Raises:
+            StructuredDataError: If the query does not parse or does not
+                validate against the schema.
+            MissingExtraError: If the relational engine is not installed.
+        """
+        if not isinstance(query, str) or not query.strip():
+            raise StructuredDataError(
+                'query must be a non-empty string', code='INVALID_REQUEST'
+            )
+        self.text = query
+        self.schema = (
+            data if isinstance(data, Schema) else Schema.from_data(dict(data))
+        )
+        self._profile = profile
+        self._model: Any = None
+
+    def materialize(
+        self,
+        *,
+        indices: Sequence[Any] | None = None,
+        predict: pd.DataFrame | None = None,
+        num_context_samples: int | None = None,
+        **options: Any,
+    ) -> Request:
+        r"""Gather the data that answers this query.
+
+        Args:
+            indices: The entity keys to predict for. These are rows that exist
+                in the tables.
+            predict: Rows to score that are **not** in the tables. Reserved for
+                the single-table path and not yet accepted; a query cannot
+                enumerate rows it has never seen, which is why the rows are an
+                argument rather than something the query derives.
+            num_context_samples: How many labelled examples to gather. The
+                client derives the endpoint's ``run_mode`` from this rather
+                than asking you to know its presets.
+            **options: Sampler options, e.g. ``num_neighbors``, ``anchor_time``.
+
+        Returns:
+            A :class:`~sdm_client.Request` carrying the gathered data.
+
+        Raises:
+            StructuredDataError: If neither ``indices`` nor ``predict`` is
+                given, if both are, or if an option is not one this accepts.
+        """
+        if predict is not None:
+            raise StructuredDataError(
+                'materialize(predict=...) is not supported yet: it is the '
+                'single-table path, where the rows to score are ones the '
+                'tables do not contain. Use Request(context=..., predict=...) '
+                'for that today',
+                code='INVALID_REQUEST',
+            )
+        if indices is None:
+            raise StructuredDataError(
+                'materialize() needs the rows to score: pass indices=[...] '
+                'naming the entities. There is no all-rows default, because '
+                'it would silently score an entire table',
+                code='INVALID_REQUEST',
+            )
+        if not isinstance(indices, Sequence) or isinstance(
+            indices, (str, bytes)
+        ):
+            raise StructuredDataError(
+                f'indices must be a sequence of entity keys, got '
+                f'{type(indices).__name__}',
+                code='INVALID_REQUEST',
+            )
+        if not indices:
+            raise StructuredDataError(
+                'indices is empty, so there is nothing to score',
+                code='INVALID_REQUEST',
+            )
+
+        unknown = sorted(set(options) - _MATERIALIZE_OPTIONS)
+        if unknown:
+            raise StructuredDataError(
+                f'unknown materialize option(s) {unknown}; accepted: '
+                f'{sorted(_MATERIALIZE_OPTIONS)}',
+                code='INVALID_REQUEST',
+            )
+        if 'run_mode' in options:  # pragma: no cover - caught by the above
+            raise StructuredDataError(
+                'run_mode is not a knob here; set num_context_samples and the '
+                'client derives what the endpoint needs',
+                code='INVALID_REQUEST',
+            )
+
+        payloads = self._gather(indices, num_context_samples, options)
+        return Request.materialized(
+            payloads=payloads,
+            schema=self.schema,
+            query=self.text,
+            indices=list(indices),
+            requested_inference={
+                'inference_config': options.get('inference_config') or {}
+            },
+        )
+
+    def _gather(
+        self,
+        indices: Sequence[Any],
+        num_context_samples: int | None,
+        options: dict[str, Any],
+    ) -> tuple[dict[str, Any], ...]:
+        r"""Parse, sample and encode, using the engine's own materializer.
+
+        The engine already splits building a request from sending one, and
+        each part it returns is a wire payload. Reimplementing that here would
+        duplicate PQL resolution, point-in-time correctness and neighbourhood
+        sampling that already live -- and are tested -- there.
+        """
+        from sdm_client.models import RELATIONAL_LIMITS
+
+        engine = _engine()
+        run_mode = _run_mode_for(num_context_samples)
+
+        model = self._engine_model(engine)
+        query_def = model._parse_query(self.text)
+        task = model._get_task_table(
+            query=query_def,
+            indices=list(indices),
+            run_mode=run_mode,
+            **{
+                key: options[key]
+                for key in (
+                    'anchor_time',
+                    'context_anchor_time',
+                    'lag_timesteps',
+                    'max_pq_iterations',
+                    'random_seed',
+                )
+                if key in options
+            },
+        )
+        task._query = query_def.to_string()
+
+        parts = model.materialize_task(
+            task,
+            run_mode=run_mode,
+            top_k=query_def.top_k,
+            exclude_cols_dict=query_def.get_exclude_cols_dict(),
+            **{
+                key: options[key]
+                for key in (
+                    'num_neighbors',
+                    'num_hops',
+                    'inference_config',
+                    'use_prediction_time',
+                    'return_embeddings',
+                    'random_seed',
+                )
+                if key in options
+            },
+        )
+        if not parts:
+            raise StructuredDataError(
+                'the engine gathered nothing for this query',
+                code='INVALID_REQUEST',
+            )
+        for part in parts:
+            _check_limits(part, RELATIONAL_LIMITS)
+        return tuple(part.payload for part in parts)
+
+    def _engine_model(self, engine: Any) -> Any:
+        if self._model is None:
+            graph = _to_engine_graph(engine, self.schema)
+            self._model = engine.KumoRelational(graph, verbose=False)
+        return self._model
+
+    def __repr__(self) -> str:
+        return f'PredictiveQuery({self.text!r}, {self.schema!r})'
+
+
+def _run_mode_for(num_context_samples: int | None) -> str:
+    r"""The wire value that admits ``num_context_samples`` labelled examples.
+
+    The endpoint distinguishes only ``fast`` from everything else -- 1,000
+    context rows against 10,000 -- so this is a two-way choice dressed as a
+    four-value enum. Deriving it means a caller sets the number they want
+    rather than learning which preset contains it.
+    """
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    if num_context_samples is None:
+        return 'fast'
+    if num_context_samples <= RELATIONAL_LIMITS['context_rows_fast']:
+        return 'fast'
+    if num_context_samples <= RELATIONAL_LIMITS['context_rows_max']:
+        return 'best'
+    raise StructuredDataError(
+        f'num_context_samples is {num_context_samples}, and the endpoint '
+        f'accepts at most {RELATIONAL_LIMITS["context_rows_max"]:,} context '
+        f'rows',
+        code='UNSUPPORTED_REQUEST',
+    )
+
+
+def _check_limits(part: Any, limits: Mapping[str, int]) -> None:
+    r"""Refuse a gathered part the endpoint would reject, before sending it."""
+    payload = getattr(part, 'payload', None)
+    if not isinstance(payload, dict):
+        return
+    predict = payload.get('predict', {}).get('instance_table', {})
+    rows = predict.get('rows')
+    if rows is None:
+        return
+    kind = payload.get('task', {}).get('kind')
+    cap = (
+        limits['predict_rows_temporal_link_prediction']
+        if kind == 'temporal_link_prediction'
+        else limits['predict_rows_max']
+    )
+    if len(rows) > cap:
+        raise StructuredDataError(
+            f'this batch scores {len(rows)} rows and the endpoint accepts at '
+            f'most {cap} for a {kind} task',
+            code='UNSUPPORTED_REQUEST',
+        )
+
+
+def _to_engine_graph(engine: Any, schema: Schema) -> Any:
+    r"""Build the engine's graph from this client's schema.
+
+    The engine infers a graph from frames in the same way, so the frames are
+    handed over and the schema's corrections are applied on top. Those
+    corrections are the whole reason a caller edited the schema, and inferring
+    twice would discard them.
+    """
+    frames = {name: table.data for name, table in schema.tables.items()}
+    graph = engine.Graph.from_data(frames, verbose=False)
+
+    for name, table in schema.tables.items():
+        engine_table = graph[name]
+        if table.primary_key is not None:
+            engine_table.primary_key = table.primary_key
+        if table.time_column is not None:
+            engine_table.time_column = table.time_column
+        for column_name, column in table.columns.items():
+            if column_name in engine_table:
+                engine_table[column_name].stype = column.stype
+
+    # The engine infers edges from the same frames, so most of these are
+    # already there. Linking one twice is an error, and the schema is the
+    # authority only for the ones inference missed.
+    existing = {
+        (edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges
+    }
+    for link in schema.relationships:
+        edge = (link.source_table, link.source_column, link.target_table)
+        if edge not in existing:
+            graph.link(
+                src_table=link.source_table,
+                fkey=link.source_column,
+                dst_table=link.target_table,
+            )
+    return graph

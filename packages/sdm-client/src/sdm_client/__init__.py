@@ -29,6 +29,7 @@ from sdm_client.errors import (
     UnsupportedRequestError,
 )
 from sdm_client.models import KumoRelational, KumoTabular, Model
+from sdm_client.query import PredictiveQuery
 from sdm_client.request import Request, Split, Target, Task
 from sdm_client.result import PredictionResult
 from sdm_client.schema import Column, Relationship, Schema, Table
@@ -44,6 +45,7 @@ __all__ = [
     'ModelSpec',
     'NimRequestError',
     'PredictionResult',
+    'PredictiveQuery',
     'Relationship',
     'Request',
     'RuntimeContract',

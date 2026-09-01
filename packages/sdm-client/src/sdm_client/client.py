@@ -47,6 +47,10 @@ def _adapter_for(spec: ModelSpec) -> ModelAdapter:
         from sdm_client.adapters.tabular import TabularAdapter
 
         return TabularAdapter()
+    if spec.model_id == 'kumo-relational':
+        from sdm_client.adapters.relational import RelationalAdapter
+
+        return RelationalAdapter()
     raise UnknownModelError(spec.model_id, list(MODELS))
 
 
@@ -99,6 +103,7 @@ class FittedModel:
                     self._session_id, payload
                 ),
                 self._outputs,
+                payload,
             )
             for payload in self._adapter.session_prediction_plan(
                 request, self._outputs
@@ -228,7 +233,7 @@ class StructuredDataClient:
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
         parts = [
-            adapter.normalize(self._transport.predict(payload), fields)
+            adapter.normalize(self._transport.predict(payload), fields, payload)
             for payload in adapter.prediction_plan(request, fields)
         ]
         if not parts:

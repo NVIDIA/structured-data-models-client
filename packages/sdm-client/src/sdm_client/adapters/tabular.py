@@ -91,7 +91,10 @@ class TabularAdapter:
         }
 
     def normalize(
-        self, response: dict[str, Any], outputs: tuple[str, ...]
+        self,
+        response: dict[str, Any],
+        outputs: tuple[str, ...],
+        payload: dict[str, Any] | None = None,
     ) -> PredictionResult:
         try:
             parsed = PredictionResponse.from_dict(response)

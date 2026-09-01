@@ -58,6 +58,7 @@ class RuntimeContract:
             contract's enum: a tabular model takes only the coarse
             ``'classification'``.
         outputs: The output fields the model produces.
+        inference_options: Inference-config keys the endpoint accepts.
         explanation_formats: Named explanation shapes, when it explains.
         sessions: Whether the endpoint holds a pinned context.
         limits: Sizes the endpoint enforces, so the client can refuse locally
@@ -69,6 +70,10 @@ class RuntimeContract:
     explanation_formats: tuple[str, ...] = ()
     sessions: bool = True
     limits: Mapping[str, int] = field(default_factory=dict)
+    #: Inference-config keys this deployment accepts. Empty means it takes no
+    #: inference config at all. A driver built for a different backend may
+    #: default to sending more than this, which the endpoint refuses.
+    inference_options: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -137,9 +142,17 @@ class ModelAdapter(Protocol):
         ...
 
     def normalize(
-        self, response: dict[str, Any], outputs: tuple[str, ...]
+        self,
+        response: dict[str, Any],
+        outputs: tuple[str, ...],
+        payload: dict[str, Any],
     ) -> PredictionResult:
-        r"""Turn one endpoint response into the client's result type."""
+        r"""Turn one endpoint response into the client's result type.
+
+        ``payload`` is the request that produced it. A batch's answers are
+        indexed within that batch, so mapping them back to what the caller
+        asked about needs the request beside the response.
+        """
         ...
 
     def close(self) -> None:
