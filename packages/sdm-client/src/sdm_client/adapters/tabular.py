@@ -27,7 +27,10 @@ from collections.abc import Iterator
 from typing import Any
 
 import pandas as pd
-from sdm_api.generated.tfm_api import PredictionResponse
+from sdm_api.generated.tfm_api import (
+    PredictionResponse,
+    ResponseContractError,
+)
 
 from sdm_client.base import ModelSpec
 from sdm_client.errors import StructuredDataError
@@ -90,7 +93,17 @@ class TabularAdapter:
     def normalize(
         self, response: dict[str, Any], outputs: tuple[str, ...]
     ) -> PredictionResult:
-        parsed = PredictionResponse.from_dict(response)
+        try:
+            parsed = PredictionResponse.from_dict(response)
+        except (ResponseContractError, TypeError, ValueError) as error:
+            # A 200 whose body does not match the contract is still a failure,
+            # and it has to arrive as one of this client's errors rather than
+            # as a binding-layer exception nobody is catching.
+            raise StructuredDataError(
+                f'{self.spec.model_id} returned a response that does not '
+                f'match the contract: {error}',
+                code='INVALID_RESPONSE',
+            ) from error
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,

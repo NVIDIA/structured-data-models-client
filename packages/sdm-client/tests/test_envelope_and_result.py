@@ -170,3 +170,47 @@ def test_quantiles_are_spread_under_a_readable_prefix():
         {'row_index': 0, 'prediction': 2.0, 'quantiles': {'0.5': 2.0}}
     ).to_pandas()
     assert 'quantile_0.5' in frame.columns
+
+
+def test_a_split_request_keeps_every_batch_rather_than_the_last():
+    """A request past the endpoint's cap is several calls, one answer."""
+    first = result_with({'row_index': 0, 'prediction': 'a'})
+    second = result_with({'row_index': 1, 'prediction': 'b'})
+    merged = PredictionResult.merge([first, second])
+    assert len(merged) == 2
+    assert list(merged.to_pandas()['prediction']) == ['a', 'b']
+    assert merged.metadata['batches'] == 2
+
+
+def test_merging_one_part_returns_it_unchanged():
+    only = result_with({'row_index': 0, 'prediction': 'a'})
+    assert PredictionResult.merge([only]) is only
+
+
+def test_merging_nothing_is_an_error_rather_than_an_empty_answer():
+    with pytest.raises(ValueError):
+        PredictionResult.merge([])
+
+
+def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
+    """A body that does not match the contract is still this client's failure."""
+    from sdm_client.errors import StructuredDataError
+
+    adapter = TabularAdapter()
+    with pytest.raises(StructuredDataError) as error:
+        adapter.normalize(
+            {'model': 'kumo-tabular', 'predictions': [], 'metadata': {}},
+            ('prediction',),
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+    with pytest.raises(StructuredDataError):
+        adapter.normalize(
+            {
+                'id': 'r',
+                'model': 'kumo-tabular',
+                'predictions': [None],
+                'metadata': {},
+            },
+            ('prediction',),
+        )

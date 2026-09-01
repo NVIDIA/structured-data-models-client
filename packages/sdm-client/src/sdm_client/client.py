@@ -93,20 +93,23 @@ class FittedModel:
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
             )
-        payloads = list(
-            self._adapter.session_prediction_plan(request, self._outputs)
-        )
-        response = None
-        for payload in payloads:
-            response = self._client._transport.session_predict(
-                self._session_id, payload
+        parts = [
+            self._adapter.normalize(
+                self._client._transport.session_predict(
+                    self._session_id, payload
+                ),
+                self._outputs,
             )
-        if response is None:
+            for payload in self._adapter.session_prediction_plan(
+                request, self._outputs
+            )
+        ]
+        if not parts:
             raise StructuredDataError(
                 'the adapter produced no scoring call for this request',
                 code='INVALID_REQUEST',
             )
-        return self._adapter.normalize(response, self._outputs)
+        return PredictionResult.merge(parts)
 
     def close(self) -> None:
         r"""Release the pinned context. Safe to call twice."""
@@ -221,15 +224,19 @@ class StructuredDataClient:
             NimRequestError: If the endpoint answered with an error.
         """
         adapter, fields = self._prepare(request, model, outputs)
-        response = None
-        for payload in adapter.prediction_plan(request, fields):
-            response = self._transport.predict(payload)
-        if response is None:
+        # Every call's rows are kept. A request past the endpoint's per-call
+        # cap is split by the adapter, and each call answers about its own
+        # rows, so returning only the last would drop the earlier batches.
+        parts = [
+            adapter.normalize(self._transport.predict(payload), fields)
+            for payload in adapter.prediction_plan(request, fields)
+        ]
+        if not parts:
             raise StructuredDataError(
                 'the adapter produced no call for this request',
                 code='INVALID_REQUEST',
             )
-        return adapter.normalize(response, fields)
+        return PredictionResult.merge(parts)
 
     def fit(
         self,

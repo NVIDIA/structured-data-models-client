@@ -114,6 +114,38 @@ class PredictionResult:
             )
         return frame
 
+    @classmethod
+    def merge(cls, parts: Sequence[PredictionResult]) -> PredictionResult:
+        r"""Join the results of one request that was sent in several calls.
+
+        A request larger than the endpoint's per-call cap is split by the
+        adapter, and each call answers about its own rows. Keeping only the
+        last answer would silently drop every earlier batch, so the parts are
+        concatenated here.
+
+        Raises:
+            ValueError: If ``parts`` is empty, which would mean a request was
+                sent with nothing to score.
+        """
+        if not parts:
+            raise ValueError('no parts to merge')
+        if len(parts) == 1:
+            return parts[0]
+        first = parts[0]
+        items = [item for part in parts for item in part.items]
+        metadata = dict(first.metadata)
+        metadata['batches'] = len(parts)
+        explanation = next(
+            (part.explanation for part in parts if part.explanation), None
+        )
+        return cls(
+            model=first.model,
+            request_id=first.request_id,
+            items=items,
+            metadata=metadata,
+            explanation=explanation,
+        )
+
     def __len__(self) -> int:
         return len(self.items)
 

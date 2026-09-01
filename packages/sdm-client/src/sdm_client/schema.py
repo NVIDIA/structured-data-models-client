@@ -15,6 +15,19 @@ Everything is inferred. You override only where inference is wrong:
 >>> schema['users'].primary_key = 'user_id'
 >>> schema['users']['churn'].stype = 'categorical'
 
+**Inference reads values, so a code stored as a number reads as a number.** A
+postcode, a store number or a status code is ``numerical`` here, and the model
+will treat its distances as meaningful. No amount of inference settles that --
+only you know the column is a label. Correct it:
+
+>>> schema['users']['zip_code'].stype = 'categorical'
+
+Relationship inference is deliberately conservative in the same spirit: it
+links a column only to a primary key of exactly the same name, so
+``orders.user_id`` finds ``users.user_id`` but not ``users.id``. A wrong link
+changes what the model is shown and is harder to notice than a missing one, so
+pass ``relationships=`` when the names do not line up.
+
 Nothing here contacts a model. Inference reads your frames locally.
 """
 

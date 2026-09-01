@@ -196,6 +196,22 @@ class Request:
                 code='INVALID_REQUEST',
             )
 
+        # And the other direction: a feature the model was shown has to be
+        # supplied for the rows being scored. The endpoint rejects a predict
+        # half that is missing one, so name it here instead.
+        absent = [
+            column
+            for column in context.columns
+            if column != target and column not in predict.columns
+        ]
+        if absent:
+            raise StructuredDataError(
+                f'predict is missing column(s) {absent} that context carries. '
+                f'Every feature the model is shown has to be supplied for the '
+                f'rows being scored; drop them from context, or supply them',
+                code='INVALID_REQUEST',
+            )
+
         if schema is None:
             schema = Schema.from_data(
                 {entity_table: context, **related},

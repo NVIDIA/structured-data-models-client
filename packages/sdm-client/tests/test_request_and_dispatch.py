@@ -197,3 +197,18 @@ def test_a_plaintext_url_to_a_remote_host_refuses_an_api_key():
     """A credential must not leave over an unencrypted connection."""
     with pytest.raises(StructuredDataError):
         StructuredDataClient(url='http://example.com', api_key='secret')
+
+
+def test_a_predict_half_missing_a_feature_the_context_carries_is_refused():
+    """The endpoint rejects it; name the column here instead."""
+    with pytest.raises(StructuredDataError) as error:
+        simple_request(predict=to_score().drop(columns=['age']))
+    message = str(error.value)
+    assert 'age' in message
+    assert 'missing' in message
+
+
+def test_the_target_is_not_required_in_the_predict_half():
+    """It is the one context column that must be absent, not present."""
+    request = simple_request()
+    assert 'churn' not in request.predict.instance_table.columns

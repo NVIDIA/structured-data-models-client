@@ -117,9 +117,18 @@ def _validate_url(url: str, api_key: str | None) -> None:
             code='INVALID_CONFIGURATION',
         )
     host = parsed.hostname.lower()
-    if api_key and parsed.scheme == 'http' and host not in _LOCAL_HOSTS:
+    # Userinfo in the URL is a credential too, and ``requests`` turns it into
+    # an ``Authorization: Basic`` header. Checking only ``api_key`` let
+    # ``http://user:secret@host`` send that in the clear.
+    carries_credential = bool(api_key or parsed.username or parsed.password)
+    if (
+        carries_credential
+        and parsed.scheme == 'http'
+        and host not in _LOCAL_HOSTS
+    ):
+        what = 'an API key' if api_key else 'the credential in this URL'
         raise StructuredDataError(
-            'refusing to send an API key over plaintext HTTP; use an https:// '
+            f'refusing to send {what} over plaintext HTTP; use an https:// '
             f'URL (or a localhost endpoint), got {shown!r}',
             code='INVALID_CONFIGURATION',
         )
@@ -440,6 +449,7 @@ class Transport:
             else _build_session(
                 self._url,
                 self._api_key,
+                self._verify_ssl,
                 max_retries=0,
                 backoff_factor=_DEFAULT_BACKOFF_FACTOR,
             )

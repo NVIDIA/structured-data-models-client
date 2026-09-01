@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-httpserver"]
+test = ["pytest", "requests-mock"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
