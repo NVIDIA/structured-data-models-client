@@ -1,0 +1,59 @@
+# Every job runs on every package. The suite is fast and fully offline: nothing
+# here reaches a NIM, a warehouse or a package index beyond the wheels it
+# installs.
+
+default:
+  image: python:3.12-slim
+  interruptible: true
+
+stages:
+  - lint
+  - vendor
+  - test
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_CACHE_DIR: "1"
+
+.python:
+  before_script:
+    - python -V
+    - pip install -q --upgrade pip
+
+lint:
+  stage: lint
+  extends: .python
+  script:
+    - pip install -q ruff==0.16.*
+    - ruff check .
+    - ruff format --check .
+
+# A repo-wide rename matches any text, including text inside a vendored file.
+# This stage is what turns that silent edit into a red pipeline; it runs before
+# the tests so the failure names the real cause rather than a confusing import
+# error downstream.
+vendor:
+  stage: vendor
+  extends: .python
+  script:
+    - python scripts/vendor_manifest.py verify --tree packages/sdm-pql/src/predictive_query
+
+test:
+  stage: test
+  extends: .python
+  script:
+    - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]'
+    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests -q
+
+# The generated bindings are only checked against the canonical contract when
+# that repository is reachable. The digest test in the suite already catches a
+# hand-edited generated file without it.
+contract:
+  stage: test
+  extends: .python
+  allow_failure: true
+  script:
+    - pip install -q pyyaml
+    - git clone --depth 1 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/kumo-tfm-nims/structured-data-api.git" /tmp/contract
+    - pip install -q -e './packages/sdm-api[test]'
+    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check

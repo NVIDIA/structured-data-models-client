@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdm-pql"
+version = "0.1.0"
+description = "Predictive Query Language for the NVIDIA Structured Data Models client: grammar, parser, validator, AST and model profiles"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "NVIDIA" }]
+keywords = ["predictive-query", "pql", "structured-data", "relational", "dsl"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+# Upstream's dependency set, carried across unchanged. This package parses and
+# validates text; it loads no model, reads no warehouse and opens no socket.
+dependencies = [
+    # 4.9.3 exactly: the checked-in parser is ANTLR 4.9.3 output, and a
+    # serialized ATN is only readable by the runtime that emitted it.
+    "antlr4-python3-runtime==4.9.3",
+    "numpy",
+    "pandas",
+    "pydantic",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["predictive_query*"]
+
+[tool.setuptools.package-data]
+"predictive_query" = ["py.typed"]
+"predictive_query.grammar" = ["*.g4", "*.interp", "*.tokens"]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+# The vendored tree is upstream's bytes. Linting it here would invite a fix
+# that silently forks it; see SOURCE.md.
+extend-exclude = ["src/predictive_query"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+xfail_strict = true
+addopts = ["--color=yes"]

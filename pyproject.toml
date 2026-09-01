@@ -1,0 +1,26 @@
+# Workspace root for the sdm-client monorepo. This builds no package; each
+# independently released distribution lives under packages/ with its own
+# pyproject.toml:
+#
+#   packages/sdm-client            - the public client SDK (pure python)
+#   packages/sdm-api               - Universal TFM wire types (pure python)
+#   packages/sdm-pql               - the Predictive Query Language (pure python)
+#   packages/sdm-connectors        - shared data-source connectors (pure python)
+#   packages/sdm-relational-engine - the relational driver (native build)
+#
+# This file carries only shared tooling configuration. Each package's
+# [tool.ruff] extends this file, so the lint baseline below applies to every
+# first-party tree and a package cannot drop rules by shadowing the block.
+
+[tool.ruff]
+line-length = 80
+target-version = "py310"
+# Vendored trees are upstream's bytes. Linting them here would invite a fix
+# that silently forks them; see packages/sdm-pql/SOURCE.md.
+extend-exclude = ["packages/sdm-pql/src/predictive_query"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "single"
