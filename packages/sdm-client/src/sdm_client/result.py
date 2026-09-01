@@ -132,9 +132,18 @@ class PredictionResult:
         if len(parts) == 1:
             return parts[0]
         first = parts[0]
+        models = {part.model for part in parts}
+        if len(models) > 1:
+            raise ValueError(
+                f'cannot merge results from different models: {sorted(models)}'
+            )
         items = [item for part in parts for item in part.items]
         metadata = dict(first.metadata)
         metadata['batches'] = len(parts)
+        # Each call has its own id in the endpoint's logs, and only the first
+        # would otherwise survive -- which is the one you do not have when a
+        # later batch is the one that misbehaved.
+        metadata['batch_request_ids'] = [part.request_id for part in parts]
         explanation = next(
             (part.explanation for part in parts if part.explanation), None
         )

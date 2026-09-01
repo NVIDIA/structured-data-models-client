@@ -116,6 +116,18 @@ def _validate_url(url: str, api_key: str | None) -> None:
             f'url is missing a host, got {shown!r}',
             code='INVALID_CONFIGURATION',
         )
+    # A base URL is a scheme, a host and at most a path prefix. A query or
+    # fragment is not a meaningful part of one, and every route is appended to
+    # this string -- so `http://host?api_key=x` becomes
+    # `http://host/?api_key=x/v1/predictions`, which is both a broken URL and a
+    # secret in a plaintext request line that redaction never sees.
+    if parsed.query or parsed.fragment:
+        raise StructuredDataError(
+            'url must be a base endpoint without a query string or fragment; '
+            'pass a credential as api_key rather than in the URL',
+            code='INVALID_CONFIGURATION',
+        )
+
     host = parsed.hostname.lower()
     # Userinfo in the URL is a credential too, and ``requests`` turns it into
     # an ``Authorization: Basic`` header. Checking only ``api_key`` let

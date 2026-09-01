@@ -196,13 +196,23 @@ class Request:
                 code='INVALID_REQUEST',
             )
 
+        if schema is None:
+            schema = Schema.from_data(
+                {entity_table: context, **related},
+                relationships=None if related else (),
+            )
+
         # And the other direction: a feature the model was shown has to be
         # supplied for the rows being scored. The endpoint rejects a predict
-        # half that is missing one, so name it here instead.
+        # half that is missing one, so name it here instead. A primary key is
+        # identity rather than a feature, so scoring rows may omit it.
+        identity = set(_as_key_tuple(schema[entity_table].primary_key))
         absent = [
             column
             for column in context.columns
-            if column != target and column not in predict.columns
+            if column != target
+            and column not in identity
+            and column not in predict.columns
         ]
         if absent:
             raise StructuredDataError(
@@ -210,12 +220,6 @@ class Request:
                 f'Every feature the model is shown has to be supplied for the '
                 f'rows being scored; drop them from context, or supply them',
                 code='INVALID_REQUEST',
-            )
-
-        if schema is None:
-            schema = Schema.from_data(
-                {entity_table: context, **related},
-                relationships=None if related else (),
             )
 
         self.schema = schema
@@ -254,6 +258,14 @@ class Request:
             f'{self.context_rows} context rows, {self.predict_rows} to score, '
             f'{shape})'
         )
+
+
+def _as_key_tuple(key: Any) -> tuple[str, ...]:
+    if key is None:
+        return ()
+    if isinstance(key, str):
+        return (key,)
+    return tuple(key)
 
 
 def _require_frame(value: Any, name: str) -> pd.DataFrame:

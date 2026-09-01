@@ -1,0 +1,295 @@
+[project]
+name = "sdm-relational-engine"
+dynamic=["dependencies", "version"]
+authors=[
+    {name="NVIDIA"},
+]
+license = "Apache-2.0"
+license-files=["LICENSE", "NOTICE"]
+description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Kumo Relational Client"
+readme="README.md"
+# Upper bound matches the interpreters CI builds and imports wheels for
+# (cp310..cp313 on manylinux_2_28 x86-64): this package ships binary wheels
+# only (no sdist), so a version with no wheel must fail resolution rather than
+# fail to find a distribution. Move both together.
+requires-python=">=3.10,<3.14"
+keywords=[
+    "deep-learning",
+    "graph-neural-networks",
+    "relational-foundation-model",
+    "predictive-query",
+]
+# Only the interpreter versions `build_sdm_relational_engine_wheels` actually builds.
+classifiers=[
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/sdm-client"
+Source = "https://github.com/NVIDIA/sdm-client"
+Issues = "https://github.com/NVIDIA/sdm-client/issues"
+
+[project.optional-dependencies]
+# Invoking a served model. Separate from the `databricks` extra below, which
+# reads Unity Catalog over SQL; either is useful without the other.
+databricks-serving=[
+    "databricks-sdk>=0.68.0,<1.0",
+]
+# The Snowflake counterpart, separate from the `snowflake` extra below for the
+# same reason: reading a warehouse and invoking a served model are unrelated.
+snowflake-serving=[
+    "snowflake-snowpark-python>=1.20",
+]
+test=[
+    "packaging",
+    "pytest",
+    "pytest-mock",
+    "requests-mock",
+]
+codegen=[
+    "pyyaml",
+]
+explain=[
+    "openai>=1.40",
+]
+relbench=[
+    "pooch",
+    "tqdm",
+]
+sqlite=[
+    "sdm-connectors[sqlite]",
+]
+duckdb=[
+    "sdm-connectors[duckdb]",
+]
+snowflake=[
+    "numpy<2.0",
+    "sdm-connectors[snowflake]",
+    "pyyaml",
+]
+databricks=[
+    "sdm-connectors[databricks]",
+    "pyyaml",
+]
+
+[build-system]
+requires = [
+    "pybind11>=2.13.6",
+    "scikit-build-core<0.12.0",
+    # PEP 639 `license` + `license-files` above; older setuptools silently
+    # drops the license files from the wheel's .dist-info.
+    "setuptools>=77",
+    "setuptools_scm",
+]
+build-backend = "scikit_build_core.setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where=["src"]
+include=["sdm_relational_engine*"]
+
+[tool.setuptools.package-data]
+"sdm_relational_engine"=["py.typed"]
+"sdm_relational_engine.api"=["SOURCE.md"]
+"predictive_query"=["SOURCE.md"]
+"sdm_relational_engine.rfm"=["assets/*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sdm_relational_engine._version.__version__"}
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+editable.verbose=false
+
+# https://cibuildwheel.pypa.io/en/stableoptions/
+[tool.cibuildwheel]
+build-frontend = "build[uv]"
+
+[tool.pytest.ini_options]
+xfail_strict = true
+addopts = [
+    "--capture=no",
+    "--color=yes",
+    "-vv",
+]
+filterwarnings=[
+    # NOTE Entries here must not name a warning class by import path: pytest
+    # resolves those while parsing this file, which imports the module before
+    # any test runs. `sdm_relational_engine.rfm` is not importable without the compiled
+    # sampler, so such an entry breaks the whole session under WITH_RELATIONALLIB=0.
+    # Scope class-based filters to the tests that need them instead.
+    "error::UserWarning",
+    "error::DeprecationWarning",
+    "ignore:.*pkg_resources.*:DeprecationWarning",
+    # Pydantic v1 calls ForwardRef._evaluate, which is deprecated in Python
+    # 3.14. Remove once we upgrade to Pydantic v2.
+    "ignore:ForwardRef._evaluate is a private API.*:DeprecationWarning",
+]
+markers = [
+    "integration: integration tests",
+    "live_nim: opt-in live KumoRelational NIM tests using RFM_NIM_BASE_URL",
+    "live_nim_smoke: fast public client and NIM boundary validation",
+    "live_nim_full: extended task, validation, recovery, and session coverage",
+]
+
+[tool.ruff]  # https://docs.astral.sh/ruff/rules
+# Inherit the workspace rule set; this package only adds to it.
+extend="../../pyproject.toml"
+src=["src/sdm_relational_engine", "setup.py"]
+line-length=80
+indent-width=4
+target-version="py310"
+# ANTLR output. `PQLGrammarParser` is a serialized ATN on a single line, so
+# there is nothing here a human edits or a linter can usefully say. To change
+# the language, edit PQLGrammar.g4 and regenerate. Everything else under api/
+# and pql/ is linted: with kumo-api and kumo-pql gone, those trees are ordinary
+# first-party code with a documented origin (see their SOURCE.md).
+extend-exclude=[
+    "src/sdm_relational_engine/pql/grammar/PQLGrammarLexer.py",
+    "src/sdm_relational_engine/pql/grammar/PQLGrammarParser.py",
+    "src/sdm_relational_engine/pql/grammar/PQLGrammarVisitor.py",
+]
+
+[tool.ruff.lint]
+extend-select=[
+    "D",  # pydocstyle
+]
+# The D1xx entries below are a docstring-coverage backlog, not a policy: this
+# package predates the docstring convention the other two follow, and turning
+# them on today reports several hundred findings at once. Retire them a rule at
+# a time as the tree is documented.
+ignore = [
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D104",  # Missing docstring in public package
+    "D105",  # Missing docstring in magic method -- intentional
+    "D107",  # Missing docstring in __init__ -- documented on the class
+    "D205",  # Blank line required between summary line and description
+    "D415",  # First line should end with a period
+
+    # --- Style backlog -------------------------------------------------
+    # Everything below is on in sdm-client and sdm-connectors, which pass
+    # clean. This tree is an order of magnitude larger and predates the rule
+    # set, so each is listed with its count at the time of writing and is
+    # meant to be retired one rule at a time, not left indefinitely. None of
+    # them can be auto-fixed without changing behaviour.
+    "C408",    # 34x dict()/list() call instead of a literal
+    "B028",    # 13x warnings.warn without stacklevel -- changes the reported
+               #     call site, so it is a behaviour change for callers
+               #     filtering on it
+    "B905",    # 13x zip() without strict=; several zip unequal-length inputs
+               #     deliberately, so this needs reading case by case
+    "TRY004",  #  8x raise TypeError for a type check -- would change the
+               #     exception type callers see, so it belongs with the
+               #     exception-hierarchy work
+    "SIM105",  #  7x try/except/pass -> contextlib.suppress
+    "SIM117",  #  7x nested with statements
+    "SIM118",  #  7x `in dict.keys()`
+    "RET504",  #  5x unnecessary assignment before return
+    "B023",    #  4x function defined in a loop uses the loop variable; each
+               #     needs checking for whether late binding is intended
+    "PIE810",  #  4x multiple startswith/endswith calls
+    "RUF005",  #  4x list concatenation instead of unpacking
+    "SIM102",  #  3x collapsible if
+    "C414",    #  2x unnecessary double cast
+    "RUF015",  #  2x index into an allocated iterable for the first element
+    "B024",    #  1x ABC with no abstract method
+    "C413",    #  1x reversed(sorted(...))
+
+    # The tree carries 11 markers that name neither an owner nor an issue.
+    # Each sits on live code and is actionable, but there is no public issue
+    # tracker to point them at until this repository is on GitHub. Give them
+    # issue links then and drop these three rules.
+    "TD002",
+    "TD003",
+    "FIX002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# NOTE This table replaces the root one rather than merging with it, so the
+# workspace-level entries have to be repeated here.
+# Import order inside a package __init__ is load-bearing: see the root
+# pyproject.toml for why sorting them breaks sdm_relational_engine.rfm.backend.local.
+"**/__init__.py" = ["I001"]
+# Tests assert, use literal expected values, nest `with pytest.raises(...)`
+# around a fixture, and evaluate a bare attribute to prove it raises.
+"**/tests/**" = [
+    "S101",
+    "ANN",
+    "PLR2004",
+    "ERA001",
+    "SIM117",
+    "RUF012",
+    "B018",
+    "RUF043",
+]
+# Written by scripts/generate_tfm_api.py from the Universal TFM OpenAPI
+# contract; edit the generator, not the output.
+"src/sdm_relational_engine/client/generated/*.py" = ["ERA001"]
+# Named after starlette's exception, which it is derived from and mirrors;
+# an `Error` suffix would rename a public class for no behavioural gain.
+"src/sdm_relational_engine/exceptions.py" = ["N818"]
+# `Timestamp` and `Timedelta` are drop-in replacements for the pandas
+# constructors they wrap, and read as such at every call site.
+"src/sdm_relational_engine/rfm/base/utils.py" = ["N802"]
+# The AST and parser modules document the grammar shape they handle in
+# comments -- `# "AGGR ( column , int , int )"`, `# (condition)` -- which
+# ERA001 cannot tell apart from commented-out code.
+"src/sdm_relational_engine/api/pquery/AST/*.py" = ["ERA001"]
+# `cls` is the correct first argument of a pydantic field validator, which is
+# what every N805 in these files is; ruff does not recognise the project's
+# `compatible_field_validator` decorator as one.
+"src/sdm_relational_engine/api/data_source.py" = ["N805"]
+"src/sdm_relational_engine/api/source_table.py" = ["N805"]
+"src/sdm_relational_engine/api/table.py" = ["N805"]
+"src/sdm_relational_engine/pql/parser/*.py" = ["ERA001"]
+# The generated `PQLGrammarVisitor` declares `visitProg` and its siblings.
+"src/sdm_relational_engine/pql/parser/visitor.py" = ["N802"]
+# `BaseHTTPRequestHandler` dispatches through `do_GET` and `do_POST`.
+"tests/client/test_client_security.py" = ["N815"]
+# ANTLR's `ErrorListener` calls `syntaxError(...)` by that exact name.
+"tests/test_pql_quoted_identifiers.py" = ["N802"]
+# Databricks injects `dbutils`/`spark`/`display` into notebooks (F821), and
+# each cell repeats its own imports so it stays runnable on its own (E402).
+"**/examples/**/notebooks/*.ipynb" = ["F821", "E402"]
+
+[tool.ruff.lint.pydocstyle]
+convention="google"
+
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.analysis]
+allowed-unresolved-imports = [
+    "setuptools.**",
+    "sdm_relational_engine.relationallib",
+    "IPython.**",
+    "google.colab.**",
+    "streamlit.**",
+    "snowflake.**",
+    "adbc_driver_sqlite.**",
+    "databricks.**",
+]
+
+[[tool.ty.overrides]]
+include = ["tests/**"]
+rules = { unresolved-import = "ignore" }
+
+[[tool.ty.overrides]]
+include = ["examples/**"]
+rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", unresolved-reference = "ignore", no-matching-overload = "ignore", unsupported-operator = "ignore", invalid-argument-type = "ignore" }
+
+[[tool.ty.overrides]]
+include = ["**/*.ipynb"]
+rules = { unresolved-import = "ignore", unresolved-reference = "ignore" }

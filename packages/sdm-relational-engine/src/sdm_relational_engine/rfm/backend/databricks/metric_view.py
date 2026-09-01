@@ -1,0 +1,498 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import re
+from collections.abc import Collection, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+from sdm_relational_engine.exceptions import KumoRelationalError
+
+if TYPE_CHECKING:
+    from sdm_relational_engine.rfm.backend.databricks import Connection
+
+SOURCE_ALIAS = 'source'
+
+_CARDINALITIES = {'many_to_one', 'one_to_many'}
+_MEASURE_SUFFIX = ' measure'
+
+_BARE_IDENT = r'[A-Za-z_][A-Za-z0-9_]*'
+_IDENT = rf'`(?:[^`]|``)+`|{_BARE_IDENT}'
+
+_TABLE_REFERENCE_RE = re.compile(
+    rf'\s*({_IDENT})(?:\.({_IDENT}))?(?:\.({_IDENT}))?\s*$'
+)
+_CHAIN = rf'(?:{_IDENT})(?:\s*\.\s*(?:{_IDENT}))*'
+_JOIN_CONDITION_RE = re.compile(rf'\s*({_CHAIN})\s*=\s*({_CHAIN})\s*$')
+_IDENT_RE = re.compile(_IDENT)
+
+
+class UnsupportedJoinError(KumoRelationalError, ValueError):
+    r"""Raised when a metric view join cannot be converted into a graph
+    edge.
+    """
+
+
+@dataclass(frozen=True)
+class JoinKeyRef:
+    r"""One side of a metric view join condition.
+
+    Args:
+        qualifier: The (dot-joined) table alias or join path qualifying the
+            column, if any.
+        column: The referenced column name.
+    """
+
+    qualifier: str | None
+    column: str
+
+
+@dataclass(frozen=True)
+class MetricViewJoin:
+    r"""A join of a metric view definition.
+
+    Args:
+        alias: The join name, used as the graph table name.
+        table: The parsed name parts of the joined table.
+        parent_alias: The alias of the table this join is declared on, either
+            :obj:`SOURCE_ALIAS` or the alias of an enclosing join.
+        path: The aliases of all enclosing joins followed by ``alias``.
+            Dimensions reference nested joins by this full path, *e.g.*,
+            ``customer.nation.n_name``.
+        condition: The two sides of the single-column equality join condition.
+        cardinality: Either ``'many_to_one'`` or ``'one_to_many'``.
+    """
+
+    alias: str
+    table: tuple[str, ...]
+    parent_alias: str
+    path: tuple[str, ...]
+    condition: tuple[JoinKeyRef, JoinKeyRef]
+    cardinality: str
+
+
+@dataclass(frozen=True)
+class MetricViewColumn:
+    r"""A metric view dimension resolved onto a single table.
+
+    Args:
+        name: The dimension name, used as the column name.
+        alias: The alias of the table the dimension refers to, either
+            :obj:`SOURCE_ALIAS` or a join alias.
+        expr: The dimension expression with the alias qualifier stripped.
+    """
+
+    name: str
+    alias: str
+    expr: str
+
+
+@dataclass
+class MetricViewSpec:
+    r"""The graph-relevant parts of a metric view definition.
+
+    Args:
+        source: The parsed name parts of the source (fact) table.
+        joins: All convertible joins, parents before children.
+        columns: All dimensions resolved onto a single table.
+        messages: Human-readable messages for every dropped element.
+    """
+
+    source: tuple[str, ...]
+    joins: list[MetricViewJoin]
+    columns: list[MetricViewColumn]
+    messages: list[str]
+
+
+def unquote_ident(name: str) -> str:
+    r"""Removes backtick quoting from an identifier, if present."""
+    name = name.strip()
+    if len(name) >= 2 and name.startswith('`') and name.endswith('`'):
+        return name[1:-1].replace('``', '`')
+    return name
+
+
+def parse_table_reference(name: Any) -> tuple[str, ...] | None:
+    r"""Parses a table reference into its unquoted name parts.
+
+    Returns ``None`` if the reference is not a plain (optionally qualified)
+    table name, *e.g.*, a SQL query.
+    """
+    if not isinstance(name, str):
+        return None
+    match = _TABLE_REFERENCE_RE.match(name)
+    if match is None:
+        return None
+    return tuple(
+        unquote_ident(part) for part in match.groups() if part is not None
+    )
+
+
+def parse_join_condition(
+    condition: Any,
+) -> tuple[JoinKeyRef, JoinKeyRef] | None:
+    r"""Parses a single-column equality join condition.
+
+    Column references may be qualified by an alias or a (dotted) join path.
+    Returns ``None`` for any other condition, *e.g.*, composite or
+    non-equality joins.
+    """
+    if not isinstance(condition, str):
+        return None
+    match = _JOIN_CONDITION_RE.match(condition)
+    if match is None:
+        return None
+
+    def _ref(chain: str) -> JoinKeyRef:
+        parts = [unquote_ident(part) for part in _IDENT_RE.findall(chain)]
+        return JoinKeyRef(
+            qualifier='.'.join(parts[:-1]) or None,
+            column=parts[-1],
+        )
+
+    left, right = match.groups()
+    return _ref(left), _ref(right)
+
+
+def _quoted_variants(name: str) -> str:
+    quoted = re.escape('`' + name.replace('`', '``') + '`')
+    if re.fullmatch(_BARE_IDENT, name):
+        return f'{quoted}|{re.escape(name)}'
+    return quoted
+
+
+def _to_path(alias: str | Sequence[str]) -> tuple[str, ...]:
+    if isinstance(alias, str):
+        return (alias,)
+    return tuple(alias)
+
+
+def _path_pattern(path: Sequence[str]) -> re.Pattern[str]:
+    chain = r'\s*\.\s*'.join(f'(?:{_quoted_variants(part)})' for part in path)
+    return re.compile(
+        rf'(?<![A-Za-z0-9_`$.]){chain}\s*\.',
+        flags=re.IGNORECASE,
+    )
+
+
+def _field_pattern(name: str) -> re.Pattern[str]:
+    return re.compile(
+        rf'(?<![A-Za-z0-9_`$.])(?:{_quoted_variants(name)})(?![A-Za-z0-9_`])',
+        flags=re.IGNORECASE,
+    )
+
+
+def references_alias(expr: str, alias: str | Sequence[str]) -> bool:
+    r"""Returns ``True`` if the expression references a column of the given
+    table alias or join path.
+    """
+    return _path_pattern(_to_path(alias)).search(expr) is not None
+
+
+def strip_alias_qualifier(expr: str, alias: str | Sequence[str]) -> str:
+    r"""Removes all qualified references to the given table alias or join
+    path from the expression.
+    """
+    return _path_pattern(_to_path(alias)).sub('', expr).strip()
+
+
+def parse_metric_view(definition: str) -> MetricViewSpec:
+    r"""Parses a metric view YAML definition into its graph-relevant parts.
+
+    Measures define aggregations rather than row-level values, and are
+    therefore never part of the returned specification. Elements that cannot
+    be represented in a graph (SQL query join sources, composite or
+    non-equality join conditions, dimensions referencing multiple tables,
+    filters, parameters, and materializations) are dropped and reported in
+    :attr:`MetricViewSpec.messages`.
+
+    Raises:
+        ValueError: If the definition is not a YAML mapping, misses a source,
+            or defines a SQL query as its source.
+    """
+    import yaml
+
+    cfg = yaml.safe_load(definition)
+    if not isinstance(cfg, dict):
+        raise ValueError('The metric view definition is not a YAML mapping')
+
+    source = cfg.get('source')
+    if source is None:
+        raise ValueError("The metric view definition misses a 'source'")
+    source_ref = parse_table_reference(source)
+    if source_ref is None:
+        raise ValueError(
+            f'Unsupported metric view source {source!r}. Only plain table '
+            f'names are supported as the source of a metric view when '
+            f'converting it into a graph'
+        )
+
+    messages: list[str] = []
+    for key in ('filter', 'parameters', 'materialization'):
+        if key in cfg:
+            messages.append(
+                f"Ignored the '{key}' section since it cannot "
+                f'be represented in a graph'
+            )
+
+    joins: list[MetricViewJoin] = []
+    aliases: set[str] = set()
+    kept: set[str] = set()
+
+    def _collect_aliases(join_cfgs: Any) -> None:
+        for join_cfg in join_cfgs or []:
+            if isinstance(join_cfg, dict):
+                if isinstance(join_cfg.get('name'), str):
+                    aliases.add(join_cfg['name'])
+                _collect_aliases(join_cfg.get('joins'))
+
+    def _add_joins(join_cfgs: Any, parent_path: tuple[str, ...]) -> None:
+        parent_alias = parent_path[-1] if parent_path else SOURCE_ALIAS
+        for join_cfg in join_cfgs or []:
+            if not isinstance(join_cfg, dict):
+                messages.append(
+                    f'Failed to add join {join_cfg!r} since it is not a mapping'
+                )
+                continue
+
+            alias = join_cfg.get('name')
+            if not isinstance(alias, str):
+                messages.append(
+                    f'Failed to add join {join_cfg!r} since it misses a name'
+                )
+                continue
+
+            def _skip(msg: str) -> None:
+                messages.append(f"Failed to add join '{alias}' since {msg}")
+                aliases.add(alias)
+                _collect_aliases(join_cfg.get('joins'))
+
+            if alias == SOURCE_ALIAS or alias in kept:
+                _skip(f"the name '{alias}' is already in use")
+                continue
+
+            table = parse_table_reference(join_cfg.get('source'))
+            if table is None:
+                _skip('only plain table names are supported as join sources')
+                continue
+
+            cardinality = join_cfg.get('cardinality', 'many_to_one')
+            if cardinality not in _CARDINALITIES:
+                _skip(f"of its unsupported cardinality '{cardinality}'")
+                continue
+
+            using = join_cfg.get('using')
+            if isinstance(using, str):
+                using = [using]
+            if using is not None:
+                if not isinstance(using, list) or len(using) != 1:
+                    _skip('composite key references are not yet supported')
+                    continue
+                column = unquote_ident(str(using[0]))
+                condition = (
+                    JoinKeyRef(qualifier=parent_alias, column=column),
+                    JoinKeyRef(qualifier=alias, column=column),
+                )
+            else:
+                on_cfg = join_cfg.get('on', join_cfg.get(True))
+                parsed = parse_join_condition(on_cfg)
+                if parsed is None:
+                    _skip(
+                        'only single-column equality join conditions are '
+                        'supported'
+                    )
+                    continue
+                condition = parsed
+
+            joins.append(
+                MetricViewJoin(
+                    alias=alias,
+                    table=table,
+                    parent_alias=parent_alias,
+                    path=parent_path + (alias,),
+                    condition=condition,
+                    cardinality=cardinality,
+                )
+            )
+            aliases.add(alias)
+            kept.add(alias)
+            _add_joins(
+                join_cfg.get('joins'), parent_path=parent_path + (alias,)
+            )
+
+    _add_joins(cfg.get('joins'), parent_path=())
+
+    candidates: list[tuple[tuple[str, ...], str]] = []
+    for join in joins:
+        candidates.append((join.path, join.alias))
+        if len(join.path) > 1:
+            candidates.append(((join.alias,), join.alias))
+    for alias in aliases - kept:
+        candidates.append(((alias,), alias))
+    candidates.append(((SOURCE_ALIAS,), SOURCE_ALIAS))
+    candidates.sort(key=lambda candidate: len(candidate[0]), reverse=True)
+
+    columns: list[MetricViewColumn] = []
+    defined: dict[str, str] = {}
+    dim_cfgs = list(cfg.get('dimensions') or []) + list(cfg.get('fields') or [])
+    for dim_cfg in dim_cfgs:
+        if not isinstance(dim_cfg, dict):
+            messages.append(
+                f'Failed to add dimension {dim_cfg!r} since it is not a mapping'
+            )
+            continue
+
+        name = dim_cfg.get('name')
+        expr = dim_cfg.get('expr')
+        if not isinstance(name, str) or not isinstance(expr, str):
+            messages.append(
+                f'Failed to add dimension {dim_cfg!r} since it '
+                f'misses a name or expression'
+            )
+            continue
+
+        for field_name, field_expr in defined.items():
+            expr = _field_pattern(field_name).sub(
+                lambda match: f'({field_expr})', expr
+            )
+        defined[name] = expr
+
+        refs: set[str] = set()
+        for path, path_alias in candidates:
+            if references_alias(expr, path):
+                refs.add(path_alias)
+                expr = strip_alias_qualifier(expr, path)
+        if len(refs) > 1:
+            messages.append(
+                f"Failed to add dimension '{name}' since its "
+                f'expression references multiple tables'
+            )
+            continue
+
+        alias = refs.pop() if refs else SOURCE_ALIAS
+        if alias != SOURCE_ALIAS and alias not in kept:
+            messages.append(
+                f"Failed to add dimension '{name}' since it "
+                f"references the skipped join '{alias}'"
+            )
+            continue
+
+        columns.append(
+            MetricViewColumn(
+                name=name,
+                alias=alias,
+                expr=expr,
+            )
+        )
+
+    return MetricViewSpec(
+        source=source_ref,
+        joins=joins,
+        columns=columns,
+        messages=messages,
+    )
+
+
+def resolve_join_keys(
+    join: MetricViewJoin,
+    child_columns: Collection[str],
+    parent_columns: Collection[str],
+) -> tuple[str, str, str]:
+    r"""Resolves a join condition into ``(other_alias, other_key,
+    child_key)``.
+
+    ``other_alias`` is the alias of the non-child side of the join, either
+    :attr:`MetricViewJoin.parent_alias` or :obj:`SOURCE_ALIAS`. Unqualified
+    column references are resolved by their (unambiguous) membership in the
+    child or parent table.
+
+    Raises:
+        UnsupportedJoinError: If the condition cannot be resolved.
+    """
+    child_names = {join.alias, '.'.join(join.path)}
+    parent_names = {join.parent_alias}
+    if len(join.path) > 1:
+        parent_names.add('.'.join(join.path[:-1]))
+
+    def _side(ref: JoinKeyRef) -> str | None:
+        if ref.qualifier is not None:
+            if ref.qualifier in child_names:
+                return join.alias
+            if ref.qualifier in parent_names:
+                return join.parent_alias
+            if ref.qualifier == SOURCE_ALIAS:
+                return SOURCE_ALIAS
+            return None
+        in_child = ref.column in child_columns
+        in_parent = ref.column in parent_columns
+        if in_child and not in_parent:
+            return join.alias
+        if in_parent and not in_child:
+            return join.parent_alias
+        return None
+
+    first, second = join.condition
+    first_side, second_side = _side(first), _side(second)
+
+    if first_side == join.alias and second_side not in (None, join.alias):
+        assert second_side is not None
+        return second_side, second.column, first.column
+    if second_side == join.alias and first_side not in (None, join.alias):
+        assert first_side is not None
+        return first_side, first.column, second.column
+
+    raise UnsupportedJoinError(
+        f"Failed to add join '{join.alias}' since its join condition could "
+        f"not be resolved into a key reference between '{join.parent_alias}' "
+        f"and '{join.alias}'"
+    )
+
+
+def read_metric_view_definition(
+    connection: Connection,
+    quoted_name: str,
+) -> tuple[str, dict[str, str], str | None, str | None]:
+    r"""Reads a metric view definition from a Databricks SQL warehouse.
+
+    Returns the YAML definition, the data types of all dimensions by name,
+    and the catalog and schema of the metric view.
+
+    Raises:
+        ValueError: If the relation is not a metric view or exposes no
+            definition.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(f'DESCRIBE TABLE EXTENDED {quoted_name}')
+        rows = cursor.fetchall()
+
+    dtypes: dict[str, str] = {}
+    details: dict[str, str] = {}
+    in_columns = True
+    for row in rows:
+        col_name = str(row[0]).strip() if row[0] is not None else ''
+        data_type = str(row[1]) if len(row) > 1 and row[1] is not None else ''
+        if in_columns:
+            if col_name == '' or col_name.startswith('#'):
+                in_columns = False
+                continue
+            if not data_type.endswith(_MEASURE_SUFFIX):
+                dtypes[col_name] = data_type
+        elif col_name and col_name not in details:
+            details[col_name] = data_type
+
+    if details.get('Type') != 'METRIC_VIEW':
+        raise ValueError(
+            f"'{quoted_name}' is not a metric view "
+            f"(got type '{details.get('Type', 'UNKNOWN')}')"
+        )
+
+    definition = details.get('View Text')
+    if not definition:
+        raise ValueError(
+            f"Could not read the definition of metric view '{quoted_name}'"
+        )
+
+    return definition, dtypes, details.get('Catalog'), details.get('Database')

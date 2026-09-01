@@ -210,3 +210,41 @@ def test_unusable_transport_limits_are_refused_at_construction(
 ):
     with pytest.raises(StructuredDataError):
         Transport('https://nim.example', timeout=timeout, max_retries=retries)
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'http://nim.example?api_key=query-secret',
+        'https://nim.example?token=query-secret',
+        'https://nim.example/api?access_token=query-secret',
+        'https://nim.example#fragment',
+    ],
+)
+def test_a_base_url_carrying_a_query_or_fragment_is_refused(url):
+    """A route is appended to this string, so a query breaks the URL as well.
+
+    ``http://host?api_key=x`` became ``http://host/?api_key=x/v1/predictions``:
+    a malformed request line, with the secret in it, that redaction never saw
+    because it only ever stripped userinfo.
+    """
+    with pytest.raises(StructuredDataError) as error:
+        Transport(url)
+    assert error.value.code == 'INVALID_CONFIGURATION'
+    assert 'query-secret' not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    'url',
+    [
+        'https://nim.example',
+        'http://localhost:8000',
+        'https://nim.example/api/v2',
+    ],
+)
+def test_an_ordinary_base_url_with_a_path_prefix_is_still_accepted(url):
+    transport = Transport(url)
+    try:
+        assert transport.url == url.rstrip('/')
+    finally:
+        transport.close()

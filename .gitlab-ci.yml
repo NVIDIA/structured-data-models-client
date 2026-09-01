@@ -57,8 +57,22 @@ test:
   extends: .python
   script:
     - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,test]'
-    # Live tests are deselected: this job reaches no NIM and no warehouse.
-    - python -m pytest packages/*/tests -q -m 'not live_nim and not live_warehouse'
+    # Live tests are deselected: this job reaches no NIM and no warehouse. The
+    # relational engine is a native build and is tested in its own job.
+    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests packages/sdm-client/tests packages/sdm-connectors/tests -q -m 'not live_nim and not live_warehouse'
+
+# The engine builds a C++ extension, so it needs a toolchain the pure-python
+# jobs do not. It is tested from its own directory because some of its tests
+# read paths relative to the working directory.
+engine:
+  stage: test
+  extends: .python
+  script:
+    - apt-get update -qq && apt-get install -y -qq build-essential cmake git
+    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb]'
+    - pip install -q -e './packages/sdm-relational-engine'
+    - pip install -q pytest pytest-mock requests-mock pytest-httpserver pytest-subtests
+    - cd packages/sdm-relational-engine && python -m pytest tests -q
 
 # Blocking. Fetches the contract at the revision recorded in PROVENANCE.json,
 # proves the recorded digest is that revision's actual bytes, and proves the
