@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Universal TFM API wire types for the NVIDIA Structured Data Models client"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 authors = [{ name = "NVIDIA" }]
 keywords = ["structured-data", "foundation-model", "openapi", "wire-format"]

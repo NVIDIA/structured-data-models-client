@@ -144,3 +144,141 @@ def test_the_package_carries_no_third_party_dependency():
     text = (PACKAGE_ROOT / 'pyproject.toml').read_text(encoding='utf-8')
     body = text.split('dependencies = [', 1)[1].split(']', 1)[0]
     assert not body.strip(), f'sdm-api grew a dependency: {body.strip()}'
+
+
+def test_a_response_item_without_row_index_is_refused():
+    """``row_index`` is the join key callers are told to rely on.
+
+    The contract makes it required. If the binding accepted an item without
+    one, a caller would receive a row whose key is silently ``None`` and join
+    against it.
+    """
+    from sdm_api.generated.tfm_api import PredictionItem, ResponseContractError
+
+    with pytest.raises(ResponseContractError):
+        PredictionItem.from_dict({})
+    with pytest.raises(ResponseContractError):
+        PredictionItem.from_dict({'prediction': 1})
+
+
+def test_a_null_row_index_is_refused_as_well_as_a_missing_one():
+    from sdm_api.generated.tfm_api import PredictionItem, ResponseContractError
+
+    with pytest.raises(ResponseContractError):
+        PredictionItem.from_dict({'row_index': None})
+
+
+@pytest.mark.parametrize('omitted', ['id', 'model', 'predictions', 'metadata'])
+def test_a_response_missing_any_required_field_is_refused(omitted):
+    from sdm_api.generated.tfm_api import (
+        PredictionResponse,
+        ResponseContractError,
+    )
+
+    body = {
+        'id': 'r-1',
+        'model': 'kumo-tabular',
+        'predictions': [{'row_index': 0}],
+        'metadata': {},
+    }
+    del body[omitted]
+    with pytest.raises(ResponseContractError):
+        PredictionResponse.from_dict(body)
+
+
+def test_a_well_formed_response_parses_and_keeps_its_join_key():
+    from sdm_api.generated.tfm_api import PredictionResponse
+
+    response = PredictionResponse.from_dict(
+        {
+            'id': 'r-1',
+            'model': 'kumo-relational',
+            'predictions': [
+                {'row_index': 0, 'prediction': 'yes'},
+                {'row_index': 1, 'prediction': 'no', 'id': 'user-7'},
+            ],
+            'metadata': {'elapsed_ms': 12},
+        }
+    )
+    assert response.model == 'kumo-relational'
+    assert [item.row_index for item in response.predictions] == [0, 1]
+    assert response.predictions[1].id == 'user-7'
+    # An optional field stays absent rather than being invented.
+    assert response.predictions[0].id is None
+    assert response.metadata == {'elapsed_ms': 12}
+
+
+def test_every_spec_required_field_is_generated_without_a_default():
+    """The generator derives requiredness from the spec; prove it landed.
+
+    Read off the dataclass rather than the source, so this fails if a future
+    regeneration turns a required field back into a defaulted one.
+    """
+    import dataclasses
+
+    from sdm_api.generated.tfm_api import PredictionItem, PredictionResponse
+
+    required = {
+        PredictionItem: {'row_index'},
+        PredictionResponse: {'id', 'model', 'predictions', 'metadata'},
+    }
+    for model, names in required.items():
+        defaulted = {
+            field.name
+            for field in dataclasses.fields(model)
+            if field.default is not dataclasses.MISSING
+            or field.default_factory is not dataclasses.MISSING
+        }
+        assert not (names & defaulted), (
+            f'{model.__name__} generates spec-required fields with defaults: '
+            f'{sorted(names & defaulted)}'
+        )
+
+
+def test_the_recorded_revision_is_the_one_the_digest_belongs_to():
+    """Provenance must pin a revision *and* that revision's bytes.
+
+    Checking the shape of the revision string alone would pass against a
+    record that names one revision and carries another's digest.
+    """
+    record = provenance()
+    if not CONTRACT.exists():
+        pytest.skip('the contract repository is not checked out')
+
+    import subprocess
+
+    head = subprocess.check_output(
+        ['git', '-C', str(CONTRACT.parent), 'rev-parse', 'HEAD'], text=True
+    ).strip()
+    if head != record['source_revision']:
+        pytest.skip(
+            'the local contract checkout is not at the recorded revision'
+        )
+    assert (
+        hashlib.sha256(CONTRACT.read_bytes()).hexdigest()
+        == record['source_sha256']
+    )
+
+
+def test_the_generator_that_produced_these_bindings_is_recorded():
+    """A changed generator changes the output, so it belongs in provenance."""
+    generator = REPO_ROOT / provenance()['generator']
+    assert generator.is_file(), 'provenance names a generator that is missing'
+    assert (
+        hashlib.sha256(generator.read_bytes()).hexdigest()
+        == provenance()['generator_sha256']
+    ), 'the generator changed; regenerate so the record matches it'
+
+
+def test_the_formatter_does_not_own_the_generated_file():
+    """Formatting the generated file would break its provenance on every run.
+
+    Its bytes are recorded in PROVENANCE.json, so whoever writes them has to be
+    the generator alone. This is a regression guard: the exclusion was added
+    after a formatter run silently invalidated the record.
+    """
+    root = (REPO_ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    assert 'sdm_api/generated/tfm_api.py' in root, (
+        'the generated bindings are not excluded from ruff; a format run will '
+        'rewrite them and break PROVENANCE.json'
+    )

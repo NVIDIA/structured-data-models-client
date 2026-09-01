@@ -66,8 +66,8 @@ TFM_TASK_KIND_VALUES: Final[tuple[str, ...]] = (
 
 @dataclass(frozen=True)
 class PredictionItem:
+    row_index: int
     id: str | None = None
-    row_index: int | None = None
     forecast_step: int | None = None
     prediction: Any | None = None
     probabilities: dict[str, float] | None = None
@@ -82,7 +82,7 @@ class PredictionItem:
     def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionItem':
         return cls(
             id=str(data['id']) if 'id' in data else None,
-            row_index=_int_or_none(data.get('row_index')),
+            row_index=_require_int(data, 'row_index', 'PredictionItem'),
             forecast_step=_int_or_none(data.get('forecast_step')),
             prediction=data.get('prediction'),
             probabilities=_float_dict(data.get('probabilities')),
@@ -105,14 +105,64 @@ class PredictionResponse:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionResponse':
         return cls(
-            id=str(data['id']),
-            model=str(data['model']),
+            id=_require_str(data, 'id', 'PredictionResponse'),
+            model=_require_str(data, 'model', 'PredictionResponse'),
             predictions=tuple(
                 PredictionItem.from_dict(item)
-                for item in data.get('predictions', [])
+                for item in _require_sequence(
+                    data, 'predictions', 'PredictionResponse'
+                )
             ),
-            metadata=dict(data.get('metadata', {})),
+            metadata=dict(_require_mapping(data, 'metadata', 'PredictionResponse')),
         )
+
+
+class ResponseContractError(ValueError):
+    """A response omitted a field the contract requires."""
+
+
+def _require(data: Mapping[str, Any], field: str, model: str) -> Any:
+    if field not in data:
+        raise ResponseContractError(
+            f'{model} response is missing required field {field!r}'
+        )
+    return data[field]
+
+
+def _require_str(data: Mapping[str, Any], field: str, model: str) -> str:
+    return str(_require(data, field, model))
+
+
+def _require_int(data: Mapping[str, Any], field: str, model: str) -> int:
+    value = _require(data, field, model)
+    if value is None:
+        raise ResponseContractError(
+            f'{model} response has a null {field!r}, which the contract '
+            f'requires'
+        )
+    return int(value)
+
+
+def _require_sequence(
+    data: Mapping[str, Any], field: str, model: str
+) -> Any:
+    value = _require(data, field, model)
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):
+        raise ResponseContractError(
+            f'{model} response field {field!r} is not a sequence'
+        )
+    return value
+
+
+def _require_mapping(
+    data: Mapping[str, Any], field: str, model: str
+) -> Mapping[str, Any]:
+    value = _require(data, field, model)
+    if not isinstance(value, Mapping):
+        raise ResponseContractError(
+            f'{model} response field {field!r} is not an object'
+        )
+    return value
 
 
 def _float_dict(value: Any) -> dict[str, float] | None:

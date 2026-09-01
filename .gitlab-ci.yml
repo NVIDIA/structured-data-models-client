@@ -1,6 +1,12 @@
-# Every job runs on every package. The suite is fast and fully offline: nothing
-# here reaches a NIM, a warehouse or a package index beyond the wheels it
-# installs.
+# Every job here is offline and fast. Nothing reaches a NIM, a warehouse, or a
+# package index beyond the wheels it installs.
+#
+# The one exception is `contract`, which clones the canonical contract at the
+# exact revision this repository's bindings were generated from. That job is
+# blocking, because "the generated bindings match the contract" is the phase
+# condition this repository was built to hold. `contract-drift` watches the
+# contract's HEAD instead and is advisory: upstream moving is news, not a
+# broken build.
 
 default:
   image: python:3.12-slim
@@ -14,6 +20,7 @@ stages:
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_CACHE_DIR: "1"
+  CONTRACT_PROJECT: kumo-tfm-nims/structured-data-api
 
 .python:
   before_script:
@@ -28,9 +35,16 @@ lint:
     - ruff check .
     - ruff format --check .
 
+hygiene:
+  stage: lint
+  extends: .python
+  script:
+    - apt-get update -qq && apt-get install -y -qq git
+    - python scripts/check_repo_hygiene.py all
+
 # A repo-wide rename matches any text, including text inside a vendored file.
-# This stage is what turns that silent edit into a red pipeline; it runs before
-# the tests so the failure names the real cause rather than a confusing import
+# This stage turns that silent edit into a red pipeline, and runs before the
+# tests so the failure names the real cause rather than a confusing import
 # error downstream.
 vendor:
   stage: vendor
@@ -45,15 +59,34 @@ test:
     - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]'
     - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests -q
 
-# The generated bindings are only checked against the canonical contract when
-# that repository is reachable. The digest test in the suite already catches a
-# hand-edited generated file without it.
+# Blocking. Fetches the contract at the revision recorded in PROVENANCE.json,
+# proves the recorded digest is that revision's actual bytes, and proves the
+# generated file is exactly what the generator produces from it. A hand-edited
+# binding, a doctored provenance record, or a stale regeneration all fail here.
 contract:
+  stage: test
+  extends: .python
+  script:
+    - apt-get update -qq && apt-get install -y -qq git
+    - pip install -q pyyaml
+    - pip install -q -e './packages/sdm-api[test]'
+    - REVISION=$(python -c "import json;print(json.load(open('packages/sdm-api/src/sdm_api/generated/PROVENANCE.json'))['source_revision'])")
+    - echo "contract revision: $REVISION"
+    - git clone -q "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CONTRACT_PROJECT}.git" /tmp/contract
+    - git -C /tmp/contract checkout -q "$REVISION"
+    - python scripts/check_contract_pin.py --contract /tmp/contract/nim-sd.openapi.yaml
+    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check
+    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --validate-contract
+
+# Advisory. The contract moving forward is something to know about, not a
+# reason to fail an unrelated change.
+contract-drift:
   stage: test
   extends: .python
   allow_failure: true
   script:
+    - apt-get update -qq && apt-get install -y -qq git
     - pip install -q pyyaml
-    - git clone --depth 1 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/kumo-tfm-nims/structured-data-api.git" /tmp/contract
     - pip install -q -e './packages/sdm-api[test]'
-    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check
+    - git clone -q --depth 1 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CONTRACT_PROJECT}.git" /tmp/contract-head
+    - python scripts/generate_sdm_api.py --spec /tmp/contract-head/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check

@@ -17,7 +17,13 @@ line-length = 80
 target-version = "py310"
 # Vendored trees are upstream's bytes. Linting them here would invite a fix
 # that silently forks them; see packages/sdm-pql/SOURCE.md.
-extend-exclude = ["packages/sdm-pql/src/predictive_query"]
+# The generated bindings are the generator's output, and their bytes are
+# recorded in PROVENANCE.json. Letting the formatter rewrite them would break
+# that record on every run.
+extend-exclude = [
+    "packages/sdm-pql/src/predictive_query",
+    "packages/sdm-api/src/sdm_api/generated/tfm_api.py",
+]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "B", "UP"]

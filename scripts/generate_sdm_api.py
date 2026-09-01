@@ -136,7 +136,7 @@ def generate_code(
     schemas = spec.get('components', {}).get('schemas', {})
     schema_names = tuple(sorted(schemas))
     response_model_names = _generated_response_model_names(schemas)
-    spec_hash = hashlib.sha256(spec_text.encode()).hexdigest()
+    spec_hash = _source_digest(source, spec_text)
     source_label = _stable_source_label(source)
 
     lines = [
@@ -227,24 +227,54 @@ def validate_generated_code(spec: dict[str, Any], code: str) -> list[str]:
 
         expected_fields = tuple(schema.get('properties', {}))
         actual_fields = _generated_dataclass_fields(code, schema_name)
-        if actual_fields != expected_fields:
+        # Compared as sets: a dataclass must declare its required fields before
+        # its defaulted ones, so generated order follows requiredness rather
+        # than the spec's property order. Which fields exist is the contract;
+        # what order they are declared in is not.
+        if set(actual_fields) != set(expected_fields):
             errors.append(
                 _format_sequence_diff(
                     f'{schema_name} fields differ from spec properties',
-                    expected_fields=expected_fields,
-                    actual_fields=actual_fields,
+                    expected_fields=tuple(sorted(expected_fields)),
+                    actual_fields=tuple(sorted(actual_fields)),
                 )
             )
 
+        required = tuple(schema.get('required', []))
         missing_required = tuple(
-            field
-            for field in schema.get('required', [])
-            if field not in actual_fields
+            field for field in required if field not in actual_fields
         )
         if missing_required:
             errors.append(
                 f'{schema_name} is missing required spec fields: '
                 f'{", ".join(missing_required)}'
+            )
+
+        # A required field must be generated without a default, so a response
+        # that omits it fails where it is parsed rather than yielding a model
+        # with a silently absent value.
+        defaulted = _generated_defaulted_fields(code, schema_name)
+        wrongly_optional = tuple(
+            field
+            for field in required
+            if field in actual_fields and field in defaulted
+        )
+        if wrongly_optional:
+            errors.append(
+                f'{schema_name} generates spec-required fields with defaults, '
+                f'so a response omitting them would parse: '
+                f'{", ".join(wrongly_optional)}'
+            )
+
+        wrongly_required = tuple(
+            field
+            for field in actual_fields
+            if field not in required and field not in defaulted
+        )
+        if wrongly_required:
+            errors.append(
+                f'{schema_name} generates optional spec fields without '
+                f'defaults: {", ".join(wrongly_required)}'
             )
 
     expected_output_fields = tuple(
@@ -315,7 +345,7 @@ def _load_spec(spec_text: str, source: str) -> dict[str, Any]:
         if yaml is None:
             raise RuntimeError(
                 'PyYAML is required to generate TFM API metadata from YAML. '
-                "Install this repo with the 'codegen' extra."
+                'Install PyYAML to run this generator: pip install pyyaml'
             )
         spec = yaml.safe_load(spec_text)
     if not isinstance(spec, dict):
@@ -413,6 +443,19 @@ def _constant_lines(
     return lines
 
 
+def _source_digest(source: str, spec_text: str) -> str:
+    r"""SHA-256 of the contract's raw bytes.
+
+    Digesting the decoded text instead agrees for an ASCII spec and diverges
+    silently the day one carries a BOM or a non-UTF-8 byte, which is exactly
+    when a provenance record needs to be right.
+    """
+    path = Path(source)
+    if path.exists():
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(spec_text.encode()).hexdigest()
+
+
 def _write_provenance(output: Path, code: str, spec_source: str) -> None:
     r"""Record what was generated, beside the generated file.
 
@@ -428,6 +471,9 @@ def _write_provenance(output: Path, code: str, spec_source: str) -> None:
         'generated_file': output.name,
         'generated_sha256': hashlib.sha256(code.encode()).hexdigest(),
         'generator': 'scripts/generate_sdm_api.py',
+        'generator_sha256': hashlib.sha256(
+            Path(__file__).read_bytes()
+        ).hexdigest(),
         'source_path': Path(spec_source).name,
         'source_repository': 'structured-data-api',
         'source_revision': _spec_revision(spec_source),
@@ -478,58 +524,211 @@ def _generated_response_model_names(schemas: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
+    """Emit the two response models, with required fields enforced.
+
+    Which fields are required is read from the spec rather than hardcoded, so
+    a contract that gains or drops a requirement moves this generated code with
+    it. A required field is emitted without a default and read strictly, so a
+    response missing it raises where it is parsed instead of yielding a model
+    whose ``row_index`` is quietly ``None`` -- that field is the join key the
+    client hands back to callers.
+    """
     if not {'PredictionItem', 'PredictionResponse'} <= set(schemas):
         return []
-    return [
-        '@dataclass(frozen=True)',
-        'class PredictionItem:',
-        '    id: str | None = None',
-        '    row_index: int | None = None',
-        '    forecast_step: int | None = None',
-        '    prediction: Any | None = None',
-        '    probabilities: dict[str, float] | None = None',
-        '    scores: tuple[float, ...] | None = None',
-        '    rankings: tuple[dict[str, Any], ...] | None = None',
-        '    embeddings: tuple[float, ...] | None = None',
-        '    quantiles: dict[str, float] | None = None',
-        '    explanation: dict[str, Any] | None = None',
-        '    metadata: dict[str, Any] | None = None',
+
+    item_required = set(schemas['PredictionItem'].get('required', ()))
+    response_required = set(schemas['PredictionResponse'].get('required', ()))
+
+    # (name, annotation, reader) in spec order. Required fields are emitted
+    # first because a dataclass cannot follow a defaulted field with a bare one.
+    item_fields = (
+        ('id', 'str', "_require_str(data, 'id', 'PredictionItem')"),
+        (
+            'row_index',
+            'int',
+            "_require_int(data, 'row_index', 'PredictionItem')",
+        ),
+        (
+            'forecast_step',
+            'int',
+            "_require_int(data, 'forecast_step', 'PredictionItem')",
+        ),
+        ('prediction', 'Any', "_require(data, 'prediction', 'PredictionItem')"),
+        (
+            'probabilities',
+            'dict[str, float]',
+            "_float_dict(_require(data, 'probabilities', 'PredictionItem'))",
+        ),
+        (
+            'scores',
+            'tuple[float, ...]',
+            "_float_tuple(_require(data, 'scores', 'PredictionItem'))",
+        ),
+        (
+            'rankings',
+            'tuple[dict[str, Any], ...]',
+            "_mapping_tuple(_require(data, 'rankings', 'PredictionItem'))",
+        ),
+        (
+            'embeddings',
+            'tuple[float, ...]',
+            "_float_tuple(_require(data, 'embeddings', 'PredictionItem'))",
+        ),
+        (
+            'quantiles',
+            'dict[str, float]',
+            "_float_dict(_require(data, 'quantiles', 'PredictionItem'))",
+        ),
+        (
+            'explanation',
+            'dict[str, Any]',
+            "_dict_or_none(_require(data, 'explanation', 'PredictionItem'))",
+        ),
+        (
+            'metadata',
+            'dict[str, Any]',
+            "_dict_or_none(_require(data, 'metadata', 'PredictionItem'))",
+        ),
+    )
+    optional_reader = {
+        'id': "str(data['id']) if 'id' in data else None",
+        'row_index': "_int_or_none(data.get('row_index'))",
+        'forecast_step': "_int_or_none(data.get('forecast_step'))",
+        'prediction': "data.get('prediction')",
+        'probabilities': "_float_dict(data.get('probabilities'))",
+        'scores': "_float_tuple(data.get('scores'))",
+        'rankings': "_mapping_tuple(data.get('rankings'))",
+        'embeddings': "_float_tuple(data.get('embeddings'))",
+        'quantiles': "_float_dict(data.get('quantiles'))",
+        'explanation': "_dict_or_none(data.get('explanation'))",
+        'metadata': "_dict_or_none(data.get('metadata'))",
+    }
+
+    declarations = [
+        f'    {name}: {annotation}'
+        for name, annotation, _ in item_fields
+        if name in item_required
+    ]
+    declarations += [
+        f'    {name}: {annotation} | None = None'
+        for name, annotation, _ in item_fields
+        if name not in item_required
+    ]
+
+    readers = []
+    for name, _, strict in item_fields:
+        reader = strict if name in item_required else optional_reader[name]
+        readers.append(f'            {name}={reader},')
+
+    lines = ['@dataclass(frozen=True)', 'class PredictionItem:']
+    lines += declarations
+    lines += [
         '',
         '    @classmethod',
         "    def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionItem':",
         '        return cls(',
-        "            id=str(data['id']) if 'id' in data else None,",
-        "            row_index=_int_or_none(data.get('row_index')),",
-        "            forecast_step=_int_or_none(data.get('forecast_step')),",
-        "            prediction=data.get('prediction'),",
-        "            probabilities=_float_dict(data.get('probabilities')),",
-        "            scores=_float_tuple(data.get('scores')),",
-        "            rankings=_mapping_tuple(data.get('rankings')),",
-        "            embeddings=_float_tuple(data.get('embeddings')),",
-        "            quantiles=_float_dict(data.get('quantiles')),",
-        "            explanation=_dict_or_none(data.get('explanation')),",
-        "            metadata=_dict_or_none(data.get('metadata')),",
+        *readers,
         '        )',
         '',
         '',
         '@dataclass(frozen=True)',
         'class PredictionResponse:',
-        '    id: str',
-        '    model: str',
-        '    predictions: tuple[PredictionItem, ...]',
-        '    metadata: dict[str, Any]',
+    ]
+
+    response_fields = (
+        ('id', 'str', "_require_str(data, 'id', 'PredictionResponse')"),
+        ('model', 'str', "_require_str(data, 'model', 'PredictionResponse')"),
+        (
+            'predictions',
+            'tuple[PredictionItem, ...]',
+            "tuple(\n                PredictionItem.from_dict(item)\n                for item in _require_sequence(\n                    data, 'predictions', 'PredictionResponse'\n                )\n            )",
+        ),
+        (
+            'metadata',
+            'dict[str, Any]',
+            "dict(_require_mapping(data, 'metadata', 'PredictionResponse'))",
+        ),
+    )
+    response_optional_reader = {
+        'id': "str(data.get('id', ''))",
+        'model': "str(data.get('model', ''))",
+        'predictions': "tuple(\n                PredictionItem.from_dict(item)\n                for item in data.get('predictions', [])\n            )",
+        'metadata': "dict(data.get('metadata', {}))",
+    }
+
+    lines += [
+        f'    {name}: {annotation}'
+        for name, annotation, _ in response_fields
+        if name in response_required
+    ]
+    lines += [
+        f'    {name}: {annotation} | None = None'
+        for name, annotation, _ in response_fields
+        if name not in response_required
+    ]
+    lines += [
         '',
         '    @classmethod',
         "    def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionResponse':",
         '        return cls(',
-        "            id=str(data['id']),",
-        "            model=str(data['model']),",
-        '            predictions=tuple(',
-        '                PredictionItem.from_dict(item)',
-        "                for item in data.get('predictions', [])",
-        '            ),',
-        "            metadata=dict(data.get('metadata', {})),",
+    ]
+    for name, _, strict in response_fields:
+        reader = (
+            strict
+            if name in response_required
+            else response_optional_reader[name]
+        )
+        lines.append(f'            {name}={reader},')
+    lines += [
         '        )',
+        '',
+        '',
+        'class ResponseContractError(ValueError):',
+        '    """A response omitted a field the contract requires."""',
+        '',
+        '',
+        'def _require(data: Mapping[str, Any], field: str, model: str) -> Any:',
+        '    if field not in data:',
+        '        raise ResponseContractError(',
+        "            f'{model} response is missing required field {field!r}'",
+        '        )',
+        '    return data[field]',
+        '',
+        '',
+        'def _require_str(data: Mapping[str, Any], field: str, model: str) -> str:',
+        '    return str(_require(data, field, model))',
+        '',
+        '',
+        'def _require_int(data: Mapping[str, Any], field: str, model: str) -> int:',
+        '    value = _require(data, field, model)',
+        '    if value is None:',
+        '        raise ResponseContractError(',
+        "            f'{model} response has a null {field!r}, which the contract '",
+        "            f'requires'",
+        '        )',
+        '    return int(value)',
+        '',
+        '',
+        'def _require_sequence(',
+        '    data: Mapping[str, Any], field: str, model: str',
+        ') -> Any:',
+        '    value = _require(data, field, model)',
+        '    if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):',
+        '        raise ResponseContractError(',
+        "            f'{model} response field {field!r} is not a sequence'",
+        '        )',
+        '    return value',
+        '',
+        '',
+        'def _require_mapping(',
+        '    data: Mapping[str, Any], field: str, model: str',
+        ') -> Mapping[str, Any]:',
+        '    value = _require(data, field, model)',
+        '    if not isinstance(value, Mapping):',
+        '        raise ResponseContractError(',
+        "            f'{model} response field {field!r} is not an object'",
+        '        )',
+        '    return value',
         '',
         '',
         'def _float_dict(value: Any) -> dict[str, float] | None:',
@@ -565,6 +764,22 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '',
         '',
     ]
+    return lines
+
+
+def _generated_defaulted_fields(code: str, class_name: str) -> tuple[str, ...]:
+    """Names of the class's dataclass fields that carry a default."""
+    tree = ast.parse(code)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return tuple(
+                statement.target.id
+                for statement in node.body
+                if isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+                and statement.value is not None
+            )
+    return ()
 
 
 def _tuple_constant_lines(name: str, values: tuple[str, ...]) -> list[str]:

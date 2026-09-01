@@ -11,6 +11,10 @@ This client builds the request, sends it to a NIM, and gives you back a
 DataFrame. Inference runs in the NIM, so this package downloads no weights and
 needs no GPU.
 
+> **Not shipped yet.** The sample below is the API this repository is being
+> built toward, and `sdm_client` does not exist on disk today. What *is*
+> installable right now is `sdm-api` and `sdm-pql`; see Status.
+
 ```python
 from sdm_client import (
     StructuredDataClient,

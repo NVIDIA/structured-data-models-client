@@ -1,7 +1,8 @@
 {
   "generated_file": "tfm_api.py",
-  "generated_sha256": "d4a73f7c998b3dfa210b632ab02f05619068b57e90c07c41ed40436f6d2e7c7a",
+  "generated_sha256": "18e80d65e2ea2f2d3cc80dda00ef74c855e656218430ff801eafc3217c8d02ac",
   "generator": "scripts/generate_sdm_api.py",
+  "generator_sha256": "ae243073710914cbc3d5e9ec431be18da504ae8d4459ebe7a1a1b45b0dd514d8",
   "source_path": "nim-sd.openapi.yaml",
   "source_repository": "structured-data-api",
   "source_revision": "9ca10eeef619d2afd3aec3f6bbab3ce72196a61a",
