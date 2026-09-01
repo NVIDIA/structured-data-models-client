@@ -1,0 +1,92 @@
+[project]
+name = "sdm-connectors"
+dynamic = ["version"]
+authors = [
+    {name = "NVIDIA"},
+]
+description = "Shared data-source connectors (connect, read, SQL quoting) for the sdm-client and its engines"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = [
+    "structured-data",
+    "connectors",
+    "sql",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pandas>=2.0",
+    "pyarrow",
+]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/sdm-client"
+Source = "https://github.com/NVIDIA/sdm-client"
+Issues = "https://github.com/NVIDIA/sdm-client/issues"
+
+[project.optional-dependencies]
+sqlite = [
+    "adbc-driver-sqlite",
+]
+duckdb = [
+    "duckdb>=1.5.0",
+]
+snowflake = [
+    "snowflake-connector-python",
+]
+databricks = [
+    "databricks-sql-connector>=3.0.0",
+]
+s3 = [
+    "s3fs>=2023.12.0",
+]
+all = [
+    "sdm-connectors[sqlite,duckdb,snowflake,databricks,s3]",
+]
+test = [
+    "pytest",
+    "moto[server]>=5",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["sdm_connectors*"]
+
+[tool.setuptools.package-data]
+"sdm_connectors" = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sdm_connectors.__version__"}
+
+[tool.pytest.ini_options]
+markers = ["live_warehouse: needs a real Snowflake or Databricks warehouse"]
+testpaths = ["tests"]
+addopts = ["-q"]
+# An xfail that starts passing is a fixed bug, and should fail the run so it
+# gets un-marked rather than sitting there silently.
+xfail_strict = true
+
+[tool.ruff]
+# Inherit the workspace lint baseline so this package cannot silently opt out of
+# it; see the root pyproject.toml for the shared rule set.
+extend = "../../pyproject.toml"
+line-length = 80
+target-version = "py310"
