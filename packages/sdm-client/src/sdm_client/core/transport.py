@@ -382,7 +382,7 @@ class Transport:
     r"""The HTTP wire layer to one Universal TFM NIM.
 
     Owns a pooled ``requests.Session`` with retry/backoff on transient
-    failures (429/5xx). Not part of the public API surface; a ``PredictClient``
+    failures (429/5xx). Not part of the public API surface; a ``StructuredDataClient``
     holds one of these.
 
     ``timeout`` bounds each individual attempt, not the call as a whole: a

@@ -80,6 +80,30 @@ SHIPPED_SUFFIXES = {
     '.json',
     '.yaml',
     '.yml',
+    '.ipynb',
+}
+
+# Interfaces earlier generations of this client had. An example naming one sends
+# a reader to an API that does not exist, which is why this is scanned for
+# rather than left to review. The scan covers every tracked shipped file,
+# including notebooks and per-package example directories -- a sweep that
+# looked only at `src/` and the top-level `examples/` missed a whole tree.
+RETIRED_INTERFACES = (
+    'RelationalClient',
+    'PredictClient',
+    'client.relational(',
+    'client.tabular(',
+    'kumo_relational_client',
+    'nemotron_predict',
+)
+
+# Where a retired name is legitimately mentioned: the checks that forbid it,
+# and the record of what changed.
+RETIRED_ALLOWLIST = {
+    'scripts/check_repo_hygiene.py',
+    'packages/sdm-client/tests/test_quickstart_notebook.py',
+    'CHANGELOG.md',
+    'docs/about/architecture.md',
 }
 
 
@@ -158,15 +182,46 @@ def check_internal() -> int:
     return 0
 
 
+def check_retired() -> int:
+    """No shipped file may send a reader to an interface this client dropped."""
+    findings = []
+    for path in tracked_files():
+        relative = str(path.relative_to(REPO_ROOT))
+        if relative in RETIRED_ALLOWLIST or path.suffix not in SHIPPED_SUFFIXES:
+            continue
+        if 'predictive_query' in Path(relative).parts:
+            continue
+        text = path.read_text(encoding='utf-8', errors='replace')
+        for retired in RETIRED_INTERFACES:
+            if retired in text:
+                findings.append(f'{relative}: {retired}')
+
+    for finding in findings:
+        print(
+            f'retired interface in a shipped file: {finding}', file=sys.stderr
+        )
+    if findings:
+        print(
+            '\nRewrite it against the shipped API, or remove it. An example '
+            'nobody can run is worse than no example.',
+            file=sys.stderr,
+        )
+        return 1
+    print('no shipped file names a retired interface')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('check', choices=('spdx', 'internal', 'all'))
+    parser.add_argument('check', choices=('spdx', 'internal', 'retired', 'all'))
     args = parser.parse_args()
     if args.check == 'spdx':
         return check_spdx()
     if args.check == 'internal':
         return check_internal()
-    return check_spdx() | check_internal()
+    if args.check == 'retired':
+        return check_retired()
+    return check_spdx() | check_internal() | check_retired()
 
 
 if __name__ == '__main__':
