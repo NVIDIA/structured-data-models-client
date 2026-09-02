@@ -12,6 +12,7 @@ Every one was reproduced before it was written down. Nothing here is fixed yet.
 | [1](001-decimal-columns-lose-precision.md) | A `Decimal` column loses precision, and walks past the guard that exists to stop it | High |
 | [2](002-non-unique-primary-key-accepted.md) | A non-unique primary key is accepted, and the model silently sees one of the duplicates | High |
 | [9](009-csv-reader-rounds-large-integers.md) | The CSV reader rounds large integers when the column has a blank | High |
+| [14](014-a-sum-over-integers-in-duckdb-is-rounded.md) | A `SUM` over an integer column in DuckDB comes back rounded | High |
 | [3](003-engine-exceptions-escape-the-error-surface.md) | Engine exceptions escape the SDK's error surface, one advertising an API this SDK does not have | Medium |
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |
 | [5](005-empty-frames-are-not-refused.md) | An empty `predict` frame costs a round trip and returns a result with no columns | Medium |
@@ -25,15 +26,23 @@ Every one was reproduced before it was written down. Nothing here is fixed yet.
 
 ## Themes
 
-Three of these are the same defect wearing different clothes. The wire layer
-has a rule — an integer that `float64` cannot hold exactly must not travel as a
+Four of these are the same defect wearing different clothes. The wire layer has
+a rule — an integer that `float64` cannot hold exactly must not travel as a
 number — and it enforces that rule correctly for a Python `int`. A `Decimal`
 walks past it ([1](001-decimal-columns-lose-precision.md)) because the guard
 tests `Integral`; a CSV blank defeats it before the guard runs
 ([9](009-csv-reader-rounds-large-integers.md)) because pandas has already
-promoted the column; a `uint64` satisfies it while still exceeding the dtype
-being declared ([4](004-uint64-declared-as-int64.md)). Fixing one does not fix
-the others, and the rule is only as strong as its weakest path.
+promoted the column; a DuckDB `SUM` defeats it in the Arrow conversion
+([14](014-a-sum-over-integers-in-duckdb-is-rounded.md)) because the repair
+written for that hazard does not cover decimals; and a `uint64` satisfies it
+while still exceeding the dtype being declared
+([4](004-uint64-declared-as-int64.md)). Fixing one does not fix the others, and
+the rule is only as strong as its weakest path.
+
+What was checked and *is* exact, for contrast: Parquet `Int64` with a null,
+Parquet `int64`, DuckDB `BIGINT` with a null, SQLite `integer` with a null, CSV
+without a blank, Snowflake `NUMBER(38,0)`, Databricks `BIGINT`, and a Python
+`int` list. The repair works; it just has holes.
 
 Two more are the same shape in the type system: the SDK works out something
 careful — `UNTYPED` for a column with no values

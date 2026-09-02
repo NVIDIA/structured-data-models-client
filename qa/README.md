@@ -56,3 +56,5 @@ These fail on purpose, and each one names the bug it is waiting on.
 | `an entity id that is not in the table` | [3](../bugs/003-engine-exceptions-escape-the-error-surface.md) |
 | `a free-text column` | [8](../bugs/008-endpoint-limits-are-not-declared-locally.md) |
 | `materializing prints nothing to stdout` | [7](../bugs/007-materialize-prints-to-stdout.md) |
+| `csv, a large integer with a blank in the column` | [9](../bugs/009-csv-reader-rounds-large-integers.md) |
+| `duckdb, a SUM over a BIGINT column` | [14](../bugs/014-a-sum-over-integers-in-duckdb-is-rounded.md) |
