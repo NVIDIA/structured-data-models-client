@@ -92,6 +92,7 @@ class Column:
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'stype':
             self._check_stype(value)
+            self._check_supports_dtype(value, getattr(self, 'dtype', None))
         object.__setattr__(self, key, value)
 
     @staticmethod
@@ -100,6 +101,24 @@ class Column:
             raise StructuredDataError(
                 f'{value!r} is not a semantic type; use one of '
                 f'{sorted(SEMANTIC_TYPES)}',
+                code='INVALID_REQUEST',
+            )
+
+    def _check_supports_dtype(self, stype: str, dtype: str | None) -> None:
+        r"""Refuse a meaning the values cannot carry.
+
+        The language already decides this, and used to decide it at
+        ``materialize()`` -- several cells after the assignment that caused it,
+        as a bare ``ValueError``. Asking the same question here changes only
+        when the answer arrives. Nothing is refused that was going to be
+        accepted.
+        """
+        if dtype is None:
+            return
+        if not supports_dtype(stype, dtype):
+            raise StructuredDataError(
+                f'column {self.name!r} holds {dtype!r}, which cannot mean '
+                f'{stype!r}',
                 code='INVALID_REQUEST',
             )
 
@@ -130,6 +149,68 @@ class Table:
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        if key == 'primary_key' and value is not None:
+            self._check_key(value)
+        elif key == 'time_column' and value is not None:
+            self._check_time_column(value)
+        object.__setattr__(self, key, value)
+
+    def _check_column(self, name: str) -> None:
+        if name not in getattr(self, 'columns', {}):
+            raise StructuredDataError(
+                f'table {self.name!r} has no column {name!r}; it has '
+                f'{sorted(getattr(self, "columns", {}))}',
+                code='INVALID_REQUEST',
+            )
+
+    def _check_key(self, value: str | Sequence[str]) -> None:
+        r"""A key has to exist, and has to identify a row.
+
+        Inference deliberately tolerates a nearly-unique column, because a
+        single duplicated row is common in an extract and still the column the
+        caller means. An explicit key is an assertion rather than a guess, so
+        it is held to the same standard the inference applies -- and a caller
+        who states something false should hear so.
+        """
+        names = (value,) if isinstance(value, str) else tuple(value)
+        if not names:
+            raise StructuredDataError(
+                f'table {self.name!r} was given an empty primary key',
+                code='INVALID_REQUEST',
+            )
+        for name in names:
+            self._check_column(name)
+            if name == getattr(self, 'time_column', None):
+                raise StructuredDataError(
+                    f'column {name!r} is already the time column of table '
+                    f'{self.name!r}, so it cannot also be its primary key',
+                    code='INVALID_REQUEST',
+                )
+        frame = getattr(self, 'data', None)
+        if frame is None or frame.empty:
+            return
+        duplicates = _duplicate_key_count(frame, names)
+        if duplicates > len(frame) * (1 - _KEY_UNIQUENESS):
+            example = _first_duplicate(frame, names)
+            raise StructuredDataError(
+                f'{".".join((self.name, *names))} is not unique enough to '
+                f'identify a row: {duplicates} of {len(frame)} rows repeat a '
+                f'value already used, e.g. {example!r}',
+                code='INVALID_REQUEST',
+            )
+
+    def _check_time_column(self, name: str) -> None:
+        self._check_column(name)
+        if name == getattr(self, 'primary_key', None):
+            raise StructuredDataError(
+                f'column {name!r} is already the primary key of table '
+                f'{self.name!r}, so it cannot also be its time column',
+                code='INVALID_REQUEST',
+            )
+        if name in getattr(self, 'columns', {}):
+            self.columns[name].stype = 'timestamp'
 
     def __getitem__(self, column: str) -> Column:
         try:
@@ -451,6 +532,42 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
                 )
             )
     return links
+
+
+def supports_dtype(stype: str, dtype: str) -> bool:
+    r"""Whether a column of ``dtype`` can mean ``stype``.
+
+    Answered by the language rather than by a second table kept here, so the
+    two cannot drift. An unrecognised pair is allowed through: this is a guard
+    against a known-wrong combination, not a whitelist.
+    """
+    from predictive_query.schema.typing import Dtype, Stype
+
+    try:
+        return Stype(stype).supports_dtype(
+            Dtype(_WIRE_TO_PQL_DTYPE.get(dtype, dtype))
+        )
+    except ValueError:
+        return True
+
+
+def _duplicate_key_count(frame: pd.DataFrame, names: Sequence[str]) -> int:
+    r"""How many rows repeat a key value another row already used."""
+    columns = list(names)
+    if any(name not in frame.columns for name in columns):
+        return 0
+    key = frame[columns[0]] if len(columns) == 1 else frame[columns]
+    return int(key.duplicated().sum())
+
+
+def _first_duplicate(frame: pd.DataFrame, names: Sequence[str]) -> Any:
+    columns = list(names)
+    key = frame[columns[0]] if len(columns) == 1 else frame[columns]
+    repeated = key[key.duplicated()]
+    if repeated.empty:
+        return None
+    first = repeated.iloc[0]
+    return first if len(columns) == 1 else tuple(first)
 
 
 def to_graph_definition(schema: Schema) -> Any:

@@ -101,12 +101,15 @@ def test_a_table_does_not_link_to_itself():
 
 
 def test_overrides_replace_inference():
+    # `age` rather than `segment`: an override is an assertion that the column
+    # identifies a row, and `segment` repeats. Any unique column inference
+    # would not have picked makes the same point.
     schema = Schema.from_data(
         {'users': users()},
-        primary_keys={'users': 'segment'},
+        primary_keys={'users': 'age'},
         time_columns={'users': 'joined'},
     )
-    assert schema['users'].primary_key == 'segment'
+    assert schema['users'].primary_key == 'age'
     assert schema['users'].time_column == 'joined'
 
 
