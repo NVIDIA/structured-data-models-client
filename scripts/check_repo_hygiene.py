@@ -3,10 +3,15 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Two checks this repository has to pass before it can be published.
+"""Three checks this repository has to pass before it can be published.
 
 ``spdx`` asserts every first-party source file carries a licence header. A file
 added without one is otherwise invisible until a release audit finds it.
+
+``retired`` asserts no shipped file sends a reader to an interface this client
+dropped. An example naming one is worse than no example, and a sweep that
+chooses its own roots will miss a tree -- so this enumerates from
+``git ls-files``.
 
 ``internal`` asserts no internal-only reference reaches a *shipped* file. The
 distinction matters: an internal URL in a provenance record is correct and
