@@ -35,7 +35,7 @@ Application code should import the client's neutral surface, not this package
 directly:
 
 ```python
-from sdm_client import PredictiveQuery, StructuredDataClient, KumoRelational
+from sdm_client import PredictiveQuery, SDMClient, KumoRelational
 
 query = PredictiveQuery(
     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
@@ -43,7 +43,7 @@ query = PredictiveQuery(
 )
 request = query.materialize(indices=[1, 2, 3])
 
-with StructuredDataClient(url='http://localhost:8000') as client:
+with SDMClient(url='http://localhost:8000') as client:
     result = client.predict(request, model=KumoRelational())
 ```
 

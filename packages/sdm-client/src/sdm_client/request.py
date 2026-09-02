@@ -7,7 +7,7 @@ r"""One request type, for every model.
 A :class:`Request` is the wire envelope minus the two things that belong to the
 call rather than the question: which model answers it, and which output fields
 you want back. Both are arguments to
-:meth:`~sdm_client.StructuredDataClient.predict`.
+:meth:`~sdm_client.SDMClient.predict`.
 
 It is not a new abstraction. The Universal TFM contract already unified the
 single-table and relational cases under one envelope, and a tabular request is

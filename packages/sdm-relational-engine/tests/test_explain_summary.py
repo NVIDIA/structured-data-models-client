@@ -511,7 +511,7 @@ def test_nim_failure_error_timeout_points_at_the_timeout_setting() -> None:
         )
     )
     assert 'timeout' in msg
-    assert 'StructuredDataClient(url, timeout=...)' in msg
+    assert 'SDMClient(url, timeout=...)' in msg
     assert 'GPU memory pressure' not in msg
 
 

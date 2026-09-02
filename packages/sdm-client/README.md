@@ -3,13 +3,13 @@
 One Python client for NVIDIA's structured-data foundation model NIMs.
 
 ```python
-from sdm_client import Request, StructuredDataClient, KumoTabular
+from sdm_client import Request, SDMClient, KumoTabular
 
 request = Request(
     context=labelled, predict=to_score, target='churn', task='classification'
 )
 
-with StructuredDataClient(url='http://localhost:8000') as client:
+with SDMClient(url='http://localhost:8000') as client:
     print(client.predict(request, model=KumoTabular()).to_pandas())
 ```
 

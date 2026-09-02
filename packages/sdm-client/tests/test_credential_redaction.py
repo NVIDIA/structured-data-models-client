@@ -6,7 +6,7 @@ import pytest
 import requests
 import requests_mock
 
-from sdm_client import StructuredDataClient, StructuredDataError
+from sdm_client import SDMClient, StructuredDataError
 from sdm_client.core.transport import (
     Transport,
     redact_url,
@@ -58,7 +58,7 @@ def test_the_url_stays_readable_through_the_property():
 def test_client_repr_does_not_render_a_credential_carried_in_the_url():
     # This client contacts nothing at construction, so there is no health
     # check to disable; the donor suite had one.
-    with StructuredDataClient(_URL) as client:
+    with SDMClient(_URL) as client:
         assert _SECRET not in repr(client)
         assert 'nim.example' in repr(client)
 

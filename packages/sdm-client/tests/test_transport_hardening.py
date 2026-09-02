@@ -16,7 +16,7 @@ import pytest
 import requests
 import requests_mock
 
-from sdm_client import StructuredDataClient
+from sdm_client import SDMClient
 from sdm_client.core.transport import Transport
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -71,7 +71,7 @@ def test_a_credential_in_the_url_is_not_rendered_back_to_the_caller():
     transport = Transport('https://user:secret@nim.example')
     try:
         assert 'secret' not in repr(
-            StructuredDataClient('https://user:secret@nim.example')
+            SDMClient('https://user:secret@nim.example')
         )
     finally:
         transport.close()

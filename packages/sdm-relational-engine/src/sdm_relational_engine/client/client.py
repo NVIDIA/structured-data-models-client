@@ -351,7 +351,7 @@ class NimClient:
 
         ``max_retries`` bounds the transport-level retries of a transient
         failure (408/429/5xx, or a connection that never established); ``0``
-        disables them. It is what ``StructuredDataClient(max_retries=...)`` forwards, so
+        disables them. It is what ``SDMClient(max_retries=...)`` forwards, so
         the knob reaches this path rather than being dropped for a fixed policy
         of its own. It is separate from ``predict(num_retries=...)``, which
         retries the prediction call itself at the application level and is what

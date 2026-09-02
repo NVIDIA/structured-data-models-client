@@ -16,7 +16,7 @@ needs no GPU.
 
 ```python
 from sdm_client import (
-    StructuredDataClient,
+    SDMClient,
     Schema,
     PredictiveQuery,
     KumoRelational,
@@ -28,7 +28,7 @@ query = PredictiveQuery(
 )
 request = query.materialize(indices=[1, 2, 3])
 
-with StructuredDataClient(url='http://localhost:8000') as client:
+with SDMClient(url='http://localhost:8000') as client:
     result = client.predict(request, model=KumoRelational())
     print(result.to_pandas())
 ```
@@ -80,12 +80,18 @@ Lint and format with `ruff`; the formatter owns line length.
 
 ## Vendored code
 
-`sdm-pql` is a verbatim copy of the `predictive_query` package from
-`kumo/predictive-query-language`, carried only until that repository publishes
-to an index. Its bytes are pinned per file in `VENDOR_MANIFEST.json` and
-asserted in CI — a repo-wide rename has silently corrupted a vendored artifact
-in this family of repositories before. See
-[`packages/sdm-pql/SOURCE.md`](packages/sdm-pql/SOURCE.md).
+Two trees are vendored, and both are pinned by digest and checked in CI,
+because a repo-wide rename has silently corrupted a vendored artifact in this
+family of repositories before.
+
+`sdm-pql` is a verbatim copy of the `predictive_query` package, carried only
+until that repository publishes to an index — pinned per file in
+`VENDOR_MANIFEST.json`. See [`packages/sdm-pql/SOURCE.md`](packages/sdm-pql/SOURCE.md).
+
+`mermaid.min.js` is bundled in the relational engine so `Graph.visualize()`
+draws offline: Snowflake and Databricks notebooks block external scripts, so a
+diagram fetched from a CDN would not draw. Upstream bytes, SHA-256 pinned,
+components enumerated in `LICENSE`.
 
 ## License
 

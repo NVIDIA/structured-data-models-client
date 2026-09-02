@@ -3,12 +3,18 @@ Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
-This distribution vendors no third-party source. It builds a C++ extension from
-first-party source in src/sdm_relational_engine/csrc, and everything else it
-depends on -- including the Predictive Query Language and the Universal TFM
-wire types -- is resolved by the package manager at install time.
+This distribution builds a C++ extension from first-party source in
+src/sdm_relational_engine/csrc, and vendors one third-party artifact.
 
-An earlier version of this package bundled a minified mermaid.js for rendering
-a graph diagram. It no longer does: Graph.to_mermaid() returns the diagram
-source, which any renderer draws, and carrying a JavaScript engine to draw a
-picture was not a trade worth making.
+src/sdm_relational_engine/rfm/assets/mermaid.min.js
+--------------------------------------------------
+
+mermaid 11.15.0, MIT licensed, bundled so that Graph.visualize() renders a
+graph offline in notebook environments that block external scripts. The bundle
+is upstream bytes, unmodified; its SHA-256 is pinned in rfm/assets/VENDORED.md
+and asserted by tests/test_vendored_mermaid.py. Its own components are
+enumerated in the third-party section of LICENSE, and its licence text is in
+rfm/assets/MERMAID_LICENSE.
+
+Everything else, including the Predictive Query Language and the Universal TFM
+wire types, is resolved by the package manager at install time.

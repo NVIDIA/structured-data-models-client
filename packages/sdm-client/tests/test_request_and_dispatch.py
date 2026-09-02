@@ -17,7 +17,7 @@ from sdm_client import (
     KumoRelational,
     KumoTabular,
     Request,
-    StructuredDataClient,
+    SDMClient,
     UnknownModelError,
     UnsupportedRequestError,
 )
@@ -166,7 +166,7 @@ def test_the_default_outputs_follow_the_task_kind():
 
 
 def test_an_unknown_model_id_names_the_contract_change_it_would_need():
-    client = StructuredDataClient(url='http://localhost:9')
+    client = SDMClient(url='http://localhost:9')
     try:
         with pytest.raises(UnknownModelError) as error:
             client.capabilities('kumo-timeseries')
@@ -178,7 +178,7 @@ def test_an_unknown_model_id_names_the_contract_change_it_would_need():
 
 
 def test_capabilities_are_reported_as_the_clients_own_answer():
-    client = StructuredDataClient(url='http://localhost:9')
+    client = SDMClient(url='http://localhost:9')
     try:
         capabilities = client.capabilities(KumoTabular())
         assert capabilities.source == 'sdk'
@@ -196,7 +196,7 @@ def test_capabilities_are_reported_as_the_clients_own_answer():
 def test_a_plaintext_url_to_a_remote_host_refuses_an_api_key():
     """A credential must not leave over an unencrypted connection."""
     with pytest.raises(StructuredDataError):
-        StructuredDataClient(url='http://example.com', api_key='secret')
+        SDMClient(url='http://example.com', api_key='secret')
 
 
 def test_a_predict_half_missing_a_feature_the_context_carries_is_refused():

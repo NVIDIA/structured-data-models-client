@@ -30,7 +30,7 @@ FOREIGN_IDENTIFIERS = (
     'sdm_pql',
     'sdm_relational_engine',
     'sdm-client',
-    'StructuredDataClient',
+    'SDMClient',
 )
 
 _SKIP_DIRS = {'__pycache__', '.pytest_cache', '.ruff_cache'}

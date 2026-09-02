@@ -4,7 +4,7 @@
 
 r"""The exceptions this client raises.
 
-Every call on :class:`~sdm_client.StructuredDataClient` raises
+Every call on :class:`~sdm_client.SDMClient` raises
 :class:`StructuredDataError` or one of its subclasses, so ``except
 StructuredDataError`` is enough to catch anything the client reports.
 

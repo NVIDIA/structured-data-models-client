@@ -17,7 +17,7 @@ a laptop; `kumo-relational` needs Linux.
 Two ways.
 
 **A hosted endpoint.** Find the model in the NVIDIA API catalog, generate a
-key, and pass the endpoint and key to `StructuredDataClient`.
+key, and pass the endpoint and key to `SDMClient`.
 
 **The container, run yourself.** Pull the NIM and run it on your own GPU host,
 then point the client at it. Use this when the data cannot leave your

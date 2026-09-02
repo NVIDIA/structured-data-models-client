@@ -87,7 +87,7 @@ class ModelSpec:
 
 @dataclass(frozen=True)
 class ModelCapabilities:
-    r"""What :meth:`~sdm_client.StructuredDataClient.capabilities` reports.
+    r"""What :meth:`~sdm_client.SDMClient.capabilities` reports.
 
     Describes the client side. Nothing here is read from the endpoint, and
     ``source`` says so, so a caller cannot mistake it for the endpoint's own

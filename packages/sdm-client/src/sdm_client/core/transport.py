@@ -382,7 +382,7 @@ class Transport:
     r"""The HTTP wire layer to one Universal TFM NIM.
 
     Owns a pooled ``requests.Session`` with retry/backoff on transient
-    failures (429/5xx). Not part of the public API surface; a ``StructuredDataClient``
+    failures (429/5xx). Not part of the public API surface; a ``SDMClient``
     holds one of these.
 
     ``timeout`` bounds each individual attempt, not the call as a whole: a
@@ -440,7 +440,7 @@ class Transport:
     def _require_open(self) -> None:
         if self._closed:
             raise StructuredDataError(
-                'this client is closed; construct a new StructuredDataClient',
+                'this client is closed; construct a new SDMClient',
                 code='INVALID_CONFIGURATION',
             )
 

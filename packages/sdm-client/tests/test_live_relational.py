@@ -26,7 +26,7 @@ from sdm_client import (
     KumoRelational,
     KumoTabular,
     PredictiveQuery,
-    StructuredDataClient,
+    SDMClient,
     UnsupportedRequestError,
 )
 from sdm_client.errors import StructuredDataError
@@ -87,7 +87,7 @@ COUNT_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
 
 @pytest.fixture
 def client():
-    with StructuredDataClient(url=RELATIONAL_URL, timeout=600.0) as opened:
+    with SDMClient(url=RELATIONAL_URL, timeout=600.0) as opened:
         yield opened
 
 

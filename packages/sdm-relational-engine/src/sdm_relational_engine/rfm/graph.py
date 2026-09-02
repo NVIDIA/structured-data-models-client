@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import copy
+import io
 import re
 import warnings
 from collections import defaultdict
@@ -25,6 +26,8 @@ from predictive_query.schema.typing import Stype
 from typing_extensions import Self
 
 from sdm_relational_engine import (
+    in_jupyter_notebook,
+    in_streamlit_notebook,
     in_tmux,
 )
 from sdm_relational_engine.exceptions import (
@@ -2616,6 +2619,89 @@ class Graph:
             lines.append(f'{" " * 4}{dst_table} o|--o{{ {src_table} : {fkey}')
 
         return '\n'.join(lines)
+
+    def visualize(
+        self,
+        path: Path | str | io.BytesIO | None = None,
+        show_columns: bool = True,
+        height: int = 540,
+    ) -> None:
+        r"""Visualizes the tables and edges in this graph as a Mermaid
+        entity-relationship diagram.
+
+        Display is fully self-contained: the bundled mermaid.js is inlined
+        into the produced HTML, so no system executables (graphviz), CDN
+        scripts, or web services are needed inside notebook environments.
+        Only PNG/SVG export renders via the mermaid.ink web service and
+        therefore requires network access.
+
+        Args:
+            path: Where to write the visualization. ``None`` displays the
+                graph inline (Jupyter, Databricks, Colab, and Snowflake
+                notebooks) or prints the Mermaid source in terminals.
+                A path ending in ``.html`` writes a standalone offline HTML
+                file, ``.mmd`` writes the Mermaid source, and ``.png`` or
+                ``.svg`` writes an image (network required). A
+                :class:`io.BytesIO` receives PNG bytes (network required).
+            show_columns: Whether to show all columns of every table in the
+                graph. If ``False``, will only show the primary key, foreign
+                key(s), and time column of each table.
+            height: The pixel height of the inline notebook rendering.
+        """
+        from sdm_relational_engine.rfm import viz
+
+        source = self._to_mermaid(show_columns)
+
+        path = Path(path) if isinstance(path, str) else path
+
+        if isinstance(path, Path):
+            suffix = path.suffix.removeprefix('.').lower()
+            if suffix == '':
+                raise ValueError(f"Missing file extension in path '{path}'")
+            if suffix == 'html':
+                path.write_text(viz.to_html(source), encoding='utf-8')
+            elif suffix == 'mmd':
+                path.write_text(source + '\n', encoding='utf-8')
+            elif suffix in ('png', 'svg'):
+                path.write_bytes(viz.render_image(source, suffix))
+            else:
+                raise ValueError(
+                    f"File extension '{suffix}' not supported "
+                    f'for visualization. Expected one of '
+                    f"'html', 'mmd', 'png' or 'svg'."
+                )
+
+        elif isinstance(path, io.BytesIO):
+            path.write(viz.render_image(source, 'png'))
+
+        elif in_streamlit_notebook():
+            import streamlit as st
+
+            try:
+                st.components.v1.html(
+                    viz.to_html(source),
+                    height=height,
+                    scrolling=True,
+                )
+            except Exception:  # Custom components are unavailable.
+                st.code(source)
+
+        elif in_jupyter_notebook():
+            from IPython.display import HTML
+            from IPython.display import display as ipython_display
+
+            ipython_display(HTML(viz.to_iframe(source, height=height)))
+
+        else:
+            warnings.warn(
+                'Cannot display the rendered graph outside of a '
+                'notebook environment - printing the Mermaid '
+                "source instead. Use `visualize(path='graph.html')`"
+                ' to write a standalone offline rendering.'
+            )
+            print(source)
+
+    # Helpers #################################################################
 
     def to_mermaid(self, show_columns: bool = True) -> str:
         r"""This graph as a Mermaid entity-relationship diagram.

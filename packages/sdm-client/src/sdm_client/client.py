@@ -6,7 +6,7 @@ r"""One connection to one NIM, serving every model it can reach.
 
 The model is an argument:
 
->>> with StructuredDataClient(url='http://localhost:8000') as client:
+>>> with SDMClient(url='http://localhost:8000') as client:
 ...     result = client.predict(request, model=KumoTabular())
 
 Each client owns its own transport, so several can target different endpoints
@@ -57,7 +57,7 @@ def _adapter_for(spec: ModelSpec) -> ModelAdapter:
 class FittedModel:
     r"""A context pinned on the endpoint, ready to score against.
 
-    Returned by :meth:`StructuredDataClient.fit`. The contract's
+    Returned by :meth:`SDMClient.fit`. The contract's
     ``POST /v1/sessions`` uploads a context and runs no inference; scoring
     against it is a second call. That is what ``fit`` and ``predict`` are here.
 
@@ -67,7 +67,7 @@ class FittedModel:
 
     def __init__(
         self,
-        client: StructuredDataClient,
+        client: SDMClient,
         adapter: ModelAdapter,
         session_id: str,
         outputs: tuple[str, ...],
@@ -134,7 +134,7 @@ class FittedModel:
         return f'FittedModel({self.model!r}, {state})'
 
 
-class StructuredDataClient:
+class SDMClient:
     r"""A connection to one Universal TFM NIM.
 
     Use it as a context manager, or call :meth:`close`.
@@ -358,7 +358,7 @@ class StructuredDataClient:
         finally:
             self._transport.close()
 
-    def __enter__(self) -> StructuredDataClient:
+    def __enter__(self) -> SDMClient:
         return self
 
     def __exit__(
@@ -370,4 +370,4 @@ class StructuredDataClient:
         self.close()
 
     def __repr__(self) -> str:
-        return f'StructuredDataClient(url={redact_url(self._transport.url)!r})'
+        return f'SDMClient(url={redact_url(self._transport.url)!r})'

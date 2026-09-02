@@ -7,7 +7,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE.
 Vendored source
 --------------------------------------------------------------------------------
 
-One tree is vendored into this repository as source and ships with it.
+Two trees are vendored into this repository as source and ship with it.
 Everything else this project depends on is resolved by the package manager at
 install time and is not covered by this file.
 
@@ -18,13 +18,22 @@ The Predictive Query Language, copied verbatim from
 
   Predictive Query Language
   Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
-  https://gitlab-master.nvidia.com/kumo/predictive-query-language
   revision 7ca9cb6673f2f3591000fa1416bf6ebeb4c9cf18 (version 0.1.0)
   Apache License 2.0
 
-This is first-party NVIDIA code under the same license as this repository. It
-is vendored only because it is not yet published to a package index, and it is
-pinned per file in packages/sdm-pql/VENDOR_MANIFEST.json. See
-packages/sdm-pql/SOURCE.md.
+First-party NVIDIA code under the same license as this repository, vendored
+only because it is not yet published to a package index, and pinned per file in
+packages/sdm-pql/VENDOR_MANIFEST.json. See packages/sdm-pql/SOURCE.md.
 
-No third-party source is bundled in this repository.
+packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid.min.js
+---------------------------------------------------------------------------------
+
+mermaid 11.15.0, MIT licensed, bundled so that Graph.visualize() renders a
+graph entirely offline. That matters in the notebook environments this client
+is used from: Snowflake and Databricks block external scripts, so a diagram
+that fetched from a CDN would simply not draw.
+
+The bundle is upstream bytes, unmodified, and its SHA-256 is pinned in
+rfm/assets/VENDORED.md and asserted by tests/test_vendored_mermaid.py. It is a
+bundle, so the components inside it are enumerated with their copyrights in the
+third-party section of LICENSE. See rfm/assets/MERMAID_LICENSE.

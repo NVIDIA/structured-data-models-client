@@ -6,7 +6,7 @@ You have labelled rows and rows you want scored. That is the whole input.
 
 ```python
 import pandas as pd
-from sdm_client import Request, StructuredDataClient, KumoTabular
+from sdm_client import Request, SDMClient, KumoTabular
 
 labelled = pd.DataFrame(
     {
@@ -21,7 +21,7 @@ request = Request(
     context=labelled, predict=to_score, target='churn', task='classification'
 )
 
-with StructuredDataClient(url='http://localhost:8000') as client:
+with SDMClient(url='http://localhost:8000') as client:
     print(client.predict(request, model=KumoTabular()).to_pandas())
 ```
 
@@ -33,7 +33,7 @@ this model exists to score rows it has never seen.
 Describe the tables, ask in PQL, and name the entities to score.
 
 ```python
-from sdm_client import PredictiveQuery, StructuredDataClient, KumoRelational
+from sdm_client import PredictiveQuery, SDMClient, KumoRelational
 
 query = PredictiveQuery(
     'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id',
@@ -41,7 +41,7 @@ query = PredictiveQuery(
 )
 request = query.materialize(indices=[7, 12, 3])
 
-with StructuredDataClient(url='http://localhost:8001') as client:
+with SDMClient(url='http://localhost:8001') as client:
     print(client.predict(request, model=KumoRelational()).to_pandas())
 ```
 

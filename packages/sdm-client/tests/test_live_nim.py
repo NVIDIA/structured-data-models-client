@@ -24,7 +24,7 @@ import pytest
 from sdm_client import (
     KumoTabular,
     Request,
-    StructuredDataClient,
+    SDMClient,
     UnsupportedRequestError,
 )
 
@@ -39,7 +39,7 @@ requires_tabular = pytest.mark.skipif(
 
 @pytest.fixture
 def client():
-    with StructuredDataClient(url=TABULAR_URL, timeout=180.0) as opened:
+    with SDMClient(url=TABULAR_URL, timeout=180.0) as opened:
         yield opened
 
 

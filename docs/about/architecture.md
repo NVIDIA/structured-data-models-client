@@ -10,7 +10,7 @@
 
 ---
 
-## 0. Read this first — one thing is broken outside this repo
+## 0. One inconsistency in the contract, which nothing shipping depends on
 
 **The contract will not let a new model exist.**
 
@@ -21,9 +21,14 @@ as an escape hatch — cannot be sent at all. The response's `model` field *is* 
 
 Verified on `structured-data-api@main`, current as of today.
 
-We handle this honestly either way (§6). But the clean fix is a small MR on `structured-data-api` to
-make the request `model` a bounded open string, matching the response it already has. **Recommended,
-and cheap — it is phase 0 and it only blocks the escape hatch, not the two shipping models.**
+**This does not affect anything shipping.** `kumo-tabular` and `kumo-relational` are both in the
+enum, so both work today and neither needs a contract change. What the enum forecloses is the
+source doc's `model="some-future-model"` escape hatch, which is deferred along with the models it
+would have served (§12). An unrecognised id is refused client-side with a message naming the
+contract change it would need, rather than being sent and rejected.
+
+If a third model is ever wanted, a small MR on `structured-data-api` opens the field. Until then
+this is a note, not a task.
 
 > **Model ids are fine.** An earlier draft claimed the NIMs still served `nemotron-*`. That was a
 > stale local checkout. On `origin/main`, `tfm-serving` declares
@@ -39,7 +44,7 @@ Today you pick a model by calling a different method. Tomorrow the model is an a
 
 ```python
 from sdm_client import (
-    StructuredDataClient,
+    SDMClient,
     Schema,
     PredictiveQuery,
     KumoRelational,
@@ -51,7 +56,7 @@ query = PredictiveQuery(
 )
 request = query.materialize(indices=[1, 2, 3])
 
-with StructuredDataClient(url='http://localhost:8000') as client:
+with SDMClient(url='http://localhost:8000') as client:
     result = client.predict(request, model=KumoRelational())
 ```
 
@@ -504,7 +509,7 @@ Each phase is independently shippable and tested.
 |---|---|---|---|
 | **0** | **Unblock** | MR on `structured-data-api` to open the request `model` enum (§0) | The escape hatch is sendable, or we accept that a new model needs a contract MR and say so |
 | 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql` vendored, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
-| 2 | **Client + tabular** | `StructuredDataClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
+| 2 | **Client + tabular** | `SDMClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
 | 3 | **Connectors** | `sdm-connectors` | every backend reads a table |
 | 4 | **Relational** | `sdm-relational-engine`, relational adapter, PQL materialization | `PredictiveQuery(...).materialize(indices=…)` predicts against the relational NIM |
 | 5 | **fit + explain** | Session handle, explanation outputs, pre-flight limits | `fit()`/`predict()` reuse one context; every §7 limit fails locally |
@@ -573,7 +578,7 @@ cover `sdm-pql` as well.
 |---|---|---|---|
 | `predictive_query` (vendored) | Apache-2.0 | `sdm-pql` | First-party NVIDIA, vendored only until it publishes |
 | ANTLR Python runtime | BSD-3-Clause | `sdm-pql` dependency | Required by the PQL parser |
-| `mermaid.min.js` (vendored) | MIT, and a bundle — enumerate its contents | `sdm-relational-engine` assets | Only if we keep `Schema.visualize()`. **Dropping it removes the single worst provenance liability in the repo** — decide in phase 4. |
+| `mermaid.min.js` (vendored) | MIT, and a bundle — its components are enumerated in `LICENSE` | `sdm-relational-engine` assets | **Kept.** `visualize()` draws offline, and the notebook environments this client is used from — Snowflake and Databricks — block external scripts, so a CDN-fetched diagram would not draw at all. Upstream bytes, SHA-256 pinned, digest asserted by a test. `to_mermaid()` returns the source for anyone who would rather render it elsewhere. |
 | pandas, numpy, requests, pydantic | BSD / Apache-2.0 | dependencies | Resolved at install, not vendored |
 
 OSRB needs the provenance records and the inventory above. The existing ticket was approved against
@@ -598,5 +603,5 @@ a form-filling exercise rather than an audit.
 1. **§0** — do we open the contract's `model` enum? Recommended. Without it, "any SDFM NIM" is
    really "any model already in the contract", and every new model needs a `structured-data-api` MR
    before the client can even send its name.
-2. `StructuredDataClient` spells out the acronym, matching the naming rule, but it is long.
+2. `SDMClient` spells out the acronym, matching the naming rule, but it is long.
    The alternative is `SDMClient`. One line to change.
