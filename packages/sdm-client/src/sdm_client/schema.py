@@ -155,7 +155,12 @@ class Table:
     duplicate_keys: int = 0
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key == 'primary_key' and value is not None:
+        if key == 'primary_key':
+            if value is None:
+                # No key, so nothing tolerated and nothing to report.
+                object.__setattr__(self, 'duplicate_keys', 0)
+                object.__setattr__(self, key, None)
+                return
             self._check_key(value)
             object.__setattr__(self, key, value)
             self._adopt_key(value)
@@ -175,9 +180,8 @@ class Table:
         """
         names = _as_key_tuple(value)
         for name in names:
-            column = self.columns.get(name)
-            if column is not None and supports_dtype('ID', column.dtype):
-                column.stype = 'ID'
+            # `_check_key` has already refused a column that cannot be one.
+            self.columns[name].stype = 'ID'
         frame = getattr(self, 'data', None)
         if frame is None or frame.empty:
             return
@@ -218,6 +222,13 @@ class Table:
             )
         for name in names:
             self._check_column(name)
+            column = self.columns[name]
+            if not supports_dtype('ID', column.dtype):
+                raise StructuredDataError(
+                    f'column {name!r} holds {column.dtype!r}, which cannot '
+                    f'identify a row, so it cannot be a primary key',
+                    code='INVALID_REQUEST',
+                )
             if name == getattr(self, 'time_column', None):
                 raise StructuredDataError(
                     f'column {name!r} is already the time column of table '
@@ -500,18 +511,11 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
         for column in frame.columns
     }
     table = Table(name=name, data=frame, columns=columns)
+    # Assigning the key is what marks its column, counts what the uniqueness
+    # threshold tolerated and says so; doing any of it a second time here would
+    # report the same duplicate twice, from inside this module.
     table.primary_key = _infer_primary_key(frame, columns)
     table.time_column = _infer_time_column(columns)
-    if table.primary_key is not None:
-        table.duplicate_keys = _duplicate_key_count(frame, (table.primary_key,))
-        if table.duplicate_keys:
-            warnings.warn(
-                f'{name}.{table.primary_key} identifies a row {table.duplicate_keys} '
-                f'time(s) it has already been used, e.g. '
-                f'{_first_duplicate(frame, (table.primary_key,))!r}. Those rows '
-                f'are indistinguishable to the model.',
-                stacklevel=3,
-            )
     return table
 
 

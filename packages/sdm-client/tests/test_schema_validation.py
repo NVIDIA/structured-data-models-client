@@ -64,11 +64,22 @@ def test_an_empty_composite_key_is_refused():
 
 
 def test_the_time_column_cannot_also_be_the_primary_key():
+    # A string column, so it *could* be a key -- otherwise the dtype check
+    # fires first and this would not reach the question being asked.
+    frame = users()
+    frame['when'] = [f'2024-01-0{index + 1}' for index in range(len(frame))]
+    built = Schema.from_data({'users': frame}, relationships=[])
+    built['users'].time_column = 'when'
+    with pytest.raises(StructuredDataError) as error:
+        built['users'].primary_key = 'when'
+    assert 'time column' in str(error.value)
+
+
+def test_a_timestamp_cannot_be_a_primary_key_at_all():
     built = schema()
-    built['users'].time_column = 'joined'
     with pytest.raises(StructuredDataError) as error:
         built['users'].primary_key = 'joined'
-    assert 'time column' in str(error.value)
+    assert 'cannot identify a row' in str(error.value)
 
 
 def test_the_primary_key_cannot_also_be_the_time_column():
@@ -318,3 +329,40 @@ def test_a_relationship_into_a_composite_key_is_refused():
             relationships=[Relationship('c', 'a', 't', 'a')],
         )
     assert 'composite key' in str(error.value)
+
+
+def test_a_key_column_that_cannot_identify_a_row_is_refused():
+    """A bool has two values, so it cannot tell rows apart.
+
+    Left as a non-ID primary key it produced a raw engine ValueError at
+    materialize, which is the leak bug 3 closed everywhere else.
+    """
+    frame = pd.DataFrame({'flag': [False, True], 'y': [0, 1]})
+    built = Schema.from_data({'t': frame}, relationships=[])
+    with pytest.raises(StructuredDataError) as error:
+        built['t'].primary_key = 'flag'
+    assert 'cannot identify a row' in str(error.value)
+
+
+def test_a_tolerated_duplicate_is_reported_once():
+    """Inference assigns the key, and assignment is what reports."""
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        built = Schema.from_data({'users': duplicated(repeats=5)})
+    assert len(caught) == 1
+    assert built['users'].duplicate_keys == 5
+
+
+def test_clearing_the_key_clears_what_described_it():
+    with pytest.warns(UserWarning):
+        built = Schema.from_data({'users': duplicated(repeats=5)})
+    built['users'].primary_key = None
+    assert built['users'].duplicate_keys == 0
+    assert 'repeated' not in repr(built['users'])
+
+
+def test_inference_marks_the_key_it_nominates():
+    built = Schema.from_data({'users': users()}, relationships=[])
+    assert built['users']['user_id'].stype == 'ID'
