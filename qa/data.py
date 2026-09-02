@@ -117,3 +117,32 @@ def northwind_ready(order_limit: int = 4_000):
             if schema[table][column].stype == 'text':
                 schema[table][column].stype = 'categorical'
     return schema
+
+
+@functools.cache
+def bank() -> pd.DataFrame:
+    """41k rows, 20 features, a heavily imbalanced binary target.
+
+    Different in shape from Adult: more categorical columns, several of them
+    with the string 'unknown' rather than a null, and float features that come
+    from a macroeconomic series rather than the individual.
+    """
+    frame = pd.read_csv(
+        DATA / 'bank' / 'bank-additional' / 'bank-additional-full.csv', sep=';'
+    )
+    frame.columns = [c.replace('.', '_') for c in frame.columns]
+    frame.insert(0, 'contact_id', range(len(frame)))
+    frame['y'] = (frame['y'] == 'yes').astype(int)
+    return frame
+
+
+@functools.cache
+def students() -> pd.DataFrame:
+    """4.4k rows, 36 mostly-numeric features, a three-class target.
+
+    Column names carry spaces, slashes and parentheses, which is the point of
+    including it: a real export whose headers were never meant for code.
+    """
+    frame = pd.read_csv(DATA / 'students' / 'data.csv', sep=';')
+    frame.insert(0, 'student_id', range(len(frame)))
+    return frame

@@ -453,6 +453,108 @@ def run(client):
             ):
                 fail(e, 'a session answered the wrong number of rows')
 
+    # --- two more datasets, chosen for what they are awkward about --------
+    with probe(
+        AREA,
+        'bank marketing, an imbalanced binary target',
+        'both classes are reachable',
+    ) as e:
+        ctx, sc = split(data.bank(), 800, 6)
+        frame = client.predict(
+            Request(
+                context=ctx,
+                predict=sc.drop(columns=['y']),
+                target='y',
+                task='classification',
+            ),
+            model=KumoTabular(),
+        ).to_pandas()
+        rate = ctx['y'].mean()
+        if len(frame) != 6:
+            fail(e, f'expected 6 rows, got {len(frame)}')
+        else:
+            note(
+                e,
+                f'{rate:.1%} positive in context, predictions '
+                f'{list(frame["prediction"])}',
+            )
+
+    with probe(
+        AREA,
+        "bank marketing's 'unknown' is a level, not a null",
+        'it survives as a category',
+    ) as e:
+        ctx, sc = split(data.bank(), 800, 3)
+        unknowns = int((ctx == 'unknown').sum().sum())
+        frame = client.predict(
+            Request(
+                context=ctx,
+                predict=sc.drop(columns=['y']),
+                target='y',
+                task='classification',
+            ),
+            model=KumoTabular(),
+        ).to_pandas()
+        if len(frame) != 3:
+            fail(e, f'expected 3 rows, got {len(frame)}')
+        else:
+            note(e, f"{unknowns} 'unknown' cells in the context")
+
+    with probe(
+        AREA,
+        'column names with spaces, slashes and a tab',
+        'sent as given, not sanitised',
+    ) as e:
+        frame_in = data.students()
+        awkward = [
+            c for c in frame_in.columns if any(ch in c for ch in ' /()\t')
+        ]
+        ctx, sc = split(frame_in, 600, 4)
+        result = client.predict(
+            Request(
+                context=ctx,
+                predict=sc.drop(columns=['Target']),
+                target='Target',
+                task='classification',
+            ),
+            model=KumoTabular(),
+        ).to_pandas()
+        if len(result) != 4:
+            fail(e, f'expected 4 rows, got {len(result)}')
+        elif not set(result['prediction']) <= set(ctx['Target'].unique()):
+            fail(
+                e,
+                f'predicted outside the label set: {set(result["prediction"])}',
+            )
+        else:
+            note(e, f'{len(awkward)} awkward column names, e.g. {awkward[:2]}')
+
+    with probe(
+        AREA,
+        'a three-class target on real data',
+        'one probability column per class',
+    ) as e:
+        ctx, sc = split(data.students(), 600, 4)
+        result = client.predict(
+            Request(
+                context=ctx,
+                predict=sc.drop(columns=['Target']),
+                target='Target',
+                task='classification',
+            ),
+            model=KumoTabular(),
+            outputs=['prediction', 'probabilities'],
+        ).to_pandas()
+        columns = [c for c in result.columns if c.startswith('probability_')]
+        if len(columns) != ctx['Target'].nunique():
+            fail(
+                e,
+                f'{len(columns)} probability columns for '
+                f'{ctx["Target"].nunique()} classes',
+            )
+        elif not result[columns].sum(axis=1).sub(1).abs().lt(1e-4).all():
+            fail(e, 'probabilities do not sum to 1')
+
     # --- the query path ---------------------------------------------------
     with probe(
         AREA,
