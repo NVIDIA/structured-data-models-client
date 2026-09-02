@@ -207,7 +207,7 @@ class Table:
 
     def _check_time_column(self, name: str) -> None:
         self._check_column(name)
-        if name == getattr(self, 'primary_key', None):
+        if name in _as_key_tuple(getattr(self, 'primary_key', None)):
             raise StructuredDataError(
                 f'column {name!r} is already the primary key of table '
                 f'{self.name!r}, so it cannot also be its time column',
@@ -358,6 +358,7 @@ class Schema:
             for link in inferred:
                 _require_column(built, link.source_table, link.source_column)
                 _require_column(built, link.target_table, link.target_column)
+                _require_joinable(built, link)
 
         schema = cls(built, inferred)
         schema._mark_key_columns()
@@ -553,6 +554,46 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
                 )
             )
     return links
+
+
+def _require_joinable(tables: Mapping[str, Table], link: Relationship) -> None:
+    r"""A relationship has to be one the engine can actually build.
+
+    An edge joins a foreign key to the *primary key* of the table it points at
+    -- that is the only shape the graph has -- so a link naming some other
+    column is not narrower, it is different: the language would resolve one
+    graph while the engine built another. And the two columns have to hold
+    comparable values, or the join matches nothing.
+    """
+    target = tables[link.target_table]
+    key = target.primary_key
+    keys = _as_key_tuple(key)
+    if link.target_column not in keys:
+        named = f'{key!r}' if key is not None else 'no primary key'
+        raise StructuredDataError(
+            f'{link} does not join to a primary key: table '
+            f'{link.target_table!r} has {named}. A relationship points at the '
+            f'key that identifies a row, so set that key first if it is not '
+            f'the one inference found',
+            code='INVALID_REQUEST',
+        )
+    source_dtype = tables[link.source_table][link.source_column].dtype
+    target_dtype = target[link.target_column].dtype
+    if _join_family(source_dtype) != _join_family(target_dtype):
+        raise StructuredDataError(
+            f'{link} joins {source_dtype!r} to {target_dtype!r}, which cannot '
+            f'match. Give both columns the same kind of value',
+            code='INVALID_REQUEST',
+        )
+
+
+def _join_family(dtype: str) -> str:
+    r"""What has to agree across a join: a number matches a number."""
+    if dtype.startswith(('int', 'float')):
+        return 'number'
+    if dtype.startswith('timestamp'):
+        return 'timestamp'
+    return dtype
 
 
 def supports_dtype(stype: str, dtype: str) -> bool:

@@ -33,7 +33,7 @@ import pandas as pd
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Schema
+from sdm_client.schema import Schema, _as_key_tuple
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
     from predictive_query import Profile
@@ -341,6 +341,7 @@ class PredictiveQuery:
                 },
             )
         task._query = query_def.to_string()
+        _check_entity_count(indices, getattr(task, 'task_type', None))
         task = _narrow_context(task, num_context_samples)
 
         with _engine_errors(model):
@@ -393,6 +394,11 @@ def _engine_errors(model: Any) -> Iterator[None]:
     missed exactly the failures a caller is most likely to hit, since they are
     all caused by ordinary bad input.
 
+    Bad input and a fault in the engine are told apart by type rather than by
+    reading the message: the engine reports the first as a ``ValueError``, a
+    ``KeyError`` or one of its own error classes, and anything else is not the
+    caller's doing and should not be reported as though it were.
+
     Where the engine dropped rows, the reason is attached. Its message says how
     many rows went unresolved and not why, and it already knows: every graph
     build records how many rows had a null key, a duplicated key or no time.
@@ -401,15 +407,29 @@ def _engine_errors(model: Any) -> Iterator[None]:
         yield
     except StructuredDataError:
         raise
-    except Exception as error:
-        message = str(error)
-        detail = _sanitization_detail(model)
+    except _CALLER_ERRORS as error:
         raise StructuredDataError(
-            f'{message}{detail}',
-            code='UNSUPPORTED_REQUEST'
-            if 'at once' in message
-            else 'INVALID_REQUEST',
+            f'{error}{_sanitization_detail(model)}',
+            code='INVALID_REQUEST',
         ) from error
+    except Exception as error:
+        raise StructuredDataError(
+            f'the relational engine failed while building this request: '
+            f'{type(error).__name__}: {error}',
+            code='INTERNAL_ERROR',
+        ) from error
+
+
+def _caller_errors() -> tuple[type[BaseException], ...]:
+    r"""The exception types the engine uses to report bad input."""
+    types: list[type[BaseException]] = [ValueError, KeyError, TypeError]
+    try:
+        from sdm_relational_engine import KumoRelationalError
+    except ImportError:  # pragma: no cover - the extra is optional
+        pass
+    else:
+        types.append(KumoRelationalError)
+    return tuple(types)
 
 
 def _sanitization_detail(model: Any) -> str:
@@ -444,17 +464,26 @@ def _sanitization_detail(model: Any) -> str:
     return f' [{"; ".join(reasons)}]' if reasons else ''
 
 
-def _check_entity_count(indices: Sequence[Any]) -> None:
+_CALLER_ERRORS: tuple[type[BaseException], ...] = _caller_errors()
+
+
+def _check_entity_count(indices: Sequence[Any], task_kind: Any = None) -> None:
     r"""Refuse more entities than the endpoint scores, before gathering any.
 
     The engine refuses this too, several seconds later, in a message that names
-    a ``batch_size=`` argument this client does not have.
+    a ``batch_size=`` argument this client does not have. Checked twice: once
+    on the count alone, and again once the task kind is known, because a
+    temporal link prediction is capped lower than everything else.
     """
     ceiling = RELATIONAL_LIMITS['predict_rows_max']
+    described = 'the endpoint scores at most'
+    if task_kind is not None and 'link_prediction' in str(task_kind):
+        ceiling = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
+        described = 'a temporal link prediction scores at most'
     if len(indices) > ceiling:
         raise StructuredDataError(
-            f'{len(indices):,} entities were asked for, and the endpoint '
-            f'scores at most {ceiling:,} at a time; split them across calls',
+            f'{len(indices):,} entities were asked for, and {described} '
+            f'{ceiling:,} at a time; split them across calls',
             code='UNSUPPORTED_REQUEST',
         )
 
@@ -620,11 +649,26 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
             fkey=link.source_column,
             dst_table=link.target_table,
         )
+    # An engine edge carries no target column: it always joins to the target
+    # table's primary key, which is why the schema is made to say the same
+    # thing before it gets here.
     sent = {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
     described = {
         (link.source_table, link.source_column, link.target_table)
         for link in schema.relationships
     }
+    misdirected = [
+        link
+        for link in schema.relationships
+        if link.target_column
+        not in _as_key_tuple(schema[link.target_table].primary_key)
+    ]
+    if misdirected:
+        raise StructuredDataError(
+            f'{misdirected} name a target column that is not the primary key '
+            f'of the table they point at, and an edge can only join to that',
+            code='INVALID_REQUEST',
+        )
     if (
         sent != described
     ):  # pragma: no cover - the assertion this fix exists for

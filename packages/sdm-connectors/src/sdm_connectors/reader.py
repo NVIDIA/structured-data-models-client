@@ -355,8 +355,13 @@ def _read_s3(
     return _read_file(path, storage_options=storage_options, format=format)
 
 
-def _is_directory(path: str) -> bool:
+def _is_directory(
+    path: str, storage_options: dict[str, Any] | None = None
+) -> bool:
     r"""Whether ``path`` names a directory, local or remote.
+
+    Built with the caller's ``storage_options``, so a private endpoint or an
+    explicit credential is used here as it is for the read itself.
 
     ``os.path.isdir`` answers only for the local filesystem, so an ``s3://``
     prefix was never a directory to it and a partitioned Parquet dataset --
@@ -375,12 +380,16 @@ def _is_directory(path: str) -> bool:
     try:
         import fsspec
 
-        return bool(fsspec.filesystem(scheme).isdir(path))
+        return bool(
+            fsspec.filesystem(scheme, **(storage_options or {})).isdir(path)
+        )
     except Exception:  # noqa: BLE001 - see the docstring
         return False
 
 
-def _resolve_format(path: str) -> str:
+def _resolve_format(
+    path: str, storage_options: dict[str, Any] | None = None
+) -> str:
     r"""Decide the file format from ``path``, or reject it.
 
     Falling back to CSV for any unrecognised suffix does not fail loudly: a
@@ -402,7 +411,7 @@ def _resolve_format(path: str) -> str:
         return 'parquet'
     if suffix in _CSV_SUFFIXES:
         return 'csv'
-    if _is_directory(path):
+    if _is_directory(path, storage_options):
         return 'parquet'
     raise ConnectorError(
         f'unsupported file format {suffix or path!r} for {path!r}; supported: '
@@ -500,7 +509,7 @@ def _read_file(
     format: str | None = None,
 ) -> pd.DataFrame:
     if format is None:
-        resolved = _resolve_format(path)
+        resolved = _resolve_format(path, storage_options)
     elif format in _FILE_FORMATS:
         resolved = format
     else:
