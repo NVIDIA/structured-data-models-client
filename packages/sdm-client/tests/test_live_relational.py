@@ -241,20 +241,35 @@ def test_omitting_the_count_gathers_what_the_data_holds(client, query):
 
 
 @requires_relational
-def test_asking_for_more_context_than_exists_still_predicts(client, query):
-    """There are only so many labelled examples; that is not an error."""
-    request = query.materialize(indices=[0, 1], num_context_samples=100_00 - 1)
-    frame = client.predict(request, model=KumoRelational()).to_pandas()
-    assert len(frame) == 2
+def test_asking_for_more_context_than_exists_gives_what_exists(client, query):
+    """There are only so many labelled examples; that is not an error.
+
+    Asserted against the default rather than just "it predicted", because the
+    old bucket-only behaviour would also have predicted here.
+    """
+    available = len(
+        query.materialize(indices=[0, 1]).payloads[0]['context'][
+            'instance_table'
+        ]['rows']
+    )
+    request = query.materialize(indices=[0, 1], num_context_samples=9_999)
+    gathered = len(request.payloads[0]['context']['instance_table']['rows'])
+
+    assert gathered == available, 'asking for more should give what there is'
+    assert (
+        client.predict(request, model=KumoRelational()).to_pandas().shape[0]
+        == 2
+    )
 
 
 @requires_relational
-def test_asking_past_the_endpoint_ceiling_is_refused_before_gathering(query):
+@pytest.mark.parametrize('bad', [10_001, 0, -1, 5.5, '5'])
+def test_a_count_the_endpoint_cannot_serve_is_refused_locally(query, bad):
+    """None of these reach the endpoint; see test_context_samples for the proof."""
     from sdm_client.errors import StructuredDataError
 
-    with pytest.raises(StructuredDataError) as error:
-        query.materialize(indices=[0], num_context_samples=10_001)
-    assert '10,000' in str(error.value)
+    with pytest.raises(StructuredDataError):
+        query.materialize(indices=[0], num_context_samples=bad)
 
 
 @requires_relational

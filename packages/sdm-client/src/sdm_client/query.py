@@ -24,11 +24,13 @@ model whose profile accepts it can answer.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
+from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
 from sdm_client.schema import Schema
 
@@ -138,9 +140,11 @@ class PredictiveQuery:
                 single-table path: a query enumerates rows the tables already
                 hold, so rows it has never seen have to be supplied rather
                 than derived. Mutually exclusive with ``indices``.
-            num_context_samples: How many labelled examples to gather. The
-                client derives the endpoint's ``run_mode`` from this rather
-                than asking you to know its presets.
+            num_context_samples: How many labelled examples to gather, at
+                least 1. The client derives the endpoint's ``run_mode`` from it
+                rather than asking you to know the presets, and narrows the
+                gathered examples to exactly this many. Omitted, you get the
+                smaller budget of 1,000, which is the endpoint's own default.
             **options: Sampler options, e.g. ``num_neighbors``, ``anchor_time``.
 
         Returns:
@@ -194,6 +198,7 @@ class PredictiveQuery:
                 code='INVALID_REQUEST',
             )
 
+        num_context_samples = _valid_context_samples(num_context_samples)
         payloads = self._gather(indices, num_context_samples, options)
         return Request.materialized(
             payloads=payloads,
@@ -287,8 +292,6 @@ class PredictiveQuery:
         duplicate PQL resolution, point-in-time correctness and neighbourhood
         sampling that already live -- and are tested -- there.
         """
-        from sdm_client.models import RELATIONAL_LIMITS
-
         engine = _engine()
         run_mode = _run_mode_for(num_context_samples)
 
@@ -354,6 +357,39 @@ class PredictiveQuery:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
 
 
+def _valid_context_samples(value: Any) -> int | None:
+    r"""Reject a count that is not a count.
+
+    This number reaches a frame slice, and pandas is happy to take a negative
+    one -- ``narrow_context(0, -1)`` quietly drops the last example rather than
+    failing. Zero is worse: it gathers nothing and the model is asked to
+    predict from an empty context. A bool is an int in Python, and
+    ``num_context_samples=True`` meaning one example helps nobody.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise StructuredDataError(
+            f'num_context_samples must be a whole number of labelled '
+            f'examples, got {type(value).__name__} {value!r}',
+            code='INVALID_REQUEST',
+        )
+    if value < 1:
+        raise StructuredDataError(
+            f'num_context_samples must be at least 1; a model predicts from '
+            f'labelled examples, and {value} leaves it none',
+            code='INVALID_REQUEST',
+        )
+    ceiling = RELATIONAL_LIMITS['context_rows_max']
+    if value > ceiling:
+        raise StructuredDataError(
+            f'num_context_samples is {value:,}, and the endpoint accepts at '
+            f'most {ceiling:,} context rows',
+            code='UNSUPPORTED_REQUEST',
+        )
+    return int(value)
+
+
 def _narrow_context(task: Any, num_context_samples: int | None) -> Any:
     r"""Gather exactly as many labelled examples as were asked for.
 
@@ -365,6 +401,13 @@ def _narrow_context(task: Any, num_context_samples: int | None) -> Any:
 
     Asking for more than the data holds is not an error -- there simply are not
     that many labelled examples -- so this only ever narrows.
+
+    Which examples survive is the engine's existing rule, inherited rather than
+    chosen: the first ``n``. For most tasks the candidates are shuffled before
+    this point, so that is a sample. For forecasting the engine orders context
+    chronologically first, so narrowing keeps the **oldest** ``n``. That is what
+    the endpoint does when it trims to its own ceiling, and matching it means a
+    narrowed request and a capped one behave the same way.
     """
     if num_context_samples is None:
         return task
@@ -382,16 +425,17 @@ def _run_mode_for(num_context_samples: int | None) -> str:
     four-value enum. Deriving it means a caller sets the number they want
     rather than learning which preset contains it.
     """
-    from sdm_client.models import RELATIONAL_LIMITS
-
     if num_context_samples is None:
         return 'fast'
     if num_context_samples <= RELATIONAL_LIMITS['context_rows_fast']:
         return 'fast'
     if num_context_samples <= RELATIONAL_LIMITS['context_rows_max']:
         return 'best'
+    # Unreachable through `materialize`, which validates first. Kept because
+    # this function is callable on its own, and a guard that only holds when
+    # its caller happens to check first is not a guard.
     raise StructuredDataError(
-        f'num_context_samples is {num_context_samples}, and the endpoint '
+        f'num_context_samples is {num_context_samples:,}, and the endpoint '
         f'accepts at most {RELATIONAL_LIMITS["context_rows_max"]:,} context '
         f'rows',
         code='UNSUPPORTED_REQUEST',

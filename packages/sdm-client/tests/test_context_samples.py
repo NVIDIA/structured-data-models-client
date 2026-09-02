@@ -128,3 +128,99 @@ def test_the_public_surface_offers_no_run_mode():
     parameters = inspect.signature(PredictiveQuery.materialize).parameters
     assert 'run_mode' not in parameters
     assert 'num_context_samples' in parameters
+
+
+# --- a count that is not a count -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ('bad', 'fragment'),
+    [
+        (0, 'at least 1'),
+        (-1, 'at least 1'),
+        (-240, 'at least 1'),
+        (5.5, 'whole number'),
+        ('5', 'whole number'),
+        (True, 'whole number'),
+        ([5], 'whole number'),
+    ],
+)
+def test_a_count_that_is_not_a_count_is_refused(bad, fragment):
+    """This number reaches a frame slice, and pandas takes anything.
+
+    ``narrow_context(0, -1)`` quietly drops the last example rather than
+    failing, and ``0`` asks the model to predict from an empty context. A bool
+    is an int in Python, so ``True`` would have meant one example.
+    """
+    from sdm_client.query import _valid_context_samples
+
+    with pytest.raises(StructuredDataError) as error:
+        _valid_context_samples(bad)
+    assert fragment in str(error.value)
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+@pytest.mark.parametrize('good', [1, 2, 500, 1_000, 10_000])
+def test_a_real_count_passes_through_unchanged(good):
+    from sdm_client.query import _valid_context_samples
+
+    assert _valid_context_samples(good) == good
+
+
+def test_omitting_the_count_stays_omitted():
+    from sdm_client.query import _valid_context_samples
+
+    assert _valid_context_samples(None) is None
+
+
+def test_a_refused_count_never_reaches_the_engine():
+    """Validation runs before anything is gathered, which is the expensive part."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+    from sdm_client.query import _MATERIALIZE_OPTIONS  # noqa: F401
+
+    frame = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
+    query = PredictiveQuery(
+        'PREDICT users.v FOR EACH users.user_id', {'users': frame}
+    )
+
+    called = False
+
+    def _fail(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError('the engine was reached')
+
+    query._gather = _fail  # type: ignore[method-assign]
+    with pytest.raises(StructuredDataError):
+        query.materialize(indices=[1], num_context_samples=0)
+    assert not called, 'the count was validated after gathering, not before'
+
+
+def test_the_ceiling_is_refused_before_the_engine_is_reached():
+    """Same point for the upper bound: no round trip, no sampling."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery
+
+    frame = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
+    query = PredictiveQuery(
+        'PREDICT users.v FOR EACH users.user_id', {'users': frame}
+    )
+
+    def _fail(*args, **kwargs):
+        raise AssertionError('the engine was reached')
+
+    query._gather = _fail  # type: ignore[method-assign]
+    with pytest.raises(StructuredDataError) as error:
+        query.materialize(indices=[1], num_context_samples=MAX + 1)
+    assert '10,000' in str(error.value)
+
+
+def test_narrowing_at_the_upper_boundary_gathers_exactly_what_was_asked():
+    """The live fixture is small, so the high boundary is covered here."""
+    for asked in (FAST + 1, 9_999, MAX):
+        narrowed = _narrow_context(_Task(MAX + 5_000), asked)
+        assert narrowed.num_context_examples == asked
+        assert _run_mode_for(asked) == 'best'

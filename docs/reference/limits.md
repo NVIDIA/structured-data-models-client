@@ -31,9 +31,22 @@ labelled examples are gathered, even though the budget that admits them holds
 1,000 — a count that only chose a bucket would be as decorative as the two
 preset values that did nothing.
 
-Omit it and you get what the data holds, up to the endpoint's ceiling. Ask for
-more than exists and you get what exists; that is not an error. Ask for more
-than 10,000 and you are told the ceiling rather than silently given fewer.
+Omit it and you get the smaller budget — up to 1,000 examples — which is the
+default the endpoint has always had. Ask for more and say so; that is what the
+argument is for.
+
+Ask for more than exists and you get what exists; there are only so many
+labelled examples, and that is not an error. Ask for more than 10,000 and you
+are told the ceiling rather than silently given fewer. Zero, a negative, a
+fraction or a string are refused by name.
+
+**Which examples you get** when the count narrows: the first `n` of what was
+gathered. For most tasks the candidates are shuffled first, so that is a
+sample. For forecasting the engine orders context chronologically before
+slicing, so a narrowed forecast keeps the **oldest** `n` examples, not the most
+recent. That is the endpoint's own long-standing behaviour when it trims to its
+ceiling, and it is inherited rather than chosen — worth knowing before you
+narrow a forecast.
 
 ## What a deployment serves
 
