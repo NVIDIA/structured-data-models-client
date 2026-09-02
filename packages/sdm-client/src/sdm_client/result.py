@@ -173,12 +173,23 @@ class PredictionResult:
         explanation = next(
             (part.explanation for part in parts if part.explanation), None
         )
+        # Every part answers one slice of the same request, so they were asked
+        # for the same fields. If they were not, the merged result cannot
+        # honestly claim either set, and an empty one would take its shape from
+        # whichever part happened to be first.
+        shapes = {part.outputs for part in parts}
+        if len(shapes) > 1:
+            raise ValueError(
+                f'these parts were asked for different outputs ({sorted(shapes)}), '
+                f'so they are not slices of one request'
+            )
         return cls(
             model=first.model,
             request_id=first.request_id,
             items=items,
             metadata=metadata,
             explanation=explanation,
+            outputs=first.outputs,
         )
 
     def __len__(self) -> int:

@@ -247,3 +247,25 @@ def test_an_unrelated_error_is_returned_unchanged():
 def test_the_tabular_adapter_does_not_pretend_to_explain():
     error = StructuredDataError('boom', code='X')
     assert TabularAdapter().explain_error(error, {}) is error
+
+
+# --- merging keeps the shape ------------------------------------------------
+
+
+def empty(request_id: str, outputs=('prediction',)) -> PredictionResult:
+    return PredictionResult(
+        model='kumo-tabular', request_id=request_id, items=(), outputs=outputs
+    )
+
+
+def test_merging_keeps_the_columns_the_request_implied():
+    """A split request that scored nothing must still be joinable."""
+    merged = PredictionResult.merge([empty('a'), empty('b')])
+    assert merged.outputs == ('prediction',)
+    assert list(merged.to_pandas().columns) == ['row_index', 'prediction']
+
+
+def test_merging_parts_that_wanted_different_outputs_is_refused():
+    """They would not be slices of one request."""
+    with pytest.raises(ValueError, match='different outputs'):
+        PredictionResult.merge([empty('a'), empty('b', ('scores',))])

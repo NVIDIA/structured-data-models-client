@@ -270,7 +270,10 @@ class SDMClient:
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         try:
-            created = self._transport.create_session(payload)
+            try:
+                created = self._transport.create_session(payload)
+            except StructuredDataError as error:
+                raise adapter.explain_error(error, payload) from None
         except Exception as error:
             status = getattr(error, 'status_code', None)
             if status in _SESSIONS_UNSUPPORTED:

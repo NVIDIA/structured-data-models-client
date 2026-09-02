@@ -157,9 +157,41 @@ class Table:
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key' and value is not None:
             self._check_key(value)
-        elif key == 'time_column' and value is not None:
+            object.__setattr__(self, key, value)
+            self._adopt_key(value)
+            return
+        if key == 'time_column' and value is not None:
             self._check_time_column(value)
         object.__setattr__(self, key, value)
+
+    def _adopt_key(self, value: str | Sequence[str]) -> None:
+        r"""Make the rest of the table agree with the key it was just given.
+
+        A key identifies a row, so its columns mean ``ID`` -- the engine's own
+        setter does the same thing -- and whatever imperfection the uniqueness
+        check tolerated is recorded and said out loud. Inference does all three
+        after nominating a key; assignment has to as well, or the two routes
+        describe the same table differently.
+        """
+        names = _as_key_tuple(value)
+        for name in names:
+            column = self.columns.get(name)
+            if column is not None and supports_dtype('ID', column.dtype):
+                column.stype = 'ID'
+        frame = getattr(self, 'data', None)
+        if frame is None or frame.empty:
+            return
+        object.__setattr__(
+            self, 'duplicate_keys', _duplicate_key_count(frame, names)
+        )
+        if self.duplicate_keys:
+            warnings.warn(
+                f'{self.name}.{".".join(names)} identifies a row '
+                f'{self.duplicate_keys} time(s) it has already been used, '
+                f'e.g. {_first_duplicate(frame, names)!r}. Those rows are '
+                f'indistinguishable to the model.',
+                stacklevel=3,
+            )
 
     def _check_column(self, name: str) -> None:
         if name not in getattr(self, 'columns', {}):
@@ -343,9 +375,12 @@ class Schema:
             built[name] = _infer_table(name, frame)
 
         for name, key in (primary_keys or {}).items():
-            _require_table(built, name).primary_key = _require_column(
-                built, name, key
-            )
+            table = _require_table(built, name)
+            # The setter takes a composite key, so this has to as well, or the
+            # two ways of saying the same thing disagree.
+            for column in _as_key_tuple(key):
+                _require_column(built, name, column)
+            table.primary_key = key
         for name, column in (time_columns or {}).items():
             _require_table(built, name).time_column = _require_column(
                 built, name, column
@@ -568,6 +603,13 @@ def _require_joinable(tables: Mapping[str, Table], link: Relationship) -> None:
     target = tables[link.target_table]
     key = target.primary_key
     keys = _as_key_tuple(key)
+    if len(keys) > 1:
+        raise StructuredDataError(
+            f'{link} points at {link.target_table!r}, whose primary key is '
+            f'{list(keys)}. An edge joins one column to one key, so a table '
+            f'with a composite key cannot be the target of a relationship',
+            code='INVALID_REQUEST',
+        )
     if link.target_column not in keys:
         named = f'{key!r}' if key is not None else 'no primary key'
         raise StructuredDataError(

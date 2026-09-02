@@ -148,7 +148,8 @@ def test_the_tolerance_inference_allows_is_the_tolerance_assignment_allows():
     with pytest.warns(UserWarning):
         built = Schema.from_data({'users': duplicated(repeats=5)})
     assert built['users'].primary_key == 'user_id'
-    built['users'].primary_key = 'user_id'
+    with pytest.warns(UserWarning):
+        built['users'].primary_key = 'user_id'
 
 
 def test_a_unique_key_is_accepted():
@@ -234,3 +235,86 @@ def test_a_unique_key_says_nothing():
         built = Schema.from_data({'users': users()})
     assert built['users'].duplicate_keys == 0
     assert 'repeated' not in repr(built['users'])
+
+
+# --- assignment and inference describe the same table -----------------------
+
+
+def test_assigning_a_key_marks_its_columns_as_identifiers():
+    """The engine's setter does this, so both routes have to."""
+    built = Schema.from_data({'users': users()}, relationships=[])
+    assert built['users']['age'].stype != 'ID'
+    built['users'].primary_key = 'age'
+    assert built['users']['age'].stype == 'ID'
+
+
+def test_assigning_a_key_records_and_reports_what_it_tolerated():
+    frame = duplicated(repeats=5).rename(columns={'user_id': 'k'})
+    built = Schema.from_data({'users': frame}, relationships=[])
+    assert built['users'].duplicate_keys == 0
+    with pytest.warns(UserWarning, match='already been used'):
+        built['users'].primary_key = 'k'
+    assert built['users'].duplicate_keys == 5
+    assert '5 repeated keys' in repr(built['users'])
+
+
+def test_a_composite_key_marks_every_column_it_names():
+    frame = pd.DataFrame({'a': [1, 1, 2], 'b': [1, 2, 1], 'v': [1.0, 2.0, 3.0]})
+    built = Schema.from_data({'t': frame}, relationships=[])
+    built['t'].primary_key = ['a', 'b']
+    assert built['t']['a'].stype == 'ID'
+    assert built['t']['b'].stype == 'ID'
+
+
+def test_the_constructor_takes_a_composite_key_as_the_setter_does():
+    frame = pd.DataFrame({'a': [1, 1, 2], 'b': [1, 2, 1], 'v': [1.0, 2.0, 3.0]})
+    built = Schema.from_data(
+        {'t': frame}, primary_keys={'t': ['a', 'b']}, relationships=[]
+    )
+    assert built['t'].primary_key == ['a', 'b']
+
+
+def test_a_composite_key_naming_a_missing_column_is_refused():
+    frame = pd.DataFrame({'a': [1, 2], 'v': [1.0, 2.0]})
+    with pytest.raises(StructuredDataError):
+        Schema.from_data(
+            {'t': frame}, primary_keys={'t': ['a', 'nope']}, relationships=[]
+        )
+
+
+# --- a relationship has to be one an edge can express -----------------------
+
+
+def test_a_relationship_must_point_at_the_primary_key():
+    with pytest.raises(StructuredDataError) as error:
+        Schema.from_data(
+            {'users': users(), 'orders': orders()},
+            relationships=[Relationship('orders', 'user_id', 'users', 'age')],
+        )
+    assert 'primary key' in str(error.value)
+
+
+def test_a_relationship_joining_incomparable_types_is_refused():
+    frame = orders()
+    frame['user_id'] = frame['user_id'].astype(str)
+    with pytest.raises(StructuredDataError) as error:
+        Schema.from_data(
+            {'users': users(), 'orders': frame},
+            relationships=[
+                Relationship('orders', 'user_id', 'users', 'user_id')
+            ],
+        )
+    assert 'cannot match' in str(error.value)
+
+
+def test_a_relationship_into_a_composite_key_is_refused():
+    """An engine edge joins one column to one key; a pair is not expressible."""
+    frame = pd.DataFrame({'a': [1, 1, 2], 'b': [1, 2, 1], 'v': [1.0, 2.0, 3.0]})
+    child = pd.DataFrame({'child_id': [1, 2], 'a': [1, 2]})
+    with pytest.raises(StructuredDataError) as error:
+        Schema.from_data(
+            {'t': frame, 'c': child},
+            primary_keys={'t': ['a', 'b'], 'c': 'child_id'},
+            relationships=[Relationship('c', 'a', 't', 'a')],
+        )
+    assert 'composite key' in str(error.value)
