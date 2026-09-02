@@ -437,8 +437,14 @@ The client's four-tier `debug/fast/normal/best` ladder was a client-side fiction
 So the user sets the real numbers, and the client derives the wire value:
 
 ```python
-query.materialize(indices=[…], num_context_samples=5000, num_neighbors=[8, 8])
+query.materialize(indices=[…], num_context_samples=500, num_neighbors=[8, 8])
 ```
+
+**And the number is honoured, not just used to pick a bucket.** The endpoint's
+budget is a ceiling, not a request; gathering 1,000 because that is the bucket that
+admits 500 would make the number as decorative as the two preset values that did
+nothing, which is the defect this replaced. The count narrows the gathered
+examples where they are built, before anything is encoded.
 
 The client **pre-flights the server's limits before sending**, so you get a readable error instead of
 a 500.

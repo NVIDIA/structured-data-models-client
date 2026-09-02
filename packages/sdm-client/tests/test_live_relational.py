@@ -202,3 +202,65 @@ def test_a_binary_question_comes_back_with_probabilities(client):
         column for column in frame.columns if column.startswith('probability_')
     ]
     assert probability_columns, f'no probabilities in {list(frame.columns)}'
+
+
+@requires_relational
+def test_the_number_of_context_samples_is_honoured_end_to_end(client, query):
+    """The count has to reach the payload, not just choose a wire value.
+
+    ``run_mode`` went because two of its four values did nothing. Replacing it
+    with a number that is rounded up to a bucket would be the same defect in a
+    new shape, so this asserts the gathered context, the derived wire value,
+    and that a prediction still comes back at each size.
+    """
+    for asked in (5, 20, 60):
+        request = query.materialize(indices=[0, 1], num_context_samples=asked)
+        payload = request.payloads[0]
+
+        gathered = len(payload['context']['instance_table']['rows'])
+        assert gathered == asked, (
+            f'asked for {asked} context rows and gathered {gathered}'
+        )
+        # Every one of these is under the small budget, so the wire value is
+        # the one that admits it.
+        assert payload['inference']['run_mode'] == 'fast'
+
+        frame = client.predict(request, model=KumoRelational()).to_pandas()
+        assert len(frame) == 2, f'no prediction at num_context_samples={asked}'
+
+
+@requires_relational
+def test_omitting_the_count_gathers_what_the_data_holds(client, query):
+    """The default is not zero and not a bucket: it is what is there."""
+    default = query.materialize(indices=[0, 1])
+    small = query.materialize(indices=[0, 1], num_context_samples=5)
+
+    available = len(default.payloads[0]['context']['instance_table']['rows'])
+    assert available > 5, 'this fixture cannot tell the two apart'
+    assert len(small.payloads[0]['context']['instance_table']['rows']) == 5
+
+
+@requires_relational
+def test_asking_for_more_context_than_exists_still_predicts(client, query):
+    """There are only so many labelled examples; that is not an error."""
+    request = query.materialize(indices=[0, 1], num_context_samples=100_00 - 1)
+    frame = client.predict(request, model=KumoRelational()).to_pandas()
+    assert len(frame) == 2
+
+
+@requires_relational
+def test_asking_past_the_endpoint_ceiling_is_refused_before_gathering(query):
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError) as error:
+        query.materialize(indices=[0], num_context_samples=10_001)
+    assert '10,000' in str(error.value)
+
+
+@requires_relational
+def test_run_mode_is_refused_as_an_option(query):
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError) as error:
+        query.materialize(indices=[0], run_mode='best')
+    assert 'run_mode' in str(error.value)

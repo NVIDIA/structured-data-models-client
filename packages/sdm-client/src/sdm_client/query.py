@@ -314,6 +314,7 @@ class PredictiveQuery:
             },
         )
         task._query = query_def.to_string()
+        task = _narrow_context(task, num_context_samples)
 
         parts = model.materialize_task(
             task,
@@ -351,6 +352,26 @@ class PredictiveQuery:
 
     def __repr__(self) -> str:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
+
+
+def _narrow_context(task: Any, num_context_samples: int | None) -> Any:
+    r"""Gather exactly as many labelled examples as were asked for.
+
+    The endpoint enforces a ceiling, and the engine trims to that ceiling, but
+    a ceiling is not a request: asking for 500 and being handed 4,000 makes the
+    number decorative, which is the whole complaint that retired ``run_mode``.
+    So the count is applied here, where the examples exist and before anything
+    is encoded.
+
+    Asking for more than the data holds is not an error -- there simply are not
+    that many labelled examples -- so this only ever narrows.
+    """
+    if num_context_samples is None:
+        return task
+    gathered = task.num_context_examples
+    if gathered <= num_context_samples:
+        return task
+    return task.narrow_context(0, num_context_samples)
 
 
 def _run_mode_for(num_context_samples: int | None) -> str:

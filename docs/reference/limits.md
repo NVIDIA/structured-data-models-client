@@ -18,15 +18,22 @@ a 500 or a 422 that names neither the limit nor how to get under it.
 ## There is no `run_mode`
 
 The endpoint takes one, and this client derives it. It distinguishes only a
-small context budget from a large one, so a four-value preset was a two-way
-choice wearing a disguise. Set the number you want:
+small context budget from a large one, so the four-value preset was a two-way
+choice wearing a disguise: `debug` silently gave you `fast`, and `normal`
+silently gave you `best`. Set the number you want instead:
 
 ```python
-query.materialize(indices=[...], num_context_samples=5000)
+query.materialize(indices=[...], num_context_samples=500)
 ```
 
-Ask for more than 10,000 and you are told the ceiling rather than being
-silently given fewer.
+**The number is honoured, not rounded up to a bucket.** Ask for 500 and 500
+labelled examples are gathered, even though the budget that admits them holds
+1,000 — a count that only chose a bucket would be as decorative as the two
+preset values that did nothing.
+
+Omit it and you get what the data holds, up to the endpoint's ceiling. Ask for
+more than exists and you get what exists; that is not an error. Ask for more
+than 10,000 and you are told the ceiling rather than silently given fewer.
 
 ## What a deployment serves
 
