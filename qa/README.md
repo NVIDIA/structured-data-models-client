@@ -72,6 +72,9 @@ These fail on purpose, and each one names the bug it is waiting on.
 | `the graph sent matches the schema` | [15](../bugs/015-the-schemas-relationships-are-additive-only.md) |
 | `asserting there are no relationships` | [15](../bugs/015-the-schemas-relationships-are-additive-only.md) |
 | `the schema can draw itself` | [16](../bugs/016-visualize-is-documented-but-not-reachable.md) |
+| `a primary key that is not a column` | [17](../bugs/017-schema-checks-that-a-column-exists-not-that-it-fits.md) |
+| `a string column assigned as the time column` | [17](../bugs/017-schema-checks-that-a-column-exists-not-that-it-fits.md) |
+| `a non-unique primary key assigned directly` | [2](../bugs/002-non-unique-primary-key-accepted.md) |
 | `csv, a large integer with a blank in the column` | [9](../bugs/009-csv-reader-rounds-large-integers.md) |
 | `duckdb, a SUM over a BIGINT column` | [14](../bugs/014-a-sum-over-integers-in-duckdb-is-rounded.md) |
 | `a python int list through data= with a None` | [9](../bugs/009-csv-reader-rounds-large-integers.md) |

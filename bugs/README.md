@@ -21,8 +21,8 @@ Every one was reproduced before it was written down. Nothing here is fixed yet.
 | [10](010-all-null-context-column-stringifies-real-values.md) | A column empty in the context turns real values into strings in the rows being scored | Medium |
 | [11](011-numpy-scalars-in-inference-raise-a-raw-typeerror.md) | A numpy scalar in `inference` raises a raw `TypeError` from the JSON encoder | Medium |
 | [12](012-an-explicit-categorical-becomes-text.md) | An explicitly declared `Categorical` becomes `text` once it has 65 levels | Medium |
-| [16](016-visualize-is-documented-but-not-reachable.md) | `visualize()` is documented, licensed and vendored for — but not reachable | Medium |
-| [17](017-schema-checks-that-a-column-exists-not-that-it-fits.md) | `Schema` checks that a column exists, not that it can mean what you said | Medium |
+| [16](016-visualize-is-documented-but-not-reachable.md) | `Schema` cannot draw itself, though that is what the vendored mermaid bundle is for | Medium |
+| [17](017-schema-checks-that-a-column-exists-not-that-it-fits.md) | `Schema` checks that a column exists, not that it can mean what you said — and after construction, not even that | Medium |
 | [8](008-endpoint-limits-are-not-declared-locally.md) | Two endpoint limits are discovered only by being rejected, and one does not name the column | Medium |
 | [7](007-materialize-prints-to-stdout.md) | `materialize()` prints progress to stdout | Low |
 | [13](013-a-malformed-response-is-coerced-rather-than-refused.md) | A malformed `200` response is coerced rather than refused | Low |
@@ -135,6 +135,20 @@ normalising to the same instant. A session given a mismatched schema is refused
 by the endpoint as `422 SESSION_PREDICT_SCHEMA_MISMATCH`, naming the offending
 column — a round trip rather than a local check, but a clean outcome, so it is
 not filed.
+
+## What a third pass would look at
+
+Both passes exercised constructors and `materialize()`. The class that nearly
+escaped both is **mutation after construction** — `schema['t'].primary_key = x`
+is the documented way to correct a schema and runs no checks at all, not even
+that the column exists. That is now [17](017-schema-checks-that-a-column-exists-not-that-it-fits.md),
+found by asking what shape of defect the method itself could not see.
+
+What is still unexamined here is release shape rather than behaviour: a clean
+install from built wheels, the optional extras resolving on their own, the
+native engine on a platform other than this one, dependency metadata, and drift
+between this client's pinned `RuntimeContract` and whatever the endpoint serves
+next. Those want release smoke tests, not more probes.
 
 ## Method
 

@@ -95,22 +95,31 @@ tool that would reveal this is unavailable.
 
 ## Proposed fix
 
-Make the schema authoritative in both directions. Build the engine graph from
-the schema rather than re-inferring:
+The engine already offers the control this needs. `Graph.from_data` takes an
+`edges` argument, and passing an empty list suppresses link inference entirely:
 
-- Construct the engine graph **without** inference where the engine allows it,
-  and add exactly the schema's relationships.
-- If the engine's constructor always infers, then reconcile after: remove every
-  edge not in `schema.relationships` as well as adding every one that is
-  missing. `Graph` supports `link`; it needs an `unlink` — or rebuild the edge
-  list wholesale.
-- Assert the result: after reconciliation, the engine graph's edge set must
-  equal the schema's relationship set. That assertion is the test.
+```python
+graph = engine.Graph.from_data(frames, edges=[], infer_metadata=True, verbose=False)
+# 0 edges, confirmed
+```
+
+So the fix is:
+
+- build with `edges=[]`;
+- apply the schema's keys, time columns and stypes as now;
+- `graph.link(...)` for exactly the schema's relationships, unconditionally —
+  the `existing` set and the `not in existing` test both go away;
+- assert the engine graph's edge set equals the schema's relationship set
+  before returning. That assertion is also the test.
+
+No after-the-fact reconciliation is needed. (`Graph.unlink` does exist, if a
+reconcile is ever preferred, but suppressing the inference is simpler and
+leaves one source of truth rather than two.)
 
 A separate question worth deciding once: should `Schema`'s inference be widened
-to match the engine's, or the engine's narrowed to match `Schema`'s? They
-should not both exist. `Schema`'s is the more conservative and the one the
-docs describe, which argues for making it the only one.
+to match the engine's, or should the engine's simply never run? Two inferences
+that disagree is the underlying problem, and `edges=[]` settles it by leaving
+only `Schema`'s — which is the conservative one, and the one the docs describe.
 
 Tests to add: `relationships=[]` yields an engine graph with no edges; an
 explicit single relationship yields exactly that edge; Northwind inferred

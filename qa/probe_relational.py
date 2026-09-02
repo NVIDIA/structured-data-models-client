@@ -79,6 +79,56 @@ def run(client):
         else:
             note(e, f'pkeys={ {n: built[n].primary_key for n in built} }')
 
+    # KNOWN BUG bugs/017
+    with probe(
+        AREA,
+        'a primary key that is not a column',
+        'refused at the point of assignment',
+    ) as e:
+        built = schema()
+        try:
+            built['Customers'].primary_key = 'NoSuchColumn'
+            fail(
+                e,
+                f'accepted; primary_key is now '
+                f'{built["Customers"].primary_key!r}',
+            )
+        except StructuredDataError as exc:
+            note(e, str(exc)[:120])
+
+    # KNOWN BUG bugs/017
+    with probe(
+        AREA,
+        'a string column assigned as the time column',
+        'refused at the point of assignment',
+    ) as e:
+        built = schema()
+        try:
+            built['Customers'].time_column = 'Country'
+            fail(e, 'a string column was accepted as the time column')
+        except StructuredDataError as exc:
+            note(e, str(exc)[:120])
+
+    # KNOWN BUG bugs/002
+    with probe(
+        AREA,
+        'a non-unique primary key assigned directly',
+        'refused; inference declined it for a reason',
+    ) as e:
+        tables = dict(data.northwind_graph())
+        tables['Customers'] = pd.concat(
+            [tables['Customers'], tables['Customers'].head(1)],
+            ignore_index=True,
+        )
+        built = Schema.from_data(tables)
+        if built['Customers'].primary_key is not None:
+            fail(e, 'inference nominated a non-unique key')
+        try:
+            built['Customers'].primary_key = 'CustomerID'
+            fail(e, 'a non-unique column was accepted as the primary key')
+        except StructuredDataError as exc:
+            note(e, str(exc)[:120])
+
     # KNOWN BUG bugs/015
     with probe(
         AREA,

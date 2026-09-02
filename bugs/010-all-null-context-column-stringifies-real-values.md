@@ -68,7 +68,9 @@ nothing":
 
 - Keep `UNTYPED` in the per-frame dtype and let `widen_tfm_dtype` ignore it, so
   the column takes the dtype of whichever frame actually has values — `int64`
-  in the example above.
+  in the example above. Both `_dtype_of` sites have to stop converting
+  `UNTYPED` to `'string'`: `schema.py:380-384` and the one in
+  `adapters/tabular.py`.
 - If **every** frame is untyped for a column, then there genuinely is no
   information, and `'string'` is the right last resort; keep it for that case
   only.

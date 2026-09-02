@@ -1,4 +1,4 @@
-# 17. `Schema` checks that a column exists, not that it can mean what you said
+# 17. `Schema` checks that a column exists, not that it can mean what you said — and after construction, not even that
 
 **Severity: medium** — the error arrives at the wrong time, in the wrong type,
 pointing at the wrong line.
@@ -38,6 +38,36 @@ A fourth case is not caught anywhere: a relationship between two columns that
 are not keys at all (`Relationship('orders', 'price', 'users', 'age')`) builds
 a schema without complaint.
 
+## After construction there is no check at all
+
+The constructor at least verifies the column exists. Direct assignment — which
+is the documented way to correct a schema — does not:
+
+```python
+schema['Customers'].primary_key = 'NoSuchColumn'
+schema['Customers'].primary_key
+# 'NoSuchColumn'
+```
+
+```python
+schema['Customers'].time_column = 'Country'   # a string column
+schema['Customers'].time_column
+# 'Country'
+```
+
+```python
+# 94 rows, 93 distinct CustomerIDs: inference declined to nominate a key
+schema['Customers'].primary_key            # None
+schema['Customers'].primary_key = 'CustomerID'   # accepted, still not unique
+```
+
+`Column.stype` has a setter that validates the name against the five known
+values. `Table.primary_key` and `Table.time_column` have no setter at all, so
+they accept anything — including a column that is not in the table. The last
+example is also the assignment route into
+[2](002-non-unique-primary-key-accepted.md): inference was careful enough to
+return `None`, and the assignment puts the non-unique key back.
+
 The engine's messages are good — each names the column and the conflict. Two
 things are wrong around them.
 
@@ -61,6 +91,8 @@ things are wrong around them.
   and both ends of a `Relationship`
 - `Schema.from_data`'s `relationships` branch — checks both columns exist, not
   that their dtypes can join or that either is a key
+- `Table` — `primary_key` and `time_column` are plain attributes with no
+  setter, so post-construction assignment is unchecked entirely
 
 ## Why it needs fixing
 
@@ -81,12 +113,19 @@ Move the checks the engine already performs to where the value is set:
   `timestamp` on a non-datetime column, `numerical` on a string, `text` on a
   numeric — as `StructuredDataError`, reusing the engine's wording. The dtype
   is on the `Column` already.
-- `time_columns=`: require the named column be a timestamp.
+- Give `Table.primary_key` and `Table.time_column` setters that run the same
+  checks as the constructor arguments, so the two routes cannot diverge. A
+  `Table` holds its own frame, so both the existence and the uniqueness checks
+  are local.
+- `time_columns=` and `.time_column =`: require the named column be a
+  timestamp.
 - `relationships=`: require both columns' dtypes to be joinable and the target
   to be the target table's primary key, refusing with the offending pair named.
 - Keep the engine's checks where they are. They are the backstop, and after
   this they should be unreachable from the public API — which is the test.
 
-Tests to add: each of the four cases above raises `StructuredDataError` at the
-point of assignment; every legitimate edit in the docs still works; a
+Tests to add: each of the four constructor cases raises `StructuredDataError`
+at the point of assignment; `primary_key = 'NoSuchColumn'`,
+`time_column = <a string column>` and `primary_key = <a non-unique column>` are
+each refused; every legitimate edit in the class docstring still works; a
 relationship between two non-key columns is refused.

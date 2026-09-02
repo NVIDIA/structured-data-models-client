@@ -1,7 +1,7 @@
-# 16. `visualize()` is documented, licensed and vendored for — but not reachable from the public API
+# 16. `Schema` cannot draw itself, though that is what the vendored mermaid bundle is for
 
-**Severity: medium** — a documented feature that raises `AttributeError`, and a
-vendored dependency carried for it.
+**Severity: medium** — the documented call raises `AttributeError` on the
+object the SDK asks you to build.
 
 ## Problem
 
@@ -22,18 +22,20 @@ schema.visualize()    # AttributeError: 'Schema' object has no attribute 'visual
 schema.to_mermaid()   # AttributeError: 'Schema' object has no attribute 'to_mermaid'
 ```
 
-Both live on the engine's `Graph` class, which is not exported from
-`sdm_relational_engine`'s top level either. The only way to reach them today is
-through a private helper:
+Both live on the engine's `Graph`. That class *is* exported
+(`sdm_relational_engine.rfm.Graph`), so the methods are not unreachable in
+general — but they are unreachable from a `Schema`, which is the object a
+caller of this SDK actually has. Turning one into the other is a private
+helper:
 
 ```python
 from sdm_client.query import _to_engine_graph, _engine
 _to_engine_graph(_engine(), schema).to_mermaid()   # works
 ```
 
-`Graph` is also not the name the SDK uses. `Graph` was renamed to `Schema` for
-this client, so a reader following the README looks for a class that no longer
-exists in the public API.
+`Graph` is also not the name the SDK uses. It was renamed to `Schema` for this
+client, so a reader following the README looks for a class the public API does
+not have.
 
 ## Reproduced
 
@@ -62,8 +64,8 @@ feature as available.
 
 Three separate costs, and they compound:
 
-1. A user follows the README and gets an `AttributeError`. On a public
-   repository that is the first impression.
+1. A user follows the README, calls it on the object they have, and gets an
+   `AttributeError`. On a public repository that is the first impression.
 2. The vendored bundle is justified *by* this feature. If it is unreachable,
    the SDK carries a third-party JavaScript bundle, its licence obligations and
    its provenance pinning for nothing — and that is exactly what an OSRB

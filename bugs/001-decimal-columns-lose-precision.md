@@ -127,7 +127,7 @@ the docs. What should not stand is the current position, which is to lose the
 precision silently. This report's title is about integers; the fractional case
 is a smaller, separate decision that the same fix should force someone to make.
 
-Tests to add: a `Decimal` past 2**53 in both an `int64`-shaped and a
-fractional column, `Decimal('Infinity')`, `Decimal('NaN')`, and a
-regression test asserting that a Python `int` and the equal `Decimal` are
-treated identically.
+Tests to add: a `Decimal` past 2**53 in both an `int64`-shaped and a fractional
+column, `np.int64` past 2**53 in a `float64` column, `Decimal('Infinity')`,
+`Decimal('NaN')`, and a regression test asserting that a Python `int`, the
+equal `Decimal` and the equal `np.int64` are all treated identically.
