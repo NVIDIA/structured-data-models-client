@@ -82,7 +82,11 @@ def northwind_graph(order_limit: int = 4_000) -> dict[str, pd.DataFrame]:
     details = northwind('Order Details')
     details = details[details['OrderID'].isin(set(orders['OrderID']))]
     products = northwind('Products')
+    # Northwind's later rows carry dates this parser does not read, and a row
+    # with no time cannot be placed in a temporal graph. Dropping them here
+    # keeps the fixture honest: coercing to NaT silently loses 3,170 of 4,000.
     orders['OrderDate'] = pd.to_datetime(orders['OrderDate'], errors='coerce')
+    orders = orders[orders['OrderDate'].notna()].reset_index(drop=True)
     return {
         'Customers': customers,
         'Orders': orders,

@@ -13,6 +13,7 @@ Every one was reproduced before it was written down. Nothing here is fixed yet.
 | [2](002-non-unique-primary-key-accepted.md) | A non-unique primary key is accepted, and the model silently sees one of the duplicates | High |
 | [9](009-csv-reader-rounds-large-integers.md) | The CSV reader rounds large integers when the column has a blank | High |
 | [14](014-a-sum-over-integers-in-duckdb-is-rounded.md) | A `SUM` over an integer column in DuckDB comes back rounded | High |
+| [15](015-the-schemas-relationships-are-additive-only.md) | A schema's `relationships` are additive only, so the model sees a graph the caller did not describe | High |
 | [3](003-engine-exceptions-escape-the-error-surface.md) | Engine exceptions escape the SDK's error surface, one advertising an API this SDK does not have | Medium |
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |
 | [5](005-empty-frames-are-not-refused.md) | An empty `predict` frame costs a round trip and returns a result with no columns | Medium |
@@ -20,6 +21,7 @@ Every one was reproduced before it was written down. Nothing here is fixed yet.
 | [10](010-all-null-context-column-stringifies-real-values.md) | A column empty in the context turns real values into strings in the rows being scored | Medium |
 | [11](011-numpy-scalars-in-inference-raise-a-raw-typeerror.md) | A numpy scalar in `inference` raises a raw `TypeError` from the JSON encoder | Medium |
 | [12](012-an-explicit-categorical-becomes-text.md) | An explicitly declared `Categorical` becomes `text` once it has 65 levels | Medium |
+| [16](016-visualize-is-documented-but-not-reachable.md) | `visualize()` is documented, licensed and vendored for — but not reachable | Medium |
 | [7](007-materialize-prints-to-stdout.md) | `materialize()` prints progress to stdout | Low |
 | [8](008-endpoint-limits-are-not-declared-locally.md) | Two endpoint limits are discovered only by being rejected, and one does not name the column | Low |
 | [13](013-a-malformed-response-is-coerced-rather-than-refused.md) | A malformed `200` response is coerced rather than refused | Low |
@@ -44,11 +46,14 @@ Parquet `int64`, DuckDB `BIGINT` with a null, SQLite `integer` with a null, CSV
 without a blank, Snowflake `NUMBER(38,0)`, Databricks `BIGINT`, and a Python
 `int` list. The repair works; it just has holes.
 
-Two more are the same shape in the type system: the SDK works out something
-careful — `UNTYPED` for a column with no values
+Three more are the same shape: the SDK works out something careful and then
+discards it one function later — `UNTYPED` for a column with no values
 ([10](010-all-null-context-column-stringifies-real-values.md)), the caller's
-own `Categorical` ([12](012-an-explicit-categorical-becomes-text.md)) — and
-then discards it one function later.
+own `Categorical` ([12](012-an-explicit-categorical-becomes-text.md)), and the
+schema's own relationships, which are overruled by a second inference inside
+the engine ([15](015-the-schemas-relationships-are-additive-only.md)). The last
+is the most serious thing in this list: `Schema` is the object the SDK asks you
+to trust, and on Northwind it reports three relationships while four are sent.
 
 And three are error-surface holes: engine exceptions
 ([3](003-engine-exceptions-escape-the-error-surface.md)), a JSON encoder

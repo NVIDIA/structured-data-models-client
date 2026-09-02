@@ -79,6 +79,55 @@ def run(client):
         else:
             note(e, f'pkeys={ {n: built[n].primary_key for n in built} }')
 
+    # KNOWN BUG bugs/015
+    with probe(
+        AREA,
+        'the graph sent matches the schema',
+        'no relationship the schema does not have',
+    ) as e:
+        from sdm_client.query import _engine, _to_engine_graph
+
+        built = schema()
+        graph = _to_engine_graph(_engine(), built)
+        sent = {
+            (edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges
+        }
+        described = {
+            (link.source_table, link.source_column, link.target_table)
+            for link in built.relationships
+        }
+        if sent != described:
+            fail(
+                e,
+                f'sent but not described: {sorted(sent - described)}; '
+                f'described but not sent: {sorted(described - sent)}',
+            )
+
+    # KNOWN BUG bugs/015
+    with probe(
+        AREA,
+        'asserting there are no relationships',
+        'an empty sequence means empty',
+    ) as e:
+        from sdm_client.query import _engine, _to_engine_graph
+
+        built = Schema.from_data(data.northwind_graph(), relationships=[])
+        edges = _to_engine_graph(_engine(), built).edges
+        if edges:
+            fail(e, f'relationships=[] still sent {len(edges)} edges')
+
+    # KNOWN BUG bugs/016
+    with probe(
+        AREA,
+        'the schema can draw itself',
+        'to_mermaid is reachable from the public API',
+    ) as e:
+        built = schema()
+        if not hasattr(built, 'to_mermaid'):
+            fail(e, 'Schema has no to_mermaid, which the README documents')
+        elif 'Order Details' not in built.to_mermaid():
+            fail(e, 'the diagram omits the table whose name has a space')
+
     with probe(
         AREA,
         'a table name with a space is carried through',
