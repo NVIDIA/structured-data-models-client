@@ -3,11 +3,12 @@ Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
-This distribution builds a C++ extension from first-party source in
-src/sdm_relational_engine/csrc, and vendors one third-party artifact.
+This distribution builds a C++ extension from first-party source, and vendors
+one third-party artifact. Paths below are as packaged in the wheel, which is
+the published distribution; in the source tree they sit under src/.
 
-src/sdm_relational_engine/rfm/assets/mermaid.min.js
---------------------------------------------------
+sdm_relational_engine/rfm/assets/mermaid.min.js
+-----------------------------------------------
 
 mermaid 11.15.0, MIT licensed, bundled so that Graph.visualize() renders a
 graph offline in notebook environments that block external scripts. The bundle
