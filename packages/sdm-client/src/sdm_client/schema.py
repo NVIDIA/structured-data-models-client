@@ -543,9 +543,9 @@ def _infer_primary_key(
 ) -> str | None:
     r"""The column that identifies a row, if one is obvious.
 
-    Requires both a key-shaped name and near-total uniqueness. Uniqueness
-    alone would nominate any high-cardinality measurement, and a name alone
-    would nominate a foreign key.
+    Requires a key-shaped name, values that can identify a row, and near-total
+    uniqueness. Uniqueness alone would nominate any high-cardinality
+    measurement, and a name alone would nominate a foreign key.
     """
     if len(frame) == 0:
         return None
@@ -553,7 +553,10 @@ def _infer_primary_key(
         lowered = name.lower()
         if not lowered.endswith(_KEY_SUFFIXES):
             continue
-        if column.stype == 'timestamp':
+        if not supports_dtype('ID', column.dtype):
+            # A key-shaped name on values that cannot identify a row -- a bool
+            # column called `id`, say. Nominating it would refuse the frame at
+            # construction for a key nobody asked for.
             continue
         distinct = frame[name].nunique(dropna=True)
         if distinct >= len(frame) * _KEY_UNIQUENESS:

@@ -366,3 +366,36 @@ def test_clearing_the_key_clears_what_described_it():
 def test_inference_marks_the_key_it_nominates():
     built = Schema.from_data({'users': users()}, relationships=[])
     assert built['users']['user_id'].stype == 'ID'
+
+
+def test_inference_does_not_nominate_a_key_it_would_then_refuse():
+    """A bool column called `id` is key-shaped and unique, and cannot be a key.
+
+    Nominating it made `Schema.from_data` refuse a frame for a key nobody
+    asked for.
+    """
+    frame = pd.DataFrame({'id': [False, True], 'y': [0, 1]})
+    built = Schema.from_data({'t': frame}, relationships=[])
+    assert built['t'].primary_key is None
+    with pytest.raises(StructuredDataError):
+        built['t'].primary_key = 'id'
+
+
+def test_a_timestamp_named_like_a_key_is_not_nominated():
+    frame = pd.DataFrame(
+        {
+            'when_id': pd.date_range('2024-01-01', periods=3),
+            'v': [1.0, 2.0, 3.0],
+        }
+    )
+    assert (
+        Schema.from_data({'t': frame}, relationships=[])['t'].primary_key
+        is None
+    )
+
+
+def test_an_ordinary_key_is_still_nominated():
+    frame = pd.DataFrame({'user_id': [1, 2, 3], 'v': [1.0, 2.0, 3.0]})
+    built = Schema.from_data({'t': frame}, relationships=[])
+    assert built['t'].primary_key == 'user_id'
+    assert built['t']['user_id'].stype == 'ID'
