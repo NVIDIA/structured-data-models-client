@@ -54,6 +54,34 @@ _OBJECT_CONTENT_DTYPES = {
 }
 
 
+def _holds_only_scalars(dtype: Any) -> bool:
+    r"""Whether a column of ``dtype`` cannot contain a sequence.
+
+    Asked of the dtype rather than by elimination: ``is_object_dtype`` alone
+    would call an Arrow-backed list column scalar, and that is what
+    ``pd.read_parquet(dtype_backend='pyarrow')`` gives for one.
+    """
+    arrow_type = getattr(dtype, 'pyarrow_dtype', None)
+    if arrow_type is not None:
+        import pyarrow as pa
+
+        return not (
+            pa.types.is_list(arrow_type)
+            or pa.types.is_large_list(arrow_type)
+            or pa.types.is_fixed_size_list(arrow_type)
+            or pa.types.is_struct(arrow_type)
+            or pa.types.is_map(arrow_type)
+        )
+    return bool(
+        pd.api.types.is_numeric_dtype(dtype)
+        or pd.api.types.is_bool_dtype(dtype)
+        or pd.api.types.is_datetime64_any_dtype(dtype)
+        or pd.api.types.is_timedelta64_dtype(dtype)
+        or isinstance(dtype, pd.StringDtype)
+        or dtype == 'str'
+    )
+
+
 def require_scalar_cells(series: pd.Series, described: str) -> None:
     r"""Refuse a column whose cells are lists.
 
@@ -72,10 +100,12 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     reach the wire without one: the rows being scored are not part of the
     schema, and a caller may supply a schema of their own.
     """
-    # Only an `object` column can hold one, so every numeric, boolean and
-    # timestamp column -- which is most of them, on the hot path for every
-    # table in every request -- costs a dtype check and nothing more.
-    if not pd.api.types.is_object_dtype(series.dtype):
+    # Skipped only for a dtype that cannot hold a sequence, which is most of
+    # them on the hot path for every table in every request. Asked the other way
+    # round on purpose: `is_object_dtype` alone would let an Arrow-backed list
+    # column through, and that is what `pd.read_parquet(dtype_backend='pyarrow')`
+    # gives for one.
+    if _holds_only_scalars(series.dtype):
         return
     for value in series:
         if isinstance(value, (list, tuple, set, np.ndarray)):

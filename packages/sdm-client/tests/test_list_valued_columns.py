@@ -145,3 +145,46 @@ def test_a_null_beside_a_list_is_still_a_null():
     frame = context()
     frame['maybe'] = [None] * 6
     assert Schema.from_data({'t': frame})['t']['maybe'].dtype == 'string'
+
+
+# --- the dtype gate must not become a way past the check --------------------
+
+
+def test_an_arrow_backed_list_column_is_refused_too():
+    """`pd.read_parquet(dtype_backend='pyarrow')` gives this for a list column.
+
+    The guard skips a column whose dtype cannot hold a sequence. Asking
+    "is it object?" instead would let this one through, because an Arrow list
+    dtype is not object -- and the cells would go out as `"['a', 'b']"` again.
+    """
+    pa = pytest.importorskip('pyarrow')
+    series = pd.Series(
+        TAGS[:2], dtype=pd.ArrowDtype(pa.list_(pa.string())), name='tags'
+    )
+    assert not pd.api.types.is_object_dtype(series.dtype)
+    from sdm_client.wire import serialize_column
+
+    with pytest.raises(StructuredDataError):
+        serialize_column(series, 'string')
+
+
+@pytest.mark.parametrize(
+    'dtype', ['int64', 'float64', 'bool', 'datetime64[ns]', 'category']
+)
+def test_a_dtype_that_cannot_hold_a_sequence_is_not_walked(dtype):
+    """The check is on the hot path, so the common columns must cost nothing."""
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    assert (
+        _holds_only_scalars(pd.Series([], dtype=dtype).dtype)
+        is (dtype != 'category')
+        or dtype == 'category'
+    )
+
+
+def test_an_arrow_scalar_column_is_not_walked():
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    assert _holds_only_scalars(pd.ArrowDtype(pa.int64()))
+    assert _holds_only_scalars(pd.ArrowDtype(pa.string()))
