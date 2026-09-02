@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from types import TracebackType
+from typing import Any
 
 from sdm_client.base import (
     ModelAdapter,
@@ -233,7 +234,7 @@ class SDMClient:
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
         parts = [
-            adapter.normalize(self._transport.predict(payload), fields, payload)
+            adapter.normalize(self._send(adapter, payload), fields, payload)
             for payload in adapter.prediction_plan(request, fields)
         ]
         if not parts:
@@ -242,6 +243,13 @@ class SDMClient:
                 code='INVALID_REQUEST',
             )
         return PredictionResult.merge(parts)
+
+    def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
+        r"""Post one payload, letting the adapter explain a refusal."""
+        try:
+            return self._transport.predict(payload)
+        except StructuredDataError as error:
+            raise adapter.explain_error(error, payload) from None
 
     def fit(
         self,

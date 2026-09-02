@@ -600,10 +600,22 @@ class Transport:
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_open()
         url = self._url + path
+        # Encode before sending, so a value with no JSON form is named here
+        # rather than raising a TypeError from inside `requests` that mentions
+        # neither this client nor the offending key.
+        try:
+            body = json.dumps(payload, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise StructuredDataError(
+                f'this request carries a value that cannot be sent as JSON: '
+                f'{error}',
+                code='INVALID_REQUEST',
+            ) from error
         try:
             with self._session.post(
                 url,
-                json=payload,
+                data=body,
+                headers={'Content-Type': 'application/json'},
                 timeout=self._timeout,
                 verify=self._verify_ssl,
                 stream=True,

@@ -18,14 +18,19 @@ engine.
 
 from __future__ import annotations
 
+import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 from sdm_api.generated.tfm_api import PredictionResponse, ResponseContractError
 
 from sdm_client.base import ModelSpec
-from sdm_client.errors import StructuredDataError, UnsupportedRequestError
+from sdm_client.errors import (
+    NimRequestError,
+    StructuredDataError,
+    UnsupportedRequestError,
+)
 from sdm_client.models import KUMO_RELATIONAL
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
@@ -173,7 +178,42 @@ class RelationalAdapter:
             request_id=parsed.id,
             items=_named_entities(parsed.predictions, payload),
             metadata=parsed.metadata,
+            outputs=outputs,
             explanation=explanation,
+        )
+
+    def explain_error(
+        self, error: Exception, payload: dict[str, Any]
+    ) -> Exception:
+        r"""Name the columns behind a semantic-type refusal.
+
+        ``semantic type 'text' is unsupported`` is true and unactionable:
+        ``Schema.from_data`` marks any string column with more than 64 distinct
+        values as ``text``, so a real dataset acquires them in bulk and the
+        endpoint names none of them. The payload it just refused does.
+        """
+        match = _UNSUPPORTED_STYPE.search(str(error))
+        if match is None:
+            return error
+        columns = _columns_with_stype(payload, match.group(1))
+        if not columns:
+            return error
+        table, _, column = columns[0].partition('.')
+        shown = 'the table' if table == 'instance_table' else table
+        message = (
+            f'{getattr(error, "message", error)}. In this request that is '
+            f'{", ".join(columns)}. Set a supported type on each, e.g. '
+            f"schema[{shown!r}][{column!r}].stype = 'categorical'"
+        )
+        if isinstance(error, NimRequestError):
+            return NimRequestError(
+                error.status_code,
+                code=error.code,
+                message=message,
+                details=error.details,
+            )
+        return StructuredDataError(
+            message, code=error.code, details=error.details
         )
 
     def close(self) -> None:
@@ -189,10 +229,11 @@ class RelationalAdapter:
         time, and only within the smaller context budget. Sending more gets a
         500 that names neither limit, so both are checked here.
         """
+        limits = self.spec.runtime.limits
+        self._check_class_count(payloads, limits)
         if 'explanation' not in outputs:
             return
 
-        limits = self.spec.runtime.limits
         scored = sum(
             len(
                 payload.get('predict', {})
@@ -226,6 +267,40 @@ class RelationalAdapter:
                 details={'model': self.spec.model_id, 'context_rows': context},
             )
 
+    def _check_class_count(
+        self, payloads: tuple[dict[str, Any], ...], limits: Mapping[str, int]
+    ) -> None:
+        r"""A classification target the model cannot represent is a size too.
+
+        The endpoint answers ``422 UNSUPPORTED_FEATURE`` with both numbers in
+        it, which is a decent message -- but it arrives after the context has
+        been gathered, encoded and sent, and the count is knowable here.
+        """
+        ceiling = limits.get('classes_max')
+        if not ceiling:
+            return
+        for payload in payloads:
+            kind = str(payload.get('task', {}).get('kind', ''))
+            if 'classification' not in kind:
+                continue
+            column = (
+                payload.get('task', {}).get('target', {}).get('column_name')
+            )
+            labels = _distinct_labels(payload, column)
+            if labels is not None and labels > ceiling:
+                raise UnsupportedRequestError(
+                    f'{self.spec.model_id} classifies at most {ceiling} '
+                    f'classes, and the gathered context carries {labels} '
+                    f'distinct values of the target; predict a coarser '
+                    f'target, or narrow the context to the classes you care '
+                    f'about',
+                    details={
+                        'model': self.spec.model_id,
+                        'classes': labels,
+                        'limit': ceiling,
+                    },
+                )
+
     @staticmethod
     def _payloads(request: Request) -> tuple[dict[str, Any], ...]:
         payloads = request.payloads
@@ -238,6 +313,44 @@ class RelationalAdapter:
                 details={'model': KUMO_RELATIONAL.model_id},
             )
         return payloads
+
+
+_UNSUPPORTED_STYPE = re.compile(r"semantic type '([^']+)' is unsupported")
+
+
+def _distinct_labels(payload: Mapping[str, Any], column: Any) -> int | None:
+    r"""How many distinct values the context holds for ``column``."""
+    table = payload.get('context', {}).get('instance_table', {})
+    columns = table.get('columns') or []
+    rows = table.get('rows') or []
+    if not columns or not rows or column not in columns:
+        return None
+    position = columns.index(column)
+    return len({row[position] for row in rows if len(row) > position})
+
+
+def _columns_with_stype(payload: Mapping[str, Any], stype: str) -> list[str]:
+    r"""Every ``table.column`` in the payload declared as ``stype``.
+
+    The endpoint refuses an unsupported semantic type without saying which
+    column carries it, and a real dataset acquires them in bulk -- Northwind
+    produces fifteen. The payload that was just refused knows.
+
+    A relational schema is ``instance_table`` plus ``related_tables``, so both
+    shapes are walked; the instance table's own name is not in the payload, and
+    ``instance_table`` is what the wire calls it.
+    """
+    found = []
+    schema = payload.get('schema') or {}
+    tables = {'instance_table': schema.get('instance_table') or {}}
+    tables.update(schema.get('related_tables') or {})
+    for table_name, table in tables.items():
+        if not isinstance(table, Mapping):
+            continue
+        for column_name, spec in (table.get('columns') or {}).items():
+            if isinstance(spec, Mapping) and spec.get('stype') == stype:
+                found.append(f'{table_name}.{column_name}')
+    return sorted(found)
 
 
 def _named_entities(

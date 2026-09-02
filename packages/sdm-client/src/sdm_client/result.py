@@ -62,10 +62,12 @@ class PredictionResult:
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
         explanation: dict[str, Any] | None = None,
+        outputs: Sequence[str] = (),
     ) -> None:
         self.model = model
         self.request_id = request_id
         self.items = tuple(items)
+        self.outputs = tuple(outputs)
         self.metadata = dict(metadata or {})
         self._explanation = explanation
 
@@ -89,6 +91,17 @@ class PredictionResult:
         Rows come back ordered by ``row_index``. The endpoint is not required
         to preserve request order, and a caller who reads the first few rows
         would otherwise be reading whichever rows finished first.
+
+        A result with no rows still has columns. Scoring an empty frame is
+        legal -- the contract puts no minimum on ``rows`` -- and it is what a
+        filter that matched nothing produces, so it happens inside ordinary
+        loops. Returning a frame with no columns at all made that case fail
+        differently from every other: ``frame['prediction']`` became a
+        ``KeyError`` and a join on ``row_index`` could not be written.
+
+        The per-class columns cannot be known with no rows to read them from,
+        so an empty classification result carries ``row_index`` and
+        ``prediction`` but no ``probability_*``.
         """
         rows: list[dict[str, Any]] = []
         for item in self.items:
@@ -110,12 +123,22 @@ class PredictionResult:
                 row['rankings'] = [dict(entry) for entry in item.rankings]
             rows.append(row)
 
-        frame = pd.DataFrame(rows)
+        frame = pd.DataFrame(rows) if rows else self._empty_frame()
         if 'row_index' in frame.columns:
             frame = frame.sort_values('row_index', kind='stable').reset_index(
                 drop=True
             )
         return frame
+
+    def _empty_frame(self) -> pd.DataFrame:
+        r"""The columns this request would have produced, with no rows."""
+        columns = ['row_index']
+        columns += [
+            name
+            for name in (*_SCALAR_FIELDS, *_SEQUENCE_FIELDS, 'rankings')
+            if name != 'row_index' and name in self.outputs
+        ]
+        return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 
     @classmethod
     def merge(cls, parts: Sequence[PredictionResult]) -> PredictionResult:

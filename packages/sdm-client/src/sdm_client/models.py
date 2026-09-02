@@ -50,6 +50,7 @@ RELATIONAL_LIMITS = {
     'explanation_predict_rows': 1,
     'hops_max': 6,
     'tables_max': 15,
+    'classes_max': 10,
 }
 
 KUMO_TABULAR = ModelSpec(

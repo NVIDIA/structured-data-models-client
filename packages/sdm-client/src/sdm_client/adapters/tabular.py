@@ -37,7 +37,13 @@ from sdm_client.errors import StructuredDataError
 from sdm_client.models import KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
-from sdm_client.wire import encode_table, widen_tfm_dtype
+from sdm_client.wire import (
+    UNTYPED,
+    encode_table,
+    infer_tfm_dtype,
+    json_ready,
+    widen_tfm_dtype,
+)
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -112,7 +118,15 @@ class TabularAdapter:
             request_id=parsed.id,
             items=parsed.predictions,
             metadata=parsed.metadata,
+            outputs=outputs,
         )
+
+    def explain_error(
+        self, error: Exception, payload: dict[str, Any]
+    ) -> Exception:
+        r"""Nothing to add: this endpoint's refusals already name the column
+        they are about."""
+        return error
 
     def close(self) -> None:
         r"""Nothing to release: this adapter sends through the client's own
@@ -126,14 +140,29 @@ class TabularAdapter:
         predict = request.predict.instance_table
 
         # A column's dtype has to describe both halves. Taking it from the
-        # context alone would call an all-null context column 'string' and then
-        # send integers under it from the predict half.
-        dtypes = {name: column.dtype for name, column in table.columns.items()}
+        # context alone calls an all-null context column 'string' and then
+        # sends the predict half's integers under it as text, which changes
+        # what the model is asked to predict on. `infer_tfm_dtype` reports
+        # UNTYPED for a column that carries no type precisely so it cannot
+        # re-type the other frame, so the schema's answer is set aside for
+        # those and the frames decide.
+        dtypes = {
+            name: (
+                UNTYPED
+                if name in context.columns
+                and _raw_dtype_of(context[name]) == UNTYPED
+                else column.dtype
+            )
+            for name, column in table.columns.items()
+        }
         for name in predict.columns:
             if name in dtypes:
                 dtypes[name] = widen_tfm_dtype(
-                    (dtypes[name], _dtype_of(predict[name]))
+                    (dtypes[name], _raw_dtype_of(predict[name]))
                 )
+        # Untyped on both sides means there is genuinely no information, and
+        # 'string' round-trips whatever arrives without claiming a width.
+        dtypes = {name: dtype or 'string' for name, dtype in dtypes.items()}
 
         target = request.task.target.column_name
         missing = [name for name in context.columns if name not in dtypes]
@@ -175,7 +204,7 @@ class TabularAdapter:
             'metadata': {'request_id': _request_id()},
         }
         if request.inference:
-            envelope['inference'] = dict(request.inference)
+            envelope['inference'] = json_ready(request.inference)
         return envelope
 
     @staticmethod
@@ -196,7 +225,14 @@ class TabularAdapter:
 
 
 def _dtype_of(series: pd.Series) -> str:
-    from sdm_client.wire import UNTYPED, infer_tfm_dtype
-
     dtype = infer_tfm_dtype(series)
     return dtype if dtype != UNTYPED else 'string'
+
+
+def _raw_dtype_of(series: pd.Series) -> str:
+    r"""Like :func:`_dtype_of`, but keeping UNTYPED as the answer.
+
+    A column with no values contributes nothing to a widening. Turning it into
+    ``'string'`` first is what made it decide the outcome.
+    """
+    return infer_tfm_dtype(series)

@@ -154,8 +154,8 @@ class Request:
 
         Raises:
             StructuredDataError: If a frame is not a DataFrame, ``task`` is not
-                a known kind, ``target`` is missing from ``context``, or
-                ``predict`` carries the target column.
+                a known kind, ``context`` has no rows, ``target`` is missing
+                from ``context``, or ``predict`` carries the target column.
         """
         context = _require_frame(context, 'context')
         predict = _require_frame(predict, 'predict')
@@ -167,6 +167,16 @@ class Request:
         if task not in TASK_KINDS:
             raise StructuredDataError(
                 f'task must be one of {list(TASK_KINDS)}, got {task!r}',
+                code='INVALID_REQUEST',
+            )
+        if len(context) == 0:
+            # A zero-row `predict` is legal -- the contract sets no minimum on
+            # rows, and an empty batch inside a loop is a reasonable no-op.
+            # A zero-row context is not: a model that predicts from labelled
+            # examples cannot be given none, and the endpoint answers a 500.
+            raise StructuredDataError(
+                'context has no rows, so there is nothing for the model to '
+                'learn the answer from',
                 code='INVALID_REQUEST',
             )
         if target not in context.columns:

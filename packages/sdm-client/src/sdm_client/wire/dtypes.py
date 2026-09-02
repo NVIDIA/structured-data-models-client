@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from decimal import Decimal
 from numbers import Integral
 from typing import Any
@@ -149,6 +149,24 @@ def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
     if widest == 'float32' and 'int64' in candidates:
         return 'float64'
     return widest
+
+
+def json_ready(value: Any) -> Any:
+    r"""``value`` with numpy scalars replaced by their Python equivalents.
+
+    Anything a caller reads out of their own frame is a numpy scalar, and the
+    JSON encoder has no rule for one -- so ``inference={'seed': df['seed'][0]}``
+    used to die inside ``requests`` as a ``TypeError`` naming neither the key
+    nor this client. Applied to the small hand-written parts of a payload;
+    table cells go through :func:`serialize_cell`, which types them properly.
+    """
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Mapping):
+        return {key: json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_ready(item) for item in value]
+    return value
 
 
 def _is_missing(value: Any) -> bool:
