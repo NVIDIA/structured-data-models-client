@@ -72,6 +72,11 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     reach the wire without one: the rows being scored are not part of the
     schema, and a caller may supply a schema of their own.
     """
+    # Only an `object` column can hold one, so every numeric, boolean and
+    # timestamp column -- which is most of them, on the hot path for every
+    # table in every request -- costs a dtype check and nothing more.
+    if not pd.api.types.is_object_dtype(series.dtype):
+        return
     for value in series:
         if isinstance(value, (list, tuple, set, np.ndarray)):
             raise StructuredDataError(
