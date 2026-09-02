@@ -33,8 +33,21 @@ integer dtype that does not fit.
 ('int64', ['18446744073709551615'])
 ```
 
+The nullable dtype behaves the same way:
+
+```python
+>>> s = pd.Series([2**64 - 1, None], dtype='UInt64')
+>>> infer_tfm_dtype(s), serialize_column(s, infer_tfm_dtype(s))
+('int64', ['18446744073709551615', None])
+```
+
 `uint64` is not exotic: it is what Parquet writes for an unsigned column, what
 `pd.read_parquet` gives back, and what hash-derived ids commonly use.
+
+The relational path has the same hole in its own encoder —
+`sdm_relational_engine/rfm/payload.py`'s `_dtype_name` and `_cell_json_value`
+make the same "every integer is `int64`" choice — so a fix in `wire/dtypes.py`
+covers the tabular path only.
 
 ## Location
 
@@ -71,4 +84,9 @@ Two options; the second is better.
    impossible case into a sentence instead of a contradiction.
 
 Tests to add: `uint64` inside the `int64` range keeps working; `2**63` and
-`2**64 - 1` are refused by name; the refusal is a `StructuredDataError`.
+`2**64 - 1` are refused by name, in both `uint64` and `UInt64`; the refusal is
+a `StructuredDataError`; the same holds on the relational payload path.
+
+Worth doing first: send `2**64 - 1` to a live endpoint and record what it
+actually does. If it wraps or truncates rather than rejecting, this is silent
+corruption and belongs with the high-severity three.

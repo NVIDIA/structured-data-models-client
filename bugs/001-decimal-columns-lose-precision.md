@@ -34,11 +34,26 @@ True
 False
 ```
 
-The same blind spot appears twice more in the same file:
+The guard is type-based rather than value-based, so `Decimal` is not the only
+thing that walks past it. A numpy integer does too, because numpy's comparison
+promotes both sides to float before comparing:
+
+```python
+serialize_cell(9007199254740993, 'float64')            # StructuredDataError
+serialize_cell(Decimal('9007199254740993'), 'float64') # 9007199254740992.0
+serialize_cell(np.int64(9007199254740993), 'float64')  # 9007199254740992.0
+```
+
+Two more instances of the same blind spot in the same file:
 
 - `_require_finite` tests `isinstance(value, (float, np.floating))`, so
-  `Decimal('Infinity')` reaches the payload as `inf`. `json.dumps` writes that
-  as the bare token `Infinity`, which is not JSON.
+  `Decimal('Infinity')` is not caught. It is not silently sent — `requests`
+  encodes with `allow_nan=False` and the call fails — but it fails in the wrong
+  layer, as `StructuredDataError(TRANSPORT_ERROR)`: *"Request to
+  .../v1/predictions failed: Out of range float values are not JSON
+  compliant: inf"*. A `float('inf')` in the same column is refused before the
+  request is built, by name, as `INVALID_REQUEST`. Same value, same column, two
+  different error codes and two different layers.
 - `serialize_cell`'s `int64` branch checks fractional loss only for `float`, so
   a `Decimal` with a fractional part would be truncated by `int()` rather than
   refused — unreachable today only because `decimal` never maps to `int64`.
@@ -92,15 +107,25 @@ Classify a `decimal` object column by its contents rather than assuming
 
 - In `infer_tfm_dtype`, when the content is `decimal`, report `int64` if every
   non-null value has a zero exponent and fits `int64`, and `float64` otherwise.
-  That routes exact integers into the branch that already stringifies past
-  2**53.
+  That routes exact integers — ids, counts, cents-as-integers — into the branch
+  that already stringifies past 2**53.
 - Widen the `float64` precision guard from `isinstance(value, Integral)` to
-  anything integral by value, `Decimal` included, so a value `float64` cannot
-  hold is refused whatever type carried it.
+  anything integral **by value**, `Decimal` and `np.integer` included, so a
+  value `float64` cannot hold is refused whatever type carried it.
 - Widen `_require_finite` to any non-finite numeric, so `Decimal('Infinity')`
-  is refused like `float('inf')` already is.
+  is refused as `INVALID_REQUEST` before the request is built, the way
+  `float('inf')` already is, rather than as a transport error afterwards.
 - A `Decimal` too large for `int64` should be refused by name rather than
   rounded — say which column and value, and suggest sending it as a string.
+
+**A fractional `Decimal` is not fixed by any of this, and should be decided
+explicitly.** `Decimal('12345678901234567.8901')` cannot be represented by
+`float64`, and the wire has no exact decimal type, so routing it to `float64`
+is lossy however it is classified. Two honest options: refuse it, naming the
+column and suggesting it be sent as a string; or accept the loss and say so in
+the docs. What should not stand is the current position, which is to lose the
+precision silently. This report's title is about integers; the fractional case
+is a smaller, separate decision that the same fix should force someone to make.
 
 Tests to add: a `Decimal` past 2**53 in both an `int64`-shaped and a
 fractional column, `Decimal('Infinity')`, `Decimal('NaN')`, and a

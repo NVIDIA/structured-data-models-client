@@ -1,6 +1,7 @@
 # 8. Two endpoint limits are discovered only by being rejected, and one does not name the column
 
-**Severity: low** — correct behaviour, expensive discovery.
+**Severity: medium** — correct behaviour, but it is what a user meets in their
+first hour, and the message does not tell them where to look.
 
 ## Problem
 
@@ -48,21 +49,30 @@ is one line — once they know which line.
 
 ## Location
 
-`packages/sdm-client/src/sdm_client/models.py` — `RuntimeContract` has fields
-`tasks`, `outputs`, `explanation_formats`, `sessions`, `limits`,
-`inference_options`. No field describes supported semantic types, and
-`limits` has no class-count entry.
+`packages/sdm-client/src/sdm_client/base.py:52` — `RuntimeContract` is defined
+here (`models.py` only instantiates it) with fields `tasks`, `outputs`,
+`explanation_formats`, `sessions`, `limits`, `inference_options`. No field
+describes supported semantic types, and `limits` has no class-count entry.
 
 `packages/sdm-client/src/sdm_client/adapters/relational.py` — `_preflight`
-checks the explanation limits and the inference options, and has the schema
-available.
+checks the explanation limits and the inference options. Note its signature is
+`_preflight(self, payloads, outputs)`: it receives encoded payloads, not a
+`Schema`, so the fix has to read the stypes out of
+`payload['schema'][table]['columns']` — or `_preflight` has to be given the
+request.
 
 ## Why it needs fixing
 
-This is not a wrong answer, and both refusals are honest — which is why it is
-low severity. It is a first-hour experience problem: a user points this SDK at
-their own tables, which is the intended first thing to do, and gets a 422
-naming a semantic type they did not know their data had and cannot locate.
+This is not a wrong answer, and both refusals are honest. What makes it worse
+than "expensive discovery" is when it happens: pointing the SDK at your own
+tables is the intended first thing to do, and any table with a free-text column
+— a name, an address, a description — fails with a 422 that names a semantic
+type the user did not know their data had and gives them no way to find it.
+
+It compounds with [12](012-an-explicit-categorical-becomes-text.md): a column
+the user explicitly declared `Categorical` is re-typed `text` at 65 levels and
+then rejected here, so the two together make an ordinary categorical column
+unusable and explain neither half.
 
 ## Proposed fix
 

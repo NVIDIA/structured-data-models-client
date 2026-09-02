@@ -409,12 +409,59 @@ def run_databricks(client):
             fail(e, f'{len(frame)} rows')
 
     with probe(
-        AREA, 'databricks, a metric view', 'listed, and read if readable'
+        AREA, 'databricks, a metric view is listed', 'isMetric marks it'
     ) as e:
         views = read_table(
-            connection, query=(f'show views in {catalog}.{schema}')
+            connection, query=f'show views in {catalog}.{schema}'
         )
-        note(e, f'{len(views)} views in {catalog}.{schema}')
+        metric = (
+            views[views['isMetric']] if 'isMetric' in views else views.head(0)
+        )
+        if metric.empty:
+            note(e, f'no metric view among {len(views)} views')
+        else:
+            note(e, f'metric views: {list(metric["viewName"])}')
+
+    with probe(
+        AREA,
+        'databricks, a metric view without MEASURE()',
+        'refused by name, not a crash',
+    ) as e:
+        view = f'{catalog}.{schema}.nvidia_erp_mv'
+        try:
+            read_table(connection, query=f'select * from {view} limit 5')
+            note(e, 'select * was accepted')
+        except ConnectorError as exc:
+            if 'MEASURE' not in str(exc):
+                fail(e, f'refused for an unexpected reason: {str(exc)[:140]}')
+            else:
+                note(e, 'METRIC_VIEW_MISSING_MEASURE_FUNCTION, surfaced intact')
+        except Exception as exc:  # noqa: BLE001
+            fail(e, f'{type(exc).__name__} escaped the connector error surface')
+
+    with probe(
+        AREA,
+        'databricks, a metric view feeds a prediction',
+        'governed measures score',
+    ) as e:
+        view = f'{catalog}.{schema}.nvidia_erp_mv'
+        frame = read_table(
+            connection,
+            query=(
+                f'select `Product Family`, `Customer Region`, `Sales Channel`, '
+                f'MEASURE(`Total Revenue`) as revenue, '
+                f'MEASURE(`Order Count`) as orders '
+                f'from {view} group by 1, 2, 3'
+            ),
+        )
+        if len(frame) < 10:
+            note(e, f'only {len(frame)} rows; not scoring')
+        else:
+            result = score(client, frame, 'Sales Channel')
+            if len(result) != 3:
+                fail(e, f'{len(result)} rows scored')
+            else:
+                note(e, f'{frame.shape} -> {list(result["prediction"])}')
 
     for name in created:
         connection.cursor().execute(f'drop table if exists {name}')

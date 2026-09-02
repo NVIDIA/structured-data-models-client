@@ -53,6 +53,19 @@ No `dtype_backend`, no `dtype` hint, no post-read repair.
 
 Applies to `source='local'` and `source='s3'` alike, and to compressed CSV.
 
+**The same promotion happens on the `data=` path**, which does not go through
+`pd.read_csv` at all:
+
+```python
+read('local', data={'row_id': [9007199254740993, None, 9007199254740995]})
+# dtype float64 -> [9007199254740992.0, None, 9007199254740996.0]
+```
+
+`_read_local` builds the frame with `pd.DataFrame(data)`, and a `None` in a
+list of Python ints promotes the column exactly the same way. Without the
+`None` it stays `int64` and travels exactly. So the fix has to cover both
+constructors, not only the reader.
+
 ## Why it needs fixing
 
 An id column with occasional blanks is completely ordinary in exported CSV —
@@ -82,6 +95,13 @@ handles but the tests pin. If that turns out too broad, the narrower fix is to
 re-parse only those columns that came back `float64` and whose non-null values
 are all integral, which is the repair `_arrow_to_pandas` performs.
 
-Tests to add: the CSV above round-trips exactly, locally and through S3; a
-float column with a blank is still a float; an existing all-integer CSV is
-unchanged.
+For `data=`, `dtype_backend` does not apply — the frame is constructed from
+Python objects. A post-construction repair is the only option there: a
+`float64` column whose source values were all integral is not recoverable after
+the fact, so the construction itself has to avoid the promotion, e.g. by
+building integer columns through `pd.array(..., dtype='Int64')` when every
+non-null value is an `int`.
+
+Tests to add: the CSV above round-trips exactly, locally and through S3;
+`data=` with a `None` in an integer column round-trips exactly; a float column
+with a blank is still a float; an existing all-integer CSV is unchanged.

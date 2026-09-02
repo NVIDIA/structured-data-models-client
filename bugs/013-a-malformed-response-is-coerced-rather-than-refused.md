@@ -36,6 +36,12 @@ Three things happened without comment:
 - `:143` — `_require_int`, whose body is `int(value)`
 - `:173` — `_float_dict`, which does not reject non-finite values
 
+The same shape appears in the sibling helpers, so the fix should cover all of
+them rather than only the two above: `_int_or_none` coerces `forecast_step`
+the same way, `_float_tuple` accepts non-finite quantiles as `_float_dict`
+accepts non-finite probabilities, and `_require_str` coerces a non-string into
+one.
+
 This file is generated, so the fix belongs in the generator
 (`scripts/generate_sdm_api.py`) and not in the output.
 
@@ -68,6 +74,14 @@ In the generator:
 - Regenerate, and re-pin the provenance digests
   (`scripts/vendor_manifest.py`, `scripts/check_contract_pin.py`).
 
-Tests to add: `row_index` of `1.2`, `True`, `'1'` and `None` each raise
-`INVALID_RESPONSE` naming the field; a `NaN` probability raises; a well-formed
-response is unchanged.
+Note the two error vocabularies: `sdm-api` raises `ResponseContractError` — it
+is dependency-free and does not know about `StructuredDataError` — and
+`sdm-client`'s adapter is what turns that into `INVALID_RESPONSE`. Tests in
+`sdm-api` should expect `ResponseContractError`; only the `sdm-client` tests
+should expect `INVALID_RESPONSE`.
+
+Tests to add, in `sdm-api`: `row_index` of `1.2`, `True`, `'1'` and `None` each
+raise `ResponseContractError` naming the field; a `NaN` probability and a `NaN`
+quantile raise; a non-string where a string is required raises; a well-formed
+response is unchanged. In `sdm-client`: each of those surfaces as
+`INVALID_RESPONSE`.

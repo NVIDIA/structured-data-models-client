@@ -403,6 +403,18 @@ def run_exactness(client):  # noqa: ARG001
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
+    # KNOWN BUG bugs/009
+    with probe(
+        AREA, 'a python int list through data= with a None', 'exact'
+    ) as e:
+        ok, dtype, cells = exact(
+            read(
+                'local', data={'id': [big, None, big + 2], 'v': [1.0, 2.0, 3.0]}
+            )
+        )
+        if not ok:
+            fail(e, f'{dtype} -> {cells}')
+
 
 if __name__ == '__main__':
     os.environ.setdefault('SDM_TABULAR_URL', TABULAR)
