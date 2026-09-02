@@ -507,7 +507,6 @@ Each phase is independently shippable and tested.
 
 | # | Phase | Ships | Done when |
 |---|---|---|---|
-| **0** | **Unblock** | MR on `structured-data-api` to open the request `model` enum (§0) | The escape hatch is sendable, or we accept that a new model needs a contract MR and say so |
 | 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql` vendored, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
 | 2 | **Client + tabular** | `SDMClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
 | 3 | **Connectors** | `sdm-connectors` | every backend reads a table |
@@ -516,8 +515,8 @@ Each phase is independently shippable and tested.
 | 6 | **Docs + E2E** | Docs, notebook, live-NIM harness for both models | both models pass live E2E |
 | 7 | **PQL for tabular** | `materialize(predict=…)` emits a one-table request | a tabular question runs from PQL text |
 
-Phase 0 blocks only the escape hatch, not phases 2 or 4 — both shipping models are already in the
-enum. Phases 2 and 3 are independent. Phase 4 needs 1–3.
+Phases 2 and 3 are independent. Phase 4 needs 1–3. Nothing is blocked on the contract: both
+shipping models are already in its enum (§0).
 
 ---
 
@@ -600,8 +599,9 @@ a form-filling exercise rather than an audit.
 
 ## 13. Open questions for the human
 
-1. **§0** — do we open the contract's `model` enum? Recommended. Without it, "any SDFM NIM" is
-   really "any model already in the contract", and every new model needs a `structured-data-api` MR
-   before the client can even send its name.
-2. `SDMClient` spells out the acronym, matching the naming rule, but it is long.
-   The alternative is `SDMClient`. One line to change.
+None outstanding. Two earlier ones are settled:
+
+- **The client is `SDMClient`.**
+- **The contract's closed `model` enum is not a task.** Both shipping models are in it. It only
+  forecloses the escape hatch for a third, which is deferred along with the models it would serve
+  (§12). If one is ever wanted, a small `structured-data-api` MR opens the field.

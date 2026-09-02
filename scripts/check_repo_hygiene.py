@@ -95,6 +95,7 @@ SHIPPED_SUFFIXES = {
 # looked only at `src/` and the top-level `examples/` missed a whole tree.
 RETIRED_INTERFACES = (
     'RelationalClient',
+    'StructuredDataClient',
     'PredictClient',
     'client.relational(',
     'client.tabular(',

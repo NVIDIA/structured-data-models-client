@@ -211,8 +211,8 @@ The components below are vendored into this repository as source and ship with
 it. Everything else this project depends on is resolved by the package manager
 at install time and is not covered by this section.
 
-packages/kumo-relational-engine/src/kumo_relational_engine/rfm/assets/mermaid.min.js
--------------------------------------------------------
+src/sdm_relational_engine/rfm/assets/mermaid.min.js
+---------------------------------------------------
 
 mermaid, used for offline graph visualization.
 
