@@ -16,6 +16,7 @@ re-scoped. What is left is fifteen. Nothing here is fixed yet.
 | [9](009-csv-reader-rounds-large-integers.md) | The CSV reader rounds large integers when the column has a blank | High |
 | [14](014-a-sum-over-integers-in-duckdb-is-rounded.md) | A `SUM` over an integer column in DuckDB comes back rounded | High |
 | [15](015-the-schemas-relationships-are-additive-only.md) | A schema's `relationships` are additive only, so the model sees a graph the caller did not describe | High |
+| [18](018-an-integer-entity-key-can-be-declared-float64.md) | An integer entity key can be declared `float64`, and the endpoint refuses the request | High |
 | [2](002-non-unique-primary-key-accepted.md) | A primary key that is knowingly not unique is used to join and correlate, and nothing says so | Medium |
 | [3](003-engine-exceptions-escape-the-error-surface.md) | Engine exceptions escape the SDK's error surface, one advertising an API this SDK does not have | Medium |
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |

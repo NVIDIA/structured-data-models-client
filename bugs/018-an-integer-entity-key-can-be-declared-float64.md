@@ -3,9 +3,8 @@
 **Severity: high** — a relational request that cannot be served, on a schema
 shaped no differently from one that works.
 
-**Status: not fixed.** Found after the fifteen, by testing the built wheels
-rather than the source tree. It reproduces identically on `main`, so it is not
-something this branch introduced, and fixing it is a separate change.
+Found after the fifteen, by testing the built wheels rather than the source
+tree. It reproduced identically on `main`, so this branch did not introduce it.
 
 ## Problem
 
@@ -47,21 +46,37 @@ PredictiveQuery('PREDICT users.tier FOR EACH users.user_id', schema).materialize
 # -> __kumo_entity_ref_0 declared float64; the endpoint then refuses it
 ```
 
-## What it is *not*
+## The cause
 
-Worth recording, because the shape of the trigger is what will make this
-findable:
+`_entity_values` read the key one row at a time:
 
-- **not** the context size — `num_context_samples` of 10, 20, 37, 38, 39, 50
-  and 200 all produce `float64` on this schema
-- **not** the time column — the same two tables without one are `int64`
-- **not** the key's type — a string `user_id` is declared `string`, correctly
-- **not** every relational schema — Northwind (four tables, integer `OrderID`)
-  is `int64` and predicts fine, which is why every probe in
-  [`../qa`](../qa/README.md) passes: they all use Northwind
+```python
+values.append(_json_value(df.iloc[row_index][table.primary_key]))
+```
 
-The failing and passing fixtures differ in table count and in the columns each
-table carries, and the exact condition was not isolated.
+`df.iloc[row_index]` builds a Series for the **whole row**, and a row has a
+single dtype. Put an integer key beside a float column and the row is `float64`,
+so `user_id` comes back as `20.0`:
+
+```python
+>>> df = pd.DataFrame({'user_id': [1, 2, 3], 'age': [20.0, 30.0, 40.0]})
+>>> df.iloc[0]['user_id']
+np.float64(1.0)
+>>> df['user_id'].iloc[0]
+np.int64(1)
+```
+
+That is the whole trigger, and it explains every observation: bisecting the
+fixtures, adding the float `age` column to the entity table is what flipped the
+reference from `int64` to `float64`. Northwind escaped it because the columns
+beside `OrderID` are strings, and an object row keeps the integer. A string key
+escaped it because there is nothing to promote to. The context size and the time
+column never mattered.
+
+**The correct form was already in this file**, twelve lines below, with a
+comment explaining that a row-wise read *"materializes a whole row Series per
+edge, which dominates request assembly"* — someone hit the cost of this mistake
+and fixed it there. The type side went unnoticed.
 
 ## Why it needs fixing
 
@@ -71,20 +86,21 @@ names two internal column names they have never seen, and there is no argument
 they can change to avoid it. It is also silent about which of their tables is
 implicated.
 
-## Where to start
+## Location
 
-The declaration comes from the engine's payload encoder, not from
-`sdm_client.wire` — `sdm_relational_engine/rfm/payload.py`'s `_dtype_name`
-reports what the column holds, so the column is genuinely float-typed by the
-time it is encoded. That points at how the predict rows are assembled in
-`rfm.py` (a merge or reindex that introduces a null and promotes the column)
-rather than at the encoder.
+`packages/sdm-relational-engine/src/sdm_relational_engine/rfm/payload.py:536`
+— `_entity_values`.
 
-The first thing to establish is the exact difference between the two fixtures
-above, since one works and one does not.
+## The fix
 
-## Tests to add once it is fixed
+Read the column, then the row. The key column is taken once outside the loop
+and indexed positionally, which preserves its own dtype — and is what the
+gather below it already does.
 
-The failing fixture, asserting `__kumo_entity_ref_0` matches the dtype of the
-key it joins to; the Northwind case, unchanged; a string key, unchanged; and a
-live prediction on the failing fixture, which is what would have caught it.
+Tests in `packages/sdm-client/tests/test_entity_reference_dtype.py`: the failing
+fixture, a string key, the same graph without a time column, a temporal
+aggregation, and the entity values themselves — because the wrong read gave
+`1.0` for `1`, so the dtype was only the visible half.
+
+Verified against the live relational NIM: the request that was refused now
+scores, and the ids correlate back as `['1', '2', '3']`.

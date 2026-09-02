@@ -516,6 +516,13 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
     values: list[Any] = []
     batch = np.asarray(table.batch)
     df = table.df.reset_index(drop=True)
+    # The key column, not the frame. `df.iloc[i][key]` builds a Series for the
+    # whole row, and a row has one dtype -- so an integer key sitting beside a
+    # float column comes back as a float, and the payload then declares the
+    # entity reference `float64` while the key it joins to is `int64`, which
+    # the endpoint refuses. The same gather twelve lines below already reads
+    # the column first, for the cost rather than the type.
+    key_values = df[table.primary_key]
     row = np.asarray(table.row) if table.row is not None else None
     # One pass for every instance's first occurrence, rather than a full scan
     # of `batch` per instance (`np.unique` returns the first index per value
@@ -530,10 +537,10 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
             values.append(None)
             continue
         row_index = position if row is None else int(row[position])
-        if row_index >= len(df):
+        if row_index >= len(key_values):
             values.append(None)
             continue
-        values.append(_json_value(df.iloc[row_index][table.primary_key]))
+        values.append(_json_value(key_values.iloc[row_index]))
     return values
 
 
