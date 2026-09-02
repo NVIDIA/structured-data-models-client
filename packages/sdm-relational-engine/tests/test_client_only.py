@@ -2,11 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The Kumo Relational engine may only be initialized by sdm_client.RelationalClient.
+"""The Kumo Relational engine may only be initialized by sdm_client.StructuredDataClient.
 
 Direct `rfm.init(...)` + `KumoRelational(graph).predict(...)` against a NIM used to
 bypass the supported client surface (issue #22). These tests lock in that the
-engine now redirects any non-adapter caller to RelationalClient.
+engine now redirects any non-adapter caller to StructuredDataClient.
 """
 
 from __future__ import annotations
@@ -30,13 +30,13 @@ requires_engine = pytest.mark.skipif(
 
 @requires_engine
 def test_direct_init_is_blocked():
-    with pytest.raises(RuntimeError, match='RelationalClient'):
+    with pytest.raises(RuntimeError, match='StructuredDataClient'):
         rfm_engine.init(url='http://nim.example.com:8000')
 
 
 @requires_engine
 def test_init_without_token_is_blocked_even_with_all_args():
-    with pytest.raises(RuntimeError, match='RelationalClient'):
+    with pytest.raises(RuntimeError, match='StructuredDataClient'):
         rfm_engine.init(
             url='http://nim.example.com:8000',
             api_key='k',
@@ -68,7 +68,7 @@ def test_authorized_init_passes_the_guard(monkeypatch):
 @requires_engine
 def test_client_access_without_init_redirects_to_structured_client():
     rfm_engine.global_state.reset()
-    with pytest.raises(RuntimeError, match='RelationalClient'):
+    with pytest.raises(RuntimeError, match='StructuredDataClient'):
         _ = rfm_engine.global_state.client
 
 

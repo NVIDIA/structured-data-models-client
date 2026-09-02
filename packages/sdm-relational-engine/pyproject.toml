@@ -232,7 +232,6 @@ ignore = [
     "RUF043",
 ]
 # contract; edit the generator, not the output.
-"src/sdm_relational_engine/client/generated/*.py" = ["ERA001"]
 # Named after starlette's exception, which it is derived from and mirrors;
 # an `Error` suffix would rename a public class for no behavioural gain.
 "src/sdm_relational_engine/exceptions.py" = ["N818"]

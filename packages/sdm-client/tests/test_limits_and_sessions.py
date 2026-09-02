@@ -232,3 +232,110 @@ def test_the_preflight_runs_through_a_real_materialized_request():
                 request, ('prediction', 'explanation')
             )
         )
+
+
+def correlated_payload(*, rows: int, kind: str = 'regression') -> dict:
+    """A batch shaped the way the engine gathers one, with both id columns."""
+    return {
+        'task': {'kind': kind, 'target': {'column_name': 't'}},
+        'schema': {'instance_table': {'columns': {}}},
+        'context': {'instance_table': {'rows': [[i] for i in range(10)]}},
+        'predict': {
+            'instance_table': {
+                'columns': ['instance_id', '__kumo_entity_ref_0'],
+                'rows': [[200 + i, 10 + i] for i in range(rows)],
+            }
+        },
+    }
+
+
+def item(**fields):
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    return PredictionItem(**fields)
+
+
+def named(items, payload):
+    from sdm_client.adapters.relational import _named_entities
+
+    return _named_entities(tuple(items), payload)
+
+
+def test_the_caller_entity_replaces_the_transport_key():
+    payload = correlated_payload(rows=2)
+    out = named(
+        [
+            item(row_index=0, id='200', prediction=1.0),
+            item(row_index=1, id='201', prediction=2.0),
+        ],
+        payload,
+    )
+    assert [entry.id for entry in out] == ['10', '11']
+
+
+@pytest.mark.parametrize(
+    ('items', 'fragment'),
+    [
+        ([item(row_index=None, id='200')], 'missing a row_index'),
+        ([item(row_index=5, id='200')], 'asked about 2 rows'),
+        (
+            [item(row_index=0, id='200'), item(row_index=0, id='200')],
+            'more than once',
+        ),
+        ([item(row_index=0, id='999')], 'asked about'),
+        ([item(row_index=0, id=None)], 'carries no id'),
+        ([item(row_index=0, id='200')], 'unanswered'),
+        (
+            [
+                item(row_index=0, id='200', forecast_step=1),
+                item(row_index=1, id='201'),
+            ],
+            'carries a forecast step',
+        ),
+    ],
+)
+def test_a_response_that_does_not_line_up_is_refused(items, fragment):
+    """Rewriting an id can misattribute an answer, so every row is checked."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError) as error:
+        named(items, correlated_payload(rows=2))
+    assert fragment in str(error.value)
+
+
+def test_a_forecast_may_answer_a_row_once_per_step():
+    payload = correlated_payload(rows=1, kind='forecasting')
+    out = named(
+        [
+            item(row_index=0, id='200', forecast_step=1, prediction=1.0),
+            item(row_index=0, id='200', forecast_step=2, prediction=2.0),
+        ],
+        payload,
+    )
+    assert [entry.forecast_step for entry in out] == [1, 2]
+    assert {entry.id for entry in out} == {'10'}
+
+
+def test_a_forecast_answering_the_same_step_twice_is_refused():
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError) as error:
+        named(
+            [
+                item(row_index=0, id='200', forecast_step=1),
+                item(row_index=0, id='200', forecast_step=1),
+            ],
+            correlated_payload(rows=1, kind='forecasting'),
+        )
+    assert 'step 1 more than once' in str(error.value)
+
+
+def test_a_forecast_row_without_a_step_is_refused():
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError) as error:
+        named(
+            [item(row_index=0, id='200')],
+            correlated_payload(rows=1, kind='forecasting'),
+        )
+    assert 'names no step' in str(error.value)

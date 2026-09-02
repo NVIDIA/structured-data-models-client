@@ -508,7 +508,7 @@ def _nim_failure_error(
     if isinstance(error, Timeout):
         return NimFailureError(
             f'The KumoRelational NIM did not answer {subject} within the configured '
-            'timeout. Raise it with RelationalClient(url, timeout=...), or retry '
+            'timeout. Raise it with StructuredDataClient(url, timeout=...), or retry '
             f'when the NIM is less busy. Original error: {error}',
             transient=True,
         )

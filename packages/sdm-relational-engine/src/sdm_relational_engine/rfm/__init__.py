@@ -31,12 +31,14 @@ logger = logging.getLogger('sdm_relational_engine_rfm')
 _CLIENT_TOKEN = object()
 
 _DIRECT_USE_MESSAGE = (
-    'Direct use of the Kumo Relational engine is not supported. Run inference through '
-    'the NVIDIA Kumo Relational Client:\n'
-    '    from sdm_client import RelationalClient, relational\n'
-    '    graph = relational.Graph.from_data(...)\n'
-    '    with RelationalClient(url=...) as client:\n'
-    '        client.relational(graph).predict(query, indices=[...])'
+    'Direct use of the relational engine is not supported. Run inference '
+    'through the client:\n'
+    '    from sdm_client import (\n'
+    '        PredictiveQuery, StructuredDataClient, KumoRelational,\n'
+    '    )\n'
+    '    request = PredictiveQuery(query, tables).materialize(indices=[...])\n'
+    '    with StructuredDataClient(url=...) as client:\n'
+    '        client.predict(request, model=KumoRelational())'
 )
 
 
@@ -183,7 +185,7 @@ def init_databricks_serving(
     argument or the environment; there is no URL to resolve here.
 
     Gated like :func:`init`: the engine is reachable only through
-    ``RelationalClient``, so both entry points must refuse a direct call rather than
+    ``StructuredDataClient``, so both entry points must refuse a direct call rather than
     leaving one of them as a way around the boundary.
     """
     if _token is not _CLIENT_TOKEN:
@@ -219,7 +221,7 @@ def init_snowflake_serving(
     invoked as a SQL method over a session, so there is no URL to resolve.
 
     Gated like :func:`init`: the engine is reachable only through
-    ``RelationalClient``, so both entry points must refuse a direct call rather than
+    ``StructuredDataClient``, so both entry points must refuse a direct call rather than
     leaving one of them as a way around the boundary.
     """
     if _token is not _CLIENT_TOKEN:
