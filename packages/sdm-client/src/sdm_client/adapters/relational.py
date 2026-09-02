@@ -247,18 +247,18 @@ def _named_entities(
 
     Entity values never travel: the engine sends an opaque reference and an
     internal instance id, so a response's ``id`` is the transport key rather
-    than the user's key. The reference column carries the entity, and the
+    than the user's key. The reference column carries the entity and the
     instance-id column carries the key the endpoint answers under, so the two
-    together restore the mapping.
-
-    The mapping is read from the payload that produced this response, so a run
-    split into several calls maps each batch against its own rows.
+    together restore the mapping. It is read from the payload that produced
+    this response, so a run split into several calls maps each batch against
+    its own rows.
 
     **A mismatch is an error, not a silent pass.** Rewriting an id is exactly
-    the operation that can misattribute an answer, so a row index that is
-    missing, out of range, repeated where it should not be, or whose id does
-    not match the instance this batch asked about, is refused rather than
-    handed back looking ordinary.
+    the operation that can misattribute an answer, so every row is checked
+    against the batch it claims to belong to before its id is replaced.
+
+    Forecasting is the one task that answers a row more than once, and only
+    then: a row may repeat across steps, but not within one.
     """
     import dataclasses
 
@@ -280,14 +280,10 @@ def _named_entities(
         if 'instance_id' in columns
         else None
     )
-    # Forecasting answers several steps for one row, so a repeated index is
-    # expected there and nowhere else.
-    forecasting = any(
-        getattr(item, 'forecast_step', None) is not None for item in items
-    )
+    forecasting = _forecast_task(payload)
 
     named: list[Any] = []
-    seen: set[int] = set()
+    seen: set[tuple[int, int | None]] = set()
     for item in items:
         index = item.row_index
         if index is None:
@@ -302,29 +298,65 @@ def _named_entities(
                 f'about {len(entities)} rows',
                 code='INVALID_RESPONSE',
             )
-        if not forecasting:
-            if index in seen:
+
+        step = item.forecast_step
+        if forecasting:
+            if step is None:
                 raise StructuredDataError(
-                    f'the response answers row_index {index} more than once',
+                    f'a forecast answer for row {index} names no step, so its '
+                    f'place in the horizon is unknown',
                     code='INVALID_RESPONSE',
                 )
-            seen.add(index)
-        if (
-            instances is not None
-            and item.id is not None
-            and str(item.id) != str(instances[index])
-        ):
+        elif step is not None:
             raise StructuredDataError(
-                f'the response pairs row_index {index} with id {item.id!r}, '
-                f'and this batch asked about {instances[index]!r} there',
+                f'a {payload.get("task", {}).get("kind")!r} answer carries a '
+                f'forecast step, which only a forecast has',
                 code='INVALID_RESPONSE',
             )
+
+        key = (index, step)
+        if key in seen:
+            where = (
+                f'row {index} step {step}' if forecasting else f'row {index}'
+            )
+            raise StructuredDataError(
+                f'the response answers {where} more than once',
+                code='INVALID_RESPONSE',
+            )
+        seen.add(key)
+
+        if instances is not None:
+            if item.id is None:
+                raise StructuredDataError(
+                    f'the answer for row {index} carries no id, and this batch '
+                    f'asked under {instances[index]!r}, so the two cannot be '
+                    f'matched',
+                    code='INVALID_RESPONSE',
+                )
+            if str(item.id) != str(instances[index]):
+                raise StructuredDataError(
+                    f'the response pairs row_index {index} with id '
+                    f'{item.id!r}, and this batch asked about '
+                    f'{instances[index]!r} there',
+                    code='INVALID_RESPONSE',
+                )
         named.append(dataclasses.replace(item, id=str(entities[index])))
 
-    if not forecasting and len(seen) != len(entities):
-        missing = sorted(set(range(len(entities))) - seen)
+    answered = {index for index, _ in seen}
+    if answered != set(range(len(entities))):
+        missing = sorted(set(range(len(entities))) - answered)
         raise StructuredDataError(
             f'the response left row(s) {missing} unanswered',
             code='INVALID_RESPONSE',
         )
     return named
+
+
+def _forecast_task(payload: dict[str, Any]) -> bool:
+    """Whether this batch asked a forecast.
+
+    Read from the request rather than from the shape of the answer. Deciding
+    it from the answer let a single item carrying a step switch off the
+    duplicate guard for every other row in the response.
+    """
+    return payload.get('task', {}).get('kind') == 'forecasting'

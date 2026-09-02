@@ -77,7 +77,10 @@ include = ["sdm_connectors*"]
 version = {attr = "sdm_connectors.__version__"}
 
 [tool.pytest.ini_options]
-markers = ["live_warehouse: needs a real Snowflake or Databricks warehouse"]
+markers = [
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
+    "socket: binds a local socket; deselect where that is not permitted",
+]
 testpaths = ["tests"]
 addopts = ["-q"]
 # An xfail that starts passing is a fixed bug, and should fail the run so it

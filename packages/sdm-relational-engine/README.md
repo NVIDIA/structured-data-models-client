@@ -26,7 +26,6 @@ pip install "sdm-relational-engine[duckdb]"      # or [sqlite] / [snowflake] / [
 # optional features:
 pip install "sdm-relational-engine[explain]"     # natural-language explanation summaries
 pip install "sdm-relational-engine[relbench]"    # Graph.from_relbench() dataset loading
-pip install "sdm-relational-engine[codegen]"     # regenerate the TFM API client (see scripts/)
 ```
 
 Release wheels are built for CPython 3.10, 3.11, 3.12 and 3.13
@@ -36,13 +35,16 @@ Application code should import the client's neutral surface, not this package
 directly:
 
 ```python
-from sdm_client import RelationalClient, relational
+from sdm_client import PredictiveQuery, StructuredDataClient, KumoRelational
 
-graph = relational.Graph.from_data({'users': df1, 'items': df2, 'orders': df3})
-with RelationalClient(url='http://localhost:8000') as client:
-    result = client.relational(graph).predict(
-        'PREDICT SUM(orders.price, 0, 30, days) FOR items.item_id=1'
-    )
+query = PredictiveQuery(
+    'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+    {'users': users_df, 'orders': orders_df},
+)
+request = query.materialize(indices=[1, 2, 3])
+
+with StructuredDataClient(url='http://localhost:8000') as client:
+    result = client.predict(request, model=KumoRelational())
 ```
 
 ## Local development

@@ -104,8 +104,13 @@ Full documentation is under [`docs/`](docs/index.md):
 ## Testing
 
 ```bash
-# everything that needs nothing running
-python -m pytest packages/*/tests -q -m 'not live_nim and not live_warehouse'
+# everything that needs nothing running, and opens no sockets
+python -m pytest packages/sdm-api/tests packages/sdm-pql/tests \
+                packages/sdm-client/tests packages/sdm-connectors/tests \
+  -q -m 'not live_nim and not live_warehouse and not socket'
+
+# the native engine, from the repository root
+python -m pytest packages/sdm-relational-engine/tests -q
 
 # against a NIM you are running
 SDM_TABULAR_URL=http://localhost:8000 \

@@ -1,8 +1,12 @@
 # sdm-client — architecture plan
 
-**Repo:** `gitlab-master.nvidia.com/kumo-tfm-nims/sdm-client`
 **What it is:** one Python client for NVIDIA's structured-data foundation model NIMs.
-**Status:** plan. Nothing built yet.
+**Status:** built. All seven phases below are implemented and tested end to end against live NIMs.
+
+> This began as the plan and is kept as the record of *why* the design is what it is, including the
+> places reality corrected it. Where a section describes an interface, the shipped one is
+> authoritative — see the [quickstart](../get-started/quickstart.md) and
+> [prediction output](../reference/prediction-output.md).
 
 ---
 

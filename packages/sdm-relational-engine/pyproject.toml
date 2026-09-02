@@ -56,9 +56,6 @@ test=[
     "pytest-mock",
     "requests-mock",
 ]
-codegen=[
-    "pyyaml",
-]
 explain=[
     "openai>=1.40",
 ]
@@ -234,7 +231,6 @@ ignore = [
     "B018",
     "RUF043",
 ]
-# Written by scripts/generate_tfm_api.py from the Universal TFM OpenAPI
 # contract; edit the generator, not the output.
 "src/sdm_relational_engine/client/generated/*.py" = ["ERA001"]
 # Named after starlette's exception, which it is derived from and mirrors;

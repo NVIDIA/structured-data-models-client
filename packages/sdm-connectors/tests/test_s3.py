@@ -16,6 +16,12 @@ from sdm_connectors.sql import (
     MissingBackendError,
 )
 
+# These bind a local socket, which a sandboxed or locked-down runner may
+# refuse. Marked so such a runner can deselect them rather than report a
+# failure it cannot act on.
+pytestmark = pytest.mark.socket
+
+
 s3fs = pytest.importorskip('s3fs')
 moto_server = pytest.importorskip('moto.server')
 

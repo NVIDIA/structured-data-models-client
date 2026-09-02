@@ -30,3 +30,14 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.format]
 quote-style = "single"
+
+# Registered here as well as per package, so that running the whole workspace
+# from the repository root neither warns about unknown marks nor silently
+# selects a test that opens a socket.
+[tool.pytest.ini_options]
+markers = [
+    "live_nim: needs a running NIM",
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
+    "socket: binds a local socket; deselect where that is not permitted",
+    "gpu: needs a CUDA GPU",
+]

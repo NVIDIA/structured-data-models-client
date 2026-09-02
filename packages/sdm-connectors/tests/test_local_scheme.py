@@ -16,6 +16,12 @@ import pytest
 from sdm_connectors import read
 from sdm_connectors.sql import ConnectorError
 
+# These bind a local socket, which a sandboxed or locked-down runner may
+# refuse. Marked so such a runner can deselect them rather than report a
+# failure it cannot act on.
+pytestmark = pytest.mark.socket
+
+
 _CSV = b'a,b\n1,2\n'
 
 
