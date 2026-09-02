@@ -154,6 +154,10 @@ class PredictiveQuery:
             StructuredDataError: If neither ``indices`` nor ``predict`` is
                 given, if both are, or if an option is not one this accepts.
         """
+        # Before the branch, so a bad value is refused the same way whichever
+        # path it was heading for.
+        num_context_samples = _valid_context_samples(num_context_samples)
+
         if predict is not None and indices is not None:
             raise StructuredDataError(
                 'pass either indices=[...] to score rows the tables already '
@@ -162,6 +166,19 @@ class PredictiveQuery:
                 code='INVALID_REQUEST',
             )
         if predict is not None:
+            if num_context_samples is not None:
+                raise StructuredDataError(
+                    'num_context_samples has nothing to narrow when the rows '
+                    'to score are supplied: the context is the table you gave, '
+                    'in full. Pass a smaller table instead',
+                    code='INVALID_REQUEST',
+                )
+            if options:
+                raise StructuredDataError(
+                    f'{sorted(options)} are sampler options, and supplying the '
+                    f'rows to score gathers nothing to sample',
+                    code='INVALID_REQUEST',
+                )
             return self._materialize_rows(predict)
         if indices is None:
             raise StructuredDataError(
@@ -198,7 +215,6 @@ class PredictiveQuery:
                 code='INVALID_REQUEST',
             )
 
-        num_context_samples = _valid_context_samples(num_context_samples)
         payloads = self._gather(indices, num_context_samples, options)
         return Request.materialized(
             payloads=payloads,

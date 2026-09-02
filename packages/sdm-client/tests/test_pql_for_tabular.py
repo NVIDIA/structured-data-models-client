@@ -147,3 +147,35 @@ def test_a_schema_translates_into_the_language_once():
     assert definition.tables['users'].pkey == 'user_id'
     names = {column.name for column in definition.tables['users'].cols}
     assert {'user_id', 'age', 'churn'} <= names
+
+
+@pytest.mark.parametrize('bad', [0, -1, 5.5, '5', True, 10_001])
+def test_a_bad_context_count_is_refused_on_this_path_too(bad):
+    """Validation runs before the branch, so it cannot be routed around.
+
+    This path returned early, ahead of the check, so an invalid count was
+    silently accepted here while being refused on the other one.
+    """
+    with pytest.raises(StructuredDataError):
+        query().materialize(predict=new_rows(), num_context_samples=bad)
+
+
+def test_a_valid_context_count_is_refused_because_it_narrows_nothing():
+    """Supplying the rows means the context is the table, in full.
+
+    Accepting the argument here and ignoring it would be the quieter failure:
+    a caller would believe they had limited the context and be wrong.
+    """
+    with pytest.raises(StructuredDataError) as error:
+        query().materialize(predict=new_rows(), num_context_samples=500)
+    assert 'nothing to narrow' in str(error.value)
+
+
+def test_a_sampler_option_is_refused_because_nothing_is_sampled():
+    with pytest.raises(StructuredDataError) as error:
+        query().materialize(predict=new_rows(), num_neighbors=[8, 8])
+    assert 'gathers nothing to sample' in str(error.value)
+
+
+def test_the_ordinary_call_still_works():
+    assert query().materialize(predict=new_rows()).predict_rows == 2
