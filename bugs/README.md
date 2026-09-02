@@ -19,7 +19,7 @@ re-scoped. What is left is fifteen. Nothing here is fixed yet.
 | [2](002-non-unique-primary-key-accepted.md) | A primary key that is knowingly not unique is used to join and correlate, and nothing says so | Medium |
 | [3](003-engine-exceptions-escape-the-error-surface.md) | Engine exceptions escape the SDK's error surface, one advertising an API this SDK does not have | Medium |
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |
-| [5](005-empty-frames-are-not-refused.md) | An empty `predict` frame returns a result with no columns at all | Medium |
+| [5](005-an-empty-result-has-no-columns.md) | An empty `predict` frame returns a result with no columns at all | Medium |
 | [6](006-s3-parquet-prefix-needs-a-trailing-slash.md) | A Parquet prefix on S3 is refused unless it ends in `/` | Medium |
 | [8](008-endpoint-limits-are-not-declared-locally.md) | Two endpoint limits are discovered only by being rejected, and one does not name the column | Medium |
 | [10](010-all-null-context-column-stringifies-real-values.md) | A column empty in the context turns real values into strings in the rows being scored | Medium |
@@ -47,10 +47,17 @@ Two reports were written and then deleted, because neither survived the test
 
 Two others were re-scoped rather than deleted. The `_KEY_UNIQUENESS = 0.99`
 threshold in [2](002-non-unique-primary-key-accepted.md) is deliberate and
-well-argued, so that report is now about the silence rather than the threshold.
-And the contract puts no `minItems` on `rows`, so a zero-row `predict` is legal
-and [5](005-empty-frames-are-not-refused.md) is about the shapeless result
+well-argued, so that report is now about the silence rather than the threshold
+— and about the fact that the engine already counts the duplicates and the
+client throws the count away. And the contract puts no `minItems` on `rows`, so
+a zero-row `predict` is legal and
+[5](005-an-empty-result-has-no-columns.md) is about the shapeless result
 instead of the acceptance.
+
+Two of the fifteen ([8](008-endpoint-limits-are-not-declared-locally.md) and
+[17](017-schema-checks-that-a-column-exists-not-that-it-fits.md)) contain a
+half that is a judgement call rather than a defect. Both say so in the file, and
+both have a smaller fix that is not a judgement call.
 
 ## Themes
 

@@ -60,7 +60,7 @@ These fail on purpose, and each one names the bug it is waiting on.
 
 | Probe | Bug |
 |---|---|
-| `empty predict frame` (tabular, edges) | [5](../bugs/005-empty-frames-are-not-refused.md) |
+| `empty predict frame` (tabular, edges) | [5](../bugs/005-an-empty-result-has-no-columns.md) |
 | `a Decimal from a warehouse` | [1](../bugs/001-decimal-columns-lose-precision.md) |
 | `a uint64 past int64` | [4](../bugs/004-uint64-declared-as-int64.md) |
 | `a duplicated primary key` | [2](../bugs/002-non-unique-primary-key-accepted.md) |

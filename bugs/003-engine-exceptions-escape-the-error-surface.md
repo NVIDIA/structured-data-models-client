@@ -43,6 +43,15 @@ Two further problems in that third message:
 `TaskReferenceError` is also not exported from `sdm_client`, so a caller cannot
 name it in an `except` clause without importing from the engine package.
 
+The `TaskReferenceError` message is additionally unhelpful in a way the SDK
+could fix for free. *"N unresolved row(s) after graph sanitization"* covers at
+least two different causes — an id that is not in the table, and a row whose
+time column is null — and explains neither. The engine already knows which:
+its `TableSanitizationReport` carries `null_primary_key_rows`,
+`duplicate_primary_key_rows` and `null_time_rows` per table, and the client
+reads none of it (see [2](002-non-unique-primary-key-accepted.md)). Wrapping
+the exception is the opportunity to attach that.
+
 ## Location
 
 `packages/sdm-client/src/sdm_client/query.py`

@@ -79,6 +79,30 @@ Snowflake happens to escape this: its driver returns `NUMBER(38,0)` as `int64`,
 which takes the correct path and stringifies past the JS-safe range. So the
 same table modelled in two warehouses gives two different answers.
 
+## The correct behaviour already exists, one package away
+
+The relational engine's own encoder gets this right, and has tests for it:
+
+```python
+>>> from sdm_relational_engine.rfm.payload import _dtype_name, _cell_json_value
+>>> s = pd.Series([Decimal('9007199254740993'), Decimal('1')], dtype=object)
+>>> d = _dtype_name(s); d
+'int64'
+>>> [_cell_json_value(v, d) for v in s]
+['9007199254740993', 1]
+```
+
+Its docstring names the case exactly — *"a `DECIMAL` read through a warehouse
+driver ... are all `object` while holding numbers"* — and states the invariant
+this bug breaks: *"Every value `_cell_json_value` can produce for the dtype
+returned here is one the contract accepts for it, so the declaration and the
+cells are always consistent."*
+
+So this is not an open design question. Two encoders in one repository take the
+same input and one is exact; the fix for `wire/dtypes.py` is largely to adopt
+what `payload.py` already does. (The two do still share the `uint64` hole —
+that is [4](004-uint64-declared-as-int64.md), and it is a separate defect.)
+
 ## Location
 
 `packages/sdm-client/src/sdm_client/wire/dtypes.py`

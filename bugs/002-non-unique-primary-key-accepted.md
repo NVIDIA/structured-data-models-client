@@ -82,6 +82,31 @@ that had just been made.
 - `:253` — the `primary_keys` override, `_require_column` and nothing else
 - `Table.primary_key` — a plain attribute, no setter, no check
 
+## The repo does not think duplicates are harmless — and already counts them
+
+Two places say so.
+
+The client refuses far smaller correlation risks. `_named_entities` rejects a
+response whose `row_index` is missing, out of range, duplicated or unanswered,
+because attaching a prediction to the wrong entity is not acceptable. A
+duplicated primary key is the same hazard one layer earlier, unchecked.
+
+And the engine **already measures this**. Every graph build produces a
+`TableSanitizationReport`:
+
+```python
+TableSanitizationReport(
+    table_name=..., input_rows=..., output_rows=...,
+    null_primary_key_rows=..., duplicate_primary_key_rows=...,
+    null_time_rows=...,
+)
+```
+
+`duplicate_primary_key_rows` is computed on every call. The client never reads
+it — `grep -r diagnostic packages/sdm-client/src` returns nothing, and a
+materialized `Request` exposes no attribute carrying it. The number the user
+needs exists already and is discarded.
+
 ## Why it needs fixing
 
 The threshold decides to tolerate an imperfection. Tolerating it is fine;
@@ -94,11 +119,16 @@ saying when it fired.
 
 ## Proposed fix
 
-Keep the threshold. Report what it tolerated.
+Keep the threshold. Surface what it tolerated — most of which is already
+computed.
 
-- When inference nominates a key that is not exactly unique, record it on the
-  `Table` (e.g. `primary_key_duplicates: int`) and surface it in `Schema`'s
-  `__repr__`, so it is visible in the notebook where the schema is printed.
+- Read the engine's `GraphSanitizationReport` in `_gather` and carry it on the
+  materialized `Request`, so `duplicate_primary_key_rows`,
+  `null_primary_key_rows` and `null_time_rows` are visible at all. This is the
+  cheap half: the report exists, nothing reads it.
+- When inference nominates a key that is not exactly unique, record the count
+  on the `Table` and show it in `Schema.__repr__`, which is what a user prints
+  in a notebook.
 - Emit a `warnings.warn` naming the column, the duplicate count and one
   offending value.
 - Apply the same 99% test to the `primary_keys=` override and to direct
@@ -108,7 +138,15 @@ Keep the threshold. Report what it tolerated.
   has duplicates *among the requested indices*, since that is the case where a
   specific answer is specifically wrong.
 
+**One existing test will need changing**, and should be looked at rather than
+worked around: `test_overrides_replace_inference` overrides
+`primary_keys={'users': 'segment'}`, and `segment` is `['north', 'south',
+'north', 'east']` — three distinct in four rows. The test's purpose is that an
+override replaces inference, which does not require a non-unique column; it
+should use a unique one that inference would not have chosen.
+
 Tests to add: an exactly-unique key is silent; one duplicate in a thousand
 warns and records the count; an override or assignment below the threshold is
 refused naming the column and an offending value; the Northwind fixture with a
-duplicated customer is either refused or reported.
+duplicated customer is either refused or reported; the sanitization report
+reaches the caller.
