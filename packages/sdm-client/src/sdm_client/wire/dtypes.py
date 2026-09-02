@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
+from decimal import Decimal
 from numbers import Integral
 from typing import Any
 
@@ -16,6 +17,12 @@ from sdm_client.errors import StructuredDataError
 
 JSON_SAFE_INT_MAX = 9007199254740991
 JSON_SAFE_INT_MIN = -9007199254740991
+
+# The range the wire's `int64` represents. Beyond it a value cannot be sent
+# under that dtype whatever its Python type, so the declaration and the cells
+# would disagree.
+INT64_MAX = 2**63 - 1
+INT64_MIN = -(2**63)
 
 # Ordered from narrowest to widest; anything outside this map (timestamps,
 # strings) has no numeric widening and falls back to 'string'.
@@ -40,7 +47,6 @@ _OBJECT_CONTENT_DTYPES = {
     'integer': 'int64',
     'floating': 'float64',
     'mixed-integer-float': 'float64',
-    'decimal': 'float64',
     'boolean': 'bool',
     'date': 'timestamp[us]',
     'datetime': 'timestamp[us]',
@@ -87,8 +93,37 @@ def infer_tfm_dtype(series: pd.Series) -> str:
         content = pd.api.types.infer_dtype(series, skipna=True)
         if content == 'empty':
             return UNTYPED
+        if content == 'decimal':
+            return _decimal_dtype(series)
         return _OBJECT_CONTENT_DTYPES.get(content, 'string')
     return 'string'
+
+
+def _decimal_dtype(series: pd.Series) -> str:
+    r"""``int64`` for a whole-number ``Decimal`` column, ``float64`` otherwise.
+
+    ``DECIMAL`` and ``NUMBER`` are how a warehouse spells an exact number, and
+    a driver hands them back as ``Decimal`` objects. Calling the column
+    ``float64`` because that is what floats are made of loses every value past
+    2**53 -- which is most warehouse ids -- so a column whose values are whole
+    is reported as the integer it is, and travels under the rule that keeps
+    those exact.
+
+    A value too wide even for ``int64`` gets ``float64`` here and is refused by
+    :func:`serialize_cell`, which can name it. Reporting ``string`` instead
+    would change what the model is asked to predict on.
+    """
+    integral = True
+    for value in series:
+        if _is_missing(value):
+            continue
+        if not isinstance(value, Decimal):
+            return 'float64'
+        if not value.is_finite() or value != value.to_integral_value():
+            return 'float64'
+        if not INT64_MIN <= int(value) <= INT64_MAX:
+            integral = False
+    return 'int64' if integral else 'float64'
 
 
 def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
@@ -128,13 +163,45 @@ def _is_missing(value: Any) -> bool:
 
 
 def _require_finite(value: Any) -> None:
-    r"""``inf`` has no JSON literal; emitting it produces invalid JSON."""
+    r"""``inf`` has no JSON literal; emitting it produces invalid JSON.
+
+    Asked of the value rather than of its type: a ``Decimal('Infinity')`` from
+    a warehouse is as unsendable as a ``float('inf')``, and testing only for
+    ``float`` let it through to fail later inside the JSON encoder, as a
+    transport error that named neither the column nor the value.
+    """
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise StructuredDataError(
+                f'value {value!r} is not JSON-representable; replace '
+                'non-finite numbers with a finite value or a null',
+                code='INVALID_REQUEST',
+            )
+        return
     if isinstance(value, (float, np.floating)) and not math.isfinite(value):
         raise StructuredDataError(
             f'value {value!r} is not JSON-representable; replace non-finite '
             'numbers with a finite value or a null',
             code='INVALID_REQUEST',
         )
+
+
+def _integral_value(value: Any) -> int | None:
+    r"""``value`` as an ``int`` when it is a whole number, else ``None``.
+
+    Asked of the value, not of its type. ``numbers.Integral`` covers ``int``
+    and ``np.integer`` but not ``Decimal``, and a numpy integer compares equal
+    to the ``float`` it rounds to -- so a type test and an ``!=`` each let a
+    different unrepresentable value through the guard below.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Decimal):
+        if value.is_finite() and value == value.to_integral_value():
+            return int(value)
+    return None
 
 
 def serialize_cell(value: Any, dtype: str) -> Any:
@@ -152,10 +219,16 @@ def serialize_cell(value: Any, dtype: str) -> Any:
     if dtype in ('int64', 'int32'):
         _require_finite(value)
         integer_value = int(value)
-        if isinstance(value, (float, np.floating)) and integer_value != value:
+        if not isinstance(value, Integral) and integer_value != value:
             raise StructuredDataError(
                 f'value {value!r} cannot be sent as {dtype} without losing its '
                 'fractional part',
+                code='INVALID_REQUEST',
+            )
+        if not INT64_MIN <= integer_value <= INT64_MAX:
+            raise StructuredDataError(
+                f'value {value!r} is outside the range {dtype} represents '
+                f'({INT64_MIN} to {INT64_MAX}); send the column as strings',
                 code='INVALID_REQUEST',
             )
         if (
@@ -167,7 +240,22 @@ def serialize_cell(value: Any, dtype: str) -> Any:
     if dtype in ('float64', 'float32'):
         _require_finite(value)
         number = float(value)
-        if isinstance(value, Integral) and number != value:
+        whole = _integral_value(value)
+        if (
+            whole is None
+            and isinstance(value, Decimal)
+            and abs(number) > (JSON_SAFE_INT_MAX)
+        ):
+            # Past 2**53 a float64 cannot even hold the integer part, so the
+            # fractional value it becomes is not a rounding of the original in
+            # any useful sense. Below that the loss is ordinary float
+            # behaviour, which any float column already has.
+            raise StructuredDataError(
+                f'value {value!r} is too large for {dtype} to represent; '
+                'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            )
+        if whole is not None and int(number) != whole:
             raise StructuredDataError(
                 f'value {value!r} cannot be sent as {dtype} without losing '
                 f'precision, because it is outside the range a {dtype} '
