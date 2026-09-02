@@ -175,8 +175,9 @@ class PredictiveQuery:
                 )
             if options:
                 raise StructuredDataError(
-                    f'{sorted(options)} are sampler options, and supplying the '
-                    f'rows to score gathers nothing to sample',
+                    f'{sorted(options)} cannot apply when the rows to score '
+                    f'are supplied: nothing is gathered, so there is nothing '
+                    f'to sample',
                     code='INVALID_REQUEST',
                 )
             return self._materialize_rows(predict)

@@ -174,8 +174,15 @@ def test_a_valid_context_count_is_refused_because_it_narrows_nothing():
 def test_a_sampler_option_is_refused_because_nothing_is_sampled():
     with pytest.raises(StructuredDataError) as error:
         query().materialize(predict=new_rows(), num_neighbors=[8, 8])
-    assert 'gathers nothing to sample' in str(error.value)
+    assert 'nothing to sample' in str(error.value)
 
 
 def test_the_ordinary_call_still_works():
     assert query().materialize(predict=new_rows()).predict_rows == 2
+
+
+def test_an_option_that_is_not_even_a_sampler_option_is_refused_too():
+    """The message must not call a misspelling a sampler option."""
+    with pytest.raises(StructuredDataError) as error:
+        query().materialize(predict=new_rows(), num_neighbours=[8, 8])
+    assert 'nothing to sample' in str(error.value)
