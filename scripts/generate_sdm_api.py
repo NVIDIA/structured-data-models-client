@@ -765,7 +765,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '    r"""``value`` as a float, refusing a non-finite one.',
         '',
         '    ``NaN`` has no JSON literal, so a body carrying one is already',
-        '    outside the contract; passing it through puts it in the caller\'s',
+        "    outside the contract; passing it through puts it in the caller's",
         '    frame instead, where it reads as a missing probability.',
         '    """',
         '    number = float(value)',

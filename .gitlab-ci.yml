@@ -86,7 +86,9 @@ contract:
     - pip install -q pyyaml
     - pip install -q -e './packages/sdm-api[test]'
     - REVISION=$(python -c "import json;print(json.load(open('packages/sdm-api/src/sdm_api/generated/PROVENANCE.json'))['source_revision'])")
-    - echo "contract revision: $REVISION"
+    # Quoted whole: an unquoted ': ' makes YAML read the step as a mapping,
+    # which fails the whole pipeline before a job starts.
+    - 'echo "contract revision: $REVISION"'
     - git clone -q "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CONTRACT_PROJECT}.git" /tmp/contract
     - git -C /tmp/contract checkout -q "$REVISION"
     - python scripts/check_contract_pin.py --contract /tmp/contract/nim-sd.openapi.yaml
