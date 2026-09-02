@@ -4,11 +4,19 @@ Findings from an end-to-end QA pass against both live NIMs, real public
 datasets (UCI Adult, UCI Wine Quality, Titanic, Northwind) and real
 warehouses (Snowflake, Databricks, S3).
 
-Each file states the problem, where it is, why it matters, and a proposed fix.
-Every one was reproduced before it was written down, and then re-examined
-against a single test — **does the repository itself already say this should be
+Each file states the problem, where it is, why it matters, and the fix. Every
+one was reproduced before it was written down, and then re-examined against a
+single test — **does the repository itself already say this should be
 otherwise?** Two reports failed that test and were deleted; two more were
-re-scoped. What is left is fifteen. Nothing here is fixed yet.
+re-scoped. What is left is sixteen, and all sixteen are fixed on this branch.
+
+The reports are kept as the record of what was wrong and why each fix is shaped
+the way it is; the probe that found each one, in [`../qa`](../qa/README.md), is
+its regression test. Where a fix differs from the proposal the file started
+with, the file says so and why. The last of them,
+[18](018-an-integer-entity-key-can-be-declared-float64.md), was found after the
+rest by testing the built wheels rather than the source tree — a reminder that
+the check which finds a bug is usually the one nobody had run yet.
 
 | # | Title | Severity |
 |---|---|---|

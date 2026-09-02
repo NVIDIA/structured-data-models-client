@@ -56,7 +56,7 @@ values.append(_json_value(df.iloc[row_index][table.primary_key]))
 
 `df.iloc[row_index]` builds a Series for the **whole row**, and a row has a
 single dtype. Put an integer key beside a float column and the row is `float64`,
-so `user_id` comes back as `20.0`:
+so a `user_id` of `1` comes back as `1.0`:
 
 ```python
 >>> df = pd.DataFrame({'user_id': [1, 2, 3], 'age': [20.0, 30.0, 40.0]})
