@@ -1,33 +1,38 @@
-# 2. A non-unique primary key is accepted, and the model silently sees one of the duplicates
+# 2. A primary key that is knowingly not unique is used to join and correlate, and nothing says so
 
-**Severity: high** — a wrong answer, with no signal that anything went wrong.
+**Severity: medium** — a wrong answer that the code already knows might be
+wrong, and does not mention.
 
-## Problem
+## What is deliberate, and is not the bug
 
-A primary key is what every relationship in a schema joins on and what a
-prediction is correlated back by. Nothing checks that it is unique.
+`_infer_primary_key` accepts a column that is 99% distinct, and the comment
+says exactly why:
 
-Two paths are affected, and neither refuses:
+```python
+# A column is only a candidate identifier if nearly every value is distinct.
+# Exactly 1.0 would reject a key with a single duplicated row, which is common
+# in an extract and still the column the user means.
+_KEY_UNIQUENESS = 0.99
+```
 
-1. **Inference.** `_infer_primary_key` accepts a column whose distinct count is
-   at least 99% of its length. 1,005 rows with 1,000 distinct ids is 99.5%, so
-   `user_id` is nominated as the primary key despite five duplicates.
+That reasoning is sound and this report does not argue with it. Nominating a
+near-unique column is the right call.
 
-   ```python
-   base = pd.DataFrame({'user_id': range(1000), 'v': [float(i) for i in range(1000)]})
-   dupes = pd.concat([base, base.head(5)], ignore_index=True)
-   Schema.from_data({'users': dupes})['users'].primary_key
-   # 'user_id'   <- five rows share an id
-   ```
+## What is the bug
 
-2. **Explicit override.** `primary_keys={'Customers': 'CustomerID'}` is checked
-   for existence only (`_require_column`), never for uniqueness. At any
-   duplicate rate at all.
+The nominated key is then used as a join key and as the identity a prediction
+is correlated back by — and the duplicate the threshold knowingly tolerated is
+never mentioned to anyone.
 
-## Reproduced
+```python
+base = pd.DataFrame({'user_id': range(1000), 'v': [float(i) for i in range(1000)]})
+dupes = pd.concat([base, base.head(5)], ignore_index=True)
+Schema.from_data({'users': dupes})['users'].primary_key
+# 'user_id'  -- 99.5% distinct, five rows share an id, no warning
+```
 
-End to end against the relational NIM, on Northwind with one customer row
-duplicated under the same key and different attributes:
+End to end on Northwind, with one customer duplicated under the same key and
+different attributes:
 
 ```
    CustomerID      Country          City
@@ -40,49 +45,70 @@ duplicated under the same key and different attributes:
 0          0  ALFKI    2.178293
 ```
 
-One prediction, no warning, and no way for the caller to know which of the two
-`ALFKI` rows the model was shown — or whether the join to `Orders` attached
-one customer's orders to the other's features.
+One prediction. Which of the two `ALFKI` rows the model was shown is not
+knowable from anything the SDK returns, and whether the join to `Orders`
+attached one customer's orders to the other's features is not knowable either.
+
+The contract is explicit that this matters. `nim-sd.openapi.yaml` requires a
+*"unique non-null `instance_id` for each request instance"* and that
+*"`instance_id` is a declared, non-null ID column and is unique within"* the
+request. The client's primary key is what becomes that identity, so a duplicate
+collapses two entities into one instance before the endpoint can object.
+
+## The override and assignment paths have no threshold at all
+
+The 99% reasoning covers inference. Neither other route is covered by it:
+
+```python
+Schema.from_data(tables, primary_keys={'Customers': 'CustomerID'})
+# existence-checked only, at any duplicate rate
+
+schema['Customers'].primary_key = 'CustomerID'
+# no check whatsoever -- see bug 17
+```
+
+The second is the sharper case: on the 94-row Northwind fixture, inference
+*declined* to nominate a key (93/94 = 0.989 < 0.99) and returned `None`. A
+direct assignment puts the non-unique key straight back, past the judgement
+that had just been made.
 
 ## Location
 
 `packages/sdm-client/src/sdm_client/schema.py`
 
-- `:67` — `_KEY_UNIQUENESS = 0.99`
-- `:417` — `if distinct >= len(frame) * _KEY_UNIQUENESS:` — inference
-- `:253` — `for name, key in (primary_keys or {}).items():` — the override
-  path, which calls `_require_column` and nothing else
+- `:67` — `_KEY_UNIQUENESS = 0.99` (deliberate; not the bug)
+- `:417` — `if distinct >= len(frame) * _KEY_UNIQUENESS:` — where a tolerated
+  duplicate becomes a silent one
+- `:253` — the `primary_keys` override, `_require_column` and nothing else
+- `Table.primary_key` — a plain attribute, no setter, no check
 
 ## Why it needs fixing
 
-Duplicate keys are not exotic; they are what a real extract looks like after a
-fan-out join, an un-deduplicated CDC feed, or an SCD-2 table read without its
-`is_current` filter. The SDK is pointed straight at warehouses where all three
-are ordinary.
+The threshold decides to tolerate an imperfection. Tolerating it is fine;
+tolerating it *silently* is not, because the consequence is not a degraded
+answer but a possibly-misattributed one, and the user has no way to discover it.
 
-The failure is silent and directional: a duplicate does not raise, it changes
-which row's features the model sees, and the answer that comes back is
-plausible. A user cannot audit for this, because the SDK reports nothing.
-
-The 99% threshold is also self-inconsistent: it is deliberately loose so that
-inference is robust, but the value it produces is then used as an exact join
-key. Robustness at nomination time becomes silence at join time.
+Duplicate keys are precisely what the comment says they are — common in an
+extract. That is the argument for the threshold, and equally the argument for
+saying when it fired.
 
 ## Proposed fix
 
-Uniqueness is a property of a key, not a heuristic. Check it where the key is
-established, on both paths:
+Keep the threshold. Report what it tolerated.
 
-- Inference: require `distinct == len(frame)` (nulls excluded) for a column to
-  be *nominated* as a primary key. Keep the 99% heuristic, if it is wanted, as
-  a signal for which column to *consider*, but do not return a non-unique one.
-  A column that is nearly unique should yield `primary_key = None`, which
-  already makes the caller say what they mean.
-- Override: validate the named column is unique and non-null, and refuse with a
-  message that names the column, the duplicate count, and one offending value.
-- The check costs one `nunique()` per candidate column, which the code already
-  computes at `:416`.
+- When inference nominates a key that is not exactly unique, record it on the
+  `Table` (e.g. `primary_key_duplicates: int`) and surface it in `Schema`'s
+  `__repr__`, so it is visible in the notebook where the schema is printed.
+- Emit a `warnings.warn` naming the column, the duplicate count and one
+  offending value.
+- Apply the same 99% test to the `primary_keys=` override and to direct
+  assignment, so all three routes agree. Below the threshold, refuse — an
+  override is an assertion, and the user should hear that it is false.
+- Consider refusing outright at materialize time when the entity table's key
+  has duplicates *among the requested indices*, since that is the case where a
+  specific answer is specifically wrong.
 
-Tests to add: exactly-unique passes; one duplicate in a thousand is refused on
-both the inferred and the explicit path; a null in the key column is refused;
-the error names the column and an offending value.
+Tests to add: an exactly-unique key is silent; one duplicate in a thousand
+warns and records the count; an override or assignment below the threshold is
+refused naming the column and an offending value; the Northwind fixture with a
+duplicated customer is either refused or reported.

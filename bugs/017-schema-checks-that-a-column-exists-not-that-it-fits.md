@@ -47,7 +47,13 @@ is the documented way to correct a schema — does not:
 schema['Customers'].primary_key = 'NoSuchColumn'
 schema['Customers'].primary_key
 # 'NoSuchColumn'
+
+query.materialize(indices=[...])
+# KeyError: "Column 'NoSuchColumn' not found in table 'Customers'"
 ```
+
+A bare `KeyError` from a dictionary lookup — not even the engine's `ValueError`,
+which at least explains itself.
 
 ```python
 schema['Customers'].time_column = 'Country'   # a string column
@@ -104,6 +110,22 @@ cells later is the difference between an obvious mistake and a puzzle.
 The compatibility rules are already written down, in the engine, and are
 already being enforced. This is about running them where the user can act on
 them.
+
+**Scope, honestly stated.** The *stype* half is the weakest part of this
+report: setting a column's stype against its dtype is exactly the correction
+the docs invite, and the client tests deliberately allow re-typing (a numeric
+`age` to `categorical`, for instance), so where to draw the line is a judgement
+about how much a user may override. Only the combinations the engine will later
+reject outright should be refused, not every combination that looks unusual.
+
+The *existence* half is not a judgement call. `primary_key = 'NoSuchColumn'` is
+accepted and produces a `KeyError` later; no reading of "let the user correct
+the schema" covers naming a column that is not there.
+
+This report also overlaps [3](003-engine-exceptions-escape-the-error-surface.md)
+on the error type. If bug 3 is fixed first, these raise `StructuredDataError`
+at materialize time, which is most of the harm gone — what remains is the
+timing, which is what makes it worth fixing separately rather than instead.
 
 ## Proposed fix
 

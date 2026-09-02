@@ -5,27 +5,52 @@ datasets (UCI Adult, UCI Wine Quality, Titanic, Northwind) and real
 warehouses (Snowflake, Databricks, S3).
 
 Each file states the problem, where it is, why it matters, and a proposed fix.
-Every one was reproduced before it was written down. Nothing here is fixed yet.
+Every one was reproduced before it was written down, and then re-examined
+against a single test — **does the repository itself already say this should be
+otherwise?** Two reports failed that test and were deleted; two more were
+re-scoped. What is left is fifteen. Nothing here is fixed yet.
 
 | # | Title | Severity |
 |---|---|---|
 | [1](001-decimal-columns-lose-precision.md) | A `Decimal` column loses precision, and walks past the guard that exists to stop it | High |
-| [2](002-non-unique-primary-key-accepted.md) | A non-unique primary key is accepted, and the model silently sees one of the duplicates | High |
 | [9](009-csv-reader-rounds-large-integers.md) | The CSV reader rounds large integers when the column has a blank | High |
 | [14](014-a-sum-over-integers-in-duckdb-is-rounded.md) | A `SUM` over an integer column in DuckDB comes back rounded | High |
 | [15](015-the-schemas-relationships-are-additive-only.md) | A schema's `relationships` are additive only, so the model sees a graph the caller did not describe | High |
+| [2](002-non-unique-primary-key-accepted.md) | A primary key that is knowingly not unique is used to join and correlate, and nothing says so | Medium |
 | [3](003-engine-exceptions-escape-the-error-surface.md) | Engine exceptions escape the SDK's error surface, one advertising an API this SDK does not have | Medium |
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |
-| [5](005-empty-frames-are-not-refused.md) | An empty `predict` frame costs a round trip and returns a result with no columns | Medium |
+| [5](005-empty-frames-are-not-refused.md) | An empty `predict` frame returns a result with no columns at all | Medium |
 | [6](006-s3-parquet-prefix-needs-a-trailing-slash.md) | A Parquet prefix on S3 is refused unless it ends in `/` | Medium |
+| [8](008-endpoint-limits-are-not-declared-locally.md) | Two endpoint limits are discovered only by being rejected, and one does not name the column | Medium |
 | [10](010-all-null-context-column-stringifies-real-values.md) | A column empty in the context turns real values into strings in the rows being scored | Medium |
 | [11](011-numpy-scalars-in-inference-raise-a-raw-typeerror.md) | A numpy scalar in `inference` raises a raw `TypeError` from the JSON encoder | Medium |
-| [12](012-an-explicit-categorical-becomes-text.md) | An explicitly declared `Categorical` becomes `text` once it has 65 levels | Medium |
-| [16](016-visualize-is-documented-but-not-reachable.md) | `Schema` cannot draw itself, though that is what the vendored mermaid bundle is for | Medium |
 | [17](017-schema-checks-that-a-column-exists-not-that-it-fits.md) | `Schema` checks that a column exists, not that it can mean what you said — and after construction, not even that | Medium |
-| [8](008-endpoint-limits-are-not-declared-locally.md) | Two endpoint limits are discovered only by being rejected, and one does not name the column | Medium |
 | [7](007-materialize-prints-to-stdout.md) | `materialize()` prints progress to stdout | Low |
 | [13](013-a-malformed-response-is-coerced-rather-than-refused.md) | A malformed `200` response is coerced rather than refused | Low |
+
+## What was rejected
+
+Two reports were written and then deleted, because neither survived the test
+*"does the repository itself already say this should be otherwise"*.
+
+- **An explicit `pd.Categorical` becomes `text` at 65 levels.** Surprising, but
+  the relational engine does the same thing, no test or doc says the pandas
+  dtype should be authoritative over cardinality, and the threshold's comment
+  explains the reasoning. That is a design preference, not a defect. Its one
+  real consequence — the endpoint then refusing `text` — is recorded in
+  [8](008-endpoint-limits-are-not-declared-locally.md).
+- **`visualize()`/`to_mermaid()` are unreachable.** They are not. The README
+  says `Graph.visualize()`, `sdm_relational_engine.rfm.Graph` is exported, and
+  it works. The genuine observation — that the only obtainable picture shows the
+  fabricated edge — belongs to
+  [15](015-the-schemas-relationships-are-additive-only.md), where it now is.
+
+Two others were re-scoped rather than deleted. The `_KEY_UNIQUENESS = 0.99`
+threshold in [2](002-non-unique-primary-key-accepted.md) is deliberate and
+well-argued, so that report is now about the silence rather than the threshold.
+And the contract puts no `minItems` on `rows`, so a zero-row `predict` is legal
+and [5](005-empty-frames-are-not-refused.md) is about the shapeless result
+instead of the acceptance.
 
 ## Themes
 
@@ -47,20 +72,20 @@ Parquet `int64`, DuckDB `BIGINT` with a null, SQLite `integer` with a null, CSV
 without a blank, Snowflake `NUMBER(38,0)`, Databricks `BIGINT`, and a Python
 `int` list. The repair works; it just has holes.
 
-Three more are the same shape: the SDK works out something careful and then
+Two more are the same shape: the SDK works out something careful and then
 discards it one function later — `UNTYPED` for a column with no values
-([10](010-all-null-context-column-stringifies-real-values.md)), the caller's
-own `Categorical` ([12](012-an-explicit-categorical-becomes-text.md)), and the
-schema's own relationships, which are overruled by a second inference inside
-the engine ([15](015-the-schemas-relationships-are-additive-only.md)). The last
-is the most serious thing in this list: `Schema` is the object the SDK asks you
-to trust, and on Northwind it reports three relationships while four are sent.
+([10](010-all-null-context-column-stringifies-real-values.md)), and the
+schema's own relationships, overruled by a second inference inside the engine
+([15](015-the-schemas-relationships-are-additive-only.md)). The second is the
+most serious thing in this list: `Schema` is the object the SDK asks you to
+trust, and on Northwind it reports three relationships while four are sent.
 
-And four are error-surface holes: engine exceptions
-([3](003-engine-exceptions-escape-the-error-surface.md)), a schema edit whose
-incompatibility is only caught later, by the engine, as a `ValueError`
-([17](017-schema-checks-that-a-column-exists-not-that-it-fits.md)), a JSON
-encoder `TypeError`
+And four are error-surface holes, all failing the same sentence in
+`errors.py` — *"Base class for every error this client raises"*: engine
+exceptions ([3](003-engine-exceptions-escape-the-error-surface.md)), a schema
+edit whose incompatibility surfaces later as a `ValueError` or a bare
+`KeyError` ([17](017-schema-checks-that-a-column-exists-not-that-it-fits.md)),
+a JSON encoder `TypeError`
 ([11](011-numpy-scalars-in-inference-raise-a-raw-typeerror.md)), and a response
 coerced instead of refused
 ([13](013-a-malformed-response-is-coerced-rather-than-refused.md)).

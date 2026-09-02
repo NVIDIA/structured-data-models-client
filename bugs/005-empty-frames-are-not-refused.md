@@ -1,12 +1,31 @@
-# 5. An empty `predict` frame costs a round trip and returns a result with no columns
+# 5. An empty `predict` frame returns a result with no columns at all
 
-**Severity: medium** — a `KeyError` in the caller's code, from a call that
-looked like it succeeded.
+**Severity: medium** — a `KeyError` in the caller's code, several lines after a
+call that returned `200`.
 
-## Problem
+## What is not the bug
 
-`Request(predict=<0-row frame>)` is accepted, sent to the endpoint, and comes
-back as a DataFrame with **no columns at all**:
+A zero-row table is legal. `nim-sd.openapi.yaml` puts `minItems: 1` on
+`ArraysTableData.columns` and on `OutputSpec.fields`, and deliberately does
+**not** put it on `rows`:
+
+```yaml
+columns:
+  type: array
+  minItems: 1        # <- required to be non-empty
+rows:
+  type: array
+  maxItems: 10000    # <- no minItems
+```
+
+So sending zero rows is within the contract, and an earlier draft of this
+report was wrong to propose refusing it. A zero-row batch inside a loop is a
+legitimate no-op.
+
+## The bug
+
+The result of that no-op is not an empty result — it is a frame with **no
+columns**:
 
 ```python
 result = client.predict(
@@ -19,66 +38,57 @@ result.to_pandas()
 # Index: []
 ```
 
-So the documented way to use a result fails on it:
+so the documented way to use a result fails on it:
 
 ```python
 frame['prediction']                          # KeyError: 'prediction'
 to_score.merge(frame, on='row_index')        # KeyError: 'row_index'
 ```
 
-A zero-row frame is what a filter returns when nothing matches, so this lands
-in the middle of an ordinary loop: `predict(df[df.segment == s])` works for
-every segment until one is empty, and then it is a `KeyError` rather than an
-empty result.
+An empty result is a different *type* from a non-empty one, so a caller cannot
+write one piece of code that handles both. `predict(df[df.segment == s])` works
+for every segment until one filters to nothing, and then it is a `KeyError`
+naming a column the caller never mistyped.
 
-The SDK already refuses the equivalent on the other entry point:
+## A second case, which is not legal
+
+An empty **context** is accepted and the endpoint answers
+`500 INTERNAL_ERROR Unexpected server error.` Unlike a zero-row `predict`, this
+one is locally knowable and cannot be meaningful — a model that predicts from
+labelled examples cannot be given none. The client already refuses the
+equivalent on the other entry point:
 
 ```python
 query.materialize(indices=[])
 # StructuredDataError: indices is empty, so there is nothing to score
 ```
 
-A related case: an **empty context** is also accepted, and the endpoint answers
-`500 INTERNAL_ERROR Unexpected server error.` A context with no rows is
-locally knowable — a model that predicts from labelled examples cannot be given
-none — and should not become a 500.
-
-## Reproduced
-
-Live against the tabular NIM. `predict=` with 0 rows: HTTP 200, empty result,
-no columns. `context=` with 0 rows: `[500 INTERNAL_ERROR] Unexpected server
-error.`
-
 ## Location
 
-`packages/sdm-client/src/sdm_client/request.py` — `Request.__init__` validates
-columns, dtypes and the target, but not row counts.
+`packages/sdm-client/src/sdm_client/result.py` — `to_pandas` builds columns
+from the returned predictions, so no predictions means no columns.
 
-`packages/sdm-client/src/sdm_client/client.py:231-244` — `predict` sends
-whatever it is given.
+`packages/sdm-client/src/sdm_client/request.py` — `Request.__init__` validates
+columns, dtypes and the target, not row counts.
 
 ## Why it needs fixing
 
-Two things are wrong and only one of them is the round trip. The wasted call is
-minor; the shape of the result is not. An empty result that carries no columns
-is a different type from a non-empty one, so a caller cannot write code that
-handles both. Every other refusal in this SDK is a sentence; this one is a
-`KeyError` several lines later, in the caller's code, naming a column the
-caller never mistyped.
+The wasted round trip is the minor half. The shape of the result is the real
+one: it makes the empty case fail differently from the non-empty case, in the
+caller's code, at a point that gives no hint where the problem came from.
 
 ## Proposed fix
 
-- Refuse an empty `predict` frame in `Request.__init__` with the same voice as
-  the `indices=[]` refusal: *"predict has no rows, so there is nothing to
-  score"*, code `INVALID_REQUEST`.
-- Refuse an empty `context` frame likewise: a model predicts from labelled
-  examples, and zero of them is not a question that can be asked.
-- If refusing an empty `predict` is judged too strict — an empty batch inside a
-  loop is arguably a legitimate no-op — then return an empty result **with the
-  correct columns** (`row_index`, `prediction`, and the probability columns the
-  task implies) so that a join and a column access both still work. Refusing is
-  simpler and matches the rest of the SDK; either is better than today.
+- `to_pandas()` should return an empty frame **with the columns the request
+  implies** — `row_index`, `prediction`, and the probability columns for a
+  classification task — so a join and a column access both still work on it.
+  The task and requested outputs are on the result already.
+- Refuse an empty **context** locally, in the voice of the `indices=[]`
+  refusal, rather than letting it become a 500.
+- Leave an empty `predict` accepted. It is contract-legal, and a no-op batch is
+  a reasonable thing to hand a loop.
 
-Tests to add: an empty `predict` raises with a message naming the frame; an
-empty `context` raises; neither reaches the transport (assert by replacing the
-transport with a failing sentinel).
+Tests to add: an empty `predict` returns a zero-row frame whose columns match a
+non-empty one for the same request, and `merge(on='row_index')` succeeds
+against it; an empty `context` raises `StructuredDataError` without reaching
+the transport.

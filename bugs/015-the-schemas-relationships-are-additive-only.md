@@ -88,10 +88,16 @@ which rows are sampled as neighbours and therefore what the model is shown —
 not an error, a different answer. And it is not rare: it happens on Northwind,
 with default arguments, on the first call.
 
-There is also no diagnostic. `visualize()`/`to_mermaid()` would show the fourth
-edge, but they are on the engine's graph and are not reachable from the public
-API (see [16](016-visualize-is-documented-but-not-reachable.md)), so the one
-tool that would reveal this is unavailable.
+There is a diagnostic, and it makes the point rather than softening it. The
+engine's `Graph` is public, so this draws the graph:
+
+```python
+import sdm_relational_engine.rfm as rfm
+rfm.Graph.from_data(frames).visualize()
+```
+
+It renders four edges. So the only picture of the graph a user can obtain shows
+the fabricated one, and looks like confirmation.
 
 ## Proposed fix
 

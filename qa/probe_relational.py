@@ -166,18 +166,6 @@ def run(client):
         if edges:
             fail(e, f'relationships=[] still sent {len(edges)} edges')
 
-    # KNOWN BUG bugs/016
-    with probe(
-        AREA,
-        'the schema can draw itself',
-        'to_mermaid is reachable from the public API',
-    ) as e:
-        built = schema()
-        if not hasattr(built, 'to_mermaid'):
-            fail(e, 'Schema has no to_mermaid, which the README documents')
-        elif 'Order Details' not in built.to_mermaid():
-            fail(e, 'the diagram omits the table whose name has a space')
-
     with probe(
         AREA,
         'a table name with a space is carried through',
