@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from contextlib import suppress
+from numbers import Integral
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
@@ -29,6 +30,15 @@ _PARQUET_SUFFIXES = ('.parquet', '.pq', '.parq')
 _CSV_SUFFIXES = ('.csv', '.txt')
 _COMPRESSION_SUFFIXES = ('.gz', '.bz2', '.zip', '.xz', '.zst', '.tar')
 _FILE_FORMATS = ('csv', 'parquet')
+
+# The range `Int64` holds. Beyond it pandas keeps an object column, which is
+# exact, so there is nothing to rescue and forcing a dtype would only raise.
+_INT64_MAX = 2**63 - 1
+_INT64_MIN = -(2**63)
+
+# What a plain read gives a string column on this pandas, so narrowing one back
+# lands where it would have landed without the null-aware backend.
+_PLAIN_STRING_DTYPE = pd.Series(['a']).dtype
 
 
 _NULLABLE_INTEGER_DTYPES = {
@@ -353,17 +363,20 @@ def _is_directory(path: str) -> bool:
     which is how tabular data lands in object storage -- was refused unless the
     caller happened to write a trailing slash. The filesystem that owns the
     path is asked instead.
+
+    Reached only for a path whose name gives no answer, and a failure to reach
+    the store is not one either: whatever went wrong -- credentials, network,
+    a bucket that is not there -- surfaces from the read that follows, with its
+    own message, rather than from a format guess.
     """
     scheme = urlparse(path).scheme
     if len(scheme) <= 1 or scheme == 'file':
         return os.path.isdir(path)
     try:
         import fsspec
-    except ImportError:  # pragma: no cover - fsspec ships with s3fs
-        return False
-    try:
+
         return bool(fsspec.filesystem(scheme).isdir(path))
-    except Exception:  # noqa: BLE001 - an unreadable path is not a directory
+    except Exception:  # noqa: BLE001 - see the docstring
         return False
 
 
@@ -374,8 +387,12 @@ def _resolve_format(path: str) -> str:
     ``.json`` file parses into junk column names and zero rows, and a ``.tsv``
     into a single column. Only the documented formats are read, and a directory
     (with or without a trailing separator) is a Parquet dataset.
+
+    The suffix is read first, so a named file is decided without touching the
+    filesystem at all. Only a path that carries no answer of its own is asked
+    about, which is the case a partitioned dataset falls into.
     """
-    if path.endswith(('/', os.sep)) or _is_directory(path):
+    if path.endswith(('/', os.sep)):
         return 'parquet'
     suffix = PurePosixPath(path.lower()).suffix
     if suffix in _COMPRESSION_SUFFIXES:
@@ -385,6 +402,8 @@ def _resolve_format(path: str) -> str:
         return 'parquet'
     if suffix in _CSV_SUFFIXES:
         return 'csv'
+    if _is_directory(path):
+        return 'parquet'
     raise ConnectorError(
         f'unsupported file format {suffix or path!r} for {path!r}; supported: '
         f'{sorted(_PARQUET_SUFFIXES + _CSV_SUFFIXES)} (optionally compressed) '
@@ -414,7 +433,9 @@ def _narrow_nullable_dtypes(frame: pd.DataFrame) -> pd.DataFrame:
         ):
             frame.isetitem(position, column.astype(dtype.numpy_dtype))
         elif isinstance(dtype, pd.StringDtype):
-            frame.isetitem(position, column.astype(object))
+            # Whatever a plain read would have produced for a string column,
+            # which differs across pandas versions.
+            frame.isetitem(position, column.astype(_PLAIN_STRING_DTYPE))
         elif isinstance(dtype, pd.BooleanDtype):
             frame.isetitem(position, column.astype(bool))
     return frame
@@ -427,28 +448,50 @@ def _integer_columns_exactly(data: Any) -> Any:
     every value past 2**53 as the frame is built. By then the value is gone --
     casting back to an integer afterwards cannot recover it -- so the column
     has to be constructed with a dtype that holds a null.
+
+    Only columns that ``Int64`` can hold are converted. One value outside
+    signed 64-bit and the column is left to pandas, which keeps it as ``object``
+    and exact; forcing it would raise where nothing used to.
     """
     if not isinstance(data, Mapping):
         return data
     built: dict[Any, Any] = {}
     for name, values in data.items():
-        if isinstance(values, (list, tuple)) and any(
-            isinstance(value, int) and not isinstance(value, bool)
-            for value in values
-        ):
-            present = [
-                value
-                for value in values
-                if value is not None and value == value  # noqa: PLR0124
-            ]
-            if present and all(
-                isinstance(value, int) and not isinstance(value, bool)
-                for value in present
-            ):
-                built[name] = pd.array(list(values), dtype='Int64')
-                continue
-        built[name] = values
+        built[name] = (
+            pd.array(list(values), dtype='Int64')
+            if _fits_nullable_int64(values)
+            else values
+        )
     return built
+
+
+def _fits_nullable_int64(values: Any) -> bool:
+    r"""Whether ``values`` is a list of whole numbers ``Int64`` can hold.
+
+    ``bool`` is excluded although it is an ``int``: a flag column is not a
+    number, and pandas keeps it a bool without help.
+    """
+    if not isinstance(values, (list, tuple)):
+        return False
+    present = [value for value in values if not _is_null(value)]
+    if not present:
+        return False
+    return all(
+        isinstance(value, Integral)
+        and not isinstance(value, bool)
+        and _INT64_MIN <= int(value) <= _INT64_MAX
+        for value in present
+    )
+
+
+def _is_null(value: Any) -> bool:
+    r"""``None``, ``NaN`` and ``pd.NA`` alike, without comparing ``pd.NA``."""
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
 
 
 def _read_file(

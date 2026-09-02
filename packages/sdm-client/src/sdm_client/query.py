@@ -23,7 +23,8 @@ model whose profile accepts it can answer.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
@@ -308,52 +309,60 @@ class PredictiveQuery:
         each part it returns is a wire payload. Reimplementing that here would
         duplicate PQL resolution, point-in-time correctness and neighbourhood
         sampling that already live -- and are tested -- there.
+
+        What is not delegated is what the caller sees when it goes wrong. The
+        engine raises its own exception types, which are outside this client's
+        documented error surface, so both calls are wrapped.
         """
         engine = _engine()
         run_mode = _run_mode_for(num_context_samples)
+        _check_entity_count(indices)
 
         model = self._engine_model(engine)
         # Resolve here rather than letting the engine default to its own
         # profile: the profile is a public argument, so both paths have to
         # honour it or it means different things depending on which was used.
         query_def = self._resolve()
-        task = model._get_task_table(
-            query=query_def,
-            indices=list(indices),
-            run_mode=run_mode,
-            **{
-                key: options[key]
-                for key in (
-                    'anchor_time',
-                    'context_anchor_time',
-                    'lag_timesteps',
-                    'max_pq_iterations',
-                    'random_seed',
-                )
-                if key in options
-            },
-        )
+        with _engine_errors(model):
+            task = model._get_task_table(
+                query=query_def,
+                indices=list(indices),
+                run_mode=run_mode,
+                **{
+                    key: options[key]
+                    for key in (
+                        'anchor_time',
+                        'context_anchor_time',
+                        'lag_timesteps',
+                        'max_pq_iterations',
+                        'random_seed',
+                    )
+                    if key in options
+                },
+            )
         task._query = query_def.to_string()
         task = _narrow_context(task, num_context_samples)
 
-        parts = model.materialize_task(
-            task,
-            run_mode=run_mode,
-            top_k=query_def.top_k,
-            exclude_cols_dict=query_def.get_exclude_cols_dict(),
-            **{
-                key: options[key]
-                for key in (
-                    'num_neighbors',
-                    'num_hops',
-                    'inference_config',
-                    'use_prediction_time',
-                    'return_embeddings',
-                    'random_seed',
-                )
-                if key in options
-            },
-        )
+        with _engine_errors(model):
+            parts = model.materialize_task(
+                task,
+                run_mode=run_mode,
+                verbose=False,
+                top_k=query_def.top_k,
+                exclude_cols_dict=query_def.get_exclude_cols_dict(),
+                **{
+                    key: options[key]
+                    for key in (
+                        'num_neighbors',
+                        'num_hops',
+                        'inference_config',
+                        'use_prediction_time',
+                        'return_embeddings',
+                        'random_seed',
+                    )
+                    if key in options
+                },
+            )
         if not parts:
             raise StructuredDataError(
                 'the engine gathered nothing for this query',
@@ -372,6 +381,82 @@ class PredictiveQuery:
 
     def __repr__(self) -> str:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
+
+
+@contextmanager
+def _engine_errors(model: Any) -> Iterator[None]:
+    r"""Re-raise what the engine raises as this client's own error.
+
+    ``StructuredDataError`` is documented as the base class for every error
+    this client raises, and the engine's ``ValueError`` and
+    ``TaskReferenceError`` falsified that -- so ``except StructuredDataError``
+    missed exactly the failures a caller is most likely to hit, since they are
+    all caused by ordinary bad input.
+
+    Where the engine dropped rows, the reason is attached. Its message says how
+    many rows went unresolved and not why, and it already knows: every graph
+    build records how many rows had a null key, a duplicated key or no time.
+    """
+    try:
+        yield
+    except StructuredDataError:
+        raise
+    except Exception as error:
+        message = str(error)
+        detail = _sanitization_detail(model)
+        raise StructuredDataError(
+            f'{message}{detail}',
+            code='UNSUPPORTED_REQUEST'
+            if 'at once' in message
+            else 'INVALID_REQUEST',
+        ) from error
+
+
+def _sanitization_detail(model: Any) -> str:
+    r"""What the engine dropped while building the graph, if it dropped any."""
+    report = getattr(model, 'sanitization_report', None)
+    tables = getattr(report, 'tables', None)
+    if not tables:
+        return ''
+    reasons = []
+    for name, table in tables.items():
+        dropped = getattr(table, 'input_rows', 0) - getattr(
+            table, 'output_rows', 0
+        )
+        if dropped <= 0:
+            continue
+        causes = [
+            f'{count} with {label}'
+            for label, count in (
+                ('no primary key', getattr(table, 'null_primary_key_rows', 0)),
+                (
+                    'a repeated primary key',
+                    getattr(table, 'duplicate_primary_key_rows', 0),
+                ),
+                ('no time', getattr(table, 'null_time_rows', 0)),
+            )
+            if count
+        ]
+        reasons.append(
+            f'{name}: {dropped} of {table.input_rows} rows dropped'
+            + (f' ({", ".join(causes)})' if causes else '')
+        )
+    return f' [{"; ".join(reasons)}]' if reasons else ''
+
+
+def _check_entity_count(indices: Sequence[Any]) -> None:
+    r"""Refuse more entities than the endpoint scores, before gathering any.
+
+    The engine refuses this too, several seconds later, in a message that names
+    a ``batch_size=`` argument this client does not have.
+    """
+    ceiling = RELATIONAL_LIMITS['predict_rows_max']
+    if len(indices) > ceiling:
+        raise StructuredDataError(
+            f'{len(indices):,} entities were asked for, and the endpoint '
+            f'scores at most {ceiling:,} at a time; split them across calls',
+            code='UNSUPPORTED_REQUEST',
+        )
 
 
 def _valid_context_samples(value: Any) -> int | None:
@@ -505,13 +590,19 @@ def _check_shape(
 def _to_engine_graph(engine: Any, schema: Schema) -> Any:
     r"""Build the engine's graph from this client's schema.
 
-    The engine infers a graph from frames in the same way, so the frames are
-    handed over and the schema's corrections are applied on top. Those
-    corrections are the whole reason a caller edited the schema, and inferring
-    twice would discard them.
+    The schema is the authority, in both directions. The engine can infer a
+    graph from the same frames, but its inference and the schema's do not
+    agree, and a second opinion applied on top of the first is not a schema at
+    all -- so inference is suppressed and exactly the schema's relationships
+    are linked.
     """
     frames = {name: table.data for name, table in schema.tables.items()}
-    graph = engine.Graph.from_data(frames, verbose=False)
+    # `edges=[]` suppresses the engine's own link inference. Letting it run and
+    # adding the schema's links on top made the schema additive: an edge the
+    # engine invented stayed, so `Schema` reported three relationships while
+    # four were sent, and `relationships=[]` -- documented as asserting there
+    # are none -- sent four.
+    graph = engine.Graph.from_data(frames, edges=[], verbose=False)
 
     for name, table in schema.tables.items():
         engine_table = graph[name]
@@ -523,18 +614,23 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
             if column_name in engine_table:
                 engine_table[column_name].stype = column.stype
 
-    # The engine infers edges from the same frames, so most of these are
-    # already there. Linking one twice is an error, and the schema is the
-    # authority only for the ones inference missed.
-    existing = {
-        (edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges
-    }
     for link in schema.relationships:
-        edge = (link.source_table, link.source_column, link.target_table)
-        if edge not in existing:
-            graph.link(
-                src_table=link.source_table,
-                fkey=link.source_column,
-                dst_table=link.target_table,
-            )
+        graph.link(
+            src_table=link.source_table,
+            fkey=link.source_column,
+            dst_table=link.target_table,
+        )
+    sent = {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
+    described = {
+        (link.source_table, link.source_column, link.target_table)
+        for link in schema.relationships
+    }
+    if (
+        sent != described
+    ):  # pragma: no cover - the assertion this fix exists for
+        raise StructuredDataError(
+            f'the graph built for this request does not match the schema: '
+            f'{sorted(sent ^ described)}',
+            code='INVALID_REQUEST',
+        )
     return graph

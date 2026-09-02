@@ -33,6 +33,7 @@ Nothing here contacts a model. Inference reads your frames locally.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -149,6 +150,9 @@ class Table:
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
+    #: How many rows repeat a primary key value another row already used.
+    #: Inference tolerates a few, deliberately; this is what it tolerated.
+    duplicate_keys: int = 0
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key' and value is not None:
@@ -234,9 +238,16 @@ class Table:
     def __repr__(self) -> str:
         key = f', primary_key={self.primary_key!r}' if self.primary_key else ''
         time = f', time_column={self.time_column!r}' if self.time_column else ''
+        # A tolerated duplicate changes which row the model is shown, so it
+        # belongs where a caller will actually see it.
+        repeats = (
+            f', {self.duplicate_keys} repeated keys'
+            if self.duplicate_keys
+            else ''
+        )
         return (
             f'Table({self.name!r}, {len(self.data)} rows, '
-            f'{len(self.columns)} columns{key}{time})'
+            f'{len(self.columns)} columns{key}{time}{repeats})'
         )
 
 
@@ -455,6 +466,16 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
     table = Table(name=name, data=frame, columns=columns)
     table.primary_key = _infer_primary_key(frame, columns)
     table.time_column = _infer_time_column(columns)
+    if table.primary_key is not None:
+        table.duplicate_keys = _duplicate_key_count(frame, (table.primary_key,))
+        if table.duplicate_keys:
+            warnings.warn(
+                f'{name}.{table.primary_key} identifies a row {table.duplicate_keys} '
+                f'time(s) it has already been used, e.g. '
+                f'{_first_duplicate(frame, (table.primary_key,))!r}. Those rows '
+                f'are indistinguishable to the model.',
+                stacklevel=3,
+            )
     return table
 
 

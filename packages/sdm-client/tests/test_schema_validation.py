@@ -145,7 +145,8 @@ def test_assigning_a_repeating_key_is_refused_too():
 
 def test_the_tolerance_inference_allows_is_the_tolerance_assignment_allows():
     """One duplicate in a thousand is what the 99% threshold exists for."""
-    built = Schema.from_data({'users': duplicated(repeats=5)})
+    with pytest.warns(UserWarning):
+        built = Schema.from_data({'users': duplicated(repeats=5)})
     assert built['users'].primary_key == 'user_id'
     built['users'].primary_key = 'user_id'
 
@@ -209,3 +210,27 @@ def test_an_explicit_relationship_still_marks_both_ends_as_ids():
         relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
     )
     assert built['orders']['user_id'].stype == 'ID'
+
+
+# --- what the threshold tolerated is said out loud ---------------------------
+
+
+def test_a_tolerated_duplicate_is_counted_and_shown():
+    """Inference accepts a nearly-unique key on purpose. It should say so."""
+    frame = duplicated(repeats=5)
+    with pytest.warns(UserWarning, match='already been used'):
+        built = Schema.from_data({'users': frame})
+    table = built['users']
+    assert table.primary_key == 'user_id'
+    assert table.duplicate_keys == 5
+    assert '5 repeated keys' in repr(table)
+
+
+def test_a_unique_key_says_nothing():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        built = Schema.from_data({'users': users()})
+    assert built['users'].duplicate_keys == 0
+    assert 'repeated' not in repr(built['users'])

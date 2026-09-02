@@ -40,11 +40,7 @@ def test_a_csv_without_a_blank_keeps_its_plain_dtypes(tmp_path):
     path = tmp_path / 'plain.csv'
     path.write_text('a,b,c\n1,x,1.5\n2,y,2.5\n')
     frame = read('local', path=str(path))
-    assert [str(dtype) for dtype in frame.dtypes] == [
-        'int64',
-        'object',
-        'float64',
-    ]
+    assert frame.dtypes.equals(pd.read_csv(path).dtypes)
 
 
 def test_a_csv_float_column_with_a_blank_is_still_a_float(tmp_path):
@@ -157,3 +153,55 @@ def test_a_trailing_slash_still_means_a_directory():
     from sdm_connectors.reader import _resolve_format
 
     assert _resolve_format('s3://bucket/prefix/') == 'parquet'
+
+
+# --- data=: what pandas would have done, only exact -------------------------
+
+
+@pytest.mark.parametrize(
+    ('label', 'values'),
+    [
+        ('past int64', [2**100]),
+        ('below int64', [-(2**63) - 1]),
+        ('at 2**63', [2**63]),
+    ],
+)
+def test_an_integer_outside_int64_is_left_to_pandas(label, values):
+    """`Int64` cannot hold it, and pandas keeps an exact object column.
+
+    Forcing the dtype raised `OverflowError` where nothing used to fail.
+    """
+    frame = read('local', data={'id': values})
+    assert str(frame['id'].iloc[0]) == str(values[0])
+
+
+def test_a_pandas_na_is_a_null_like_any_other():
+    frame = read('local', data={'id': [BIG, pd.NA, BIG + 2]})
+    assert wire(frame['id']) == [str(BIG), None, str(BIG + 2)]
+
+
+def test_a_numpy_integer_with_a_null_stays_exact():
+    """A numpy scalar is an integer too, and used to round."""
+    import numpy as np
+
+    frame = read('local', data={'id': [np.int64(BIG), None]})
+    assert wire(frame['id']) == [str(BIG), None]
+
+
+def test_a_bool_column_with_a_null_is_not_made_an_integer():
+    frame = read('local', data={'flag': [True, None, False]})
+    assert not pd.api.types.is_integer_dtype(frame['flag'])
+
+
+def test_an_empty_column_is_left_alone():
+    frame = read('local', data={'id': [], 'v': []})
+    assert len(frame) == 0
+
+
+def test_a_string_column_lands_where_a_plain_read_would_put_it(tmp_path):
+    """The null-aware backend must not change what an ordinary read gives."""
+    path = tmp_path / 'strings.csv'
+    path.write_text('a,b\n1,x\n2,y\n')
+    assert (
+        read('local', path=str(path))['b'].dtype == pd.read_csv(path)['b'].dtype
+    )
