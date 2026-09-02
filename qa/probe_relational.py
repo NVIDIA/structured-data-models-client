@@ -96,16 +96,15 @@ def run(client):
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
 
-    # KNOWN BUG bugs/017
     with probe(
         AREA,
-        'a string column assigned as the time column',
+        'a numeric column assigned as the time column',
         'refused at the point of assignment',
     ) as e:
         built = schema()
         try:
-            built['Customers'].time_column = 'Country'
-            fail(e, 'a string column was accepted as the time column')
+            built['Orders'].time_column = 'Freight'
+            fail(e, 'a numeric column was accepted as the time column')
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
 

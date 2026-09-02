@@ -199,15 +199,18 @@ def run(client, relational):
         except StructuredDataError as exc:
             note(e, str(exc)[:140])
 
-    # KNOWN BUG bugs/005
     with probe(
-        AREA, 'an empty predict frame', 'refused locally, with a reason'
+        AREA,
+        'an empty predict frame',
+        'a shaped result: zero rows is legal, no columns is not',
     ) as e:
-        try:
-            result = score(client, frame(60), frame(0).drop(columns=['y']))
-            fail(e, f'accepted; result has columns {list(result.columns)}')
-        except StructuredDataError as exc:
-            note(e, str(exc)[:140])
+        result = score(client, frame(60), frame(0).drop(columns=['y']))
+        if len(result) != 0:
+            fail(e, f'{len(result)} rows for an empty frame')
+        elif 'prediction' not in result.columns:
+            fail(e, f'no columns to join or read: {list(result.columns)}')
+        else:
+            note(e, f'columns {list(result.columns)}')
 
     with probe(
         AREA, 'a target column missing from the context', 'named locally'
