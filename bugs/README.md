@@ -21,10 +21,10 @@ re-scoped. What is left is fifteen. Nothing here is fixed yet.
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |
 | [5](005-an-empty-result-has-no-columns.md) | An empty `predict` frame returns a result with no columns at all | Medium |
 | [6](006-s3-parquet-prefix-needs-a-trailing-slash.md) | A Parquet prefix on S3 is refused unless it ends in `/` | Medium |
-| [8](008-endpoint-limits-are-not-declared-locally.md) | Two endpoint limits are discovered only by being rejected, and one does not name the column | Medium |
+| [8](008-endpoint-limits-are-not-declared-locally.md) | One endpoint limit is not declared locally, and one refusal does not name the column it is about | Medium |
 | [10](010-all-null-context-column-stringifies-real-values.md) | A column empty in the context turns real values into strings in the rows being scored | Medium |
 | [11](011-numpy-scalars-in-inference-raise-a-raw-typeerror.md) | A numpy scalar in `inference` raises a raw `TypeError` from the JSON encoder | Medium |
-| [17](017-schema-checks-that-a-column-exists-not-that-it-fits.md) | `Schema` checks that a column exists, not that it can mean what you said — and after construction, not even that | Medium |
+| [17](017-schema-checks-that-a-column-exists-not-that-it-fits.md) | `Schema`'s table attributes validate nothing, where the class they wrap validates on assignment | Medium |
 | [7](007-materialize-prints-to-stdout.md) | `materialize()` prints progress to stdout | Low |
 | [13](013-a-malformed-response-is-coerced-rather-than-refused.md) | A malformed `200` response is coerced rather than refused | Low |
 
@@ -55,9 +55,24 @@ a zero-row `predict` is legal and
 instead of the acceptance.
 
 Two of the fifteen ([8](008-endpoint-limits-are-not-declared-locally.md) and
-[17](017-schema-checks-that-a-column-exists-not-that-it-fits.md)) contain a
-half that is a judgement call rather than a defect. Both say so in the file, and
-both have a smaller fix that is not a judgement call.
+[17](017-schema-checks-that-a-column-exists-not-that-it-fits.md)) looked at
+first like they contained a judgement call. The open-source predecessor,
+`kumo-relational-client`, settled both, and neither hedge survived:
+
+- **8** — the predecessor declares `_MAX_PRED_SIZE`, `_MAX_TEST_SIZE`,
+  `_MAX_CONTEXT_SIZE` and `_MAX_SIZE` locally, and **nothing else**: sizes are
+  the client's business, what a model can represent is the server's. So the
+  class ceiling belongs in `limits` and a `semantic_types` field does not — that
+  proposal is withdrawn. What is left of the `text` half is that the refusal
+  does not name the column, which the engine already has a named pattern for
+  (`_cardinality_guidance`) and simply was not applied here.
+- **17** — the engine's `Table.primary_key` and `Table.time_column` *are*
+  property setters that validate on assignment, and `Column.__setattr__`
+  rejects an stype the dtype cannot support. All of it is in this repo, one
+  package over, and in the predecessor unchanged. `sdm_client.Table` is a plain
+  dataclass with bare attributes, so this is a regression rather than a
+  question of how strict to be — the rule is "whatever the engine will reject
+  anyway", which leaves every re-typing the docs invite still legal.
 
 ## Themes
 

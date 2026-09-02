@@ -1,7 +1,7 @@
-# 17. `Schema` checks that a column exists, not that it can mean what you said — and after construction, not even that
+# 17. `Schema`'s table attributes validate nothing, where the class they wrap validates on assignment
 
-**Severity: medium** — the error arrives at the wrong time, in the wrong type,
-pointing at the wrong line.
+**Severity: medium** — a regression against the engine this SDK is built on:
+the same checks exist one package over and fire at the point of assignment.
 
 ## Problem
 
@@ -77,15 +77,53 @@ return `None`, and the assignment puts the non-unique key back.
 The engine's messages are good — each names the column and the conflict. Two
 things are wrong around them.
 
-1. **The type.** `ValueError` is outside this SDK's documented error surface, so
-   `except StructuredDataError` misses it. Same defect as
-   [3](003-engine-exceptions-escape-the-error-surface.md), reached a different
-   way.
-2. **The timing.** The failure happens at `materialize()`, so the traceback
+1. **The timing.** The failure happens at `materialize()`, so the traceback
    points at the query rather than at the assignment that caused it. In a
    notebook those are typically different cells, sometimes minutes apart. The
    information needed to reject it — the column's dtype — is present at
    assignment time.
+2. **The type.** `ValueError` is outside this SDK's documented error surface, so
+   `except StructuredDataError` misses it. Same defect as
+   [3](003-engine-exceptions-escape-the-error-surface.md), reached a different
+   way.
+
+## The checks already exist, one package over, and fire eagerly
+
+This is not a question of how much a user should be allowed to override. The
+engine `sdm_client` is built on already answers it, in
+`sdm_relational_engine/rfm/base/`:
+
+```python
+# table.py:480 -- primary_key is a property with a setter
+@primary_key.setter
+def primary_key(self, name):
+    ...                                    # empty composite key -> ValueError
+    ...                                    # collides with the time column -> ValueError
+    ...                                    # collides with the end-time column -> ValueError
+    if name is not None and name not in self:
+        raise KeyError(f"Column '{name}' not found in table '{self.name}'")
+    ...
+    self[name].stype = Stype.ID            # and the dtype check fires here
+
+# table.py:551 -- time_column likewise, ending in
+    self[name].stype = Stype.timestamp
+
+# column.py:134 -- Column.__setattr__
+if key == 'stype':
+    if not val.supports_dtype(self.dtype):
+        raise ValueError(
+            f"Column '{self.name}' received an incompatible semantic type "
+            f"(got dtype='{self.dtype}' and stype='{val}')")
+```
+
+Every check this report asks for is written there and runs at assignment. The
+same code is in the open-source predecessor this repo was derived from,
+`kumo-relational-engine`, unchanged.
+
+`sdm_client.Table` is a plain `@dataclass`: `primary_key` and `time_column` are
+bare attributes with no setter, so the value is simply stored and travels to the
+engine at `materialize()` — which is why the `KeyError` above, raised by that
+same setter, arrives several cells later than it should.
 
 ## Location
 
@@ -111,36 +149,33 @@ The compatibility rules are already written down, in the engine, and are
 already being enforced. This is about running them where the user can act on
 them.
 
-**Scope, honestly stated.** The *stype* half is the weakest part of this
-report: setting a column's stype against its dtype is exactly the correction
-the docs invite, and the client tests deliberately allow re-typing (a numeric
-`age` to `categorical`, for instance), so where to draw the line is a judgement
-about how much a user may override. Only the combinations the engine will later
-reject outright should be refused, not every combination that looks unusual.
+There is no line to draw about how strict to be, which is what made this look
+like a judgement call at first: the rule is *whatever the engine will reject
+anyway*. `Column.__setattr__` rejects a stype the dtype cannot support and
+nothing more, so re-typing a numeric `age` to `categorical` — which the client's
+tests deliberately allow, and the docs invite — stays legal. What stops being
+legal is only what was going to fail later regardless.
 
-The *existence* half is not a judgement call. `primary_key = 'NoSuchColumn'` is
-accepted and produces a `KeyError` later; no reading of "let the user correct
-the schema" covers naming a column that is not there.
-
-This report also overlaps [3](003-engine-exceptions-escape-the-error-surface.md)
-on the error type. If bug 3 is fixed first, these raise `StructuredDataError`
-at materialize time, which is most of the harm gone — what remains is the
-timing, which is what makes it worth fixing separately rather than instead.
+This report overlaps [3](003-engine-exceptions-escape-the-error-surface.md) on
+the error type. If bug 3 is fixed first, these become `StructuredDataError` at
+materialize time, which is some of the harm gone — what remains is the timing,
+which is the part worth fixing separately rather than instead.
 
 ## Proposed fix
 
-Move the checks the engine already performs to where the value is set:
+Do what the engine's setters do, at the same moment they do it.
 
-- `Column.stype` setter: reject a combination the engine will reject —
-  `timestamp` on a non-datetime column, `numerical` on a string, `text` on a
-  numeric — as `StructuredDataError`, reusing the engine's wording. The dtype
-  is on the `Column` already.
-- Give `Table.primary_key` and `Table.time_column` setters that run the same
-  checks as the constructor arguments, so the two routes cannot diverge. A
-  `Table` holds its own frame, so both the existence and the uniqueness checks
-  are local.
-- `time_columns=` and `.time_column =`: require the named column be a
-  timestamp.
+- Give `Table.primary_key` and `Table.time_column` real setters that mirror
+  `rfm/base/table.py:480` and `:551`: the column must exist, must not already
+  be the other of the two, and must be able to carry the stype the role
+  implies. Raise `StructuredDataError`, not `KeyError` or `ValueError`, since
+  this is the client's surface.
+- Give `Column.stype` the dtype check from `column.py:134` — no stricter, so
+  every re-typing the docs invite keeps working.
+- Apply the same checks to the `primary_keys=`, `time_columns=` and
+  `relationships=` constructor arguments, so the two routes cannot diverge.
+  Uniqueness belongs here too, per
+  [2](002-non-unique-primary-key-accepted.md).
 - `relationships=`: require both columns' dtypes to be joinable and the target
   to be the target table's primary key, refusing with the offending pair named.
 - Keep the engine's checks where they are. They are the backstop, and after
