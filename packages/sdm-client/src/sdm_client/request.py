@@ -33,6 +33,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from sdm_client.errors import StructuredDataError
@@ -168,6 +169,19 @@ class Request:
             raise StructuredDataError(
                 f'task must be one of {list(TASK_KINDS)}, got {task!r}',
                 code='INVALID_REQUEST',
+            )
+        if target in context.columns and _has_list_cells(context[target]):
+            # Said here because this is the only place that knows which column
+            # is the target. SDM's own `Task.classification` covers "binary,
+            # multi-class, or multi-label", but the wire does not: `CellValue`
+            # is documented as excluding array-valued prediction scalars on
+            # purpose, so a multi-label answer has no shape to come back in.
+            raise StructuredDataError(
+                f'{target!r} holds a list per row, which is a multi-label '
+                f'target. These models predict one value per row, and the '
+                f'contract has no form for a set of labels, so this cannot be '
+                f'asked or answered',
+                code='UNSUPPORTED_REQUEST',
             )
         if len(context) == 0:
             # A zero-row `predict` is legal -- the contract sets no minimum on
@@ -333,6 +347,12 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
     if isinstance(key, str):
         return (key,)
     return tuple(key)
+
+
+def _has_list_cells(series: pd.Series) -> bool:
+    return any(
+        isinstance(value, (list, tuple, set, np.ndarray)) for value in series
+    )
 
 
 def _require_frame(value: Any, name: str) -> pd.DataFrame:

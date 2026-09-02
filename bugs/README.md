@@ -8,7 +8,7 @@ Each file states the problem, where it is, why it matters, and the fix. Every
 one was reproduced before it was written down, and then re-examined against a
 single test — **does the repository itself already say this should be
 otherwise?** Two reports failed that test and were deleted; two more were
-re-scoped. What is left is sixteen, and all sixteen are fixed on this branch.
+re-scoped. What is left is seventeen, and all seventeen are fixed on this branch.
 
 The reports are kept as the record of what was wrong and why each fix is shaped
 the way it is; the probe that found each one, in [`../qa`](../qa/README.md), is
@@ -25,6 +25,7 @@ the check which finds a bug is usually the one nobody had run yet.
 | [14](014-a-sum-over-integers-in-duckdb-is-rounded.md) | A `SUM` over an integer column in DuckDB comes back rounded | High |
 | [15](015-the-schemas-relationships-are-additive-only.md) | A schema's `relationships` are additive only, so the model sees a graph the caller did not describe | High |
 | [18](018-an-integer-entity-key-can-be-declared-float64.md) | An integer entity key can be declared `float64`, and the endpoint refuses the request | High |
+| [19](019-a-list-valued-column-crashes-or-is-stringified.md) | A list-valued column crashes in one place and is silently stringified in another | High |
 | [2](002-non-unique-primary-key-accepted.md) | A primary key that is knowingly not unique is used to join and correlate, and nothing says so | Medium |
 | [3](003-engine-exceptions-escape-the-error-surface.md) | Engine exceptions escape the SDK's error surface, one advertising an API this SDK does not have | Medium |
 | [4](004-uint64-declared-as-int64.md) | A `uint64` column is declared `int64` while carrying values `int64` cannot hold | Medium |

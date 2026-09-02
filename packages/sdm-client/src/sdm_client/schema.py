@@ -41,7 +41,11 @@ from typing import Any
 import pandas as pd
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.wire import UNTYPED, infer_tfm_dtype
+from sdm_client.wire import (
+    UNTYPED,
+    infer_tfm_dtype,
+    require_scalar_cells,
+)
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -501,6 +505,11 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
             f'table {name!r} column names must be strings; got {non_strings}',
             code='INVALID_REQUEST',
         )
+    # Before any column is described: a list cell cannot be typed, and asking
+    # would raise `unhashable type: 'list'` from inside pandas rather than say
+    # anything useful.
+    for column in frame.columns:
+        require_scalar_cells(frame[column], f'{name}.{column}')
 
     columns = {
         column: Column(

@@ -1,0 +1,147 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""A column of lists is refused, in the same words, wherever it enters.
+
+SDM's own `Task.classification` covers "binary, multi-class, or multi-label",
+so it is reasonable to try a multi-label target. The wire does not: `CellValue`
+is documented as excluding array-valued prediction scalars *on purpose*, so a
+set of labels has no shape to come back in.
+
+Before this, the same input produced two different wrong answers. Building a
+schema raised `TypeError: unhashable type: 'list'` from inside pandas, because
+`_stype_of` counts distinct values. And a list that reached the wire without a
+schema -- the rows being scored are not described by one -- was written by
+`serialize_cell`'s `str(value)` fallback as the repr of a Python list, so the
+model was asked about the text `"['a', 'b']"`.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from sdm_client import Request, Schema
+from sdm_client.adapters.tabular import TabularAdapter
+from sdm_client.errors import StructuredDataError
+
+TAGS = [['a', 'b'], ['b'], ['a'], ['a', 'b'], ['b'], ['a']]
+
+
+def context(**columns) -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            'row_id': range(6),
+            'v': [float(index) for index in range(6)],
+            'y': [index % 2 for index in range(6)],
+        }
+    )
+    for name, values in columns.items():
+        frame[name] = values
+    return frame
+
+
+def scored(**columns) -> pd.DataFrame:
+    frame = pd.DataFrame({'row_id': [900], 'v': [1.0]})
+    for name, values in columns.items():
+        frame[name] = values
+    return frame
+
+
+# --- the target ------------------------------------------------------------
+
+
+def test_a_multi_label_target_is_refused_as_one():
+    """Named for what it is, not as a typing problem."""
+    with pytest.raises(StructuredDataError) as error:
+        Request(
+            context=context(tags=TAGS),
+            predict=scored(),
+            target='tags',
+            task='classification',
+        )
+    message = str(error.value)
+    assert error.value.code == 'UNSUPPORTED_REQUEST'
+    assert 'multi-label' in message
+    assert 'tags' in message
+
+
+# --- a feature, which is a different sentence ------------------------------
+
+
+def test_a_list_feature_in_the_context_is_refused_by_the_schema():
+    with pytest.raises(StructuredDataError) as error:
+        Schema.from_data({'t': context(tags=TAGS)})
+    message = str(error.value)
+    assert 't.tags' in message
+    assert 'list' in message
+
+
+def test_a_list_present_only_in_the_rows_to_score_is_refused():
+    """No schema describes those rows, so the wire is the only guard."""
+    request = Request(
+        context=context(tags=['a', 'b', 'a', 'b', 'a', 'b']),
+        predict=scored(tags=[['a', 'b']]),
+        target='y',
+        task='classification',
+    )
+    with pytest.raises(StructuredDataError) as error:
+        list(TabularAdapter().prediction_plan(request, ('prediction',)))
+    assert 'tags' in str(error.value)
+
+
+def test_a_list_is_never_written_as_the_repr_of_one():
+    """The failure this replaces: `"['a', 'b']"` as an ordinary category."""
+    from sdm_client.wire import serialize_column
+
+    with pytest.raises(StructuredDataError):
+        serialize_column(pd.Series(TAGS, name='tags'), 'string')
+
+
+# --- every shape of sequence, not just `list` ------------------------------
+
+
+@pytest.mark.parametrize(
+    'value',
+    [['a', 'b'], ('a', 'b'), {'a', 'b'}, np.array([1, 2])],
+    ids=['list', 'tuple', 'set', 'ndarray'],
+)
+def test_any_sequence_cell_is_refused(value):
+    frame = context()
+    frame['seq'] = [value] * 6
+    with pytest.raises(StructuredDataError):
+        Schema.from_data({'t': frame})
+
+
+def test_a_string_is_not_a_sequence_for_this_purpose():
+    """A string is iterable, and is exactly what a categorical column holds."""
+    schema = Schema.from_data(
+        {'t': context(tag=['a', 'b', 'a', 'b', 'a', 'b'])}
+    )
+    assert schema['t']['tag'].stype == 'categorical'
+
+
+# --- nothing ordinary changed ----------------------------------------------
+
+
+def test_an_ordinary_frame_still_builds():
+    schema = Schema.from_data({'t': context()})
+    assert sorted(schema['t']) == ['row_id', 'v', 'y']
+
+
+def test_an_ordinary_request_still_encodes():
+    request = Request(
+        context=context(), predict=scored(), target='y', task='classification'
+    )
+    plan = next(
+        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+    )
+    assert plan['predict']['instance_table']['rows'] == [[900, 1.0]]
+
+
+def test_a_null_beside_a_list_is_still_a_null():
+    frame = context()
+    frame['maybe'] = [None] * 6
+    assert Schema.from_data({'t': frame})['t']['maybe'].dtype == 'string'

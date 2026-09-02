@@ -54,6 +54,35 @@ _OBJECT_CONTENT_DTYPES = {
 }
 
 
+def require_scalar_cells(series: pd.Series, described: str) -> None:
+    r"""Refuse a column whose cells are lists.
+
+    The contract carries a `stringlist` dtype, and says what it is for: array
+    cells exist "so that the stringlist dtype can carry JSON arrays **without
+    permitting array-valued prediction scalars**" -- temporal link prediction
+    labels, which no model reachable from here serves.
+
+    Nothing in this client sends one. `pandas.api.types.infer_dtype` reports a
+    list column as `mixed`, which falls through to `string`, and `serialize_cell`
+    ends in `str(value)` -- so a column of lists used to travel as the *repr* of
+    a Python list, `"['a', 'b']"`, as an ordinary category. That is silent, and
+    the model is asked about text that was never in the data.
+
+    Raised here rather than only where a schema is built, because a value can
+    reach the wire without one: the rows being scored are not part of the
+    schema, and a caller may supply a schema of their own.
+    """
+    for value in series:
+        if isinstance(value, (list, tuple, set, np.ndarray)):
+            raise StructuredDataError(
+                f'{described} holds a list, and a list-valued column is not '
+                f'something this client can send. Multi-label targets are not '
+                f'supported by these models; for a feature, give one value per '
+                f'row',
+                code='UNSUPPORTED_REQUEST',
+            )
+
+
 def infer_tfm_dtype(series: pd.Series) -> str:
     r"""The wire dtype that represents ``series``' values.
 
@@ -297,4 +326,8 @@ def serialize_cell(value: Any, dtype: str) -> Any:
 
 
 def serialize_column(series: pd.Series, dtype: str) -> list[Any]:
+    # Every table reaches the wire through here, including the rows being
+    # scored, which no schema describes. A list cell would otherwise be written
+    # by `serialize_cell`'s `str(value)` fallback as the repr of a Python list.
+    require_scalar_cells(series, f'column {series.name!r}')
     return [serialize_cell(value, dtype) for value in series.tolist()]
