@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import PurePosixPath
 from typing import Any
@@ -28,6 +29,7 @@ _PARQUET_SUFFIXES = ('.parquet', '.pq', '.parq')
 _CSV_SUFFIXES = ('.csv', '.txt')
 _COMPRESSION_SUFFIXES = ('.gz', '.bz2', '.zip', '.xz', '.zst', '.tar')
 _FILE_FORMATS = ('csv', 'parquet')
+
 
 _NULLABLE_INTEGER_DTYPES = {
     pa.int8(): pd.Int8Dtype(),
@@ -164,20 +166,27 @@ def read_table(
         cursor, owned = _query_handle(connection)
         try:
             cursor.execute(sql)
-            if hasattr(cursor, 'fetch_arrow_all'):
-                arrow_table = _columnar_fetch(cursor, 'fetch_arrow_all')
-                if arrow_table is not None:
-                    return _arrow_to_pandas(arrow_table)
+            # Arrow first, every time. A driver's own pandas conversion decides
+            # for itself what a wide integer becomes, and DuckDB's `fetchdf`
+            # turns a HUGEINT -- which is what `sum(BIGINT)` widens to -- into a
+            # float64, rounding it. Arrow carries the exact value through to
+            # `_arrow_to_pandas`, which knows not to widen it.
+            for method in (
+                'fetch_arrow_all',
+                'to_arrow_table',
+                'fetch_arrow_table',
+                'fetchall_arrow',
+            ):
+                if hasattr(cursor, method):
+                    arrow_table = _columnar_fetch(cursor, method)
+                    if arrow_table is not None:
+                        return _arrow_to_pandas(arrow_table)
             if hasattr(cursor, 'fetch_pandas_all'):
                 frame = _columnar_fetch(cursor, 'fetch_pandas_all')
                 if frame is not None:
                     return frame
             if hasattr(cursor, 'fetchdf'):
                 return cursor.fetchdf()
-            if hasattr(cursor, 'fetch_arrow_table'):
-                return _arrow_to_pandas(cursor.fetch_arrow_table())
-            if hasattr(cursor, 'fetchall_arrow'):
-                return _arrow_to_pandas(cursor.fetchall_arrow())
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
             return pd.DataFrame(rows, columns=columns)
@@ -194,6 +203,11 @@ def _arrow_to_pandas(arrow_table: Any) -> pd.DataFrame:
     ``float64``, which silently rounds values beyond 2**53. Such columns use a
     null-aware integer dtype instead, matching what DuckDB already returns.
     Integer columns without nulls keep their numpy dtype.
+
+    A decimal column needs nothing here: Arrow hands it to pandas as ``Decimal``
+    objects, which the wire layer types by value. It is the *driver's* own
+    pandas conversion that rounds those, which is why the caller reaches for
+    Arrow first.
     """
     df = arrow_table.to_pandas(types_mapper=_NULLABLE_INTEGER_DTYPES.get)
     for position, dtype in enumerate(df.dtypes):
@@ -229,7 +243,9 @@ def _read_local(
         if isinstance(data, pd.DataFrame):
             return data
         try:
-            return pd.DataFrame(data)
+            return _narrow_nullable_dtypes(
+                pd.DataFrame(_integer_columns_exactly(data))
+            )
         except (ValueError, TypeError) as error:
             raise ConnectorError(
                 f'local connector could not build a DataFrame from '
@@ -329,6 +345,28 @@ def _read_s3(
     return _read_file(path, storage_options=storage_options, format=format)
 
 
+def _is_directory(path: str) -> bool:
+    r"""Whether ``path`` names a directory, local or remote.
+
+    ``os.path.isdir`` answers only for the local filesystem, so an ``s3://``
+    prefix was never a directory to it and a partitioned Parquet dataset --
+    which is how tabular data lands in object storage -- was refused unless the
+    caller happened to write a trailing slash. The filesystem that owns the
+    path is asked instead.
+    """
+    scheme = urlparse(path).scheme
+    if len(scheme) <= 1 or scheme == 'file':
+        return os.path.isdir(path)
+    try:
+        import fsspec
+    except ImportError:  # pragma: no cover - fsspec ships with s3fs
+        return False
+    try:
+        return bool(fsspec.filesystem(scheme).isdir(path))
+    except Exception:  # noqa: BLE001 - an unreadable path is not a directory
+        return False
+
+
 def _resolve_format(path: str) -> str:
     r"""Decide the file format from ``path``, or reject it.
 
@@ -337,7 +375,7 @@ def _resolve_format(path: str) -> str:
     into a single column. Only the documented formats are read, and a directory
     (with or without a trailing separator) is a Parquet dataset.
     """
-    if path.endswith(('/', os.sep)) or os.path.isdir(path):
+    if path.endswith(('/', os.sep)) or _is_directory(path):
         return 'parquet'
     suffix = PurePosixPath(path.lower()).suffix
     if suffix in _COMPRESSION_SUFFIXES:
@@ -355,6 +393,62 @@ def _resolve_format(path: str) -> str:
         code='INVALID_CONNECTOR_ARGS',
         details={'path': path, 'suffix': suffix},
     )
+
+
+def _narrow_nullable_dtypes(frame: pd.DataFrame) -> pd.DataFrame:
+    r"""Put columns with no nulls back into their plain numpy dtype.
+
+    A null-aware dtype is only needed where a null actually is. Narrowing the
+    rest keeps an ordinary frame looking ordinary -- ``int64`` rather than
+    ``Int64``, ``object`` rather than ``string`` -- which is what a caller
+    comparing dtypes expects, and what the Arrow path already does.
+    """
+    for position, dtype in enumerate(frame.dtypes):
+        if not isinstance(dtype, pd.api.extensions.ExtensionDtype):
+            continue
+        column = frame.iloc[:, position]
+        if column.isna().any():
+            continue
+        if pd.api.types.is_integer_dtype(dtype) or pd.api.types.is_float_dtype(
+            dtype
+        ):
+            frame.isetitem(position, column.astype(dtype.numpy_dtype))
+        elif isinstance(dtype, pd.StringDtype):
+            frame.isetitem(position, column.astype(object))
+        elif isinstance(dtype, pd.BooleanDtype):
+            frame.isetitem(position, column.astype(bool))
+    return frame
+
+
+def _integer_columns_exactly(data: Any) -> Any:
+    r"""Build integer columns as ``Int64`` before pandas can widen them.
+
+    ``pd.DataFrame({'id': [big, None]})`` promotes to ``float64``, which rounds
+    every value past 2**53 as the frame is built. By then the value is gone --
+    casting back to an integer afterwards cannot recover it -- so the column
+    has to be constructed with a dtype that holds a null.
+    """
+    if not isinstance(data, Mapping):
+        return data
+    built: dict[Any, Any] = {}
+    for name, values in data.items():
+        if isinstance(values, (list, tuple)) and any(
+            isinstance(value, int) and not isinstance(value, bool)
+            for value in values
+        ):
+            present = [
+                value
+                for value in values
+                if value is not None and value == value  # noqa: PLR0124
+            ]
+            if present and all(
+                isinstance(value, int) and not isinstance(value, bool)
+                for value in present
+            ):
+                built[name] = pd.array(list(values), dtype='Int64')
+                continue
+        built[name] = values
+    return built
 
 
 def _read_file(
@@ -380,4 +474,13 @@ def _read_file(
     ):
         if resolved == 'parquet':
             return pd.read_parquet(path, storage_options=storage_options)
-        return pd.read_csv(path, storage_options=storage_options)
+        # A blank in an integer column makes pandas promote the whole column
+        # to float64 as it parses, rounding every value past 2**53 before the
+        # frame exists. A null-aware backend keeps the integer an integer.
+        return _narrow_nullable_dtypes(
+            pd.read_csv(
+                path,
+                storage_options=storage_options,
+                dtype_backend='numpy_nullable',
+            )
+        )

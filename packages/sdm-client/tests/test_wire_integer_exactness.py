@@ -62,10 +62,39 @@ def test_a_fractional_decimal_is_still_a_float():
     assert cells([Decimal('12.3456'), Decimal('1.00')]) == [12.3456, 1.0]
 
 
-def test_a_decimal_too_wide_for_int64_is_refused_rather_than_rounded():
-    with pytest.raises(StructuredDataError) as error:
-        cells([Decimal('123456789012345678901234567890')])
-    assert 'strings' in str(error.value)
+def test_a_decimal_too_wide_for_int64_travels_as_a_string():
+    """The digits survive, which is what the relational encoder does too."""
+    series = pd.Series(
+        [Decimal('123456789012345678901234567890')], dtype=object
+    )
+    assert infer_tfm_dtype(series) == 'string'
+    assert cells([Decimal('123456789012345678901234567890')]) == [
+        '123456789012345678901234567890'
+    ]
+
+
+@pytest.mark.parametrize(
+    'value', [2**63, 2**64, 10**20], ids=['int64 max + 1', '2**64', '10**20']
+)
+def test_a_whole_decimal_just_past_int64_is_not_rounded_into_a_float(value):
+    """`float(2**63)` is exact, so an exactness check alone would pass it."""
+    assert cells([Decimal(str(value))]) == [str(value)]
+
+
+def test_the_int64_boundary_decimal_is_still_an_integer():
+    assert (
+        infer_tfm_dtype(pd.Series([Decimal(str(INT64_MAX))], dtype=object))
+        == 'int64'
+    )
+
+
+def test_a_decimal_too_large_for_a_float_does_not_raise_overflowerror():
+    """`float(Decimal('1e400'))` is `inf`, and `int(inf)` is an OverflowError."""
+    assert cells([Decimal('1e400')]) == ['1E+400']
+
+
+def test_a_column_mixing_a_wide_decimal_with_a_small_one_travels_whole():
+    assert cells([Decimal(str(2**63)), Decimal('1')]) == [str(2**63), '1']
 
 
 def test_a_fractional_decimal_past_the_safe_range_is_refused():

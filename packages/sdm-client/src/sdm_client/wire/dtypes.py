@@ -109,9 +109,10 @@ def _decimal_dtype(series: pd.Series) -> str:
     is reported as the integer it is, and travels under the rule that keeps
     those exact.
 
-    A value too wide even for ``int64`` gets ``float64`` here and is refused by
-    :func:`serialize_cell`, which can name it. Reporting ``string`` instead
-    would change what the model is asked to predict on.
+    A whole number too wide even for ``int64`` travels as ``string``, which
+    keeps the digits exactly and is what the relational encoder does with the
+    same input. Anything else is a ``float64``, and :func:`serialize_cell`
+    refuses the values that cannot survive one.
     """
     integral = True
     for value in series:
@@ -123,7 +124,7 @@ def _decimal_dtype(series: pd.Series) -> str:
             return 'float64'
         if not INT64_MIN <= int(value) <= INT64_MAX:
             integral = False
-    return 'int64' if integral else 'float64'
+    return 'int64' if integral else 'string'
 
 
 def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
@@ -240,6 +241,14 @@ def serialize_cell(value: Any, dtype: str) -> Any:
     if dtype in ('float64', 'float32'):
         _require_finite(value)
         number = float(value)
+        if not math.isfinite(number):
+            # A finite value whose float conversion is not: too large for
+            # the dtype to hold at all, rather than merely rounded by it.
+            raise StructuredDataError(
+                f'value {value!r} is outside the range {dtype} represents; '
+                'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            )
         whole = _integral_value(value)
         if (
             whole is None
