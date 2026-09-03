@@ -110,11 +110,15 @@ not nested: pandas hands their cells back as `bytes`. `pa.uuid()` is walked for
 the same reason and passes, since its cells are `uuid.UUID` objects. Both
 directions are pinned: twelve Arrow types walked, ten kept on the fast path —
 and a sweep asserts the invariant itself rather than any list of types, because
-enumerating them is what went wrong four times running. It builds every factory
-`pyarrow` exposes, parameterised ones included, and for each type the gate lets
-past checks that no cell it can hold is one the rule would refuse: 30 types
-cleared and checked, 12 walked, with the count asserted so the sweep cannot
-quietly stop reaching anything. That question
+enumerating them is what went wrong four times running. Its candidates come from Arrow's own
+taxonomy — every `pa.types.is_*` predicate — so a type pyarrow adds later
+arrives with its predicate and is picked up, and for each type the gate lets
+past it checks that no cell it can hold is one the rule would refuse: 27 types
+cleared and checked, 9 walked, with the count asserted so the sweep cannot
+quietly stop reaching anything. Only those names are called: sweeping every
+callable on the module would invoke `log_memory_allocations()` and
+`create_library_symlinks()`, which change process-global state and the
+installed package. That question
 is asked of the dtype rather than by elimination, because `is_object_dtype`
 alone would call an **Arrow-backed list column** scalar — and that is exactly
 what `pd.read_parquet(dtype_backend='pyarrow')` gives for one, which would have

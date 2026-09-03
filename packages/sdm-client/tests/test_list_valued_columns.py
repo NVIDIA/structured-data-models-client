@@ -533,21 +533,19 @@ def test_a_frozenset_is_refused():
 
 
 def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
-    """The invariant, checked against every Arrow type rather than a list.
+    """The invariant, checked against Arrow's own type taxonomy.
 
     Enumerating types is what went wrong four times -- a list view, then binary,
     then a binary view, then an interval -- so this asserts the property: for
     every type the gate lets past, no cell it can hold may be one the cell rule
     would refuse. A type the gate walks is safe by construction and is skipped.
 
-    Parameterised factories are built with arguments here rather than dropped,
-    because they are the interesting ones, and the count is asserted so the
-    sweep cannot quietly hollow out if pyarrow's surface changes.
+    The candidates come from `pa.types.is_*`, so a type pyarrow adds later
+    arrives with its predicate and is picked up. Only those names are called:
+    sweeping every callable on the module would invoke
+    `log_memory_allocations()` and `create_library_symlinks()`, which change
+    process-global state and the installed package.
     """
-    import contextlib
-    import inspect
-    import io
-
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars, is_container
 
@@ -558,9 +556,11 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
         'large_list_view': (pa.string(),),
         'map_': (pa.string(), pa.int64()),
         'struct': ([('a', pa.int64())],),
+        'decimal': (10, 2),
+        'decimal32': (8, 2),
+        'decimal64': (10, 2),
         'decimal128': (10, 2),
         'decimal256': (10, 2),
-        'decimal': (10, 2),
         'timestamp': ('us',),
         'duration': ('us',),
         'time32': ('s',),
@@ -568,39 +568,29 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
         'dictionary': (pa.int8(), pa.string()),
         'run_end_encoded': (pa.int16(), pa.string()),
         'fixed_shape_tensor': (pa.float32(), (2,)),
+        'fixed_size_list': (pa.string(), 2),
+        'fixed_size_binary': (4,),
     }
 
-    def build(name: str):
-        factory = getattr(pa, name, None)
-        if factory is None or not callable(factory):
-            return None
-        try:
-            parameters = inspect.signature(factory).parameters.values()
-        except (TypeError, ValueError):
-            return None
-        required = [
-            parameter
-            for parameter in parameters
-            if parameter.default is parameter.empty
-            and parameter.kind
-            in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
-        ]
-        args = arguments.get(name, ())
-        if required and not args:
-            return None
-        try:
-            # Some module-level callables print a banner when called.
-            with contextlib.redirect_stdout(io.StringIO()):
-                built = factory(*args)
-        except Exception:  # noqa: BLE001 - not a type factory
-            return None
-        return built if isinstance(built, pa.DataType) else None
+    def candidates():
+        for predicate in dir(pa.types):
+            if not predicate.startswith('is_'):
+                continue
+            stem = predicate[3:]
+            for name in (stem, f'{stem}_'):
+                factory = getattr(pa, name, None)
+                if factory is not None and callable(factory):
+                    yield name, factory
+                    break
 
     examined = 0
     offenders = []
-    for name in dir(pa):
-        arrow_type = build(name)
-        if arrow_type is None:
+    for name, factory in candidates():
+        try:
+            arrow_type = factory(*arguments.get(name, ()))
+        except Exception:  # noqa: BLE001 - needs arguments this does not know
+            continue
+        if not isinstance(arrow_type, pa.DataType):
             continue
         try:
             dtype = pd.ArrowDtype(arrow_type)
@@ -621,5 +611,5 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
                 break
 
     assert not offenders
-    # A sweep that reaches nothing would pass silently.
+    # A sweep that reaches nothing would pass just as quietly.
     assert examined >= 20, f'the sweep only examined {examined} types'
