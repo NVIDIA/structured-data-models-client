@@ -79,18 +79,20 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
 
     ``pa.types.is_nested`` answers for the containers -- list, its view and
     large variants, fixed-size list, struct, map, union -- but not for the
-    encodings that *wrap* one. A dictionary or a run-end encoding of a list is
-    still a column of lists, so both are unwrapped and asked again. Enumerating
-    the nested types instead was how the previous attempt let a list view
-    through.
+    types that *wrap* one. A dictionary or a run-end encoding of a list, and an
+    extension type whose storage is a list, are all still columns of lists, so
+    each is unwrapped and the question asked again. Enumerating the nested
+    types instead was how an earlier attempt let a list view through.
     """
     import pyarrow as pa
 
     while True:
-        if pa.types.is_dictionary(arrow_type):
-            arrow_type = arrow_type.value_type
+        if isinstance(arrow_type, pa.ExtensionType):
+            arrow_type = arrow_type.storage_type
             continue
-        if pa.types.is_run_end_encoded(arrow_type):
+        if pa.types.is_dictionary(arrow_type) or pa.types.is_run_end_encoded(
+            arrow_type
+        ):
             arrow_type = arrow_type.value_type
             continue
         return not pa.types.is_nested(arrow_type)

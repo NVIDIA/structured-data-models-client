@@ -251,3 +251,41 @@ def test_a_categorical_of_sequences_is_refused():
     )
     with pytest.raises(StructuredDataError):
         require_scalar_cells(series, 'x')
+
+
+def test_an_extension_type_over_a_list_is_walked():
+    """`is_nested` is False for the extension type; its storage is a list."""
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    class ListExtension(pa.ExtensionType):
+        def __init__(self) -> None:
+            super().__init__(pa.list_(pa.string()), 'sdm.test.listext')
+
+        def __arrow_ext_serialize__(self) -> bytes:
+            return b''
+
+        @classmethod
+        def __arrow_ext_deserialize__(cls, storage_type, serialized):
+            return cls()
+
+    assert not pa.types.is_nested(ListExtension())
+    assert not _holds_only_scalars(pd.ArrowDtype(ListExtension()))
+
+
+def test_an_extension_type_over_a_scalar_is_not_walked():
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    class StringExtension(pa.ExtensionType):
+        def __init__(self) -> None:
+            super().__init__(pa.string(), 'sdm.test.strext')
+
+        def __arrow_ext_serialize__(self) -> bytes:
+            return b''
+
+        @classmethod
+        def __arrow_ext_deserialize__(cls, storage_type, serialized):
+            return cls()
+
+    assert _holds_only_scalars(pd.ArrowDtype(StringExtension()))
