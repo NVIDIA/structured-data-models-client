@@ -56,7 +56,8 @@ Please read them before filing.
   `query=`, `path=` and `storage_options=` are executed or resolved as written,
   with the credentials you supply, as is a `ColumnSpec(expr=...)` you write
   yourself. Do not pass attacker-controlled values into them. Entity
-  identifiers are the exception: no sampler interpolates them into SQL text.
-  SQLite, Snowflake and Databricks bind them as query parameters; DuckDB
-  registers them as a temporary relation the query joins against. Either way
-  they may come from untrusted input.
+  identifiers are the exception, and may come from untrusted input: no sampler
+  ever interpolates one into SQL text. Depending on the backend and on which
+  query is being built, they travel either as bound parameters or as a
+  temporary table the query joins against, and both paths keep the value out
+  of the statement.
