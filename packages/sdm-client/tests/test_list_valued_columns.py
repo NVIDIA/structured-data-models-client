@@ -380,15 +380,68 @@ def test_a_canonical_arrow_extension_over_a_list_is_walked():
     assert not _holds_only_scalars(pd.ArrowDtype(tensor))
 
 
-@pytest.mark.parametrize('name', ['uuid', 'json_'])
-def test_a_canonical_arrow_extension_over_a_scalar_is_not_walked(name):
+def test_a_canonical_arrow_extension_over_a_scalar_is_not_walked():
+    """`json_` stores a string, so the gate can skip it outright."""
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars
 
-    factory = getattr(pa, name, None)
+    factory = getattr(pa, 'json_', None)
     if factory is None:
-        pytest.skip(f'pyarrow has no {name}')
+        pytest.skip('pyarrow has no json_')
     assert _holds_only_scalars(pd.ArrowDtype(factory()))
+
+
+def test_a_uuid_column_is_walked_and_passes():
+    """`pa.uuid()` stores a fixed-size binary, which the gate cannot clear.
+
+    So it is walked -- and its cells are `uuid.UUID` objects, not bytes, so
+    they pass. The gate is conservative and the cell rule is the authority;
+    the cost of that is one walk over a column that turns out to be fine.
+    """
+    pa = pytest.importorskip('pyarrow')
+    import uuid as uuid_module
+
+    from sdm_client.wire import serialize_column
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    value = uuid_module.uuid4()
+    series = pd.Series(
+        pa.array([value.bytes], type=pa.uuid()).to_pandas(),
+        dtype=pd.ArrowDtype(pa.uuid()),
+    )
+    assert not _holds_only_scalars(series.dtype)
+    assert serialize_column(series, 'string') == [str(value)]
+
+
+@pytest.mark.parametrize(
+    'arrow_binary', ['binary', 'large_binary', 'fixed_size_binary'], ids=str
+)
+def test_an_arrow_binary_column_is_walked(arrow_binary):
+    """Its cells are `bytes`, which the cell rule refuses.
+
+    The gate and the cell rule have to agree, or the fast path would skip a
+    column the rule would have rejected.
+    """
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    arrow_type = {
+        'binary': pa.binary(),
+        'large_binary': pa.large_binary(),
+        'fixed_size_binary': pa.binary(4),
+    }[arrow_binary]
+    assert not _holds_only_scalars(pd.ArrowDtype(arrow_type))
+
+
+def test_a_container_target_is_refused_as_a_multi_label_one():
+    """The target guard asks the same question the wire does, not its own."""
+    frame = context()
+    frame['tgt'] = [range(2)] * 6
+    with pytest.raises(StructuredDataError) as error:
+        Request(
+            context=frame, predict=scored(), target='tgt', task='classification'
+        )
+    assert 'multi-label' in str(error.value)
 
 
 def test_a_mapping_cell_is_refused_too():

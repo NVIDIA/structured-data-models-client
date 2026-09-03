@@ -99,6 +99,15 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
         ):
             arrow_type = arrow_type.value_type
             continue
+        # Binary is not nested, but pandas hands its cells back as `bytes`,
+        # which `_is_container` refuses -- so the two questions have to agree
+        # or the fast path would skip a column the cell rule would reject.
+        if pa.types.is_binary(arrow_type) or pa.types.is_large_binary(
+            arrow_type
+        ):
+            return False
+        if pa.types.is_fixed_size_binary(arrow_type):
+            return False
         return not pa.types.is_nested(arrow_type)
 
 
@@ -128,7 +137,7 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     if _holds_only_scalars(series.dtype):
         return
     for value in series:
-        if _is_container(value):
+        if is_container(value):
             shape = 'a mapping' if isinstance(value, Mapping) else 'a container'
             raise StructuredDataError(
                 f'{described} holds {shape} ({type(value).__name__}), and a '
@@ -139,7 +148,7 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
             )
 
 
-def _is_container(value: Any) -> bool:
+def is_container(value: Any) -> bool:
     r"""Whether ``value`` holds other values rather than being one.
 
     Asked as a property, not as a list of types. Enumerating them is how a

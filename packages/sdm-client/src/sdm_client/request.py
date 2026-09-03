@@ -33,11 +33,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from sdm_client.errors import StructuredDataError
 from sdm_client.schema import Schema
+from sdm_client.wire import is_container
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -170,7 +170,7 @@ class Request:
                 f'task must be one of {list(TASK_KINDS)}, got {task!r}',
                 code='INVALID_REQUEST',
             )
-        if target in context.columns and _has_list_cells(context[target]):
+        if target in context.columns and _has_container_cells(context[target]):
             # Said here because this is the only place that knows which column
             # is the target. SDM's own `Task.classification` covers "binary,
             # multi-class, or multi-label", but the wire does not: `CellValue`
@@ -349,10 +349,9 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
     return tuple(key)
 
 
-def _has_list_cells(series: pd.Series) -> bool:
-    return any(
-        isinstance(value, (list, tuple, set, np.ndarray)) for value in series
-    )
+def _has_container_cells(series: pd.Series) -> bool:
+    r"""The same question the wire asks, so the two cannot disagree."""
+    return any(is_container(value) for value in series)
 
 
 def _require_frame(value: Any, name: str) -> pd.DataFrame:
