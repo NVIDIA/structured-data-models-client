@@ -83,11 +83,15 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
     extension type whose storage is a list, are all still columns of lists, so
     each is unwrapped and the question asked again. Enumerating the nested
     types instead was how an earlier attempt let a list view through.
+
+    ``BaseExtensionType`` rather than ``ExtensionType``: pyarrow's own
+    canonical extensions -- ``fixed_shape_tensor``, whose storage is a
+    fixed-size list -- are the former and not the latter.
     """
     import pyarrow as pa
 
     while True:
-        if isinstance(arrow_type, pa.ExtensionType):
+        if isinstance(arrow_type, pa.BaseExtensionType):
             arrow_type = arrow_type.storage_type
             continue
         if pa.types.is_dictionary(arrow_type) or pa.types.is_run_end_encoded(
@@ -99,7 +103,7 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
 
 
 def require_scalar_cells(series: pd.Series, described: str) -> None:
-    r"""Refuse a column whose cells are lists.
+    r"""Refuse a column whose cells are lists or mappings.
 
     The contract carries a `stringlist` dtype, and says what it is for: array
     cells exist "so that the stringlist dtype can carry JSON arrays **without
@@ -124,9 +128,10 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     if _holds_only_scalars(series.dtype):
         return
     for value in series:
-        if isinstance(value, (list, tuple, set, np.ndarray)):
+        if isinstance(value, (list, tuple, set, frozenset, dict, np.ndarray)):
+            shape = 'a mapping' if isinstance(value, dict) else 'a list'
             raise StructuredDataError(
-                f'{described} holds a list, and a list-valued column is not '
+                f'{described} holds {shape}, and a nested column is not '
                 f'something this client can send. Multi-label targets are not '
                 f'supported by these models; for a feature, give one value per '
                 f'row',

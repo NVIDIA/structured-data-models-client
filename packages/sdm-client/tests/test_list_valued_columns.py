@@ -289,3 +289,45 @@ def test_an_extension_type_over_a_scalar_is_not_walked():
             return cls()
 
     assert _holds_only_scalars(pd.ArrowDtype(StringExtension()))
+
+
+def test_a_canonical_arrow_extension_over_a_list_is_walked():
+    """`fixed_shape_tensor` is a `BaseExtensionType`, not an `ExtensionType`.
+
+    Its storage is a fixed-size list and pandas yields Python lists for it, so
+    checking only for `ExtensionType` let it through.
+    """
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    tensor = pa.fixed_shape_tensor(pa.float32(), (2,))
+    assert not isinstance(tensor, pa.ExtensionType)
+    assert isinstance(tensor, pa.BaseExtensionType)
+    assert not _holds_only_scalars(pd.ArrowDtype(tensor))
+
+
+@pytest.mark.parametrize('name', ['uuid', 'json_'])
+def test_a_canonical_arrow_extension_over_a_scalar_is_not_walked(name):
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    factory = getattr(pa, name, None)
+    if factory is None:
+        pytest.skip(f'pyarrow has no {name}')
+    assert _holds_only_scalars(pd.ArrowDtype(factory()))
+
+
+def test_a_mapping_cell_is_refused_too():
+    """An Arrow struct column yields dicts, which stringified the same way."""
+    from sdm_client.wire import serialize_column
+
+    with pytest.raises(StructuredDataError) as error:
+        serialize_column(pd.Series([{'a': 1}, {'a': 2}], name='meta'), 'string')
+    assert 'mapping' in str(error.value)
+
+
+def test_a_frozenset_is_refused():
+    from sdm_client.wire.dtypes import require_scalar_cells
+
+    with pytest.raises(StructuredDataError):
+        require_scalar_cells(pd.Series([frozenset({'a'})], name='x'), 'x')

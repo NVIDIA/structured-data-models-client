@@ -92,8 +92,9 @@ something the others do not:
   as **"a multi-label target"** rather than as a typing problem. A feature says
   "a list-valued column is not something this client can send".
 
-Tuples, sets and ndarrays are covered too; a string is not, since that is
-exactly what a categorical column holds.
+Tuples, sets, frozensets, ndarrays and mappings are covered too — an Arrow
+`struct` column yields dicts, which stringified as `"{'a': 1}"` by the same
+route. A string is not, since that is exactly what a categorical column holds.
 
 `serialize_column` is on the hot path for every table in every request, so the
 check returns immediately for a dtype that cannot hold a sequence. That question
@@ -106,7 +107,10 @@ Arrow is asked through `pa.types.is_nested`, not by listing the nested types:
 an earlier attempt enumerated list, large_list, fixed_size_list, struct and map,
 and a **list view** went straight through the gap. The types that *wrap* another — a dictionary,
 a run-end encoding, an extension type — are unwrapped first, since a dictionary
-of lists, or an extension over a list, is still a column of lists. On a 10,000-row frame the guard costs 0.02 ms for an integer column,
+of lists, or an extension over a list, is still a column of lists. The
+extension case is tested with `BaseExtensionType` rather than `ExtensionType`,
+because pyarrow's own canonical extensions are the former: `fixed_shape_tensor`
+stores a fixed-size list and pandas yields Python lists for it. On a 10,000-row frame the guard costs 0.02 ms for an integer column,
 0.00 ms for an Arrow string one, and 0.80 ms for an `object` string one.
 
 Tests in `packages/sdm-client/tests/test_list_valued_columns.py`: the target,
