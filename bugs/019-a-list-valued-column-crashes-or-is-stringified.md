@@ -113,9 +113,11 @@ and a sweep asserts the invariant itself rather than any list of types, because
 enumerating them is what went wrong four times running. Its candidates come from Arrow's own
 taxonomy — every `pa.types.is_*` predicate — so a type pyarrow adds later
 arrives with its predicate and is picked up, and for each type the gate lets
-past it checks that no cell it can hold is one the rule would refuse: 27 types
-cleared and checked, 9 walked, with the count asserted so the sweep cannot
-quietly stop reaching anything. Only those names are called: sweeping every
+past it checks that no cell it can hold is one the rule would refuse: 30 types
+cleared and checked, 16 walked, with the count asserted so the sweep cannot
+quietly stop reaching anything. A handful are seeded by hand — the unions,
+`opaque`, `bool8`, `uuid`, `json`, the interval and `fixed_shape_tensor` — since
+the taxonomy has no predicate that reaches them. Only those names are called: sweeping every
 callable on the module would invoke `log_memory_allocations()` and
 `create_library_symlinks()`, which change process-global state and the
 installed package. That question

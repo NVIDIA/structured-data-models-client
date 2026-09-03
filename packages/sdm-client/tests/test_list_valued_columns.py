@@ -572,6 +572,22 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
         'fixed_size_binary': (4,),
     }
 
+    # Types with no `is_*` predicate of their own, or whose predicate names an
+    # abstract family rather than a constructible type. Seeded by hand because
+    # the taxonomy does not reach them, and each is a real Arrow type.
+    seeds = {
+        'opaque_over_string': lambda: pa.opaque(pa.string(), 't', 'v'),
+        'opaque_over_binary': lambda: pa.opaque(pa.binary(), 't', 'v'),
+        'opaque_over_list': lambda: pa.opaque(pa.list_(pa.string()), 't', 'v'),
+        'dense_union': lambda: pa.dense_union([pa.field('a', pa.int64())]),
+        'sparse_union': lambda: pa.sparse_union([pa.field('a', pa.int64())]),
+        'bool8': pa.bool8,
+        'uuid': pa.uuid,
+        'json': pa.json_,
+        'month_day_nano_interval': pa.month_day_nano_interval,
+        'fixed_shape_tensor': lambda: pa.fixed_shape_tensor(pa.float32(), (2,)),
+    }
+
     def candidates():
         for predicate in dir(pa.types):
             if not predicate.startswith('is_'):
@@ -582,6 +598,14 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
                 if factory is not None and callable(factory):
                     yield name, factory
                     break
+        for name, factory in seeds.items():
+            if getattr(
+                pa, name.split('_over_')[0], None
+            ) is not None or name in {
+                'json',
+                'bool8',
+            }:
+                yield name, factory
 
     examined = 0
     offenders = []
@@ -612,4 +636,4 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
 
     assert not offenders
     # A sweep that reaches nothing would pass just as quietly.
-    assert examined >= 20, f'the sweep only examined {examined} types'
+    assert examined >= 25, f'the sweep only examined {examined} types'
