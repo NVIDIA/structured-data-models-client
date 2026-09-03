@@ -26,9 +26,15 @@ Pull requests whose commits are not signed off cannot be merged.
 
 ## Third-party code
 
-New third-party dependencies or bundled code must be recorded in the
-[`NOTICE`](./NOTICE) file with their license and source, and any bundled
-license text included in the repository.
+A new third-party *dependency* is declared in the owning package's
+`pyproject.toml`, and resolved by the package manager at install time;
+[`NOTICE`](./NOTICE) does not cover it, and deliberately says so.
+
+Third-party code *vendored into the tree* is different: it ships with this
+repository, so it must be recorded in [`NOTICE`](./NOTICE) with its license and
+source, its license text included, and its bytes pinned by digest and asserted
+in CI. Today `mermaid.min.js` is the only such tree. Adding a second is a
+decision to discuss on an issue first, not a detail of a pull request.
 
 ## Full text of the DCO
 

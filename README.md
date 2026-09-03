@@ -11,9 +11,6 @@ This client builds the request, sends it to a NIM, and gives you back a
 DataFrame. Inference runs in the NIM, so this package downloads no weights and
 needs no GPU.
 
-> The relational path in this sample arrives in phase 4. The tabular path
-> below it works today against a running NIM.
-
 ```python
 from sdm_client import (
     SDMClient,
