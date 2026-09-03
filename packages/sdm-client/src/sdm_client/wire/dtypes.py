@@ -128,15 +128,33 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     if _holds_only_scalars(series.dtype):
         return
     for value in series:
-        if isinstance(value, (list, tuple, set, frozenset, dict, np.ndarray)):
-            shape = 'a mapping' if isinstance(value, dict) else 'a list'
+        if _is_container(value):
+            shape = 'a mapping' if isinstance(value, Mapping) else 'a container'
             raise StructuredDataError(
-                f'{described} holds {shape}, and a nested column is not '
-                f'something this client can send. Multi-label targets are not '
-                f'supported by these models; for a feature, give one value per '
-                f'row',
+                f'{described} holds {shape} ({type(value).__name__}), and a '
+                f'nested column is not something this client can send. '
+                f'Multi-label targets are not supported by these models; for a '
+                f'feature, give one value per row',
                 code='UNSUPPORTED_REQUEST',
             )
+
+
+def _is_container(value: Any) -> bool:
+    r"""Whether ``value`` holds other values rather than being one.
+
+    Asked as a property, not as a list of types. Enumerating them is how a
+    tuple, then a mapping, then a `range`, then a nested Series each turned out
+    to be missing -- and every one of them would have been written by
+    :func:`serialize_cell`'s `str()` fallback as its *repr*: `"[1, 2]"`,
+    `"{'a': 1}"`, `"range(0, 2)"`.
+
+    A `str` is iterable and is exactly what a text column holds, so it is the
+    one exception. Everything a scalar column legitimately carries -- a number,
+    a `Decimal`, a `UUID`, a timestamp -- is not iterable at all.
+    """
+    if isinstance(value, str):
+        return False
+    return isinstance(value, (Iterable, Mapping, bytes, memoryview))
 
 
 def infer_tfm_dtype(series: pd.Series) -> str:

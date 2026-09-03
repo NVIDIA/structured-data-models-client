@@ -105,14 +105,88 @@ def test_a_list_is_never_written_as_the_repr_of_one():
 
 @pytest.mark.parametrize(
     'value',
-    [['a', 'b'], ('a', 'b'), {'a', 'b'}, np.array([1, 2])],
-    ids=['list', 'tuple', 'set', 'ndarray'],
+    [
+        ['a', 'b'],
+        ('a', 'b'),
+        {'a', 'b'},
+        frozenset({'a'}),
+        {'a': 1},
+        np.array([1, 2]),
+        range(2),
+        b'ab',
+        memoryview(b'ab'),
+        pd.Series([1, 2]),
+        pd.DataFrame({'a': [1]}),
+    ],
+    ids=[
+        'list',
+        'tuple',
+        'set',
+        'frozenset',
+        'dict',
+        'ndarray',
+        'range',
+        'bytes',
+        'memoryview',
+        'Series',
+        'DataFrame',
+    ],
 )
-def test_any_sequence_cell_is_refused(value):
-    frame = context()
-    frame['seq'] = [value] * 6
+def test_any_container_cell_is_refused(value):
+    """Every one of these was written as its own repr by the `str()` fallback.
+
+    Asked as a property rather than a list of types, because the list is how a
+    tuple, then a mapping, then a `range` each turned out to be missing.
+    """
+    from sdm_client.wire.dtypes import require_scalar_cells
+
     with pytest.raises(StructuredDataError):
-        Schema.from_data({'t': frame})
+        require_scalar_cells(pd.Series([value], dtype=object, name='x'), 'x')
+
+
+@pytest.mark.parametrize(
+    'value',
+    [
+        'abc',
+        1,
+        1.5,
+        True,
+        None,
+        np.int64(3),
+        __import__('decimal').Decimal('1.5'),
+        __import__('uuid').uuid4(),
+        __import__('datetime').date(2024, 1, 1),
+        __import__('datetime').datetime(2024, 1, 1),
+    ],
+    ids=[
+        'str',
+        'int',
+        'float',
+        'bool',
+        'None',
+        'np.int64',
+        'Decimal',
+        'UUID',
+        'date',
+        'datetime',
+    ],
+)
+def test_everything_a_scalar_column_carries_still_passes(value):
+    """The guard must not start refusing what a text column legitimately holds."""
+    from sdm_client.wire.dtypes import require_scalar_cells
+
+    require_scalar_cells(pd.Series([value], dtype=object, name='x'), 'x')
+
+
+def test_an_object_with_a_custom_iter_is_refused():
+    class Custom:
+        def __iter__(self):
+            return iter([1, 2])
+
+    from sdm_client.wire.dtypes import require_scalar_cells
+
+    with pytest.raises(StructuredDataError):
+        require_scalar_cells(pd.Series([Custom()], dtype=object, name='x'), 'x')
 
 
 def test_a_string_is_not_a_sequence_for_this_purpose():

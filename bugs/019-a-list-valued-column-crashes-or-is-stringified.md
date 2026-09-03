@@ -92,9 +92,14 @@ something the others do not:
   as **"a multi-label target"** rather than as a typing problem. A feature says
   "a list-valued column is not something this client can send".
 
-Tuples, sets, frozensets, ndarrays and mappings are covered too — an Arrow
-`struct` column yields dicts, which stringified as `"{'a': 1}"` by the same
-route. A string is not, since that is exactly what a categorical column holds.
+**The check asks whether a value is a container, not what type it is.** That
+took four rounds to arrive at: the list of types was missing a tuple, then a
+mapping (an Arrow `struct` column yields dicts, stringified as `"{'a': 1}"`),
+then a `range`, then a nested `Series`. Anything iterable that is not a `str`
+is refused; a `str` is the exception because that is exactly what a text column
+holds, and everything a scalar column legitimately carries — a number, a
+`Decimal`, a `UUID`, a timestamp — is not iterable at all. Both directions are
+pinned: eleven container shapes refused, ten scalar shapes still accepted.
 
 `serialize_column` is on the hot path for every table in every request, so the
 check returns immediately for a dtype that cannot hold a sequence. That question
