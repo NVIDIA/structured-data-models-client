@@ -146,9 +146,9 @@ indent-width=4
 target-version="py310"
 # ANTLR output. `PQLGrammarParser` is a serialized ATN on a single line, so
 # there is nothing here a human edits or a linter can usefully say. To change
-# the language, edit PQLGrammar.g4 and regenerate. Everything else under api/
-# and pql/ is linted: with kumo-api and kumo-pql gone, those trees are ordinary
-# first-party code with a documented origin (see their SOURCE.md).
+# the language, edit PQLGrammar.g4 and regenerate. Everything under api/ is
+# linted: with the packages it was copied from gone, that tree is ordinary
+# first-party code with a documented origin (see api/SOURCE.md).
 extend-exclude=[
     "src/sdm_relational_engine/pql/grammar/PQLGrammarLexer.py",
     "src/sdm_relational_engine/pql/grammar/PQLGrammarParser.py",

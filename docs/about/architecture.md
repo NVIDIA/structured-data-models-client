@@ -515,7 +515,7 @@ Each phase is independently shippable and tested.
 
 | # | Phase | Ships | Done when |
 |---|---|---|---|
-| 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql` vendored, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
+| 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql`, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
 | 2 | **Client + tabular** | `SDMClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
 | 3 | **Connectors** | `sdm-connectors` | every backend reads a table |
 | 4 | **Relational** | `sdm-relational-engine`, relational adapter, PQL materialization | `PredictiveQuery(...).materialize(indices=…)` predicts against the relational NIM |
@@ -561,15 +561,17 @@ OSRB had already validated.
 
 So, as a rule, not a suggestion:
 
-1. Every vendored tree has a **hash manifest** pinned beside it and asserted in CI — a per-file
-   SHA-256 list for `sdm-pql`, a single digest for a bundle like `mermaid.min.js`. This covers
-   `predictive_query` too: it is first-party NVIDIA code, but it is vendored *verbatim*, which makes
-   it just as vulnerable to rename drift.
+1. Every vendored tree has a **digest pinned beside it and asserted in CI** — for `mermaid.min.js`,
+   a single SHA-256 over the bundle.
 2. A test asserts the rename **did not inject target-repo identifiers** into a vendored tree — no
-   `sdm_`, `Schema`, or `sdm-client` strings appearing where upstream has none. Note this is not a
-   blanket ban on the word `kumo`: upstream `predictive_query` legitimately contains NVIDIA copyright
-   and historical `kumo` references, so the assertion is "unchanged from upstream", not "contains no
-   forbidden word".
+   `sdm_`, `Schema`, or `sdm-client` strings appearing where upstream has none. The assertion is
+   "unchanged from upstream", not "contains no forbidden word".
+
+> This rule applied to `predictive_query` while that tree was a verbatim copy of a separate
+> repository. That repository is being retired, so the tree is first-party source of this one now:
+> there is no upstream to diverge from, and a manifest pinned to a baseline nobody can fetch would
+> assert nothing. It is linted and header-checked like any other first-party tree instead. `mermaid`
+> is the only tree the rule still governs.
 3. The rename tool **excludes vendored paths and `assets/` by configuration, before it runs** — then
    the hash test verifies it afterwards. Exclusion prevents the churn; the hash only detects it.
 4. Bumping a vendored bundle means **re-enumerating its components from the new release's manifest** —
