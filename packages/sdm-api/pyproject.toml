@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdm-api"
-version = "0.1.0"
+version = "1.0.0"
 description = "Universal TFM API wire types for the NVIDIA Structured Data Models client"
 readme = "README.md"
 license = "Apache-2.0"

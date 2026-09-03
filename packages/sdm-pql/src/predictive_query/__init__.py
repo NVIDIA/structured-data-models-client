@@ -60,7 +60,7 @@ from predictive_query.schema.typing import (
 )
 from predictive_query.validator import PredictiveQueryValidator
 
-__version__ = '0.1.0'
+__version__ = '1.0.0'
 
 #: The version of the *language*, as distinct from this package. MINOR goes up
 #: when the language accepts something it did not before, so every query valid
