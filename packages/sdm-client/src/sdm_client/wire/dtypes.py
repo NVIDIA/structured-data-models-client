@@ -101,8 +101,10 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
         break
 
     # Each of these gives pandas a scalar cell: a number, a `str`, a
-    # `Timestamp`, a `timedelta`, `None`. Binary is deliberately absent --
-    # pandas hands those back as `bytes`, which the cell rule refuses.
+    # `Timestamp`, a `timedelta`, `None`. Two are deliberately absent. Binary,
+    # because pandas hands those back as `bytes`. And `month_day_nano_interval`,
+    # because its cell is a `MonthDayNano` -- a NamedTuple, and so a `tuple` --
+    # which the cell rule refuses, correctly: it has no scalar form on the wire.
     checks = (
         'is_integer',
         'is_floating',
@@ -115,7 +117,6 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
         'is_time',
         'is_timestamp',
         'is_duration',
-        'is_interval',
         'is_null',
     )
     return any(

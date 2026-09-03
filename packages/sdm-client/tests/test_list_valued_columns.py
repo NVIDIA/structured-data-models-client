@@ -420,6 +420,7 @@ def test_a_uuid_column_is_walked_and_passes():
         'large_binary',
         'binary_view',
         'fixed_size_binary',
+        'month_day_nano_interval',
         'list',
         'large_list',
         'list_view',
@@ -445,6 +446,8 @@ def test_every_arrow_type_whose_cells_are_not_scalars_is_walked(name):
         'large_binary': lambda: pa.large_binary(),
         'binary_view': lambda: pa.binary_view(),
         'fixed_size_binary': lambda: pa.binary(4),
+        # Its cell is a `MonthDayNano`, which is a NamedTuple and so a tuple.
+        'month_day_nano_interval': lambda: pa.month_day_nano_interval(),
         'list': lambda: pa.list_(pa.string()),
         'large_list': lambda: pa.large_list(pa.string()),
         'list_view': lambda: pa.list_view(pa.string()),
