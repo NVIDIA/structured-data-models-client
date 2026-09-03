@@ -60,7 +60,7 @@ Replace `<target>` with the grammar spec you intend to use. As of now we use:
 Example:
 
 ```
-antlr4 -Dlanguage=Python3 PQueryLangGrammar.g4 -visitor -no-listener
+antlr4 -Dlanguage=Python3 PQLGrammar.g4 -visitor -no-listener
 ```
 
 ### Test mode
@@ -70,13 +70,13 @@ In order to test grammar changes using a prompt, use the following:
 1. Generate Java version of the grammar
 
 ```
-antlr4 PQueryLangGrammar.g4
+antlr4 PQLGrammar.g4
 ```
 
 2. Compile the generated java code:
 
 ```
-javac PQueryLangGrammar*.java
+javac PQLGrammar*.java
 ```
 
 3. Run grun test to open up test prompt. Using the `tokens` flags is going
@@ -84,7 +84,7 @@ javac PQueryLangGrammar*.java
    a graphical version of AST.
 
 ```
-grun PQueryLangGrammar prog -tokens -gui
+grun PQLGrammar prog -tokens -gui
 ```
 
 4. Paste the query you are trying to test in the prompt.

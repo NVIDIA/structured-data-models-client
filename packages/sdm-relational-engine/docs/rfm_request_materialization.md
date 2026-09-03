@@ -63,7 +63,7 @@ therefore requires the compiled `sdm_relational_engine.relationallib` extension.
 with its default native build enabled; `WITH_RELATIONALLIB=0` is only suitable for
 metadata-only workflows and cannot run local materialization.
 
-For a source checkout using the published `kumo-api` dependency:
+For a source checkout:
 
 ```bash
 python -m pip install --editable .

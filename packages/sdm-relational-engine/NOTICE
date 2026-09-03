@@ -17,5 +17,7 @@ and asserted by tests/test_vendored_mermaid.py. Its own components are
 enumerated in the third-party section of LICENSE, and its licence text is in
 rfm/assets/MERMAID_LICENSE.
 
+The wire types this driver speaks to the model with are first-party source in
+this distribution, under sdm_relational_engine/api; see its SOURCE.md.
 Everything else, including the Predictive Query Language and the Universal TFM
 wire types, is resolved by the package manager at install time.

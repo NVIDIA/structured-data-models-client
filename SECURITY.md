@@ -21,8 +21,10 @@ A report is most useful when it includes the affected package and version, the
 type of vulnerability, the minimal steps or script that reproduce it, and what
 an attacker gains.
 
-NVIDIA does not run a bug bounty programme, but does acknowledge externally
-reported issues addressed under its coordinated disclosure policy. See the
+NVIDIA runs a public bug bounty and vulnerability disclosure programme on
+[Intigriti](https://app.intigriti.com/programs/nvidia/nvidiapublicbugbounty/detail),
+and acknowledges externally reported issues addressed under its coordinated
+disclosure policy. See the
 [PSIRT policies](https://www.nvidia.com/en-us/security/psirt-policies/) page.
 
 ## Supported versions
@@ -54,5 +56,7 @@ Please read them before filing.
   `query=`, `path=` and `storage_options=` are executed or resolved as written,
   with the credentials you supply, as is a `ColumnSpec(expr=...)` you write
   yourself. Do not pass attacker-controlled values into them. Entity
-  identifiers are the exception: the SQL samplers bind them as query
-  parameters, so they may come from untrusted input.
+  identifiers are the exception: no sampler interpolates them into SQL text.
+  SQLite, Snowflake and Databricks bind them as query parameters; DuckDB
+  registers them as a temporary relation the query joins against. Either way
+  they may come from untrusted input.
