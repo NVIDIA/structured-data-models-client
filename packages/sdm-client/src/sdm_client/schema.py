@@ -544,10 +544,30 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
         for column in frame.columns
     }
     table = Table(name=name, data=frame, columns=columns)
+    inferred = _infer_primary_key(frame, columns)
+    if inferred is not None and frame[inferred].isna().any():
+        # Tolerated here and refused on assignment, the same way a nearly
+        # unique column is: inference is a guess and a caller's key is an
+        # assertion. Refusing would break `Schema.from_data` on frames that
+        # worked before, including any relationship pointing at this table --
+        # but the engine drops these rows without a word, so the guess is
+        # said out loud.
+        missing = int(frame[inferred].isna().sum())
+        warnings.warn(
+            f'{name}.{inferred} identifies a row, but {missing} row(s) have '
+            f'no value for it. Those rows cannot be scored and the model '
+            f'will not see them; fill or drop them, or name a different '
+            f'primary key.',
+            stacklevel=_warning_stacklevel(),
+        )
+        object.__setattr__(table, 'primary_key', inferred)
+        table._adopt_key(inferred)
+        table.time_column = _infer_time_column(columns)
+        return table
     # Assigning the key is what marks its column, counts what the uniqueness
     # threshold tolerated and says so; doing any of it a second time here would
     # report the same duplicate twice, from inside this module.
-    table.primary_key = _infer_primary_key(frame, columns)
+    table.primary_key = inferred
     table.time_column = _infer_time_column(columns)
     return table
 
@@ -590,12 +610,6 @@ def _infer_primary_key(
             # A key-shaped name on values that cannot identify a row -- a bool
             # column called `id`, say. Nominating it would refuse the frame at
             # construction for a key nobody asked for.
-            continue
-        if frame[name].isna().any():
-            # A row with no key cannot be identified, and assigning this
-            # column would refuse the frame outright. Inference declines to
-            # nominate it instead, leaving the caller free to say otherwise
-            # and hear why.
             continue
         distinct = frame[name].nunique(dropna=True)
         if distinct >= len(frame) * _KEY_UNIQUENESS:

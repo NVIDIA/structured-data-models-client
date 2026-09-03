@@ -440,28 +440,41 @@ def test_many_null_keys_are_reported_as_nulls_not_as_duplicates():
     assert 'already used' not in message
 
 
-def test_inference_declines_a_null_bearing_key_instead_of_refusing_the_frame():
-    """Inference nominating one would make `Schema.from_data` raise."""
+def test_inference_tolerates_a_null_bearing_key_and_says_so():
+    """Inference is a guess and a caller's key is an assertion.
+
+    A nearly-unique column is tolerated with a warning; a null-bearing one is
+    now treated the same way, because refusing it made `Schema.from_data`
+    raise on frames that previously worked. The engine drops those rows
+    without a word, so the guess is said out loud.
+    """
     frame = pd.DataFrame(
         {'user_id': list(range(999)) + [None], 'v': [1.0] * 1000}
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
         built = Schema.from_data({'users': frame})
-    assert built['users'].primary_key is None
+    assert built['users'].primary_key == 'user_id'
+    assert any('no value for it' in str(w.message) for w in caught)
 
 
-def test_duplicate_keys_is_recorded_when_the_key_is_assigned():
-    """It was an init field declared after `primary_key`, so the generated
-    `__init__` reset it to 0 after `_adopt_key` had computed it."""
+def test_duplicate_keys_is_recorded_when_a_table_is_built_with_a_key():
+    """The failing case was the constructor, not assignment.
+
+    `duplicate_keys` was an init field declared after `primary_key`, so the
+    generated `__init__` assigned 0 over whatever `_adopt_key` had just
+    computed. Every table built this way reported none.
+    """
+    from sdm_client.schema import Column, Table
+
     frame = pd.DataFrame({'id': list(range(299)) + [0], 'v': [1.0] * 300})
-    table = _table(frame.rename(columns={'id': 'plain'}))
-    table.data = frame
-    table.columns['id'] = table.columns.pop('plain')
-    table.columns['id'].name = 'id'
+    columns = {
+        'id': Column(name='id', dtype='int64', stype='ID'),
+        'v': Column(name='v', dtype='float64', stype='numerical'),
+    }
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        table.primary_key = 'id'
+        table = Table(name='t', data=frame, columns=columns, primary_key='id')
     assert table.duplicate_keys == 1
 
 
@@ -484,3 +497,26 @@ def test_the_duplicate_key_warning_points_at_the_caller():
         Schema.from_data({'t': frame})
     assert caught
     assert caught[0].filename == __file__
+
+
+def test_a_null_bearing_inferred_key_warns_rather_than_breaking_a_relationship():
+    """Refusing here would break `Schema.from_data` on frames that worked.
+
+    A relationship pointing at the table needs it to have a primary key, so
+    declining to infer one turned a silently dropped row into a hard failure
+    with a message that did not mention nulls at all.
+    """
+    users = pd.DataFrame(
+        {'user_id': list(range(999)) + [None], 'age': [1.0] * 1000}
+    )
+    orders = pd.DataFrame({'order_id': list(range(50)), 'user_id': [1.0] * 50})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        built = Schema.from_data(
+            {'users': users, 'orders': orders},
+            relationships=[
+                Relationship('orders', 'user_id', 'users', 'user_id')
+            ],
+        )
+    assert built['users'].primary_key == 'user_id'
+    assert any('no value for it' in str(w.message) for w in caught)

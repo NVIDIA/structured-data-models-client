@@ -1020,3 +1020,29 @@ def test_a_decimal_too_wide_for_a_float_is_refused_not_sent_as_inf():
     with pytest.raises(ValueError) as error:
         _cell_json_value(Decimal('1e400'), 'float64')
     assert 'too large' in str(error.value)
+
+
+def test_a_huge_fractional_decimal_is_refused_before_it_becomes_inf():
+    """The conversion happens in `_json_value`, above the encoder's guard.
+
+    A finite Decimal with a 310-digit integer part and a fraction reached
+    `float()` there and came back `inf`, which has no JSON form and is not a
+    rounding of the original in any useful sense.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _json_value
+
+    huge = Decimal('1' + '0' * 310 + '.1')
+    assert huge.is_finite()
+    with pytest.raises(ValueError) as error:
+        _json_value(huge)
+    assert 'too large' in str(error.value)
+
+
+def test_an_ordinary_fractional_decimal_still_converts():
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _json_value
+
+    assert _json_value(Decimal('1.5')) == 1.5

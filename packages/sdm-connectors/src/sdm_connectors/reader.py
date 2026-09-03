@@ -421,7 +421,9 @@ def _resolve_format(
             f'could not determine the format of {path!r}: it names no known '
             f'suffix, and the store could not be asked whether it is a '
             f'directory ({type(unreachable).__name__}: {unreachable}). Fix '
-            f'the access problem, or pass format= explicitly'
+            f'the access problem, or pass format= explicitly',
+            code='CONNECT_FAILED',
+            details={'path': path},
         ) from unreachable
     raise ConnectorError(
         f'unsupported file format {suffix or path!r} for {path!r}; supported: '

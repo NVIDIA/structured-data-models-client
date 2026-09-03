@@ -414,6 +414,12 @@ def _engine_errors(model: Any) -> Iterator[None]:
     except StructuredDataError:
         raise
     except _CALLER_ERRORS as error:
+        if isinstance(error, TypeError) and _is_call_signature_error(error):
+            raise StructuredDataError(
+                f'the relational engine was called incorrectly by this '
+                f'client: {type(error).__name__}: {error}',
+                code='INTERNAL_ERROR',
+            ) from error
         raise StructuredDataError(
             f'{error}{_sanitization_detail(model)}',
             code='INVALID_REQUEST',
@@ -426,17 +432,34 @@ def _engine_errors(model: Any) -> Iterator[None]:
         ) from error
 
 
+#: How CPython words a call that does not match the callee's signature. A
+#: `TypeError` carrying one of these is this client calling the engine wrongly;
+#: any other one is the engine refusing a value the caller supplied.
+_CALL_SIGNATURE_PHRASES = (
+    'unexpected keyword argument',
+    'positional argument',
+    'required argument',
+    'takes no arguments',
+    'missing 1 required',
+    'missing 2 required',
+)
+
+
+def _is_call_signature_error(error: TypeError) -> bool:
+    message = str(error)
+    return any(phrase in message for phrase in _CALL_SIGNATURE_PHRASES)
+
+
 def _caller_errors() -> tuple[type[BaseException], ...]:
     r"""The exception types the engine uses to report bad input.
 
-    ``TypeError`` is deliberately not among them. The engine raises it for a
-    keyword it does not take or a ``None`` where an object was expected --
-    which is this client calling the engine wrongly, not the caller describing
-    their data wrongly. Reporting it as ``INVALID_REQUEST`` tells a user their
-    request is at fault for a bug they cannot fix, so it falls through to the
-    internal bucket with the type named.
+    ``TypeError`` is both. The engine raises it to reject a caller's own
+    ``anchor_time``, with a hint naming what to pass instead -- and it raises
+    it when this client calls the engine with a keyword it does not take,
+    which is our bug and not something a user can act on. The two are told
+    apart by :func:`_is_call_signature_error` rather than by type.
     """
-    types: list[type[BaseException]] = [ValueError, KeyError]
+    types: list[type[BaseException]] = [ValueError, KeyError, TypeError]
     try:
         from sdm_relational_engine import KumoRelationalError
     except ImportError:  # pragma: no cover - the extra is optional

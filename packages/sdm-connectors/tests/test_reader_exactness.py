@@ -234,3 +234,21 @@ def test_a_string_column_lands_where_a_plain_read_would_put_it(tmp_path):
     assert (
         read('local', path=str(path))['b'].dtype == pd.read_csv(path)['b'].dtype
     )
+
+
+def test_an_unreachable_store_error_carries_a_code():
+    """Every ConnectorError carries a stable code so a caller can branch
+    without matching on message text; the new one was missing it."""
+    import sdm_connectors.reader as reader
+
+    def _unreachable(path, storage_options=None):
+        return False, PermissionError('refused')
+
+    original = reader._is_directory
+    reader._is_directory = _unreachable
+    try:
+        with pytest.raises(ConnectorError) as error:
+            reader._resolve_format('s3://bucket/parts')
+    finally:
+        reader._is_directory = original
+    assert error.value.code == 'CONNECT_FAILED'

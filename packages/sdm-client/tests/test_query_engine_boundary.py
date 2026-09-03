@@ -238,10 +238,45 @@ def test_a_relationship_listed_twice_is_linked_once():
     assert edges == {('orders', 'user_id', 'users')}
 
 
-def test_a_type_error_from_the_engine_is_not_blamed_on_the_caller():
-    """A kwarg the engine does not take is this client's bug, and reporting
-    it as INVALID_REQUEST tells a user to fix something they cannot."""
-    from sdm_client.query import _CALLER_ERRORS
+def test_a_type_error_is_sorted_by_what_it_says_not_by_its_type():
+    """The engine uses TypeError for both a caller's bad value and this
+    client's bad call, so the type alone cannot tell them apart."""
+    from sdm_client.query import _CALLER_ERRORS, _is_call_signature_error
 
-    assert TypeError not in _CALLER_ERRORS
+    assert TypeError in _CALLER_ERRORS
     assert ValueError in _CALLER_ERRORS
+    assert _is_call_signature_error(
+        TypeError("f() got an unexpected keyword argument 'verbose'")
+    )
+    assert not _is_call_signature_error(
+        TypeError("'anchor_time' must be a pandas.Timestamp")
+    )
+
+
+def test_a_bad_anchor_time_is_the_callers_fault_not_the_libraries():
+    """The engine raises TypeError to reject a caller's own `anchor_time`,
+    with a hint naming what to pass instead. Removing TypeError from the
+    caller bucket turned that into 'the relational engine failed'."""
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.query import _engine_errors
+
+    with pytest.raises(StructuredDataError) as error:
+        with _engine_errors(None):
+            raise TypeError(
+                "'anchor_time' must be a pandas.Timestamp or the literal "
+                "'entity' (got str '2024-01-01'); try pd.Timestamp(...)"
+            )
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_a_wrong_keyword_into_the_engine_is_reported_as_our_bug():
+    """The other half of the same type: this one a user cannot act on."""
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.query import _engine_errors
+
+    with pytest.raises(StructuredDataError) as error:
+        with _engine_errors(None):
+            raise TypeError(
+                "_get_task_table() got an unexpected keyword argument 'verbose'"
+            )
+    assert error.value.code == 'INTERNAL_ERROR'

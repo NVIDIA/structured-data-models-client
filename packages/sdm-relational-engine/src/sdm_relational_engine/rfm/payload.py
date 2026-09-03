@@ -1156,7 +1156,15 @@ def _json_value(value: Any) -> Any:
         if not value.is_finite():
             return None
         if value != value.to_integral_value():
-            return float(value)
+            number = float(value)
+            if not math.isfinite(number):
+                # Too wide for a float to hold even the integer part, so the
+                # `inf` it becomes is not a rounding of the original.
+                raise ValueError(
+                    f'value {value!r} is too large for float64 to represent; '
+                    f'send the column as strings to keep it exact'
+                )
+            return number
         return int(value) if _fits_int64(value) else str(value)
     if isinstance(value, pd.Timestamp):
         return _timestamp_json_value(value)
