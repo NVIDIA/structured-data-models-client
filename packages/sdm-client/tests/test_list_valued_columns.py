@@ -414,23 +414,92 @@ def test_a_uuid_column_is_walked_and_passes():
 
 
 @pytest.mark.parametrize(
-    'arrow_binary', ['binary', 'large_binary', 'fixed_size_binary'], ids=str
+    'name',
+    [
+        'binary',
+        'large_binary',
+        'binary_view',
+        'fixed_size_binary',
+        'list',
+        'large_list',
+        'list_view',
+        'large_list_view',
+        'fixed_size_list',
+        'struct',
+        'map',
+    ],
+    ids=str,
 )
-def test_an_arrow_binary_column_is_walked(arrow_binary):
-    """Its cells are `bytes`, which the cell rule refuses.
+def test_every_arrow_type_whose_cells_are_not_scalars_is_walked(name):
+    """The gate names what is safe to skip, and walks everything else.
 
-    The gate and the cell rule have to agree, or the fast path would skip a
-    column the rule would have rejected.
+    Listing the unsafe types is how a list view, then binary, then a *binary*
+    view each got through in turn: a new Arrow type defaulted to the fast path,
+    and the fast path is the one that can be wrong.
     """
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars
 
-    arrow_type = {
-        'binary': pa.binary(),
-        'large_binary': pa.large_binary(),
-        'fixed_size_binary': pa.binary(4),
-    }[arrow_binary]
+    builders = {
+        'binary': lambda: pa.binary(),
+        'large_binary': lambda: pa.large_binary(),
+        'binary_view': lambda: pa.binary_view(),
+        'fixed_size_binary': lambda: pa.binary(4),
+        'list': lambda: pa.list_(pa.string()),
+        'large_list': lambda: pa.large_list(pa.string()),
+        'list_view': lambda: pa.list_view(pa.string()),
+        'large_list_view': lambda: pa.large_list_view(pa.string()),
+        'fixed_size_list': lambda: pa.list_(pa.string(), 2),
+        'struct': lambda: pa.struct([('a', pa.int64())]),
+        'map': lambda: pa.map_(pa.string(), pa.int64()),
+    }
+    build = builders[name]
+    try:
+        arrow_type = build()
+    except AttributeError:  # pragma: no cover - older pyarrow
+        pytest.skip(f'pyarrow has no {name}')
     assert not _holds_only_scalars(pd.ArrowDtype(arrow_type))
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'int64',
+        'float64',
+        'bool_',
+        'string',
+        'large_string',
+        'string_view',
+        'date32',
+        'timestamp',
+        'duration',
+        'null',
+    ],
+    ids=str,
+)
+def test_every_arrow_scalar_type_stays_on_the_fast_path(name):
+    """The other direction: skipping must not quietly stop happening."""
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    factory = getattr(pa, name, None)
+    if factory is None:
+        pytest.skip(f'pyarrow has no {name}')
+    arrow_type = (
+        factory('us') if name in {'timestamp', 'duration'} else factory()
+    )
+    assert _holds_only_scalars(pd.ArrowDtype(arrow_type))
+
+
+def test_a_wrapped_binary_view_is_walked_too():
+    """The wrappers unwrap to it, so the same answer has to come back."""
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    view = pa.binary_view()
+    assert not _holds_only_scalars(
+        pd.ArrowDtype(pa.run_end_encoded(pa.int16(), view))
+    )
 
 
 def test_a_container_target_is_refused_as_a_multi_label_one():

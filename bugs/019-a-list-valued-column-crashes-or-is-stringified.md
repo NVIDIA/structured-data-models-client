@@ -105,9 +105,10 @@ pinned: eleven container shapes refused, ten scalar shapes still accepted.
 `serialize_column` is on the hot path for every table in every request, so the
 check returns immediately for a dtype that cannot hold a container. That gate
 and the cell rule have to agree, or the fast path would skip a column the rule
-would reject — which is why Arrow's binary types are walked even though they
-are not nested: pandas hands their cells back as `bytes`. `pa.uuid()` is walked
-for the same reason and passes, since its cells are `uuid.UUID` objects. That question
+would reject — which is why Arrow's binary types are walked even though they are
+not nested: pandas hands their cells back as `bytes`. `pa.uuid()` is walked for
+the same reason and passes, since its cells are `uuid.UUID` objects. Both
+directions are pinned: eleven Arrow types walked, ten kept on the fast path. That question
 is asked of the dtype rather than by elimination, because `is_object_dtype`
 alone would call an **Arrow-backed list column** scalar — and that is exactly
 what `pd.read_parquet(dtype_backend='pyarrow')` gives for one, which would have

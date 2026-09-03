@@ -77,16 +77,15 @@ def _holds_only_scalars(dtype: Any) -> bool:
 def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
     r"""The same question of an Arrow type, through its wrappers.
 
-    ``pa.types.is_nested`` answers for the containers -- list, its view and
-    large variants, fixed-size list, struct, map, union -- but not for the
-    types that *wrap* one. A dictionary or a run-end encoding of a list, and an
-    extension type whose storage is a list, are all still columns of lists, so
-    each is unwrapped and the question asked again. Enumerating the nested
-    types instead was how an earlier attempt let a list view through.
+    Answered by naming what is *safe to skip* rather than what must be walked.
+    Listing the unsafe types is how a list view, then Arrow binary, then a
+    binary view each got through in turn -- every new Arrow type defaulted to
+    the fast path, and the fast path is the one that can be wrong. This way an
+    unfamiliar type is walked: slower, and correct.
 
-    ``BaseExtensionType`` rather than ``ExtensionType``: pyarrow's own
-    canonical extensions -- ``fixed_shape_tensor``, whose storage is a
-    fixed-size list -- are the former and not the latter.
+    The types that wrap another -- a dictionary, a run-end encoding, an
+    extension -- are unwrapped first, since a dictionary of lists is still a
+    column of lists.
     """
     import pyarrow as pa
 
@@ -99,16 +98,31 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
         ):
             arrow_type = arrow_type.value_type
             continue
-        # Binary is not nested, but pandas hands its cells back as `bytes`,
-        # which `_is_container` refuses -- so the two questions have to agree
-        # or the fast path would skip a column the cell rule would reject.
-        if pa.types.is_binary(arrow_type) or pa.types.is_large_binary(
-            arrow_type
-        ):
-            return False
-        if pa.types.is_fixed_size_binary(arrow_type):
-            return False
-        return not pa.types.is_nested(arrow_type)
+        break
+
+    # Each of these gives pandas a scalar cell: a number, a `str`, a
+    # `Timestamp`, a `timedelta`, `None`. Binary is deliberately absent --
+    # pandas hands those back as `bytes`, which the cell rule refuses.
+    checks = (
+        'is_integer',
+        'is_floating',
+        'is_decimal',
+        'is_boolean',
+        'is_string',
+        'is_large_string',
+        'is_string_view',
+        'is_date',
+        'is_time',
+        'is_timestamp',
+        'is_duration',
+        'is_interval',
+        'is_null',
+    )
+    return any(
+        getattr(pa.types, name)(arrow_type)
+        for name in checks
+        if hasattr(pa.types, name)
+    )
 
 
 def require_scalar_cells(series: pd.Series, described: str) -> None:
