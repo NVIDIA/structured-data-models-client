@@ -408,7 +408,7 @@ whether sessions are served, and the resource limits in §7. A profile cannot kn
 deployment* has a regressor checkpoint; that is a runtime fact and lives beside it, never duplicated
 into it.
 
-> **Cost, stated plainly.** `kumo-relational-client` deleted its registry on purpose. We are
+> **Cost, stated plainly.** The predecessor client deleted its registry on purpose. We are
 > re-opening it, and that buys back an adapter protocol to keep stable and conformance tests to
 > maintain. That is the price of serving more than one model, and it is the price the doc asks for.
 
@@ -469,19 +469,21 @@ One request is now impossible and says so clearly: an explanation with more than
 
 ## 8. What we copy
 
-`kumo-relational-client` 1.0.0 is post-QA, hardened, and live-tested. We copy it rather than rewrite it.
+Most of this client is not new. An earlier internal NVIDIA relational client, at 1.0.0, is post-QA,
+hardened and live-tested, and a separate internal client carried the tabular surface. We copy both
+rather than rewrite them.
 
-Sources, named exactly:
+What came from where, and what changed on the way:
 
-| From (repo · ref · path) | To | Change |
+| From | To | Change |
 |---|---|---|
-| `NVIDIA/kumo-relational-client` · `main` · `packages/kumo-connectors/` | `sdm-connectors` | names only |
-| ⟂ · `packages/kumo-relational-engine/src/kumo_relational_engine/rfm/` | `sdm-relational-engine` | `Graph`→`Schema`; PQL types from `predictive_query` |
-| ⟂ · `.../kumo_relational_engine/csrc/neighbor_sampler.cpp` | `sdm-relational-engine` | none |
-| ⟂ · `packages/kumo-relational-client/src/kumo_relational_client/adapters/relational.py` | `sdm_client/adapters/relational.py` | returns the unified `Request`/`PredictionResult` |
-| ⟂ · `.../kumo_relational_client/core/transport.py` | `sdm_client/core/transport.py` | none |
-| `kumo-tfm-nims/nvidia-sdfm-sdk` · `main` @ `befe915` · `packages/nemotron-predict-client/src/nemotron_predict/adapters/tabular.py` | `sdm_client/adapters/tabular.py` | model id `nemotron-tabular` → `kumo-tabular` |
-| ⟂ · `.../nemotron_predict/wire/{__init__,dtypes,tables}.py` | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
+| The predecessor client's connectors package | `sdm-connectors` | names only |
+| ⟂ its relational engine, `rfm/` | `sdm-relational-engine` | `Graph`→`Schema`; PQL types from `predictive_query` |
+| ⟂ its C++ neighbour sampler, `csrc/neighbor_sampler.cpp` | `sdm-relational-engine` | none |
+| ⟂ its relational adapter | `sdm_client/adapters/relational.py` | returns the unified `Request`/`PredictionResult` |
+| ⟂ its transport | `sdm_client/core/transport.py` | none |
+| The earlier tabular client's adapter | `sdm_client/adapters/tabular.py` | model id renamed to `kumo-tabular` |
+| ⟂ its wire types | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
 | A separate internal Predictive Query Language repository, now retired | `sdm-pql` | none; the tree is maintained here from this point on |
 
 Two hard-won behaviours to carry over deliberately: every redirect hop is closed rather than drained,
@@ -530,7 +532,7 @@ shipping models are already in its enum (§0).
 
 ## 11. This gets open-sourced
 
-It ships internal first, but public release is the destination, not a maybe. `kumo-relational-client`
+It ships internal first, but public release is the destination, not a maybe. The predecessor client
 reached public by **retrofit** — a full audit plus an OSRB pass after the code existed. We are not
 repeating that. Every rule below is cheap on day one and expensive later.
 
@@ -547,7 +549,7 @@ repeating that. Every rule below is cheap on day one and expensive later.
 ship publicly without them**, and a hand-maintained dependency table is not an SBOM. Treat both as
 gates on the release, not as nice-to-haves.
 
-License is **Apache-2.0** — it matches `kumo-relational-client`, the source of most of what we
+License is **Apache-2.0** — it matches the predecessor client, the source of most of what we
 copy, so nothing we carry across needs relicensing.
 
 ### Vendored code is the risk, and we already know how it breaks
@@ -577,8 +579,7 @@ So, as a rule, not a suggestion:
 4. Bumping a vendored bundle means **re-enumerating its components from the new release's manifest** —
    a version bump silently moves sub-component versions too.
 
-`kumo-relational-client@main` already ships this test at
-`packages/kumo-relational-engine/tests/test_vendored_mermaid.py`; we copy it.
+The predecessor client already ships this test; we copy it.
 
 ### What ships that we did not write
 

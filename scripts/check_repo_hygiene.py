@@ -97,7 +97,6 @@ RETIRED_INTERFACES = (
     'PredictClient',
     'client.relational(',
     'client.tabular(',
-    'kumo_relational_client',
     'nemotron_predict',
 )
 
