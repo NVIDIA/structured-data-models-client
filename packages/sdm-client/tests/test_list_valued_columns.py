@@ -533,41 +533,74 @@ def test_a_frozenset_is_refused():
 
 
 def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
-    """The invariant, checked against every Arrow type pyarrow exposes.
+    """The invariant, checked against every Arrow type rather than a list.
 
-    Enumerating types is what went wrong four times, so this asserts the
-    property instead: whatever the gate lets past, the cell rule must accept.
-    A type the gate walks is safe by construction and is not examined here.
+    Enumerating types is what went wrong four times -- a list view, then binary,
+    then a binary view, then an interval -- so this asserts the property: for
+    every type the gate lets past, no cell it can hold may be one the cell rule
+    would refuse. A type the gate walks is safe by construction and is skipped.
+
+    Parameterised factories are built with arguments here rather than dropped,
+    because they are the interesting ones, and the count is asserted so the
+    sweep cannot quietly hollow out if pyarrow's surface changes.
     """
+    import contextlib
     import inspect
+    import io
 
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars, is_container
+
+    arguments = {
+        'list_': (pa.string(),),
+        'large_list': (pa.string(),),
+        'list_view': (pa.string(),),
+        'large_list_view': (pa.string(),),
+        'map_': (pa.string(), pa.int64()),
+        'struct': ([('a', pa.int64())],),
+        'decimal128': (10, 2),
+        'decimal256': (10, 2),
+        'decimal': (10, 2),
+        'timestamp': ('us',),
+        'duration': ('us',),
+        'time32': ('s',),
+        'time64': ('us',),
+        'dictionary': (pa.int8(), pa.string()),
+        'run_end_encoded': (pa.int16(), pa.string()),
+        'fixed_shape_tensor': (pa.float32(), (2,)),
+    }
 
     def build(name: str):
         factory = getattr(pa, name, None)
         if factory is None or not callable(factory):
             return None
         try:
-            required = [
-                parameter
-                for parameter in inspect.signature(factory).parameters.values()
-                if parameter.default is parameter.empty
-                and parameter.kind
-                in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
-            ]
-            if required:
-                return None
-            return factory()
-        except Exception:  # noqa: BLE001 - not a type factory, or unbuildable
+            parameters = inspect.signature(factory).parameters.values()
+        except (TypeError, ValueError):
             return None
+        required = [
+            parameter
+            for parameter in parameters
+            if parameter.default is parameter.empty
+            and parameter.kind
+            in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        args = arguments.get(name, ())
+        if required and not args:
+            return None
+        try:
+            # Some module-level callables print a banner when called.
+            with contextlib.redirect_stdout(io.StringIO()):
+                built = factory(*args)
+        except Exception:  # noqa: BLE001 - not a type factory
+            return None
+        return built if isinstance(built, pa.DataType) else None
 
+    examined = 0
     offenders = []
     for name in dir(pa):
         arrow_type = build(name)
         if arrow_type is None:
-            continue
-        if not isinstance(arrow_type, pa.DataType):
             continue
         try:
             dtype = pd.ArrowDtype(arrow_type)
@@ -575,6 +608,7 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
             continue
         if not _holds_only_scalars(dtype):
             continue
+        examined += 1
         for value in (None, 1, 1.5, True, 'a', b'ab'):
             try:
                 cell = pd.Series(
@@ -583,6 +617,9 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
             except Exception:  # noqa: BLE001 - the type cannot hold this value
                 continue
             if is_container(cell):
-                offenders.append((name, type(cell).__name__))
+                offenders.append((name, str(arrow_type), type(cell).__name__))
                 break
+
     assert not offenders
+    # A sweep that reaches nothing would pass silently.
+    assert examined >= 20, f'the sweep only examined {examined} types'
