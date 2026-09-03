@@ -368,7 +368,6 @@ def run_exactness(client):  # noqa: ARG001
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
-    # KNOWN BUG bugs/014
     with probe(AREA, 'duckdb, a SUM over a BIGINT column', 'exact') as e:
         connection = connect('duckdb')
         connection.execute(
@@ -379,7 +378,6 @@ def run_exactness(client):  # noqa: ARG001
         if str(cells[0]) != str(big * 3):
             fail(e, f'sum is {big * 3}, got {cells[0]!r} ({frame["id"].dtype})')
 
-    # KNOWN BUG bugs/009
     with probe(
         AREA, 'csv, a large integer with a blank in the column', 'exact'
     ) as e:
@@ -403,7 +401,6 @@ def run_exactness(client):  # noqa: ARG001
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
-    # KNOWN BUG bugs/009
     with probe(
         AREA, 'a python int list through data= with a None', 'exact'
     ) as e:

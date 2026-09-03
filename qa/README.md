@@ -1,8 +1,8 @@
 # QA probes
 
-The end-to-end pass that produced [`../bugs`](../bugs), and now the regression
-suite for the fixes. Every probe here was written against a failure; each one
-that passes is a bug that stays fixed.
+The end-to-end pass these fixes came out of, and now their regression suite.
+Every probe here was written against a real failure against a live NIM; each
+one that passes is a bug that stays fixed.
 
 These are not part of the test suite. They need live endpoints, real
 credentials and datasets that are downloaded rather than vendored, so they are
@@ -56,12 +56,10 @@ them before they exit.
 
 ## Status
 
-All 139 probes pass. Each of the fifteen bugs they were written against has a
-fix on this branch, and the probe that found it is the regression test for it.
-The three that assert the *shape* of a decision rather than a refusal --
-`empty predict frame`, `an empty predict frame`, `a numeric column assigned as
-the time column` -- were rewritten when the decision was settled, and the
-reasoning is in the bug files.
+All 139 probes pass. Each was written against a failure that is now fixed, so
+the suite is the regression check for those fixes: point it at a live NIM and a
+warehouse, and anything that comes back red is something that used to be
+broken.
 
 | Suite | Probes |
 |---|---|

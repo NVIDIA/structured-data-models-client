@@ -79,7 +79,6 @@ def run(client):
         else:
             note(e, f'pkeys={ {n: built[n].primary_key for n in built} }')
 
-    # KNOWN BUG bugs/017
     with probe(
         AREA,
         'a primary key that is not a column',
@@ -108,7 +107,6 @@ def run(client):
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
 
-    # KNOWN BUG bugs/002
     with probe(
         AREA,
         'a non-unique primary key assigned directly',
@@ -128,7 +126,6 @@ def run(client):
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
 
-    # KNOWN BUG bugs/015
     with probe(
         AREA,
         'the graph sent matches the schema',
@@ -152,7 +149,6 @@ def run(client):
                 f'described but not sent: {sorted(described - sent)}',
             )
 
-    # KNOWN BUG bugs/015
     with probe(
         AREA,
         'asserting there are no relationships',
