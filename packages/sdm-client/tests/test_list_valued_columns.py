@@ -169,22 +169,85 @@ def test_an_arrow_backed_list_column_is_refused_too():
 
 
 @pytest.mark.parametrize(
-    'dtype', ['int64', 'float64', 'bool', 'datetime64[ns]', 'category']
+    'dtype', ['int64', 'float64', 'bool', 'datetime64[ns]']
 )
 def test_a_dtype_that_cannot_hold_a_sequence_is_not_walked(dtype):
     """The check is on the hot path, so the common columns must cost nothing."""
     from sdm_client.wire.dtypes import _holds_only_scalars
 
-    assert (
-        _holds_only_scalars(pd.Series([], dtype=dtype).dtype)
-        is (dtype != 'category')
-        or dtype == 'category'
-    )
+    assert _holds_only_scalars(pd.Series([], dtype=dtype).dtype)
 
 
 def test_an_arrow_scalar_column_is_not_walked():
+    """A Parquet-heavy frame is Arrow-backed throughout, list column or not."""
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars
 
     assert _holds_only_scalars(pd.ArrowDtype(pa.int64()))
     assert _holds_only_scalars(pd.ArrowDtype(pa.string()))
+    assert _holds_only_scalars(pd.ArrowDtype(pa.timestamp('us')))
+
+
+def test_a_dictionary_of_scalars_is_still_scalar():
+    """Unwrapping must not make every encoded column pay for the walk."""
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    assert _holds_only_scalars(
+        pd.ArrowDtype(pa.dictionary(pa.int8(), pa.string()))
+    )
+
+
+@pytest.mark.parametrize(
+    'arrow',
+    [
+        'list',
+        'list_view',
+        'large_list',
+        'large_list_view',
+        'fixed_size_list',
+        'struct',
+        'map',
+        'dictionary_of_list',
+        'run_end_encoded_list',
+    ],
+    ids=str,
+)
+def test_every_arrow_type_that_can_hold_a_sequence_is_walked(arrow):
+    """Enumerating the nested types let a list *view* through once already.
+
+    `pa.types.is_nested` answers for the containers. The encodings that wrap
+    one -- a dictionary or a run-end encoding of a list -- are still columns of
+    lists, so they are unwrapped before the question is asked.
+    """
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars
+
+    nested = {
+        'list': pa.list_(pa.string()),
+        'list_view': pa.list_view(pa.string()),
+        'large_list': pa.large_list(pa.string()),
+        'large_list_view': pa.large_list_view(pa.string()),
+        'fixed_size_list': pa.list_(pa.string(), 2),
+        'struct': pa.struct([('a', pa.int64())]),
+        'map': pa.map_(pa.string(), pa.int64()),
+        'dictionary_of_list': pa.dictionary(pa.int8(), pa.list_(pa.string())),
+        'run_end_encoded_list': pa.run_end_encoded(
+            pa.int16(), pa.list_(pa.string())
+        ),
+    }[arrow]
+    assert not _holds_only_scalars(pd.ArrowDtype(nested))
+
+
+def test_a_categorical_of_sequences_is_refused():
+    """`Categorical.from_codes` builds one the ordinary constructor refuses."""
+    from sdm_client.wire.dtypes import require_scalar_cells
+
+    # Built by hand: `pd.Index([('a', 'b'), ...])` becomes a MultiIndex.
+    values = np.empty(2, dtype=object)
+    values[0], values[1] = ('a', 'b'), ('b',)
+    series = pd.Series(
+        pd.Categorical.from_codes([0, 1, 0], categories=pd.Index(values))
+    )
+    with pytest.raises(StructuredDataError):
+        require_scalar_cells(series, 'x')

@@ -100,9 +100,13 @@ check returns immediately for a dtype that cannot hold a sequence. That question
 is asked of the dtype rather than by elimination, because `is_object_dtype`
 alone would call an **Arrow-backed list column** scalar — and that is exactly
 what `pd.read_parquet(dtype_backend='pyarrow')` gives for one, which would have
-put `"['a', 'b']"` back on the wire by a different door. Nested Arrow types —
-list, large_list, fixed_size_list, struct, map — are all walked; Arrow scalars
-are not. On a 10,000-row frame the guard costs 0.02 ms for an integer column,
+put `"['a', 'b']"` back on the wire by a different door.
+
+Arrow is asked through `pa.types.is_nested`, not by listing the nested types:
+an earlier attempt enumerated list, large_list, fixed_size_list, struct and map,
+and a **list view** went straight through the gap. The encodings that *wrap* a
+type — a dictionary or a run-end encoding of a list — are unwrapped first,
+since a dictionary of lists is still a column of lists. On a 10,000-row frame the guard costs 0.02 ms for an integer column,
 0.00 ms for an Arrow string one, and 0.80 ms for an `object` string one.
 
 Tests in `packages/sdm-client/tests/test_list_valued_columns.py`: the target,

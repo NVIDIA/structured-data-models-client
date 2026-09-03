@@ -63,15 +63,7 @@ def _holds_only_scalars(dtype: Any) -> bool:
     """
     arrow_type = getattr(dtype, 'pyarrow_dtype', None)
     if arrow_type is not None:
-        import pyarrow as pa
-
-        return not (
-            pa.types.is_list(arrow_type)
-            or pa.types.is_large_list(arrow_type)
-            or pa.types.is_fixed_size_list(arrow_type)
-            or pa.types.is_struct(arrow_type)
-            or pa.types.is_map(arrow_type)
-        )
+        return _arrow_holds_only_scalars(arrow_type)
     return bool(
         pd.api.types.is_numeric_dtype(dtype)
         or pd.api.types.is_bool_dtype(dtype)
@@ -80,6 +72,28 @@ def _holds_only_scalars(dtype: Any) -> bool:
         or isinstance(dtype, pd.StringDtype)
         or dtype == 'str'
     )
+
+
+def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
+    r"""The same question of an Arrow type, through its wrappers.
+
+    ``pa.types.is_nested`` answers for the containers -- list, its view and
+    large variants, fixed-size list, struct, map, union -- but not for the
+    encodings that *wrap* one. A dictionary or a run-end encoding of a list is
+    still a column of lists, so both are unwrapped and asked again. Enumerating
+    the nested types instead was how the previous attempt let a list view
+    through.
+    """
+    import pyarrow as pa
+
+    while True:
+        if pa.types.is_dictionary(arrow_type):
+            arrow_type = arrow_type.value_type
+            continue
+        if pa.types.is_run_end_encoded(arrow_type):
+            arrow_type = arrow_type.value_type
+            continue
+        return not pa.types.is_nested(arrow_type)
 
 
 def require_scalar_cells(series: pd.Series, described: str) -> None:
