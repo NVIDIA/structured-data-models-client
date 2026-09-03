@@ -97,7 +97,6 @@ include=["sdm_relational_engine*"]
 [tool.setuptools.package-data]
 "sdm_relational_engine"=["py.typed"]
 "sdm_relational_engine.api"=["SOURCE.md"]
-"predictive_query"=["SOURCE.md"]
 "sdm_relational_engine.rfm"=["assets/*"]
 
 [tool.setuptools.dynamic]

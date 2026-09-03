@@ -14,7 +14,6 @@ default:
 
 stages:
   - lint
-  - vendor
   - test
 
 variables:
@@ -41,16 +40,6 @@ hygiene:
   script:
     - apt-get update -qq && apt-get install -y -qq git
     - python scripts/check_repo_hygiene.py all  # spdx, internal refs, retired APIs
-
-# A repo-wide rename matches any text, including text inside a vendored file.
-# This stage turns that silent edit into a red pipeline, and runs before the
-# tests so the failure names the real cause rather than a confusing import
-# error downstream.
-vendor:
-  stage: vendor
-  extends: .python
-  script:
-    - python scripts/vendor_manifest.py verify --tree packages/sdm-pql/src/predictive_query
 
 test:
   stage: test

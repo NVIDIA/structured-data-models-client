@@ -7,23 +7,9 @@ Licensed under the Apache License, Version 2.0. See LICENSE.
 Vendored source
 --------------------------------------------------------------------------------
 
-Two trees are vendored into this repository as source and ship with it.
+One tree is vendored into this repository as source and ships with it.
 Everything else this project depends on is resolved by the package manager at
 install time and is not covered by this file.
-
-packages/sdm-pql/src/predictive_query
--------------------------------------
-
-The Predictive Query Language, copied verbatim from
-
-  Predictive Query Language
-  Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
-  revision 7ca9cb6673f2f3591000fa1416bf6ebeb4c9cf18 (version 0.1.0)
-  Apache License 2.0
-
-First-party NVIDIA code under the same license as this repository, vendored
-only because it is not yet published to a package index, and pinned per file in
-packages/sdm-pql/VENDOR_MANIFEST.json. See packages/sdm-pql/SOURCE.md.
 
 packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid.min.js
 ---------------------------------------------------------------------------------
@@ -37,3 +23,7 @@ The bundle is upstream bytes, unmodified, and its SHA-256 is pinned in
 rfm/assets/VENDORED.md and asserted by tests/test_vendored_mermaid.py. It is a
 bundle, so the components inside it are enumerated with their copyrights in the
 third-party section of LICENSE. See rfm/assets/MERMAID_LICENSE.
+
+Everything else in this repository, including the Predictive Query Language in
+packages/sdm-pql, is first-party NVIDIA source maintained here under the
+licence above.

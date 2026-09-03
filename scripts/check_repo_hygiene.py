@@ -31,12 +31,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SPDX_LINE = 'SPDX-License-Identifier: Apache-2.0'
 
-# Only first-party Python. The vendored tree carries upstream's own headers and
-# must not be touched; generated files get their header from the generator.
+# Generated files get their header from the generator, so they are excluded
+# below rather than listed here.
 SPDX_ROOTS = (
     'scripts',
     'packages/sdm-api/src',
     'packages/sdm-api/tests',
+    'packages/sdm-pql/src',
     'packages/sdm-pql/tests',
     'packages/sdm-client/src',
     'packages/sdm-client/tests',
@@ -45,7 +46,7 @@ SPDX_ROOTS = (
     'packages/sdm-relational-engine/src',
     'packages/sdm-relational-engine/tests',
 )
-SPDX_EXCLUDE_PARTS = {'predictive_query', '__pycache__'}
+SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
 
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
@@ -61,13 +62,10 @@ INTERNAL_PATTERNS = (
 # to say where the bytes came from, and a contributor guide has to say where to
 # push. Neither is a leak; both are reviewed deliberately.
 INTERNAL_ALLOWLIST = {
-    'packages/sdm-pql/SOURCE.md',
-    'packages/sdm-pql/VENDOR_MANIFEST.json',
     'packages/sdm-pql/README.md',
     'packages/sdm-api/README.md',
     'packages/sdm-api/src/sdm_api/generated/PROVENANCE.json',
     'scripts/check_repo_hygiene.py',
-    'scripts/vendor_manifest.py',
     'scripts/generate_sdm_api.py',
     'README.md',
     'NOTICE',
@@ -163,7 +161,7 @@ def check_internal() -> int:
             continue
         if path.suffix not in SHIPPED_SUFFIXES:
             continue
-        if 'predictive_query' in Path(relative).parts:
+        if 'grammar' in Path(relative).parts:
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -195,7 +193,7 @@ def check_retired() -> int:
         relative = str(path.relative_to(REPO_ROOT))
         if relative in RETIRED_ALLOWLIST or path.suffix not in SHIPPED_SUFFIXES:
             continue
-        if 'predictive_query' in Path(relative).parts:
+        if 'grammar' in Path(relative).parts:
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for retired in RETIRED_INTERFACES:

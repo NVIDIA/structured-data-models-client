@@ -15,9 +15,7 @@
 [tool.ruff]
 line-length = 80
 target-version = "py310"
-# Vendored trees are upstream's bytes. Linting them here would invite a fix
-# that silently forks them; see packages/sdm-pql/SOURCE.md.
-# The generated bindings are the generator's output, and their bytes are
+# The generated parser is ANTLR's output and the generated bindings are the generator's output, and their bytes are
 # recorded in PROVENANCE.json. Letting the formatter rewrite them would break
 # that record on every run.
 # Prose, not source. A fenced snippet in a bug report is written to be read --
@@ -25,7 +23,7 @@ target-version = "py310"
 # its shape -- and formatting it as a module rewrites the thing being
 # illustrated.
 extend-exclude = [
-    "packages/sdm-pql/src/predictive_query",
+    "packages/sdm-pql/src/predictive_query/grammar",
     "packages/sdm-api/src/sdm_api/generated/tfm_api.py",
     "*.md",
 ]

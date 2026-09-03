@@ -1,30 +1,12 @@
-sdm-client
+sdm-pql
 Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
---------------------------------------------------------------------------------
-Vendored source
---------------------------------------------------------------------------------
+This distribution is first-party NVIDIA source -- the Predictive Query
+Language: grammar, parser, validator, AST and model profiles -- and vendors no
+third-party source. The ANTLR-generated parser under src/predictive_query/
+grammar is generated from PQLGrammar.g4 in the same tree.
 
-One tree is vendored into this repository as source and ships with it.
-Everything else this project depends on is resolved by the package manager at
-install time and is not covered by this file.
-
-packages/sdm-pql/src/predictive_query
--------------------------------------
-
-The Predictive Query Language, copied verbatim from
-
-  Predictive Query Language
-  Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
-  https://gitlab-master.nvidia.com/kumo/predictive-query-language
-  revision 7ca9cb6673f2f3591000fa1416bf6ebeb4c9cf18 (version 0.1.0)
-  Apache License 2.0
-
-This is first-party NVIDIA code under the same license as this repository. It
-is vendored only because it is not yet published to a package index, and it is
-pinned per file in packages/sdm-pql/VENDOR_MANIFEST.json. See
-packages/sdm-pql/SOURCE.md.
-
-No third-party source is bundled in this repository.
+Everything this distribution depends on is resolved by the package manager at
+install time and licensed by its own authors.

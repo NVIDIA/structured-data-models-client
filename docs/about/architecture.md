@@ -125,20 +125,22 @@ pip install sdm-client[all]            # relational + every backend
 `[explain]` and `[relbench]` stay outside `[all]` and must be asked for by name — `[explain]` posts
 row data to a third-party LLM, so installing it is a deliberate act.
 
-### Why `sdm-pql` is separate, and why its import name is `predictive_query`
+### Why `sdm-pql` is separate
 
-`kumo-tfm-nims/predictive-query-language` already exists. It is pure Python, Apache-2.0, and already
-ships the parser, the AST, the validators, **and** the schema types (`Dtype`, `Stype`,
-`GraphDefinition`, `TableDefinition`). It has no publish job yet, so we vendor it.
+The language is a distribution of its own because two packages need it and neither needs the
+other. `sdm-client` resolves a query against a schema; `sdm-relational-engine` reads the AST it
+produces. Putting the parser in either one would make the other depend on a driver or a client it
+has no use for.
 
-We vendor it **verbatim, under its own import name**. When it publishes, the swap is one line in
-`sdm-client`'s dependencies — delete the vendored package, depend on the real one. Nothing else moves.
+It carries the parser, the AST, the validators, **and** the schema types (`Dtype`, `Stype`,
+`GraphDefinition`, `TableDefinition`), so those types have exactly one owner and nothing has to
+translate between two spellings of the same enum.
 
-> Copying the *old* engine's `pql/` instead would manufacture a fork we would later have to reconcile.
-> We checked: its `Dtype`, `Stype` and `ProblemType` are **identical** to the engine's, so nothing is lost.
-
-One hazard to document: two distributions would provide `predictive_query`, so never install
-`sdm-pql` and `predictive-query-language` together. `sdm-client` depends on exactly one.
+The tree is first-party source of this repository, maintained here under Apache-2.0. It was
+briefly carried as a vendored copy of a separate internal repository; that repository is being
+retired, so there is no upstream to track, no manifest to re-record, and no dependency swap
+pending. It imports as `predictive_query`, which is a name inherited from that period rather than
+one this layout would choose today.
 
 ### Who owns which types
 
@@ -480,7 +482,7 @@ Sources, named exactly:
 | ⟂ · `.../kumo_relational_client/core/transport.py` | `sdm_client/core/transport.py` | none |
 | `kumo-tfm-nims/nvidia-sdfm-sdk` · `main` @ `befe915` · `packages/nemotron-predict-client/src/nemotron_predict/adapters/tabular.py` | `sdm_client/adapters/tabular.py` | model id `nemotron-tabular` → `kumo-tabular` |
 | ⟂ · `.../nemotron_predict/wire/{__init__,dtypes,tables}.py` | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
-| `kumo/predictive-query-language` · `main` · `src/predictive_query/` | `sdm-pql` | none — verbatim |
+| A separate internal Predictive Query Language repository, now retired | `sdm-pql` | none; the tree is maintained here from this point on |
 
 Two hard-won behaviours to carry over deliberately: every redirect hop is closed rather than drained,
 and credentials in a URL are stripped everywhere the URL is rendered.
@@ -545,8 +547,8 @@ repeating that. Every rule below is cheap on day one and expensive later.
 ship publicly without them**, and a hand-maintained dependency table is not an SBOM. Treat both as
 gates on the release, not as nice-to-haves.
 
-License is **Apache-2.0** — it matches `kumo-relational-client` and `predictive-query-language`, so
-nothing we vendor needs relicensing.
+License is **Apache-2.0** — it matches `kumo-relational-client`, the source of most of what we
+copy, so nothing we carry across needs relicensing.
 
 ### Vendored code is the risk, and we already know how it breaks
 

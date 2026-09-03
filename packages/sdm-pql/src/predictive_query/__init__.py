@@ -24,19 +24,19 @@ from predictive_query.api import validate
 from predictive_query.parser import Delegate, PQLParser
 from predictive_query.profiles import (
     ANOMALY,
+    FINE_TUNING,
     RELATIONAL,
     TABULAR,
     TIMESERIES,
-    FINE_TUNING,
     Capabilities,
     Mode,
     Profile,
 )
-from predictive_query.schema import codes
 from predictive_query.query import (
     ParsedPredictiveQuery,
     ValidatedPredictiveQuery,
 )
+from predictive_query.schema import codes
 from predictive_query.schema.common import (
     Span,
     ValidationError,
