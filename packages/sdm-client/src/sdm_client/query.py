@@ -341,7 +341,13 @@ class PredictiveQuery:
                 },
             )
         task._query = query_def.to_string()
-        _check_entity_count(indices, getattr(task, 'task_type', None))
+        if not hasattr(task, 'task_type'):
+            raise StructuredDataError(
+                'the resolved task does not say what kind it is, so the '
+                'entity limit for it cannot be checked',
+                code='INTERNAL_ERROR',
+            )
+        _check_entity_count(indices, task.task_type)
         task = _narrow_context(task, num_context_samples)
 
         with _engine_errors(model):
@@ -421,8 +427,16 @@ def _engine_errors(model: Any) -> Iterator[None]:
 
 
 def _caller_errors() -> tuple[type[BaseException], ...]:
-    r"""The exception types the engine uses to report bad input."""
-    types: list[type[BaseException]] = [ValueError, KeyError, TypeError]
+    r"""The exception types the engine uses to report bad input.
+
+    ``TypeError`` is deliberately not among them. The engine raises it for a
+    keyword it does not take or a ``None`` where an object was expected --
+    which is this client calling the engine wrongly, not the caller describing
+    their data wrongly. Reporting it as ``INVALID_REQUEST`` tells a user their
+    request is at fault for a bug they cannot fix, so it falls through to the
+    internal bucket with the type named.
+    """
+    types: list[type[BaseException]] = [ValueError, KeyError]
     try:
         from sdm_relational_engine import KumoRelationalError
     except ImportError:  # pragma: no cover - the extra is optional
@@ -643,7 +657,15 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
             if column_name in engine_table:
                 engine_table[column_name].stype = column.stype
 
+    linked: set[tuple[str, str, str]] = set()
     for link in schema.relationships:
+        edge = (link.source_table, link.source_column, link.target_table)
+        if edge in linked:
+            # The engine refuses an edge it already has. Listing the same
+            # relationship twice is what happens when a caller appends to an
+            # inferred list, and it asks for nothing the first one did not.
+            continue
+        linked.add(edge)
         graph.link(
             src_table=link.source_table,
             fkey=link.source_column,
@@ -664,8 +686,13 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
         not in _as_key_tuple(schema[link.target_table].primary_key)
     ]
     if misdirected:
+        shown = ', '.join(
+            f'{link.source_table}.{link.source_column} -> '
+            f'{link.target_table}.{link.target_column}'
+            for link in misdirected
+        )
         raise StructuredDataError(
-            f'{misdirected} name a target column that is not the primary key '
+            f'{shown} name a target column that is not the primary key '
             f'of the table they point at, and an edge can only join to that',
             code='INVALID_REQUEST',
         )
@@ -675,6 +702,6 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
         raise StructuredDataError(
             f'the graph built for this request does not match the schema: '
             f'{sorted(sent ^ described)}',
-            code='INVALID_REQUEST',
+            code='INTERNAL_ERROR',
         )
     return graph

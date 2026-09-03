@@ -516,12 +516,8 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
     values: list[Any] = []
     batch = np.asarray(table.batch)
     df = table.df.reset_index(drop=True)
-    # The key column, not the frame. `df.iloc[i][key]` builds a Series for the
-    # whole row, and a row has one dtype -- so an integer key sitting beside a
-    # float column comes back as a float, and the payload then declares the
-    # entity reference `float64` while the key it joins to is `int64`, which
-    # the endpoint refuses. The same gather twelve lines below already reads
-    # the column first, for the cost rather than the type.
+    # The column, not the row: `df.iloc[i][key]` collapses a row to one dtype
+    # and returns an integer key as a float.
     key_values = df[table.primary_key]
     row = np.asarray(table.row) if table.row is not None else None
     # One pass for every instance's first occurrence, rather than a full scan
@@ -1228,11 +1224,24 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
         return bool(value)
     if dtype in ('int64', 'int32'):
         integer = int(value)
+        if not _INT64_MIN <= integer <= _INT64_MAX:
+            # `_dtype_name` answers int64 for uint64 too, so without this a
+            # value the declared dtype cannot hold travels as though it could.
+            raise ValueError(
+                f'value {value!r} is outside the range {dtype} represents '
+                f'({_INT64_MIN} to {_INT64_MAX}); send the column as strings'
+            )
         if integer > JSON_SAFE_INT_MAX or integer < JSON_SAFE_INT_MIN:
             return str(integer)
         return integer
     if dtype in ('float64', 'float32'):
-        return float(value)
+        number = float(value)
+        if not math.isfinite(number) and _is_finite_input(value):
+            raise ValueError(
+                f'value {value!r} is too large for {dtype} to represent; '
+                f'send the column as strings to keep it exact'
+            )
+        return number
     if dtype == 'timestamp[us]':
         if isinstance(value, str):
             return value
@@ -1243,6 +1252,19 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             f"wire dtype '{dtype}'; convert the column to a supported dtype"
         )
     return value
+
+
+def _is_finite_input(value: Any) -> bool:
+    r"""Whether ``value`` was finite before the float conversion.
+
+    A `Decimal` too wide for a float becomes `inf`, which is a different fault
+    from a value that was infinite to begin with and must not be reported as
+    one.
+    """
+    try:
+        return bool(Decimal(str(value)).is_finite())
+    except (ArithmeticError, ValueError, TypeError):
+        return False
 
 
 def _wire_string(value: Any) -> str:

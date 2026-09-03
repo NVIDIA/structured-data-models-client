@@ -4,6 +4,32 @@
 
 The first release is being assembled. Nothing here has shipped yet.
 
+### Behaviour worth knowing before you rely on it
+
+**A `DECIMAL` column travels as the number it is, and a fractional one rounds.**
+A warehouse `DECIMAL`/`NUMBER` arrives as `Decimal`, which is exact and
+unbounded, and the wire has no such type. So: a whole-number decimal is sent as
+`int64`; one too wide for `int64` is sent as digits in a string, which keeps
+every one of them; and a **fractional** decimal is sent as `float64`, which
+rounds it. Below 2**53 that rounding is ordinary float behaviour and is
+accepted silently. Above it a float cannot hold even the integer part, so the
+value is refused rather than quietly mangled. If you need a fractional decimal
+kept exactly, send the column as strings.
+
+This applies however the column reaches us. Read through Arrow -- which the
+connectors prefer, because it is the path that keeps a wide integer exact -- a
+`DECIMAL` used to be announced as `string`, so an id column stopped being an id
+to the model. It is now named the same way on both paths.
+
+**A CSV column with blanks keeps its type instead of becoming `float64`.**
+`read_table` on a local CSV now reads through pandas' nullable dtypes, so an
+integer column containing a blank comes back `Int64` rather than being promoted
+to `float64` and losing exactness past 2**53. Columns with no nulls are
+narrowed back to the plain numpy dtypes, so the common case is unchanged, but a
+column **with** nulls now arrives as `Int64`, `string` or `boolean` where it
+previously arrived as `float64` or `object`. Code that tests `frame.dtypes`
+against numpy types for such a column will see the difference.
+
 ### Notes for a reviewer
 
 **Graph visualization is kept, and so is its provenance.** `Graph.visualize()`

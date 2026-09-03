@@ -85,7 +85,7 @@ class PredictionItem:
         return cls(
             id=str(data['id']) if 'id' in data else None,
             row_index=_require_int(data, 'row_index', 'PredictionItem'),
-            forecast_step=_int_or_none(data.get('forecast_step')),
+            forecast_step=_int_or_none(data.get('forecast_step'), 'forecast_step', 'prediction'),
             prediction=data.get('prediction'),
             probabilities=_float_dict(data.get('probabilities')),
             scores=_float_tuple(data.get('scores')),
@@ -202,7 +202,22 @@ def _finite(value: Any) -> float:
     outside the contract; passing it through puts it in the caller's
     frame instead, where it reads as a missing probability.
     """
-    number = float(value)
+    if isinstance(value, bool):
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires a '
+            f'number'
+        )
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        # A number spelled as a string is accepted: servers do send
+        # one, and refusing a value that parses exactly would be a
+        # regression with nothing gained. What must not happen is a
+        # raw ValueError escaping as though it were the caller's.
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires a '
+            f'number'
+        ) from None
     if not math.isfinite(number):
         raise ResponseContractError(
             f'response carries a non-finite number {value!r}, which the '
@@ -219,10 +234,12 @@ def _float_dict(value: Any) -> dict[str, float] | None:
     return {str(key): _finite(val) for key, val in value.items()}
 
 
-def _int_or_none(value: Any) -> int | None:
+def _int_or_none(
+    value: Any, field: str = 'value', model: str = 'the'
+) -> int | None:
     if value is None:
         return None
-    return _whole(value, 'value', 'the')
+    return _whole(value, field, model)
 
 
 def _float_tuple(value: Any) -> tuple[float, ...] | None:

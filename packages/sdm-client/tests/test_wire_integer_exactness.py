@@ -90,7 +90,21 @@ def test_the_int64_boundary_decimal_is_still_an_integer():
 
 def test_a_decimal_too_large_for_a_float_does_not_raise_overflowerror():
     """`float(Decimal('1e400'))` is `inf`, and `int(inf)` is an OverflowError."""
-    assert cells([Decimal('1e400')]) == ['1E+400']
+    assert cells([Decimal('1e400')]) == ['1' + '0' * 400]
+
+
+def test_a_wide_decimal_travels_as_digits_not_scientific_notation():
+    """The whole point of routing these through `string` is keeping the digits.
+
+    `str(Decimal)` switches to an exponent as soon as the exponent is
+    positive, so this column used to go out as `'1E+400'` -- which no consumer
+    reading it as an integer can parse, and which this test previously
+    asserted was correct.
+    """
+    for value in (Decimal('1e400'), Decimal('1E+30'), Decimal(str(2**70))):
+        sent = cells([value])[0]
+        assert 'E' not in sent and 'e' not in sent, sent
+        assert int(sent) == int(value)
 
 
 def test_a_column_mixing_a_wide_decimal_with_a_small_one_travels_whole():
@@ -179,3 +193,39 @@ def test_a_large_float_is_still_sent_as_a_float():
 
 def test_a_bool_is_not_an_integer_for_this_purpose():
     assert serialize_cell(True, 'float64') == 1.0
+
+
+# --- a decimal is a decimal however pandas stores it -------------------------
+
+
+def test_an_arrow_backed_decimal_is_named_like_an_object_one():
+    """Read through Arrow, a DECIMAL used to be announced as `string`.
+
+    None of the pandas dtype predicates match an `ArrowDtype`, so the column
+    fell through to the final `'string'`. An id column announced as a string
+    stops being an id to the model, and the connectors prefer the Arrow path
+    precisely because it is the one that keeps a wide integer exact.
+    """
+    pa = pytest.importorskip('pyarrow')
+
+    whole = pd.Series(
+        [Decimal('123')], dtype=pd.ArrowDtype(pa.decimal128(38, 0))
+    )
+    fractional = pd.Series(
+        [Decimal('1.50')], dtype=pd.ArrowDtype(pa.decimal128(38, 2))
+    )
+    assert infer_tfm_dtype(whole) == 'int64'
+    assert infer_tfm_dtype(fractional) == 'float64'
+    assert infer_tfm_dtype(whole) == infer_tfm_dtype(
+        pd.Series([Decimal('123')], dtype=object)
+    )
+
+
+def test_a_narrow_arrow_decimal_is_answered_from_the_type_alone():
+    """18 digits always fit int64, so no cell has to be read to know it."""
+    pa = pytest.importorskip('pyarrow')
+
+    series = pd.Series(
+        [Decimal('1')], dtype=pd.ArrowDtype(pa.decimal128(18, 0))
+    )
+    assert infer_tfm_dtype(series) == 'int64'

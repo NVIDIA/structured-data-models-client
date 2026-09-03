@@ -33,10 +33,11 @@ Nothing here contacts a model. Inference reads your frames locally.
 
 from __future__ import annotations
 
+import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, NamedTuple
 
 import pandas as pd
 
@@ -85,11 +86,19 @@ class Column:
         stype: What the column *means* -- ``'numerical'``, ``'categorical'``,
             ``'ID'``, ``'text'``, ``'timestamp'``. This is the one worth
             correcting: it decides how the model encodes the column.
+        untyped: Whether the values carried no type at all -- an all-null
+            object column. ``dtype`` is ``'string'`` for those, because a
+            schema has to name something and a string round-trips whatever
+            arrives, but the frame being scored may hold real values and
+            decide the dtype instead. Recorded so the adapter can read it
+            here rather than re-deriving it from the frame, which is how the
+            schema and the request came to disagree.
     """
 
     name: str
     dtype: str
     stype: str
+    untyped: bool = False
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
@@ -128,8 +137,10 @@ class Column:
             )
 
     def __repr__(self) -> str:
+        untyped = ', untyped=True' if self.untyped else ''
         return (
-            f'Column({self.name!r}, dtype={self.dtype!r}, stype={self.stype!r})'
+            f'Column({self.name!r}, dtype={self.dtype!r}, '
+            f'stype={self.stype!r}{untyped})'
         )
 
 
@@ -156,7 +167,10 @@ class Table:
     time_column: str | None = None
     #: How many rows repeat a primary key value another row already used.
     #: Inference tolerates a few, deliberately; this is what it tolerated.
-    duplicate_keys: int = 0
+    #: Not an init argument: the generated ``__init__`` assigns fields in
+    #: order, so a settable one would overwrite what assigning the key just
+    #: computed, and every explicitly-built table would report zero.
+    duplicate_keys: int = field(init=False, default=0)
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
@@ -189,16 +203,15 @@ class Table:
         frame = getattr(self, 'data', None)
         if frame is None or frame.empty:
             return
-        object.__setattr__(
-            self, 'duplicate_keys', _duplicate_key_count(frame, names)
-        )
-        if self.duplicate_keys:
+        quality = _key_quality(frame, names)
+        object.__setattr__(self, 'duplicate_keys', quality.duplicates)
+        if quality.duplicates:
             warnings.warn(
                 f'{self.name}.{".".join(names)} identifies a row '
-                f'{self.duplicate_keys} time(s) it has already been used, '
-                f'e.g. {_first_duplicate(frame, names)!r}. Those rows are '
+                f'{quality.duplicates} time(s) it has already been used, '
+                f'e.g. {quality.example!r}. Those rows are '
                 f'indistinguishable to the model.',
-                stacklevel=3,
+                stacklevel=_warning_stacklevel(),
             )
 
     def _check_column(self, name: str) -> None:
@@ -242,13 +255,23 @@ class Table:
         frame = getattr(self, 'data', None)
         if frame is None or frame.empty:
             return
-        duplicates = _duplicate_key_count(frame, names)
-        if duplicates > len(frame) * (1 - _KEY_UNIQUENESS):
-            example = _first_duplicate(frame, names)
+        quality = _key_quality(frame, names)
+        if quality.nulls:
+            # Refused however few. A missing key is not a near-miss on
+            # uniqueness -- the engine drops those rows rather than scoring
+            # them, and a single one used to pass silently because
+            # `duplicated` does not flag one null.
+            raise StructuredDataError(
+                f'{".".join((self.name, *names))} has {quality.nulls} row(s) '
+                f'with no value, so those rows cannot be identified; fill or '
+                f'drop them before using the column as a primary key',
+                code='INVALID_REQUEST',
+            )
+        if quality.duplicates > len(frame) * (1 - _KEY_UNIQUENESS):
             raise StructuredDataError(
                 f'{".".join((self.name, *names))} is not unique enough to '
-                f'identify a row: {duplicates} of {len(frame)} rows repeat a '
-                f'value already used, e.g. {example!r}',
+                f'identify a row: {quality.duplicates} of {len(frame)} rows '
+                f'repeat a value already used, e.g. {quality.example!r}',
                 code='INVALID_REQUEST',
             )
 
@@ -516,6 +539,7 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
             name=column,
             dtype=_dtype_of(frame[column]),
             stype=_stype_of(frame[column]),
+            untyped=infer_tfm_dtype(frame[column]) == UNTYPED,
         )
         for column in frame.columns
     }
@@ -566,6 +590,12 @@ def _infer_primary_key(
             # A key-shaped name on values that cannot identify a row -- a bool
             # column called `id`, say. Nominating it would refuse the frame at
             # construction for a key nobody asked for.
+            continue
+        if frame[name].isna().any():
+            # A row with no key cannot be identified, and assigning this
+            # column would refuse the frame outright. Inference declines to
+            # nominate it instead, leaving the caller free to say otherwise
+            # and hear why.
             continue
         distinct = frame[name].nunique(dropna=True)
         if distinct >= len(frame) * _KEY_UNIQUENESS:
@@ -671,23 +701,57 @@ def supports_dtype(stype: str, dtype: str) -> bool:
         return True
 
 
-def _duplicate_key_count(frame: pd.DataFrame, names: Sequence[str]) -> int:
-    r"""How many rows repeat a key value another row already used."""
+def _warning_stacklevel() -> int:
+    r"""How far up to point a warning so it lands on the caller's line.
+
+    Assigning a key warns three frames up; inferring one warns from deeper,
+    because `Schema.from_data` reaches the same setter through `_infer_table`.
+    A fixed number is right for one route and blames this module on the other,
+    which is the route most callers take. Counting the frames that belong to
+    this file answers for both.
+    """
+    depth = 1
+    frame = sys._getframe(1)
+    while frame is not None and frame.f_globals.get('__name__') == __name__:
+        depth += 1
+        frame = frame.f_back
+    return depth
+
+
+class _KeyQuality(NamedTuple):
+    r"""What one pass over a key column found.
+
+    Computed once and handed on. The check, the count that gets recorded and
+    the example in the message all used to derive this separately, which meant
+    three full passes over the same column for every key assignment.
+    """
+
+    duplicates: int
+    nulls: int
+    example: Any
+
+
+def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:
     columns = list(names)
     if any(name not in frame.columns for name in columns):
-        return 0
+        return _KeyQuality(0, 0, None)
     key = frame[columns[0]] if len(columns) == 1 else frame[columns]
-    return int(key.duplicated().sum())
-
-
-def _first_duplicate(frame: pd.DataFrame, names: Sequence[str]) -> Any:
-    columns = list(names)
-    key = frame[columns[0]] if len(columns) == 1 else frame[columns]
-    repeated = key[key.duplicated()]
-    if repeated.empty:
-        return None
-    first = repeated.iloc[0]
-    return first if len(columns) == 1 else tuple(first)
+    nulls = int(
+        key.isna().any(axis=1).sum() if len(columns) > 1 else key.isna().sum()
+    )
+    # `duplicated` treats null as equal to null, so nulls would otherwise be
+    # counted as repeats and reported as a duplicate problem, which has a
+    # different fix. Count them separately and leave them out of this.
+    present = (
+        key[~key.isna().any(axis=1)] if len(columns) > 1 else key[key.notna()]
+    )
+    repeated_mask = present.duplicated()
+    duplicates = int(repeated_mask.sum())
+    example = None
+    if duplicates:
+        first = present[repeated_mask].iloc[0]
+        example = first if len(columns) == 1 else tuple(first)
+    return _KeyQuality(duplicates, nulls, example)
 
 
 def to_graph_definition(schema: Schema) -> Any:

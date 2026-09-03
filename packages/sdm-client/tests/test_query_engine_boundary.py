@@ -175,3 +175,73 @@ def test_a_dropped_row_is_explained_rather_than_only_counted():
 def test_an_ordinary_call_is_unaffected():
     request = query().materialize(indices=[1, 2], num_context_samples=20)
     assert request.payloads
+
+
+def test_a_temporal_link_prediction_is_capped_lower_than_everything_else():
+    """The second call to `_check_entity_count` is why it takes a task kind.
+
+    Only the 1,000 ceiling was covered, so the whole reason the argument
+    exists went unexercised: a temporal link prediction is capped at 200, and
+    a count between the two has to be refused for that task and allowed for
+    every other one.
+    """
+    from sdm_client.models import RELATIONAL_LIMITS
+    from sdm_client.query import _check_entity_count
+
+    temporal = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
+    between = list(range(temporal + 1))
+
+    _check_entity_count(between, 'binary_classification')
+    _check_entity_count(between, None)
+
+    with pytest.raises(StructuredDataError) as error:
+        _check_entity_count(between, 'temporal_link_prediction')
+    assert str(temporal) in str(error.value)
+    assert error.value.code == 'UNSUPPORTED_REQUEST'
+
+
+def test_the_two_ceilings_are_the_engine_s_own():
+    """A drift between these and the engine refuses work the engine allows."""
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    engine = pytest.importorskip('sdm_relational_engine.rfm.rfm')
+    from predictive_query import TaskType
+
+    assert (
+        RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
+        == engine._MAX_PRED_SIZE[TaskType.TEMPORAL_LINK_PREDICTION]
+    )
+    assert (
+        RELATIONAL_LIMITS['predict_rows_max']
+        == engine._MAX_PRED_SIZE[TaskType.BINARY_CLASSIFICATION]
+    )
+
+
+def test_a_relationship_listed_twice_is_linked_once():
+    """`graph.link()` became unconditional, and the engine refuses an edge it
+    already has -- which a caller appending to an inferred list produces."""
+    import pandas as pd
+
+    from sdm_client import Relationship, Schema
+    from sdm_client.query import _to_engine_graph
+
+    users = pd.DataFrame({'user_id': [1, 2], 'age': [20.0, 30.0]})
+    orders = pd.DataFrame({'order_id': [1, 2], 'user_id': [1, 2]})
+    schema = Schema.from_data({'users': users, 'orders': orders})
+    link = Relationship('orders', 'user_id', 'users', 'user_id')
+    schema.relationships = [link, link]
+
+    from sdm_client.query import _engine
+
+    graph = _to_engine_graph(_engine(), schema)
+    edges = {(e.src_table, e.fkey, e.dst_table) for e in graph.edges}
+    assert edges == {('orders', 'user_id', 'users')}
+
+
+def test_a_type_error_from_the_engine_is_not_blamed_on_the_caller():
+    """A kwarg the engine does not take is this client's bug, and reporting
+    it as INVALID_REQUEST tells a user to fix something they cannot."""
+    from sdm_client.query import _CALLER_ERRORS
+
+    assert TypeError not in _CALLER_ERRORS
+    assert ValueError in _CALLER_ERRORS

@@ -15,6 +15,8 @@ engine's own.
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -399,3 +401,86 @@ def test_an_ordinary_key_is_still_nominated():
     built = Schema.from_data({'t': frame}, relationships=[])
     assert built['t'].primary_key == 'user_id'
     assert built['t']['user_id'].stype == 'ID'
+
+
+# --- a key with no value is its own failure, not a near-miss on uniqueness ---
+
+
+def _table(frame: pd.DataFrame):
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return _infer_table('t', frame)
+
+
+def test_a_single_null_key_is_refused_rather_than_passing_silently():
+    """`duplicated()` does not flag one null, so this used to be accepted.
+
+    The engine then drops the row as `null_primary_key_rows` and nobody hears
+    about it, which is the quietest way to lose a row.
+    """
+    frame = pd.DataFrame({'id': [1, 2, None, 4], 'v': [1.0, 2.0, 3.0, 4.0]})
+    table = _table(frame)
+    with pytest.raises(StructuredDataError) as error:
+        table.primary_key = 'id'
+    assert 'no value' in str(error.value)
+
+
+def test_many_null_keys_are_reported_as_nulls_not_as_duplicates():
+    """`duplicated()` treats null as equal to null, so these looked like
+    repeats -- and 'repeats a value already used, e.g. nan' sends the reader
+    to fix the wrong thing."""
+    frame = pd.DataFrame({'id': [None, None, None], 'v': [1.0, 2.0, 3.0]})
+    table = _table(frame)
+    with pytest.raises(StructuredDataError) as error:
+        table.primary_key = 'id'
+    message = str(error.value)
+    assert 'no value' in message
+    assert 'already used' not in message
+
+
+def test_inference_declines_a_null_bearing_key_instead_of_refusing_the_frame():
+    """Inference nominating one would make `Schema.from_data` raise."""
+    frame = pd.DataFrame(
+        {'user_id': list(range(999)) + [None], 'v': [1.0] * 1000}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        built = Schema.from_data({'users': frame})
+    assert built['users'].primary_key is None
+
+
+def test_duplicate_keys_is_recorded_when_the_key_is_assigned():
+    """It was an init field declared after `primary_key`, so the generated
+    `__init__` reset it to 0 after `_adopt_key` had computed it."""
+    frame = pd.DataFrame({'id': list(range(299)) + [0], 'v': [1.0] * 300})
+    table = _table(frame.rename(columns={'id': 'plain'}))
+    table.data = frame
+    table.columns['id'] = table.columns.pop('plain')
+    table.columns['id'].name = 'id'
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        table.primary_key = 'id'
+    assert table.duplicate_keys == 1
+
+
+def test_duplicate_keys_cannot_be_asserted_by_a_caller():
+    """A settable count could disagree with the frame it describes."""
+    import dataclasses
+
+    from sdm_client.schema import Table
+
+    names = {f.name for f in dataclasses.fields(Table) if f.init}
+    assert 'duplicate_keys' not in names
+
+
+def test_the_duplicate_key_warning_points_at_the_caller():
+    """A fixed stacklevel is right for assignment and blames this library on
+    the inference path, which is the path most callers take."""
+    frame = pd.DataFrame({'id': list(range(299)) + [0], 'v': [1.0] * 300})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        Schema.from_data({'t': frame})
+    assert caught
+    assert caught[0].filename == __file__

@@ -249,7 +249,7 @@ class SDMClient:
         try:
             return self._transport.predict(payload)
         except StructuredDataError as error:
-            raise adapter.explain_error(error, payload) from None
+            raise adapter.explain_error(error, payload) from error
 
     def fit(
         self,
@@ -273,7 +273,7 @@ class SDMClient:
             try:
                 created = self._transport.create_session(payload)
             except StructuredDataError as error:
-                raise adapter.explain_error(error, payload) from None
+                raise adapter.explain_error(error, payload) from error
         except Exception as error:
             status = getattr(error, 'status_code', None)
             if status in _SESSIONS_UNSUPPORTED:

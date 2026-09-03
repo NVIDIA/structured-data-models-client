@@ -15,6 +15,7 @@ import pandas as pd
 import pytest
 
 from sdm_connectors import connect, read, read_table
+from sdm_connectors.sql import ConnectorError
 
 BIG = 9_007_199_254_740_993
 
@@ -140,13 +141,41 @@ def test_a_local_directory_is_a_parquet_dataset(tmp_path):
 def test_a_remote_prefix_is_not_asked_of_the_local_filesystem():
     """`os.path.isdir` is always False for an s3:// URI.
 
-    The filesystem that owns the path is asked instead. Nothing here reaches
-    S3: an unreachable bucket answers "not a directory", which is the answer
-    that used to come from asking the wrong filesystem.
+    The filesystem that owns the path is asked instead, and it reports both a
+    verdict and why it could not answer, so a store that cannot be reached is
+    told apart from one that answered "not a directory".
     """
     from sdm_connectors.reader import _is_directory
 
-    assert _is_directory('s3://a-bucket-that-does-not-exist-42/prefix') is False
+    is_directory, unreachable = _is_directory(
+        's3://a-bucket-that-does-not-exist-42/prefix'
+    )
+    assert is_directory is False
+    assert unreachable is None or isinstance(unreachable, Exception)
+
+
+def test_an_unreachable_store_is_not_reported_as_a_format_problem():
+    """A suffix-less path has no read afterwards to surface the real fault.
+
+    Bad credentials on `s3://bucket/parts` used to come back as "unsupported
+    file format", which sends the caller to fix the wrong thing.
+    """
+    import sdm_connectors.reader as reader
+
+    def _unreachable(path, storage_options=None):
+        return False, PermissionError('the supplied credentials were refused')
+
+    original = reader._is_directory
+    reader._is_directory = _unreachable
+    try:
+        with pytest.raises(ConnectorError) as error:
+            reader._resolve_format('s3://bucket/parts')
+    finally:
+        reader._is_directory = original
+    message = str(error.value)
+    assert 'could not determine the format' in message
+    assert 'credentials were refused' in message
+    assert 'unsupported file format' not in message
 
 
 def test_a_trailing_slash_still_means_a_directory():

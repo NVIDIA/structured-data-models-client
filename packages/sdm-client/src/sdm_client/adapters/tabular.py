@@ -147,12 +147,7 @@ class TabularAdapter:
         # re-type the other frame, so the schema's answer is set aside for
         # those and the frames decide.
         dtypes = {
-            name: (
-                UNTYPED
-                if name in context.columns
-                and _raw_dtype_of(context[name]) == UNTYPED
-                else column.dtype
-            )
+            name: (UNTYPED if column.untyped else column.dtype)
             for name, column in table.columns.items()
         }
         for name in predict.columns:

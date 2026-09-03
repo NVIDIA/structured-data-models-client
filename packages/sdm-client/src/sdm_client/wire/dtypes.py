@@ -216,6 +216,9 @@ def infer_tfm_dtype(series: pd.Series) -> str:
         return 'int64'
     if pd.api.types.is_float_dtype(dtype):
         return 'float64' if dtype.itemsize > 4 else 'float32'
+    decimal_type = _arrow_decimal_type(dtype)
+    if decimal_type is not None:
+        return _decimal_dtype(series, decimal_type)
     if pd.api.types.is_object_dtype(dtype):
         content = pd.api.types.infer_dtype(series, skipna=True)
         if content == 'empty':
@@ -226,7 +229,34 @@ def infer_tfm_dtype(series: pd.Series) -> str:
     return 'string'
 
 
-def _decimal_dtype(series: pd.Series) -> str:
+#: Digits an int64 always holds. 18 nines is 999999999999999999, below
+#: INT64_MAX; the 19th digit is where it starts depending on the value.
+_INT64_SAFE_PRECISION = 18
+
+
+def _arrow_decimal_type(dtype: Any) -> Any | None:
+    r"""``dtype``'s Arrow decimal type, or ``None`` if it is not one.
+
+    A warehouse ``DECIMAL`` reaches us two ways. Read through pandas it is an
+    ``object`` column of :class:`~decimal.Decimal`; read through Arrow -- which
+    the connectors now prefer, because it is the path that keeps a wide integer
+    exact -- it is an ``ArrowDtype``, which satisfies none of the pandas dtype
+    predicates and so used to be announced as ``string``. An id column
+    announced as a string stops being an id to the model.
+
+    Read off the dtype rather than by importing pyarrow: this package depends
+    on pandas and numpy only, and a client should not gain a build dependency
+    to name a column.
+    """
+    arrow_type = getattr(dtype, 'pyarrow_dtype', None)
+    if arrow_type is None or not str(arrow_type).startswith('decimal'):
+        return None
+    if not isinstance(getattr(arrow_type, 'scale', None), int):
+        return None
+    return arrow_type
+
+
+def _decimal_dtype(series: pd.Series, arrow_type: Any | None = None) -> str:
     r"""``int64`` for a whole-number ``Decimal`` column, ``float64`` otherwise.
 
     ``DECIMAL`` and ``NUMBER`` are how a warehouse spells an exact number, and
@@ -241,15 +271,31 @@ def _decimal_dtype(series: pd.Series) -> str:
     same input. Anything else is a ``float64``, and :func:`serialize_cell`
     refuses the values that cannot survive one.
     """
+    if arrow_type is not None:
+        # The declared type answers both questions without reading a cell: a
+        # scale above zero cannot be whole, and 18 digits always fit int64.
+        # Only an ambiguous precision has to look at the values.
+        if arrow_type.scale > 0:
+            return 'float64'
+        if arrow_type.precision <= _INT64_SAFE_PRECISION:
+            return 'int64'
+
     integral = True
     for value in series:
         if _is_missing(value):
             continue
         if not isinstance(value, Decimal):
             return 'float64'
-        if not value.is_finite() or value != value.to_integral_value():
+        if not value.is_finite():
             return 'float64'
-        if not INT64_MIN <= int(value) <= INT64_MAX:
+        # `as_tuple().exponent` and `adjusted()` answer "is it whole" and "how
+        # many digits" off the representation, so a 400-digit value never has
+        # to be materialised as an int just to be measured.
+        if value.as_tuple().exponent < 0 and value != value.to_integral_value():
+            return 'float64'
+        if value.adjusted() >= _INT64_SAFE_PRECISION and not (
+            INT64_MIN <= value <= INT64_MAX
+        ):
             integral = False
     return 'int64' if integral else 'string'
 
@@ -420,6 +466,11 @@ def serialize_cell(value: Any, dtype: str) -> Any:
         return number
     if dtype == 'bool':
         return bool(value)
+    if isinstance(value, Decimal):
+        # `str` switches to scientific notation once the exponent is positive,
+        # so a whole number too wide for int64 -- the reason this column is a
+        # string at all -- would travel as '1E+400' rather than its digits.
+        return format(value, 'f')
     return str(value)
 
 

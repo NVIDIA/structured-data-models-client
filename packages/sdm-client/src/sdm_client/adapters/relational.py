@@ -198,12 +198,26 @@ class RelationalAdapter:
         columns = _columns_with_stype(payload, match.group(1))
         if not columns:
             return error
-        table, _, column = columns[0].partition('.')
-        shown = 'the table' if table == 'instance_table' else table
+        # The payload does not carry the entity table's real name --
+        # `instance_table` is what the wire calls it -- so an example naming
+        # it would render a line the caller cannot run. Prefer a related
+        # table, whose name did survive, and fall back to naming no table at
+        # all rather than a made-up one.
+        named = next(
+            (c for c in columns if not c.startswith('instance_table.')), None
+        )
+        if named is not None:
+            table, _, column = named.partition('.')
+            suggestion = f"schema[{table!r}][{column!r}].stype = 'categorical'"
+        else:
+            _, _, column = columns[0].partition('.')
+            suggestion = (
+                f"schema[<the entity table>][{column!r}].stype = 'categorical'"
+            )
         message = (
             f'{getattr(error, "message", error)}. In this request that is '
             f'{", ".join(columns)}. Set a supported type on each, e.g. '
-            f"schema[{shown!r}][{column!r}].stype = 'categorical'"
+            f'{suggestion}'
         )
         if isinstance(error, NimRequestError):
             return NimRequestError(
@@ -212,9 +226,15 @@ class RelationalAdapter:
                 message=message,
                 details=error.details,
             )
-        return StructuredDataError(
+        rebuilt = StructuredDataError(
             message, code=error.code, details=error.details
         )
+        status = getattr(error, 'status_code', None)
+        if status is not None:
+            # `fit()` reads this to decide whether an endpoint simply does not
+            # serve sessions; losing it turns a clean fallback into a failure.
+            rebuilt.status_code = status
+        return rebuilt
 
     def close(self) -> None:
         r"""Nothing to release: gathering happens in the query, which owns

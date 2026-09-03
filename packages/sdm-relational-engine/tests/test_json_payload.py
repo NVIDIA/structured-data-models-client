@@ -978,3 +978,45 @@ def test_decimal_cells_are_named_by_what_they_hold() -> None:
     assert emitted <= {str(value) for value in wide}
     assert '123456789012345678901234567800' in emitted
     json.dumps(payload)
+
+
+# --- the guard that landed in only one of the two encoders -------------------
+
+
+def test_a_uint64_past_int64_is_refused_rather_than_sent_as_int64():
+    """`_dtype_name` answers int64 for uint64, so without a bounds check the
+    payload declares a width the value does not have and sends it anyway.
+
+    The tabular encoder grew this guard; this one did not, so the same column
+    was exact on one path and wrong on the other.
+    """
+    import numpy as np
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(np.uint64(2**64 - 1), 'int64')
+    assert 'outside the range' in str(error.value)
+    assert 'strings' in str(error.value)
+
+
+def test_an_int64_within_range_still_travels():
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    # Inside the JS-safe range it stays a number; past it the contract's
+    # base-10-string rule applies, and both are still within int64.
+    assert _cell_json_value(2**40, 'int64') == 2**40
+    assert _cell_json_value(2**62, 'int64') == str(2**62)
+    assert _cell_json_value(-(2**63), 'int64') == str(-(2**63))
+
+
+def test_a_decimal_too_wide_for_a_float_is_refused_not_sent_as_inf():
+    """`float(Decimal('1e400'))` is `inf`, which is not a rounding of the
+    original in any useful sense and has no JSON form either.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(Decimal('1e400'), 'float64')
+    assert 'too large' in str(error.value)

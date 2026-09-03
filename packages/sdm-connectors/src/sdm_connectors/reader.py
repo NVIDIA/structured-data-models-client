@@ -357,7 +357,7 @@ def _read_s3(
 
 def _is_directory(
     path: str, storage_options: dict[str, Any] | None = None
-) -> bool:
+) -> tuple[bool, Exception | None]:
     r"""Whether ``path`` names a directory, local or remote.
 
     Built with the caller's ``storage_options``, so a private endpoint or an
@@ -369,22 +369,24 @@ def _is_directory(
     caller happened to write a trailing slash. The filesystem that owns the
     path is asked instead.
 
-    Reached only for a path whose name gives no answer, and a failure to reach
-    the store is not one either: whatever went wrong -- credentials, network,
-    a bucket that is not there -- surfaces from the read that follows, with its
-    own message, rather than from a format guess.
+    Reached only for a path whose name gives no answer. A failure to reach the
+    store is not an answer either, and there is no read afterwards to report
+    it: for a suffix-less path this call is the last word, so swallowing the
+    error made bad credentials on ``s3://bucket/parts`` surface as an
+    unsupported file format. The reason is returned alongside the verdict and
+    the caller says which happened.
     """
     scheme = urlparse(path).scheme
     if len(scheme) <= 1 or scheme == 'file':
-        return os.path.isdir(path)
+        return os.path.isdir(path), None
     try:
         import fsspec
 
         return bool(
             fsspec.filesystem(scheme, **(storage_options or {})).isdir(path)
-        )
-    except Exception:  # noqa: BLE001 - see the docstring
-        return False
+        ), None
+    except Exception as error:  # noqa: BLE001 - reported by the caller
+        return False, error
 
 
 def _resolve_format(
@@ -411,8 +413,16 @@ def _resolve_format(
         return 'parquet'
     if suffix in _CSV_SUFFIXES:
         return 'csv'
-    if _is_directory(path, storage_options):
+    is_directory, unreachable = _is_directory(path, storage_options)
+    if is_directory:
         return 'parquet'
+    if unreachable is not None:
+        raise ConnectorError(
+            f'could not determine the format of {path!r}: it names no known '
+            f'suffix, and the store could not be asked whether it is a '
+            f'directory ({type(unreachable).__name__}: {unreachable}). Fix '
+            f'the access problem, or pass format= explicitly'
+        ) from unreachable
     raise ConnectorError(
         f'unsupported file format {suffix or path!r} for {path!r}; supported: '
         f'{sorted(_PARQUET_SUFFIXES + _CSV_SUFFIXES)} (optionally compressed) '
