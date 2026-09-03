@@ -28,6 +28,11 @@ classifiers = [
 # dragging in a parser runtime.
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/NVIDIA/structured-data-models-client"
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
+
 [project.optional-dependencies]
 test = ["pytest", "pyyaml"]
 
