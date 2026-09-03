@@ -108,7 +108,9 @@ and the cell rule have to agree, or the fast path would skip a column the rule
 would reject — which is why Arrow's binary types are walked even though they are
 not nested: pandas hands their cells back as `bytes`. `pa.uuid()` is walked for
 the same reason and passes, since its cells are `uuid.UUID` objects. Both
-directions are pinned: eleven Arrow types walked, ten kept on the fast path. That question
+directions are pinned: twelve Arrow types walked, ten kept on the fast path —
+and a sweep asserts the invariant itself over every type pyarrow exposes,
+because enumerating them is what went wrong four times running. That question
 is asked of the dtype rather than by elimination, because `is_object_dtype`
 alone would call an **Arrow-backed list column** scalar — and that is exactly
 what `pd.read_parquet(dtype_backend='pyarrow')` gives for one, which would have

@@ -530,3 +530,59 @@ def test_a_frozenset_is_refused():
 
     with pytest.raises(StructuredDataError):
         require_scalar_cells(pd.Series([frozenset({'a'})], name='x'), 'x')
+
+
+def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
+    """The invariant, checked against every Arrow type pyarrow exposes.
+
+    Enumerating types is what went wrong four times, so this asserts the
+    property instead: whatever the gate lets past, the cell rule must accept.
+    A type the gate walks is safe by construction and is not examined here.
+    """
+    import inspect
+
+    pa = pytest.importorskip('pyarrow')
+    from sdm_client.wire.dtypes import _holds_only_scalars, is_container
+
+    def build(name: str):
+        factory = getattr(pa, name, None)
+        if factory is None or not callable(factory):
+            return None
+        try:
+            required = [
+                parameter
+                for parameter in inspect.signature(factory).parameters.values()
+                if parameter.default is parameter.empty
+                and parameter.kind
+                in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
+            ]
+            if required:
+                return None
+            return factory()
+        except Exception:  # noqa: BLE001 - not a type factory, or unbuildable
+            return None
+
+    offenders = []
+    for name in dir(pa):
+        arrow_type = build(name)
+        if arrow_type is None:
+            continue
+        if not isinstance(arrow_type, pa.DataType):
+            continue
+        try:
+            dtype = pd.ArrowDtype(arrow_type)
+        except Exception:  # noqa: BLE001 - pandas cannot represent it
+            continue
+        if not _holds_only_scalars(dtype):
+            continue
+        for value in (None, 1, 1.5, True, 'a', b'ab'):
+            try:
+                cell = pd.Series(
+                    pa.array([value], type=arrow_type), dtype=dtype
+                ).iloc[0]
+            except Exception:  # noqa: BLE001 - the type cannot hold this value
+                continue
+            if is_container(cell):
+                offenders.append((name, type(cell).__name__))
+                break
+    assert not offenders
