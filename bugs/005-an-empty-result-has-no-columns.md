@@ -29,9 +29,14 @@ columns**:
 
 ```python
 result = client.predict(
-    Request(context=context, predict=frame.head(0), target='income',
-            task='classification'),
-    model=KumoTabular())
+    Request(
+        context=context,
+        predict=frame.head(0),
+        target='income',
+        task='classification',
+    ),
+    model=KumoTabular(),
+)
 result.to_pandas()
 # Empty DataFrame
 # Columns: []
@@ -41,8 +46,8 @@ result.to_pandas()
 so the documented way to use a result fails on it:
 
 ```python
-frame['prediction']                          # KeyError: 'prediction'
-to_score.merge(frame, on='row_index')        # KeyError: 'row_index'
+frame['prediction']  # KeyError: 'prediction'
+to_score.merge(frame, on='row_index')  # KeyError: 'row_index'
 ```
 
 An empty result is a different *type* from a non-empty one, so a caller cannot

@@ -8,11 +8,18 @@ and can attribute a prediction to the wrong row.
 The generated response parser coerces where it should validate:
 
 ```python
-response = {'id': 'r', 'model': 'kumo-tabular', 'predictions': [
-    {'row_index': 1.2, 'prediction': 'yes', 'probabilities': {'yes': nan}}],
-    'metadata': {}}
+response = {
+    'id': 'r',
+    'model': 'kumo-tabular',
+    'predictions': [
+        {'row_index': 1.2, 'prediction': 'yes', 'probabilities': {'yes': nan}}
+    ],
+    'metadata': {},
+}
 
-TabularAdapter().normalize(response, ('prediction', 'probabilities')).to_pandas()
+TabularAdapter().normalize(
+    response, ('prediction', 'probabilities')
+).to_pandas()
 #    row_index prediction  probability_yes
 # 0          1        yes              NaN
 ```

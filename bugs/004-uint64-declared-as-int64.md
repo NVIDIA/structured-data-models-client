@@ -10,8 +10,8 @@ what `int64` can:
 
 ```python
 series = pd.Series([2**64 - 1, 1], dtype='uint64')
-infer_tfm_dtype(series)                      # 'int64'
-serialize_column(series, 'int64')            # ['18446744073709551615', '1']
+infer_tfm_dtype(series)  # 'int64'
+serialize_column(series, 'int64')  # ['18446744073709551615', '1']
 ```
 
 The schema declares `int64` and the payload carries a value outside `int64`.
