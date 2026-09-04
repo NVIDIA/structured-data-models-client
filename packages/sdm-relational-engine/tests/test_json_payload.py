@@ -1114,3 +1114,30 @@ def test_an_ordinary_decimal_in_a_float_column_still_converts():
 
     assert _cell_json_value(Decimal('1.5'), 'float64') == 1.5
     assert _cell_json_value(42, 'float64') == 42.0
+
+
+@pytest.mark.parametrize(
+    ('value', 'survives'),
+    [
+        (2**53, True),
+        (2**53 - 1, True),
+        (-(2**53), True),
+        (2**53 + 1, False),
+        (-(2**53) - 1, False),
+        (10**400, False),
+    ],
+)
+def test_only_an_integer_a_float_cannot_hold_is_refused(value, survives):
+    """The rule is a round trip, not the safe-integer ceiling.
+
+    `2**53` is above `JSON_SAFE_INT_MAX` and is still exactly representable,
+    so a ceiling comparison refused a value that travels perfectly well, and
+    disagreed with the tabular encoder about it.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    if survives:
+        assert _cell_json_value(value, 'float64') == float(value)
+    else:
+        with pytest.raises(ValueError):
+            _cell_json_value(value, 'float64')

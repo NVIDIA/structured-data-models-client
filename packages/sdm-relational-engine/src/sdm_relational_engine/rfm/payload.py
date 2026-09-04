@@ -1259,9 +1259,12 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
         return integer
     if dtype in ('float64', 'float32'):
         whole = original
-        if whole is not None and abs(whole) > JSON_SAFE_INT_MAX:
+        if whole is not None and not _survives_float(whole):
             # The tabular encoder refuses this; a float column that silently
-            # renumbers an integer is the same defect on either path.
+            # renumbers an integer is the same defect on either path. Asked as
+            # a round trip rather than against the safe-integer ceiling,
+            # because 2**53 itself is representable exactly and only the
+            # values that do not survive may be refused.
             raise ValueError(
                 f'value {value!r} cannot be sent as {dtype} without losing '
                 f'precision; give the column an integer dtype, or convert it '
@@ -1292,6 +1295,14 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             f"wire dtype '{dtype}'; convert the column to a supported dtype"
         )
     return value
+
+
+def _survives_float(whole: int) -> bool:
+    r"""Whether ``whole`` is the same integer after a float64 round trip."""
+    try:
+        return int(float(whole)) == whole
+    except OverflowError:
+        return False
 
 
 def _integral_source(value: Any) -> int | None:
