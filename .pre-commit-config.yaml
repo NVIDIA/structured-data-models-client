@@ -1,0 +1,31 @@
+exclude: ^(packages/sdm-pql/src/predictive_query/|packages/sdm-api/src/sdm_api/generated/tfm_api\.py$|packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid\.min\.js$)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-toml
+      - id: check-yaml
+      - id: no-commit-to-branch
+
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: repo-hygiene
+        name: repository hygiene
+        entry: python scripts/check_repo_hygiene.py all
+        language: system
+        pass_filenames: false
