@@ -252,3 +252,24 @@ def test_an_unreachable_store_error_carries_a_code():
     finally:
         reader._is_directory = original
     assert error.value.code == 'CONNECT_FAILED'
+
+
+def test_a_file_uri_directory_without_a_trailing_slash_is_a_directory():
+    """`os.path.isdir` was given the URI text, which is never a directory.
+
+    The reader accepts `file://` paths, so a parquet directory written that
+    way was refused as an unsupported format unless the caller happened to
+    add a trailing slash.
+    """
+    import os
+    import tempfile
+
+    from sdm_connectors.reader import _resolve_format
+
+    directory = tempfile.mkdtemp()
+    pd.DataFrame({'a': [1, 2]}).to_parquet(
+        os.path.join(directory, 'part.parquet')
+    )
+    assert _resolve_format(f'file://{directory}') == 'parquet'
+    assert _resolve_format(directory) == 'parquet'
+    assert _resolve_format(f'file://{directory}/') == 'parquet'

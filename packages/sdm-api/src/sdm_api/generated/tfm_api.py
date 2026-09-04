@@ -8,7 +8,7 @@
 
 import math
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -231,7 +231,10 @@ def _float_dict(value: Any) -> dict[str, float] | None:
     if value is None:
         return None
     if not isinstance(value, Mapping):
-        raise TypeError('Expected mapping value')
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires '
+            f'an object'
+        )
     return {str(key): _finite(val) for key, val in value.items()}
 
 
@@ -246,6 +249,15 @@ def _int_or_none(
 def _float_tuple(value: Any) -> tuple[float, ...] | None:
     if value is None:
         return None
+    if isinstance(value, (str, bytes, Mapping)) or not isinstance(
+        value, Iterable
+    ):
+        # A string is iterable, so without this a scores field of
+        # '12' becomes (1.0, 2.0); a mapping yields its keys.
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires '
+            f'an array of numbers'
+        )
     return tuple(_finite(item) for item in value)
 
 

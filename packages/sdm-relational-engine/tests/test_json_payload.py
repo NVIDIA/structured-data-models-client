@@ -1054,4 +1054,35 @@ def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
 
     with pytest.raises(ValueError) as error:
         _cell_json_value(10**400, 'float64')
-    assert 'too large' in str(error.value)
+    # Refused by the exactness guard before the conversion is even attempted,
+    # which is a better answer than catching the OverflowError afterwards.
+    assert 'strings' in str(error.value)
+
+
+def test_the_two_encoders_agree_on_an_integer_a_float_cannot_hold():
+    """The tabular encoder refused this and the relational one rounded it.
+
+    A float column that silently renumbers an integer is the same defect on
+    either path, and the wire cannot tell which encoder produced the cell.
+    """
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.wire.dtypes import serialize_cell
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(StructuredDataError):
+        serialize_cell(2**53 + 1, 'float64')
+    with pytest.raises(ValueError):
+        _cell_json_value(2**53 + 1, 'float64')
+
+
+def test_a_wide_integral_decimal_travels_as_digits_here_too():
+    """`str(Decimal)` gives an exponent, and this branch exists to keep the
+    digits. The tabular encoder was fixed; this one was not.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _json_value
+
+    sent = _json_value(Decimal('1e400'))
+    assert 'E' not in sent and 'e' not in sent
+    assert int(sent) == int(Decimal('1e400'))

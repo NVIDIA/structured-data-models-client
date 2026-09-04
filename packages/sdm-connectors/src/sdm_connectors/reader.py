@@ -11,6 +11,7 @@ from numbers import Integral
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 import pandas as pd
 import pyarrow as pa
@@ -376,9 +377,14 @@ def _is_directory(
     unsupported file format. The reason is returned alongside the verdict and
     the caller says which happened.
     """
-    scheme = urlparse(path).scheme
+    parsed = urlparse(path)
+    scheme = parsed.scheme
     if len(scheme) <= 1 or scheme == 'file':
-        return os.path.isdir(path), None
+        # `os.path.isdir` is always False for the URI text itself, so a
+        # `file://` parquet directory without a trailing slash was refused as
+        # an unsupported format even though the reader accepts that form.
+        local = url2pathname(parsed.path) if scheme == 'file' else path
+        return os.path.isdir(local), None
     try:
         import fsspec
 

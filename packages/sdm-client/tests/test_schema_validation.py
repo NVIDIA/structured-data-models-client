@@ -520,3 +520,43 @@ def test_a_null_bearing_inferred_key_warns_rather_than_breaking_a_relationship()
         )
     assert built['users'].primary_key == 'user_id'
     assert any('no value for it' in str(w.message) for w in caught)
+
+
+def test_a_hand_built_table_refuses_a_list_cell():
+    """`Schema.from_data` checked this; constructing a Table directly did not,
+    and the shape surfaced much later as an unhashable-type crash."""
+    from sdm_client.schema import Column, Table
+
+    frame = pd.DataFrame({'row_id': [1, 2], 'tags': [['a', 'b'], ['c']]})
+    with pytest.raises(StructuredDataError) as error:
+        Table(
+            name='t',
+            data=frame,
+            columns={
+                'row_id': Column('row_id', 'int64', 'ID'),
+                'tags': Column('tags', 'string', 'categorical'),
+            },
+        )
+    assert 'container' in str(error.value)
+
+
+def test_an_inferred_relationship_is_held_to_the_join_contract():
+    """Inference matches on name alone, so it can pair columns that cannot
+    join; an explicit link with the same dtypes is refused outright."""
+    users = pd.DataFrame({'user_id': ['a', 'b', 'c'], 'v': [1.0, 2.0, 3.0]})
+    orders = pd.DataFrame({'order_id': [1, 2, 3], 'user_id': [1, 2, 3]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        built = Schema.from_data({'users': users, 'orders': orders})
+    assert built.relationships == []
+
+
+def test_a_compatible_relationship_is_still_inferred():
+    users = pd.DataFrame({'user_id': [1, 2, 3], 'v': [1.0, 2.0, 3.0]})
+    orders = pd.DataFrame({'order_id': [1, 2, 3], 'user_id': [1, 2, 3]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        built = Schema.from_data({'users': users, 'orders': orders})
+    assert [str(r) for r in built.relationships] == [
+        'orders.user_id -> users.user_id'
+    ]

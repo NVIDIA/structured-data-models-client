@@ -247,3 +247,18 @@ def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
 def test_an_ordinary_float_is_untouched_by_that_guard():
     assert serialize_cell(1.5, 'float64') == 1.5
     assert serialize_cell(2**53, 'float64') == float(2**53)
+
+
+def test_a_decimal_just_past_the_cutoff_is_not_rounded_into_range():
+    """The check used to run on the float, which had already rounded it.
+
+    `float(Decimal('9007199254740991.1'))` is exactly the cutoff, so a value
+    above it compared as equal and was let through as the rounded number.
+    """
+    with pytest.raises(StructuredDataError) as error:
+        serialize_cell(Decimal('9007199254740991.1'), 'float64')
+    assert 'too large' in str(error.value)
+
+
+def test_a_decimal_below_the_cutoff_still_rounds_as_a_float_does():
+    assert serialize_cell(Decimal('1.5'), 'float64') == 1.5

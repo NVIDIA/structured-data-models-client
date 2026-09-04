@@ -605,6 +605,11 @@ class Transport:
         # neither this client nor the offending key.
         try:
             body = json.dumps(payload, allow_nan=False)
+        except RecursionError as error:
+            raise StructuredDataError(
+                'this request is nested too deeply to encode as JSON',
+                code='INVALID_REQUEST',
+            ) from error
         except (TypeError, ValueError) as error:
             raise StructuredDataError(
                 f'this request carries a value that cannot be sent as JSON: '

@@ -454,7 +454,7 @@ def serialize_cell(value: Any, dtype: str) -> Any:
         if (
             whole is None
             and isinstance(value, Decimal)
-            and abs(number) > (JSON_SAFE_INT_MAX)
+            and abs(value) > JSON_SAFE_INT_MAX
         ):
             # Past 2**53 a float64 cannot even hold the integer part, so the
             # fractional value it becomes is not a rounding of the original in

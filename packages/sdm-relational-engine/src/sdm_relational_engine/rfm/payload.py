@@ -1164,8 +1164,19 @@ def _json_value(value: Any) -> Any:
                     f'value {value!r} is too large for float64 to represent; '
                     f'send the column as strings to keep it exact'
                 )
+            if abs(value) > JSON_SAFE_INT_MAX:
+                # Past 2**53 a float cannot hold even the integer part, so
+                # what it becomes is not a rounding of the original.
+                raise ValueError(
+                    f'value {value!r} is too large for float64 to represent; '
+                    f'send the column as strings to keep it exact'
+                )
             return number
-        return int(value) if _fits_int64(value) else str(value)
+        if _fits_int64(value):
+            return int(value)
+        # `str` switches to an exponent once it is positive, and this branch
+        # exists to keep every digit.
+        return format(value, 'f')
     if isinstance(value, pd.Timestamp):
         return _timestamp_json_value(value)
     if isinstance(value, np.datetime64):
@@ -1243,6 +1254,19 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             return str(integer)
         return integer
     if dtype in ('float64', 'float32'):
+        whole = (
+            value
+            if isinstance(value, int) and not isinstance(value, bool)
+            else None
+        )
+        if whole is not None and abs(whole) > JSON_SAFE_INT_MAX:
+            # The tabular encoder refuses this; a float column that silently
+            # renumbers an integer is the same defect on either path.
+            raise ValueError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision; give the column an integer dtype, or convert it '
+                f'to strings'
+            )
         try:
             number = float(value)
         except OverflowError:

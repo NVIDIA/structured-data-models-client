@@ -172,6 +172,15 @@ class Table:
     #: computed, and every explicitly-built table would report zero.
     duplicate_keys: int = field(init=False, default=0)
 
+    def __post_init__(self) -> None:
+        # `Schema.from_data` checks this while inferring, but a hand-built
+        # `Table` reached the adapters unchecked and a list cell surfaced much
+        # later as `TypeError: unhashable type: 'list'` from label collection.
+        frame = getattr(self, 'data', None)
+        if frame is not None:
+            for column in frame.columns:
+                require_scalar_cells(frame[column], f'{self.name}.{column}')
+
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
             if value is None:
@@ -426,6 +435,10 @@ class Schema:
 
         if relationships is None:
             inferred = _infer_relationships(built)
+            # Held to the same contract as an explicit link. Inference matches
+            # on name alone, so it can pair columns whose dtypes cannot join,
+            # and `query.py` would send that edge unchanged.
+            inferred = [link for link in inferred if _is_joinable(built, link)]
         else:
             inferred = list(relationships)
             for link in inferred:
@@ -743,6 +756,14 @@ class _KeyQuality(NamedTuple):
     duplicates: int
     nulls: int
     example: Any
+
+
+def _is_joinable(tables: Mapping[str, Table], link: Relationship) -> bool:
+    try:
+        _require_joinable(tables, link)
+    except StructuredDataError:
+        return False
+    return True
 
 
 def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:

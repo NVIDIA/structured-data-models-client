@@ -462,8 +462,12 @@ def test_prediction_response_rejects_bad_probability_shape(
             entity_ids=[601],
             instance_ids=[601],
         )
-    assert 'Expected mapping value' in str(excinfo.value)
-    assert isinstance(excinfo.value.__cause__, TypeError)
+    # The cause is the generated parser's own contract error rather than a
+    # bare TypeError, so the reason names the field shape it expected.
+    from sdm_api.generated.tfm_api import ResponseContractError
+
+    assert isinstance(excinfo.value.__cause__, ResponseContractError)
+    assert 'requires' in str(excinfo.value.__cause__)
 
 
 def test_payload_factories_return_isolated_deep_copies() -> None:

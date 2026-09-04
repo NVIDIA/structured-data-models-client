@@ -248,3 +248,23 @@ def test_an_ordinary_base_url_with_a_path_prefix_is_still_accepted(url):
         assert transport.url == url.rstrip('/')
     finally:
         transport.close()
+
+
+def test_a_payload_nested_too_deeply_is_refused_not_raised_raw():
+    """`json.dumps` raises RecursionError, which the encode guard did not
+    catch, so `_post` leaked it as though the client had crashed."""
+    from sdm_client import SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    payload: dict = {}
+    cursor = payload
+    for _ in range(30_000):
+        nxt: dict = {}
+        cursor['x'] = nxt
+        cursor = nxt
+
+    with SDMClient(url='https://example.invalid') as client:
+        with pytest.raises(StructuredDataError) as error:
+            client._transport._post('/v1/predictions', payload)
+    assert error.value.code == 'INVALID_REQUEST'
+    assert 'nested too deeply' in str(error.value)
