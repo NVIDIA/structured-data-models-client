@@ -238,13 +238,41 @@ def test_a_relationship_listed_twice_is_linked_once():
     assert edges == {('orders', 'user_id', 'users')}
 
 
-def test_a_type_error_is_sorted_by_what_it_says_not_by_its_type():
+def test_a_type_error_is_sorted_by_whether_the_call_bound():
     """The engine uses TypeError for both a caller's bad value and this
-    client's bad call, so the type alone cannot tell them apart."""
+    client's bad call, so the type alone cannot tell them apart.
+
+    Argument binding fails before the callee is entered, so a signature
+    error's deepest frame is the calling line; a refused value was raised
+    from inside the engine.
+    """
     from sdm_client.query import _CALLER_ERRORS, _is_call_signature_error
 
     assert TypeError in _CALLER_ERRORS
     assert ValueError in _CALLER_ERRORS
+
+    def engine_fn(*, indices):
+        return indices
+
+    def validator(value):
+        raise TypeError("'anchor_time' must be a pandas.Timestamp")
+
+    try:
+        engine_fn(nope=1)
+    except TypeError as error:
+        assert _is_call_signature_error(error)
+
+    try:
+        validator('2024-01-01')
+    except TypeError as error:
+        assert not _is_call_signature_error(error)
+
+
+def test_the_message_fallback_covers_a_traceback_free_type_error():
+    """A TypeError with no traceback -- reconstructed, or raised across a
+    boundary -- still has to be sorted, and only the message is left."""
+    from sdm_client.query import _is_call_signature_error
+
     assert _is_call_signature_error(
         TypeError("f() got an unexpected keyword argument 'verbose'")
     )

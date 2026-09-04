@@ -432,20 +432,42 @@ def _engine_errors(model: Any) -> Iterator[None]:
         ) from error
 
 
-#: How CPython words a call that does not match the callee's signature. A
-#: `TypeError` carrying one of these is this client calling the engine wrongly;
-#: any other one is the engine refusing a value the caller supplied.
+#: How CPython words a call that does not match the callee's signature. Used
+#: only for the case the frame test cannot see: the engine calling *itself*
+#: wrongly, which is its bug rather than the caller's either way.
 _CALL_SIGNATURE_PHRASES = (
     'unexpected keyword argument',
     'positional argument',
     'required argument',
     'takes no arguments',
-    'missing 1 required',
-    'missing 2 required',
 )
 
 
 def _is_call_signature_error(error: TypeError) -> bool:
+    r"""Whether this ``TypeError`` is a bad call rather than a bad value.
+
+    The engine raises ``TypeError`` for both. It rejects a caller's own
+    ``anchor_time`` with one, naming what to pass instead -- that is the
+    caller's to fix. It also raises one when this client passes a keyword the
+    engine does not take, which no caller can act on.
+
+    The question is really "did the call bind?", and the traceback answers it:
+    argument binding fails *before* the callee is entered, so a signature
+    error's deepest frame is still the calling line here, while a value the
+    engine refused was raised from inside the engine. That is exact, and does
+    not depend on how CPython words the message this release.
+
+    The phrase list is the fallback for what the frame test cannot see -- the
+    engine miscalling its own internals, where the deepest frame is the
+    engine's but the fault is still not the caller's.
+    """
+    traceback = error.__traceback__
+    if traceback is not None:
+        deepest = traceback
+        while deepest.tb_next is not None:
+            deepest = deepest.tb_next
+        if deepest.tb_frame.f_globals.get('__name__') == __name__:
+            return True
     message = str(error)
     return any(phrase in message for phrase in _CALL_SIGNATURE_PHRASES)
 
