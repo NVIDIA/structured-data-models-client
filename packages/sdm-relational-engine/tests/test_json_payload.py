@@ -1059,18 +1059,17 @@ def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
     assert 'strings' in str(error.value)
 
 
-def test_the_two_encoders_agree_on_an_integer_a_float_cannot_hold():
-    """The tabular encoder refused this and the relational one rounded it.
+def test_an_integer_a_float_cannot_hold_is_refused_not_rounded():
+    """This encoder returned 9007199254740992.0 and sent it.
 
     A float column that silently renumbers an integer is the same defect on
-    either path, and the wire cannot tell which encoder produced the cell.
+    either encoder, and the wire cannot tell which one produced the cell. The
+    matching assertion for the tabular encoder is in `sdm-client`'s
+    `test_wire_integer_exactness.py`; the two cannot be checked together
+    because neither package's test job installs the other.
     """
-    from sdm_client.errors import StructuredDataError
-    from sdm_client.wire.dtypes import serialize_cell
     from sdm_relational_engine.rfm.payload import _cell_json_value
 
-    with pytest.raises(StructuredDataError):
-        serialize_cell(2**53 + 1, 'float64')
     with pytest.raises(ValueError):
         _cell_json_value(2**53 + 1, 'float64')
 

@@ -262,3 +262,14 @@ def test_a_decimal_just_past_the_cutoff_is_not_rounded_into_range():
 
 def test_a_decimal_below_the_cutoff_still_rounds_as_a_float_does():
     assert serialize_cell(Decimal('1.5'), 'float64') == 1.5
+
+
+def test_an_integer_a_float_cannot_hold_is_refused_not_rounded():
+    """The other half of the cross-encoder invariant.
+
+    `sdm-relational-engine`'s `test_json_payload.py` asserts the same value is
+    refused there. Kept as two tests because neither package's test job
+    installs the other, and a skipped test would prove nothing in CI.
+    """
+    with pytest.raises(StructuredDataError):
+        serialize_cell(2**53 + 1, 'float64')
