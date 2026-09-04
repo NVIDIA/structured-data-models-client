@@ -249,7 +249,13 @@ class SDMClient:
         try:
             return self._transport.predict(payload)
         except StructuredDataError as error:
-            raise adapter.explain_error(error, payload) from error
+            explained = adapter.explain_error(error, payload)
+            if explained is error:
+                # An adapter that had nothing to add returns the same object,
+                # and `raise error from error` makes it its own cause, which
+                # is a cycle for anything that walks the chain.
+                raise
+            raise explained from error
 
     def fit(
         self,
@@ -273,7 +279,10 @@ class SDMClient:
             try:
                 created = self._transport.create_session(payload)
             except StructuredDataError as error:
-                raise adapter.explain_error(error, payload) from error
+                explained = adapter.explain_error(error, payload)
+                if explained is error:
+                    raise
+                raise explained from error
         except Exception as error:
             status = getattr(error, 'status_code', None)
             if status in _SESSIONS_UNSUPPORTED:

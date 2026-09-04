@@ -268,3 +268,38 @@ def test_a_payload_nested_too_deeply_is_refused_not_raised_raw():
             client._transport._post('/v1/predictions', payload)
     assert error.value.code == 'INVALID_REQUEST'
     assert 'nested too deeply' in str(error.value)
+
+
+def test_an_adapter_that_adds_nothing_does_not_become_its_own_cause():
+    """`raise error from error` makes an exception its own `__cause__`.
+
+    Both adapters return the same object when they have nothing to explain,
+    so this was the common case, and anything walking the cause chain for
+    logging loops on it.
+    """
+    from sdm_client import SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    class Unchanged:
+        def explain_error(self, error, payload):
+            return error
+
+    class Explains:
+        def explain_error(self, error, payload):
+            return StructuredDataError('explained', code='INVALID_REQUEST')
+
+    class Refusing:
+        def predict(self, payload):
+            raise StructuredDataError('boom', code='INVALID_REQUEST')
+
+    client = SDMClient(url='https://example.invalid')
+    client._transport = Refusing()
+
+    with pytest.raises(StructuredDataError) as error:
+        client._send(Unchanged(), {})
+    assert error.value.__cause__ is not error.value
+
+    with pytest.raises(StructuredDataError) as error:
+        client._send(Explains(), {})
+    assert error.value.__cause__ is not error.value
+    assert isinstance(error.value.__cause__, StructuredDataError)

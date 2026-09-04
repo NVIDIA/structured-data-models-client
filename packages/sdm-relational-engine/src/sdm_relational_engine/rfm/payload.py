@@ -1227,6 +1227,10 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
     another. ``int64`` values outside the JavaScript safe-integer range travel
     as base-10 strings, which is how the contract preserves their precision.
     """
+    # Measured before normalisation. `_json_value` turns a whole Decimal too
+    # wide for int64 into a string, and a string carries no exactness the
+    # float branch below can check, so the loss happened silently.
+    original = _integral_source(value)
     value = _json_value(value)
     if value is None:
         return None
@@ -1254,11 +1258,7 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             return str(integer)
         return integer
     if dtype in ('float64', 'float32'):
-        whole = (
-            value
-            if isinstance(value, int) and not isinstance(value, bool)
-            else None
-        )
+        whole = original
         if whole is not None and abs(whole) > JSON_SAFE_INT_MAX:
             # The tabular encoder refuses this; a float column that silently
             # renumbers an integer is the same defect on either path.
@@ -1292,6 +1292,24 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             f"wire dtype '{dtype}'; convert the column to a supported dtype"
         )
     return value
+
+
+def _integral_source(value: Any) -> int | None:
+    r"""``value`` as an exact integer, if it is one, before any conversion.
+
+    A cell reaches the float branch after `_json_value` has already
+    normalised it, and that normalisation is lossy for exactly the values the
+    exactness guard exists to catch. Asked here, of the original.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, Decimal):
+        if not value.is_finite() or value != value.to_integral_value():
+            return None
+        return int(value)
+    return None
 
 
 def _is_finite_input(value: Any) -> bool:

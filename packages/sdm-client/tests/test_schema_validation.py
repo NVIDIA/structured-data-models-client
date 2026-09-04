@@ -560,3 +560,19 @@ def test_a_compatible_relationship_is_still_inferred():
     assert [str(r) for r in built.relationships] == [
         'orders.user_id -> users.user_id'
     ]
+
+
+def test_naming_a_dtype_clears_the_untyped_flag():
+    """`untyped` records that inference had nothing to go on.
+
+    A caller naming the dtype supplies exactly the information that was
+    missing, so the adapter must stop substituting UNTYPED; otherwise an
+    explicit `int64` on an all-null column still went out as `string`.
+    """
+    frame = pd.DataFrame({'row_id': [1, 2], 'v': [None, None]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        column = Schema.from_data({'t': frame})['t']['v']
+    assert column.untyped is True
+    column.dtype = 'int64'
+    assert column.untyped is False

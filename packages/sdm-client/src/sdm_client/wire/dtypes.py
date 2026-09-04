@@ -324,7 +324,12 @@ def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
     return widest
 
 
-def json_ready(value: Any) -> Any:
+#: Deep enough for any real inference mapping, shallow enough that the walk
+#: below cannot exhaust the interpreter stack before reporting.
+_MAX_JSON_DEPTH = 100
+
+
+def json_ready(value: Any, _depth: int = 0) -> Any:
     r"""``value`` with numpy scalars replaced by their Python equivalents.
 
     Anything a caller reads out of their own frame is a numpy scalar, and the
@@ -335,10 +340,21 @@ def json_ready(value: Any) -> Any:
     """
     if isinstance(value, np.generic):
         return value.item()
+    if _depth > _MAX_JSON_DEPTH:
+        # Reached before the interpreter's own limit, so a nested or cyclic
+        # mapping is named here rather than escaping the payload build as a
+        # bare RecursionError, which the transport's guard never sees.
+        raise StructuredDataError(
+            f'this value nests more than {_MAX_JSON_DEPTH} levels deep, or '
+            f'refers back to itself, so it cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        )
     if isinstance(value, Mapping):
-        return {key: json_ready(item) for key, item in value.items()}
+        return {
+            key: json_ready(item, _depth + 1) for key, item in value.items()
+        }
     if isinstance(value, (list, tuple)):
-        return [json_ready(item) for item in value]
+        return [json_ready(item, _depth + 1) for item in value]
     return value
 
 

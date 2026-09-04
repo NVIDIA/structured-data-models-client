@@ -107,6 +107,11 @@ class Column:
         if key == 'stype':
             self._check_stype(value)
             self._check_supports_dtype(value, getattr(self, 'dtype', None))
+        if key == 'dtype' and getattr(self, 'untyped', False):
+            # `untyped` records that inference had nothing to go on. A caller
+            # naming the dtype is the information it was missing, so the
+            # adapter must stop substituting UNTYPED and send what was asked.
+            object.__setattr__(self, 'untyped', False)
         object.__setattr__(self, key, value)
 
     @staticmethod

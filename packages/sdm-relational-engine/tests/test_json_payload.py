@@ -1019,7 +1019,9 @@ def test_a_decimal_too_wide_for_a_float_is_refused_not_sent_as_inf():
 
     with pytest.raises(ValueError) as error:
         _cell_json_value(Decimal('1e400'), 'float64')
-    assert 'too large' in str(error.value)
+    # Caught by the exactness guard now, which runs on the original value
+    # before any conversion, so it names the remedy rather than the symptom.
+    assert 'strings' in str(error.value)
 
 
 def test_a_huge_fractional_decimal_is_refused_before_it_becomes_inf():
@@ -1085,3 +1087,30 @@ def test_a_wide_integral_decimal_travels_as_digits_here_too():
     sent = _json_value(Decimal('1e400'))
     assert 'E' not in sent and 'e' not in sent
     assert int(sent) == int(Decimal('1e400'))
+
+
+def test_a_wide_whole_decimal_in_a_float_column_is_not_silently_rounded():
+    """The exactness guard ran after `_json_value` had already normalised.
+
+    A whole Decimal outside int64 becomes a *string* there, and a string
+    carries no integer for the guard to check, so
+    `Decimal('9223372036854775809.00')` reached `float()` and came back one
+    short with no error at all.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    value = Decimal('9223372036854775809.00')
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(value, 'float64')
+    assert 'strings' in str(error.value)
+
+
+def test_an_ordinary_decimal_in_a_float_column_still_converts():
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    assert _cell_json_value(Decimal('1.5'), 'float64') == 1.5
+    assert _cell_json_value(42, 'float64') == 42.0

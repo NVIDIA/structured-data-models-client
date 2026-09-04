@@ -273,3 +273,38 @@ def test_an_integer_a_float_cannot_hold_is_refused_not_rounded():
     """
     with pytest.raises(StructuredDataError):
         serialize_cell(2**53 + 1, 'float64')
+
+
+def test_a_mapping_that_nests_too_deeply_is_refused_before_the_stack_runs_out():
+    """This walk happens while building the payload, above the transport's
+    own recursion guard, so a RecursionError here escaped uncaught."""
+    from sdm_client.wire.dtypes import json_ready
+
+    deep: dict = {}
+    cursor = deep
+    for _ in range(5_000):
+        nxt: dict = {}
+        cursor['x'] = nxt
+        cursor = nxt
+
+    with pytest.raises(StructuredDataError) as error:
+        json_ready(deep)
+    assert 'nests more than' in str(error.value)
+
+
+def test_a_mapping_that_refers_to_itself_is_refused():
+    from sdm_client.wire.dtypes import json_ready
+
+    cyclic: dict = {}
+    cyclic['self'] = cyclic
+    with pytest.raises(StructuredDataError):
+        json_ready(cyclic)
+
+
+def test_an_ordinary_nested_value_is_untouched():
+    from sdm_client.wire.dtypes import json_ready
+
+    assert json_ready({'a': [1, 2], 'b': {'c': 3}}) == {
+        'a': [1, 2],
+        'b': {'c': 3},
+    }
