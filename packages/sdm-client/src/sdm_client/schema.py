@@ -98,7 +98,7 @@ class Column:
     name: str
     dtype: str
     stype: str
-    untyped: bool = False
+    untyped: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
@@ -553,13 +553,7 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
         require_scalar_cells(frame[column], f'{name}.{column}')
 
     columns = {
-        column: Column(
-            name=column,
-            dtype=_dtype_of(frame[column]),
-            stype=_stype_of(frame[column]),
-            untyped=infer_tfm_dtype(frame[column]) == UNTYPED,
-        )
-        for column in frame.columns
+        column: _column(frame[column], column) for column in frame.columns
     }
     table = Table(name=name, data=frame, columns=columns)
     inferred = _infer_primary_key(frame, columns)
@@ -588,6 +582,19 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
     table.primary_key = inferred
     table.time_column = _infer_time_column(columns)
     return table
+
+
+def _column(series: pd.Series, name: str) -> Column:
+    r"""One column, with the record of whether inference had anything to go on.
+
+    `untyped` is set after construction because it is not an init field: a
+    caller must not be able to build a column that names a dtype and claims to
+    have none, which is the state the adapter resolves by discarding the dtype.
+    """
+    built = Column(name=name, dtype=_dtype_of(series), stype=_stype_of(series))
+    if infer_tfm_dtype(series) == UNTYPED:
+        object.__setattr__(built, 'untyped', True)
+    return built
 
 
 def _dtype_of(series: pd.Series) -> str:

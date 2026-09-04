@@ -1258,6 +1258,11 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             return str(integer)
         return integer
     if dtype in ('float64', 'float32'):
+        if _exceeds_float64(value):
+            raise ValueError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision; send the column as strings to keep it exact'
+            )
         whole = original
         if whole is not None and not _survives_float(whole):
             # The tabular encoder refuses this; a float column that silently
@@ -1295,6 +1300,28 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             f"wire dtype '{dtype}'; convert the column to a supported dtype"
         )
     return value
+
+
+def _exceeds_float64(value: Any) -> bool:
+    r"""Whether ``value`` carries precision a ``float64`` would drop.
+
+    A numeric string is exact text and a `longdouble` is wider than a
+    `float64`; `float()` silently rounds both. The tabular encoder refuses
+    them, so this one must too.
+    """
+    if isinstance(value, str):
+        try:
+            exact = Decimal(value)
+        except (ArithmeticError, ValueError):
+            return False
+        if not exact.is_finite():
+            return False
+        return Decimal(repr(float(exact))) != exact
+    if isinstance(value, np.floating) and value.dtype.itemsize > 8:
+        if not np.isfinite(value):
+            return False
+        return np.longdouble(float(value)) != value
+    return False
 
 
 def _survives_float(whole: int) -> bool:

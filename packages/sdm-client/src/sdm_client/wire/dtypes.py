@@ -329,7 +329,9 @@ def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
 _MAX_JSON_DEPTH = 100
 
 
-def json_ready(value: Any, _depth: int = 0) -> Any:
+def json_ready(
+    value: Any, _depth: int = 0, _seen: frozenset[int] = frozenset()
+) -> Any:
     r"""``value`` with numpy scalars replaced by their Python equivalents.
 
     Anything a caller reads out of their own frame is a numpy scalar, and the
@@ -340,6 +342,11 @@ def json_ready(value: Any, _depth: int = 0) -> Any:
     """
     if isinstance(value, np.generic):
         return value.item()
+    if id(value) in _seen:
+        raise StructuredDataError(
+            'this value refers back to itself, so it cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        )
     if _depth > _MAX_JSON_DEPTH:
         # Reached before the interpreter's own limit, so a nested or cyclic
         # mapping is named here rather than escaping the payload build as a
@@ -350,11 +357,14 @@ def json_ready(value: Any, _depth: int = 0) -> Any:
             code='INVALID_REQUEST',
         )
     if isinstance(value, Mapping):
+        nested = _seen | {id(value)}
         return {
-            key: json_ready(item, _depth + 1) for key, item in value.items()
+            key: json_ready(item, _depth + 1, nested)
+            for key, item in value.items()
         }
     if isinstance(value, (list, tuple)):
-        return [json_ready(item, _depth + 1) for item in value]
+        nested = _seen | {id(value)}
+        return [json_ready(item, _depth + 1, nested) for item in value]
     return value
 
 
@@ -392,6 +402,30 @@ def _require_finite(value: Any) -> None:
             'numbers with a finite value or a null',
             code='INVALID_REQUEST',
         )
+
+
+def _exceeds_float64(value: Any) -> bool:
+    r"""Whether ``value`` carries precision a ``float64`` would drop.
+
+    Two shapes reach the float branch already carrying more than a float64
+    holds. A numeric *string* is exact text, and `float()` rounds it without
+    complaint. A `longdouble` is wider than a `float64` on the platforms that
+    have one, so the same digits are lost on the way down. Both are silent,
+    which is the one thing the wire rules exist to prevent.
+    """
+    if isinstance(value, str):
+        try:
+            exact = Decimal(value)
+        except (ArithmeticError, ValueError):
+            return False
+        if not exact.is_finite():
+            return False
+        return Decimal(repr(float(exact))) != exact
+    if isinstance(value, np.floating) and value.dtype.itemsize > 8:
+        if not np.isfinite(value):
+            return False
+        return np.longdouble(float(value)) != value
+    return False
 
 
 def _integral_value(value: Any) -> int | None:
@@ -464,6 +498,12 @@ def serialize_cell(value: Any, dtype: str) -> Any:
             raise StructuredDataError(
                 f'value {value!r} is outside the range {dtype} represents; '
                 'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            )
+        if _exceeds_float64(value):
+            raise StructuredDataError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision; send the column as strings to keep it exact',
                 code='INVALID_REQUEST',
             )
         whole = _integral_value(value)

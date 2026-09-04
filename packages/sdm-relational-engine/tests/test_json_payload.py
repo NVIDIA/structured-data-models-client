@@ -1141,3 +1141,12 @@ def test_only_an_integer_a_float_cannot_hold_is_refused(value, survives):
     else:
         with pytest.raises(ValueError):
             _cell_json_value(value, 'float64')
+
+
+def test_a_numeric_string_a_float_cannot_hold_is_refused_here_too():
+    """The tabular encoder refuses this, so this one must as well."""
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError):
+        _cell_json_value('9223372036854775809', 'float64')
+    assert _cell_json_value('1.5', 'float64') == 1.5

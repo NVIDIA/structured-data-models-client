@@ -308,3 +308,32 @@ def test_an_ordinary_nested_value_is_untouched():
         'a': [1, 2],
         'b': {'c': 3},
     }
+
+
+def test_a_numeric_string_a_float_cannot_hold_is_refused():
+    """A string is exact text, and `float()` rounds it without complaint.
+
+    Reachable whenever a caller names `float64` on a column of numeric
+    strings, which is the shape a warehouse read of a wide DECIMAL takes.
+    """
+    with pytest.raises(StructuredDataError) as error:
+        serialize_cell('9223372036854775809', 'float64')
+    assert 'losing' in str(error.value)
+
+
+def test_an_ordinary_numeric_string_still_converts():
+    assert serialize_cell('1.5', 'float64') == 1.5
+    assert serialize_cell('42', 'float64') == 42.0
+
+
+def test_a_float_wider_than_float64_is_refused_where_one_exists():
+    """`longdouble` is 80- or 128-bit on x86 and plain float64 on arm64.
+
+    Skipped rather than asserted away where the platform has nothing wider,
+    because there is genuinely no precision to lose there.
+    """
+    wide = np.longdouble('9007199254740993')
+    if wide.dtype.itemsize <= 8:
+        pytest.skip('this platform has no float wider than float64')
+    with pytest.raises(StructuredDataError):
+        serialize_cell(wide, 'float64')

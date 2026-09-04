@@ -576,3 +576,14 @@ def test_naming_a_dtype_clears_the_untyped_flag():
     assert column.untyped is True
     column.dtype = 'int64'
     assert column.untyped is False
+
+
+def test_a_column_cannot_be_built_claiming_both_a_dtype_and_no_type():
+    """`untyped` is what makes the adapter discard the declared dtype, so a
+    caller must not be able to construct that contradiction directly."""
+    import dataclasses
+
+    from sdm_client.schema import Column
+
+    names = {f.name for f in dataclasses.fields(Column) if f.init}
+    assert 'untyped' not in names
