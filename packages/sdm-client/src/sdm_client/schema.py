@@ -104,6 +104,15 @@ class Column:
         self._check_stype(self.stype)
 
     def __setattr__(self, key: str, value: Any) -> None:
+        if key == 'untyped':
+            # Derived, not declared: it records that inference found no type,
+            # and the adapter reads it as authority over `dtype`. Letting it
+            # be set is letting a column say it has a dtype and has none.
+            raise StructuredDataError(
+                "'untyped' is inferred from the values and cannot be set; "
+                'assign the dtype you want instead',
+                code='INVALID_REQUEST',
+            )
         if key == 'stype':
             self._check_stype(value)
             self._check_supports_dtype(value, getattr(self, 'dtype', None))

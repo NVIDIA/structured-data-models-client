@@ -587,3 +587,14 @@ def test_a_column_cannot_be_built_claiming_both_a_dtype_and_no_type():
 
     names = {f.name for f in dataclasses.fields(Column) if f.init}
     assert 'untyped' not in names
+
+
+def test_untyped_cannot_be_set_by_a_caller():
+    """The adapter reads it as authority over `dtype`, so setting it is
+    saying a column both has a type and has none."""
+    from sdm_client.schema import Column
+
+    column = Column('v', 'int64', 'numerical')
+    with pytest.raises(StructuredDataError) as error:
+        column.untyped = True
+    assert 'cannot be set' in str(error.value)
