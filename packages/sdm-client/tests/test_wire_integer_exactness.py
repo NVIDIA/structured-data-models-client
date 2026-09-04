@@ -229,3 +229,21 @@ def test_a_narrow_arrow_decimal_is_answered_from_the_type_alone():
         [Decimal('1')], dtype=pd.ArrowDtype(pa.decimal128(18, 0))
     )
     assert infer_tfm_dtype(series) == 'int64'
+
+
+def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
+    """`float(10**400)` raises OverflowError rather than returning `inf`.
+
+    A Python int has no width, so the conversion refuses outright where a
+    wide Decimal quietly becomes `inf`. Same fault, different exception, and
+    the finite guard below never ran for this one.
+    """
+    with pytest.raises(StructuredDataError) as error:
+        serialize_cell(10**400, 'float64')
+    assert 'outside the range' in str(error.value)
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_an_ordinary_float_is_untouched_by_that_guard():
+    assert serialize_cell(1.5, 'float64') == 1.5
+    assert serialize_cell(2**53, 'float64') == float(2**53)

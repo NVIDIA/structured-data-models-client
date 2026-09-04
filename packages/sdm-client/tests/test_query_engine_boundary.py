@@ -268,6 +268,46 @@ def test_a_type_error_is_sorted_by_whether_the_call_bound():
         assert not _is_call_signature_error(error)
 
 
+def test_the_frame_test_decides_it_without_help_from_the_message():
+    """The message fallback would answer this one too, so it has to be shown
+    that the frames alone do.
+
+    A bad call made from `query.py` leaves its deepest frame there, and the
+    two are told apart even when the wording carries no signature phrase at
+    all -- which is the point of not depending on CPython's wording.
+    """
+    import sdm_client.query as query
+    from sdm_client.query import _is_call_signature_error
+
+    def engine_fn(*, indices):
+        return indices
+
+    # Raised *from* query.py, with a message the phrase list does not match.
+    source = compile(
+        "def call():\n    raise TypeError('an entirely unrecognised wording')",
+        query.__file__,
+        'exec',
+    )
+    namespace: dict = {'__name__': query.__name__}
+    exec(source, namespace)
+    try:
+        namespace['call']()
+    except TypeError as error:
+        assert _is_call_signature_error(error), (
+            'a TypeError whose deepest frame is query.py is a bad call, '
+            'however it is worded'
+        )
+
+    # Raised from anywhere else, same unrecognised wording.
+    def elsewhere():
+        raise TypeError('an entirely unrecognised wording')
+
+    try:
+        elsewhere()
+    except TypeError as error:
+        assert not _is_call_signature_error(error)
+
+
 def test_the_message_fallback_covers_a_traceback_free_type_error():
     """A TypeError with no traceback -- reconstructed, or raised across a
     boundary -- still has to be sorted, and only the message is left."""

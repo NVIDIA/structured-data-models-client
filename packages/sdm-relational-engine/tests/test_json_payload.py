@@ -1046,3 +1046,12 @@ def test_an_ordinary_fractional_decimal_still_converts():
     from sdm_relational_engine.rfm.payload import _json_value
 
     assert _json_value(Decimal('1.5')) == 1.5
+
+
+def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
+    """The Decimal path returns `inf`; the int path raises OverflowError."""
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(10**400, 'float64')
+    assert 'too large' in str(error.value)

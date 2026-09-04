@@ -431,7 +431,17 @@ def serialize_cell(value: Any, dtype: str) -> Any:
         return integer_value
     if dtype in ('float64', 'float32'):
         _require_finite(value)
-        number = float(value)
+        try:
+            number = float(value)
+        except OverflowError:
+            # A Python int has no width, so `float()` refuses outright rather
+            # than returning `inf` the way a wide Decimal does. Same fault,
+            # different exception, and it must not escape raw.
+            raise StructuredDataError(
+                f'value {value!r} is outside the range {dtype} represents; '
+                'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            ) from None
         if not math.isfinite(number):
             # A finite value whose float conversion is not: too large for
             # the dtype to hold at all, rather than merely rounded by it.

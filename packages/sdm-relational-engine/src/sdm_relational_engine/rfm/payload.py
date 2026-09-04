@@ -1243,7 +1243,15 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             return str(integer)
         return integer
     if dtype in ('float64', 'float32'):
-        number = float(value)
+        try:
+            number = float(value)
+        except OverflowError:
+            # A Python int has no width, so `float()` refuses rather than
+            # returning `inf` the way a wide Decimal does.
+            raise ValueError(
+                f'value {value!r} is too large for {dtype} to represent; '
+                f'send the column as strings to keep it exact'
+            ) from None
         if not math.isfinite(number) and _is_finite_input(value):
             raise ValueError(
                 f'value {value!r} is too large for {dtype} to represent; '
