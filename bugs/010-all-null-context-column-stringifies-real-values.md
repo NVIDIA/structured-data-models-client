@@ -13,7 +13,9 @@ scored are sent as text.
 Request(
     context=pd.DataFrame({'row_id': [1, 2], 'x': [None, None], 'y': [0, 1]}),
     predict=pd.DataFrame({'row_id': [3], 'x': [42]}),
-    target='y', task='classification')
+    target='y',
+    task='classification',
+)
 ```
 
 produces

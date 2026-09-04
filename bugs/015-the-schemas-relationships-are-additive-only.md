@@ -13,9 +13,11 @@ missed. It never removes one the engine invented and the schema does not have.
 The two inferences are not the same, so they disagree on real data:
 
 ```python
-schema = Schema.from_data(northwind)      # Customers, Orders, "Order Details", Products
-len(schema.relationships)                 # 3
-len(_to_engine_graph(engine, schema).edges)   # 4
+schema = Schema.from_data(
+    northwind
+)  # Customers, Orders, "Order Details", Products
+len(schema.relationships)  # 3
+len(_to_engine_graph(engine, schema).edges)  # 4
 ```
 
 The fourth edge is fabricated:
@@ -39,12 +41,17 @@ It does not:
 
 ```python
 schema = Schema.from_data(northwind, relationships=[])
-len(schema.relationships)                     # 0
-len(_to_engine_graph(engine, schema).edges)   # 4
+len(schema.relationships)  # 0
+len(_to_engine_graph(engine, schema).edges)  # 4
 
-schema = Schema.from_data(northwind, relationships=[Relationship('Orders','CustomerID','Customers','CustomerID')])
-len(schema.relationships)                     # 1
-len(_to_engine_graph(engine, schema).edges)   # 4
+schema = Schema.from_data(
+    northwind,
+    relationships=[
+        Relationship('Orders', 'CustomerID', 'Customers', 'CustomerID')
+    ],
+)
+len(schema.relationships)  # 1
+len(_to_engine_graph(engine, schema).edges)  # 4
 ```
 
 The argument is write-only. A caller who inspects `schema.relationships`, sees
@@ -63,7 +70,11 @@ graph = engine.Graph.from_data(frames, verbose=False)
 # inference missed.
 existing = {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
 for link in schema.relationships:
-    if (link.source_table, link.source_column, link.target_table) not in existing:
+    if (
+        link.source_table,
+        link.source_column,
+        link.target_table,
+    ) not in existing:
         graph.link(...)
 ```
 
@@ -93,6 +104,7 @@ engine's `Graph` is public, so this draws the graph:
 
 ```python
 import sdm_relational_engine.rfm as rfm
+
 rfm.Graph.from_data(frames).visualize()
 ```
 
@@ -105,7 +117,9 @@ The engine already offers the control this needs. `Graph.from_data` takes an
 `edges` argument, and passing an empty list suppresses link inference entirely:
 
 ```python
-graph = engine.Graph.from_data(frames, edges=[], infer_metadata=True, verbose=False)
+graph = engine.Graph.from_data(
+    frames, edges=[], infer_metadata=True, verbose=False
+)
 # 0 edges, confirmed
 ```
 

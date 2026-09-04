@@ -20,7 +20,7 @@ Decimal('12345678901234567.8901')          -> 1.2345678901234568e+16
 The same value as a Python `int` is **refused**:
 
 ```python
-serialize_cell(9007199254740993, 'float64')          # StructuredDataError
+serialize_cell(9007199254740993, 'float64')  # StructuredDataError
 serialize_cell(Decimal('9007199254740993'), 'float64')  # 9007199254740992.0
 ```
 
@@ -39,8 +39,8 @@ thing that walks past it. A numpy integer does too, because numpy's comparison
 promotes both sides to float before comparing:
 
 ```python
-serialize_cell(9007199254740993, 'float64')            # StructuredDataError
-serialize_cell(Decimal('9007199254740993'), 'float64') # 9007199254740992.0
+serialize_cell(9007199254740993, 'float64')  # StructuredDataError
+serialize_cell(Decimal('9007199254740993'), 'float64')  # 9007199254740992.0
 serialize_cell(np.int64(9007199254740993), 'float64')  # 9007199254740992.0
 ```
 
@@ -69,8 +69,8 @@ insert into t values (9007199254740993, 12.3456, 'a');
 
 ```python
 frame = read_table(connection, query='select * from t')
-frame['id'].dtype                      # object
-type(frame['id'].iloc[0])              # decimal.Decimal
+frame['id'].dtype  # object
+type(frame['id'].iloc[0])  # decimal.Decimal
 serialize_column(frame['id'], infer_tfm_dtype(frame['id']))
 # ['9007199254740992.0']  <- the id is now a different id
 ```

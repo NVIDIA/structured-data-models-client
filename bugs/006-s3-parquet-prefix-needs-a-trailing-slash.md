@@ -11,9 +11,11 @@ call, and it is always false for an `s3://` URI. So a partitioned Parquet
 prefix is refused unless the caller happens to write a trailing slash:
 
 ```python
-read('s3', path='s3://bucket/qa/parts')     # ConnectorError: unsupported file format
-read('s3', path='s3://bucket/qa/parts/')    # 400 rows
-read('local', path='/tmp/qa/parts')         # 400 rows
+read(
+    's3', path='s3://bucket/qa/parts'
+)  # ConnectorError: unsupported file format
+read('s3', path='s3://bucket/qa/parts/')  # 400 rows
+read('local', path='/tmp/qa/parts')  # 400 rows
 ```
 
 The error text says the reader supports "Parquet directories", so a user who

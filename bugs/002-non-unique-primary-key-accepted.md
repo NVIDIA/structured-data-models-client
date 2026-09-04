@@ -25,7 +25,9 @@ is correlated back by — and the duplicate the threshold knowingly tolerated is
 never mentioned to anyone.
 
 ```python
-base = pd.DataFrame({'user_id': range(1000), 'v': [float(i) for i in range(1000)]})
+base = pd.DataFrame(
+    {'user_id': range(1000), 'v': [float(i) for i in range(1000)]}
+)
 dupes = pd.concat([base, base.head(5)], ignore_index=True)
 Schema.from_data({'users': dupes})['users'].primary_key
 # 'user_id'  -- 99.5% distinct, five rows share an id, no warning
@@ -96,8 +98,11 @@ And the engine **already measures this**. Every graph build produces a
 
 ```python
 TableSanitizationReport(
-    table_name=..., input_rows=..., output_rows=...,
-    null_primary_key_rows=..., duplicate_primary_key_rows=...,
+    table_name=...,
+    input_rows=...,
+    output_rows=...,
+    null_primary_key_rows=...,
+    duplicate_primary_key_rows=...,
     null_time_rows=...,
 )
 ```

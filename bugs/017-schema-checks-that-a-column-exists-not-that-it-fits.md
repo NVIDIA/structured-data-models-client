@@ -10,23 +10,25 @@ existence and nothing else. Whether the column can actually *be* that is
 decided much later, by the engine, which raises a bare `ValueError`:
 
 ```python
-schema['users']['age'].stype = 'text'          # accepted, age is float64
+schema['users']['age'].stype = 'text'  # accepted, age is float64
 query.materialize(indices=[1, 2])
 # ValueError: Column 'age' received an incompatible semantic type
 #             (got dtype='float' and stype='text')
 ```
 
 ```python
-Schema.from_data(tables, time_columns={'users': 'age'})   # accepted
-schema['users'].time_column                                # 'age'
+Schema.from_data(tables, time_columns={'users': 'age'})  # accepted
+schema['users'].time_column  # 'age'
 query.materialize(indices=[1, 2])
 # ValueError: Column 'age' received an incompatible semantic type
 #             (got dtype='float' and stype='timestamp')
 ```
 
 ```python
-Schema.from_data(tables, relationships=[
-    Relationship('orders', 'user_id', 'users', 'user_id')])   # accepted
+Schema.from_data(
+    tables,
+    relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
+)  # accepted
 # users.user_id is a string, orders.user_id is an int
 query.materialize(indices=['1', '2'])
 # ValueError: Edge(src_table='orders', fkey='user_id', dst_table='users') is
@@ -56,15 +58,15 @@ A bare `KeyError` from a dictionary lookup — not even the engine's `ValueError
 which at least explains itself.
 
 ```python
-schema['Customers'].time_column = 'Country'   # a string column
+schema['Customers'].time_column = 'Country'  # a string column
 schema['Customers'].time_column
 # 'Country'
 ```
 
 ```python
 # 94 rows, 93 distinct CustomerIDs: inference declined to nominate a key
-schema['Customers'].primary_key            # None
-schema['Customers'].primary_key = 'CustomerID'   # accepted, still not unique
+schema['Customers'].primary_key  # None
+schema['Customers'].primary_key = 'CustomerID'  # accepted, still not unique
 ```
 
 `Column.stype` has a setter that validates the name against the five known
@@ -97,23 +99,25 @@ engine `sdm_client` is built on already answers it, in
 # table.py:480 -- primary_key is a property with a setter
 @primary_key.setter
 def primary_key(self, name):
-    ...                                    # empty composite key -> ValueError
-    ...                                    # collides with the time column -> ValueError
-    ...                                    # collides with the end-time column -> ValueError
+    ...  # empty composite key -> ValueError
+    ...  # collides with the time column -> ValueError
+    ...  # collides with the end-time column -> ValueError
     if name is not None and name not in self:
         raise KeyError(f"Column '{name}' not found in table '{self.name}'")
     ...
-    self[name].stype = Stype.ID            # and the dtype check fires here
+    self[name].stype = Stype.ID  # and the dtype check fires here
 
-# table.py:551 -- time_column likewise, ending in
+    # table.py:551 -- time_column likewise, ending in
     self[name].stype = Stype.timestamp
+
 
 # column.py:134 -- Column.__setattr__
 if key == 'stype':
     if not val.supports_dtype(self.dtype):
         raise ValueError(
             f"Column '{self.name}' received an incompatible semantic type "
-            f"(got dtype='{self.dtype}' and stype='{val}')")
+            f"(got dtype='{self.dtype}' and stype='{val}')"
+        )
 ```
 
 Every check this report asks for is written there and runs at assignment. The

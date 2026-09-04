@@ -20,8 +20,8 @@ row_id,x,y
 
 ```python
 frame = read('local', path='bigint.csv')
-frame['row_id'].dtype          # float64
-list(frame['row_id'])          # [9007199254740992.0, nan, 9007199254740996.0]
+frame['row_id'].dtype  # float64
+list(frame['row_id'])  # [9007199254740992.0, nan, 9007199254740996.0]
 # on the wire: [9007199254740992.0, None, 9007199254740996.0]
 ```
 
@@ -82,7 +82,9 @@ Read CSV with a null-aware backend so an integer column with a blank stays an
 integer:
 
 ```python
-pd.read_csv(path, storage_options=storage_options, dtype_backend='numpy_nullable')
+pd.read_csv(
+    path, storage_options=storage_options, dtype_backend='numpy_nullable'
+)
 ```
 
 That yields `Int64` rather than `float64`, which `infer_tfm_dtype` already

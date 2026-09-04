@@ -10,8 +10,13 @@ of pandas.
 JSON encoding, so the request dies inside the encoder:
 
 ```python
-Request(context=..., predict=..., target='y', task='classification',
-        inference={'seed': np.int64(4)})
+Request(
+    context=...,
+    predict=...,
+    target='y',
+    task='classification',
+    inference={'seed': np.int64(4)},
+)
 client.predict(request, model=KumoTabular())
 # TypeError: Object of type int64 is not JSON serializable
 ```
@@ -20,7 +25,7 @@ client.predict(request, model=KumoTabular())
 neither the key, nor `inference`, nor the request. A caller who wrote
 
 ```python
-inference={'seed': df['seed'].iloc[0]}
+inference = {'seed': df['seed'].iloc[0]}
 ```
 
 gets a bare encoder error with nothing pointing at what they did.

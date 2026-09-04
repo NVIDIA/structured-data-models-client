@@ -10,7 +10,9 @@ methods in a fixed order, and DuckDB offers two of them — `fetchdf()` and
 `fetch_arrow_table()`. `fetchdf()` is tried first, and it rounds.
 
 ```python
-connection.execute('create table t as select 9007199254740993::BIGINT id from range(3)')
+connection.execute(
+    'create table t as select 9007199254740993::BIGINT id from range(3)'
+)
 read_table(connection, query='select sum(id) s from t')['s']
 # dtype float64, value 2.702159776422298e+16
 # true sum:                27021597764222979
@@ -19,9 +21,9 @@ read_table(connection, query='select sum(id) s from t')['s']
 The other path is exact:
 
 ```python
-cursor.to_arrow_table().column(0)[0]     # Decimal128Scalar 27021597764222979
-cursor.to_arrow_table().to_pandas()['s'] # object, Decimal('27021597764222979')
-cursor.fetchdf()['s']                    # float64, 2.702159776422298e+16
+cursor.to_arrow_table().column(0)[0]  # Decimal128Scalar 27021597764222979
+cursor.to_arrow_table().to_pandas()['s']  # object, Decimal('27021597764222979')
+cursor.fetchdf()['s']  # float64, 2.702159776422298e+16
 ```
 
 So the value survives DuckDB, survives Arrow, and is lost by the pandas fetch
@@ -55,11 +57,14 @@ only exact once both are fixed.
 ladder in `read_table`:
 
 ```python
-if hasattr(cursor, 'fetch_arrow_all'): ...      # DuckDB: no
-if hasattr(cursor, 'fetch_pandas_all'): ...     # DuckDB: no
-if hasattr(cursor, 'fetchdf'):                  # DuckDB: yes  <- taken, lossy
+if hasattr(cursor, 'fetch_arrow_all'):
+    ...  # DuckDB: no
+if hasattr(cursor, 'fetch_pandas_all'):
+    ...  # DuckDB: no
+if hasattr(cursor, 'fetchdf'):  # DuckDB: yes  <- taken, lossy
     return cursor.fetchdf()
-if hasattr(cursor, 'fetch_arrow_table'): ...    # DuckDB: yes, exact, unreached
+if hasattr(cursor, 'fetch_arrow_table'):
+    ...  # DuckDB: yes, exact, unreached
 ```
 
 The exact method is already in the list, two lines below the lossy one.
