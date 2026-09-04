@@ -12,13 +12,13 @@ submit them under the project's open-source license, per the
 Sign off each commit by adding a `Signed-off-by` line with your real name and
 email (matching the commit author):
 
-```
+```bash
 git commit --signoff
 ```
 
 which appends:
 
-```
+```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
@@ -38,7 +38,7 @@ decision to discuss on an issue first, not a detail of a pull request.
 
 ## Full text of the DCO
 
-```
+```text
 Developer Certificate of Origin
 Version 1.1
 
