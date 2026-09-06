@@ -109,7 +109,13 @@ def emit(record: PredictionRecord) -> None:
 # The cost is that a message with several values keeps only what is outside
 # them, so two failures differing only in wording between two values read the
 # same. The type is still there, and so is every other field on the record.
-_QUOTED_SPAN = re.compile(r"""['"].*["']|['"].*""", re.DOTALL)
+# Every character something upstream might quote with. Backticks are not
+# decoration here: the Databricks backend quotes identifiers with them, so an
+# error echoing a column name arrives wrapped in them. The curly forms turn up
+# when a message was written as prose. Opening and closing need not match,
+# since the rule takes the span rather than pairing them.
+_QUOTES = '\'"`\u2018\u2019\u201a\u201c\u201d\u201e\u00ab\u00bb'
+_QUOTED_SPAN = re.compile(f'[{_QUOTES}].*[{_QUOTES}]|[{_QUOTES}].*', re.DOTALL)
 _ID_LIST = re.compile(r'\[[^\[\]]*\]|\((?:\s*[-\w.]+\s*,)[^()]*\)')
 _MARK = "'?'"
 
@@ -122,8 +128,13 @@ def describe_error(error: BaseException) -> str:
     is exactly the caller data every other field here is chosen to avoid.
 
     The type is always kept, since that is what a reader branches on. The
-    message keeps its shape and loses its values, unless its quoting is
-    ambiguous, in which case it loses the whole quoted span instead.
+    message keeps whatever falls outside its quoted span and loses the rest.
+
+    What this does not catch is a value that arrives unquoted, as in
+    "entity alice@example.com not found". Nothing marks it as data, and
+    redacting on shape would take ordinary words with it. The record's own
+    fields are chosen so none of them carries caller data; this is the last
+    line for the one field that quotes an upstream message back.
 
     Nothing here may raise. This runs inside the `except` that re-raises the
     caller's error, so an exception thrown while describing one would replace

@@ -589,3 +589,32 @@ def test_the_record_counts_the_default_hops_when_none_are_asked_for(
         model.predict(QUERY, verbose=False)
 
     assert _written(caplog)[0]['num_hops'] == 2
+
+
+@pytest.mark.parametrize(
+    'message',
+    [
+        'entity ‘alice@acme.com’ not found',
+        'entity “alice@acme.com” not found',
+        'entity `alice@acme.com` not found',
+        'Column `orders`.`alice@acme.com` does not exist',
+        'entity «alice@acme.com» not found',
+    ],
+)
+def test_a_value_quoted_any_way_upstream_quotes_is_redacted(
+    message: str,
+) -> None:
+    """Backticks are not decoration: the Databricks backend quotes identifiers
+    with them, so an error echoing a column name arrives wrapped in them. The
+    curly forms turn up when a message was written as prose.
+    """
+    assert 'acme.com' not in describe_error(RuntimeError(message))
+
+
+def test_an_unquoted_value_is_not_caught_and_that_is_written_down() -> None:
+    """Nothing marks a bare value as data, and redacting on shape would take
+    ordinary words with it. Recorded so the limit is known rather than
+    assumed away.
+    """
+    described = describe_error(RuntimeError('entity alice@acme.com not found'))
+    assert described == 'RuntimeError: entity alice@acme.com not found'
