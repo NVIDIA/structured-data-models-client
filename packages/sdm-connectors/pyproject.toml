@@ -51,11 +51,14 @@ snowflake = [
 databricks = [
     "databricks-sql-connector>=3.0.0",
 ]
+postgres = [
+    "psycopg[binary]>=3.1",
+]
 s3 = [
     "s3fs>=2023.12.0",
 ]
 all = [
-    "sdm-connectors[sqlite,duckdb,snowflake,databricks,s3]",
+    "sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks,s3]",
 ]
 test = [
     "pytest",

@@ -266,3 +266,62 @@ def test_databricks_still_rejects_a_misspelled_argument():
         )
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
     assert 'catalog' in str(excinfo.value)
+
+
+# --- postgres ---------------------------------------------------------------
+
+
+def test_postgres_is_a_supported_backend():
+    """The list is what `connect` validates against, so an unlisted backend
+    is refused before any driver is imported."""
+    from sdm_connectors.backends import _SQL_BACKENDS
+
+    assert 'postgres' in _SQL_BACKENDS
+
+
+def test_an_unknown_backend_names_postgres_among_the_supported():
+    with pytest.raises(ConnectorError) as error:
+        connect('postgresql', 'postgresql://localhost/db')
+    assert 'postgres' in str(error.value)
+    assert error.value.code == 'UNKNOWN_CONNECTOR'
+
+
+def test_postgres_refuses_a_connect_argument_it_does_not_take():
+    """Caught here rather than by libpq, which reports an unknown keyword as
+    a connection failure and hides the typo."""
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+
+    with pytest.raises(ConnectorError) as error:
+        postgres.connect(nosuchoption='x')
+    assert 'nosuchoption' in str(error.value)
+
+
+def test_postgres_accepts_the_libpq_connection_parameters():
+    """A representative few, so a future trim of the set is deliberate."""
+    from sdm_connectors.backends.postgres import _CONNECT_ARGS
+
+    assert {'host', 'port', 'dbname', 'user', 'password', 'sslmode'} <= (
+        _CONNECT_ARGS
+    )
+
+
+def test_postgres_reads_the_standard_environment_variables(monkeypatch):
+    """`PGHOST` and friends are how a Postgres user expects to configure a
+    client, and libpq only reads them when the argument is absent."""
+    from sdm_connectors.backends import postgres
+
+    monkeypatch.setenv('PGHOST', 'example.invalid')
+    monkeypatch.setenv('PGDATABASE', 'from_env')
+    captured: dict = {}
+
+    def _fake_connect(*args, **kwargs):
+        captured.update(kwargs)
+        captured['args'] = args
+        raise RuntimeError('stop before the socket')
+
+    monkeypatch.setattr(postgres.psycopg, 'connect', _fake_connect)
+    with pytest.raises(RuntimeError):
+        postgres.connect(dbname='explicit')
+
+    assert captured['host'] == 'example.invalid'
+    assert captured['dbname'] == 'explicit', 'an argument must win over PG*'

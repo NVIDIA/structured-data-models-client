@@ -8,7 +8,7 @@ its graph samplers) don't each carry their own copy.
 It provides:
 
 - `connect(backend, **kwargs)`: open a connection to `sqlite` / `duckdb` /
-  `snowflake` / `databricks` (one driver per backend).
+  `postgres` / `snowflake` / `databricks` (one driver per backend).
 - `read(source, **kwargs) -> DataFrame`: read a table or query as a flat pandas
   DataFrame (also handles `local` DataFrames / CSV / Parquet, and `s3` object
   URIs: `read('s3', path='s3://bucket/table.parquet', storage_options=...)`).
@@ -58,7 +58,7 @@ sdm-client's `DRIVER_LOAD_FAILED`).
 Pure-python. Database drivers are optional extras:
 
 ```bash
-pip install "sdm-connectors[sqlite]"      # or [duckdb] / [snowflake] / [databricks] / [s3] / [all]
+pip install "sdm-connectors[sqlite]"      # or [duckdb] / [postgres] / [snowflake] / [databricks] / [s3] / [all]
 ```
 
 Consumers depend on it and surface these extras under their own name, e.g.
