@@ -168,3 +168,55 @@ def test_dropping_a_table_drops_the_marks_of_its_edges() -> None:
     graph.remove_table('orders')
 
     assert graph.inferred_edges == ()
+
+
+def test_declaring_an_inferred_edge_again_clears_the_guess() -> None:
+    """A caller who removes an inferred link and declares it themselves has
+    stated the relationship, so it must stop being reported as a guess.
+    """
+    graph = _graph()
+    graph.infer_links(verbose=False)
+    assert graph.inferred_edges == (('orders', 'customer_id', 'customers'),)
+
+    graph.unlink('orders', 'customer_id', 'customers')
+    graph.link('orders', 'customer_id', 'customers')
+
+    assert graph.inferred_edges == ()
+
+
+def test_inference_can_guess_an_edge_again_after_it_was_declared() -> None:
+    """Clearing the mark records who declared it last, not that the edge may
+    never be guessed again.
+    """
+    graph = _graph()
+    graph.infer_links(verbose=False)
+    graph.unlink('orders', 'customer_id', 'customers')
+    graph.link('orders', 'customer_id', 'customers')
+    graph.unlink('orders', 'customer_id', 'customers')
+
+    graph.infer_links(verbose=False)
+
+    assert graph.inferred_edges == (('orders', 'customer_id', 'customers'),)
+
+
+def test_declaring_one_edge_leaves_another_guess_alone() -> None:
+    frames = {
+        'customers': pd.DataFrame({'customer_id': [1, 2, 3], 'seg': [*'abc']}),
+        'orders': pd.DataFrame(
+            {'order_id': [1, 2, 3], 'customer_id': [1, 2, 3]}
+        ),
+        'items': pd.DataFrame({'item_id': [1, 2, 3], 'order_id': [1, 2, 3]}),
+    }
+    graph = rfm.Graph.from_data(
+        frames, edges=[], infer_metadata=True, verbose=False
+    )
+    graph['customers'].primary_key = 'customer_id'
+    graph['orders'].primary_key = 'order_id'
+    graph['items'].primary_key = 'item_id'
+    graph.infer_links(verbose=False)
+    assert len(graph.inferred_edges) == 2
+
+    graph.unlink('orders', 'customer_id', 'customers')
+    graph.link('orders', 'customer_id', 'customers')
+
+    assert graph.inferred_edges == (('items', 'order_id', 'orders'),)

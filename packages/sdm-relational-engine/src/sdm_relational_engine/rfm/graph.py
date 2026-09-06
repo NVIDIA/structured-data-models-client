@@ -2187,6 +2187,11 @@ class Graph:
 
         self[src_table][fkey].stype = Stype.ID
         self._edges.append(edge)
+        self._inferred_edges = tuple(
+            marked
+            for marked in getattr(self, '_inferred_edges', ())
+            if marked != (src_table, fkey, dst_table)
+        )
 
         return self
 

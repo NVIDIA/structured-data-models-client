@@ -199,6 +199,16 @@ class GlobalState(metaclass=Singleton):
 
     def clear(self) -> None:
         self._deployment = Deployment()
+        self._drop_cached_client()
+
+    def _drop_cached_client(self) -> None:
+        """Close and forget this thread's cached client.
+
+        Separate from `clear` so pointing the process at a new deployment can
+        drop the stale client without first emptying the deployment: a reader
+        between those two steps would otherwise see an uninitialized state and
+        be told the client failed to authenticate.
+        """
         if hasattr(self.thread_local, '_client'):
             try:
                 self.thread_local._client.close()
@@ -207,6 +217,17 @@ class GlobalState(metaclass=Singleton):
             del self.thread_local._client
         if hasattr(self.thread_local, '_client_config'):
             del self.thread_local._client_config
+
+    def _replace(self, **fields: Any) -> None:
+        """Swap in a complete deployment in one assignment.
+
+        Unlike `_publish`, which edits the current value, this starts from the
+        defaults, so a field the caller does not name is reset rather than
+        inherited from the deployment being replaced.
+        """
+        with _publish_lock:
+            self._deployment = Deployment(**fields)
+        self._drop_cached_client()
 
     @property
     def _config(self) -> tuple[Any, ...]:
@@ -334,7 +355,6 @@ def init(
         )
         if unchanged:
             return
-        global_state.clear()
 
     client = NimClient(
         url=url,
@@ -345,7 +365,7 @@ def init(
     )
     client.authenticate()
 
-    global_state._publish(
+    global_state._replace(
         url=client._url,
         api_key=client._api_key,
         verify_ssl=verify_ssl,
@@ -434,10 +454,7 @@ def init_databricks_serving(
 
     set_log_level(os.getenv(_ENV_KUMO_RELATIONAL_LOG) or log_level)
 
-    if global_state.initialized:
-        global_state.clear()
-
-    global_state._publish(
+    global_state._replace(
         client_factory=lambda: DatabricksServingClient(
             endpoint, workspace_client, **overrides
         ),
@@ -528,10 +545,7 @@ def init_snowflake_serving(
 
     set_log_level(os.getenv(_ENV_KUMO_RELATIONAL_LOG) or log_level)
 
-    if global_state.initialized:
-        global_state.clear()
-
-    global_state._publish(
+    global_state._replace(
         client_factory=lambda: SnowflakeServingClient(
             service, session, **overrides
         ),

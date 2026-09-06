@@ -248,3 +248,35 @@ def test_assigning_one_setting_leaves_the_others_alone() -> None:
     assert global_state._api_key == 'key-a'
     assert global_state._max_retries == 4
     assert global_state._timeout == 30.0
+
+
+def test_a_reader_never_sees_an_uninitialized_deployment_mid_reinit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pointing an already-configured process at a new deployment must not
+    pass through an empty one.
+
+    Authenticating the replacement is a network call. Emptying the deployment
+    before it means a thread predicting at that moment is told the client
+    failed to authenticate, for a deployment that is still perfectly good.
+    """
+    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    kre.init(url=DEPLOYMENTS[0][0], api_key=DEPLOYMENTS[0][1])
+
+    seen: list[bool] = []
+    stop = threading.Event()
+
+    def watch() -> None:
+        while not stop.is_set():
+            seen.append(global_state.initialized)
+
+    watcher = threading.Thread(target=watch)
+    watcher.start()
+    try:
+        kre.init(url=DEPLOYMENTS[1][0], api_key=DEPLOYMENTS[1][1])
+    finally:
+        stop.set()
+        watcher.join()
+
+    assert seen, 'the watcher never observed the state'
+    assert all(seen), f'{seen.count(False)} of {len(seen)} reads saw no client'

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from sdm_connectors import connect
+from sdm_connectors import connect, read
 from sdm_connectors.backends import mark_owned, owns_connection
 from sdm_connectors.sql import (
     ConnectorError,
@@ -280,6 +280,22 @@ def test_postgres_is_a_supported_backend():
     from sdm_connectors.backends import _SQL_BACKENDS
 
     assert 'postgres' in _SQL_BACKENDS
+
+
+def test_connect_and_read_support_the_same_sql_backends():
+    """`connect` and `read` keep separate lists, so a backend added to one and
+    not the other is registered but unreachable through the one-shot call."""
+    from sdm_connectors.backends import _SQL_BACKENDS
+    from sdm_connectors.reader import _SQL_SOURCES
+
+    assert set(_SQL_BACKENDS) == set(_SQL_SOURCES)
+
+
+def test_read_names_postgres_among_the_supported_connectors():
+    with pytest.raises(ConnectorError) as error:
+        read('postgresql', table='t')
+    assert 'postgres' in str(error.value)
+    assert error.value.code == 'UNKNOWN_CONNECTOR'
 
 
 def test_an_unknown_backend_names_postgres_among_the_supported():

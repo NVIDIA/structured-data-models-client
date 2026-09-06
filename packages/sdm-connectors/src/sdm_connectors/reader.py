@@ -24,7 +24,7 @@ from sdm_connectors.sql import (
     resolve_sql,
 )
 
-_SQL_SOURCES = ('sqlite', 'duckdb', 'snowflake', 'databricks')
+_SQL_SOURCES = ('sqlite', 'duckdb', 'postgres', 'snowflake', 'databricks')
 _FILE_SOURCES = ('local', 's3')
 
 _PARQUET_SUFFIXES = ('.parquet', '.pq', '.parq')
