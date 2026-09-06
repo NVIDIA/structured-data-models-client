@@ -103,8 +103,18 @@ def _table_terms(table: _Table) -> list[str]:
 
     Columns are named in their own order rather than sorted, because that order
     is the one the sampler reads them in.
+
+    The source name is carried as well as the name. A warehouse-backed table
+    can be called `orders` while reading `orders_2025`, and a graph reading
+    `orders_2026` under the same name is a different graph. For a table with no
+    separate source the two are equal, which costs a repeated term and keeps
+    the rule one line.
     """
-    terms = [_term(table.name), _term(len(table.columns))]
+    terms = [
+        _term(table.name),
+        _term(getattr(table, 'source_name', None)),
+        _term(len(table.columns)),
+    ]
     for column in table.columns:
         terms.extend(_column_terms(column))
     key = table.primary_key_columns or ()

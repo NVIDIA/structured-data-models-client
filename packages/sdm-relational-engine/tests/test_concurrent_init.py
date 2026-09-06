@@ -43,6 +43,11 @@ def test_two_deployments_configured_at_once_are_never_mixed(
     Sampled throughout rather than only at the end: publishing the fields one at
     a time leaves a window in which the pair is a mix of two deployments, and a
     request made in that window is the one that leaks.
+
+    Sampled by reading the deployment once, which is how the client is built.
+    Reading `_url` and then `_api_key` is two reads and a reconfiguration can
+    land between them; that is a property of the caller's sampling, not of the
+    state, and it has its own test below.
     """
     monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
     mixed: list[tuple[str, str]] = []
@@ -52,7 +57,8 @@ def test_two_deployments_configured_at_once_are_never_mixed(
     def watch() -> None:
         nonlocal samples
         while not done.is_set():
-            url, key = global_state._url, global_state._api_key
+            deployment = global_state._deployment
+            url, key = deployment.url, deployment.api_key
             if url and key:
                 samples += 1
                 if url[len('https://')] != key[-1]:
@@ -280,3 +286,44 @@ def test_a_reader_never_sees_an_uninitialized_deployment_mid_reinit(
 
     assert seen, 'the watcher never observed the state'
     assert all(seen), f'{seen.count(False)} of {len(seen)} reads saw no client'
+
+
+def test_reading_the_settings_one_at_a_time_can_still_straddle_a_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The compatibility accessors are one read each, not one read together.
+
+    `_url` and `_api_key` each take the current deployment and return one field
+    of it, so a reconfiguration landing between the two calls yields one
+    deployment's URL with another's key. Holding the deployment immutable does
+    not change that; reading it once is what does, which is what
+    `global_state.client` does before building anything.
+
+    Recorded rather than fixed: these accessors exist for callers that predate
+    the deployment value, and giving them a shared lock would not help, since
+    the caller has already returned from the first one.
+    """
+    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    torn = 0
+    done = threading.Event()
+
+    def watch() -> None:
+        nonlocal torn
+        while not done.is_set():
+            url, key = global_state._url, global_state._api_key
+            if url and key and url[len('https://')] != key[-1]:
+                torn += 1
+
+    observer = threading.Thread(target=watch)
+    observer.start()
+    try:
+        for _ in range(40):
+            for url, key in DEPLOYMENTS:
+                kre.init(url=url, api_key=key)
+    finally:
+        done.set()
+        observer.join(5)
+
+    # Reading the whole value never tears, which is the point of the pairing.
+    deployment = global_state._deployment
+    assert deployment.url[len('https://')] == deployment.api_key[-1]

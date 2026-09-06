@@ -267,3 +267,49 @@ def test_the_expression_is_part_of_what_the_column_type_calls_identity() -> (
         stype='categorical',
     )
     assert hash(a) != hash(b)
+
+
+def test_two_graphs_reading_different_source_tables_are_not_the_same(
+    tmp_path: object,
+) -> None:
+    """A warehouse table can be named `orders` and read `orders_2025`.
+
+    The sampler issues its queries against the source name, so a graph reading
+    a different physical table is a different graph even when every logical
+    name, column and key matches.
+    """
+    import sqlite3
+
+    path = str(tmp_path / 'data.db')  # type: ignore[operator]
+    connection = sqlite3.connect(path)
+    connection.execute(
+        'create table customers (customer_id integer primary key)'
+    )
+    connection.executemany(
+        'insert into customers values (?)', [(1,), (2,), (3,)]
+    )
+    for year in (2025, 2026):
+        connection.execute(
+            f'create table orders_{year} '
+            '(order_id integer primary key, customer_id integer)'
+        )
+        connection.executemany(
+            f'insert into orders_{year} values (?, ?)', [(1, 1), (2, 2), (3, 3)]
+        )
+    connection.commit()
+    connection.close()
+
+    def build(source: str) -> rfm.Graph:
+        return rfm.Graph.from_sqlite(
+            path,
+            tables=['customers', {'name': 'orders', 'source_name': source}],
+            edges=[],
+            verbose=False,
+        )
+
+    assert graph_fingerprint(build('orders_2025')) != graph_fingerprint(
+        build('orders_2026')
+    )
+    assert graph_fingerprint(build('orders_2025')) == graph_fingerprint(
+        build('orders_2025')
+    )

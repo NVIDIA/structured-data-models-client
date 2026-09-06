@@ -104,9 +104,19 @@ def emit(record: PredictionRecord) -> None:
 # unbounded amount of it in the log.
 #
 # One pass, not two: a second pass would match the quotes this one substitutes
-# in and swallow the rest of the message with them.
+# in and swallow the rest of the message with them, so the substitution is a
+# placeholder carrying no quotes and the text is put back at the end.
 _QUOTED = re.compile(r"""(?<!\w)(['"])(?:\\.|(?!\1).)*(?:\1|$)""", re.DOTALL)
+# Everything from the first quote to the last, used when the pass above leaves
+# a quote behind. A backslash before a closing quote is ambiguous -- an escaped
+# quote inside the value, or the end of a value that happens to end in a
+# backslash -- and reading it the wrong way ends a match early and leaves the
+# next value in the message. Nothing distinguishes the two cases, so an
+# ambiguous message loses its whole quoted span rather than part of a value.
+_QUOTED_SPAN = re.compile(r"""(?<!\w)['"].*["']""", re.DOTALL)
+_ANY_QUOTE = re.compile(r"""['"]""")
 _ID_LIST = re.compile(r'\[[^\[\]]*\]|\((?:\s*[-\w.]+\s*,)[^()]*\)')
+_HOLE = '\x00'
 
 
 def describe_error(error: BaseException) -> str:
@@ -117,11 +127,15 @@ def describe_error(error: BaseException) -> str:
     is exactly the caller data every other field here is chosen to avoid.
 
     The type is always kept, since that is what a reader branches on. The
-    message keeps its shape and loses its values.
+    message keeps its shape and loses its values, unless its quoting is
+    ambiguous, in which case it loses the whole quoted span instead.
     """
-    message = _QUOTED.sub("'?'", str(error))
+    text = str(error)
+    message = _QUOTED.sub(_HOLE, text)
+    if _ANY_QUOTE.search(message.replace(_HOLE, '')):
+        message = _QUOTED_SPAN.sub(_HOLE, text)
     message = _ID_LIST.sub('(values)', message)
-    return f'{type(error).__name__}: {message}'
+    return f'{type(error).__name__}: {message.replace(_HOLE, chr(39) + "?" + chr(39))}'
 
 
 @contextmanager
