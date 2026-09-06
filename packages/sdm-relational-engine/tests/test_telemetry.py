@@ -464,3 +464,43 @@ def test_a_model_built_on_the_changed_graph_fingerprints_differently(
     rebuilt = KumoRelational(model._graph, verbose=False)
 
     assert rebuilt._graph_fingerprint() != before
+
+
+@pytest.mark.parametrize(
+    ('message', 'secret'),
+    [
+        ('entity "alice@acme.com not found', 'acme.com'),
+        ("the model's entity 'a@x.com' is unknown", 'x.com'),
+        ('NIM rejected: {"entity":"alice\\"@acme.com"}', 'acme.com'),
+        ('k="sk-live-abc" more', 'sk-live'),
+        ('"a@x.com""b@y.com"', 'x.com'),
+        ('entity "a\n@acme.com" not found', 'acme.com'),
+    ],
+)
+def test_no_shape_of_quoting_leaves_a_value_behind(
+    message: str, secret: str
+) -> None:
+    """Each of these once left the value, or part of it, in the message.
+
+    An unterminated quote left all of it; an apostrophe in prose opened a match
+    that closed on the real value's opening quote; an escaped quote ended the
+    match inside the value.
+    """
+    assert secret not in describe_error(RuntimeError(message))
+
+
+def test_redaction_keeps_the_shape_of_the_message() -> None:
+    """A record is read to tell one failure from another, so the message has
+    to survive losing its values.
+    """
+    described = describe_error(
+        RuntimeError("'a@x.com' and 'b@y.com' are unknown")
+    )
+    assert described == "RuntimeError: '?' and '?' are unknown"
+
+
+def test_a_message_with_no_values_is_left_alone() -> None:
+    assert (
+        describe_error(RuntimeError('connection reset by peer'))
+        == 'RuntimeError: connection reset by peer'
+    )
