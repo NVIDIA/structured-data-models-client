@@ -167,13 +167,35 @@ def test_the_batch_size_in_force_is_the_one_recorded(
     assert [w['batch_size'] for w in _written(caplog)] == ['None', '100']
 
 
-def test_a_re_typed_graph_is_a_different_graph(model: KumoRelational) -> None:
-    r"""A fingerprint that named the graph as it once was would mislead."""
+def test_re_typing_a_column_afterwards_does_not_change_the_record(
+    model: KumoRelational,
+) -> None:
+    r"""The model does not see the change, so the record must not report it.
+
+    Re-typing a column on the caller's graph after the model was built leaves
+    the parsed definition and the sampler untouched, so the prediction runs
+    with the type the column had at build time. A fingerprint that moved here
+    would name a graph the prediction did not use.
+    """
     before = model._graph_fingerprint()
 
     model._graph['customers']['seg'].stype = 'text'
 
-    assert model._graph_fingerprint() != before
+    assert model._graph_fingerprint() == before
+
+
+def test_a_model_built_after_the_re_type_is_a_different_graph(
+    model: KumoRelational,
+) -> None:
+    r"""The type is still part of a graph's identity; when it is read is what
+    changed.
+    """
+    before = model._graph_fingerprint()
+    model._graph['customers']['seg'].stype = 'text'
+
+    rebuilt = KumoRelational(model._graph, verbose=False)
+
+    assert rebuilt._graph_fingerprint() != before
 
 
 def test_a_record_that_cannot_be_written_does_not_fail_the_call(
@@ -370,3 +392,75 @@ def test_the_record_carries_its_schema_version(
         model.predict(QUERY, verbose=False)
 
     assert _written(caplog)[0]['schema_version'] == SCHEMA_VERSION
+
+
+def test_a_quote_inside_a_value_does_not_end_the_redaction() -> None:
+    """A value carrying an escaped quote must not survive in the message.
+
+    Matching up to the next quote stops inside the value, so the remainder of
+    it lands in the log: exactly the caller data this function exists to keep
+    out. A backslash escape counts as one unit of the value.
+    """
+    described = describe_error(
+        RuntimeError('NIM rejected request: {"entity":"alice\\"@acme.com"}')
+    )
+    assert 'acme.com' not in described
+    assert 'alice' not in described
+
+
+def test_a_quote_inside_a_single_quoted_value_is_redacted_too() -> None:
+    described = describe_error(
+        RuntimeError("entity 'o\\'brien@acme.com' not found")
+    )
+    assert 'acme.com' not in described
+    assert 'brien' not in described
+
+
+def test_two_quoted_values_stay_two_redactions() -> None:
+    """The escape handling must not let one match swallow the text between
+    two separate values, which would hide the shape of the message.
+    """
+    described = describe_error(
+        RuntimeError("'a@x.com' and 'b@y.com' are unknown")
+    )
+    assert 'x.com' not in described
+    assert 'y.com' not in described
+    assert 'and' in described
+    assert 'are unknown' in described
+
+
+def test_a_newline_inside_a_value_is_redacted() -> None:
+    described = describe_error(RuntimeError('entity "a\n@acme.com" not found'))
+    assert 'acme.com' not in described
+
+
+def test_the_fingerprint_names_the_graph_the_model_was_built_on(
+    model: KumoRelational,
+) -> None:
+    """Changing the caller's graph afterwards must not change the record.
+
+    The query is parsed against a definition taken when the model was built,
+    and the rows come from a sampler built at the same moment. A fingerprint
+    that followed the caller's later edits would name a graph the prediction
+    never used, which is the one thing the record exists to get right.
+    """
+    before = model._graph_fingerprint()
+    assert before
+
+    model._graph.unlink('orders', 'customer_id', 'customers')
+
+    assert model._graph_fingerprint() == before
+
+
+def test_a_model_built_on_the_changed_graph_fingerprints_differently(
+    model: KumoRelational,
+) -> None:
+    """Pinning the fingerprint records when the graph was read, not that two
+    different graphs may share a name.
+    """
+    before = model._graph_fingerprint()
+    model._graph.unlink('orders', 'customer_id', 'customers')
+
+    rebuilt = KumoRelational(model._graph, verbose=False)
+
+    assert rebuilt._graph_fingerprint() != before

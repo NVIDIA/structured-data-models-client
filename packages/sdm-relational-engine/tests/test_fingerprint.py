@@ -215,3 +215,55 @@ def test_a_column_named_like_an_encoded_field_cannot_forge_one() -> None:
     colliding = _graph(column_rename={'seg': '4:cid7:unknown'})
 
     assert graph_fingerprint(colliding) != graph_fingerprint(_graph())
+
+
+def test_two_columns_differing_only_by_expression_are_not_the_same() -> None:
+    """A logical column reaches the sampler as `<expr> AS <name>`.
+
+    Two graphs whose columns share a name, storage type and semantic type but
+    compute the value differently read different data, so a fingerprint that
+    called them equal would report the wrong graph for a prediction.
+    """
+    from sdm_relational_engine.rfm.base.column import Column
+    from sdm_relational_engine.rfm.base.expression import Expression
+    from sdm_relational_engine.rfm.fingerprint import _column_terms
+
+    def column(expr: str | None) -> Column:
+        return Column(
+            name='big',
+            expr=None if expr is None else Expression.coerce(expr),
+            dtype='bool',
+            stype='categorical',
+        )
+
+    assert _column_terms(column('amount > 0')) != _column_terms(
+        column('amount > 100')
+    )
+    assert _column_terms(column('amount > 0')) != _column_terms(column(None))
+    assert _column_terms(column('amount > 0')) == _column_terms(
+        column('amount > 0')
+    )
+
+
+def test_the_expression_is_part_of_what_the_column_type_calls_identity() -> (
+    None
+):
+    """The fingerprint follows `Column.__hash__` here rather than inventing a
+    narrower notion of sameness.
+    """
+    from sdm_relational_engine.rfm.base.column import Column
+    from sdm_relational_engine.rfm.base.expression import Expression
+
+    a = Column(
+        name='big',
+        expr=Expression.coerce('amount > 0'),
+        dtype='bool',
+        stype='categorical',
+    )
+    b = Column(
+        name='big',
+        expr=Expression.coerce('amount > 100'),
+        dtype='bool',
+        stype='categorical',
+    )
+    assert hash(a) != hash(b)

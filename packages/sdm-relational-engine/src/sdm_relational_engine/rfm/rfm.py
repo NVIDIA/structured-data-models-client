@@ -362,6 +362,22 @@ _CARDINALITY_RE = re.compile(r'categorical cardinality \d+ exceeds limit (\d+)')
 _OPTIMIZABLE_BACKENDS = frozenset({DataBackend.SQLITE, DataBackend.DUCKDB})
 
 
+def _fingerprint_of(graph: Any) -> str:
+    r"""The graph's fingerprint, or an empty string if it cannot be taken.
+
+    A prediction must not fail because its record could not be labelled.
+    """
+    try:
+        return graph_fingerprint(graph)
+    except Exception:
+        logging.getLogger('sdm_relational_engine').warning(
+            'Graph could not be fingerprinted, so predictions over it cannot '
+            'be told apart from ones over a different graph.',
+            exc_info=True,
+        )
+        return ''
+
+
 def _first_uncastable(
     values: Sequence[Any], dtype: Any
 ) -> tuple[int, Any] | None:
@@ -783,6 +799,7 @@ class KumoRelational:
         graph = graph.validate()
         self._graph = graph
         self._graph_def = graph._to_api_graph_definition()
+        self._fingerprint = _fingerprint_of(graph)
         self._composite_key_dict: dict[str, tuple[str, ...]] = {
             name: table.primary_key_columns
             for name, table in graph.tables.items()
@@ -1212,19 +1229,13 @@ class KumoRelational:
     def _graph_fingerprint(self) -> str:
         r"""Name the graph this prediction ran against.
 
-        Computed per call rather than held, because a graph can be re-typed or
-        re-linked between predictions and a fingerprint that named the graph as
-        it once was would point an investigation at the wrong one.
+        Taken once, when the model was built, because that is when the graph
+        stops mattering: the query is parsed against `_graph_def` and the rows
+        come from `_sampler`, both fixed here. Re-reading the caller's graph
+        per call would report a link they removed afterwards as though the
+        prediction had used it.
         """
-        try:
-            return graph_fingerprint(self._graph)
-        except Exception:
-            logging.getLogger('sdm_relational_engine').warning(
-                'Graph could not be fingerprinted, so this prediction cannot '
-                'be told apart from one over a different graph.',
-                exc_info=True,
-            )
-            return ''
+        return self._fingerprint
 
     def _composite_entity_key(self, query: Any) -> tuple[str, ...] | None:
         r"""The columns the query's entity table spreads its identity across.

@@ -82,7 +82,20 @@ def _term(value: object) -> str:
 
 
 def _column_terms(column: _Column) -> list[str]:
-    return [_term(column.name), _term(column.stype), _term(column.dtype)]
+    r"""A column, including the expression that defines it.
+
+    A logical column is projected into the sampler's SQL as
+    ``<expr> AS <name>``, so two graphs whose columns share a name and type but
+    compute it differently read different data. `Column` already counts the
+    expression as part of its identity; a fingerprint that dropped it would
+    call those two graphs the same.
+    """
+    return [
+        _term(column.name),
+        _term(column.stype),
+        _term(column.dtype),
+        _term(getattr(column, 'expr', None)),
+    ]
 
 
 def _table_terms(table: _Table) -> list[str]:

@@ -94,7 +94,9 @@ def emit(record: PredictionRecord) -> None:
 # A quoted value, and a bare list of entity ids. What an engine or a NIM quotes
 # back when it rejects something is the caller's data, and it arrives here
 # through str(error) rather than through any field this record chose to carry.
-_QUOTED = re.compile(r"""(['"])(?:(?!\1).)*\1""")
+# The body accepts a backslash escape as one unit, so a quote inside the value
+# does not end the match and leave the rest of the value in the message.
+_QUOTED = re.compile(r"""(['"])(?:\\.|(?!\1).)*\1""", re.DOTALL)
 _ID_LIST = re.compile(r'\[[^\[\]]*\]|\((?:\s*[-\w.]+\s*,)[^()]*\)')
 
 

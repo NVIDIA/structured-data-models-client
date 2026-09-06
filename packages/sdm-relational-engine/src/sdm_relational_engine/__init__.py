@@ -555,6 +555,7 @@ def init_snowflake_serving(
         serving_overrides=overrides,
     )
     global_state.thread_local._client = probe
+    global_state.thread_local._client_config = global_state._config
 
     logging.getLogger('sdm_relational_engine').info(
         'Initialized Kumo Relational Client v%s against Snowflake model service %r',
