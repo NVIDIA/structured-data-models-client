@@ -91,6 +91,9 @@ def test_databricks_driver_options_bypass_the_allow_list(monkeypatch):
 
     backend.connect(catalog='c', driver_options={'use_cloud_fetch': True})
 
+    # The partner attribution is added to every connection this package owns,
+    # so it is expected here alongside what the caller asked for.
+    assert seen.pop('user_agent_entry') == 'nvidia_sdm-client/1.0.0'
     assert seen == {'catalog': 'c', 'use_cloud_fetch': True}
 
 
@@ -325,3 +328,101 @@ def test_postgres_reads_the_standard_environment_variables(monkeypatch):
 
     assert captured['host'] == 'example.invalid'
     assert captured['dbname'] == 'explicit', 'an argument must win over PG*'
+
+
+# --- Databricks partner attribution -----------------------------------------
+
+
+def test_a_databricks_connection_carries_the_partner_attribution():
+    """Databricks requires a partner product to identify every connection."""
+    from unittest import mock
+
+    import sdm_connectors.backends.databricks as databricks
+
+    captured: dict = {}
+
+    def _fake_connect(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    with mock.patch.object(databricks.databricks_sql, 'connect', _fake_connect):
+        databricks.connect(server_hostname='h', http_path='p', access_token='t')
+    assert captured['user_agent_entry'] == 'nvidia_sdm-client/1.0.0'
+
+
+def test_a_caller_tag_is_kept_after_the_required_identifier():
+    """Set after the caller's options are merged, so a connection we own
+    cannot lose the attribution, and the caller's tag is not replaced."""
+    from unittest import mock
+
+    import sdm_connectors.backends.databricks as databricks
+
+    captured: dict = {}
+
+    def _fake_connect(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    with mock.patch.object(databricks.databricks_sql, 'connect', _fake_connect):
+        databricks.connect(
+            server_hostname='h',
+            http_path='p',
+            access_token='t',
+            user_agent_entry='acme/2.1',
+        )
+    assert captured['user_agent_entry'] == 'nvidia_sdm-client/1.0.0 acme/2.1'
+
+
+def test_an_unsendable_user_agent_entry_is_an_argument_error():
+    """A control character in a header is the caller's mistake, and reporting
+    it as a connection failure sends them to look at the network."""
+    import sdm_connectors.backends.databricks as databricks
+
+    with pytest.raises(ConnectorError) as error:
+        databricks.connect(
+            server_hostname='h',
+            http_path='p',
+            access_token='t',
+            user_agent_entry='bad\x01entry',
+        )
+    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
+
+
+@pytest.mark.parametrize(
+    ('package_version', 'expected'),
+    [
+        ('1.0.0', '1.0.0'),
+        ('1.2.3', '1.2.3'),
+        ('1.0.0a1', '1.0.0-alpha.1'),
+        ('1.0.0rc2', '1.0.0-rc.2'),
+        ('1.0.0.dev3', '1.0.0-dev.3'),
+        ('1.0.0.post1', '1.0.0+post.1'),
+    ],
+)
+def test_a_python_version_is_translated_to_the_semver_databricks_takes(
+    package_version, expected
+):
+    from sdm_connectors._databricks_telemetry import databricks_product_version
+
+    assert databricks_product_version(package_version) == expected
+
+
+def test_a_version_that_cannot_be_expressed_is_refused_not_invented():
+    """An invented fallback would claim the wrong release."""
+    from sdm_connectors._databricks_telemetry import (
+        DatabricksTelemetryVersionError,
+        databricks_product_version,
+    )
+
+    with pytest.raises(DatabricksTelemetryVersionError):
+        databricks_product_version('1.0')
+
+
+def test_the_attribution_version_is_the_installed_one():
+    """The identifier names this SDK's release, so it has to track it."""
+    import sdm_connectors
+    from sdm_connectors._databricks_telemetry import databricks_user_agent
+
+    assert sdm_connectors.__version__ in databricks_user_agent(
+        sdm_connectors.__version__
+    )

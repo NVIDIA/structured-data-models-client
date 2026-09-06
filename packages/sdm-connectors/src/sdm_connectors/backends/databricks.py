@@ -8,7 +8,14 @@ import inspect
 import os
 from typing import Any, TypeAlias
 
+from sdm_connectors._databricks_telemetry import (
+    DatabricksTelemetryVersionError,
+    DatabricksUserAgentEntryError,
+    databricks_user_agent,
+)
+from sdm_connectors._version import __version__
 from sdm_connectors.sql import (
+    ConnectorError,
     check_connect_args,
     merge_driver_options,
     require_driver,
@@ -97,4 +104,24 @@ def connect(
         if kwargs.get(arg) is None:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
+    # Databricks requires a partner product to identify every connection it
+    # creates. Set after the caller's options are merged, so a connection we
+    # own cannot quietly lose the attribution, and any tag the caller supplied
+    # is kept after the required identifier rather than replaced.
+    try:
+        kwargs['user_agent_entry'] = databricks_user_agent(
+            __version__, kwargs.get('user_agent_entry')
+        )
+    except DatabricksTelemetryVersionError as error:
+        raise ConnectorError(
+            f'installed version {__version__!r} cannot be expressed as the '
+            f'Databricks telemetry version: {error}',
+            code='INVALID_CONNECTOR_ARGS',
+            details={'package_version': __version__},
+        ) from error
+    except (DatabricksUserAgentEntryError, TypeError) as error:
+        raise ConnectorError(
+            f'invalid Databricks user_agent_entry: {error}',
+            code='INVALID_CONNECTOR_ARGS',
+        ) from error
     return databricks_sql.connect(**kwargs)
