@@ -6,10 +6,11 @@ import logging
 import os
 import sys
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import functools
 from functools import lru_cache
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from sdm_relational_engine._logging import (
     _ENV_KUMO_RELATIONAL_LOG,
@@ -36,6 +37,55 @@ from sdm_relational_engine.client.transport import RFMTransport
 initialize_logging()
 
 
+@dataclass(frozen=True)
+class Deployment:
+    r"""Everything that says where requests go and how they authenticate.
+
+    Held as one immutable value and replaced in a single assignment, so a
+    reader sees one deployment or another and never a mix of two. Published
+    field by field, there is a window in which the URL is the new deployment's
+    and the API key is still the last one's, and a request made in that window
+    sends that key to a host it does not belong to.
+    """
+
+    url: str | None = None
+    api_key: str | None = field(default=None, repr=False)
+    verify_ssl: bool = True
+    timeout: float | None = None
+    max_retries: int = 3
+    client_factory: Callable[[], Any] | None = None
+    serving_kind: str | None = None
+    serving_endpoint: str | None = None
+    serving_platform_client: Any | None = None
+    serving_overrides: dict[str, Any] | None = None
+
+
+_Configure = TypeVar('_Configure', bound=Callable[..., None])
+
+_configure_lock = threading.RLock()
+
+# Held only for the read-modify-write of the configuration value itself, never
+# across the network. Publishing a timeout should not queue behind another
+# thread's in-flight authentication.
+_publish_lock = threading.RLock()
+
+
+def _config_of(deployment: Deployment) -> tuple[Any, ...]:
+    """What a cached client was built from, so a stale one is recognised."""
+    return (
+        deployment.url,
+        deployment.api_key,
+        deployment.verify_ssl,
+        deployment.timeout,
+        deployment.max_retries,
+        deployment.client_factory is not None,
+        deployment.serving_kind,
+        deployment.serving_endpoint,
+        id(deployment.serving_platform_client),
+        tuple(sorted((deployment.serving_overrides or {}).items())),
+    )
+
+
 @dataclass
 class GlobalState(metaclass=Singleton):
     r"""Global state needed by the RFM client.
@@ -47,30 +97,108 @@ class GlobalState(metaclass=Singleton):
     before the new mode installs its own. The ``_serving_*`` fields record what
     :func:`init_databricks_serving` was last called with, so repeating the call
     returns early rather than re-resolving credentials.
+
+    The fields are views onto one :class:`Deployment` value. Reading any of
+    them takes the whole of it once, so a reader cannot see half of one
+    configuration and half of another however the writers interleave.
     """
 
-    _url: str | None = None
-    # Kept out of the repr: `global_state` is exported, and a dataclass repr
-    # reaches tracebacks, notebook echoes and crash reporters. The key is
-    # readable through the attribute for anyone who actually wants it.
-    _api_key: str | None = field(default=None, repr=False)
-    _verify_ssl: bool = True
-    _timeout: float | None = None
-    _max_retries: int = 3
-    _client_factory: Callable[[], Any] | None = None
-    _serving_kind: str | None = None
-    _serving_endpoint: str | None = None
-    _serving_platform_client: Any | None = None
-    _serving_overrides: dict[str, Any] | None = None
-
+    _deployment: Deployment = field(default_factory=Deployment)
     thread_local: threading.local = field(default_factory=threading.local)
 
+    def _publish(self, **changes: Any) -> None:
+        r"""Install a configuration change, whole, in one assignment.
+
+        Locked because this reads the current configuration before writing the
+        next: two callers changing different fields at once would otherwise
+        each start from the same value and the second would drop the first's
+        change. The assignment itself is what readers rely on being one step.
+        """
+        with _publish_lock:
+            self._deployment = replace(self._deployment, **changes)
+
+    @property
+    def _url(self) -> str | None:
+        return self._deployment.url
+
+    @_url.setter
+    def _url(self, value: str | None) -> None:
+        self._publish(url=value)
+
+    @property
+    def _api_key(self) -> str | None:
+        return self._deployment.api_key
+
+    @_api_key.setter
+    def _api_key(self, value: str | None) -> None:
+        self._publish(api_key=value)
+
+    @property
+    def _verify_ssl(self) -> bool:
+        return self._deployment.verify_ssl
+
+    @_verify_ssl.setter
+    def _verify_ssl(self, value: bool) -> None:
+        self._publish(verify_ssl=value)
+
+    @property
+    def _timeout(self) -> float | None:
+        return self._deployment.timeout
+
+    @_timeout.setter
+    def _timeout(self, value: float | None) -> None:
+        self._publish(timeout=value)
+
+    @property
+    def _max_retries(self) -> int:
+        return self._deployment.max_retries
+
+    @_max_retries.setter
+    def _max_retries(self, value: int) -> None:
+        self._publish(max_retries=value)
+
+    @property
+    def _client_factory(self) -> Callable[[], Any] | None:
+        return self._deployment.client_factory
+
+    @_client_factory.setter
+    def _client_factory(self, value: Callable[[], Any] | None) -> None:
+        self._publish(client_factory=value)
+
+    @property
+    def _serving_kind(self) -> str | None:
+        return self._deployment.serving_kind
+
+    @_serving_kind.setter
+    def _serving_kind(self, value: str | None) -> None:
+        self._publish(serving_kind=value)
+
+    @property
+    def _serving_endpoint(self) -> str | None:
+        return self._deployment.serving_endpoint
+
+    @_serving_endpoint.setter
+    def _serving_endpoint(self, value: str | None) -> None:
+        self._publish(serving_endpoint=value)
+
+    @property
+    def _serving_platform_client(self) -> Any | None:
+        return self._deployment.serving_platform_client
+
+    @_serving_platform_client.setter
+    def _serving_platform_client(self, value: Any | None) -> None:
+        self._publish(serving_platform_client=value)
+
+    @property
+    def _serving_overrides(self) -> dict[str, Any] | None:
+        return self._deployment.serving_overrides
+
+    @_serving_overrides.setter
+    def _serving_overrides(self, value: dict[str, Any] | None) -> None:
+        self._publish(serving_overrides=value)
+
     def clear(self) -> None:
-        self._client_factory = None
-        self._serving_kind = None
-        self._serving_endpoint = None
-        self._serving_platform_client = None
-        self._serving_overrides = None
+        self._deployment = Deployment()
         if hasattr(self.thread_local, '_client'):
             try:
                 self.thread_local._client.close()
@@ -79,29 +207,17 @@ class GlobalState(metaclass=Singleton):
             del self.thread_local._client
         if hasattr(self.thread_local, '_client_config'):
             del self.thread_local._client_config
-        self._url = None
-        self._api_key = None
-        self._verify_ssl = True
-        self._timeout = None
-        self._max_retries = 3
 
     @property
     def _config(self) -> tuple[Any, ...]:
-        return (
-            self._url,
-            self._api_key,
-            self._verify_ssl,
-            self._timeout,
-            self._max_retries,
-            self._client_factory is not None,
-            self._serving_endpoint,
-            id(self._serving_platform_client),
-            tuple(sorted((self._serving_overrides or {}).items())),
-        )
+        return _config_of(self._deployment)
 
     @property
     def initialized(self) -> bool:
-        return self._url is not None or self._client_factory is not None
+        deployment = self._deployment
+        return (
+            deployment.url is not None or deployment.client_factory is not None
+        )
 
     @property
     def client(self) -> RFMTransport:
@@ -139,22 +255,23 @@ class GlobalState(metaclass=Singleton):
                 'Please re-create your client before proceeding.'
             )
 
-        config = self._config
+        deployment = self._deployment
+        config = _config_of(deployment)
         if (
             hasattr(self.thread_local, '_client')
             and getattr(self.thread_local, '_client_config', None) == config
         ):
             return self.thread_local._client
 
-        if self._client_factory is not None:
-            client = self._client_factory()
+        if deployment.client_factory is not None:
+            client = deployment.client_factory()
         else:
             client = NimClient(
-                self._url,
-                self._api_key,
-                verify_ssl=self._verify_ssl,
-                timeout=self._timeout,
-                max_retries=self._max_retries,
+                deployment.url,
+                deployment.api_key,
+                verify_ssl=deployment.verify_ssl,
+                timeout=deployment.timeout,
+                max_retries=deployment.max_retries,
             )
         self.thread_local._client = client
         self.thread_local._client_config = config
@@ -164,6 +281,18 @@ class GlobalState(metaclass=Singleton):
 global_state: GlobalState = GlobalState()
 
 
+def _serialized(configure: _Configure) -> _Configure:
+    """Let one thread at a time point the process at a deployment."""
+
+    @functools.wraps(configure)
+    def guarded(*args: Any, **kwargs: Any) -> None:
+        with _configure_lock:
+            return configure(*args, **kwargs)
+
+    return cast(_Configure, guarded)
+
+
+@_serialized
 def init(
     url: str | None = None,
     api_key: str | None = None,
@@ -216,11 +345,13 @@ def init(
     )
     client.authenticate()
 
-    global_state._url = client._url
-    global_state._api_key = client._api_key
-    global_state._verify_ssl = verify_ssl
-    global_state._timeout = timeout
-    global_state._max_retries = max_retries
+    global_state._publish(
+        url=client._url,
+        api_key=client._api_key,
+        verify_ssl=verify_ssl,
+        timeout=timeout,
+        max_retries=max_retries,
+    )
 
     logging.getLogger('sdm_relational_engine').info(
         "Initialized KumoRelational client v%s against deployment '%s'",
@@ -229,6 +360,7 @@ def init(
     )
 
 
+@_serialized
 def init_databricks_serving(
     endpoint: str,
     *,
@@ -305,13 +437,15 @@ def init_databricks_serving(
     if global_state.initialized:
         global_state.clear()
 
-    global_state._client_factory = lambda: DatabricksServingClient(
-        endpoint, workspace_client, **overrides
+    global_state._publish(
+        client_factory=lambda: DatabricksServingClient(
+            endpoint, workspace_client, **overrides
+        ),
+        serving_kind='databricks',
+        serving_endpoint=endpoint,
+        serving_platform_client=workspace_client,
+        serving_overrides=overrides,
     )
-    global_state._serving_kind = 'databricks'
-    global_state._serving_endpoint = endpoint
-    global_state._serving_platform_client = workspace_client
-    global_state._serving_overrides = overrides
     global_state.thread_local._client = probe
     global_state.thread_local._client_config = global_state._config
 
@@ -323,6 +457,7 @@ def init_databricks_serving(
     )
 
 
+@_serialized
 def init_snowflake_serving(
     service: str,
     *,
@@ -396,13 +531,15 @@ def init_snowflake_serving(
     if global_state.initialized:
         global_state.clear()
 
-    global_state._client_factory = lambda: SnowflakeServingClient(
-        service, session, **overrides
+    global_state._publish(
+        client_factory=lambda: SnowflakeServingClient(
+            service, session, **overrides
+        ),
+        serving_kind='snowflake',
+        serving_endpoint=service,
+        serving_platform_client=session,
+        serving_overrides=overrides,
     )
-    global_state._serving_kind = 'snowflake'
-    global_state._serving_endpoint = service
-    global_state._serving_platform_client = session
-    global_state._serving_overrides = overrides
     global_state.thread_local._client = probe
 
     logging.getLogger('sdm_relational_engine').info(

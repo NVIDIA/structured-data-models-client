@@ -2237,6 +2237,9 @@ class Graph:
         Args:
             verbose: Whether to print verbose output.
         """
+        declared = {
+            (edge.src_table, edge.fkey, edge.dst_table) for edge in self.edges
+        }
         known_edges = {(edge.src_table, edge.fkey) for edge in self.edges}
 
         for table in self.tables.values():  # Use links from source metadata:
@@ -2397,12 +2400,51 @@ class Graph:
             dst_table_name = scores[0][0]
             self.link(src_table_name, src_key_name, dst_table_name)
 
+        self._inferred_edges = tuple(
+            sorted(
+                set(self.inferred_edges)
+                | {
+                    (edge.src_table, edge.fkey, edge.dst_table)
+                    for edge in self.edges
+                    if (edge.src_table, edge.fkey, edge.dst_table)
+                    not in declared
+                }
+            )
+        )
+
         self._warn_unlinkable_tables()
 
         if verbose:
             self.print_links()
 
         return self
+
+    @property
+    def inferred_edges(self) -> tuple[tuple[str, str, str], ...]:
+        r"""The edges :meth:`infer_links` chose, as ``(src, fkey, dst)``.
+
+        Inference reads names and values to guess a relationship, so the graph a
+        question runs against is partly a guess. Recording which edges were
+        guessed is what lets a caller say why a prediction came out as it did,
+        and what lets a cache tell one guessed shape from another rather than
+        serving whichever was inferred first.
+
+        Empty before inference runs, and empty when every edge was declared.
+        An edge stays marked for as long as it is there: a later inference pass
+        that adds nothing new does not un-guess what an earlier one guessed.
+
+        Reported against the edges the graph currently HAS, so an edge that
+        inference chose and the caller then removed stops being reported.
+        Otherwise a graph would carry the mark of a link it no longer has, and
+        fingerprint differently from an identical graph that never had it.
+        """
+        marked = getattr(self, '_inferred_edges', ())
+        if not marked:
+            return ()
+        present = {
+            (edge.src_table, edge.fkey, edge.dst_table) for edge in self.edges
+        }
+        return tuple(edge for edge in marked if edge in present)
 
     def _warn_unlinkable_tables(self) -> None:
         r"""Reports a table that ended up with no primary key even though one
