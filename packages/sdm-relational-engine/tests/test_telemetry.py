@@ -416,16 +416,18 @@ def test_a_quote_inside_a_single_quoted_value_is_redacted_too() -> None:
     assert 'brien' not in described
 
 
-def test_two_quoted_values_stay_two_redactions() -> None:
-    """The escape handling must not let one match swallow the text between
-    two separate values, which would hide the shape of the message.
+def test_two_quoted_values_both_go() -> None:
+    """Neither value survives, and what surrounds them both does.
+
+    The wording between the two goes with them: the rule takes the whole span
+    from the first quote to the last, because deciding where one value ends
+    needs the message to say, and it does not.
     """
     described = describe_error(
         RuntimeError("'a@x.com' and 'b@y.com' are unknown")
     )
     assert 'x.com' not in described
     assert 'y.com' not in described
-    assert 'and' in described
     assert 'are unknown' in described
 
 
@@ -489,14 +491,24 @@ def test_no_shape_of_quoting_leaves_a_value_behind(
     assert secret not in describe_error(RuntimeError(message))
 
 
-def test_redaction_keeps_the_shape_of_the_message() -> None:
-    """A record is read to tell one failure from another, so the message has
-    to survive losing its values.
+def test_redaction_keeps_what_is_outside_the_values() -> None:
+    """A record is read to tell one failure from another, so what surrounds
+    the values has to survive losing them.
     """
     described = describe_error(
         RuntimeError("'a@x.com' and 'b@y.com' are unknown")
     )
-    assert described == "RuntimeError: '?' and '?' are unknown"
+    assert described == "RuntimeError: '?' are unknown"
+
+
+def test_a_value_whose_quote_touches_a_word_is_still_redacted() -> None:
+    """`entity'alice@example.com'` has no separator before the quote, which a
+    rule keyed on one reads as prose and leaves alone.
+    """
+    described = describe_error(RuntimeError("entity'alice@acme.com' not found"))
+
+    assert 'acme.com' not in described
+    assert described == "RuntimeError: entity'?' not found"
 
 
 def test_a_message_with_no_values_is_left_alone() -> None:
@@ -537,11 +549,43 @@ def test_the_caller_keeps_their_own_error_when_it_cannot_be_described(
     assert _written(caplog), 'the record was not emitted'
 
 
-def test_a_value_carrying_the_placeholder_cannot_forge_a_redaction() -> None:
-    """The substitution uses a character no message should contain; one that
-    does must not come back out looking like a redaction mark.
+def test_a_message_that_quotes_nothing_keeps_every_character() -> None:
+    """Nothing is stripped from a message with no values in it, so two
+    different failures cannot be reshaped into the same text.
     """
-    described = describe_error(RuntimeError('a\x00b "v"'))
+    for message in ('bad\x00input', 'badinput', 'connection reset by peer'):
+        assert (
+            describe_error(RuntimeError(message)) == f'RuntimeError: {message}'
+        )
 
-    assert '\x00' not in described
-    assert described.count("'?'") == 1
+
+def test_the_record_counts_the_hops_that_ran(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`num_hops` is deprecated in favour of `num_neighbors`.
+
+    Passing the neighbour list sets the hop count and leaves `num_hops` at its
+    default, so recording the argument reported two hops for a prediction that
+    walked three.
+    """
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, num_neighbors=[8, 4, 2], verbose=False)
+
+    assert _written(caplog)[0]['num_hops'] == 3
+
+
+def test_the_record_counts_the_default_hops_when_none_are_asked_for(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    assert _written(caplog)[0]['num_hops'] == 2

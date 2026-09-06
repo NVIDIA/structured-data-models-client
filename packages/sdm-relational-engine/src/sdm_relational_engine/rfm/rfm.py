@@ -1863,7 +1863,11 @@ class KumoRelational:
             engine_version=__version__,
             run_mode=str(RunMode(run_mode)),
             batch_size=str(self._batch_size.get()),
-            num_hops=num_hops,
+            # The resolved neighbour list, not the argument: `num_hops` is
+            # deprecated in favour of `num_neighbors`, and passing the latter
+            # sets the hop count while leaving the former at its default. The
+            # list is what the sampler walks, so its length is what ran.
+            num_hops=len(num_neighbors),
             explain=explain_config is not None,
             prediction_id=uuid.uuid4().hex,
             task_type=str(getattr(task, 'task_type', '')),

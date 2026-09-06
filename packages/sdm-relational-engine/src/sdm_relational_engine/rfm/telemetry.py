@@ -91,32 +91,26 @@ def emit(record: PredictionRecord) -> None:
         logger.debug('Prediction record could not be emitted', exc_info=True)
 
 
-# A quoted value, and a bare list of entity ids. What an engine or a NIM quotes
-# back when it rejects something is the caller's data, and it arrives here
-# through str(error) rather than through any field this record chose to carry.
+# Everything from the first quote in a message to the last, and a bare list of
+# entity ids. What an engine or a NIM quotes back when it rejects something is
+# the caller's data, and it arrives here through str(error) rather than through
+# any field this record chose to carry.
 #
-# The body accepts a backslash escape as one unit, so a quote inside the value
-# does not end the match and leave the rest of the value behind. A quote only
-# opens a value when it does not follow a word character, because the
-# apostrophe in "the model's entity 'alice@example.com'" would otherwise open a
-# match that closes on the real value's opening quote. A value that never
-# closes runs to the end of the message, since the alternative is leaving an
-# unbounded amount of it in the log.
+# The span is deliberately blunt. Matching each value separately needs the
+# message to say where one ends, and it does not: a backslash before a closing
+# quote is either an escaped quote inside the value or the end of a value that
+# ends in a backslash, and an apostrophe in prose is indistinguishable from an
+# opening quote. Every rule tried for those cases left some value in the log --
+# reading the escape one way leaks the rest of that value, the other way leaks
+# the next one, and requiring a non-word character before an opening quote
+# leaks `entity'alice@example.com'`. Taking the whole span cannot: nothing
+# between the outer quotes survives, whatever the quoting meant.
 #
-# One pass, not two: a second pass would match the quotes this one substitutes
-# in and swallow the rest of the message with them, so the substitution is a
-# placeholder carrying no quotes and the text is put back at the end.
-_QUOTED = re.compile(r"""(?<!\w)(['"])(?:\\.|(?!\1).)*(?:\1|$)""", re.DOTALL)
-# Everything from the first quote to the last, used when the pass above leaves
-# a quote behind. A backslash before a closing quote is ambiguous -- an escaped
-# quote inside the value, or the end of a value that happens to end in a
-# backslash -- and reading it the wrong way ends a match early and leaves the
-# next value in the message. Nothing distinguishes the two cases, so an
-# ambiguous message loses its whole quoted span rather than part of a value.
-_QUOTED_SPAN = re.compile(r"""(?<!\w)['"].*["']""", re.DOTALL)
-_ANY_QUOTE = re.compile(r"""['"]""")
+# The cost is that a message with several values keeps only what is outside
+# them, so two failures differing only in wording between two values read the
+# same. The type is still there, and so is every other field on the record.
+_QUOTED_SPAN = re.compile(r"""['"].*["']|['"].*""", re.DOTALL)
 _ID_LIST = re.compile(r'\[[^\[\]]*\]|\((?:\s*[-\w.]+\s*,)[^()]*\)')
-_HOLE = '\x00'
 _MARK = "'?'"
 
 
@@ -137,14 +131,9 @@ def describe_error(error: BaseException) -> str:
     """
     name = type(error).__name__
     try:
-        # A value carrying the placeholder would come back out looking like a
-        # redaction mark, so it is removed before one is put in.
-        text = str(error).replace(_HOLE, '')
-        message = _QUOTED.sub(_HOLE, text)
-        if _ANY_QUOTE.search(message.replace(_HOLE, '')):
-            message = _QUOTED_SPAN.sub(_HOLE, text)
+        message = _QUOTED_SPAN.sub(_MARK, str(error))
         message = _ID_LIST.sub('(values)', message)
-        return f'{name}: {message.replace(_HOLE, _MARK)}'
+        return f'{name}: {message}'
     except Exception:
         return f'{name}: <message could not be read>'
 
