@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     # 4.9.3 exactly: the checked-in parser is ANTLR 4.9.3 output, and a
     # serialized ATN is only readable by the runtime that emitted it.
-    "antlr4-python3-runtime==4.9.3",
+    "antlr4-python3-runtime==4.13.2",
     "numpy",
     "pandas",
     "pydantic",

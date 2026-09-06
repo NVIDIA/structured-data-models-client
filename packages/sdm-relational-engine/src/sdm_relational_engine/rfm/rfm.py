@@ -110,7 +110,7 @@ _SIZE_LIMIT_MSG = (
     'number of columns (e.g., large text columns), '
     'neighborhood configuration, or the run mode. If none of '
     'this is possible, please create a feature request at '
-    "'https://github.com/NVIDIA/sdm-client' if you must go "
+    "'https://github.com/NVIDIA/structured-data-models-client' if you must go "
     'beyond this for your use-case.'
 )
 
@@ -562,7 +562,7 @@ def _nim_failure_error(
 
     return NimFailureError(
         f'An unexpected exception occurred. Please create an issue at '
-        f"'https://github.com/NVIDIA/sdm-client'. "
+        f"'https://github.com/NVIDIA/structured-data-models-client'. "
         f'{detail if detail else error}{fields}',
         status_code=status,
         detail=detail,
@@ -2604,7 +2604,7 @@ class KumoRelational:
                 f'hops (got {len(num_neighbors)}). Reduce the '
                 f'number of hops and try again. Please create a '
                 f'feature request at '
-                f"'https://github.com/NVIDIA/sdm-client' if you "
+                f"'https://github.com/NVIDIA/structured-data-models-client' if you "
                 f'must go beyond this for your use-case.'
             )
 
@@ -2659,7 +2659,7 @@ class KumoRelational:
                 f'{_MAX_SUBGRAPH_TABLES} '
                 f'tables (got {len(subgraph.table_dict)}). '
                 f'Please create a feature request at '
-                f"'https://github.com/NVIDIA/sdm-client' if you "
+                f"'https://github.com/NVIDIA/structured-data-models-client' if you "
                 f'must go beyond this for your use-case.'
             )
 
