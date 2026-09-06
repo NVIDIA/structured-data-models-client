@@ -12,6 +12,7 @@ from sdm_api.generated.tfm_api import PredictionItem
 
 from sdm_client import PredictionResult, Request
 from sdm_client.adapters.tabular import TabularAdapter
+from sdm_client.errors import StructuredDataError
 
 
 def request_for(task: str = 'classification', **kwargs) -> Request:
@@ -188,7 +189,7 @@ def test_merging_one_part_returns_it_unchanged():
 
 
 def test_merging_nothing_is_an_error_rather_than_an_empty_answer():
-    with pytest.raises(ValueError):
+    with pytest.raises(StructuredDataError):
         PredictionResult.merge([])
 
 

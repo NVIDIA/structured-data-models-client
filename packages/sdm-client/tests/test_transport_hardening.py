@@ -354,3 +354,39 @@ def test_an_ordinary_payload_and_a_repeated_subobject_are_accepted():
 
     shared = {'x': 1}
     _check_encodable({'a': [1, 2, {'b': 3}], 'p': shared, 'q': [shared]})
+
+
+def test_a_non_ascii_body_is_encoded_here_not_by_requests():
+    """A `str` body is handed to httplib, which encodes latin-1.
+
+    That only worked because `json.dumps` defaults to `ensure_ascii=True`.
+    Encoding to utf-8 here removes the dependency on a default nobody will
+    remember when it changes.
+    """
+    import requests_mock
+
+    from sdm_client import SDMClient
+
+    with SDMClient(url='https://example.invalid') as client:
+        with requests_mock.Mocker() as mock:
+            mock.post(
+                'https://example.invalid/v1/predictions',
+                json={'id': 'x', 'model': 'kumo-relational', 'predictions': []},
+            )
+            client._transport._post('/v1/predictions', {'note': 'naïve café'})
+            assert isinstance(mock.last_request.body, bytes)
+
+
+def test_merge_raises_the_clients_own_error_type():
+    """`except StructuredDataError` is the documented catch for this client.
+
+    These three raises were bare `ValueError`, so a caller following the
+    documentation missed them, which is the same premise as the engine-error
+    classification added in this branch.
+    """
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.result import PredictionResult
+
+    with pytest.raises(StructuredDataError) as error:
+        PredictionResult.merge([])
+    assert error.value.code == 'INTERNAL_ERROR'
