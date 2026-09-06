@@ -1150,3 +1150,39 @@ def test_a_numeric_string_a_float_cannot_hold_is_refused_here_too():
     with pytest.raises(ValueError):
         _cell_json_value('9223372036854775809', 'float64')
     assert _cell_json_value('1.5', 'float64') == 1.5
+
+
+def test_decimal_inference_does_not_depend_on_row_order():
+    """It returned on the first constraining value, so the same two values
+    named the column float64 one way round and string the other, and
+    reordering rows changed whether the request was even legal.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _decimal_dtype_name
+
+    values = [Decimal('1.5'), Decimal('9223372036854775809.00')]
+    forward = _decimal_dtype_name(pd.Series(values, dtype=object))
+    reverse = _decimal_dtype_name(
+        pd.Series(list(reversed(values)), dtype=object)
+    )
+    assert forward == reverse == 'string'
+
+
+@pytest.mark.parametrize(
+    ('values', 'expected'),
+    [
+        ([Decimal('1.5'), Decimal('2.5')], 'float64'),
+        ([Decimal('1'), Decimal('2')], 'int64'),
+        ([Decimal('9223372036854775809'), Decimal('1')], 'string'),
+        ([Decimal('1.5'), Decimal('9223372036854775809.00')], 'string'),
+    ],
+)
+def test_a_decimal_column_is_named_by_everything_it_holds(values, expected):
+    from sdm_relational_engine.rfm.payload import _decimal_dtype_name
+
+    assert _decimal_dtype_name(pd.Series(values, dtype=object)) == expected
+    assert (
+        _decimal_dtype_name(pd.Series(list(reversed(values)), dtype=object))
+        == expected
+    )

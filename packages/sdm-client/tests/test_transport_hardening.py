@@ -251,8 +251,13 @@ def test_an_ordinary_base_url_with_a_path_prefix_is_still_accepted(url):
 
 
 def test_a_payload_nested_too_deeply_is_refused_not_raised_raw():
-    """`json.dumps` raises RecursionError, which the encode guard did not
-    catch, so `_post` leaked it as though the client had crashed."""
+    """Checked before encoding, not by catching what the encoder raises.
+
+    Whether `json.dumps` raises `RecursionError` is an implementation detail:
+    CPython 3.12 raises on a 30,000 level mapping and 3.14 encodes the same
+    value happily. A guard written around the exception protects one
+    interpreter and not the next, and this package supports both.
+    """
     from sdm_client import SDMClient
     from sdm_client.errors import StructuredDataError
 
@@ -267,7 +272,7 @@ def test_a_payload_nested_too_deeply_is_refused_not_raised_raw():
         with pytest.raises(StructuredDataError) as error:
             client._transport._post('/v1/predictions', payload)
     assert error.value.code == 'INVALID_REQUEST'
-    assert 'nested too deeply' in str(error.value)
+    assert 'nests more than' in str(error.value)
 
 
 def test_an_adapter_that_adds_nothing_does_not_become_its_own_cause():
@@ -303,3 +308,49 @@ def test_an_adapter_that_adds_nothing_does_not_become_its_own_cause():
         client._send(Explains(), {})
     assert error.value.__cause__ is not error.value
     assert isinstance(error.value.__cause__, StructuredDataError)
+
+
+def test_a_payload_that_refers_back_to_itself_is_refused():
+    from sdm_client import SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    cyclic: dict = {}
+    cyclic['self'] = cyclic
+    with SDMClient(url='https://example.invalid') as client:
+        with pytest.raises(StructuredDataError) as error:
+            client._transport._post('/v1/predictions', cyclic)
+    assert 'refers back to itself' in str(error.value)
+
+
+def test_the_check_does_not_depend_on_the_encoder_raising():
+    """The point of the guard: it must refuse the value that `json.dumps`
+    on this interpreter happens to accept."""
+    import json
+
+    from sdm_client.core.transport import _check_encodable
+    from sdm_client.errors import StructuredDataError
+
+    deep: dict = {}
+    cursor = deep
+    for _ in range(30_000):
+        nxt: dict = {}
+        cursor['x'] = nxt
+        cursor = nxt
+
+    encoder_raised = False
+    try:
+        json.dumps(deep)
+    except RecursionError:
+        encoder_raised = True
+
+    with pytest.raises(StructuredDataError):
+        _check_encodable(deep)
+    assert isinstance(encoder_raised, bool)
+
+
+def test_an_ordinary_payload_and_a_repeated_subobject_are_accepted():
+    """The same object referenced twice is a DAG, not a cycle."""
+    from sdm_client.core.transport import _check_encodable
+
+    shared = {'x': 1}
+    _check_encodable({'a': [1, 2, {'b': 3}], 'p': shared, 'q': [shared]})

@@ -1076,7 +1076,7 @@ def _decimal_dtype_name(data: pd.Series) -> str | None:
     if not pd.api.types.is_object_dtype(data.dtype):
         return None
 
-    found = False
+    found = fractional = too_wide = False
     for value in data:
         if _is_null_like(value):
             continue
@@ -1086,10 +1086,23 @@ def _decimal_dtype_name(data: pd.Series) -> str | None:
         if not value.is_finite():
             continue  # encodes as null, so it constrains nothing
         if value != value.to_integral_value():
-            return 'float64'
-        if not _fits_int64(value):
-            return 'string'
-    return 'int64' if found else None
+            fractional = True
+        elif not _fits_int64(value):
+            too_wide = True
+    if not found:
+        return None
+    # Decided once the whole column has been read, not on whichever value
+    # happened to come first. Returning early made the answer depend on row
+    # order: the same two values named the column float64 one way round and
+    # string the other, so reordering rows changed whether the request was
+    # even legal.
+    if too_wide:
+        # A width no float64 holds. `string` keeps every digit, and it keeps
+        # the fractional values in the same column exactly too.
+        return 'string'
+    if fractional:
+        return 'float64'
+    return 'int64'
 
 
 def _list_dtype_name(data: pd.Series) -> str | None:

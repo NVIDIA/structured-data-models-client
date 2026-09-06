@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -603,9 +604,10 @@ class Transport:
         # Encode before sending, so a value with no JSON form is named here
         # rather than raising a TypeError from inside `requests` that mentions
         # neither this client nor the offending key.
+        _check_encodable(payload)
         try:
             body = json.dumps(payload, allow_nan=False)
-        except RecursionError as error:
+        except RecursionError as error:  # pragma: no cover - see the check
             raise StructuredDataError(
                 'this request is nested too deeply to encode as JSON',
                 code='INVALID_REQUEST',
@@ -651,6 +653,46 @@ class Transport:
                 code='TRANSPORT_ERROR',
             )
         return body
+
+
+#: Deeper than any real request and far below the interpreter's own limit,
+#: so the walk below reports rather than exhausting the stack.
+_MAX_PAYLOAD_DEPTH = 200
+
+
+def _check_encodable(payload: Any) -> None:
+    r"""Refuse a payload that nests too deeply or refers back to itself.
+
+    Not left to ``json.dumps`` raising ``RecursionError``. Whether it does is
+    an implementation detail of the encoder: CPython 3.12 raises on a 30,000
+    level mapping and 3.14 encodes the same value without complaint, so a
+    guard written around the exception protects one interpreter and not the
+    next. This package supports both.
+
+    Iterative, because a recursive check would hit the same limit it exists to
+    report.
+    """
+    stack: list[tuple[Any, int, tuple[int, ...]]] = [(payload, 0, ())]
+    while stack:
+        value, depth, parents = stack.pop()
+        if not isinstance(value, (Mapping, list, tuple)):
+            continue
+        if id(value) in parents:
+            raise StructuredDataError(
+                'this request contains a value that refers back to itself, '
+                'so it cannot be sent as JSON',
+                code='INVALID_REQUEST',
+            )
+        if depth > _MAX_PAYLOAD_DEPTH:
+            raise StructuredDataError(
+                f'this request nests more than {_MAX_PAYLOAD_DEPTH} levels '
+                f'deep, so it cannot be sent as JSON',
+                code='INVALID_REQUEST',
+            )
+        nested = (*parents, id(value))
+        items = value.values() if isinstance(value, Mapping) else value
+        for item in items:
+            stack.append((item, depth + 1, nested))
 
 
 def _to_nim_error(status_code: int, content: bytes) -> NimRequestError:
