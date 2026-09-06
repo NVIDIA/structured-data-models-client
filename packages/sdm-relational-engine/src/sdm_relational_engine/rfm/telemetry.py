@@ -117,6 +117,7 @@ _QUOTED_SPAN = re.compile(r"""(?<!\w)['"].*["']""", re.DOTALL)
 _ANY_QUOTE = re.compile(r"""['"]""")
 _ID_LIST = re.compile(r'\[[^\[\]]*\]|\((?:\s*[-\w.]+\s*,)[^()]*\)')
 _HOLE = '\x00'
+_MARK = "'?'"
 
 
 def describe_error(error: BaseException) -> str:
@@ -129,13 +130,23 @@ def describe_error(error: BaseException) -> str:
     The type is always kept, since that is what a reader branches on. The
     message keeps its shape and loses its values, unless its quoting is
     ambiguous, in which case it loses the whole quoted span instead.
+
+    Nothing here may raise. This runs inside the `except` that re-raises the
+    caller's error, so an exception thrown while describing one would replace
+    the failure the caller is trying to read.
     """
-    text = str(error)
-    message = _QUOTED.sub(_HOLE, text)
-    if _ANY_QUOTE.search(message.replace(_HOLE, '')):
-        message = _QUOTED_SPAN.sub(_HOLE, text)
-    message = _ID_LIST.sub('(values)', message)
-    return f'{type(error).__name__}: {message.replace(_HOLE, chr(39) + "?" + chr(39))}'
+    name = type(error).__name__
+    try:
+        # A value carrying the placeholder would come back out looking like a
+        # redaction mark, so it is removed before one is put in.
+        text = str(error).replace(_HOLE, '')
+        message = _QUOTED.sub(_HOLE, text)
+        if _ANY_QUOTE.search(message.replace(_HOLE, '')):
+            message = _QUOTED_SPAN.sub(_HOLE, text)
+        message = _ID_LIST.sub('(values)', message)
+        return f'{name}: {message.replace(_HOLE, _MARK)}'
+    except Exception:
+        return f'{name}: <message could not be read>'
 
 
 @contextmanager

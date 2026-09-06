@@ -504,3 +504,44 @@ def test_a_message_with_no_values_is_left_alone() -> None:
         describe_error(RuntimeError('connection reset by peer'))
         == 'RuntimeError: connection reset by peer'
     )
+
+
+def test_an_error_whose_message_cannot_be_read_is_still_described() -> None:
+    """`describe_error` runs inside the `except` that re-raises the caller's
+    error, so raising here would hand them an exception about logging instead
+    of the failure they were debugging.
+    """
+
+    class Unreadable(Exception):
+        def __str__(self) -> str:
+            raise ValueError('str() itself fails')
+
+    described = describe_error(Unreadable())
+
+    assert described.startswith('Unreadable:')
+    assert 'str() itself fails' not in described
+
+
+def test_the_caller_keeps_their_own_error_when_it_cannot_be_described(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Unreadable(Exception):
+        def __str__(self) -> str:
+            raise ValueError('str() itself fails')
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        with pytest.raises(Unreadable):
+            with recorded(PredictionRecord(graph_fingerprint='abc')):
+                raise Unreadable()
+
+    assert _written(caplog), 'the record was not emitted'
+
+
+def test_a_value_carrying_the_placeholder_cannot_forge_a_redaction() -> None:
+    """The substitution uses a character no message should contain; one that
+    does must not come back out looking like a redaction mark.
+    """
+    described = describe_error(RuntimeError('a\x00b "v"'))
+
+    assert '\x00' not in described
+    assert described.count("'?'") == 1
