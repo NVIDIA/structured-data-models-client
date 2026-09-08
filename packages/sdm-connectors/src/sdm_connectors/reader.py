@@ -488,20 +488,40 @@ def _integer_columns_exactly(data: Any) -> Any:
     casting back to an integer afterwards cannot recover it -- so the column
     has to be constructed with a dtype that holds a null.
 
-    Only columns that ``Int64`` can hold are converted. One value outside
-    signed 64-bit and the column is left to pandas, which keeps it as ``object``
-    and exact; forcing it would raise where nothing used to.
+    Only columns that ``Int64`` can hold are converted. A column holding a
+    whole number wider than that is built as ``object`` instead, which is what
+    pandas does for it anyway when nothing is missing -- but not when something
+    is: ``[2 ** 63 + 1, None]`` becomes ``float64`` and the value is gone.
     """
     if not isinstance(data, Mapping):
         return data
     built: dict[Any, Any] = {}
     for name, values in data.items():
-        built[name] = (
-            pd.array(list(values), dtype='Int64')
-            if _fits_nullable_int64(values)
-            else values
-        )
+        if _fits_nullable_int64(values):
+            built[name] = pd.array(list(values), dtype='Int64')
+        elif _holds_wide_integer(values):
+            built[name] = pd.Series(list(values), dtype=object)
+        else:
+            built[name] = values
     return built
+
+
+def _holds_wide_integer(values: Any) -> bool:
+    r"""Whether ``values`` holds a whole number too wide for ``Int64``.
+
+    Such a column cannot be built as ``Int64``, and left to pandas alongside a
+    null it becomes ``float64``, which rounds it away. Built as ``object`` the
+    integer stays an integer and the wire rules can see it.
+    """
+    if not isinstance(values, (list, tuple)):
+        return False
+    return any(
+        isinstance(value, Integral)
+        and not isinstance(value, bool)
+        and not _INT64_MIN <= int(value) <= _INT64_MAX
+        for value in values
+        if not _is_null(value)
+    )
 
 
 def _fits_nullable_int64(values: Any) -> bool:

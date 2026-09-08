@@ -363,3 +363,31 @@ def test_a_driver_without_arrow_still_reads_integers_exactly():
 
     assert str(frame['id'].iloc[0]) == str(big)
     assert list(frame.columns) == ['id', 'v']
+
+
+def test_an_integer_too_wide_for_int64_survives_a_null_beside_it():
+    """`Int64` cannot hold it, and pandas turns it into float64 when something
+    beside it is missing.
+
+    Without a null pandas keeps such a column `object` on its own, which is
+    what made this look handled.
+    """
+    frame = read('local', data={'id': [9223372036854775809, None]})
+
+    assert str(frame['id'].iloc[0]) == '9223372036854775809'
+
+
+def test_a_column_pandas_already_keeps_exact_is_unchanged():
+    frame = read('local', data={'id': [9223372036854775809, 1]})
+
+    assert str(frame['id'].iloc[0]) == '9223372036854775809'
+
+
+def test_ordinary_columns_are_not_turned_into_objects():
+    """Only a column holding an integer too wide for Int64 takes that path."""
+    assert str(read('local', data={'x': [1.5, None]})['x'].dtype) == 'float64'
+    assert str(read('local', data={'b': [True, False]})['b'].dtype) == 'bool'
+    assert (
+        str(read('local', data={'id': [9007199254740993, None]})['id'].dtype)
+        == 'Int64'
+    )

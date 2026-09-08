@@ -536,7 +536,12 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
         if row_index >= len(key_values):
             values.append(None)
             continue
-        values.append(_json_value(key_values.iloc[row_index]))
+        # The key itself, unconverted. This column is serialised later like
+        # any other, under a dtype inferred from these values, so carrying the
+        # key as it is makes the reference and the row it names infer the same
+        # dtype and travel as the same text. Converting here decided the
+        # encoding twice, and a decimal key rounded on this side only.
+        values.append(key_values.iloc[row_index])
     return values
 
 
@@ -641,8 +646,11 @@ def _populate_relationship_columns(
         if not src_positions:
             continue
         gathered = dst_df[dst_key].iloc[pairs[in_range, 1]]
+        # The key itself, for the same reason: this column is serialised
+        # under a dtype inferred from these values, so a foreign key that is
+        # the destination row's own value travels as that row's own text.
         for position, value in zip(src_positions, gathered):
-            fkey_values[position] = _json_value(value)
+            fkey_values[position] = value
         if all(value is None for value in fkey_values):
             continue
 
