@@ -22,7 +22,6 @@ import json
 import logging
 import re
 import time
-import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -115,26 +114,27 @@ def emit(record: PredictionRecord) -> None:
 # error echoing a column name arrives wrapped in them, and the apostrophe is
 # what Python itself quotes with.
 #
-# The rest are taken from Unicode by name rather than listed. Listing them is
-# how the single angle quotes were missed after the double ones were added,
-# and taking the `Pi`/`Pf` categories instead misses the low-9 forms, which
-# Unicode classes as opening punctuation. Matching the name catches every
-# form at once and still leaves `(`, `[` and `{` out, which categories would
-# not have.
+# The rest are every character Unicode names as a quotation mark or a corner
+# bracket. Written out rather than derived at import, because deriving it
+# means naming every character in Unicode and costs about a tenth of a second
+# every time this module loads. A test re-derives the set and fails if this
+# literal no longer matches, so a form added by a newer Unicode cannot go in
+# unnoticed -- which is the whole reason it is not a hand-kept list.
+#
+# Categories were the obvious alternative and are wrong twice: `Pi`/`Pf` miss
+# the low-9 forms, which Unicode classes as opening punctuation, and adding
+# `Ps`/`Pe` to reach them pulls in `(`, `[` and `{`, so a message naming a
+# table in parentheses would lose everything after it.
 #
 # Opening and closing need not match, since the rule takes the span rather
 # than pairing them.
-def _quote_characters() -> str:
-    marks = {"'", '`'}
-    for point in range(0x110000):
-        character = chr(point)
-        name = unicodedata.name(character, '')
-        if 'QUOTATION MARK' in name or 'CORNER BRACKET' in name:
-            marks.add(character)
-    return ''.join(sorted(marks))
-
-
-_QUOTES = _quote_characters()
+_QUOTES = (
+    '"\'`\u00ab\u00bb\u2018\u2019\u201a\u201b\u201c\u201d\u201e'
+    '\u201f\u2039\u203a\u275b\u275c\u275d\u275e\u275f\u2760'
+    '\u276e\u276f\u2e42\u300c\u300d\u300e\u300f\u301d\u301e'
+    '\u301f\ufe41\ufe42\ufe43\ufe44\uff02\uff62\uff63'
+    '\U0001f676\U0001f677\U0001f678\U000e0022'
+)
 _QUOTE_CLASS = f'[{re.escape(_QUOTES)}]'
 _QUOTED_SPAN = re.compile(
     f'{_QUOTE_CLASS}.*{_QUOTE_CLASS}|{_QUOTE_CLASS}.*', re.DOTALL

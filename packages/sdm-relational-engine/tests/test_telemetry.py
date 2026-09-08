@@ -636,3 +636,32 @@ def test_an_unquoted_value_is_not_caught_and_that_is_written_down() -> None:
     """
     described = describe_error(RuntimeError('entity alice@acme.com not found'))
     assert described == 'RuntimeError: entity alice@acme.com not found'
+
+
+def test_the_quote_characters_are_still_all_of_them() -> None:
+    """The set is written out so importing this module does not cost a scan of
+    every character in Unicode.
+
+    Written-out means it can fall behind, which is exactly how the single angle
+    quotes came to be missing. This re-derives it, so a form added by a newer
+    Unicode fails here rather than quietly leaving a value in a log.
+    """
+    import unicodedata
+
+    from sdm_relational_engine.rfm.telemetry import _QUOTES
+
+    derived = {"'", '`'}
+    for point in range(0x110000):
+        character = chr(point)
+        name = unicodedata.name(character, '')
+        if 'QUOTATION MARK' in name or 'CORNER BRACKET' in name:
+            derived.add(character)
+
+    assert set(_QUOTES) == derived
+
+
+def test_no_bracket_is_treated_as_a_quote() -> None:
+    """Reaching the low-9 forms by Unicode category would pull these in."""
+    from sdm_relational_engine.rfm.telemetry import _QUOTES
+
+    assert not set('()[]{}<>').intersection(_QUOTES)
