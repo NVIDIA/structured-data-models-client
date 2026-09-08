@@ -16,6 +16,7 @@ from sdm_api.generated.tfm_api import (
     TFM_SCHEMA_NAMES,
     PredictionItem,
     PredictionResponse,
+    ResponseContractError,
     TFMOperations,
 )
 from sdm_relational_engine.client import NimClient
@@ -71,9 +72,16 @@ def test_generated_prediction_response_parser() -> None:
             'model': 'kumo-relational',
             'predictions': [
                 {
-                    'id': 7,
-                    'row_index': '3',
-                    'forecast_step': '2',
+                    # A string, as the contract types it and as the NIM sends
+                    # it: an integer-keyed entity comes back as '180', not 180.
+                    'id': '7',
+                    # Integers, not strings that look like them: the contract
+                    # types row_index and forecast_step as int32, and its
+                    # base-10-string rule is scoped to table cells, which these
+                    # are not. Coercing them let a row_index of 1.2 become
+                    # row 1.
+                    'row_index': 3,
+                    'forecast_step': 2,
                     'prediction': True,
                     'probabilities': {
                         'false': 0.25,
@@ -492,3 +500,21 @@ def test_prediction_response_rejects_invalid_correlation(
 # `packages/sdm-api/tests/test_generated_bindings.py` plus
 # `scripts/check_contract_pin.py` cover them. Keeping a second copy here meant
 # tests that only passed when run from one directory.
+
+
+def test_a_prediction_id_that_is_not_a_string_is_refused() -> None:
+    """The contract types the entity id as a string and the NIM sends one, so
+    a number here is a server that is not keeping the contract.
+
+    Coercing it produced an id the caller never sent, which then correlated
+    against their rows as though it had.
+    """
+    with pytest.raises(ResponseContractError):
+        PredictionResponse.from_dict(
+            {
+                'id': 'pred-1',
+                'model': 'kumo-relational',
+                'predictions': [{'id': 7, 'row_index': 0}],
+                'metadata': {},
+            }
+        )

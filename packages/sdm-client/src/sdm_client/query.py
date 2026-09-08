@@ -23,7 +23,8 @@ model whose profile accepts it can answer.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
@@ -32,7 +33,7 @@ import pandas as pd
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Schema
+from sdm_client.schema import Schema, _as_key_tuple
 
 if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
     from predictive_query import Profile
@@ -308,52 +309,67 @@ class PredictiveQuery:
         each part it returns is a wire payload. Reimplementing that here would
         duplicate PQL resolution, point-in-time correctness and neighbourhood
         sampling that already live -- and are tested -- there.
+
+        What is not delegated is what the caller sees when it goes wrong. The
+        engine raises its own exception types, which are outside this client's
+        documented error surface, so both calls are wrapped.
         """
         engine = _engine()
         run_mode = _run_mode_for(num_context_samples)
+        _check_entity_count(indices)
 
         model = self._engine_model(engine)
         # Resolve here rather than letting the engine default to its own
         # profile: the profile is a public argument, so both paths have to
         # honour it or it means different things depending on which was used.
         query_def = self._resolve()
-        task = model._get_task_table(
-            query=query_def,
-            indices=list(indices),
-            run_mode=run_mode,
-            **{
-                key: options[key]
-                for key in (
-                    'anchor_time',
-                    'context_anchor_time',
-                    'lag_timesteps',
-                    'max_pq_iterations',
-                    'random_seed',
-                )
-                if key in options
-            },
-        )
+        with _engine_errors(model):
+            task = model._get_task_table(
+                query=query_def,
+                indices=list(indices),
+                run_mode=run_mode,
+                **{
+                    key: options[key]
+                    for key in (
+                        'anchor_time',
+                        'context_anchor_time',
+                        'lag_timesteps',
+                        'max_pq_iterations',
+                        'random_seed',
+                    )
+                    if key in options
+                },
+            )
         task._query = query_def.to_string()
+        if not hasattr(task, 'task_type'):
+            raise StructuredDataError(
+                'the resolved task does not say what kind it is, so the '
+                'entity limit for it cannot be checked',
+                code='INTERNAL_ERROR',
+            )
+        _check_entity_count(indices, task.task_type)
         task = _narrow_context(task, num_context_samples)
 
-        parts = model.materialize_task(
-            task,
-            run_mode=run_mode,
-            top_k=query_def.top_k,
-            exclude_cols_dict=query_def.get_exclude_cols_dict(),
-            **{
-                key: options[key]
-                for key in (
-                    'num_neighbors',
-                    'num_hops',
-                    'inference_config',
-                    'use_prediction_time',
-                    'return_embeddings',
-                    'random_seed',
-                )
-                if key in options
-            },
-        )
+        with _engine_errors(model):
+            parts = model.materialize_task(
+                task,
+                run_mode=run_mode,
+                verbose=False,
+                top_k=query_def.top_k,
+                exclude_cols_dict=query_def.get_exclude_cols_dict(),
+                **{
+                    key: options[key]
+                    for key in (
+                        'num_neighbors',
+                        'num_hops',
+                        'inference_config',
+                        'use_prediction_time',
+                        'return_embeddings',
+                        'random_seed',
+                    )
+                    if key in options
+                },
+            )
         if not parts:
             raise StructuredDataError(
                 'the engine gathered nothing for this query',
@@ -372,6 +388,163 @@ class PredictiveQuery:
 
     def __repr__(self) -> str:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
+
+
+@contextmanager
+def _engine_errors(model: Any) -> Iterator[None]:
+    r"""Re-raise what the engine raises as this client's own error.
+
+    ``StructuredDataError`` is documented as the base class for every error
+    this client raises, and the engine's ``ValueError`` and
+    ``TaskReferenceError`` falsified that -- so ``except StructuredDataError``
+    missed exactly the failures a caller is most likely to hit, since they are
+    all caused by ordinary bad input.
+
+    Bad input and a fault in the engine are told apart by type rather than by
+    reading the message: the engine reports the first as a ``ValueError``, a
+    ``KeyError`` or one of its own error classes, and anything else is not the
+    caller's doing and should not be reported as though it were.
+
+    Where the engine dropped rows, the reason is attached. Its message says how
+    many rows went unresolved and not why, and it already knows: every graph
+    build records how many rows had a null key, a duplicated key or no time.
+    """
+    try:
+        yield
+    except StructuredDataError:
+        raise
+    except _CALLER_ERRORS as error:
+        if isinstance(error, TypeError) and _is_call_signature_error(error):
+            raise StructuredDataError(
+                f'the relational engine was called incorrectly by this '
+                f'client: {type(error).__name__}: {error}',
+                code='INTERNAL_ERROR',
+            ) from error
+        raise StructuredDataError(
+            f'{error}{_sanitization_detail(model)}',
+            code='INVALID_REQUEST',
+        ) from error
+    except Exception as error:
+        raise StructuredDataError(
+            f'the relational engine failed while building this request: '
+            f'{type(error).__name__}: {error}',
+            code='INTERNAL_ERROR',
+        ) from error
+
+
+#: How CPython words a call that does not match the callee's signature. Used
+#: only for the case the frame test cannot see: the engine calling *itself*
+#: wrongly, which is its bug rather than the caller's either way.
+_CALL_SIGNATURE_PHRASES = (
+    'unexpected keyword argument',
+    'positional argument',
+    'required argument',
+    'takes no arguments',
+)
+
+
+def _is_call_signature_error(error: TypeError) -> bool:
+    r"""Whether this ``TypeError`` is a bad call rather than a bad value.
+
+    The engine raises ``TypeError`` for both. It rejects a caller's own
+    ``anchor_time`` with one, naming what to pass instead -- that is the
+    caller's to fix. It also raises one when this client passes a keyword the
+    engine does not take, which no caller can act on.
+
+    The question is really "did the call bind?", and the traceback answers it:
+    argument binding fails *before* the callee is entered, so a signature
+    error's deepest frame is still the calling line here, while a value the
+    engine refused was raised from inside the engine. That is exact, and does
+    not depend on how CPython words the message this release.
+
+    The phrase list is the fallback for what the frame test cannot see -- the
+    engine miscalling its own internals, where the deepest frame is the
+    engine's but the fault is still not the caller's.
+    """
+    traceback = error.__traceback__
+    if traceback is not None:
+        deepest = traceback
+        while deepest.tb_next is not None:
+            deepest = deepest.tb_next
+        if deepest.tb_frame.f_globals.get('__name__') == __name__:
+            return True
+    message = str(error)
+    return any(phrase in message for phrase in _CALL_SIGNATURE_PHRASES)
+
+
+def _caller_errors() -> tuple[type[BaseException], ...]:
+    r"""The exception types the engine uses to report bad input.
+
+    ``TypeError`` is both. The engine raises it to reject a caller's own
+    ``anchor_time``, with a hint naming what to pass instead -- and it raises
+    it when this client calls the engine with a keyword it does not take,
+    which is our bug and not something a user can act on. The two are told
+    apart by :func:`_is_call_signature_error` rather than by type.
+    """
+    types: list[type[BaseException]] = [ValueError, KeyError, TypeError]
+    try:
+        from sdm_relational_engine import KumoRelationalError
+    except ImportError:  # pragma: no cover - the extra is optional
+        pass
+    else:
+        types.append(KumoRelationalError)
+    return tuple(types)
+
+
+def _sanitization_detail(model: Any) -> str:
+    r"""What the engine dropped while building the graph, if it dropped any."""
+    report = getattr(model, 'sanitization_report', None)
+    tables = getattr(report, 'tables', None)
+    if not tables:
+        return ''
+    reasons = []
+    for name, table in tables.items():
+        dropped = getattr(table, 'input_rows', 0) - getattr(
+            table, 'output_rows', 0
+        )
+        if dropped <= 0:
+            continue
+        causes = [
+            f'{count} with {label}'
+            for label, count in (
+                ('no primary key', getattr(table, 'null_primary_key_rows', 0)),
+                (
+                    'a repeated primary key',
+                    getattr(table, 'duplicate_primary_key_rows', 0),
+                ),
+                ('no time', getattr(table, 'null_time_rows', 0)),
+            )
+            if count
+        ]
+        reasons.append(
+            f'{name}: {dropped} of {table.input_rows} rows dropped'
+            + (f' ({", ".join(causes)})' if causes else '')
+        )
+    return f' [{"; ".join(reasons)}]' if reasons else ''
+
+
+_CALLER_ERRORS: tuple[type[BaseException], ...] = _caller_errors()
+
+
+def _check_entity_count(indices: Sequence[Any], task_kind: Any = None) -> None:
+    r"""Refuse more entities than the endpoint scores, before gathering any.
+
+    The engine refuses this too, several seconds later, in a message that names
+    a ``batch_size=`` argument this client does not have. Checked twice: once
+    on the count alone, and again once the task kind is known, because a
+    temporal link prediction is capped lower than everything else.
+    """
+    ceiling = RELATIONAL_LIMITS['predict_rows_max']
+    described = 'the endpoint scores at most'
+    if task_kind is not None and 'link_prediction' in str(task_kind):
+        ceiling = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
+        described = 'a temporal link prediction scores at most'
+    if len(indices) > ceiling:
+        raise StructuredDataError(
+            f'{len(indices):,} entities were asked for, and {described} '
+            f'{ceiling:,} at a time; split them across calls',
+            code='UNSUPPORTED_REQUEST',
+        )
 
 
 def _valid_context_samples(value: Any) -> int | None:
@@ -505,13 +678,21 @@ def _check_shape(
 def _to_engine_graph(engine: Any, schema: Schema) -> Any:
     r"""Build the engine's graph from this client's schema.
 
-    The engine infers a graph from frames in the same way, so the frames are
-    handed over and the schema's corrections are applied on top. Those
-    corrections are the whole reason a caller edited the schema, and inferring
-    twice would discard them.
+    The schema is the authority, in both directions. The engine can infer a
+    graph from the same frames, but its inference and the schema's do not
+    agree, and a second opinion applied on top of the first is not a schema at
+    all -- so inference is suppressed and exactly the schema's relationships
+    are linked.
     """
+    schema.check_consistent()
+
     frames = {name: table.data for name, table in schema.tables.items()}
-    graph = engine.Graph.from_data(frames, verbose=False)
+    # `edges=[]` suppresses the engine's own link inference. Letting it run and
+    # adding the schema's links on top made the schema additive: an edge the
+    # engine invented stayed, so `Schema` reported three relationships while
+    # four were sent, and `relationships=[]` -- documented as asserting there
+    # are none -- sent four.
+    graph = engine.Graph.from_data(frames, edges=[], verbose=False)
 
     for name, table in schema.tables.items():
         engine_table = graph[name]
@@ -523,18 +704,51 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
             if column_name in engine_table:
                 engine_table[column_name].stype = column.stype
 
-    # The engine infers edges from the same frames, so most of these are
-    # already there. Linking one twice is an error, and the schema is the
-    # authority only for the ones inference missed.
-    existing = {
-        (edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges
-    }
+    linked: set[tuple[str, str, str]] = set()
     for link in schema.relationships:
         edge = (link.source_table, link.source_column, link.target_table)
-        if edge not in existing:
-            graph.link(
-                src_table=link.source_table,
-                fkey=link.source_column,
-                dst_table=link.target_table,
-            )
+        if edge in linked:
+            # The engine refuses an edge it already has. Listing the same
+            # relationship twice is what happens when a caller appends to an
+            # inferred list, and it asks for nothing the first one did not.
+            continue
+        linked.add(edge)
+        graph.link(
+            src_table=link.source_table,
+            fkey=link.source_column,
+            dst_table=link.target_table,
+        )
+    # An engine edge carries no target column: it always joins to the target
+    # table's primary key, which is why the schema is made to say the same
+    # thing before it gets here.
+    sent = {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
+    described = {
+        (link.source_table, link.source_column, link.target_table)
+        for link in schema.relationships
+    }
+    misdirected = [
+        link
+        for link in schema.relationships
+        if link.target_column
+        not in _as_key_tuple(schema[link.target_table].primary_key)
+    ]
+    if misdirected:
+        shown = ', '.join(
+            f'{link.source_table}.{link.source_column} -> '
+            f'{link.target_table}.{link.target_column}'
+            for link in misdirected
+        )
+        raise StructuredDataError(
+            f'{shown} name a target column that is not the primary key '
+            f'of the table they point at, and an edge can only join to that',
+            code='INVALID_REQUEST',
+        )
+    if (
+        sent != described
+    ):  # pragma: no cover - the assertion this fix exists for
+        raise StructuredDataError(
+            f'the graph built for this request does not match the schema: '
+            f'{sorted(sent ^ described)}',
+            code='INTERNAL_ERROR',
+        )
     return graph

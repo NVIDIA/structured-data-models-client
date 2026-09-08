@@ -181,25 +181,27 @@ def run(client):
         except StructuredDataError as exc:
             note(e, f'refused cleanly: {exc}')
 
-    # KNOWN BUG bugs/005: this is expected to fail until the empty frame is
-    # refused; it is left failing on purpose so the fix flips it.
     with probe(
-        AREA, 'empty predict frame', 'refused before the wire, with a reason'
+        AREA,
+        'empty predict frame',
+        'a shaped result: zero rows is legal, no columns is not',
     ) as e:
         ctx, _ = split(data.adult(), 200, 1)
-        try:
-            client.predict(
-                Request(
-                    context=ctx,
-                    predict=data.adult().head(0).drop(columns=['income']),
-                    target='income',
-                    task='classification',
-                ),
-                model=KumoTabular(),
-            )
-            fail(e, 'an empty frame was accepted')
-        except StructuredDataError as exc:
-            note(e, str(exc)[:120])
+        result = client.predict(
+            Request(
+                context=ctx,
+                predict=data.adult().head(0).drop(columns=['income']),
+                target='income',
+                task='classification',
+            ),
+            model=KumoTabular(),
+        ).to_pandas()
+        if len(result) != 0:
+            fail(e, f'{len(result)} rows for an empty frame')
+        elif 'prediction' not in result.columns:
+            fail(e, f'no columns to join or read: {list(result.columns)}')
+        else:
+            note(e, f'columns {list(result.columns)}')
 
     with probe(AREA, 'a column of only nulls', 'not a crash') as e:
         ctx, sc = split(data.titanic(), 300, 2)

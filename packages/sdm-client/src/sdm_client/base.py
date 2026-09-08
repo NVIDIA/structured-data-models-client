@@ -155,6 +155,18 @@ class ModelAdapter(Protocol):
         """
         ...
 
+    def explain_error(
+        self, error: Exception, payload: dict[str, Any]
+    ) -> Exception:
+        r"""A chance to add what the endpoint's message left out.
+
+        A NIM sometimes reports a rule without saying which column broke it.
+        The request that was just refused knows, and the adapter is holding it,
+        so the answer is one lookup away. Returns the error to raise -- the one
+        it was given, unless it has something to add.
+        """
+        return error
+
     def close(self) -> None:
         r"""Release anything this adapter opened that the client cannot see."""
         ...

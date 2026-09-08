@@ -42,6 +42,14 @@ from sdm_client.base import ModelSpec, RuntimeContract
 # Sizes the relational endpoint enforces. It refuses past them, so the client
 # refuses first with a message that names the limit. See the architecture note
 # on inference knobs: `run_mode` is derived from these rather than being set.
+#
+# `predict_rows_max` and `predict_rows_temporal_link_prediction` restate the
+# engine's own `_MAX_PRED_SIZE` and `_MAX_PRED_SIZE_TEMPORAL_LINK_PREDICTION`
+# (sdm_relational_engine/rfm/rfm.py:75-76). The duplication predates this
+# client, but
+# it is load-bearing now that the check runs here first: if the two ever
+# disagree the client refuses work the engine would have taken. Change them
+# together.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'context_rows_max': 10_000,
@@ -50,6 +58,7 @@ RELATIONAL_LIMITS = {
     'explanation_predict_rows': 1,
     'hops_max': 6,
     'tables_max': 15,
+    'classes_max': 10,
 }
 
 KUMO_TABULAR = ModelSpec(

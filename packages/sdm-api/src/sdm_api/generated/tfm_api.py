@@ -6,7 +6,9 @@
 # Source: nim-sd.openapi.yaml
 # Source SHA256: cbaae64b821ae1efa20f58e9bbae94273c15ab4e8b462f00924117b06b53ed85
 
-from collections.abc import Mapping
+import math
+
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -80,10 +82,11 @@ class PredictionItem:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionItem':
+        data = _require_object(data, 'PredictionItem')
         return cls(
-            id=str(data['id']) if 'id' in data else None,
+            id=_str_or_none(data.get('id'), 'id', 'prediction'),
             row_index=_require_int(data, 'row_index', 'PredictionItem'),
-            forecast_step=_int_or_none(data.get('forecast_step')),
+            forecast_step=_int_or_none(data.get('forecast_step'), 'forecast_step', 'prediction'),
             prediction=data.get('prediction'),
             probabilities=_float_dict(data.get('probabilities')),
             scores=_float_tuple(data.get('scores')),
@@ -104,6 +107,7 @@ class PredictionResponse:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionResponse':
+        data = _require_object(data, 'PredictionResponse')
         return cls(
             id=_require_str(data, 'id', 'PredictionResponse'),
             model=_require_str(data, 'model', 'PredictionResponse'),
@@ -130,7 +134,35 @@ def _require(data: Mapping[str, Any], field: str, model: str) -> Any:
 
 
 def _require_str(data: Mapping[str, Any], field: str, model: str) -> str:
-    return str(_require(data, field, model))
+    value = _require(data, field, model)
+    if not isinstance(value, str):
+        raise ResponseContractError(
+            f'{model} response has {field!r} = {value!r}, where the '
+            f'contract requires a string'
+        )
+    return value
+
+
+def _whole(value: Any, field: str, model: str) -> int:
+    r"""``value`` as an int, refusing anything that is not already one.
+
+    ``int()`` accepts a bool and truncates a float, so a `row_index` of
+    ``1.2`` used to become ``1`` -- attaching a prediction meant for no
+    row to row 1, which a join on `row_index` would then honour.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ResponseContractError(
+            f'{model} response has {field!r} = {value!r}, where the '
+            f'contract requires a whole number'
+        )
+    if isinstance(value, float) and (
+        not math.isfinite(value) or value != int(value)
+    ):
+        raise ResponseContractError(
+            f'{model} response has {field!r} = {value!r}, which is not '
+            f'a whole number'
+        )
+    return int(value)
 
 
 def _require_int(data: Mapping[str, Any], field: str, model: str) -> int:
@@ -140,7 +172,7 @@ def _require_int(data: Mapping[str, Any], field: str, model: str) -> int:
             f'{model} response has a null {field!r}, which the contract '
             f'requires'
         )
-    return int(value)
+    return _whole(value, field, model)
 
 
 def _require_sequence(
@@ -165,24 +197,92 @@ def _require_mapping(
     return value
 
 
+def _finite(value: Any) -> float:
+    r"""``value`` as a float, refusing a non-finite one.
+
+    ``NaN`` has no JSON literal, so a body carrying one is already
+    outside the contract; passing it through puts it in the caller's
+    frame instead, where it reads as a missing probability.
+    """
+    if isinstance(value, bool):
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires a '
+            f'number'
+        )
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        # A number spelled as a string is accepted: servers do send
+        # one, and refusing a value that parses exactly would be a
+        # regression with nothing gained. What must not escape is a
+        # raw error from the conversion itself -- `float(10**400)`
+        # raises OverflowError, which no caller catches.
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires a '
+            f'number'
+        ) from None
+    if not math.isfinite(number):
+        raise ResponseContractError(
+            f'response carries a non-finite number {value!r}, which the '
+            f'contract does not permit'
+        )
+    return number
+
+
 def _float_dict(value: Any) -> dict[str, float] | None:
     if value is None:
         return None
     if not isinstance(value, Mapping):
-        raise TypeError('Expected mapping value')
-    return {str(key): float(val) for key, val in value.items()}
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires '
+            f'an object'
+        )
+    return {str(key): _finite(val) for key, val in value.items()}
 
 
-def _int_or_none(value: Any) -> int | None:
+def _int_or_none(
+    value: Any, field: str = 'value', model: str = 'the'
+) -> int | None:
     if value is None:
         return None
-    return int(value)
+    return _whole(value, field, model)
+
+
+def _require_object(value: Any, model: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires '
+            f'a {model} object'
+        )
+    return value
+
+
+def _str_or_none(
+    value: Any, field: str = 'value', model: str = 'the'
+) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ResponseContractError(
+            f'{model} response has {field!r} = {value!r}, where the '
+            f'contract requires a string'
+        )
+    return value
 
 
 def _float_tuple(value: Any) -> tuple[float, ...] | None:
     if value is None:
         return None
-    return tuple(float(item) for item in value)
+    if isinstance(value, (str, bytes, Mapping)) or not isinstance(
+        value, Iterable
+    ):
+        # A string is iterable, so without this a scores field of
+        # '12' becomes (1.0, 2.0); a mapping yields its keys.
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires '
+            f'an array of numbers'
+        )
+    return tuple(_finite(item) for item in value)
 
 
 def _mapping_tuple(value: Any) -> tuple[dict[str, Any], ...] | None:

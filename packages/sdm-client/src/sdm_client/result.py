@@ -33,6 +33,8 @@ from typing import Any
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
+from sdm_client.errors import StructuredDataError
+
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
 _SCALAR_FIELDS = ('row_index', 'id', 'forecast_step', 'prediction')
@@ -62,10 +64,12 @@ class PredictionResult:
         items: Sequence[PredictionItem],
         metadata: dict[str, Any] | None = None,
         explanation: dict[str, Any] | None = None,
+        outputs: Sequence[str] = (),
     ) -> None:
         self.model = model
         self.request_id = request_id
         self.items = tuple(items)
+        self.outputs = tuple(outputs)
         self.metadata = dict(metadata or {})
         self._explanation = explanation
 
@@ -89,6 +93,17 @@ class PredictionResult:
         Rows come back ordered by ``row_index``. The endpoint is not required
         to preserve request order, and a caller who reads the first few rows
         would otherwise be reading whichever rows finished first.
+
+        A result with no rows still has columns. Scoring an empty frame is
+        legal -- the contract puts no minimum on ``rows`` -- and it is what a
+        filter that matched nothing produces, so it happens inside ordinary
+        loops. Returning a frame with no columns at all made that case fail
+        differently from every other: ``frame['prediction']`` became a
+        ``KeyError`` and a join on ``row_index`` could not be written.
+
+        The per-class columns cannot be known with no rows to read them from,
+        so an empty classification result carries ``row_index`` and
+        ``prediction`` but no ``probability_*``.
         """
         rows: list[dict[str, Any]] = []
         for item in self.items:
@@ -110,12 +125,22 @@ class PredictionResult:
                 row['rankings'] = [dict(entry) for entry in item.rankings]
             rows.append(row)
 
-        frame = pd.DataFrame(rows)
+        frame = pd.DataFrame(rows) if rows else self._empty_frame()
         if 'row_index' in frame.columns:
             frame = frame.sort_values('row_index', kind='stable').reset_index(
                 drop=True
             )
         return frame
+
+    def _empty_frame(self) -> pd.DataFrame:
+        r"""The columns this request would have produced, with no rows."""
+        columns = ['row_index']
+        columns += [
+            name
+            for name in (*_SCALAR_FIELDS, *_SEQUENCE_FIELDS, 'rankings')
+            if name != 'row_index' and name in self.outputs
+        ]
+        return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 
     @classmethod
     def merge(cls, parts: Sequence[PredictionResult]) -> PredictionResult:
@@ -127,18 +152,22 @@ class PredictionResult:
         concatenated here.
 
         Raises:
-            ValueError: If ``parts`` is empty, which would mean a request was
-                sent with nothing to score.
+            StructuredDataError: If ``parts`` is empty, which would mean a
+                request was sent with nothing to score, or if the parts do
+                not describe one request.
         """
         if not parts:
-            raise ValueError('no parts to merge')
+            raise StructuredDataError(
+                'no parts to merge', code='INTERNAL_ERROR'
+            )
         if len(parts) == 1:
             return parts[0]
         first = parts[0]
         models = {part.model for part in parts}
         if len(models) > 1:
-            raise ValueError(
-                f'cannot merge results from different models: {sorted(models)}'
+            raise StructuredDataError(
+                f'cannot merge results from different models: {sorted(models)}',
+                code='INTERNAL_ERROR',
             )
         items = [item for part in parts for item in part.items]
         metadata = dict(first.metadata)
@@ -150,12 +179,24 @@ class PredictionResult:
         explanation = next(
             (part.explanation for part in parts if part.explanation), None
         )
+        # Every part answers one slice of the same request, so they were asked
+        # for the same fields. If they were not, the merged result cannot
+        # honestly claim either set, and an empty one would take its shape from
+        # whichever part happened to be first.
+        shapes = {part.outputs for part in parts}
+        if len(shapes) > 1:
+            raise StructuredDataError(
+                f'these parts were asked for different outputs '
+                f'({sorted(shapes)}), so they are not slices of one request',
+                code='INTERNAL_ERROR',
+            )
         return cls(
             model=first.model,
             request_id=first.request_id,
             items=items,
             metadata=metadata,
             explanation=explanation,
+            outputs=first.outputs,
         )
 
     def __len__(self) -> int:

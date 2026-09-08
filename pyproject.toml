@@ -20,9 +20,14 @@ target-version = "py310"
 # The generated bindings are the generator's output, and their bytes are
 # recorded in PROVENANCE.json. Letting the formatter rewrite them would break
 # that record on every run.
+# Prose, not source. A fenced snippet in a bug report is written to be read --
+# aligned comments comparing two behaviours, a query left on one line to show
+# its shape -- and formatting it as a module rewrites the thing being
+# illustrated.
 extend-exclude = [
     "packages/sdm-pql/src/predictive_query",
     "packages/sdm-api/src/sdm_api/generated/tfm_api.py",
+    "*.md",
 ]
 
 [tool.ruff.lint]
@@ -30,7 +35,6 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.format]
 quote-style = "single"
-exclude = ["bugs"]
 
 # Registered here as well as per package, so that running the whole workspace
 # from the repository root neither warns about unknown marks nor silently

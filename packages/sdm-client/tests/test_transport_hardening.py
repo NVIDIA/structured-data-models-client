@@ -248,3 +248,145 @@ def test_an_ordinary_base_url_with_a_path_prefix_is_still_accepted(url):
         assert transport.url == url.rstrip('/')
     finally:
         transport.close()
+
+
+def test_a_payload_nested_too_deeply_is_refused_not_raised_raw():
+    """Checked before encoding, not by catching what the encoder raises.
+
+    Whether `json.dumps` raises `RecursionError` is an implementation detail:
+    CPython 3.12 raises on a 30,000 level mapping and 3.14 encodes the same
+    value happily. A guard written around the exception protects one
+    interpreter and not the next, and this package supports both.
+    """
+    from sdm_client import SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    payload: dict = {}
+    cursor = payload
+    for _ in range(30_000):
+        nxt: dict = {}
+        cursor['x'] = nxt
+        cursor = nxt
+
+    with SDMClient(url='https://example.invalid') as client:
+        with pytest.raises(StructuredDataError) as error:
+            client._transport._post('/v1/predictions', payload)
+    assert error.value.code == 'INVALID_REQUEST'
+    assert 'nests more than' in str(error.value)
+
+
+def test_an_adapter_that_adds_nothing_does_not_become_its_own_cause():
+    """`raise error from error` makes an exception its own `__cause__`.
+
+    Both adapters return the same object when they have nothing to explain,
+    so this was the common case, and anything walking the cause chain for
+    logging loops on it.
+    """
+    from sdm_client import SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    class Unchanged:
+        def explain_error(self, error, payload):
+            return error
+
+    class Explains:
+        def explain_error(self, error, payload):
+            return StructuredDataError('explained', code='INVALID_REQUEST')
+
+    class Refusing:
+        def predict(self, payload):
+            raise StructuredDataError('boom', code='INVALID_REQUEST')
+
+    client = SDMClient(url='https://example.invalid')
+    client._transport = Refusing()
+
+    with pytest.raises(StructuredDataError) as error:
+        client._send(Unchanged(), {})
+    assert error.value.__cause__ is not error.value
+
+    with pytest.raises(StructuredDataError) as error:
+        client._send(Explains(), {})
+    assert error.value.__cause__ is not error.value
+    assert isinstance(error.value.__cause__, StructuredDataError)
+
+
+def test_a_payload_that_refers_back_to_itself_is_refused():
+    from sdm_client import SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    cyclic: dict = {}
+    cyclic['self'] = cyclic
+    with SDMClient(url='https://example.invalid') as client:
+        with pytest.raises(StructuredDataError) as error:
+            client._transport._post('/v1/predictions', cyclic)
+    assert 'refers back to itself' in str(error.value)
+
+
+def test_the_check_does_not_depend_on_the_encoder_raising():
+    """The point of the guard: it must refuse the value that `json.dumps`
+    on this interpreter happens to accept."""
+    import json
+
+    from sdm_client.core.transport import _check_encodable
+    from sdm_client.errors import StructuredDataError
+
+    deep: dict = {}
+    cursor = deep
+    for _ in range(30_000):
+        nxt: dict = {}
+        cursor['x'] = nxt
+        cursor = nxt
+
+    encoder_raised = False
+    try:
+        json.dumps(deep)
+    except RecursionError:
+        encoder_raised = True
+
+    with pytest.raises(StructuredDataError):
+        _check_encodable(deep)
+    assert isinstance(encoder_raised, bool)
+
+
+def test_an_ordinary_payload_and_a_repeated_subobject_are_accepted():
+    """The same object referenced twice is a DAG, not a cycle."""
+    from sdm_client.core.transport import _check_encodable
+
+    shared = {'x': 1}
+    _check_encodable({'a': [1, 2, {'b': 3}], 'p': shared, 'q': [shared]})
+
+
+def test_a_non_ascii_body_is_encoded_here_not_by_requests():
+    """A `str` body is handed to httplib, which encodes latin-1.
+
+    That only worked because `json.dumps` defaults to `ensure_ascii=True`.
+    Encoding to utf-8 here removes the dependency on a default nobody will
+    remember when it changes.
+    """
+    import requests_mock
+
+    from sdm_client import SDMClient
+
+    with SDMClient(url='https://example.invalid') as client:
+        with requests_mock.Mocker() as mock:
+            mock.post(
+                'https://example.invalid/v1/predictions',
+                json={'id': 'x', 'model': 'kumo-relational', 'predictions': []},
+            )
+            client._transport._post('/v1/predictions', {'note': 'naïve café'})
+            assert isinstance(mock.last_request.body, bytes)
+
+
+def test_merge_raises_the_clients_own_error_type():
+    """`except StructuredDataError` is the documented catch for this client.
+
+    These three raises were bare `ValueError`, so a caller following the
+    documentation missed them, which is the same premise as the engine-error
+    classification added in this branch.
+    """
+    from sdm_client.errors import StructuredDataError
+    from sdm_client.result import PredictionResult
+
+    with pytest.raises(StructuredDataError) as error:
+        PredictionResult.merge([])
+    assert error.value.code == 'INTERNAL_ERROR'

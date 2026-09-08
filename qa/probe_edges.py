@@ -48,7 +48,6 @@ def score(
 
 def run(client, relational):
     # --- wire encoding of awkward values ----------------------------------
-    # KNOWN BUG bugs/001
     with probe(
         AREA, 'a Decimal from a warehouse', 'exact, not rounded through float'
     ) as e:
@@ -61,17 +60,16 @@ def run(client, relational):
         else:
             note(e, f'dtype={infer_tfm_dtype(series)} cells={cells}')
 
-    # KNOWN BUG bugs/004
     with probe(
-        AREA, 'a uint64 past int64', 'never declared int64 while out of range'
+        AREA, 'a uint64 past int64', 'refused rather than declared int64'
     ) as e:
         series = pd.Series([2**64 - 1, 1], dtype='uint64')
         dtype = infer_tfm_dtype(series)
-        cells = serialize_column(series, dtype)
-        if dtype == 'int64' and int(cells[0]) > 2**63 - 1:
-            fail(e, f'declared int64 but sent {cells[0]}')
-        else:
-            note(e, f'dtype={dtype} cells={cells}')
+        try:
+            cells = serialize_column(series, dtype)
+            fail(e, f'declared {dtype} and sent {cells[0]}')
+        except StructuredDataError as exc:
+            note(e, str(exc)[:110])
 
     with probe(
         AREA, 'a nullable integer with a null', 'no float widening, no rounding'
@@ -201,15 +199,18 @@ def run(client, relational):
         except StructuredDataError as exc:
             note(e, str(exc)[:140])
 
-    # KNOWN BUG bugs/005
     with probe(
-        AREA, 'an empty predict frame', 'refused locally, with a reason'
+        AREA,
+        'an empty predict frame',
+        'a shaped result: zero rows is legal, no columns is not',
     ) as e:
-        try:
-            result = score(client, frame(60), frame(0).drop(columns=['y']))
-            fail(e, f'accepted; result has columns {list(result.columns)}')
-        except StructuredDataError as exc:
-            note(e, str(exc)[:140])
+        result = score(client, frame(60), frame(0).drop(columns=['y']))
+        if len(result) != 0:
+            fail(e, f'{len(result)} rows for an empty frame')
+        elif 'prediction' not in result.columns:
+            fail(e, f'no columns to join or read: {list(result.columns)}')
+        else:
+            note(e, f'columns {list(result.columns)}')
 
     with probe(
         AREA, 'a target column missing from the context', 'named locally'

@@ -978,3 +978,367 @@ def test_decimal_cells_are_named_by_what_they_hold() -> None:
     assert emitted <= {str(value) for value in wide}
     assert '123456789012345678901234567800' in emitted
     json.dumps(payload)
+
+
+# --- the guard that landed in only one of the two encoders -------------------
+
+
+def test_a_uint64_past_int64_is_refused_rather_than_sent_as_int64():
+    """`_dtype_name` answers int64 for uint64, so without a bounds check the
+    payload declares a width the value does not have and sends it anyway.
+
+    The tabular encoder grew this guard; this one did not, so the same column
+    was exact on one path and wrong on the other.
+    """
+    import numpy as np
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(np.uint64(2**64 - 1), 'int64')
+    assert 'outside the range' in str(error.value)
+    assert 'strings' in str(error.value)
+
+
+def test_an_int64_within_range_still_travels():
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    # Inside the JS-safe range it stays a number; past it the contract's
+    # base-10-string rule applies, and both are still within int64.
+    assert _cell_json_value(2**40, 'int64') == 2**40
+    assert _cell_json_value(2**62, 'int64') == str(2**62)
+    assert _cell_json_value(-(2**63), 'int64') == str(-(2**63))
+
+
+def test_a_decimal_too_wide_for_a_float_is_refused_not_sent_as_inf():
+    """`float(Decimal('1e400'))` is `inf`, which is not a rounding of the
+    original in any useful sense and has no JSON form either.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(Decimal('1e400'), 'float64')
+    # Caught by the exactness guard now, which runs on the original value
+    # before any conversion, so it names the remedy rather than the symptom.
+    assert 'strings' in str(error.value)
+
+
+def test_a_huge_fractional_decimal_is_refused_before_it_becomes_inf():
+    """The conversion happens in `_json_value`, above the encoder's guard.
+
+    A finite Decimal with a 310-digit integer part and a fraction reached
+    `float()` there and came back `inf`, which has no JSON form and is not a
+    rounding of the original in any useful sense.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _json_value
+
+    huge = Decimal('1' + '0' * 310 + '.1')
+    assert huge.is_finite()
+    with pytest.raises(ValueError) as error:
+        _json_value(huge)
+    assert 'too large' in str(error.value)
+
+
+def test_an_ordinary_fractional_decimal_still_converts():
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _json_value
+
+    assert _json_value(Decimal('1.5')) == 1.5
+
+
+def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
+    """The Decimal path returns `inf`; the int path raises OverflowError."""
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(10**400, 'float64')
+    # Refused by the exactness guard before the conversion is even attempted,
+    # which is a better answer than catching the OverflowError afterwards.
+    assert 'strings' in str(error.value)
+
+
+def test_an_integer_a_float_cannot_hold_is_refused_not_rounded():
+    """This encoder returned 9007199254740992.0 and sent it.
+
+    A float column that silently renumbers an integer is the same defect on
+    either encoder, and the wire cannot tell which one produced the cell. The
+    matching assertion for the tabular encoder is in `sdm-client`'s
+    `test_wire_integer_exactness.py`; the two cannot be checked together
+    because neither package's test job installs the other.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError):
+        _cell_json_value(2**53 + 1, 'float64')
+
+
+def test_a_wide_integral_decimal_travels_as_digits_here_too():
+    """`str(Decimal)` gives an exponent, and this branch exists to keep the
+    digits. The tabular encoder was fixed; this one was not.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _json_value
+
+    sent = _json_value(Decimal('1e400'))
+    assert 'E' not in sent and 'e' not in sent
+    assert int(sent) == int(Decimal('1e400'))
+
+
+def test_a_wide_whole_decimal_in_a_float_column_is_not_silently_rounded():
+    """The exactness guard ran after `_json_value` had already normalised.
+
+    A whole Decimal outside int64 becomes a *string* there, and a string
+    carries no integer for the guard to check, so
+    `Decimal('9223372036854775809.00')` reached `float()` and came back one
+    short with no error at all.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    value = Decimal('9223372036854775809.00')
+    with pytest.raises(ValueError) as error:
+        _cell_json_value(value, 'float64')
+    assert 'strings' in str(error.value)
+
+
+def test_an_ordinary_decimal_in_a_float_column_still_converts():
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    assert _cell_json_value(Decimal('1.5'), 'float64') == 1.5
+    assert _cell_json_value(42, 'float64') == 42.0
+
+
+@pytest.mark.parametrize(
+    ('value', 'survives'),
+    [
+        (2**53, True),
+        (2**53 - 1, True),
+        (-(2**53), True),
+        (2**53 + 1, False),
+        (-(2**53) - 1, False),
+        (10**400, False),
+    ],
+)
+def test_only_an_integer_a_float_cannot_hold_is_refused(value, survives):
+    """The rule is a round trip, not the safe-integer ceiling.
+
+    `2**53` is above `JSON_SAFE_INT_MAX` and is still exactly representable,
+    so a ceiling comparison refused a value that travels perfectly well, and
+    disagreed with the tabular encoder about it.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    if survives:
+        assert _cell_json_value(value, 'float64') == float(value)
+    else:
+        with pytest.raises(ValueError):
+            _cell_json_value(value, 'float64')
+
+
+def test_a_numeric_string_a_float_cannot_hold_is_refused_here_too():
+    """The tabular encoder refuses this, so this one must as well."""
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    with pytest.raises(ValueError):
+        _cell_json_value('9223372036854775809', 'float64')
+    assert _cell_json_value('1.5', 'float64') == 1.5
+
+
+def test_decimal_inference_does_not_depend_on_row_order():
+    """It returned on the first constraining value, so the same two values
+    named the column float64 one way round and string the other, and
+    reordering rows changed whether the request was even legal.
+    """
+    from decimal import Decimal
+
+    from sdm_relational_engine.rfm.payload import _decimal_dtype_name
+
+    values = [Decimal('1.5'), Decimal('9223372036854775809.00')]
+    forward = _decimal_dtype_name(pd.Series(values, dtype=object))
+    reverse = _decimal_dtype_name(
+        pd.Series(list(reversed(values)), dtype=object)
+    )
+    assert forward == reverse == 'string'
+
+
+@pytest.mark.parametrize(
+    ('values', 'expected'),
+    [
+        ([Decimal('1.5'), Decimal('2.5')], 'float64'),
+        ([Decimal('1'), Decimal('2')], 'int64'),
+        ([Decimal('9223372036854775809'), Decimal('1')], 'string'),
+        ([Decimal('1.5'), Decimal('9223372036854775809.00')], 'string'),
+    ],
+)
+def test_a_decimal_column_is_named_by_everything_it_holds(values, expected):
+    from sdm_relational_engine.rfm.payload import _decimal_dtype_name
+
+    assert _decimal_dtype_name(pd.Series(values, dtype=object)) == expected
+    assert (
+        _decimal_dtype_name(pd.Series(list(reversed(values)), dtype=object))
+        == expected
+    )
+
+
+def test_a_string_decimal_column_keeps_every_value_exact() -> None:
+    """A decimal column is declared `string` when one of its values is too
+    wide for int64, and the point of that is that all of them travel exactly.
+
+    Normalising before the string branch defeated it: a fractional decimal was
+    rounded through float and then stringified, so a column declared string to
+    stay exact lost digits without saying so.
+    """
+    from sdm_relational_engine.rfm.payload import (
+        _cell_json_value,
+        _decimal_dtype_name,
+    )
+
+    column = pd.Series(
+        [
+            Decimal('9223372036854775809.00'),
+            Decimal('1.234567890123456789'),
+            Decimal('-0.000000000000000001'),
+            None,
+        ],
+        dtype=object,
+    )
+    dtype = _decimal_dtype_name(column)
+    assert dtype == 'string'
+
+    sent = [_cell_json_value(value, dtype) for value in column]
+
+    assert sent == [
+        '9223372036854775809.00',
+        '1.234567890123456789',
+        '-0.000000000000000001',
+        None,
+    ]
+
+
+def test_a_narrow_decimal_column_is_unaffected() -> None:
+    """Only a column wide enough to need `string` takes the exact-text path."""
+    from sdm_relational_engine.rfm.payload import (
+        _cell_json_value,
+        _decimal_dtype_name,
+    )
+
+    column = pd.Series([Decimal('1.5'), Decimal('2.25')], dtype=object)
+    dtype = _decimal_dtype_name(column)
+
+    assert dtype == 'float64'
+    assert [_cell_json_value(v, dtype) for v in column] == [1.5, 2.25]
+
+
+def test_a_string_target_keeps_every_value_exact() -> None:
+    """A target column is declared `string` for the same reason a data column
+    is, and used to round for the same reason too.
+
+    Worse than the cell path: it emitted a float for a column declared
+    `string`, so the value contradicted its own declaration.
+    """
+    from predictive_query.schema.task import TaskType
+    from sdm_relational_engine.rfm.payload import (
+        _cell_json_value,
+        _target_dtype,
+        _target_json_value,
+    )
+
+    values = [
+        Decimal('9223372036854775809.00'),
+        Decimal('1.234567890123456789'),
+    ]
+    dtype = _target_dtype(
+        TaskType.MULTICLASS_CLASSIFICATION, pd.Series(values, dtype=object)
+    )
+    assert dtype == 'string'
+
+    sent = [
+        _cell_json_value(
+            _target_json_value(TaskType.MULTICLASS_CLASSIFICATION, value),
+            dtype,
+        )
+        for value in values
+    ]
+
+    assert sent == ['9223372036854775809.00', '1.234567890123456789']
+
+
+def test_a_link_prediction_stringlist_keeps_its_decimals_exact() -> None:
+    from predictive_query.schema.task import TaskType
+    from sdm_relational_engine.rfm.payload import _target_json_value
+
+    sent = _target_json_value(
+        TaskType.TEMPORAL_LINK_PREDICTION,
+        [Decimal('1.234567890123456789'), Decimal('2')],
+    )
+
+    assert sent == ['1.234567890123456789', '2']
+
+
+def test_a_class_label_keeps_its_decimal_exact() -> None:
+    from sdm_relational_engine.rfm.payload import _class_label
+
+    assert (
+        _class_label(Decimal('1.234567890123456789'), 'string')
+        == '1.234567890123456789'
+    )
+
+
+def test_a_binary_target_is_still_checked() -> None:
+    """The decimal path must not skip the validation beside it."""
+    from predictive_query.schema.task import TaskType
+    from sdm_relational_engine.rfm.payload import _target_json_value
+
+    assert _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('1'))
+    assert not _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('0'))
+    with pytest.raises(ValueError):
+        _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('5'))
+
+
+def test_a_stringlist_cell_keeps_its_decimals_exact() -> None:
+    """The link-prediction target's stringlist was fixed; an ordinary data
+    column typed `stringlist` was not.
+
+    Its items are stringified too, and normalising the cell first stringifies
+    a rounded float.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    sent = _cell_json_value(
+        [Decimal('1.234567890123456789'), Decimal('2')], 'stringlist'
+    )
+
+    assert sent == ['1.234567890123456789', '2']
+
+
+def test_a_stringlist_cell_of_arrays_keeps_its_decimals_exact() -> None:
+    """A column of arrays reaches this the same way a column of lists does,
+    and testing only for a list sent it back down the rounding path.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    sent = _cell_json_value(
+        np.array([Decimal('1.234567890123456789'), Decimal('2')], dtype=object),
+        'stringlist',
+    )
+
+    assert sent == ['1.234567890123456789', '2']
+
+
+def test_a_stringlist_cell_is_otherwise_unchanged() -> None:
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    assert _cell_json_value(['a', 'b'], 'stringlist') == ['a', 'b']
+    assert _cell_json_value([1, None, 2], 'stringlist') == ['1', None, '2']
+    assert _cell_json_value([], 'stringlist') == []
+    assert _cell_json_value(None, 'stringlist') is None
+    with pytest.raises(ValueError):
+        _cell_json_value('not a list', 'stringlist')

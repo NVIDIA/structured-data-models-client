@@ -27,5 +27,9 @@ repos:
       - id: repo-hygiene
         name: repository hygiene
         entry: python scripts/check_repo_hygiene.py all
-        language: system
+        # `python` rather than `system`: a system hook resolves `python` on
+        # PATH, and a mac has only `python3`, so the hook fails to start
+        # everywhere it is most likely to be run. The script is stdlib-only,
+        # so the interpreter pre-commit provides is enough.
+        language: python
         pass_filenames: false

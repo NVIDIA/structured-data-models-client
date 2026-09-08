@@ -516,6 +516,9 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
     values: list[Any] = []
     batch = np.asarray(table.batch)
     df = table.df.reset_index(drop=True)
+    # The column, not the row: `df.iloc[i][key]` collapses a row to one dtype
+    # and returns an integer key as a float.
+    key_values = df[table.primary_key]
     row = np.asarray(table.row) if table.row is not None else None
     # One pass for every instance's first occurrence, rather than a full scan
     # of `batch` per instance (`np.unique` returns the first index per value
@@ -530,10 +533,15 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
             values.append(None)
             continue
         row_index = position if row is None else int(row[position])
-        if row_index >= len(df):
+        if row_index >= len(key_values):
             values.append(None)
             continue
-        values.append(_json_value(df.iloc[row_index][table.primary_key]))
+        # The key itself, unconverted. This column is serialised later like
+        # any other, under a dtype inferred from these values, so carrying the
+        # key as it is makes the reference and the row it names infer the same
+        # dtype and travel as the same text. Converting here decided the
+        # encoding twice, and a decimal key rounded on this side only.
+        values.append(key_values.iloc[row_index])
     return values
 
 
@@ -638,8 +646,11 @@ def _populate_relationship_columns(
         if not src_positions:
             continue
         gathered = dst_df[dst_key].iloc[pairs[in_range, 1]]
+        # The key itself, for the same reason: this column is serialised
+        # under a dtype inferred from these values, so a foreign key that is
+        # the destination row's own value travels as that row's own text.
         for position, value in zip(src_positions, gathered):
-            fkey_values[position] = _json_value(value)
+            fkey_values[position] = value
         if all(value is None for value in fkey_values):
             continue
 
@@ -955,6 +966,19 @@ def _target_dtype(task_type: TaskType, target: pd.Series) -> str:
     return dtype
 
 
+def _decimal_text(value: Any) -> str | None:
+    r"""A finite decimal's own digits, for a value that travels as text.
+
+    `_json_value` rounds a fractional decimal through float, so anything that
+    stringifies its result loses digits the declaration promised to keep.
+    Returns ``None`` when *value* is not a decimal, so a caller can fall back
+    to its ordinary conversion.
+    """
+    if isinstance(value, Decimal) and value.is_finite():
+        return format(value, 'f')
+    return None
+
+
 def _target_json_value(task_type: TaskType, value: Any) -> Any:
     task_type = TaskType(task_type)
     if task_type.is_link_pred:
@@ -974,6 +998,10 @@ def _target_json_value(task_type: TaskType, value: Any) -> Any:
                     'Link prediction target stringlist values must not contain '
                     f'null items, but got {value!r}.'
                 )
+            text = _decimal_text(item)
+            if text is not None:
+                result.append(text)
+                continue
             item_value = _json_value(item)
             if item_value is None:
                 raise ValueError(
@@ -983,6 +1011,16 @@ def _target_json_value(task_type: TaskType, value: Any) -> Any:
             result.append(str(item_value))
         return result
 
+    if (
+        task_type != TaskType.BINARY_CLASSIFICATION
+        and _decimal_text(value) is not None
+    ):
+        # Left a decimal on purpose. This value is written into the instance
+        # table and serialised again under the dtype that table declares, and
+        # rounding it here beats that decision to it: a target column declared
+        # `string` because one value is too wide for int64 would still lose
+        # the digits of every fractional value beside it.
+        return value
     value = _json_value(value)
     if task_type != TaskType.BINARY_CLASSIFICATION or value is None:
         return value
@@ -1073,7 +1111,7 @@ def _decimal_dtype_name(data: pd.Series) -> str | None:
     if not pd.api.types.is_object_dtype(data.dtype):
         return None
 
-    found = False
+    found = fractional = too_wide = False
     for value in data:
         if _is_null_like(value):
             continue
@@ -1083,10 +1121,23 @@ def _decimal_dtype_name(data: pd.Series) -> str | None:
         if not value.is_finite():
             continue  # encodes as null, so it constrains nothing
         if value != value.to_integral_value():
-            return 'float64'
-        if not _fits_int64(value):
-            return 'string'
-    return 'int64' if found else None
+            fractional = True
+        elif not _fits_int64(value):
+            too_wide = True
+    if not found:
+        return None
+    # Decided once the whole column has been read, not on whichever value
+    # happened to come first. Returning early made the answer depend on row
+    # order: the same two values named the column float64 one way round and
+    # string the other, so reordering rows changed whether the request was
+    # even legal.
+    if too_wide:
+        # A width no float64 holds. `string` keeps every digit, and it keeps
+        # the fractional values in the same column exactly too.
+        return 'string'
+    if fractional:
+        return 'float64'
+    return 'int64'
 
 
 def _list_dtype_name(data: pd.Series) -> str | None:
@@ -1153,8 +1204,27 @@ def _json_value(value: Any) -> Any:
         if not value.is_finite():
             return None
         if value != value.to_integral_value():
-            return float(value)
-        return int(value) if _fits_int64(value) else str(value)
+            number = float(value)
+            if not math.isfinite(number):
+                # Too wide for a float to hold even the integer part, so the
+                # `inf` it becomes is not a rounding of the original.
+                raise ValueError(
+                    f'value {value!r} is too large for float64 to represent; '
+                    f'send the column as strings to keep it exact'
+                )
+            if abs(value) > JSON_SAFE_INT_MAX:
+                # Past 2**53 a float cannot hold even the integer part, so
+                # what it becomes is not a rounding of the original.
+                raise ValueError(
+                    f'value {value!r} is too large for float64 to represent; '
+                    f'send the column as strings to keep it exact'
+                )
+            return number
+        if _fits_int64(value):
+            return int(value)
+        # `str` switches to an exponent once it is positive, and this branch
+        # exists to keep every digit.
+        return format(value, 'f')
     if isinstance(value, pd.Timestamp):
         return _timestamp_json_value(value)
     if isinstance(value, np.datetime64):
@@ -1193,6 +1263,9 @@ def _class_label(value: Any, dtype: str) -> str:
     """
     if dtype == 'bool':
         return 'true' if bool(value) else 'false'
+    text = _decimal_text(value)
+    if text is not None:
+        return text
     return str(_json_value(value))
 
 
@@ -1205,6 +1278,32 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
     another. ``int64`` values outside the JavaScript safe-integer range travel
     as base-10 strings, which is how the contract preserves their precision.
     """
+    # A decimal column is declared `string` when any of its values is too wide
+    # for int64, and the point of that declaration is that every value in it
+    # travels exactly. Normalising first defeats it: `_json_value` rounds a
+    # fractional Decimal through float, and the string branch below then
+    # stringifies the rounded float, so a column declared string to stay exact
+    # quietly loses digits.
+    if dtype == 'string':
+        text = _decimal_text(value)
+        if text is not None:
+            return text
+    if dtype == 'stringlist' and isinstance(value, (list, tuple, np.ndarray)):
+        # Each item, for the same reason and before the same rounding: the
+        # items are stringified, and normalising first stringifies a float.
+        # `ndarray` belongs here too: a column of arrays reaches this the same
+        # way a column of lists does, and testing only for a list sent it back
+        # down the rounding path.
+        return [
+            None
+            if item is None
+            else (_decimal_text(item) or _wire_string(_json_value(item)))
+            for item in value
+        ]
+    # Measured before normalisation. `_json_value` turns a whole Decimal too
+    # wide for int64 into a string, and a string carries no exactness the
+    # float branch below can check, so the loss happened silently.
+    original = _integral_source(value)
     value = _json_value(value)
     if value is None:
         return None
@@ -1221,11 +1320,49 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
         return bool(value)
     if dtype in ('int64', 'int32'):
         integer = int(value)
+        if not _INT64_MIN <= integer <= _INT64_MAX:
+            # `_dtype_name` answers int64 for uint64 too, so without this a
+            # value the declared dtype cannot hold travels as though it could.
+            raise ValueError(
+                f'value {value!r} is outside the range {dtype} represents '
+                f'({_INT64_MIN} to {_INT64_MAX}); send the column as strings'
+            )
         if integer > JSON_SAFE_INT_MAX or integer < JSON_SAFE_INT_MIN:
             return str(integer)
         return integer
     if dtype in ('float64', 'float32'):
-        return float(value)
+        if _exceeds_float64(value):
+            raise ValueError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision; send the column as strings to keep it exact'
+            )
+        whole = original
+        if whole is not None and not _survives_float(whole):
+            # The tabular encoder refuses this; a float column that silently
+            # renumbers an integer is the same defect on either path. Asked as
+            # a round trip rather than against the safe-integer ceiling,
+            # because 2**53 itself is representable exactly and only the
+            # values that do not survive may be refused.
+            raise ValueError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision; give the column an integer dtype, or convert it '
+                f'to strings'
+            )
+        try:
+            number = float(value)
+        except OverflowError:
+            # A Python int has no width, so `float()` refuses rather than
+            # returning `inf` the way a wide Decimal does.
+            raise ValueError(
+                f'value {value!r} is too large for {dtype} to represent; '
+                f'send the column as strings to keep it exact'
+            ) from None
+        if not math.isfinite(number) and _is_finite_input(value):
+            raise ValueError(
+                f'value {value!r} is too large for {dtype} to represent; '
+                f'send the column as strings to keep it exact'
+            )
+        return number
     if dtype == 'timestamp[us]':
         if isinstance(value, str):
             return value
@@ -1236,6 +1373,67 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
             f"wire dtype '{dtype}'; convert the column to a supported dtype"
         )
     return value
+
+
+def _exceeds_float64(value: Any) -> bool:
+    r"""Whether ``value`` carries precision a ``float64`` would drop.
+
+    A numeric string is exact text and a `longdouble` is wider than a
+    `float64`; `float()` silently rounds both. The tabular encoder refuses
+    them, so this one must too.
+    """
+    if isinstance(value, str):
+        try:
+            exact = Decimal(value)
+        except (ArithmeticError, ValueError):
+            return False
+        if not exact.is_finite():
+            return False
+        return Decimal(repr(float(exact))) != exact
+    if isinstance(value, np.floating) and value.dtype.itemsize > 8:
+        if not np.isfinite(value):
+            return False
+        return np.longdouble(float(value)) != value
+    return False
+
+
+def _survives_float(whole: int) -> bool:
+    r"""Whether ``whole`` is the same integer after a float64 round trip."""
+    try:
+        return int(float(whole)) == whole
+    except OverflowError:
+        return False
+
+
+def _integral_source(value: Any) -> int | None:
+    r"""``value`` as an exact integer, if it is one, before any conversion.
+
+    A cell reaches the float branch after `_json_value` has already
+    normalised it, and that normalisation is lossy for exactly the values the
+    exactness guard exists to catch. Asked here, of the original.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, Decimal):
+        if not value.is_finite() or value != value.to_integral_value():
+            return None
+        return int(value)
+    return None
+
+
+def _is_finite_input(value: Any) -> bool:
+    r"""Whether ``value`` was finite before the float conversion.
+
+    A `Decimal` too wide for a float becomes `inf`, which is a different fault
+    from a value that was infinite to begin with and must not be reported as
+    one.
+    """
+    try:
+        return bool(Decimal(str(value)).is_finite())
+    except (ArithmeticError, ValueError, TypeError):
+        return False
 
 
 def _wire_string(value: Any) -> str:

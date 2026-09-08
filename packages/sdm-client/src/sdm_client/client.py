@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from types import TracebackType
+from typing import Any
 
 from sdm_client.base import (
     ModelAdapter,
@@ -233,7 +234,7 @@ class SDMClient:
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
         parts = [
-            adapter.normalize(self._transport.predict(payload), fields, payload)
+            adapter.normalize(self._send(adapter, payload), fields, payload)
             for payload in adapter.prediction_plan(request, fields)
         ]
         if not parts:
@@ -242,6 +243,19 @@ class SDMClient:
                 code='INVALID_REQUEST',
             )
         return PredictionResult.merge(parts)
+
+    def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
+        r"""Post one payload, letting the adapter explain a refusal."""
+        try:
+            return self._transport.predict(payload)
+        except StructuredDataError as error:
+            explained = adapter.explain_error(error, payload)
+            if explained is error:
+                # An adapter that had nothing to add returns the same object,
+                # and `raise error from error` makes it its own cause, which
+                # is a cycle for anything that walks the chain.
+                raise
+            raise explained from error
 
     def fit(
         self,
@@ -262,7 +276,13 @@ class SDMClient:
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         try:
-            created = self._transport.create_session(payload)
+            try:
+                created = self._transport.create_session(payload)
+            except StructuredDataError as error:
+                explained = adapter.explain_error(error, payload)
+                if explained is error:
+                    raise
+                raise explained from error
         except Exception as error:
             status = getattr(error, 'status_code', None)
             if status in _SESSIONS_UNSUPPORTED:

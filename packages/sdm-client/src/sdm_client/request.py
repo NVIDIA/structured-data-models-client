@@ -37,6 +37,7 @@ import pandas as pd
 
 from sdm_client.errors import StructuredDataError
 from sdm_client.schema import Schema
+from sdm_client.wire import is_container
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -154,8 +155,8 @@ class Request:
 
         Raises:
             StructuredDataError: If a frame is not a DataFrame, ``task`` is not
-                a known kind, ``target`` is missing from ``context``, or
-                ``predict`` carries the target column.
+                a known kind, ``context`` has no rows, ``target`` is missing
+                from ``context``, or ``predict`` carries the target column.
         """
         context = _require_frame(context, 'context')
         predict = _require_frame(predict, 'predict')
@@ -167,6 +168,29 @@ class Request:
         if task not in TASK_KINDS:
             raise StructuredDataError(
                 f'task must be one of {list(TASK_KINDS)}, got {task!r}',
+                code='INVALID_REQUEST',
+            )
+        if target in context.columns and _has_container_cells(context[target]):
+            # Said here because this is the only place that knows which column
+            # is the target. SDM's own `Task.classification` covers "binary,
+            # multi-class, or multi-label", but the wire does not: `CellValue`
+            # is documented as excluding array-valued prediction scalars on
+            # purpose, so a multi-label answer has no shape to come back in.
+            raise StructuredDataError(
+                f'{target!r} holds a list per row, which is a multi-label '
+                f'target. These models predict one value per row, and the '
+                f'contract has no form for a set of labels, so this cannot be '
+                f'asked or answered',
+                code='UNSUPPORTED_REQUEST',
+            )
+        if len(context) == 0:
+            # A zero-row `predict` is legal -- the contract sets no minimum on
+            # rows, and an empty batch inside a loop is a reasonable no-op.
+            # A zero-row context is not: a model that predicts from labelled
+            # examples cannot be given none, and the endpoint answers a 500.
+            raise StructuredDataError(
+                'context has no rows, so there is nothing for the model to '
+                'learn the answer from',
                 code='INVALID_REQUEST',
             )
         if target not in context.columns:
@@ -323,6 +347,11 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
     if isinstance(key, str):
         return (key,)
     return tuple(key)
+
+
+def _has_container_cells(series: pd.Series) -> bool:
+    r"""The same question the wire asks, so the two cannot disagree."""
+    return any(is_container(value) for value in series)
 
 
 def _require_frame(value: Any, name: str) -> pd.DataFrame:

@@ -282,3 +282,24 @@ def test_the_formatter_does_not_own_the_generated_file():
         'the generated bindings are not excluded from ruff; a format run will '
         'rewrite them and break PROVENANCE.json'
     )
+
+
+def test_a_number_too_large_for_a_float_is_a_contract_error_not_an_overflow():
+    """`float(10**400)` raises OverflowError, which no adapter catches.
+
+    The point of routing every numeric field through `_finite` is that a
+    malformed response fails as a response-contract problem; an escaping
+    OverflowError reads as a client crash instead.
+    """
+    from sdm_api.generated.tfm_api import ResponseContractError, _finite
+
+    with pytest.raises(ResponseContractError):
+        _finite(10**400)
+
+
+def test_a_number_spelled_as_a_string_is_still_accepted():
+    """Servers do send one, and refusing a value that parses exactly would
+    be a regression with nothing gained."""
+    from sdm_api.generated.tfm_api import _finite
+
+    assert _finite('0.6') == 0.6
