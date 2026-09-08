@@ -1280,6 +1280,15 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
         text = _decimal_text(value)
         if text is not None:
             return text
+    if dtype == 'stringlist' and isinstance(value, (list, tuple)):
+        # Each item, for the same reason and before the same rounding: the
+        # items are stringified, and normalising first stringifies a float.
+        return [
+            None
+            if item is None
+            else (_decimal_text(item) or _wire_string(_json_value(item)))
+            for item in value
+        ]
     # Measured before normalisation. `_json_value` turns a whole Decimal too
     # wide for int64 into a string, and a string carries no exactness the
     # float branch below can check, so the loss happened silently.

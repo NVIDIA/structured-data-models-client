@@ -1301,3 +1301,30 @@ def test_a_binary_target_is_still_checked() -> None:
     assert not _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('0'))
     with pytest.raises(ValueError):
         _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('5'))
+
+
+def test_a_stringlist_cell_keeps_its_decimals_exact() -> None:
+    """The link-prediction target's stringlist was fixed; an ordinary data
+    column typed `stringlist` was not.
+
+    Its items are stringified too, and normalising the cell first stringifies
+    a rounded float.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    sent = _cell_json_value(
+        [Decimal('1.234567890123456789'), Decimal('2')], 'stringlist'
+    )
+
+    assert sent == ['1.234567890123456789', '2']
+
+
+def test_a_stringlist_cell_is_otherwise_unchanged() -> None:
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    assert _cell_json_value(['a', 'b'], 'stringlist') == ['a', 'b']
+    assert _cell_json_value([1, None, 2], 'stringlist') == ['1', None, '2']
+    assert _cell_json_value([], 'stringlist') == []
+    assert _cell_json_value(None, 'stringlist') is None
+    with pytest.raises(ValueError):
+        _cell_json_value('not a list', 'stringlist')
