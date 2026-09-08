@@ -110,6 +110,9 @@ RETIRED_ALLOWLIST = {
 }
 
 
+REPOSITORY_URL = re.compile(r'https://github\.com/NVIDIA/[A-Za-z0-9._-]+')
+
+
 def tracked_files() -> list[Path]:
     import subprocess
 
@@ -214,9 +217,56 @@ def check_retired() -> int:
     return 0
 
 
+def check_repository_url() -> int:
+    """Every repository URL in a shipped file must be the one being published.
+
+    A message that invites a bug report is only useful if the address exists.
+    This repository has been renamed once already, and the rename reached the
+    package metadata while five runtime messages kept sending people to the
+    old name.
+    """
+    declared = set()
+    for path in REPO_ROOT.glob('packages/*/pyproject.toml'):
+        declared.update(
+            REPOSITORY_URL.findall(path.read_text(encoding='utf-8'))
+        )
+    if len(declared) != 1:
+        print(
+            f'packages disagree on the repository URL: {sorted(declared)}',
+            file=sys.stderr,
+        )
+        return 1
+    expected = declared.pop()
+
+    findings = []
+    for path in tracked_files():
+        relative = str(path.relative_to(REPO_ROOT))
+        if path.suffix not in SHIPPED_SUFFIXES:
+            continue
+        text = path.read_text(encoding='utf-8', errors='replace')
+        for found in set(REPOSITORY_URL.findall(text)):
+            if found != expected:
+                findings.append(f'{relative}: {found}')
+
+    for finding in sorted(findings):
+        print(f'stale repository URL: {finding}', file=sys.stderr)
+    if findings:
+        print(
+            f'\nThe packages publish to {expected!r}. A message pointing '
+            'somewhere else sends a reader to a page that does not exist.',
+            file=sys.stderr,
+        )
+        return 1
+    print(f'every repository URL names {expected.rsplit("/", 1)[-1]}')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('check', choices=('spdx', 'internal', 'retired', 'all'))
+    parser.add_argument(
+        'check',
+        choices=('spdx', 'internal', 'retired', 'repo-url', 'all'),
+    )
     args = parser.parse_args()
     if args.check == 'spdx':
         return check_spdx()
@@ -224,7 +274,14 @@ def main() -> int:
         return check_internal()
     if args.check == 'retired':
         return check_retired()
-    return check_spdx() | check_internal() | check_retired()
+    if args.check == 'repo-url':
+        return check_repository_url()
+    return (
+        check_spdx()
+        | check_internal()
+        | check_retired()
+        | check_repository_url()
+    )
 
 
 if __name__ == '__main__':
