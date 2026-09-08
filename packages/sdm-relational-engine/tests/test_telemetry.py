@@ -594,11 +594,17 @@ def test_the_record_counts_the_default_hops_when_none_are_asked_for(
 @pytest.mark.parametrize(
     'message',
     [
-        'entity ‘alice@acme.com’ not found',
-        'entity “alice@acme.com” not found',
+        "entity 'alice@acme.com' not found",
+        'entity "alice@acme.com" not found',
         'entity `alice@acme.com` not found',
         'Column `orders`.`alice@acme.com` does not exist',
+        'entity ‘alice@acme.com’ not found',
+        'entity “alice@acme.com” not found',
+        'entity ‹alice@acme.com› not found',
         'entity «alice@acme.com» not found',
+        'entity „alice@acme.com“ not found',
+        'entity 「alice@acme.com」 not found',
+        'entity ＂alice@acme.com＂ not found',
     ],
 )
 def test_a_value_quoted_any_way_upstream_quotes_is_redacted(
@@ -606,9 +612,21 @@ def test_a_value_quoted_any_way_upstream_quotes_is_redacted(
 ) -> None:
     """Backticks are not decoration: the Databricks backend quotes identifiers
     with them, so an error echoing a column name arrives wrapped in them. The
-    curly forms turn up when a message was written as prose.
+    others come from Unicode by name, which is what stopped this being a list
+    that grows one missed form at a time.
     """
     assert 'acme.com' not in describe_error(RuntimeError(message))
+
+
+def test_brackets_are_not_treated_as_quotes() -> None:
+    """Taking the quote characters by Unicode category would pull in `(`, `[`
+    and `{`, and a message mentioning a table in parentheses would lose
+    everything after it.
+    """
+    assert (
+        describe_error(RuntimeError('lookup (customers) failed'))
+        == 'RuntimeError: lookup (customers) failed'
+    )
 
 
 def test_an_unquoted_value_is_not_caught_and_that_is_written_down() -> None:

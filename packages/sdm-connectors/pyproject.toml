@@ -77,7 +77,7 @@ include = ["sdm_connectors*"]
 "sdm_connectors" = ["py.typed"]
 
 [tool.setuptools.dynamic]
-version = {attr = "sdm_connectors.__version__"}
+version = {attr = "sdm_connectors._version.__version__"}
 
 [tool.pytest.ini_options]
 markers = [

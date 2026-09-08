@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import time
+import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -111,11 +112,33 @@ def emit(record: PredictionRecord) -> None:
 # same. The type is still there, and so is every other field on the record.
 # Every character something upstream might quote with. Backticks are not
 # decoration here: the Databricks backend quotes identifiers with them, so an
-# error echoing a column name arrives wrapped in them. The curly forms turn up
-# when a message was written as prose. Opening and closing need not match,
-# since the rule takes the span rather than pairing them.
-_QUOTES = '\'"`\u2018\u2019\u201a\u201c\u201d\u201e\u00ab\u00bb'
-_QUOTED_SPAN = re.compile(f'[{_QUOTES}].*[{_QUOTES}]|[{_QUOTES}].*', re.DOTALL)
+# error echoing a column name arrives wrapped in them, and the apostrophe is
+# what Python itself quotes with.
+#
+# The rest are taken from Unicode by name rather than listed. Listing them is
+# how the single angle quotes were missed after the double ones were added,
+# and taking the `Pi`/`Pf` categories instead misses the low-9 forms, which
+# Unicode classes as opening punctuation. Matching the name catches every
+# form at once and still leaves `(`, `[` and `{` out, which categories would
+# not have.
+#
+# Opening and closing need not match, since the rule takes the span rather
+# than pairing them.
+def _quote_characters() -> str:
+    marks = {"'", '`'}
+    for point in range(0x110000):
+        character = chr(point)
+        name = unicodedata.name(character, '')
+        if 'QUOTATION MARK' in name or 'CORNER BRACKET' in name:
+            marks.add(character)
+    return ''.join(sorted(marks))
+
+
+_QUOTES = _quote_characters()
+_QUOTE_CLASS = f'[{re.escape(_QUOTES)}]'
+_QUOTED_SPAN = re.compile(
+    f'{_QUOTE_CLASS}.*{_QUOTE_CLASS}|{_QUOTE_CLASS}.*', re.DOTALL
+)
 _ID_LIST = re.compile(r'\[[^\[\]]*\]|\((?:\s*[-\w.]+\s*,)[^()]*\)')
 _MARK = "'?'"
 

@@ -63,6 +63,41 @@ engine:
     - pip install -q pytest pytest-mock requests-mock pytest-httpserver pytest-subtests
     - cd packages/sdm-relational-engine && python -m pytest tests -q
 
+# Each distribution is built the way an index would build it: in an isolated
+# environment holding only the build backend, with none of the runtime
+# dependencies installed. This catches what no test can, because it fails
+# before a test could run: `project.version` resolved through the package root
+# imports that root, which imports pandas, and the wheel cannot be produced at
+# all. Only a real build exercises that path.
+build:
+  stage: test
+  extends: .python
+  script:
+    - apt-get update -qq && apt-get install -y -qq build-essential cmake git
+    - pip install -q build
+    - |
+      for package in sdm-api sdm-pql sdm-client sdm-connectors sdm-relational-engine; do
+        echo "building $package"
+        ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/dist" . )
+      done
+    - ls -1 dist/
+    # Every distribution carries the one version they are released together at.
+    - |
+      python - <<'EOF'
+      import pathlib, re, sys
+      names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+      versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
+      print('\n'.join(names))
+      if len(names) != 5:
+          sys.exit(f'expected 5 wheels, built {len(names)}')
+      if len(versions) != 1:
+          sys.exit(f'distributions disagree on the version: {sorted(versions)}')
+      EOF
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+
 # Blocking. Fetches the contract at the revision recorded in PROVENANCE.json,
 # proves the recorded digest is that revision's actual bytes, and proves the
 # generated file is exactly what the generator produces from it. A hand-edited
