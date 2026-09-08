@@ -81,6 +81,10 @@ build:
         ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/dist" . )
       done
     - ls -1 dist/
+    # Building each one proves nothing about installing them together. A pin
+    # that only one distribution carries makes the set unsatisfiable, and the
+    # resolver is the only thing that says so.
+    - pip install --dry-run --find-links "$CI_PROJECT_DIR/dist" 'sdm-client[relational,sqlite,duckdb]==1.0.0'
     # Every distribution carries the one version they are released together at.
     - |
       python - <<'EOF'

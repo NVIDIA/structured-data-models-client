@@ -29,7 +29,7 @@ setup(
         'sdm-api==1.0.0',
         'sdm-pql==1.0.0',
         'sdm-connectors==1.0.0',
-        'antlr4-python3-runtime==4.9.3',
+        'antlr4-python3-runtime==4.13.2',
         'rich>=9.0.0',
         'jinja2',
         'tabulate',
