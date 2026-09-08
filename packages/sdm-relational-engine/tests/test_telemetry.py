@@ -665,3 +665,29 @@ def test_no_bracket_is_treated_as_a_quote() -> None:
     from sdm_relational_engine.rfm.telemetry import _QUOTES
 
     assert not set('()[]{}<>').intersection(_QUOTES)
+
+
+def test_a_run_anchored_to_each_entity_says_so() -> None:
+    """`time_column` is `None` for an entity-anchored task exactly as it is
+    for a task with no anchor, so reading it alone makes a run anchored to
+    each entity's own timestamp indistinguishable from an unanchored one.
+    """
+    from sdm_relational_engine.rfm.rfm import _anchor_of
+
+    class Task:
+        use_entity_time = True
+        time_column = None
+        _pred_df = None
+
+    assert _anchor_of(Task()) == 'entity'
+
+
+def test_a_run_with_no_anchor_is_still_reported_as_none() -> None:
+    from sdm_relational_engine.rfm.rfm import _anchor_of
+
+    class Task:
+        use_entity_time = False
+        time_column = None
+        _pred_df = None
+
+    assert _anchor_of(Task()) == ''

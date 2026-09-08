@@ -509,3 +509,32 @@ def test_the_attribution_version_is_the_installed_one():
     assert sdm_connectors.__version__ in databricks_user_agent(
         sdm_connectors.__version__
     )
+
+
+def test_a_user_agent_entry_a_header_cannot_carry_is_an_argument_error():
+    """A header is latin-1 on the wire.
+
+    A character outside it raises a `UnicodeEncodeError` from inside the HTTP
+    layer at send time, which reads as a connection problem and sends the
+    caller to look at the network for something they typed.
+    """
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+
+    with pytest.raises(ConnectorError) as error:
+        databricks.connect(
+            server_hostname='h',
+            http_path='p',
+            access_token='t',
+            user_agent_entry='acme/☃',
+        )
+    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
+
+
+def test_a_latin_1_user_agent_entry_is_kept():
+    """Refusing what a header cannot carry must not refuse what it can."""
+    from sdm_connectors._databricks_telemetry import databricks_user_agent
+
+    agent = databricks_user_agent('1.0.0', 'café/1.0')
+
+    assert agent.endswith('café/1.0')
+    agent.encode('latin-1')

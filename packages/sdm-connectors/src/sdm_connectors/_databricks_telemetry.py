@@ -77,4 +77,15 @@ def databricks_user_agent(
         raise DatabricksUserAgentEntryError(
             'user_agent_entry must not contain control characters'
         )
+    # A header is latin-1 on the wire. A character outside it raises a
+    # UnicodeEncodeError from inside the HTTP layer at send time, which reads
+    # as a connection problem and sends the caller to look at the network for
+    # something they typed.
+    try:
+        additional_entry.encode('latin-1')
+    except UnicodeEncodeError as error:
+        raise DatabricksUserAgentEntryError(
+            'user_agent_entry must be latin-1 encodable, since it is sent as '
+            f'an HTTP header: {error}'
+        ) from error
     return f'{required} {additional_entry}'

@@ -654,7 +654,14 @@ def _anchor_of(task: Any) -> str:
 
     Two runs of one query at different anchors are different answers, so a
     record that cannot say which anchor it used cannot explain either.
+
+    A task anchored to each entity's own timestamp is named rather than dated,
+    because there is no one time to report. It has to be named: `time_column`
+    is `None` for that task exactly as it is for a task with no anchor at all,
+    so reading it alone makes the two look the same.
     """
+    if getattr(task, 'use_entity_time', False):
+        return 'entity'
     held = getattr(task, 'time_column', None)
     column = getattr(held, 'name', held)
     frame = getattr(task, '_pred_df', None)
