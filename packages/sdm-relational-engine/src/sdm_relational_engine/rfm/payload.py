@@ -1280,9 +1280,12 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
         text = _decimal_text(value)
         if text is not None:
             return text
-    if dtype == 'stringlist' and isinstance(value, (list, tuple)):
+    if dtype == 'stringlist' and isinstance(value, (list, tuple, np.ndarray)):
         # Each item, for the same reason and before the same rounding: the
         # items are stringified, and normalising first stringifies a float.
+        # `ndarray` belongs here too: a column of arrays reaches this the same
+        # way a column of lists does, and testing only for a list sent it back
+        # down the rounding path.
         return [
             None
             if item is None

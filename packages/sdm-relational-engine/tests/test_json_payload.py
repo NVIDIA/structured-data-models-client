@@ -1319,6 +1319,20 @@ def test_a_stringlist_cell_keeps_its_decimals_exact() -> None:
     assert sent == ['1.234567890123456789', '2']
 
 
+def test_a_stringlist_cell_of_arrays_keeps_its_decimals_exact() -> None:
+    """A column of arrays reaches this the same way a column of lists does,
+    and testing only for a list sent it back down the rounding path.
+    """
+    from sdm_relational_engine.rfm.payload import _cell_json_value
+
+    sent = _cell_json_value(
+        np.array([Decimal('1.234567890123456789'), Decimal('2')], dtype=object),
+        'stringlist',
+    )
+
+    assert sent == ['1.234567890123456789', '2']
+
+
 def test_a_stringlist_cell_is_otherwise_unchanged() -> None:
     from sdm_relational_engine.rfm.payload import _cell_json_value
 
