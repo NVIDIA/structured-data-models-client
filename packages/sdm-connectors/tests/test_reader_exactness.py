@@ -11,6 +11,8 @@ can take, and the two that used to round.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pandas as pd
 import pytest
 
@@ -273,3 +275,59 @@ def test_a_file_uri_directory_without_a_trailing_slash_is_a_directory():
     assert _resolve_format(f'file://{directory}') == 'parquet'
     assert _resolve_format(directory) == 'parquet'
     assert _resolve_format(f'file://{directory}/') == 'parquet'
+
+
+def test_a_parquet_nullable_integer_is_not_rounded(tmp_path):
+    """CSV was fixed and Parquet was not.
+
+    A Parquet column typed as a nullable integer arrives as float64 whatever
+    its values, so an id past 2**53 is already wrong before any wire rule
+    could catch it.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / 'ids.parquet'
+    pq.write_table(
+        pa.table({'id': pa.array([9007199254740993, None], type=pa.int64())}),
+        path,
+    )
+
+    frame = read('local', path=str(path))
+
+    assert str(frame['id'].iloc[0]) == '9007199254740993'
+
+
+def test_a_parquet_integer_without_nulls_stays_a_plain_integer(tmp_path):
+    """Reading through the null-aware backend must not leave every column an
+    extension dtype."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / 'plain.parquet'
+    pq.write_table(pa.table({'n': pa.array([1, 2], type=pa.int64())}), path)
+
+    assert str(read('local', path=str(path))['n'].dtype) == 'int64'
+
+
+def test_a_parquet_decimal_is_still_a_decimal(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / 'dec.parquet'
+    pq.write_table(
+        pa.table(
+            {
+                'd': pa.array(
+                    [Decimal('1.234567890123456789')],
+                    type=pa.decimal128(38, 18),
+                )
+            }
+        ),
+        path,
+    )
+
+    value = read('local', path=str(path))['d'].iloc[0]
+
+    assert isinstance(value, Decimal)
+    assert str(value) == '1.234567890123456789'

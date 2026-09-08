@@ -1235,3 +1235,69 @@ def test_a_narrow_decimal_column_is_unaffected() -> None:
 
     assert dtype == 'float64'
     assert [_cell_json_value(v, dtype) for v in column] == [1.5, 2.25]
+
+
+def test_a_string_target_keeps_every_value_exact() -> None:
+    """A target column is declared `string` for the same reason a data column
+    is, and used to round for the same reason too.
+
+    Worse than the cell path: it emitted a float for a column declared
+    `string`, so the value contradicted its own declaration.
+    """
+    from predictive_query.schema.task import TaskType
+    from sdm_relational_engine.rfm.payload import (
+        _cell_json_value,
+        _target_dtype,
+        _target_json_value,
+    )
+
+    values = [
+        Decimal('9223372036854775809.00'),
+        Decimal('1.234567890123456789'),
+    ]
+    dtype = _target_dtype(
+        TaskType.MULTICLASS_CLASSIFICATION, pd.Series(values, dtype=object)
+    )
+    assert dtype == 'string'
+
+    sent = [
+        _cell_json_value(
+            _target_json_value(TaskType.MULTICLASS_CLASSIFICATION, value),
+            dtype,
+        )
+        for value in values
+    ]
+
+    assert sent == ['9223372036854775809.00', '1.234567890123456789']
+
+
+def test_a_link_prediction_stringlist_keeps_its_decimals_exact() -> None:
+    from predictive_query.schema.task import TaskType
+    from sdm_relational_engine.rfm.payload import _target_json_value
+
+    sent = _target_json_value(
+        TaskType.TEMPORAL_LINK_PREDICTION,
+        [Decimal('1.234567890123456789'), Decimal('2')],
+    )
+
+    assert sent == ['1.234567890123456789', '2']
+
+
+def test_a_class_label_keeps_its_decimal_exact() -> None:
+    from sdm_relational_engine.rfm.payload import _class_label
+
+    assert (
+        _class_label(Decimal('1.234567890123456789'), 'string')
+        == '1.234567890123456789'
+    )
+
+
+def test_a_binary_target_is_still_checked() -> None:
+    """The decimal path must not skip the validation beside it."""
+    from predictive_query.schema.task import TaskType
+    from sdm_relational_engine.rfm.payload import _target_json_value
+
+    assert _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('1'))
+    assert not _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('0'))
+    with pytest.raises(ValueError):
+        _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('5'))

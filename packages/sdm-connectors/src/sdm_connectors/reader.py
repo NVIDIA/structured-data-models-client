@@ -542,11 +542,20 @@ def _read_file(
         missing_as_not_found=True,
         path=path,
     ):
-        if resolved == 'parquet':
-            return pd.read_parquet(path, storage_options=storage_options)
         # A blank in an integer column makes pandas promote the whole column
         # to float64 as it parses, rounding every value past 2**53 before the
         # frame exists. A null-aware backend keeps the integer an integer.
+        # Parquet needs this as much as CSV does: a file whose integer column
+        # is nullable arrives as float64 whatever its values, so an id past
+        # 2**53 is already wrong by the time the wire rules could catch it.
+        if resolved == 'parquet':
+            return _narrow_nullable_dtypes(
+                pd.read_parquet(
+                    path,
+                    storage_options=storage_options,
+                    dtype_backend='numpy_nullable',
+                )
+            )
         return _narrow_nullable_dtypes(
             pd.read_csv(
                 path,
