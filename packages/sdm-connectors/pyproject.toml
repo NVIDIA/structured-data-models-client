@@ -49,7 +49,10 @@ snowflake = [
     "snowflake-connector-python",
 ]
 databricks = [
-    "databricks-sql-connector>=3.0.0",
+    # 4.0.1 is the first release that reads `user_agent_entry`. Earlier ones
+    # read `_user_agent_entry` only, so the partner attribution this connector
+    # is required to send would be accepted and silently dropped.
+    "databricks-sql-connector>=4.0.1",
 ]
 postgres = [
     "psycopg[binary]>=3.1",

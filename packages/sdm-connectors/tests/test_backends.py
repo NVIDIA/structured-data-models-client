@@ -316,18 +316,44 @@ def test_postgres_refuses_a_connect_argument_it_does_not_take():
 
 
 def test_postgres_accepts_the_libpq_connection_parameters():
-    """A representative few, so a future trim of the set is deliberate."""
-    from sdm_connectors.backends.postgres import _CONNECT_ARGS
+    """Taken from the libpq that is loaded, not from a list kept by hand.
+
+    A hand-kept list refuses whatever it has not caught up with, and what it
+    was missing was not obscure: `sslcertmode` and `requirepeer` are how a
+    caller tightens how the connection authenticates.
+    """
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
 
     assert {'host', 'port', 'dbname', 'user', 'password', 'sslmode'} <= (
-        _CONNECT_ARGS
+        postgres._CONNECT_ARGS
     )
+    assert {'sslcertmode', 'requirepeer'} <= postgres._CONNECT_ARGS
+    assert 'nosuchoption' not in postgres._CONNECT_ARGS
+
+
+def test_postgres_accepts_every_parameter_the_loaded_libpq_reports():
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+    pq = pytest.importorskip('psycopg.pq')
+
+    reported = {
+        option.keyword.decode() for option in pq.Conninfo.get_defaults()
+    }
+
+    assert reported <= postgres._CONNECT_ARGS
+
+
+def test_postgres_still_names_the_parameters_if_libpq_cannot_be_asked():
+    """An unusual build that cannot answer must refuse a little, not
+    everything."""
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+
+    assert {'host', 'dbname', 'user', 'sslmode'} <= (postgres._KNOWN_LIBPQ_ARGS)
 
 
 def test_postgres_reads_the_standard_environment_variables(monkeypatch):
     """`PGHOST` and friends are how a Postgres user expects to configure a
     client, and libpq only reads them when the argument is absent."""
-    from sdm_connectors.backends import postgres
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
 
     monkeypatch.setenv('PGHOST', 'example.invalid')
     monkeypatch.setenv('PGDATABASE', 'from_env')
@@ -353,7 +379,7 @@ def test_a_databricks_connection_carries_the_partner_attribution():
     """Databricks requires a partner product to identify every connection."""
     from unittest import mock
 
-    import sdm_connectors.backends.databricks as databricks
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
 
     captured: dict = {}
 
@@ -371,7 +397,7 @@ def test_a_caller_tag_is_kept_after_the_required_identifier():
     cannot lose the attribution, and the caller's tag is not replaced."""
     from unittest import mock
 
-    import sdm_connectors.backends.databricks as databricks
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
 
     captured: dict = {}
 
@@ -392,7 +418,7 @@ def test_a_caller_tag_is_kept_after_the_required_identifier():
 def test_an_unsendable_user_agent_entry_is_an_argument_error():
     """A control character in a header is the caller's mistake, and reporting
     it as a connection failure sends them to look at the network."""
-    import sdm_connectors.backends.databricks as databricks
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
 
     with pytest.raises(ConnectorError) as error:
         databricks.connect(

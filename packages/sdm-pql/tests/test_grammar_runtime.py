@@ -10,11 +10,16 @@ fail here rather than in a user's console.
 """
 
 import re
+import sys
 from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-import tomllib
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # These packages support 3.10, where tomllib is not in the stdlib.
+    tomllib = pytest.importorskip('tomli')
 
 _GRAMMAR = Path(__file__).resolve().parents[1] / (
     'src/predictive_query/grammar'

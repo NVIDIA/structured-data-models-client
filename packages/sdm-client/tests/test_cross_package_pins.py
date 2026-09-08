@@ -14,10 +14,16 @@ all.
 from __future__ import annotations
 
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
-import tomllib
+import pytest
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # These packages support 3.10, where tomllib is not in the stdlib.
+    tomllib = pytest.importorskip('tomli')
 
 _ROOT = Path(__file__).resolve().parents[3]
 _PACKAGES = (

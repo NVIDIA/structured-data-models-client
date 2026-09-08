@@ -26,16 +26,30 @@ _ENV_BY_ARG = {
     'sslmode': 'PGSSLMODE',
 }
 
-# libpq connection parameters plus psycopg's Python-side connection options.
-_CONNECT_ARGS = frozenset(
+# psycopg's own Python-side connection options. These are not libpq
+# parameters and no libpq query reports them, so they are named here.
+_DRIVER_ARGS = frozenset(
+    {
+        'autocommit',
+        'context',
+        'cursor_factory',
+        'prepare_threshold',
+        'row_factory',
+    }
+)
+
+# libpq's parameters, taken from the libpq that is actually loaded rather than
+# written out. A hand-kept list silently refuses whatever it has not caught up
+# with, and the ones it was missing were not obscure: `sslcertmode` and
+# `requirepeer` are how a caller tightens how the connection authenticates.
+# Falls back to the names libpq has had for years if the query is unavailable,
+# so an unusual build refuses a little rather than everything.
+_KNOWN_LIBPQ_ARGS = frozenset(
     {
         'application_name',
-        'autocommit',
         'channel_binding',
         'client_encoding',
         'connect_timeout',
-        'context',
-        'cursor_factory',
         'dbname',
         'fallback_application_name',
         'gssencmode',
@@ -45,15 +59,12 @@ _CONNECT_ARGS = frozenset(
         'keepalives_count',
         'keepalives_idle',
         'keepalives_interval',
-        'load_balance_hosts',
         'options',
         'passfile',
         'password',
         'port',
-        'prepare_threshold',
         'replication',
         'require_auth',
-        'row_factory',
         'service',
         'servicefile',
         'sslcert',
@@ -61,7 +72,6 @@ _CONNECT_ARGS = frozenset(
         'sslcrldir',
         'sslkey',
         'sslmode',
-        'sslnegotiation',
         'sslpassword',
         'sslrootcert',
         'sslsni',
@@ -70,6 +80,21 @@ _CONNECT_ARGS = frozenset(
         'user',
     }
 )
+
+
+def _libpq_args() -> frozenset[str]:
+    try:
+        from psycopg import pq
+
+        reported = {
+            option.keyword.decode() for option in pq.Conninfo.get_defaults()
+        }
+    except Exception:
+        return _KNOWN_LIBPQ_ARGS
+    return frozenset(reported | _KNOWN_LIBPQ_ARGS)
+
+
+_CONNECT_ARGS = _DRIVER_ARGS | _libpq_args()
 
 
 def connect(
