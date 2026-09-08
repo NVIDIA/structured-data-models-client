@@ -684,6 +684,8 @@ def _to_engine_graph(engine: Any, schema: Schema) -> Any:
     all -- so inference is suppressed and exactly the schema's relationships
     are linked.
     """
+    schema.check_consistent()
+
     frames = {name: table.data for name, table in schema.tables.items()}
     # `edges=[]` suppresses the engine's own link inference. Letting it run and
     # adding the schema's links on top made the schema additive: an edge the

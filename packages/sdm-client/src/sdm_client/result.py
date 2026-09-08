@@ -33,6 +33,8 @@ from typing import Any
 import pandas as pd
 from sdm_api.generated.tfm_api import PredictionItem
 
+from sdm_client.errors import StructuredDataError
+
 # Emitted as columns when present on an item, in this order. ``row_index``
 # leads because it is the one field the contract always requires.
 _SCALAR_FIELDS = ('row_index', 'id', 'forecast_step', 'prediction')
@@ -150,18 +152,22 @@ class PredictionResult:
         concatenated here.
 
         Raises:
-            ValueError: If ``parts`` is empty, which would mean a request was
-                sent with nothing to score.
+            StructuredDataError: If ``parts`` is empty, which would mean a
+                request was sent with nothing to score, or if the parts do
+                not describe one request.
         """
         if not parts:
-            raise ValueError('no parts to merge')
+            raise StructuredDataError(
+                'no parts to merge', code='INTERNAL_ERROR'
+            )
         if len(parts) == 1:
             return parts[0]
         first = parts[0]
         models = {part.model for part in parts}
         if len(models) > 1:
-            raise ValueError(
-                f'cannot merge results from different models: {sorted(models)}'
+            raise StructuredDataError(
+                f'cannot merge results from different models: {sorted(models)}',
+                code='INTERNAL_ERROR',
             )
         items = [item for part in parts for item in part.items]
         metadata = dict(first.metadata)
@@ -179,9 +185,10 @@ class PredictionResult:
         # whichever part happened to be first.
         shapes = {part.outputs for part in parts}
         if len(shapes) > 1:
-            raise ValueError(
-                f'these parts were asked for different outputs ({sorted(shapes)}), '
-                f'so they are not slices of one request'
+            raise StructuredDataError(
+                f'these parts were asked for different outputs '
+                f'({sorted(shapes)}), so they are not slices of one request',
+                code='INTERNAL_ERROR',
             )
         return cls(
             model=first.model,

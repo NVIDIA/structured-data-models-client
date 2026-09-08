@@ -621,7 +621,11 @@ class Transport:
         try:
             with self._session.post(
                 url,
-                data=body,
+                # Encoded here rather than handed over as `str`: requests
+                # gives a str body to httplib, which encodes latin-1, so this
+                # is only safe today because `json.dumps` defaults to
+                # `ensure_ascii=True`. Not a default worth depending on.
+                data=body.encode('utf-8'),
                 headers={'Content-Type': 'application/json'},
                 timeout=self._timeout,
                 verify=self._verify_ssl,

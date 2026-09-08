@@ -82,8 +82,9 @@ class PredictionItem:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionItem':
+        data = _require_object(data, 'PredictionItem')
         return cls(
-            id=str(data['id']) if 'id' in data else None,
+            id=_str_or_none(data.get('id'), 'id', 'prediction'),
             row_index=_require_int(data, 'row_index', 'PredictionItem'),
             forecast_step=_int_or_none(data.get('forecast_step'), 'forecast_step', 'prediction'),
             prediction=data.get('prediction'),
@@ -106,6 +107,7 @@ class PredictionResponse:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionResponse':
+        data = _require_object(data, 'PredictionResponse')
         return cls(
             id=_require_str(data, 'id', 'PredictionResponse'),
             model=_require_str(data, 'model', 'PredictionResponse'),
@@ -244,6 +246,28 @@ def _int_or_none(
     if value is None:
         return None
     return _whole(value, field, model)
+
+
+def _require_object(value: Any, model: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ResponseContractError(
+            f'response carries {value!r} where the contract requires '
+            f'a {model} object'
+        )
+    return value
+
+
+def _str_or_none(
+    value: Any, field: str = 'value', model: str = 'the'
+) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ResponseContractError(
+            f'{model} response has {field!r} = {value!r}, where the '
+            f'contract requires a string'
+        )
+    return value
 
 
 def _float_tuple(value: Any) -> tuple[float, ...] | None:

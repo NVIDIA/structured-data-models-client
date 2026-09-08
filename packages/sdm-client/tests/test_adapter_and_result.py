@@ -267,5 +267,5 @@ def test_merging_keeps_the_columns_the_request_implied():
 
 def test_merging_parts_that_wanted_different_outputs_is_refused():
     """They would not be slices of one request."""
-    with pytest.raises(ValueError, match='different outputs'):
+    with pytest.raises(StructuredDataError, match='different outputs'):
         PredictionResult.merge([empty('a'), empty('b', ('scores',))])

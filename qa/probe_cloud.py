@@ -9,7 +9,6 @@ Everything written here is written under a prefix this file also removes.
 
 from __future__ import annotations
 
-import os
 import pathlib
 
 import data
@@ -19,6 +18,9 @@ from sdm_connectors import ConnectorError, read
 
 AREA = 's3'
 SCRATCH = pathlib.Path.home() / 'sdm-qa' / 'scratch'
+# Made here rather than assumed: this probe is meant to run on its own, and
+# every other file that writes under it makes it the same way.
+SCRATCH.mkdir(parents=True, exist_ok=True)
 BUCKET = pathlib.Path('/tmp/qa_bucket').read_text().strip()
 PREFIX = f's3://{BUCKET}/qa'
 
@@ -70,8 +72,17 @@ def run_s3(client):
         AREA, 'a parquet prefix on s3', 'many objects read as one frame'
     ) as e:
         directory = SCRATCH / 'adult_parts'
-        for name in os.listdir(directory):
-            fs.put(str(directory / name), f'{BUCKET}/qa/parts/{name}')
+        directory.mkdir(exist_ok=True)
+        # The two just written, not whatever the directory holds. It persists
+        # between runs, so listing it uploads anything left there and the
+        # prefix reads back more than the 400 rows this checks for.
+        parts = []
+        for i, part in enumerate([adult.head(200), adult.tail(200)]):
+            path = directory / f'part-{i}.parquet'
+            part.to_parquet(path, index=False)
+            parts.append(path)
+        for path in parts:
+            fs.put(str(path), f'{BUCKET}/qa/parts/{path.name}')
         frame = read('s3', path=f'{PREFIX}/parts')
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows from a 2-object prefix')

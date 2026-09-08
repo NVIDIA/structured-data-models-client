@@ -329,6 +329,30 @@ def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
 _MAX_JSON_DEPTH = 100
 
 
+def _refuse_inexact_integer(value: Any) -> None:
+    r"""Refuse an integer a float64 JSON reader would not read back exactly.
+
+    Asked by round trip rather than against the safe-integer bound. Every
+    integer up to that bound is representable, but so are plenty above it:
+    ``2 ** 53`` is exact and only the odd numbers past it are not. Refusing on
+    the bound alone would reject values that travel perfectly well.
+    """
+    if not isinstance(value, Integral) or isinstance(value, bool):
+        return
+    number = int(value)
+    try:
+        if int(float(number)) == number:
+            return
+    except (OverflowError, ValueError):
+        pass
+    raise StructuredDataError(
+        f'value {number} cannot be sent as a JSON number without losing '
+        f'precision, since a float64 does not hold it exactly; pass it as a '
+        f'string if the model accepts one',
+        code='INVALID_REQUEST',
+    )
+
+
 def json_ready(
     value: Any, _depth: int = 0, _seen: frozenset[int] = frozenset()
 ) -> Any:
@@ -339,9 +363,17 @@ def json_ready(
     used to die inside ``requests`` as a ``TypeError`` naming neither the key
     nor this client. Applied to the small hand-written parts of a payload;
     table cells go through :func:`serialize_cell`, which types them properly.
+
+    An integer too large for a float64 to hold exactly is refused rather than
+    sent. A table column has a declared type and can travel as a string, but
+    these keys have whatever meaning the model gives them, so a string may not
+    be what the far side reads. Refusing names the value at the call site;
+    sending it means a reader on a float64 JSON stack gets a different number
+    than the caller passed.
     """
     if isinstance(value, np.generic):
-        return value.item()
+        value = value.item()
+    _refuse_inexact_integer(value)
     if id(value) in _seen:
         raise StructuredDataError(
             'this value refers back to itself, so it cannot be sent as JSON',

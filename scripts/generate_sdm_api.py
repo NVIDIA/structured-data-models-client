@@ -593,7 +593,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         ),
     )
     optional_reader = {
-        'id': "str(data['id']) if 'id' in data else None",
+        'id': "_str_or_none(data.get('id'), 'id', 'prediction')",
         'row_index': (
             "_int_or_none(data.get('row_index'), 'row_index', 'prediction')"
         ),
@@ -633,6 +633,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '',
         '    @classmethod',
         "    def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionItem':",
+        "        data = _require_object(data, 'PredictionItem')",
         '        return cls(',
         *readers,
         '        )',
@@ -677,6 +678,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '',
         '    @classmethod',
         "    def from_dict(cls, data: Mapping[str, Any]) -> 'PredictionResponse':",
+        "        data = _require_object(data, 'PredictionResponse')",
         '        return cls(',
     ]
     for name, _, strict in response_fields:
@@ -815,6 +817,28 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '    if value is None:',
         '        return None',
         '    return _whole(value, field, model)',
+        '',
+        '',
+        'def _require_object(value: Any, model: str) -> Mapping[str, Any]:',
+        '    if not isinstance(value, Mapping):',
+        '        raise ResponseContractError(',
+        "            f'response carries {value!r} where the contract requires '",
+        "            f'a {model} object'",
+        '        )',
+        '    return value',
+        '',
+        '',
+        'def _str_or_none(',
+        "    value: Any, field: str = 'value', model: str = 'the'",
+        ') -> str | None:',
+        '    if value is None:',
+        '        return None',
+        '    if not isinstance(value, str):',
+        '        raise ResponseContractError(',
+        "            f'{model} response has {field!r} = {value!r}, where the '",
+        "            f'contract requires a string'",
+        '        )',
+        '    return value',
         '',
         '',
         'def _float_tuple(value: Any) -> tuple[float, ...] | None:',
