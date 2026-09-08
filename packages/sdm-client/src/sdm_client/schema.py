@@ -123,6 +123,19 @@ class Column:
             object.__setattr__(self, 'untyped', False)
         object.__setattr__(self, key, value)
 
+    def check_consistent(self) -> None:
+        r"""Refuse a column whose storage and meaning contradict each other.
+
+        Assigning a meaning is checked against the storage as it happens, but
+        the reverse is not, because a caller re-declaring storage often has to
+        set the two one at a time and either order passes through a pair that
+        does not hold. The pair is asked about here instead, once the caller
+        has finished and before anything is sent.
+        """
+        if self.dtype is None or self.stype is None:
+            return
+        self._check_supports_dtype(self.stype, self.dtype)
+
     @staticmethod
     def _check_stype(value: Any) -> None:
         if value not in SEMANTIC_TYPES:

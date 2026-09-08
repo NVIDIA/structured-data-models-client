@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from sdm_client import Relationship, Schema
+from sdm_client import PredictiveQuery, Relationship, Schema
 from sdm_client.errors import StructuredDataError
 
 
@@ -170,3 +170,45 @@ def test_an_all_null_object_column_does_not_claim_a_numeric_type():
 def test_a_high_cardinality_string_column_is_text_not_categorical():
     frame = pd.DataFrame({'note': [f'a unique note {i}' for i in range(200)]})
     assert Schema.from_data({'t': frame})['t']['note'].stype == 'text'
+
+
+def test_a_contradictory_column_is_refused_before_anything_is_sent():
+    """The pair was checked from one side only.
+
+    Assigning a meaning the values cannot carry was refused, but reaching the
+    same pair by assigning the storage instead was not, and nothing asked
+    again before the request was built -- so a column could say it holds
+    timestamps and means a quantity, and be sent.
+
+    Checked when the caller has finished rather than as they assign, because
+    re-declaring storage takes two assignments and either order passes
+    through a pair that does not hold.
+    """
+    schema = Schema.from_data(
+        {'users': pd.DataFrame({'user_id': [1, 2], 'age': [20.0, 30.0]})},
+        relationships=[],
+    )
+    schema['users'].primary_key = 'user_id'
+    schema['users']['age'].dtype = 'timestamp[us]'
+
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema
+        ).materialize(indices=[1])
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_re_declaring_storage_and_meaning_together_is_allowed():
+    """Either assignment order passes through a pair that does not hold, so
+    neither may be refused as it happens."""
+    schema = Schema.from_data(
+        {'orders': pd.DataFrame({'order_id': [1, 2], 'ship_via': [1, 2]})},
+        relationships=[],
+    )
+    column = schema['orders']['ship_via']
+
+    column.dtype = 'string'
+    column.stype = 'categorical'
+
+    column.check_consistent()
+    assert (column.dtype, column.stype) == ('string', 'categorical')
