@@ -331,3 +331,35 @@ def test_a_parquet_decimal_is_still_a_decimal(tmp_path):
 
     assert isinstance(value, Decimal)
     assert str(value) == '1.234567890123456789'
+
+
+def test_a_driver_without_arrow_still_reads_integers_exactly():
+    """The last fallback in the fetch ladder built the frame from rows.
+
+    `pd.DataFrame(rows)` promotes an integer column holding a null to float64
+    as it builds, which is the same loss the Arrow path above it exists to
+    avoid, so a driver offering neither Arrow nor a pandas fetch lost the
+    value before anything could check it.
+    """
+    big = 9007199254740993
+
+    class Cursor:
+        description = [('id',), ('v',)]
+
+        def execute(self, sql):
+            pass
+
+        def fetchall(self):
+            return [(big, 1.5), (None, 2.5)]
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    frame = read_table(Connection(), query='select 1')
+
+    assert str(frame['id'].iloc[0]) == str(big)
+    assert list(frame.columns) == ['id', 'v']

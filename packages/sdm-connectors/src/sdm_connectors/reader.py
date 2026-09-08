@@ -200,7 +200,19 @@ def read_table(
                 return cursor.fetchdf()
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
-            return pd.DataFrame(rows, columns=columns)
+            # Built a column at a time. Handing `pd.DataFrame` the rows lets it
+            # promote an integer column holding a null to float64 as it builds,
+            # which rounds every value past 2**53 before the frame exists --
+            # the same loss the Arrow path above is taken to avoid.
+            return pd.DataFrame(
+                _integer_columns_exactly(
+                    {
+                        name: [row[position] for row in rows]
+                        for position, name in enumerate(columns)
+                    }
+                ),
+                columns=columns,
+            )
         finally:
             if owned:
                 with suppress(Exception):
