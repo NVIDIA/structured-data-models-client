@@ -192,6 +192,23 @@ def test_a_contradictory_column_is_refused_before_anything_is_sent():
     schema['users']['age'].dtype = 'timestamp[us]'
 
     with pytest.raises(StructuredDataError) as error:
+        schema.check_consistent()
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_the_relational_path_asks_before_building_a_request():
+    """The check has to run as the schema becomes a request, not only when a
+    caller thinks to call it."""
+    pytest.importorskip('sdm_relational_engine')
+
+    schema = Schema.from_data(
+        {'users': pd.DataFrame({'user_id': [1, 2], 'age': [20.0, 30.0]})},
+        relationships=[],
+    )
+    schema['users'].primary_key = 'user_id'
+    schema['users']['age'].dtype = 'timestamp[us]'
+
+    with pytest.raises(StructuredDataError) as error:
         PredictiveQuery(
             'PREDICT users.age FOR EACH users.user_id', schema
         ).materialize(indices=[1])
