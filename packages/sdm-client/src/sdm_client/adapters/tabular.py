@@ -135,6 +135,12 @@ class TabularAdapter:
     def _envelope(
         self, request: Request, outputs: tuple[str, ...]
     ) -> dict[str, Any]:
+        # The same question the relational path asks, at the same moment: a
+        # column re-declared one assignment at a time can be left saying it
+        # holds one thing and means another, and neither assignment is the
+        # place to refuse it.
+        request.schema.check_consistent()
+
         table = request.schema[request.entity_table]
         context = request.context.instance_table
         predict = request.predict.instance_table

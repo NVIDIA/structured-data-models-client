@@ -392,6 +392,17 @@ class Schema:
     sent.
     """
 
+    def check_consistent(self) -> None:
+        r"""Refuse any column whose storage and meaning contradict.
+
+        Asked once, as the schema becomes a request, because a caller
+        re-declaring a column sets its storage and its meaning one at a time
+        and either order passes through a pair that does not hold.
+        """
+        for table in self.tables.values():
+            for column in table.columns.values():
+                column.check_consistent()
+
     def __init__(
         self,
         tables: Mapping[str, Table],

@@ -212,3 +212,52 @@ def test_re_declaring_storage_and_meaning_together_is_allowed():
 
     column.check_consistent()
     assert (column.dtype, column.stype) == ('string', 'categorical')
+
+
+def test_the_tabular_path_refuses_a_contradictory_column_too():
+    """Both request paths start from a schema and both must ask the same
+    question; putting the check on the relational one alone left this open."""
+    from sdm_client import Request
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    context = pd.DataFrame({'x': [1, 2, 3], 'y': [0, 1, 0]})
+    predict = pd.DataFrame({'x': [4]})
+    schema = Schema.from_data({'instance': context}, relationships=[])
+    schema['instance']['x'].dtype = 'string'
+
+    request = Request(
+        context=context,
+        predict=predict,
+        target='y',
+        task='classification',
+        schema=schema,
+    )
+
+    with pytest.raises(StructuredDataError) as error:
+        next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_the_tabular_path_accepts_a_column_re_declared_in_full():
+    from sdm_client import Request
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    context = pd.DataFrame({'x': [1, 2, 3], 'y': [0, 1, 0]})
+    predict = pd.DataFrame({'x': [4]})
+    schema = Schema.from_data({'instance': context}, relationships=[])
+    schema['instance']['x'].dtype = 'string'
+    schema['instance']['x'].stype = 'categorical'
+
+    request = Request(
+        context=context,
+        predict=predict,
+        target='y',
+        task='classification',
+        schema=schema,
+    )
+    body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+
+    assert body['schema']['instance_table']['columns']['x'] == {
+        'dtype': 'string',
+        'stype': 'categorical',
+    }
