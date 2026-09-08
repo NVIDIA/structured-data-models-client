@@ -342,12 +342,53 @@ def test_postgres_accepts_every_parameter_the_loaded_libpq_reports():
     assert reported <= postgres._CONNECT_ARGS
 
 
-def test_postgres_still_names_the_parameters_if_libpq_cannot_be_asked():
-    """An unusual build that cannot answer must refuse a little, not
-    everything."""
+def test_the_fallback_names_the_parameters_the_query_would_have_found():
+    """An unusual build that cannot answer must refuse what a recent libpq
+    would not have known either, not the arguments this change was made for.
+
+    The first version of this fallback left out `sslcertmode` and
+    `requirepeer`, which are the two the comment above it cites as the reason
+    the hand-written list was not good enough.
+    """
     postgres = pytest.importorskip('sdm_connectors.backends.postgres')
 
-    assert {'host', 'dbname', 'user', 'sslmode'} <= (postgres._KNOWN_LIBPQ_ARGS)
+    assert {
+        'host',
+        'dbname',
+        'user',
+        'sslmode',
+        'sslcertmode',
+        'requirepeer',
+        'load_balance_hosts',
+        'sslnegotiation',
+    } <= postgres._KNOWN_LIBPQ_ARGS
+
+
+def test_the_fallback_alone_accepts_what_the_loaded_libpq_reports():
+    """Whatever the running libpq accepts must not depend on the query
+    succeeding, for any parameter that existed when this was written.
+    """
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+    pq = pytest.importorskip('psycopg.pq')
+
+    reported = {
+        option.keyword.decode() for option in pq.Conninfo.get_defaults()
+    }
+
+    assert reported <= postgres._KNOWN_LIBPQ_ARGS
+
+
+def test_the_accepted_set_falls_back_when_libpq_cannot_be_asked(monkeypatch):
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+
+    def _explode():
+        raise RuntimeError('no libpq here')
+
+    monkeypatch.setattr(
+        'psycopg.pq.Conninfo.get_defaults', staticmethod(_explode)
+    )
+
+    assert postgres._libpq_args() == postgres._KNOWN_LIBPQ_ARGS
 
 
 def test_postgres_reads_the_standard_environment_variables(monkeypatch):

@@ -40,10 +40,13 @@ _DRIVER_ARGS = frozenset(
 
 # libpq's parameters, taken from the libpq that is actually loaded rather than
 # written out. A hand-kept list silently refuses whatever it has not caught up
-# with, and the ones it was missing were not obscure: `sslcertmode` and
-# `requirepeer` are how a caller tightens how the connection authenticates.
-# Falls back to the names libpq has had for years if the query is unavailable,
-# so an unusual build refuses a little rather than everything.
+# with, and what it was missing was not obscure: `sslcertmode` and
+# `requirepeer` are how a caller tightens how the connection authenticates, so
+# refusing them pushes someone toward a weaker setting.
+#
+# The names below are what libpq 180006 reports, kept only as the answer
+# when the query is unavailable, so an unusual build refuses what a recent
+# libpq would not have known either rather than refusing nearly everything.
 _KNOWN_LIBPQ_ARGS = frozenset(
     {
         'application_name',
@@ -52,26 +55,44 @@ _KNOWN_LIBPQ_ARGS = frozenset(
         'connect_timeout',
         'dbname',
         'fallback_application_name',
+        'gssdelegation',
         'gssencmode',
+        'gsslib',
         'host',
         'hostaddr',
         'keepalives',
         'keepalives_count',
         'keepalives_idle',
         'keepalives_interval',
+        'krbsrvname',
+        'load_balance_hosts',
+        'max_protocol_version',
+        'min_protocol_version',
+        'oauth_client_id',
+        'oauth_client_secret',
+        'oauth_issuer',
+        'oauth_scope',
         'options',
         'passfile',
         'password',
         'port',
         'replication',
         'require_auth',
+        'requirepeer',
+        'scram_client_key',
+        'scram_server_key',
         'service',
-        'servicefile',
+        'ssl_max_protocol_version',
+        'ssl_min_protocol_version',
         'sslcert',
+        'sslcertmode',
+        'sslcompression',
         'sslcrl',
         'sslcrldir',
         'sslkey',
+        'sslkeylogfile',
         'sslmode',
+        'sslnegotiation',
         'sslpassword',
         'sslrootcert',
         'sslsni',
