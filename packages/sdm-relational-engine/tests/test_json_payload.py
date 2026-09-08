@@ -1186,3 +1186,52 @@ def test_a_decimal_column_is_named_by_everything_it_holds(values, expected):
         _decimal_dtype_name(pd.Series(list(reversed(values)), dtype=object))
         == expected
     )
+
+
+def test_a_string_decimal_column_keeps_every_value_exact() -> None:
+    """A decimal column is declared `string` when one of its values is too
+    wide for int64, and the point of that is that all of them travel exactly.
+
+    Normalising before the string branch defeated it: a fractional decimal was
+    rounded through float and then stringified, so a column declared string to
+    stay exact lost digits without saying so.
+    """
+    from sdm_relational_engine.rfm.payload import (
+        _cell_json_value,
+        _decimal_dtype_name,
+    )
+
+    column = pd.Series(
+        [
+            Decimal('9223372036854775809.00'),
+            Decimal('1.234567890123456789'),
+            Decimal('-0.000000000000000001'),
+            None,
+        ],
+        dtype=object,
+    )
+    dtype = _decimal_dtype_name(column)
+    assert dtype == 'string'
+
+    sent = [_cell_json_value(value, dtype) for value in column]
+
+    assert sent == [
+        '9223372036854775809.00',
+        '1.234567890123456789',
+        '-0.000000000000000001',
+        None,
+    ]
+
+
+def test_a_narrow_decimal_column_is_unaffected() -> None:
+    """Only a column wide enough to need `string` takes the exact-text path."""
+    from sdm_relational_engine.rfm.payload import (
+        _cell_json_value,
+        _decimal_dtype_name,
+    )
+
+    column = pd.Series([Decimal('1.5'), Decimal('2.25')], dtype=object)
+    dtype = _decimal_dtype_name(column)
+
+    assert dtype == 'float64'
+    assert [_cell_json_value(v, dtype) for v in column] == [1.5, 2.25]

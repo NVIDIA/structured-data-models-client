@@ -1240,6 +1240,14 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
     another. ``int64`` values outside the JavaScript safe-integer range travel
     as base-10 strings, which is how the contract preserves their precision.
     """
+    # A decimal column is declared `string` when any of its values is too wide
+    # for int64, and the point of that declaration is that every value in it
+    # travels exactly. Normalising first defeats it: `_json_value` rounds a
+    # fractional Decimal through float, and the string branch below then
+    # stringifies the rounded float, so a column declared string to stay exact
+    # quietly loses digits.
+    if dtype == 'string' and isinstance(value, Decimal) and value.is_finite():
+        return format(value, 'f')
     # Measured before normalisation. `_json_value` turns a whole Decimal too
     # wide for int64 into a string, and a string carries no exactness the
     # float branch below can check, so the loss happened silently.
