@@ -19,6 +19,9 @@ from sdm_connectors import ConnectorError, read
 
 AREA = 's3'
 SCRATCH = pathlib.Path.home() / 'sdm-qa' / 'scratch'
+# Made here rather than assumed: this probe is meant to run on its own, and
+# every other file that writes under it makes it the same way.
+SCRATCH.mkdir(parents=True, exist_ok=True)
 BUCKET = pathlib.Path('/tmp/qa_bucket').read_text().strip()
 PREFIX = f's3://{BUCKET}/qa'
 
@@ -70,6 +73,9 @@ def run_s3(client):
         AREA, 'a parquet prefix on s3', 'many objects read as one frame'
     ) as e:
         directory = SCRATCH / 'adult_parts'
+        directory.mkdir(exist_ok=True)
+        for i, part in enumerate([adult.head(200), adult.tail(200)]):
+            part.to_parquet(directory / f'part-{i}.parquet', index=False)
         for name in os.listdir(directory):
             fs.put(str(directory / name), f'{BUCKET}/qa/parts/{name}')
         frame = read('s3', path=f'{PREFIX}/parts')
