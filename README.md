@@ -83,7 +83,7 @@ The relational engine is a native build and is installed and tested on its
 own, from its own directory:
 
 ```bash
-.venv/bin/pip install -e './packages/sdm-relational-engine'
+.venv/bin/pip install -e './packages/sdm-relational-engine[test]'
 cd packages/sdm-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 

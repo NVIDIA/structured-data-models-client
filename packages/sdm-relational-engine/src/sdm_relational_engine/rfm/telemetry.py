@@ -186,8 +186,15 @@ def describe_error(error: BaseException) -> str:
 def recorded(record: PredictionRecord) -> Iterator[PredictionRecord]:
     r"""Time a prediction and emit its record however it ends.
 
-    A run that raised is the one most worth having a record of, so the record is
-    written on the way out rather than on success.
+    A run that raised is the one most worth having a record of, so the record
+    is written on the way out rather than on success.
+
+    What it covers is the prediction, not the arguments to it. The record
+    names the run mode, the batch size and the hop count, and those are not
+    known until the options are resolved, so a call rejected while resolving
+    them raises before there is a record to write. That failure reaches the
+    caller immediately with its own message; this exists for the run that
+    finished and has to be explained later.
     """
     started = time.perf_counter()
     try:

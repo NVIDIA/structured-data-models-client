@@ -78,7 +78,10 @@ def _config_of(deployment: Deployment) -> tuple[Any, ...]:
         deployment.verify_ssl,
         deployment.timeout,
         deployment.max_retries,
-        deployment.client_factory is not None,
+        # The factory itself, not merely whether there is one. Keyed on
+        # presence, replacing one factory with another left the cache holding
+        # a client the old one built, and the new factory was never called.
+        id(deployment.client_factory),
         deployment.serving_kind,
         deployment.serving_endpoint,
         id(deployment.serving_platform_client),

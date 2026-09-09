@@ -417,6 +417,20 @@ def test_an_option_this_libpq_does_not_know_is_refused_here(monkeypatch):
     assert 'sslcertmode' not in postgres._libpq_args()
     assert 'host' in postgres._libpq_args()
 
+    # The set `connect` guards against is built once at import, so patching
+    # the query alone proves only what discovery returns. Rebuilding it is
+    # what puts the older libpq behind the call site.
+    monkeypatch.setattr(
+        postgres,
+        '_CONNECT_ARGS',
+        postgres._DRIVER_ARGS | postgres._libpq_args(),
+    )
+
+    with pytest.raises(ConnectorError) as error:
+        postgres.connect(host='db.example', sslcertmode='disable')
+    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
+    assert 'sslcertmode' in str(error.value)
+
 
 def test_the_accepted_set_falls_back_when_libpq_cannot_be_asked(monkeypatch):
     postgres = pytest.importorskip('sdm_connectors.backends.postgres')

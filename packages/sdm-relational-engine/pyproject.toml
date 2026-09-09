@@ -10,9 +10,12 @@ description="Relational driver (graph building, samplers, PQL, native neighbor-s
 readme="README.md"
 # This package ships binary wheels only (no sdist), so a version with no wheel
 # must fail resolution rather than fail to find a distribution. The bound and
-# the classifiers below name the same interpreters and move together. No job
-# in this repository builds those wheels yet; the bound states what the
-# extension supports, not what has been published.
+# the classifiers below name the same interpreters and move together.
+#
+# CI builds one wheel, for the interpreter the job runs on, to prove the five
+# distributions build and install together. Nothing builds the matrix these
+# classifiers name, and nothing publishes any of them, so the bound states
+# what the extension supports rather than what has been released.
 requires-python=">=3.10,<3.14"
 keywords=[
     "deep-learning",
@@ -53,7 +56,9 @@ snowflake-serving=[
 test=[
     "packaging",
     "pytest",
+    "pytest-httpserver",
     "pytest-mock",
+    "pytest-subtests",
     "requests-mock",
 ]
 explain=[
