@@ -24,9 +24,9 @@ suffix is rejected with `INVALID_CONNECTOR_ARGS` rather than parsed as CSV; pass
 recognised suffix.
 
 The two file-backed backends, `sqlite` and `duckdb`, accept `database=` and
-`uri=` as aliases for the same argument (supplying both is an error). The two
-warehouse backends, `snowflake` and `databricks`, are addressed by connection
-keywords instead, and reject any their driver does not declare,
+`uri=` as aliases for the same argument (supplying both is an error). The
+server backends, `postgres`, `snowflake` and `databricks`, are addressed by
+connection keywords instead, and reject any their driver does not declare,
 `driver_options={...}` passes anything else straight through. The
 `snowflake` backend reuses an active Snowpark session when no authentication
 arguments are given; a borrowed session cannot be reconfigured, so passing

@@ -538,3 +538,20 @@ def test_a_latin_1_user_agent_entry_is_kept():
 
     assert agent.endswith('café/1.0')
     agent.encode('latin-1')
+
+
+def test_every_sql_backend_is_named_in_read_s_own_documentation():
+    """`read` lists the sources it takes in its docstring, and that list is
+    what a caller reads before trying one.
+
+    Postgres was accepted by the code and missing from the list, which is the
+    same half-done change as the two backend lists that used to disagree.
+    """
+    from sdm_connectors.backends import _SQL_BACKENDS
+
+    documented = read.__doc__ or ''
+
+    missing = [
+        backend for backend in _SQL_BACKENDS if f"'{backend}'" not in documented
+    ]
+    assert not missing, f'accepted but undocumented: {missing}'

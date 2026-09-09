@@ -35,11 +35,7 @@ count; then its primary key, time column and end time column.
 from __future__ import annotations
 
 import hashlib
-from typing import TYPE_CHECKING, Any, Protocol
-
-if TYPE_CHECKING:
-    from sdm_relational_engine.rfm.base.graph import Graph
-
+from typing import Any, Protocol
 
 # The encoding below, bumped only when THAT changes. Versioning on the package
 # version instead would throw away every downstream cache on a release that had
@@ -68,6 +64,20 @@ class _Table(Protocol):
     primary_key_columns: Any
     time_column: Any
     end_time_column: Any
+
+
+class _Graph(Protocol):
+    r"""What this reads off a graph.
+
+    A protocol rather than the concrete class, for the reason the two above
+    are: a rename fails a type check here instead of going quiet. It also
+    keeps the annotation resolvable at runtime, which an import guarded by
+    ``TYPE_CHECKING`` is not.
+    """
+
+    tables: Any
+    edges: Any
+    inferred_edges: Any
 
 
 def _term(value: object) -> str:
@@ -126,7 +136,7 @@ def _table_terms(table: _Table) -> list[str]:
     return terms
 
 
-def graph_fingerprint(graph: Graph) -> str:
+def graph_fingerprint(graph: _Graph) -> str:
     r"""A hex name for *graph*, equal across processes for equal shapes.
 
     Tables are visited in sorted order so that two graphs built from the same
