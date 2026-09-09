@@ -13,6 +13,8 @@ place by saying which column is the target and what kind of question it is.
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pandas as pd
 import pytest
 from predictive_query import RELATIONAL, TABULAR
@@ -36,7 +38,7 @@ def new_rows() -> pd.DataFrame:
 
 
 def query(text: str = 'PREDICT users.churn FOR EACH users.user_id'):
-    return PredictiveQuery(text, {'users': users()}, profile=TABULAR)
+    return PredictiveQuery(text, {'users': users()})
 
 
 def test_a_query_can_score_rows_the_tables_never_contained():
@@ -113,19 +115,43 @@ def test_a_query_the_tabular_profile_rejects_is_refused_by_the_language():
                     }
                 ),
             },
-            profile=TABULAR,
         ).materialize(predict=new_rows())
     assert str(error.value)
 
 
-def test_the_same_query_resolves_under_the_relational_profile_too():
-    """A profile narrows; it never widens. The static form suits both."""
-    request = PredictiveQuery(
-        'PREDICT users.churn FOR EACH users.user_id',
-        {'users': users()},
-        profile=RELATIONAL,
-    ).materialize(predict=new_rows())
-    assert request.task.target.column_name == 'churn'
+@pytest.mark.parametrize(
+    ('argument', 'expected_profile', 'expected_materializer'),
+    [
+        ('predict', TABULAR, 'tabular'),
+        ('indices', RELATIONAL, 'relational'),
+    ],
+)
+def test_materialize_selects_the_profile_from_the_call_shape(
+    monkeypatch, argument, expected_profile, expected_materializer
+):
+    predictive_query = query()
+    request = object()
+    resolve = Mock(return_value=object())
+    tabular = Mock(return_value=request)
+    relational = Mock(return_value=request)
+    monkeypatch.setattr(predictive_query, '_resolve', resolve)
+    monkeypatch.setattr(
+        predictive_query._tabular_materializer, 'table', tabular
+    )
+    monkeypatch.setattr(
+        predictive_query._relational_materializer, 'materialize', relational
+    )
+
+    arguments = (
+        {'predict': new_rows()} if argument == 'predict' else {'indices': [1]}
+    )
+    assert predictive_query.materialize(**arguments) is request
+    resolve.assert_called_once_with(expected_profile)
+
+    selected = tabular if expected_materializer == 'tabular' else relational
+    skipped = relational if expected_materializer == 'tabular' else tabular
+    selected.assert_called_once()
+    skipped.assert_not_called()
 
 
 def test_a_query_predicting_a_column_that_is_not_there_is_refused():
@@ -133,7 +159,6 @@ def test_a_query_predicting_a_column_that_is_not_there_is_refused():
         PredictiveQuery(
             'PREDICT users.nope FOR EACH users.user_id',
             {'users': users()},
-            profile=TABULAR,
         ).materialize(predict=new_rows())
 
 
@@ -149,7 +174,7 @@ def test_a_schema_translates_into_the_language_once():
     assert {'user_id', 'age', 'churn'} <= names
 
 
-@pytest.mark.parametrize('bad', [0, -1, 5.5, '5', True, 10_001])
+@pytest.mark.parametrize('bad', [0, -1, 5.5, '5', True])
 def test_a_bad_context_count_is_refused_on_this_path_too(bad):
     """Validation runs before the branch, so it cannot be routed around.
 
@@ -160,29 +185,42 @@ def test_a_bad_context_count_is_refused_on_this_path_too(bad):
         query().materialize(predict=new_rows(), num_context_samples=bad)
 
 
-def test_a_valid_context_count_is_refused_because_it_narrows_nothing():
-    """Supplying the rows means the context is the table, in full.
-
-    Accepting the argument here and ignoring it would be the quieter failure:
-    a caller would believe they had limited the context and be wrong.
-    """
+@pytest.mark.parametrize('count', [500, 10_001])
+def test_predict_does_not_accept_a_context_count(count):
     with pytest.raises(StructuredDataError) as error:
-        query().materialize(predict=new_rows(), num_context_samples=500)
-    assert 'nothing to narrow' in str(error.value)
+        query().materialize(
+            predict=new_rows(),
+            num_context_samples=count,
+        )
+
+    message = str(error.value)
+    assert 'cannot be used with predict=<frame>' in message
+    assert 'schema table is used as context in full' in message
 
 
-def test_a_sampler_option_is_refused_because_nothing_is_sampled():
+def test_predict_does_not_accept_relational_sampling_options():
     with pytest.raises(StructuredDataError) as error:
-        query().materialize(predict=new_rows(), num_neighbors=[8, 8])
-    assert 'nothing to sample' in str(error.value)
+        query().materialize(
+            predict=new_rows(),
+            num_neighbors=[8, 8],
+        )
+
+    message = str(error.value)
+    assert 'predict=<frame> does not accept options' in message
+    assert 'num_neighbors' in message
 
 
 def test_the_ordinary_call_still_works():
     assert query().materialize(predict=new_rows()).predict_rows == 2
 
 
-def test_an_option_that_is_not_even_a_sampler_option_is_refused_too():
-    """The message must not call a misspelling a sampler option."""
+def test_predict_does_not_accept_unknown_options():
     with pytest.raises(StructuredDataError) as error:
-        query().materialize(predict=new_rows(), num_neighbours=[8, 8])
-    assert 'nothing to sample' in str(error.value)
+        query().materialize(
+            predict=new_rows(),
+            num_neighbours=[8, 8],
+        )
+
+    message = str(error.value)
+    assert 'predict=<frame> does not accept options' in message
+    assert 'num_neighbours' in message
