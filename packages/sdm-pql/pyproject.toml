@@ -4,14 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdm-pql"
-version = "0.1.0"
+version = "1.0.0"
 description = "Predictive Query Language for the NVIDIA Structured Data Models client: grammar, parser, validator, AST and model profiles"
 readme = "README.md"
 license = "Apache-2.0"
-# SOURCE.md and VENDOR_MANIFEST.json travel with the wheel on purpose: this
-# distribution is a verbatim copy of someone else's tree, so its provenance
-# is attribution, not just a repo-local note.
-license-files = ["LICENSE", "NOTICE", "SOURCE.md", "VENDOR_MANIFEST.json"]
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 authors = [{ name = "NVIDIA" }]
 keywords = ["predictive-query", "pql", "structured-data", "relational", "dsl"]
@@ -27,8 +24,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-# Upstream's dependency set, carried across unchanged. This package parses and
-# validates text; it loads no model, reads no warehouse and opens no socket.
+# This package parses and validates text; it loads no model, reads no
+# warehouse and opens no socket.
 dependencies = [
     # 4.9.3 exactly: the checked-in parser is ANTLR 4.9.3 output, and a
     # serialized ATN is only readable by the runtime that emitted it.
@@ -37,6 +34,11 @@ dependencies = [
     "pandas",
     "pydantic",
 ]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/structured-data-models-client"
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 
 [project.optional-dependencies]
 test = ["pytest"]
@@ -51,9 +53,8 @@ include = ["predictive_query*"]
 
 [tool.ruff]
 extend = "../../pyproject.toml"
-# The vendored tree is upstream's bytes. Linting it here would invite a fix
-# that silently forks it; see SOURCE.md.
-extend-exclude = ["src/predictive_query"]
+# ANTLR's output, regenerated from the grammar rather than edited.
+extend-exclude = ["src/predictive_query/grammar"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

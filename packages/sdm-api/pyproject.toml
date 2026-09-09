@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdm-api"
-version = "0.1.0"
+version = "1.0.0"
 description = "Universal TFM API wire types for the NVIDIA Structured Data Models client"
 readme = "README.md"
 license = "Apache-2.0"
@@ -27,6 +27,11 @@ classifiers = [
 # a NIM, a test harness, a future model engine -- picks this up without
 # dragging in a parser runtime.
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/structured-data-models-client"
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 
 [project.optional-dependencies]
 test = ["pytest", "pyyaml"]

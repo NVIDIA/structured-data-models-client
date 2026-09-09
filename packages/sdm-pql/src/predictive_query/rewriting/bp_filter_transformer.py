@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from copy import deepcopy
 from dataclasses import dataclass, field
 
@@ -567,10 +571,6 @@ class BPFilterTransformer(FilterSplitter):
         `bp_applicable_filter` and the entire original filter as
         `bp_non_applicable_filter`. This can be interpreted as "no filter
         should be applied at BP time".
-        More technical details at https://www.notion.so/Applying-link-
-        prediction-target-filters-during-BP-15abe4af1ae84bd08d5285ec3ce5cdb0
-        and https://docs.google.com/document/d/11RvkNEC856UhvMZWpm-FhFrUUlj-
-        kglj-8buWCkH3lM/edit#heading=h.emwy56xpvhw4.
 
         Args:
             node (ASTNode): Target filter to be transformed.

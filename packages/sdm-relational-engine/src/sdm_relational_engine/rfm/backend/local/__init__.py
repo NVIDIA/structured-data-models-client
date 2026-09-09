@@ -28,7 +28,7 @@ platform alone. The extension also builds from a source checkout on macOS
 * Linux (arm64), macOS (x86_64), Windows (arm64)
 * glibc versions: <2.28
 
-Please create a feature request at 'https://github.com/NVIDIA/sdm-client'."""
+Please create a feature request at 'https://github.com/NVIDIA/structured-data-models-client'."""
 
     raise RuntimeError(_msg) from e
 

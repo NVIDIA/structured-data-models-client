@@ -10,9 +10,9 @@ a spelling device only: once parsed, the AST holds the name the data itself
 uses, so nothing downstream needs to know a name was ever quoted.
 :func:`fqn` puts the quotes back when a query is rendered.
 
-This module sits outside ``sdm_relational_engine/pql`` and ``sdm_relational_engine/api`` so that the
-spelling rules have one home that both of those trees import from, rather than
-a copy in each. See ``pql/SOURCE.md`` for how the quoting reaches the parser.
+This module sits outside ``sdm_relational_engine/api`` so that the spelling
+rules have one home that every tree needing them imports from, rather than a
+copy in each. The parser itself lives in ``sdm-pql``.
 """
 
 from __future__ import annotations

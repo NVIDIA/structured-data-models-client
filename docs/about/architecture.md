@@ -24,14 +24,14 @@ Verified on `structured-data-api@main`, current as of today.
 **This does not affect anything shipping.** `kumo-tabular` and `kumo-relational` are both in the
 enum, so both work today and neither needs a contract change. What the enum forecloses is the
 source doc's `model="some-future-model"` escape hatch, which is deferred along with the models it
-would have served (§12). An unrecognised id is refused client-side with a message naming the
+would have served (§11). An unrecognised id is refused client-side with a message naming the
 contract change it would need, rather than being sent and rejected.
 
 If a third model is ever wanted, a small MR on `structured-data-api` opens the field. Until then
 this is a note, not a task.
 
 > **Model ids are fine.** An earlier draft claimed the NIMs still served `nemotron-*`. That was a
-> stale local checkout. On `origin/main`, `tfm-serving` declares
+> stale local checkout. The serving side declares
 > `ModelId = Literal["kumo-tabular", "kumo-relational"]`, and the tabular NIM's adapter registration,
 > `/v1/models` entry and `model_manifest.yaml` all say `kumo-tabular`. All three places agree.
 > **Re-clone before copying anything (§8).**
@@ -125,20 +125,22 @@ pip install sdm-client[all]            # relational + every backend
 `[explain]` and `[relbench]` stay outside `[all]` and must be asked for by name — `[explain]` posts
 row data to a third-party LLM, so installing it is a deliberate act.
 
-### Why `sdm-pql` is separate, and why its import name is `predictive_query`
+### Why `sdm-pql` is separate
 
-`kumo-tfm-nims/predictive-query-language` already exists. It is pure Python, Apache-2.0, and already
-ships the parser, the AST, the validators, **and** the schema types (`Dtype`, `Stype`,
-`GraphDefinition`, `TableDefinition`). It has no publish job yet, so we vendor it.
+The language is a distribution of its own because two packages need it and neither needs the
+other. `sdm-client` resolves a query against a schema; `sdm-relational-engine` reads the AST it
+produces. Putting the parser in either one would make the other depend on a driver or a client it
+has no use for.
 
-We vendor it **verbatim, under its own import name**. When it publishes, the swap is one line in
-`sdm-client`'s dependencies — delete the vendored package, depend on the real one. Nothing else moves.
+It carries the parser, the AST, the validators, **and** the schema types (`Dtype`, `Stype`,
+`GraphDefinition`, `TableDefinition`), so those types have exactly one owner and nothing has to
+translate between two spellings of the same enum.
 
-> Copying the *old* engine's `pql/` instead would manufacture a fork we would later have to reconcile.
-> We checked: its `Dtype`, `Stype` and `ProblemType` are **identical** to the engine's, so nothing is lost.
-
-One hazard to document: two distributions would provide `predictive_query`, so never install
-`sdm-pql` and `predictive-query-language` together. `sdm-client` depends on exactly one.
+The tree is first-party source of this repository, maintained here under Apache-2.0. It was
+briefly carried as a vendored copy of a separate internal repository; that repository is being
+retired, so there is no upstream to track, no manifest to re-record, and no dependency swap
+pending. It imports as `predictive_query`, which is a name inherited from that period rather than
+one this layout would choose today.
 
 ### Who owns which types
 
@@ -257,10 +259,10 @@ silently score a whole table.
 primary key, and a tabular frame has none. In phase 7 `Schema` synthesizes a request-local row id for
 a keyless table — a real column, positional, never sent as data and never surfacing in the result,
 which carries `row_index`. `FOR EACH users.<synthetic>` then validates unchanged, so the PQL validator
-is **not** relaxed and no query that is illegal today becomes legal. This is the concrete form of
-review comment #3.
+is **not** relaxed and no query that is illegal today becomes legal. This is the concrete form of what review
+asked for here.
 
-This is the answer to review comment #4. "Unseen" means a row that is not in the tables the schema was
+On the question review raised here: "unseen" means a row that is not in the tables the schema was
 built from. `FOR EACH` enumerates rows that *are* there, so PQL text alone can never produce them. The
 rows are an input, not a derivation — which is exactly why the direct builder carries tabular in v1.
 
@@ -311,8 +313,8 @@ requests may have no key at all. Join on the key when present, otherwise on `row
 ### What each model can produce
 
 The contract defines seven output fields. **This table is read from the servers**, not from the source
-doc — `tfm-serving/src/tfm_serving/adapters/tabular.py` and
-`structured-data-nims/…/rfm_nim/universal_adapter.py` each declare their own capabilities:
+doc — the tabular adapter and the relational NIM's universal adapter each declare their own
+capabilities, and this mirrors what they answer:
 
 | Output | `kumo-relational` | `kumo-tabular` |
 |---|---|---|
@@ -406,7 +408,7 @@ whether sessions are served, and the resource limits in §7. A profile cannot kn
 deployment* has a regressor checkpoint; that is a runtime fact and lives beside it, never duplicated
 into it.
 
-> **Cost, stated plainly.** `kumo-relational-client` deleted its registry on purpose. We are
+> **Cost, stated plainly.** The predecessor client deleted its registry on purpose. We are
 > re-opening it, and that buys back an adapter protocol to keep stable and conformance tests to
 > maintain. That is the price of serving more than one model, and it is the price the doc asks for.
 
@@ -467,53 +469,35 @@ One request is now impossible and says so clearly: an explanation with more than
 
 ## 8. What we copy
 
-`kumo-relational-client` 1.0.0 is post-QA, hardened, and live-tested. We copy it rather than rewrite it.
+Most of this client is not new. An earlier internal NVIDIA relational client, at 1.0.0, is post-QA,
+hardened and live-tested, and a separate internal client carried the tabular surface. We copy both
+rather than rewrite them.
 
-Sources, named exactly:
+What came from where, and what changed on the way:
 
-| From (repo · ref · path) | To | Change |
+| From | To | Change |
 |---|---|---|
-| `NVIDIA/kumo-relational-client` · `main` · `packages/kumo-connectors/` | `sdm-connectors` | names only |
-| ⟂ · `packages/kumo-relational-engine/src/kumo_relational_engine/rfm/` | `sdm-relational-engine` | `Graph`→`Schema`; PQL types from `predictive_query` |
-| ⟂ · `.../kumo_relational_engine/csrc/neighbor_sampler.cpp` | `sdm-relational-engine` | none |
-| ⟂ · `packages/kumo-relational-client/src/kumo_relational_client/adapters/relational.py` | `sdm_client/adapters/relational.py` | returns the unified `Request`/`PredictionResult` |
-| ⟂ · `.../kumo_relational_client/core/transport.py` | `sdm_client/core/transport.py` | none |
-| `kumo-tfm-nims/nvidia-sdfm-sdk` · `main` @ `befe915` · `packages/nemotron-predict-client/src/nemotron_predict/adapters/tabular.py` | `sdm_client/adapters/tabular.py` | model id `nemotron-tabular` → `kumo-tabular` |
-| ⟂ · `.../nemotron_predict/wire/{__init__,dtypes,tables}.py` | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
-| `kumo/predictive-query-language` · `main` · `src/predictive_query/` | `sdm-pql` | none — verbatim |
+| The predecessor client's connectors package | `sdm-connectors` | names only |
+| ⟂ its relational engine, `rfm/` | `sdm-relational-engine` | `Graph`→`Schema`; PQL types from `predictive_query` |
+| ⟂ its C++ neighbour sampler, `csrc/neighbor_sampler.cpp` | `sdm-relational-engine` | none |
+| ⟂ its relational adapter | `sdm_client/adapters/relational.py` | returns the unified `Request`/`PredictionResult` |
+| ⟂ its transport | `sdm_client/core/transport.py` | none |
+| The earlier tabular client's adapter | `sdm_client/adapters/tabular.py` | model id renamed to `kumo-tabular` |
+| ⟂ its wire types | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
+| A separate internal Predictive Query Language repository, now retired | `sdm-pql` | none; the tree is maintained here from this point on |
 
 Two hard-won behaviours to carry over deliberately: every redirect hop is closed rather than drained,
 and credentials in a URL are stripped everywhere the URL is rendered.
 
 ---
 
-## 9. Every review comment, resolved
-
-| # | Who | Comment | Resolution |
-|---|---|---|---|
-| 1 | Lei | PQL for TabICL is doable, offers to prototype | **Accepted, with the phase-7 rules named.** `sdm-pql` already ships a `TABULAR` profile; §4 now specifies the two things that were missing — the synthetic row id, and that tabular sends coarse `classification`. |
-| 2 | Lei | Needing a full graph definition is an implementation detail | **Accepted.** Everything is inferred; you never author a schema. §3 |
-| 3 | Lei | `FOR EACH` primary key can be relaxed, or synthesise a row id | **Accepted — synthesise, don't relax.** Direct tabular needs no key at all. Tabular PQL gets a synthetic request-local row id so the validator is untouched. Relational infers a key and folds composite ones. §3, §4 |
-| 4 | Lei | What does "unseen" mean for PQL? | **Answered, and it changed the API.** A row not in the tables the schema was built from. `FOR EACH` can only enumerate rows that are there, so the rows to score are an explicit argument, never derived. §4 |
-| 5 | Lei | "The model can't see your database" is a challengeable assumption | **Deferred, not dismissed.** The wire requires embedded `context` and `predict` today. `materialize()` stays one explicit, replaceable step so a push-down path substitutes there. Trigger: the contract gains source references. |
-| 6 | Manush | Drop primary keys, add composite keys | **Composite keys yes; dropping them, only where that is honestly possible.** Direct tabular needs no key; tabular PQL gets a synthetic one; **relational genuinely cannot drop keys** because samplers join on them — but they are inferred, so you never author one. §3, §4 |
-| 6 | Manush | Client needs `fit` and `predict` | **Accepted, v1.** Sessions are `fit`. §5 |
-| 6 | Manush | No run mode; expose in-context samples and neighbours | **Accepted.** §7 |
-| 6 | Manush | Be able to add explainers | **Accepted.** Explanation is an output field with named formats on `ModelSpec.runtime`. §5 |
-| 7 | Manush | Rename `Graph` → `DB_SCHEMA` | **Accepted as `Schema`** — `DB_SCHEMA` reads as a constant in Python. §3 |
-| 8 | Alex | Does the direct form support related tables? | **Accepted.** `Request(…, related_tables=…)`. §4 |
-| 9 | Alex | Fold schema construction into `PredictiveQuery` | **Accepted.** `PredictiveQuery(text, {"users": df})` works; `Schema` stays available for editing. §3 |
-| 10 | Alex | A single table as a "graph" confuses users | **Accepted.** The name is gone. §3 |
-
----
-
-## 10. Phases
+## 9. Phases
 
 Each phase is independently shippable and tested.
 
 | # | Phase | Ships | Done when |
 |---|---|---|---|
-| 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql` vendored, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
+| 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql`, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
 | 2 | **Client + tabular** | `SDMClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
 | 3 | **Connectors** | `sdm-connectors` | every backend reads a table |
 | 4 | **Relational** | `sdm-relational-engine`, relational adapter, PQL materialization | `PredictiveQuery(...).materialize(indices=…)` predicts against the relational NIM |
@@ -526,31 +510,33 @@ shipping models are already in its enum (§0).
 
 ---
 
-## 11. This gets open-sourced
+## 10. This gets open-sourced
 
-It ships internal first, but public release is the destination, not a maybe. `kumo-relational-client`
+It ships internal first, but public release is the destination, not a maybe. The predecessor client
 reached public by **retrofit** — a full audit plus an OSRB pass after the code existed. We are not
 repeating that. Every rule below is cheap on day one and expensive later.
 
-**Written OSS-clean from commit 1:**
+**Written OSS-clean from commit 1, and now carrying the rest:**
 
-| From commit 1 | Deferred, but a **release blocker** — not optional |
+| Held from commit 1 | Added for the release |
 |---|---|
-| SPDX header on every source file | `LICENSE` + `NOTICE` at the root **and in every distribution's metadata** |
-| `SOURCE.md` provenance for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md` |
-| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public CI, publishing provenance, public issue policy |
-| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | A generated **SBOM** covering direct, optional, transitive, build, native and connector dependencies |
+| SPDX header on every source file | `LICENSE` and `NOTICE` at the root, and in every distribution's metadata |
+| A provenance record for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md` |
+| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public issue policy, and the repository URL every package publishes to, checked by the hygiene script |
+| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | — |
 
-`LICENSE` and `NOTICE` are listed as deferred only because the repo starts internal. They **cannot
-ship publicly without them**, and a hand-maintained dependency table is not an SBOM. Treat both as
-gates on the release, not as nice-to-haves.
+Two things in the right-hand column are still open, and neither is a
+nice-to-have. Public CI and publishing provenance land when the repository
+does. A generated **SBOM** covering direct, optional, transitive, build, native
+and connector dependencies is not written yet, and a hand-maintained dependency
+table is not one; treat it as a gate on the release.
 
-License is **Apache-2.0** — it matches `kumo-relational-client` and `predictive-query-language`, so
-nothing we vendor needs relicensing.
+License is **Apache-2.0** — it matches the predecessor client, the source of most of what we
+copy, so nothing we carry across needs relicensing.
 
 ### Vendored code is the risk, and we already know how it breaks
 
-We vendor two trees verbatim and rename aggressively across the repo (`Graph`→`Schema`,
+We vendor one tree verbatim and rename aggressively across the repo (`Graph`→`Schema`,
 `kumo_*`→`sdm_*`). That exact combination has already caused a licensing defect in this family of
 repos: a repo-wide rename silently rewrote two identifiers **inside** the minified `mermaid.min.js`,
 turning a vendored artifact into a modified one while the LICENSE still described it as upstream's
@@ -559,29 +545,29 @@ OSRB had already validated.
 
 So, as a rule, not a suggestion:
 
-1. Every vendored tree has a **hash manifest** pinned beside it and asserted in CI — a per-file
-   SHA-256 list for `sdm-pql`, a single digest for a bundle like `mermaid.min.js`. This covers
-   `predictive_query` too: it is first-party NVIDIA code, but it is vendored *verbatim*, which makes
-   it just as vulnerable to rename drift.
+1. Every vendored tree has a **digest pinned beside it and asserted in CI** — for `mermaid.min.js`,
+   a single SHA-256 over the bundle.
 2. A test asserts the rename **did not inject target-repo identifiers** into a vendored tree — no
-   `sdm_`, `Schema`, or `sdm-client` strings appearing where upstream has none. Note this is not a
-   blanket ban on the word `kumo`: upstream `predictive_query` legitimately contains NVIDIA copyright
-   and historical `kumo` references, so the assertion is "unchanged from upstream", not "contains no
-   forbidden word".
+   `sdm_`, `Schema`, or `sdm-client` strings appearing where upstream has none. The assertion is
+   "unchanged from upstream", not "contains no forbidden word".
+
+> This rule applied to `predictive_query` while that tree was a verbatim copy of a separate
+> repository. That repository is being retired, so the tree is first-party source of this one now:
+> there is no upstream to diverge from, and a manifest pinned to a baseline nobody can fetch would
+> assert nothing. It is linted and header-checked like any other first-party tree instead. `mermaid`
+> is the only tree the rule still governs.
 3. The rename tool **excludes vendored paths and `assets/` by configuration, before it runs** — then
    the hash test verifies it afterwards. Exclusion prevents the churn; the hash only detects it.
 4. Bumping a vendored bundle means **re-enumerating its components from the new release's manifest** —
    a version bump silently moves sub-component versions too.
 
-`kumo-relational-client@main` already ships this test at
-`packages/kumo-relational-engine/tests/test_vendored_mermaid.py`; we copy it and generalise it to
-cover `sdm-pql` as well.
+The predecessor client already ships this test; we copy it.
 
 ### What ships that we did not write
 
 | Component | License | Where | Note |
 |---|---|---|---|
-| `predictive_query` (vendored) | Apache-2.0 | `sdm-pql` | First-party NVIDIA, vendored only until it publishes |
+| ANTLR-generated parser | Apache-2.0 | `sdm-pql` | Generated by ANTLR from `PQLGrammar.g4` in the same tree; the grammar and everything around it are first-party |
 | ANTLR Python runtime | BSD-3-Clause | `sdm-pql` dependency | Required by the PQL parser |
 | `mermaid.min.js` (vendored) | MIT, and a bundle — its components are enumerated in `LICENSE` | `sdm-relational-engine` assets | **Kept.** `visualize()` draws offline, and the notebook environments this client is used from — Snowflake and Databricks — block external scripts, so a CDN-fetched diagram would not draw at all. Upstream bytes, SHA-256 pinned, digest asserted by a test. `to_mermaid()` returns the source for anyone who would rather render it elsewhere. |
 | pandas, numpy, requests, pydantic | BSD / Apache-2.0 | dependencies | Resolved at install, not vendored |
@@ -592,22 +578,22 @@ a form-filling exercise rather than an audit.
 
 ---
 
-## 12. Deferred, on purpose
+## 11. Deferred, on purpose
 
 | Thing | Why | What would change it |
 |---|---|---|
 | Timeseries, anomaly, Tesseract models | Not asked for yet | A NIM serves one — profiles already exist, plus a contract MR (§6) |
-| Warehouse push-down (comment #5) | The wire requires embedded data | The contract gains source references |
-| Public OSS release | Internal first, written OSS-clean from commit 1 (§11) | A release decision; the retrofit is form-filling, not an audit |
+| Warehouse push-down | The wire requires embedded data | The contract gains source references |
+| Public OSS release | Internal first, written OSS-clean from commit 1 (§10) | A release decision; the retrofit is form-filling, not an audit |
 | Arrow IPC | The wire is JSON-arrays-only everywhere | The contract activates it |
 
 ---
 
-## 13. Open questions for the human
+## 12. Open questions for the human
 
 None outstanding. Two earlier ones are settled:
 
 - **The client is `SDMClient`.**
 - **The contract's closed `model` enum is not a task.** Both shipping models are in it. It only
   forecloses the escape hatch for a third, which is deferred along with the models it would serve
-  (§12). If one is ever wanted, a small `structured-data-api` MR opens the field.
+  (§11). If one is ever wanted, a small `structured-data-api` MR opens the field.

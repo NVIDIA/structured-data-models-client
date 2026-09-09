@@ -2707,9 +2707,9 @@ class Graph:
         r"""This graph as a Mermaid entity-relationship diagram.
 
         Returns the diagram *source*, which any Mermaid renderer will draw --
-        a notebook, a documentation site, or mermaid.live. Rendering it here
-        would mean bundling a JavaScript engine, and a 3 MB vendored bundle is
-        a licensing liability out of all proportion to drawing a picture.
+        a notebook, a documentation site, or mermaid.live. Use
+        :meth:`visualize` to draw it here instead; that path renders offline
+        from the bundled Mermaid, so it works where a CDN fetch would not.
 
         Args:
             show_columns: Whether to show every column, or only the primary

@@ -31,12 +31,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SPDX_LINE = 'SPDX-License-Identifier: Apache-2.0'
 
-# Only first-party Python. The vendored tree carries upstream's own headers and
-# must not be touched; generated files get their header from the generator.
+# Generated files get their header from the generator, so they are excluded
+# below rather than listed here.
 SPDX_ROOTS = (
     'scripts',
     'packages/sdm-api/src',
     'packages/sdm-api/tests',
+    'packages/sdm-pql/src',
     'packages/sdm-pql/tests',
     'packages/sdm-client/src',
     'packages/sdm-client/tests',
@@ -45,7 +46,7 @@ SPDX_ROOTS = (
     'packages/sdm-relational-engine/src',
     'packages/sdm-relational-engine/tests',
 )
-SPDX_EXCLUDE_PARTS = {'predictive_query', '__pycache__'}
+SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
 
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
@@ -55,25 +56,32 @@ INTERNAL_PATTERNS = (
     re.compile(r'\bnspect-\d', re.IGNORECASE),
     re.compile(r'\bcolossus\b', re.IGNORECASE),
     re.compile(r'\bTODO\([a-z]+\)', re.IGNORECASE),
+    # A private workspace document. The link is dead to every reader outside
+    # the company and the identifier in it is not ours to publish; two of
+    # these shipped in source that was internal until this release.
+    re.compile(r'\bnotion\.so\b', re.IGNORECASE),
+    re.compile(r'docs\.google\.com/document', re.IGNORECASE),
+    re.compile(r'\.atlassian\.net\b', re.IGNORECASE),
+    re.compile(r'\bconfluence\b', re.IGNORECASE),
+    # Sibling repositories that stay internal. The contract repository is not
+    # here: the generated bindings record it as their source, so its name
+    # ships either way.
+    re.compile(r'\btfm-serving\b', re.IGNORECASE),
+    re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has
 # to say where the bytes came from, and a contributor guide has to say where to
 # push. Neither is a leak; both are reviewed deliberately.
 INTERNAL_ALLOWLIST = {
-    'packages/sdm-pql/SOURCE.md',
-    'packages/sdm-pql/VENDOR_MANIFEST.json',
-    'packages/sdm-pql/README.md',
-    'packages/sdm-api/README.md',
+    # A provenance record has to name the repository the bytes came from.
     'packages/sdm-api/src/sdm_api/generated/PROVENANCE.json',
+    # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
-    'scripts/vendor_manifest.py',
     'scripts/generate_sdm_api.py',
-    'README.md',
-    'NOTICE',
-    'CHANGELOG.md',
+    # Runs on the internal instance, and has to keep naming it to work. It
+    # goes when the public repository has its own pipeline.
     '.gitlab-ci.yml',
-    'docs/about/architecture.md',
 }
 
 SHIPPED_SUFFIXES = {
@@ -86,7 +94,15 @@ SHIPPED_SUFFIXES = {
     '.yaml',
     '.yml',
     '.ipynb',
+    # The grammar itself is first-party source and is packaged, so it is read
+    # like any other. Its generated neighbours are excluded by path below.
+    '.g4',
 }
+
+# Shipped files that carry no suffix to recognise them by. Every distribution
+# packages these two, and a licence file is the last place an internal
+# reference should survive.
+SHIPPED_NAMES = {'LICENSE', 'NOTICE'}
 
 # Interfaces earlier generations of this client had. An example naming one sends
 # a reader to an API that does not exist, which is why this is scanned for
@@ -99,7 +115,6 @@ RETIRED_INTERFACES = (
     'PredictClient',
     'client.relational(',
     'client.tabular(',
-    'kumo_relational_client',
     'nemotron_predict',
 )
 
@@ -111,6 +126,9 @@ RETIRED_ALLOWLIST = {
     'CHANGELOG.md',
     'docs/about/architecture.md',
 }
+
+
+REPOSITORY_URL = re.compile(r'https://github\.com/NVIDIA/[A-Za-z0-9._-]+')
 
 
 def tracked_files() -> list[Path]:
@@ -161,9 +179,14 @@ def check_internal() -> int:
         relative = str(path.relative_to(REPO_ROOT))
         if relative in INTERNAL_ALLOWLIST:
             continue
-        if path.suffix not in SHIPPED_SUFFIXES:
+        if (
+            path.suffix not in SHIPPED_SUFFIXES
+            and path.name not in SHIPPED_NAMES
+        ):
             continue
-        if 'predictive_query' in Path(relative).parts:
+        # Generated parser output is machine-written and enormous; the
+        # grammar it is generated from is neither, and ships.
+        if 'grammar' in Path(relative).parts and path.suffix != '.g4':
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -195,7 +218,7 @@ def check_retired() -> int:
         relative = str(path.relative_to(REPO_ROOT))
         if relative in RETIRED_ALLOWLIST or path.suffix not in SHIPPED_SUFFIXES:
             continue
-        if 'predictive_query' in Path(relative).parts:
+        if 'grammar' in Path(relative).parts:
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for retired in RETIRED_INTERFACES:
@@ -217,9 +240,59 @@ def check_retired() -> int:
     return 0
 
 
+def check_repository_url() -> int:
+    """Every repository URL in a shipped file must be the one being published.
+
+    A message that invites a bug report is only useful if the address exists.
+    This repository has been renamed once already, and the rename reached the
+    package metadata while five runtime messages kept sending people to the
+    old name.
+    """
+    declared = set()
+    for path in REPO_ROOT.glob('packages/*/pyproject.toml'):
+        declared.update(
+            REPOSITORY_URL.findall(path.read_text(encoding='utf-8'))
+        )
+    if len(declared) != 1:
+        print(
+            f'packages disagree on the repository URL: {sorted(declared)}',
+            file=sys.stderr,
+        )
+        return 1
+    expected = declared.pop()
+
+    findings = []
+    for path in tracked_files():
+        relative = str(path.relative_to(REPO_ROOT))
+        if (
+            path.suffix not in SHIPPED_SUFFIXES
+            and path.name not in SHIPPED_NAMES
+        ):
+            continue
+        text = path.read_text(encoding='utf-8', errors='replace')
+        for found in set(REPOSITORY_URL.findall(text)):
+            if found != expected:
+                findings.append(f'{relative}: {found}')
+
+    for finding in sorted(findings):
+        print(f'stale repository URL: {finding}', file=sys.stderr)
+    if findings:
+        print(
+            f'\nThe packages publish to {expected!r}. A message pointing '
+            'somewhere else sends a reader to a page that does not exist.',
+            file=sys.stderr,
+        )
+        return 1
+    print(f'every repository URL names {expected.rsplit("/", 1)[-1]}')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('check', choices=('spdx', 'internal', 'retired', 'all'))
+    parser.add_argument(
+        'check',
+        choices=('spdx', 'internal', 'retired', 'repo-url', 'all'),
+    )
     args = parser.parse_args()
     if args.check == 'spdx':
         return check_spdx()
@@ -227,7 +300,14 @@ def main() -> int:
         return check_internal()
     if args.check == 'retired':
         return check_retired()
-    return check_spdx() | check_internal() | check_retired()
+    if args.check == 'repo-url':
+        return check_repository_url()
+    return (
+        check_spdx()
+        | check_internal()
+        | check_retired()
+        | check_repository_url()
+    )
 
 
 if __name__ == '__main__':

@@ -11,9 +11,6 @@ This client builds the request, sends it to a NIM, and gives you back a
 DataFrame. Inference runs in the NIM, so this package downloads no weights and
 needs no GPU.
 
-> The relational path in this sample arrives in phase 4. The tabular path
-> below it works today against a running NIM.
-
 ```python
 from sdm_client import (
     SDMClient,
@@ -72,26 +69,39 @@ the relational model needs Linux x86-64.
 
 ```bash
 python3.12 -m venv .venv
-.venv/bin/pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]'
-.venv/bin/python -m pytest packages/*/tests -q
+.venv/bin/pip install \
+  -e './packages/sdm-api[test]' \
+  -e './packages/sdm-pql[test]' \
+  -e './packages/sdm-client[test]' \
+  -e './packages/sdm-connectors[sqlite,duckdb,test]'
+.venv/bin/python -m pytest \
+  packages/sdm-api/tests packages/sdm-pql/tests \
+  packages/sdm-client/tests packages/sdm-connectors/tests -q
+```
+
+The relational engine is a native build and is installed and tested on its
+own, from its own directory:
+
+```bash
+.venv/bin/pip install -e './packages/sdm-relational-engine'
+cd packages/sdm-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 
 Lint and format with `ruff`; the formatter owns line length.
 
 ## Vendored code
 
-Two trees are vendored, and both are pinned by digest and checked in CI,
-because a repo-wide rename has silently corrupted a vendored artifact in this
-family of repositories before.
-
-`sdm-pql` is a verbatim copy of the `predictive_query` package, carried only
-until that repository publishes to an index — pinned per file in
-`VENDOR_MANIFEST.json`. See [`packages/sdm-pql/SOURCE.md`](packages/sdm-pql/SOURCE.md).
+One tree is vendored, and it is pinned by digest and checked in CI, because a
+repo-wide rename has silently corrupted a vendored artifact in this family of
+repositories before.
 
 `mermaid.min.js` is bundled in the relational engine so `Graph.visualize()`
 draws offline: Snowflake and Databricks notebooks block external scripts, so a
 diagram fetched from a CDN would not draw. Upstream bytes, SHA-256 pinned,
 components enumerated in `LICENSE`.
+
+Everything else here, including the Predictive Query Language in `sdm-pql`, is
+first-party source maintained in this repository.
 
 ## License
 

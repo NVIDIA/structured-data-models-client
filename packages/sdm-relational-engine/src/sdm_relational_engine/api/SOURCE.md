@@ -61,7 +61,8 @@ this client actually uses, and the re-sync used to preserve them explicitly:
   also defined validate/parse/evaluate types; this client only ever POSTs a
   prediction.
 - `pquery/AST/column.py`: renders a column back to the query text that names
-  it, quoting a name the bare identifier cannot spell. See `../pql/SOURCE.md`.
+  it, quoting a name the bare identifier cannot spell. The rules it follows
+  live in `sdm_relational_engine/_names.py`.
 
 `RunMode` and `MissingType` were the only two names reachable from the dropped
 `model_plan.py`. They live in `sdm_relational_engine/runmode.py`, outside this tree, because

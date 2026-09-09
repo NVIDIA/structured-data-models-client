@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -27,11 +31,6 @@ class SplitFilter:
            subset that contains conditions that may not be statically evaluated
            (e.g. because they include a temporal component).
 
-    More technical documentation:
-        - https://www.notion.so/Applying-link-prediction-target-filters-
-          during-BP-15abe4af1ae84bd08d5285ec3ce5cdb0
-        - https://docs.google.com/document/d/11RvkNEC856UhvMZWpm-FhFrUUlj-
-          kglj-8buWCkH3lM/edit#heading=h.emwy56xpvhw4
 
     Args:
         applicable_filter (Optional[ASTNode]): If not :obj:`None`, the

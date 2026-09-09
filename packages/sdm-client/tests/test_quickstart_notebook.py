@@ -31,7 +31,6 @@ RETIRED = (
     'PredictClient',
     'client.relational(',
     'client.tabular(',
-    'kumo_relational_client',
     'nemotron_predict',
     'run_mode=',
 )

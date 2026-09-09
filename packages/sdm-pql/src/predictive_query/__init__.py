@@ -24,19 +24,19 @@ from predictive_query.api import validate
 from predictive_query.parser import Delegate, PQLParser
 from predictive_query.profiles import (
     ANOMALY,
+    FINE_TUNING,
     RELATIONAL,
     TABULAR,
     TIMESERIES,
-    FINE_TUNING,
     Capabilities,
     Mode,
     Profile,
 )
-from predictive_query.schema import codes
 from predictive_query.query import (
     ParsedPredictiveQuery,
     ValidatedPredictiveQuery,
 )
+from predictive_query.schema import codes
 from predictive_query.schema.common import (
     Span,
     ValidationError,
@@ -60,7 +60,7 @@ from predictive_query.schema.typing import (
 )
 from predictive_query.validator import PredictiveQueryValidator
 
-__version__ = '0.1.0'
+__version__ = '1.0.0'
 
 #: The version of the *language*, as distinct from this package. MINOR goes up
 #: when the language accepts something it did not before, so every query valid

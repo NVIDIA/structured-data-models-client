@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdm-client"
-version = "0.1.0"
+version = "1.0.0"
 description = "One Python client for NVIDIA's structured-data foundation model NIMs"
 readme = "README.md"
 license = "Apache-2.0"
@@ -29,23 +29,28 @@ classifiers = [
 # session, and frames. A model that does heavy client-side work brings its own
 # runtime through an extra instead.
 dependencies = [
-    "sdm-api==0.1.0",
-    "sdm-pql==0.1.0",
+    "sdm-api==1.0.0",
+    "sdm-pql==1.0.0",
     "pandas>=1.5",
     "numpy>=1.23",
     "requests>=2.28",
     "urllib3>=1.26",
 ]
 
+[project.urls]
+Homepage = "https://github.com/NVIDIA/structured-data-models-client"
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
+
 [project.optional-dependencies]
 # A model that does heavy client-side work brings its own runtime; a warehouse
 # driver is opt-in the same way, through the shared connectors package.
-relational = ["sdm-relational-engine==0.1.0"]
-sqlite = ["sdm-connectors[sqlite]==0.1.0"]
-duckdb = ["sdm-connectors[duckdb]==0.1.0"]
-snowflake = ["sdm-connectors[snowflake]==0.1.0"]
-databricks = ["sdm-connectors[databricks]==0.1.0"]
-s3 = ["sdm-connectors[s3]==0.1.0"]
+relational = ["sdm-relational-engine==1.0.0"]
+sqlite = ["sdm-connectors[sqlite]==1.0.0"]
+duckdb = ["sdm-connectors[duckdb]==1.0.0"]
+snowflake = ["sdm-connectors[snowflake]==1.0.0"]
+databricks = ["sdm-connectors[databricks]==1.0.0"]
+s3 = ["sdm-connectors[s3]==1.0.0"]
 all = [
     "sdm-client[relational,sqlite,duckdb,snowflake,databricks,s3]",
 ]

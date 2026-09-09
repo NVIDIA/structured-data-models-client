@@ -12,7 +12,7 @@ uses, so nothing downstream needs to know a name was ever quoted.
 
 This module sits outside ``parser/`` and ``ast/`` so that the spelling rules
 have one home that both import from, rather than a copy in each. The grammar's
-side of it is the ``QUOTED_ID`` token; see ``PROVENANCE.md``.
+side of it is the ``QUOTED_ID`` token in ``grammar/PQLGrammar.g4``.
 """
 
 from __future__ import annotations
