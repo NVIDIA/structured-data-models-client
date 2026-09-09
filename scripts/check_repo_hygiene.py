@@ -63,6 +63,11 @@ INTERNAL_PATTERNS = (
     re.compile(r'docs\.google\.com/document', re.IGNORECASE),
     re.compile(r'\.atlassian\.net\b', re.IGNORECASE),
     re.compile(r'\bconfluence\b', re.IGNORECASE),
+    # Sibling repositories that stay internal. The contract repository is not
+    # here: the generated bindings record it as their source, so its name
+    # ships either way.
+    re.compile(r'\btfm-serving\b', re.IGNORECASE),
+    re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has
@@ -78,7 +83,6 @@ INTERNAL_ALLOWLIST = {
     'NOTICE',
     'CHANGELOG.md',
     '.gitlab-ci.yml',
-    'docs/about/architecture.md',
 }
 
 SHIPPED_SUFFIXES = {

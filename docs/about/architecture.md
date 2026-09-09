@@ -31,7 +31,7 @@ If a third model is ever wanted, a small MR on `structured-data-api` opens the f
 this is a note, not a task.
 
 > **Model ids are fine.** An earlier draft claimed the NIMs still served `nemotron-*`. That was a
-> stale local checkout. On `origin/main`, `tfm-serving` declares
+> stale local checkout. The serving side declares
 > `ModelId = Literal["kumo-tabular", "kumo-relational"]`, and the tabular NIM's adapter registration,
 > `/v1/models` entry and `model_manifest.yaml` all say `kumo-tabular`. All three places agree.
 > **Re-clone before copying anything (§8).**
@@ -313,8 +313,8 @@ requests may have no key at all. Join on the key when present, otherwise on `row
 ### What each model can produce
 
 The contract defines seven output fields. **This table is read from the servers**, not from the source
-doc — `tfm-serving/src/tfm_serving/adapters/tabular.py` and
-`structured-data-nims/…/rfm_nim/universal_adapter.py` each declare their own capabilities:
+doc — the tabular adapter and the relational NIM's universal adapter each declare their own
+capabilities, and this mirrors what they answer:
 
 | Output | `kumo-relational` | `kumo-tabular` |
 |---|---|---|
