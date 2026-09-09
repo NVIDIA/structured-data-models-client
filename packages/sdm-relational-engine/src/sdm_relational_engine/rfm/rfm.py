@@ -184,7 +184,7 @@ class ExplainConfig(CastMixin):
 
         **The natural-language summary is generated off-machine.** With
         ``skip_summary=False`` (the default), the ``openai`` package installed
-        (``pip install 'sdm-client[explain]'``) and an API key discoverable, the
+        (``pip install 'sdm-relational-engine[explain]'``) and an API key discoverable, the
         client sends the predictive query, the returned predictions, the cohort
         analysis and the subgraph attribution -- which contains the **raw
         cell values** of the explained entity's subgraph -- to an

@@ -69,8 +69,22 @@ the relational model needs Linux x86-64.
 
 ```bash
 python3.12 -m venv .venv
-.venv/bin/pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]'
-.venv/bin/python -m pytest packages/*/tests -q
+.venv/bin/pip install \
+  -e './packages/sdm-api[test]' \
+  -e './packages/sdm-pql[test]' \
+  -e './packages/sdm-client[test]' \
+  -e './packages/sdm-connectors[sqlite,duckdb,test]'
+.venv/bin/python -m pytest \
+  packages/sdm-api/tests packages/sdm-pql/tests \
+  packages/sdm-client/tests packages/sdm-connectors/tests -q
+```
+
+The relational engine is a native build and is installed and tested on its
+own, from its own directory:
+
+```bash
+.venv/bin/pip install -e './packages/sdm-relational-engine'
+cd packages/sdm-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 
 Lint and format with `ruff`; the formatter owns line length.

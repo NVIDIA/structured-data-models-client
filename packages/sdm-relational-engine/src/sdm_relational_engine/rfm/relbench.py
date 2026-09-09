@@ -62,7 +62,7 @@ def _pooch() -> Any:
             raise
         raise ModuleNotFoundError(
             "Loading a RelBench dataset requires 'pooch'. Install it via the "
-            "'relbench' extra, e.g. `pip install 'sdm-client[relbench]'` "
+            "'relbench' extra, e.g. `pip install 'sdm-relational-engine[relbench]'` "
             "(or `pip install 'sdm_relational_engine[relbench]'`).",
             name='pooch',
         ) from error
@@ -104,7 +104,7 @@ def from_relbench(dataset: str, verbose: bool = True) -> Graph:
     published datasets carry a ``rel-`` prefix, so the archive name rather than
     a stripped one is what identifies a dataset here.
 
-    Requires the ``relbench`` extra (``pip install 'sdm-client[relbench]'``).
+    Requires the ``relbench`` extra (``pip install 'sdm-relational-engine[relbench]'``).
     """
     dataset = dataset.lower()
     registry = get_registry()
