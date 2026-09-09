@@ -321,13 +321,26 @@ def test_postgres_accepts_the_libpq_connection_parameters():
     A hand-kept list refuses whatever it has not caught up with, and what it
     was missing was not obscure: `sslcertmode` and `requirepeer` are how a
     caller tightens how the connection authenticates.
+
+    The newer names are asserted only where the loaded libpq reports them.
+    Requiring them unconditionally is the union this stopped doing: on a libpq
+    that does not have `sslcertmode`, accepting it is the bug, not the fix.
     """
     postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+    pq = pytest.importorskip('psycopg.pq')
+
+    reported = {
+        option.keyword.decode() for option in pq.Conninfo.get_defaults()
+    }
 
     assert {'host', 'port', 'dbname', 'user', 'password', 'sslmode'} <= (
         postgres._CONNECT_ARGS
     )
-    assert {'sslcertmode', 'requirepeer'} <= postgres._CONNECT_ARGS
+    for recent in ('sslcertmode', 'requirepeer'):
+        if recent in reported:
+            assert recent in postgres._CONNECT_ARGS
+        else:
+            assert recent not in postgres._CONNECT_ARGS
     assert 'nosuchoption' not in postgres._CONNECT_ARGS
 
 
