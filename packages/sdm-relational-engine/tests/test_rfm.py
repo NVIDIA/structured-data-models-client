@@ -762,8 +762,8 @@ def test_batch_mode_restores_state_after_an_exception(
     with pytest.raises(RuntimeError, match='user code blew up'):
         with model.batch_mode(batch_size=25, num_retries=3):
             raise RuntimeError('user code blew up')
-    assert model._batch_size is None
-    assert model._num_retries == 0
+    assert model._batch_size.get() is None
+    assert model._num_retries.get() == 0
 
 
 def test_retry_restores_state_after_an_exception(
@@ -772,7 +772,7 @@ def test_retry_restores_state_after_an_exception(
     model = KumoRelational(user_store_graph, verbose=False)
     with pytest.raises(RuntimeError), model.retry(7):
         raise RuntimeError('boom')
-    assert model._num_retries == 0
+    assert model._num_retries.get() == 0
 
 
 def test_nested_batch_mode_honours_the_inner_retry_count(
@@ -780,11 +780,11 @@ def test_nested_batch_mode_honours_the_inner_retry_count(
 ) -> None:
     model = KumoRelational(user_store_graph, verbose=False)
     with model.retry(2):
-        assert model._num_retries == 2
+        assert model._num_retries.get() == 2
         with model.batch_mode(batch_size=3, num_retries=9):
-            assert model._num_retries == 9
-        assert model._num_retries == 2
-    assert model._num_retries == 0
+            assert model._num_retries.get() == 9
+        assert model._num_retries.get() == 2
+    assert model._num_retries.get() == 0
 
 
 def test_batch_mode_rejects_a_non_max_string(user_store_graph: Graph) -> None:
@@ -1383,7 +1383,7 @@ def _over_cap_message(task_type: TaskType, batch_size: int) -> str:
     )
     model = KumoRelational(graph, verbose=False)
     model._validate_task_references = lambda _task: None
-    model._batch_size = batch_size
+    model._batch_size.set(batch_size)
 
     task = MagicMock()
     task.task_type = task_type

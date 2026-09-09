@@ -59,7 +59,7 @@ Five distributions, released together on one version.
 | `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, transport, sessions, results |
 | `sdm-api` | `sdm_api` | pure python | The Universal TFM wire types. No third-party dependencies |
 | `sdm-pql` | `predictive_query` | pure python | The Predictive Query Language: grammar, parser, validator, AST, model profiles |
-| `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, Snowflake, Databricks, S3 |
+| `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
 | `sdm-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
 
 Only `sdm-relational-engine` is native, so the tabular model works anywhere and
@@ -73,7 +73,7 @@ python3.12 -m venv .venv
   -e './packages/sdm-api[test]' \
   -e './packages/sdm-pql[test]' \
   -e './packages/sdm-client[test]' \
-  -e './packages/sdm-connectors[sqlite,duckdb,test]'
+  -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
 .venv/bin/python -m pytest \
   packages/sdm-api/tests packages/sdm-pql/tests \
   packages/sdm-client/tests packages/sdm-connectors/tests -q
@@ -83,7 +83,7 @@ The relational engine is a native build and is installed and tested on its
 own, from its own directory:
 
 ```bash
-.venv/bin/pip install -e './packages/sdm-relational-engine'
+.venv/bin/pip install -e './packages/sdm-relational-engine[test]'
 cd packages/sdm-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 

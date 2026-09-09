@@ -1,0 +1,739 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""What a prediction says about itself, and what it must not say."""
+
+import json
+import logging
+
+import pandas as pd
+import pytest
+import sdm_relational_engine.rfm as rfm
+from sdm_relational_engine.rfm.rfm import KumoRelational
+from sdm_relational_engine.rfm.telemetry import (
+    SCHEMA_VERSION,
+    PredictionRecord,
+    describe_error,
+    emit,
+    recorded,
+)
+from sdm_relational_engine.runmode import RunMode
+from sdm_relational_engine.utils import ProgressLogger
+
+QUERY = 'PREDICT COUNT(orders.*, 0, 30) FOR customers.customer_id IN (1, 2, 3)'
+
+
+def _a_real_task(model: KumoRelational) -> object:
+    r"""The TaskTable predict() builds, so predict_task can be driven directly."""
+    query = model._parse_query(QUERY)
+    indices = query.get_rfm_entity_id_list()
+    from dataclasses import replace as _replace
+
+    query = _replace(query, for_each='FOR EACH', rfm_entity_ids=None)
+    return model._get_task_table(
+        query=query,
+        indices=indices,
+        anchor_time=None,
+        context_anchor_time=None,
+        run_mode=RunMode.FAST,
+        lag_timesteps=0,
+        max_pq_iterations=10,
+        random_seed=42,
+        logger=ProgressLogger.default(msg='', verbose=False),
+    )
+
+
+def _stub_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    r"""Replace the network call, leaving predict_task's own recording in place.
+
+    Patched below predict_task rather than over it: predict_task is where the
+    record is made, so replacing it would remove the very thing under test.
+    """
+    monkeypatch.setattr(
+        KumoRelational,
+        '_predict_batches',
+        lambda self, requests, **kw: (
+            [
+                pd.DataFrame(
+                    {'ENTITY': [1, 2, 3], 'TARGET_PRED': [1.0, 2.0, 3.0]}
+                )
+            ],
+            None,
+            None,
+            None,
+        ),
+    )
+
+
+@pytest.fixture
+def model() -> KumoRelational:
+    customers = pd.DataFrame(
+        {
+            'customer_id': range(60),
+            'seg': ['gold', 'silver', 'bronze'] * 20,
+        }
+    )
+    orders = pd.DataFrame(
+        {
+            'order_id': range(600),
+            'customer_id': [i % 60 for i in range(600)],
+            'amt': [10.0 + (i % 37) for i in range(600)],
+            'ts': pd.to_datetime(
+                [
+                    f'2025-{1 + (i // 50) % 12:02d}-{1 + i % 28:02d}'
+                    for i in range(600)
+                ]
+            ),
+        }
+    )
+    graph = rfm.Graph.from_data(
+        {'customers': customers, 'orders': orders},
+        infer_metadata=True,
+        verbose=False,
+    )
+    graph['customers'].primary_key = 'customer_id'
+    graph['orders'].primary_key = 'order_id'
+    if not graph.edges:
+        graph.link('orders', 'customer_id', 'customers')
+    return KumoRelational(graph, verbose=False)
+
+
+def _written(caplog: pytest.LogCaptureFixture) -> list[dict]:
+    return [
+        json.loads(record.getMessage().removeprefix('rfm.predict '))
+        for record in caplog.records
+        if record.getMessage().startswith('rfm.predict ')
+    ]
+
+
+def test_a_prediction_names_the_graph_it_ran_against(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    written = _written(caplog)[0]
+    assert len(written['graph_fingerprint']) == 64
+    assert written['entities'] == 3
+    assert written['outcome'] == 'returned'
+    assert written['query_type'] == 'temporal'
+    assert written['seconds'] >= 0
+
+
+def test_a_prediction_that_raised_is_still_recorded(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""The run worth explaining afterwards is the one that failed."""
+
+    def boom(self: KumoRelational, *args: object, **kw: object) -> None:
+        raise RuntimeError('NIM returned 504')
+
+    monkeypatch.setattr(KumoRelational, '_predict_batches', boom)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        with pytest.raises(RuntimeError, match='504'):
+            model.predict(QUERY, verbose=False)
+
+    written = _written(caplog)[0]
+    assert written['outcome'] == 'raised'
+    assert written['error'] == 'RuntimeError: NIM returned 504'
+    # The same fields the happy path asserts. A regression that only filled
+    # these in on success would leave the failure record hollow and still pass.
+    assert len(written['graph_fingerprint']) == 64
+    assert written['query_type'] == 'temporal'
+    assert written['entities'] == 3
+    assert written['seconds'] >= 0
+
+
+def test_the_batch_size_in_force_is_the_one_recorded(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+        with model.batch_mode(100):
+            model.predict(QUERY, verbose=False)
+
+    assert [w['batch_size'] for w in _written(caplog)] == ['None', '100']
+
+
+def test_re_typing_a_column_afterwards_does_not_change_the_record(
+    model: KumoRelational,
+) -> None:
+    r"""The model does not see the change, so the record must not report it.
+
+    Re-typing a column on the caller's graph after the model was built leaves
+    the parsed definition and the sampler untouched, so the prediction runs
+    with the type the column had at build time. A fingerprint that moved here
+    would name a graph the prediction did not use.
+    """
+    before = model._graph_fingerprint()
+
+    model._graph['customers']['seg'].stype = 'text'
+
+    assert model._graph_fingerprint() == before
+
+
+def test_a_model_built_after_the_re_type_is_a_different_graph(
+    model: KumoRelational,
+) -> None:
+    r"""The type is still part of a graph's identity; when it is read is what
+    changed.
+    """
+    before = model._graph_fingerprint()
+    model._graph['customers']['seg'].stype = 'text'
+
+    rebuilt = KumoRelational(model._graph, verbose=False)
+
+    assert rebuilt._graph_fingerprint() != before
+
+
+def test_a_record_that_cannot_be_written_does_not_fail_the_call(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""Telemetry describes a prediction; it must never be what breaks one."""
+
+    class Unserializable:
+        def __repr__(self) -> str:
+            raise RuntimeError('no')
+
+    record = PredictionRecord()
+    record.entities = Unserializable()  # type: ignore[assignment]
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        emit(record)
+
+    assert not _written(caplog)
+
+
+def test_a_cancelled_call_is_recorded_too(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""A prediction killed by a timeout raises through, not from, ``except``."""
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        with pytest.raises(KeyboardInterrupt):
+            with recorded(PredictionRecord(entities=3)):
+                raise KeyboardInterrupt
+
+    written = _written(caplog)[0]
+    assert written['outcome'] == 'raised'
+    assert written['error'] == 'KeyboardInterrupt: '
+
+
+def test_predict_task_called_directly_is_still_recorded(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""The client's adapter calls predict_task directly for a task request.
+
+    Recording only in predict() left that path, which is the one a service
+    actually takes for custom tasks, emitting nothing at all.
+    """
+    _stub_batches(monkeypatch)
+    task = _a_real_task(model)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict_task(task, verbose=False)
+
+    written = _written(caplog)
+    assert len(written) == 1
+    assert len(written[0]['graph_fingerprint']) == 64
+    assert written[0]['outcome'] == 'returned'
+
+
+def test_one_prediction_writes_exactly_one_record(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""predict() delegates to predict_task(), so both recording would double it."""
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    assert len(_written(caplog)) == 1
+
+
+def test_the_query_details_survive_the_delegation(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""predict() knows the query and entities; predict_task, which records, does not."""
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    written = _written(caplog)[0]
+    assert written['query_type'] == 'temporal'
+    assert written['entities'] == 3
+
+
+def test_a_direct_task_call_borrows_nothing_from_an_earlier_one(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""The lent detail must not outlive the call that lent it."""
+    _stub_batches(monkeypatch)
+    task = _a_real_task(model)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+        model.predict_task(task, verbose=False)
+
+    first, second = _written(caplog)
+    assert first['entities'] == 3
+    assert second['entities'] == 0, 'detail leaked out of the call that lent it'
+
+
+def test_an_entity_named_in_an_error_is_not_written_to_the_log() -> None:
+    r"""The sampler names the entity it could not find; this record must not."""
+    described = describe_error(
+        ValueError("Entity 'alice@acme.com' not found in table customers")
+    )
+
+    assert 'acme.com' not in described
+    assert described.startswith('ValueError:')
+    assert 'not found in table customers' in described
+
+
+def test_an_echoed_request_body_is_not_written_to_the_log() -> None:
+    described = describe_error(
+        RuntimeError('NIM rejected request: {"indices": [8823, 9910, 4471]}')
+    )
+
+    assert '8823' not in described
+    assert 'RuntimeError' in described
+
+
+def test_the_error_type_is_always_kept() -> None:
+    r"""The type is what a reader branches on, so it survives redaction."""
+    assert describe_error(KeyError('customer_id')).startswith('KeyError:')
+    assert describe_error(TimeoutError()).startswith('TimeoutError:')
+
+
+def test_a_failure_records_the_redacted_message(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def boom(self: KumoRelational, *args: object, **kw: object) -> None:
+        raise ValueError("Entity 'bob@acme.com' is not in the graph")
+
+    monkeypatch.setattr(KumoRelational, '_predict_batches', boom)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        with pytest.raises(ValueError):
+            model.predict(QUERY, verbose=False)
+
+    written = _written(caplog)[0]
+    assert 'acme.com' not in written['error']
+    assert written['error'].startswith('ValueError:')
+
+
+def test_a_record_can_be_tied_back_to_one_prediction(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""Graph shape, query type, entity count and batch size can all match
+    between two different calls, so those alone name no particular one.
+    """
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+        model.predict(QUERY, verbose=False)
+
+    first, second = _written(caplog)
+    assert first['prediction_id'] and second['prediction_id']
+    assert first['prediction_id'] != second['prediction_id']
+
+
+def test_a_record_names_what_the_prediction_was_anchored_to(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    r"""Two runs of one query at different anchors are different answers."""
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    written = _written(caplog)[0]
+    assert written['anchor_time']
+    assert written['task_type']
+    assert written['entity_table'] == 'customers'
+
+
+def test_the_record_carries_its_schema_version(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    assert _written(caplog)[0]['schema_version'] == SCHEMA_VERSION
+
+
+def test_a_quote_inside_a_value_does_not_end_the_redaction() -> None:
+    """A value carrying an escaped quote must not survive in the message.
+
+    Matching up to the next quote stops inside the value, so the remainder of
+    it lands in the log: exactly the caller data this function exists to keep
+    out. A backslash escape counts as one unit of the value.
+    """
+    described = describe_error(
+        RuntimeError('NIM rejected request: {"entity":"alice\\"@acme.com"}')
+    )
+    assert 'acme.com' not in described
+    assert 'alice' not in described
+
+
+def test_a_quote_inside_a_single_quoted_value_is_redacted_too() -> None:
+    described = describe_error(
+        RuntimeError("entity 'o\\'brien@acme.com' not found")
+    )
+    assert 'acme.com' not in described
+    assert 'brien' not in described
+
+
+def test_two_quoted_values_both_go() -> None:
+    """Neither value survives, and what surrounds them both does.
+
+    The wording between the two goes with them: the rule takes the whole span
+    from the first quote to the last, because deciding where one value ends
+    needs the message to say, and it does not.
+    """
+    described = describe_error(
+        RuntimeError("'a@x.com' and 'b@y.com' are unknown")
+    )
+    assert 'x.com' not in described
+    assert 'y.com' not in described
+    assert 'are unknown' in described
+
+
+def test_a_newline_inside_a_value_is_redacted() -> None:
+    described = describe_error(RuntimeError('entity "a\n@acme.com" not found'))
+    assert 'acme.com' not in described
+
+
+def test_the_fingerprint_names_the_graph_the_model_was_built_on(
+    model: KumoRelational,
+) -> None:
+    """Changing the caller's graph afterwards must not change the record.
+
+    The query is parsed against a definition taken when the model was built,
+    and the rows come from a sampler built at the same moment. A fingerprint
+    that followed the caller's later edits would name a graph the prediction
+    never used, which is the one thing the record exists to get right.
+    """
+    before = model._graph_fingerprint()
+    assert before
+
+    model._graph.unlink('orders', 'customer_id', 'customers')
+
+    assert model._graph_fingerprint() == before
+
+
+def test_a_model_built_on_the_changed_graph_fingerprints_differently(
+    model: KumoRelational,
+) -> None:
+    """Pinning the fingerprint records when the graph was read, not that two
+    different graphs may share a name.
+    """
+    before = model._graph_fingerprint()
+    model._graph.unlink('orders', 'customer_id', 'customers')
+
+    rebuilt = KumoRelational(model._graph, verbose=False)
+
+    assert rebuilt._graph_fingerprint() != before
+
+
+@pytest.mark.parametrize(
+    ('message', 'secret'),
+    [
+        ('entity "alice@acme.com not found', 'acme.com'),
+        ("the model's entity 'a@x.com' is unknown", 'x.com'),
+        ('NIM rejected: {"entity":"alice\\"@acme.com"}', 'acme.com'),
+        ('k="sk-live-abc" more', 'sk-live'),
+        ('"a@x.com""b@y.com"', 'x.com'),
+        ('entity "a\n@acme.com" not found', 'acme.com'),
+    ],
+)
+def test_no_shape_of_quoting_leaves_a_value_behind(
+    message: str, secret: str
+) -> None:
+    """Each of these once left the value, or part of it, in the message.
+
+    An unterminated quote left all of it; an apostrophe in prose opened a match
+    that closed on the real value's opening quote; an escaped quote ended the
+    match inside the value.
+    """
+    assert secret not in describe_error(RuntimeError(message))
+
+
+def test_redaction_keeps_what_is_outside_the_values() -> None:
+    """A record is read to tell one failure from another, so what surrounds
+    the values has to survive losing them.
+    """
+    described = describe_error(
+        RuntimeError("'a@x.com' and 'b@y.com' are unknown")
+    )
+    assert described == "RuntimeError: '?' are unknown"
+
+
+def test_a_value_whose_quote_touches_a_word_is_still_redacted() -> None:
+    """`entity'alice@example.com'` has no separator before the quote, which a
+    rule keyed on one reads as prose and leaves alone.
+    """
+    described = describe_error(RuntimeError("entity'alice@acme.com' not found"))
+
+    assert 'acme.com' not in described
+    assert described == "RuntimeError: entity'?' not found"
+
+
+def test_a_message_with_no_values_is_left_alone() -> None:
+    assert (
+        describe_error(RuntimeError('connection reset by peer'))
+        == 'RuntimeError: connection reset by peer'
+    )
+
+
+def test_an_error_whose_message_cannot_be_read_is_still_described() -> None:
+    """`describe_error` runs inside the `except` that re-raises the caller's
+    error, so raising here would hand them an exception about logging instead
+    of the failure they were debugging.
+    """
+
+    class Unreadable(Exception):
+        def __str__(self) -> str:
+            raise ValueError('str() itself fails')
+
+    described = describe_error(Unreadable())
+
+    assert described.startswith('Unreadable:')
+    assert 'str() itself fails' not in described
+
+
+def test_the_caller_keeps_their_own_error_when_it_cannot_be_described(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class Unreadable(Exception):
+        def __str__(self) -> str:
+            raise ValueError('str() itself fails')
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        with pytest.raises(Unreadable):
+            with recorded(PredictionRecord(graph_fingerprint='abc')):
+                raise Unreadable()
+
+    assert _written(caplog), 'the record was not emitted'
+
+
+def test_a_message_that_quotes_nothing_keeps_every_character() -> None:
+    """Nothing is stripped from a message with no values in it, so two
+    different failures cannot be reshaped into the same text.
+    """
+    for message in ('bad\x00input', 'badinput', 'connection reset by peer'):
+        assert (
+            describe_error(RuntimeError(message)) == f'RuntimeError: {message}'
+        )
+
+
+def test_the_record_counts_the_hops_that_ran(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`num_hops` is deprecated in favour of `num_neighbors`.
+
+    Passing the neighbour list sets the hop count and leaves `num_hops` at its
+    default, so recording the argument reported two hops for a prediction that
+    walked three.
+    """
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, num_neighbors=[8, 4, 2], verbose=False)
+
+    assert _written(caplog)[0]['num_hops'] == 3
+
+
+def test_the_record_counts_the_default_hops_when_none_are_asked_for(
+    model: KumoRelational,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _stub_batches(monkeypatch)
+
+    with caplog.at_level(logging.INFO, logger='sdm_relational_engine'):
+        model.predict(QUERY, verbose=False)
+
+    assert _written(caplog)[0]['num_hops'] == 2
+
+
+@pytest.mark.parametrize(
+    'message',
+    [
+        "entity 'alice@acme.com' not found",
+        'entity "alice@acme.com" not found',
+        'entity `alice@acme.com` not found',
+        'Column `orders`.`alice@acme.com` does not exist',
+        'entity ‘alice@acme.com’ not found',
+        'entity “alice@acme.com” not found',
+        'entity ‹alice@acme.com› not found',
+        'entity «alice@acme.com» not found',
+        'entity „alice@acme.com“ not found',
+        'entity 「alice@acme.com」 not found',
+        'entity ＂alice@acme.com＂ not found',
+    ],
+)
+def test_a_value_quoted_any_way_upstream_quotes_is_redacted(
+    message: str,
+) -> None:
+    """Backticks are not decoration: the Databricks backend quotes identifiers
+    with them, so an error echoing a column name arrives wrapped in them. The
+    others come from Unicode by name, which is what stopped this being a list
+    that grows one missed form at a time.
+    """
+    assert 'acme.com' not in describe_error(RuntimeError(message))
+
+
+def test_brackets_are_not_treated_as_quotes() -> None:
+    """Taking the quote characters by Unicode category would pull in `(`, `[`
+    and `{`, and a message mentioning a table in parentheses would lose
+    everything after it.
+    """
+    assert (
+        describe_error(RuntimeError('lookup (customers) failed'))
+        == 'RuntimeError: lookup (customers) failed'
+    )
+
+
+def test_an_unquoted_value_is_not_caught_and_that_is_written_down() -> None:
+    """Nothing marks a bare value as data, and redacting on shape would take
+    ordinary words with it. Recorded so the limit is known rather than
+    assumed away.
+    """
+    described = describe_error(RuntimeError('entity alice@acme.com not found'))
+    assert described == 'RuntimeError: entity alice@acme.com not found'
+
+
+def test_the_quote_characters_are_still_all_of_them() -> None:
+    """The set is written out so importing this module does not cost a scan of
+    every character in Unicode.
+
+    Written-out means it can fall behind, which is exactly how the single angle
+    quotes came to be missing. This re-derives it, so a form added by a newer
+    Unicode fails here rather than quietly leaving a value in a log.
+    """
+    import unicodedata
+
+    from sdm_relational_engine.rfm.telemetry import _QUOTES
+
+    derived = {"'", '`'}
+    for point in range(0x110000):
+        character = chr(point)
+        name = unicodedata.name(character, '')
+        if 'QUOTATION MARK' in name or 'CORNER BRACKET' in name:
+            derived.add(character)
+
+    assert set(_QUOTES) == derived
+
+
+def test_no_bracket_is_treated_as_a_quote() -> None:
+    """Reaching the low-9 forms by Unicode category would pull these in."""
+    from sdm_relational_engine.rfm.telemetry import _QUOTES
+
+    assert not set('()[]{}<>').intersection(_QUOTES)
+
+
+def test_a_run_anchored_to_each_entity_says_so() -> None:
+    """`time_column` is `None` for an entity-anchored task exactly as it is
+    for a task with no anchor, so reading it alone makes a run anchored to
+    each entity's own timestamp indistinguishable from an unanchored one.
+    """
+    from sdm_relational_engine.rfm.rfm import _anchor_of
+
+    class Task:
+        use_entity_time = True
+        time_column = None
+        _pred_df = None
+
+    assert _anchor_of(Task()) == 'entity'
+
+
+def test_a_run_with_no_anchor_is_still_reported_as_none() -> None:
+    from sdm_relational_engine.rfm.rfm import _anchor_of
+
+    class Task:
+        use_entity_time = False
+        time_column = None
+        _pred_df = None
+
+    assert _anchor_of(Task()) == ''
+
+
+def test_a_logger_that_always_raises_does_not_fail_the_prediction() -> None:
+    """The fallback log is guarded too.
+
+    A handler that raises raises for both calls, so an unguarded second one
+    turned a prediction that succeeded into whatever the logger threw, which
+    is the one thing `emit` promises not to do.
+    """
+
+    class Angry(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise OSError('disk full')
+
+    log = logging.getLogger('sdm_relational_engine')
+    handler = Angry()
+    log.addHandler(handler)
+    previous = log.level
+    log.setLevel(logging.DEBUG)
+    try:
+        with recorded(PredictionRecord(graph_fingerprint='abc')):
+            pass
+    finally:
+        log.removeHandler(handler)
+        log.setLevel(previous)
+
+
+def test_a_failed_prediction_still_raises_its_own_error() -> None:
+    """Guarding the logger must not swallow what the caller was told."""
+
+    class Angry(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise OSError('disk full')
+
+    log = logging.getLogger('sdm_relational_engine')
+    handler = Angry()
+    log.addHandler(handler)
+    previous = log.level
+    log.setLevel(logging.DEBUG)
+    try:
+        with pytest.raises(ValueError, match='the real failure'):
+            with recorded(PredictionRecord(graph_fingerprint='abc')):
+                raise ValueError('the real failure')
+    finally:
+        log.removeHandler(handler)
+        log.setLevel(previous)

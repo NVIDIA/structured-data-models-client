@@ -24,7 +24,7 @@ from sdm_connectors.sql import (
     resolve_sql,
 )
 
-_SQL_SOURCES = ('sqlite', 'duckdb', 'snowflake', 'databricks')
+_SQL_SOURCES = ('sqlite', 'duckdb', 'postgres', 'snowflake', 'databricks')
 _FILE_SOURCES = ('local', 's3')
 
 _PARQUET_SUFFIXES = ('.parquet', '.pq', '.parq')
@@ -61,7 +61,7 @@ def read(source: str, **kwargs: Any) -> pd.DataFrame:
         source: ``'local'`` (``data=`` a DataFrame/dict, or ``path=`` a CSV or
             Parquet file), ``'s3'`` (``path='s3://...'``, optional
             ``storage_options=``), or a SQL backend -- ``'sqlite'``,
-            ``'duckdb'``, ``'snowflake'``, ``'databricks'``.
+            ``'duckdb'``, ``'postgres'``, ``'snowflake'``, ``'databricks'``.
         **kwargs: For a SQL source, exactly one of ``table=`` / ``query=`` plus
             the connection arguments :func:`connect` takes for that backend
             (``sqlite`` / ``duckdb`` also accept the database path as

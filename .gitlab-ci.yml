@@ -45,7 +45,11 @@ test:
   stage: test
   extends: .python
   script:
-    - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,test]'
+    # postgres and databricks are here for their drivers, not for a server:
+    # those tests mock the connection. Without the drivers, importing the
+    # backend raises and every test that covers them skips, including the one
+    # holding the partner attribution Databricks requires.
+    - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
     # Live tests are deselected: this job reaches no NIM and no warehouse. The
     # relational engine is a native build and is tested in its own job.
     - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests packages/sdm-client/tests packages/sdm-connectors/tests -q -m 'not live_nim and not live_warehouse'
@@ -59,9 +63,56 @@ engine:
   script:
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
     - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb]'
-    - pip install -q -e './packages/sdm-relational-engine'
-    - pip install -q pytest pytest-mock requests-mock pytest-httpserver pytest-subtests
+    # The test extra, not a hand-written list beside it: naming these twice
+    # is how the documented install came to be missing pytest-mock while this
+    # job had it.
+    - pip install -q -e './packages/sdm-relational-engine[test]'
     - cd packages/sdm-relational-engine && python -m pytest tests -q
+
+# Each distribution is built the way an index would build it: in an isolated
+# environment holding only the build backend, with none of the runtime
+# dependencies installed. This catches what no test can, because it fails
+# before a test could run: `project.version` resolved through the package root
+# imports that root, which imports pandas, and the wheel cannot be produced at
+# all. Only a real build exercises that path.
+build:
+  stage: test
+  extends: .python
+  script:
+    - apt-get update -qq && apt-get install -y -qq build-essential cmake git
+    - pip install -q build
+    - |
+      for package in sdm-api sdm-pql sdm-client sdm-connectors sdm-relational-engine; do
+        echo "building $package"
+        ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/dist" . )
+      done
+    - ls -1 dist/
+    # Every distribution carries the one version they are released together
+    # at. Read from what was just built rather than written here, so a version
+    # bump does not fail the next step for the wrong reason.
+    - |
+      python - <<'EOF'
+      import pathlib, re, sys
+      names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+      versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
+      print('\n'.join(names))
+      if len(names) != 5:
+          sys.exit(f'expected 5 wheels, built {len(names)}')
+      if len(versions) != 1:
+          sys.exit(f'distributions disagree on the version: {sorted(versions)}')
+      pathlib.Path('dist/VERSION').write_text(versions.pop())
+      EOF
+    # Building each one proves nothing about installing them together. A pin
+    # that only one distribution carries makes the set unsatisfiable, and the
+    # resolver is the only thing that says so.
+    - |
+      VERSION=$(cat dist/VERSION)
+      pip install --dry-run --find-links "$CI_PROJECT_DIR/dist" \
+        "sdm-client[relational,sqlite,duckdb]==$VERSION"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
 
 # Blocking. Fetches the contract at the revision recorded in PROVENANCE.json,
 # proves the recorded digest is that revision's actual bytes, and proves the

@@ -103,7 +103,7 @@ Five distributions in one repo, released together on one version.
 | `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, `PredictiveQuery`, model handles, adapters, transport, sessions, results. |
 | `sdm-api` | `sdm_api` | pure python | The wire only: OpenAPI-generated bindings and the types the NIM speaks. |
 | `sdm-pql` | `predictive_query` | pure python | The language: grammar, parser, validator, AST, model profiles, and the schema types PQL speaks. |
-| `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables: SQLite, DuckDB, Snowflake, Databricks, S3. |
+| `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables: SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3. |
 | `sdm-relational-engine` | `sdm_relational_engine` | **native** | The relational model's heavy client-side work: graph building, samplers, the C++ neighbor sampler. |
 
 ```
@@ -118,7 +118,7 @@ works on a Mac; `kumo-relational` needs Linux x86-64.
 ```bash
 pip install sdm-client                 # tabular, PQL, transport — everywhere
 pip install sdm-client[relational]     # adds the native relational engine
-pip install sdm-client[snowflake]      # a warehouse backend (also duckdb/sqlite/databricks/s3)
+pip install sdm-client[snowflake]      # one backend (also duckdb/sqlite/postgres/databricks/s3)
 pip install sdm-client[all]            # relational + every backend
 ```
 

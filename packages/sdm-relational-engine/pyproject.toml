@@ -8,10 +8,14 @@ license = "Apache-2.0"
 license-files=["LICENSE", "NOTICE"]
 description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Kumo Relational Client"
 readme="README.md"
-# Upper bound matches the interpreters CI builds and imports wheels for
-# (cp310..cp313 on manylinux_2_28 x86-64): this package ships binary wheels
-# only (no sdist), so a version with no wheel must fail resolution rather than
-# fail to find a distribution. Move both together.
+# This package ships binary wheels only (no sdist), so a version with no wheel
+# must fail resolution rather than fail to find a distribution. The bound and
+# the classifiers below name the same interpreters and move together.
+#
+# CI builds one wheel, for the interpreter the job runs on, to prove the five
+# distributions build and install together. Nothing builds the matrix these
+# classifiers name, and nothing publishes any of them, so the bound states
+# what the extension supports rather than what has been released.
 requires-python=">=3.10,<3.14"
 keywords=[
     "deep-learning",
@@ -19,7 +23,6 @@ keywords=[
     "relational-foundation-model",
     "predictive-query",
 ]
-# Only the interpreter versions `build_sdm_relational_engine_wheels` actually builds.
 classifiers=[
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -53,7 +56,9 @@ snowflake-serving=[
 test=[
     "packaging",
     "pytest",
+    "pytest-httpserver",
     "pytest-mock",
+    "pytest-subtests",
     "requests-mock",
 ]
 explain=[

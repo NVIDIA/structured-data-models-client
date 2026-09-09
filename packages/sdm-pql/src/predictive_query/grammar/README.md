@@ -26,7 +26,7 @@ If changing the grammar, download Antlr4 tool. Make sure to cross-check the vers
 ### Download the antlr jar
 
 ```
-wget https://www.antlr.org/download/antlr-4.9.3-complete.jar
+wget https://www.antlr.org/download/antlr-4.13.2-complete.jar
 ```
 
 ### Copy it to `/usr/local/lib`.
@@ -34,17 +34,17 @@ wget https://www.antlr.org/download/antlr-4.9.3-complete.jar
 In Mac, you may need to create `/user/local/lib` first
 
 ```
-sudo cp antlr-4.9.3-complete.jar /usr/local/lib/
+sudo cp antlr-4.13.2-complete.jar /usr/local/lib/
 ```
 
 ### Add this to your .bash_profile or .bashrc
 
 ```
-export CLASSPATH=".:/usr/local/lib/antlr-4.9.3-complete.jar:$CLASSPATH"
+export CLASSPATH=".:/usr/local/lib/antlr-4.13.2-complete.jar:$CLASSPATH"
 # simplify the use of the tool to generate lexer and parser
-alias antlr4='java -Xmx500M -cp "/usr/local/lib/antlr-4.9.3-complete.jar:$CLASSPATH" org.antlr.v4.Tool'
+alias antlr4='java -Xmx500M -cp "/usr/local/lib/antlr-4.13.2-complete.jar:$CLASSPATH" org.antlr.v4.Tool'
 # simplify the use of the tool to test the generated code
-alias grun='java -Xmx500M -cp "/usr/local/lib/antlr-4.9.3-complete.jar:$CLASSPATH" org.antlr.v4.gui.TestRig'
+alias grun='java -Xmx500M -cp "/usr/local/lib/antlr-4.13.2-complete.jar:$CLASSPATH" org.antlr.v4.gui.TestRig'
 ```
 
 Once installed, `Antlr4` can be used to generate the code files with:

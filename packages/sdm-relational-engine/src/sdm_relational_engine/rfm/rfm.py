@@ -3,14 +3,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+import logging
 import math
 import os
 import re
 import time
+import uuid
 import warnings
 from collections import defaultdict
 from collections.abc import Generator, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any, Literal, overload
 
@@ -39,6 +42,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 
 from sdm_relational_engine import in_notebook
+from sdm_relational_engine._version import __version__
 from sdm_relational_engine.api.explain import GraphGradientScore
 from sdm_relational_engine.api.rfm import (
     ClassificationInferenceConfig,
@@ -56,6 +60,7 @@ from sdm_relational_engine.rfm.base import DataBackend, Sampler, composite_key
 from sdm_relational_engine.rfm.base.utils import Timestamp, to_naive_utc
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
 from sdm_relational_engine.rfm.explain_summary import generate_summary
+from sdm_relational_engine.rfm.fingerprint import graph_fingerprint
 from sdm_relational_engine.rfm.payload import (
     INSTANCE_ID,
     context_size_stats,
@@ -67,6 +72,12 @@ from sdm_relational_engine.rfm.payload import (
     validate_payload_table_rows,
 )
 from sdm_relational_engine.rfm.query_parser import parse_query_locally
+from sdm_relational_engine.rfm.telemetry import (
+    PredictionRecord,
+    describing,
+    pending,
+    recorded,
+)
 from sdm_relational_engine.runmode import RunMode
 from sdm_relational_engine.utils import ProgressLogger, display
 
@@ -351,6 +362,27 @@ _CARDINALITY_RE = re.compile(r'categorical cardinality \d+ exceeds limit (\d+)')
 _OPTIMIZABLE_BACKENDS = frozenset({DataBackend.SQLITE, DataBackend.DUCKDB})
 
 
+def _fingerprint_of(graph: Any) -> str:
+    r"""The graph's fingerprint, or an empty string if it cannot be taken.
+
+    A prediction must not fail because its record could not be labelled.
+    """
+    try:
+        return graph_fingerprint(graph)
+    except Exception:
+        try:
+            logging.getLogger('sdm_relational_engine').warning(
+                'Graph could not be fingerprinted, so predictions over it '
+                'cannot be told apart from ones over a different graph.',
+                exc_info=True,
+            )
+        except Exception:
+            # Saying so must not become the failure either, for the same
+            # reason the fingerprint itself does not fail the model.
+            pass
+        return ''
+
+
 def _first_uncastable(
     values: Sequence[Any], dtype: Any
 ) -> tuple[int, Any] | None:
@@ -622,6 +654,34 @@ def _extract_explanation(
     return prediction.drop(columns=['EXPLANATION']), summary, details, warning
 
 
+def _anchor_of(task: Any) -> str:
+    r"""When the prediction was anchored, as the task table recorded it.
+
+    Two runs of one query at different anchors are different answers, so a
+    record that cannot say which anchor it used cannot explain either.
+
+    A task anchored to each entity's own timestamp is named rather than dated,
+    because there is no one time to report. It has to be named: `time_column`
+    is `None` for that task exactly as it is for a task with no anchor at all,
+    so reading it alone makes the two look the same.
+    """
+    if getattr(task, 'use_entity_time', False):
+        return 'entity'
+    held = getattr(task, 'time_column', None)
+    column = getattr(held, 'name', held)
+    frame = getattr(task, '_pred_df', None)
+    if (
+        not column
+        or frame is None
+        or column not in getattr(frame, 'columns', [])
+    ):
+        return ''
+    try:
+        return str(frame[column].max())
+    except Exception:
+        return ''
+
+
 def _encode_composite_indices(
     indices: Sequence[Any],
     entity_key: tuple[str, ...],
@@ -749,7 +809,9 @@ class KumoRelational:
         _client: NimClient | None = None,
     ) -> None:
         graph = graph.validate()
+        self._graph = graph
         self._graph_def = graph._to_api_graph_definition()
+        self._fingerprint = _fingerprint_of(graph)
         self._composite_key_dict: dict[str, tuple[str, ...]] = {
             name: table.primary_key_columns
             for name, table in graph.tables.items()
@@ -793,8 +855,12 @@ class KumoRelational:
             RFMAPI(_client) if _client is not None else None
         )
 
-        self._batch_size: int | Literal['max'] | None = None
-        self._num_retries: int = 0
+        self._batch_size: ContextVar[int | Literal['max'] | None] = ContextVar(
+            f'{type(self).__name__}._batch_size', default=None
+        )
+        self._num_retries: ContextVar[int] = ContextVar(
+            f'{type(self).__name__}._num_retries', default=0
+        )
 
     @property
     def _api_client(self) -> RFMAPI:
@@ -842,12 +908,11 @@ class KumoRelational:
                 f'zero (got {num_retries})'
             )
 
-        previous = self._num_retries
-        self._num_retries = num_retries
+        token = self._num_retries.set(num_retries)
         try:
             yield
         finally:
-            self._num_retries = previous
+            self._num_retries.reset(token)
 
     @contextmanager
     def batch_mode(
@@ -869,6 +934,14 @@ class KumoRelational:
                 to unexpected server issues.
 
         Note:
+            The setting is held per execution context, so one model can be
+            shared by concurrent threads and by concurrent asyncio tasks
+            without their blocks overwriting each other. That covers the ways a
+            service dispatches work, but not a process pool: a subprocess
+            starts with a fresh context, so a prediction dispatched into one
+            runs at the default rather than the size set around the call.
+
+        Note:
             A multi-batch prediction uploads its context once, into a session
             the batches share, unless ``random_seed=None`` or
             ``KUMO_RELATIONAL_DISABLE_SESSIONS`` rules that out -- in which case every
@@ -884,13 +957,12 @@ class KumoRelational:
                 f"literal 'max' (got {batch_size!r})"
             )
 
-        previous = self._batch_size
-        self._batch_size = batch_size
+        token = self._batch_size.set(batch_size)
         try:
             with self.retry(num_retries):
                 yield
         finally:
-            self._batch_size = previous
+            self._batch_size.reset(token)
 
     @overload
     def predict(
@@ -1130,7 +1202,11 @@ class KumoRelational:
                 msg = f'[bold]PREDICT[/bold] {query_repr}'
             verbose = ProgressLogger.default(msg=msg, verbose=verbose)
 
-        with verbose as logger:
+        described = describing(
+            query_type=str(getattr(query_def, 'query_type', '')),
+            entities=len(indices),
+        )
+        with described, verbose as logger:
             task_table = self._get_task_table(
                 query=query_def,
                 indices=indices,
@@ -1161,6 +1237,17 @@ class KumoRelational:
             if entity_key is not None:
                 result = _decode_composite_entities(result, entity_key)
             return result
+
+    def _graph_fingerprint(self) -> str:
+        r"""Name the graph this prediction ran against.
+
+        Taken once, when the model was built, because that is when the graph
+        stops mattering: the query is parsed against `_graph_def` and the rows
+        come from `_sampler`, both fixed here. Re-reading the caller's graph
+        per call would report a link they removed afterwards as though the
+        prediction had used it.
+        """
+        return self._fingerprint
 
     def _composite_entity_key(self, query: Any) -> tuple[str, ...] | None:
         r"""The columns the query's entity table spreads its identity across.
@@ -1322,11 +1409,12 @@ class KumoRelational:
         )
 
     def _resolve_batch_size(self, task: TaskTable) -> int:
-        if self._batch_size is None:
+        batch_size = self._batch_size.get()
+        if batch_size is None:
             return task.num_prediction_examples
-        if self._batch_size == 'max':
+        if batch_size == 'max':
             return _MAX_PRED_SIZE[task.task_type]
-        return self._batch_size
+        return batch_size
 
     def _resolve_num_batches(self, task: TaskTable) -> int:
         batch_size = self._resolve_batch_size(task)
@@ -1406,7 +1494,8 @@ class KumoRelational:
         for generated in requests:
             materialized = generated.materialized
             request_payload = materialized.payload
-            for attempt in range(self._num_retries + 1):
+            num_retries = self._num_retries.get()
+            for attempt in range(num_retries + 1):
                 try:
                     if session is not None and session.active:
                         resp = self._session_predict_batch(generated, session)
@@ -1483,7 +1572,7 @@ class KumoRelational:
                     failure = _nim_failure_error(
                         e, explain_config is not None, request_payload
                     )
-                    if attempt == self._num_retries or not failure.transient:
+                    if attempt == num_retries or not failure.transient:
                         raise failure from None
                     time.sleep(_RETRY_BACKOFF_BASE_SECONDS**attempt)
         return predictions, summary, details, warning
@@ -1781,7 +1870,26 @@ class KumoRelational:
                 msg = f'Predicting {task_type_repr} task'
             verbose = ProgressLogger.default(msg=msg, verbose=verbose)
 
-        with verbose as logger:
+        record = PredictionRecord(
+            graph_fingerprint=self._graph_fingerprint(),
+            engine_version=__version__,
+            run_mode=str(RunMode(run_mode)),
+            batch_size=str(self._batch_size.get()),
+            # The resolved neighbour list, not the argument: `num_hops` is
+            # deprecated in favour of `num_neighbors`, and passing the latter
+            # sets the hop count while leaving the former at its default. The
+            # list is what the sampler walks, so its length is what ran.
+            num_hops=len(num_neighbors),
+            explain=explain_config is not None,
+            prediction_id=uuid.uuid4().hex,
+            task_type=str(getattr(task, 'task_type', '')),
+            entity_table=','.join(
+                getattr(task, 'entity_table_names', ()) or ()
+            ),
+            anchor_time=_anchor_of(task),
+            **pending(),
+        )
+        with recorded(record), verbose as logger:
             requests = self._iter_task_requests(
                 task,
                 explain=explain_config is not None,

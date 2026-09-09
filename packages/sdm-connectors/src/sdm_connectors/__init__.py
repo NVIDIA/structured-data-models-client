@@ -2,6 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from sdm_connectors._version import __version__
 from sdm_connectors.backends import connect
 from sdm_connectors.reader import read, read_table
 from sdm_connectors.sql import (
@@ -10,8 +11,6 @@ from sdm_connectors.sql import (
     quote_ident,
     resolve_sql,
 )
-
-__version__ = '1.0.0'
 
 __all__ = [
     'ConnectorError',

@@ -27,9 +27,11 @@ classifiers = [
 # This package parses and validates text; it loads no model, reads no
 # warehouse and opens no socket.
 dependencies = [
-    # 4.9.3 exactly: the checked-in parser is ANTLR 4.9.3 output, and a
-    # serialized ATN is only readable by the runtime that emitted it.
-    "antlr4-python3-runtime==4.9.3",
+    # 4.13.2 exactly: the checked-in parser is ANTLR 4.13.2 output, and a
+    # serialized ATN is only readable by the runtime that emitted it. 4.9.3,
+    # which this used to pin, is published as a source distribution only, so
+    # an environment installing with `--only-binary=:all:` cannot resolve it.
+    "antlr4-python3-runtime==4.13.2",
     "numpy",
     "pandas",
     "pydantic",

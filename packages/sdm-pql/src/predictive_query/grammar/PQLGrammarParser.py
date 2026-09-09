@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Generated from PQLGrammar.g4 by ANTLR 4.9.3
+# Generated from PQLGrammar.g4 by ANTLR 4.13.2
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
@@ -12,88 +12,76 @@ if sys.version_info[1] > 5:
 else:
 	from typing.io import TextIO
 
-
 def serializedATN():
-    with StringIO() as buf:
-        buf.write("\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3\"")
-        buf.write("\u00c3\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6\4\7\t\7")
-        buf.write("\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t\13\4\f\t\f\4\r\t\r\4\16")
-        buf.write("\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t\22\3\2\3\2")
-        buf.write("\3\2\3\2\3\2\3\2\3\2\3\2\3\3\3\3\3\3\3\3\3\3\3\3\3\3\5")
-        buf.write("\3\64\n\3\3\4\3\4\3\5\3\5\3\5\3\6\3\6\3\6\3\6\3\7\3\7")
-        buf.write("\3\7\5\7B\n\7\3\b\3\b\3\b\3\b\5\bH\n\b\3\t\3\t\5\tL\n")
-        buf.write("\t\3\n\3\n\3\n\3\n\3\13\3\13\3\13\3\13\3\13\3\13\3\f\3")
-        buf.write("\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f\3\f")
-        buf.write("\5\fg\n\f\3\f\3\f\3\f\3\f\3\f\3\f\7\fo\n\f\f\f\16\fr\13")
-        buf.write("\f\3\r\3\r\3\r\3\r\5\rx\n\r\3\r\3\r\3\r\3\r\3\r\3\r\3")
-        buf.write("\r\3\r\3\r\3\r\5\r\u0084\n\r\3\r\3\r\3\r\3\r\3\r\3\r\3")
-        buf.write("\r\3\r\3\r\3\r\3\r\3\r\5\r\u0092\n\r\3\r\3\r\5\r\u0096")
-        buf.write("\n\r\3\16\3\16\3\16\3\16\3\17\3\17\3\20\3\20\3\20\3\20")
-        buf.write("\3\20\3\20\3\20\5\20\u00a5\n\20\3\21\3\21\3\21\3\21\6")
-        buf.write("\21\u00ab\n\21\r\21\16\21\u00ac\3\21\3\21\3\21\3\21\3")
-        buf.write("\21\3\21\3\21\3\21\3\21\3\21\3\21\3\21\3\21\3\21\5\21")
-        buf.write("\u00bd\n\21\3\22\3\22\5\22\u00c1\n\22\3\22\2\3\26\23\2")
-        buf.write("\4\6\b\n\f\16\20\22\24\26\30\32\34\36 \"\2\6\3\2\17\20")
-        buf.write("\3\2\n\13\4\2\31\31\35\35\3\2\7\b\2\u00cf\2$\3\2\2\2\4")
-        buf.write("\63\3\2\2\2\6\65\3\2\2\2\b\67\3\2\2\2\n:\3\2\2\2\fA\3")
-        buf.write("\2\2\2\16G\3\2\2\2\20K\3\2\2\2\22M\3\2\2\2\24Q\3\2\2\2")
-        buf.write("\26f\3\2\2\2\30\u0095\3\2\2\2\32\u0097\3\2\2\2\34\u009b")
-        buf.write("\3\2\2\2\36\u00a4\3\2\2\2 \u00bc\3\2\2\2\"\u00be\3\2\2")
-        buf.write("\2$%\7\t\2\2%&\5\f\7\2&\'\5\4\3\2\'(\t\2\2\2()\5\16\b")
-        buf.write("\2)*\5\20\t\2*+\7\2\2\3+\3\3\2\2\2,\64\5\n\6\2-.\5\6\4")
-        buf.write("\2./\5\b\5\2/\64\3\2\2\2\60\64\5\b\5\2\61\64\5\6\4\2\62")
-        buf.write("\64\3\2\2\2\63,\3\2\2\2\63-\3\2\2\2\63\60\3\2\2\2\63\61")
-        buf.write("\3\2\2\2\63\62\3\2\2\2\64\5\3\2\2\2\65\66\t\3\2\2\66\7")
-        buf.write("\3\2\2\2\678\7\f\2\289\7\35\2\29\t\3\2\2\2:;\7\r\2\2;")
-        buf.write("<\7\35\2\2<=\7\16\2\2=\13\3\2\2\2>B\5\26\f\2?B\5\30\r")
-        buf.write("\2@B\5\34\17\2A>\3\2\2\2A?\3\2\2\2A@\3\2\2\2B\r\3\2\2")
-        buf.write("\2CH\5\34\17\2DH\5\32\16\2EH\5\22\n\2FH\5\24\13\2GC\3")
-        buf.write("\2\2\2GD\3\2\2\2GE\3\2\2\2GF\3\2\2\2H\17\3\2\2\2IJ\7\22")
-        buf.write("\2\2JL\5\26\f\2KI\3\2\2\2KL\3\2\2\2L\21\3\2\2\2MN\5\34")
-        buf.write("\17\2NO\7\27\2\2OP\5\36\20\2P\23\3\2\2\2QR\5\34\17\2R")
-        buf.write("S\7\27\2\2ST\5\36\20\2TU\7\21\2\2UV\5\26\f\2V\25\3\2\2")
-        buf.write("\2WX\b\f\1\2XY\5\30\r\2YZ\7\27\2\2Z[\5\36\20\2[g\3\2\2")
-        buf.write("\2\\]\5\34\17\2]^\7\27\2\2^_\5\36\20\2_g\3\2\2\2`a\7\25")
-        buf.write("\2\2ag\5\26\f\6bc\7\3\2\2cd\5\26\f\2de\7\4\2\2eg\3\2\2")
-        buf.write("\2fW\3\2\2\2f\\\3\2\2\2f`\3\2\2\2fb\3\2\2\2gp\3\2\2\2")
-        buf.write("hi\f\5\2\2ij\7\23\2\2jo\5\26\f\6kl\f\4\2\2lm\7\24\2\2")
-        buf.write("mo\5\26\f\5nh\3\2\2\2nk\3\2\2\2or\3\2\2\2pn\3\2\2\2pq")
-        buf.write("\3\2\2\2q\27\3\2\2\2rp\3\2\2\2st\7\26\2\2tw\7\3\2\2ux")
-        buf.write("\5\34\17\2vx\5\32\16\2wu\3\2\2\2wv\3\2\2\2xy\3\2\2\2y")
-        buf.write("z\7\5\2\2z{\t\4\2\2{|\7\5\2\2|}\7\35\2\2}~\7\4\2\2~\u0096")
-        buf.write("\3\2\2\2\177\u0080\7\26\2\2\u0080\u0083\7\3\2\2\u0081")
-        buf.write("\u0084\5\34\17\2\u0082\u0084\5\32\16\2\u0083\u0081\3\2")
-        buf.write("\2\2\u0083\u0082\3\2\2\2\u0084\u0085\3\2\2\2\u0085\u0086")
-        buf.write("\7\5\2\2\u0086\u0087\t\4\2\2\u0087\u0088\7\5\2\2\u0088")
-        buf.write("\u0089\7\35\2\2\u0089\u008a\7\5\2\2\u008a\u008b\7\32\2")
-        buf.write("\2\u008b\u008c\7\4\2\2\u008c\u0096\3\2\2\2\u008d\u008e")
-        buf.write("\7\26\2\2\u008e\u0091\7\3\2\2\u008f\u0092\5\34\17\2\u0090")
-        buf.write("\u0092\5\32\16\2\u0091\u008f\3\2\2\2\u0091\u0090\3\2\2")
-        buf.write("\2\u0092\u0093\3\2\2\2\u0093\u0094\7\4\2\2\u0094\u0096")
-        buf.write("\3\2\2\2\u0095s\3\2\2\2\u0095\177\3\2\2\2\u0095\u008d")
-        buf.write("\3\2\2\2\u0096\31\3\2\2\2\u0097\u0098\5\34\17\2\u0098")
-        buf.write("\u0099\7\21\2\2\u0099\u009a\5\26\f\2\u009a\33\3\2\2\2")
-        buf.write("\u009b\u009c\t\5\2\2\u009c\35\3\2\2\2\u009d\u00a5\7\6")
-        buf.write("\2\2\u009e\u00a5\7\35\2\2\u009f\u00a5\7\37\2\2\u00a0\u00a5")
-        buf.write("\7\36\2\2\u00a1\u00a5\5\"\22\2\u00a2\u00a5\7\30\2\2\u00a3")
-        buf.write("\u00a5\5 \21\2\u00a4\u009d\3\2\2\2\u00a4\u009e\3\2\2\2")
-        buf.write("\u00a4\u009f\3\2\2\2\u00a4\u00a0\3\2\2\2\u00a4\u00a1\3")
-        buf.write("\2\2\2\u00a4\u00a2\3\2\2\2\u00a4\u00a3\3\2\2\2\u00a5\37")
-        buf.write("\3\2\2\2\u00a6\u00aa\7\3\2\2\u00a7\u00a8\5\36\20\2\u00a8")
-        buf.write("\u00a9\7\5\2\2\u00a9\u00ab\3\2\2\2\u00aa\u00a7\3\2\2\2")
-        buf.write("\u00ab\u00ac\3\2\2\2\u00ac\u00aa\3\2\2\2\u00ac\u00ad\3")
-        buf.write("\2\2\2\u00ad\u00ae\3\2\2\2\u00ae\u00af\5\36\20\2\u00af")
-        buf.write("\u00b0\7\4\2\2\u00b0\u00bd\3\2\2\2\u00b1\u00b2\7\3\2\2")
-        buf.write("\u00b2\u00b3\5\36\20\2\u00b3\u00b4\7\4\2\2\u00b4\u00b5")
-        buf.write("\b\21\1\2\u00b5\u00bd\3\2\2\2\u00b6\u00b7\7\3\2\2\u00b7")
-        buf.write("\u00b8\5\36\20\2\u00b8\u00b9\7\5\2\2\u00b9\u00ba\7\4\2")
-        buf.write("\2\u00ba\u00bb\b\21\1\2\u00bb\u00bd\3\2\2\2\u00bc\u00a6")
-        buf.write("\3\2\2\2\u00bc\u00b1\3\2\2\2\u00bc\u00b6\3\2\2\2\u00bd")
-        buf.write("!\3\2\2\2\u00be\u00c0\7 \2\2\u00bf\u00c1\7!\2\2\u00c0")
-        buf.write("\u00bf\3\2\2\2\u00c0\u00c1\3\2\2\2\u00c1#\3\2\2\2\21\63")
-        buf.write("AGKfnpw\u0083\u0091\u0095\u00a4\u00ac\u00bc\u00c0")
-        return buf.getvalue()
-
+    return [
+        4,1,32,193,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,
+        6,2,7,7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,13,
+        2,14,7,14,2,15,7,15,2,16,7,16,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,
+        1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,50,8,1,1,2,1,2,1,3,1,3,1,3,1,4,1,4,
+        1,4,1,4,1,5,1,5,1,5,3,5,64,8,5,1,6,1,6,1,6,1,6,3,6,70,8,6,1,7,1,
+        7,3,7,74,8,7,1,8,1,8,1,8,1,8,1,9,1,9,1,9,1,9,1,9,1,9,1,10,1,10,1,
+        10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,1,10,3,
+        10,101,8,10,1,10,1,10,1,10,1,10,1,10,1,10,5,10,109,8,10,10,10,12,
+        10,112,9,10,1,11,1,11,1,11,1,11,3,11,118,8,11,1,11,1,11,1,11,1,11,
+        1,11,1,11,1,11,1,11,1,11,1,11,3,11,130,8,11,1,11,1,11,1,11,1,11,
+        1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,11,3,11,144,8,11,1,11,1,11,
+        3,11,148,8,11,1,12,1,12,1,12,1,12,1,13,1,13,1,14,1,14,1,14,1,14,
+        1,14,1,14,1,14,3,14,163,8,14,1,15,1,15,1,15,1,15,4,15,169,8,15,11,
+        15,12,15,170,1,15,1,15,1,15,1,15,1,15,1,15,1,15,1,15,1,15,1,15,1,
+        15,1,15,1,15,1,15,3,15,187,8,15,1,16,1,16,3,16,191,8,16,1,16,0,1,
+        20,17,0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,0,4,1,0,13,14,
+        1,0,8,9,2,0,23,23,27,27,1,0,5,6,205,0,34,1,0,0,0,2,49,1,0,0,0,4,
+        51,1,0,0,0,6,53,1,0,0,0,8,56,1,0,0,0,10,63,1,0,0,0,12,69,1,0,0,0,
+        14,73,1,0,0,0,16,75,1,0,0,0,18,79,1,0,0,0,20,100,1,0,0,0,22,147,
+        1,0,0,0,24,149,1,0,0,0,26,153,1,0,0,0,28,162,1,0,0,0,30,186,1,0,
+        0,0,32,188,1,0,0,0,34,35,5,7,0,0,35,36,3,10,5,0,36,37,3,2,1,0,37,
+        38,7,0,0,0,38,39,3,12,6,0,39,40,3,14,7,0,40,41,5,0,0,1,41,1,1,0,
+        0,0,42,50,3,8,4,0,43,44,3,4,2,0,44,45,3,6,3,0,45,50,1,0,0,0,46,50,
+        3,6,3,0,47,50,3,4,2,0,48,50,1,0,0,0,49,42,1,0,0,0,49,43,1,0,0,0,
+        49,46,1,0,0,0,49,47,1,0,0,0,49,48,1,0,0,0,50,3,1,0,0,0,51,52,7,1,
+        0,0,52,5,1,0,0,0,53,54,5,10,0,0,54,55,5,27,0,0,55,7,1,0,0,0,56,57,
+        5,11,0,0,57,58,5,27,0,0,58,59,5,12,0,0,59,9,1,0,0,0,60,64,3,20,10,
+        0,61,64,3,22,11,0,62,64,3,26,13,0,63,60,1,0,0,0,63,61,1,0,0,0,63,
+        62,1,0,0,0,64,11,1,0,0,0,65,70,3,26,13,0,66,70,3,24,12,0,67,70,3,
+        16,8,0,68,70,3,18,9,0,69,65,1,0,0,0,69,66,1,0,0,0,69,67,1,0,0,0,
+        69,68,1,0,0,0,70,13,1,0,0,0,71,72,5,16,0,0,72,74,3,20,10,0,73,71,
+        1,0,0,0,73,74,1,0,0,0,74,15,1,0,0,0,75,76,3,26,13,0,76,77,5,21,0,
+        0,77,78,3,28,14,0,78,17,1,0,0,0,79,80,3,26,13,0,80,81,5,21,0,0,81,
+        82,3,28,14,0,82,83,5,15,0,0,83,84,3,20,10,0,84,19,1,0,0,0,85,86,
+        6,10,-1,0,86,87,3,22,11,0,87,88,5,21,0,0,88,89,3,28,14,0,89,101,
+        1,0,0,0,90,91,3,26,13,0,91,92,5,21,0,0,92,93,3,28,14,0,93,101,1,
+        0,0,0,94,95,5,19,0,0,95,101,3,20,10,4,96,97,5,1,0,0,97,98,3,20,10,
+        0,98,99,5,2,0,0,99,101,1,0,0,0,100,85,1,0,0,0,100,90,1,0,0,0,100,
+        94,1,0,0,0,100,96,1,0,0,0,101,110,1,0,0,0,102,103,10,3,0,0,103,104,
+        5,17,0,0,104,109,3,20,10,4,105,106,10,2,0,0,106,107,5,18,0,0,107,
+        109,3,20,10,3,108,102,1,0,0,0,108,105,1,0,0,0,109,112,1,0,0,0,110,
+        108,1,0,0,0,110,111,1,0,0,0,111,21,1,0,0,0,112,110,1,0,0,0,113,114,
+        5,20,0,0,114,117,5,1,0,0,115,118,3,26,13,0,116,118,3,24,12,0,117,
+        115,1,0,0,0,117,116,1,0,0,0,118,119,1,0,0,0,119,120,5,3,0,0,120,
+        121,7,2,0,0,121,122,5,3,0,0,122,123,5,27,0,0,123,124,5,2,0,0,124,
+        148,1,0,0,0,125,126,5,20,0,0,126,129,5,1,0,0,127,130,3,26,13,0,128,
+        130,3,24,12,0,129,127,1,0,0,0,129,128,1,0,0,0,130,131,1,0,0,0,131,
+        132,5,3,0,0,132,133,7,2,0,0,133,134,5,3,0,0,134,135,5,27,0,0,135,
+        136,5,3,0,0,136,137,5,24,0,0,137,138,5,2,0,0,138,148,1,0,0,0,139,
+        140,5,20,0,0,140,143,5,1,0,0,141,144,3,26,13,0,142,144,3,24,12,0,
+        143,141,1,0,0,0,143,142,1,0,0,0,144,145,1,0,0,0,145,146,5,2,0,0,
+        146,148,1,0,0,0,147,113,1,0,0,0,147,125,1,0,0,0,147,139,1,0,0,0,
+        148,23,1,0,0,0,149,150,3,26,13,0,150,151,5,15,0,0,151,152,3,20,10,
+        0,152,25,1,0,0,0,153,154,7,3,0,0,154,27,1,0,0,0,155,163,5,4,0,0,
+        156,163,5,27,0,0,157,163,5,29,0,0,158,163,5,28,0,0,159,163,3,32,
+        16,0,160,163,5,22,0,0,161,163,3,30,15,0,162,155,1,0,0,0,162,156,
+        1,0,0,0,162,157,1,0,0,0,162,158,1,0,0,0,162,159,1,0,0,0,162,160,
+        1,0,0,0,162,161,1,0,0,0,163,29,1,0,0,0,164,168,5,1,0,0,165,166,3,
+        28,14,0,166,167,5,3,0,0,167,169,1,0,0,0,168,165,1,0,0,0,169,170,
+        1,0,0,0,170,168,1,0,0,0,170,171,1,0,0,0,171,172,1,0,0,0,172,173,
+        3,28,14,0,173,174,5,2,0,0,174,187,1,0,0,0,175,176,5,1,0,0,176,177,
+        3,28,14,0,177,178,5,2,0,0,178,179,6,15,-1,0,179,187,1,0,0,0,180,
+        181,5,1,0,0,181,182,3,28,14,0,182,183,5,3,0,0,183,184,5,2,0,0,184,
+        185,6,15,-1,0,185,187,1,0,0,0,186,164,1,0,0,0,186,175,1,0,0,0,186,
+        180,1,0,0,0,187,31,1,0,0,0,188,190,5,30,0,0,189,191,5,31,0,0,190,
+        189,1,0,0,0,190,191,1,0,0,0,191,33,1,0,0,0,15,49,63,69,73,100,108,
+        110,117,129,143,147,162,170,186,190
+    ]
 
 class PQLGrammarParser ( Parser ):
 
@@ -174,7 +162,7 @@ class PQLGrammarParser ( Parser ):
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
-        self.checkVersion("4.9.3")
+        self.checkVersion("4.13.2")
         self._interp = ParserATNSimulator(self, self.atn, self.decisionsToDFA, self.sharedContextCache)
         self._predicates = None
 
@@ -243,7 +231,7 @@ class PQLGrammarParser ( Parser ):
             self.problem_spec()
             self.state = 37
             _la = self._input.LA(1)
-            if not(_la==PQLGrammarParser.FOR_EACH or _la==PQLGrammarParser.FOR):
+            if not(_la==13 or _la==14):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
@@ -377,7 +365,7 @@ class PQLGrammarParser ( Parser ):
             self.enterOuterAlt(localctx, 1)
             self.state = 51
             _la = self._input.LA(1)
-            if not(_la==PQLGrammarParser.CLASSIFY or _la==PQLGrammarParser.RANK):
+            if not(_la==8 or _la==9):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
@@ -664,7 +652,7 @@ class PQLGrammarParser ( Parser ):
             self.state = 73
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            if _la==PQLGrammarParser.ASSUMING:
+            if _la==16:
                 self.state = 71
                 self.match(PQLGrammarParser.ASSUMING)
                 self.state = 72
@@ -854,7 +842,7 @@ class PQLGrammarParser ( Parser ):
             self.state = 100
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [PQLGrammarParser.AGGR]:
+            if token in [20]:
                 self.state = 86
                 self.aggregation()
                 self.state = 87
@@ -862,7 +850,7 @@ class PQLGrammarParser ( Parser ):
                 self.state = 88
                 self.constant()
                 pass
-            elif token in [PQLGrammarParser.FQN_COLUMN, PQLGrammarParser.WILDCARD_COLUMN]:
+            elif token in [5, 6]:
                 self.state = 90
                 self.column()
                 self.state = 91
@@ -870,13 +858,13 @@ class PQLGrammarParser ( Parser ):
                 self.state = 92
                 self.constant()
                 pass
-            elif token in [PQLGrammarParser.NOT]:
+            elif token in [19]:
                 self.state = 94
                 self.match(PQLGrammarParser.NOT)
                 self.state = 95
                 self.condition(4)
                 pass
-            elif token in [PQLGrammarParser.T__0]:
+            elif token in [1]:
                 self.state = 96
                 self.match(PQLGrammarParser.T__0)
                 self.state = 97
@@ -1014,7 +1002,7 @@ class PQLGrammarParser ( Parser ):
                 self.match(PQLGrammarParser.T__2)
                 self.state = 120
                 _la = self._input.LA(1)
-                if not(_la==PQLGrammarParser.NEG_INFTY or _la==PQLGrammarParser.INT):
+                if not(_la==23 or _la==27):
                     self._errHandler.recoverInline(self)
                 else:
                     self._errHandler.reportMatch(self)
@@ -1051,7 +1039,7 @@ class PQLGrammarParser ( Parser ):
                 self.match(PQLGrammarParser.T__2)
                 self.state = 132
                 _la = self._input.LA(1)
-                if not(_la==PQLGrammarParser.NEG_INFTY or _la==PQLGrammarParser.INT):
+                if not(_la==23 or _la==27):
                     self._errHandler.recoverInline(self)
                 else:
                     self._errHandler.reportMatch(self)
@@ -1187,7 +1175,7 @@ class PQLGrammarParser ( Parser ):
             self.enterOuterAlt(localctx, 1)
             self.state = 153
             _la = self._input.LA(1)
-            if not(_la==PQLGrammarParser.FQN_COLUMN or _la==PQLGrammarParser.WILDCARD_COLUMN):
+            if not(_la==5 or _la==6):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
@@ -1251,37 +1239,37 @@ class PQLGrammarParser ( Parser ):
             self.state = 162
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [PQLGrammarParser.BOOL]:
+            if token in [4]:
                 self.enterOuterAlt(localctx, 1)
                 self.state = 155
                 self.match(PQLGrammarParser.BOOL)
                 pass
-            elif token in [PQLGrammarParser.INT]:
+            elif token in [27]:
                 self.enterOuterAlt(localctx, 2)
                 self.state = 156
                 self.match(PQLGrammarParser.INT)
                 pass
-            elif token in [PQLGrammarParser.STR]:
+            elif token in [29]:
                 self.enterOuterAlt(localctx, 3)
                 self.state = 157
                 self.match(PQLGrammarParser.STR)
                 pass
-            elif token in [PQLGrammarParser.DECIMAL]:
+            elif token in [28]:
                 self.enterOuterAlt(localctx, 4)
                 self.state = 158
                 self.match(PQLGrammarParser.DECIMAL)
                 pass
-            elif token in [PQLGrammarParser.DATE]:
+            elif token in [30]:
                 self.enterOuterAlt(localctx, 5)
                 self.state = 159
                 self.datetime()
                 pass
-            elif token in [PQLGrammarParser.NULL]:
+            elif token in [22]:
                 self.enterOuterAlt(localctx, 6)
                 self.state = 160
                 self.match(PQLGrammarParser.NULL)
                 pass
-            elif token in [PQLGrammarParser.T__0]:
+            elif token in [1]:
                 self.enterOuterAlt(localctx, 7)
                 self.state = 161
                 self.array()

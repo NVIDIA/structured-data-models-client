@@ -8,7 +8,7 @@ its graph samplers) don't each carry their own copy.
 It provides:
 
 - `connect(backend, **kwargs)`: open a connection to `sqlite` / `duckdb` /
-  `snowflake` / `databricks` (one driver per backend).
+  `postgres` / `snowflake` / `databricks` (one driver per backend).
 - `read(source, **kwargs) -> DataFrame`: read a table or query as a flat pandas
   DataFrame (also handles `local` DataFrames / CSV / Parquet, and `s3` object
   URIs: `read('s3', path='s3://bucket/table.parquet', storage_options=...)`).
@@ -24,9 +24,9 @@ suffix is rejected with `INVALID_CONNECTOR_ARGS` rather than parsed as CSV; pass
 recognised suffix.
 
 The two file-backed backends, `sqlite` and `duckdb`, accept `database=` and
-`uri=` as aliases for the same argument (supplying both is an error). The two
-warehouse backends, `snowflake` and `databricks`, are addressed by connection
-keywords instead, and reject any their driver does not declare,
+`uri=` as aliases for the same argument (supplying both is an error). The
+server backends, `postgres`, `snowflake` and `databricks`, are addressed by
+connection keywords instead, and reject any their driver does not declare,
 `driver_options={...}` passes anything else straight through. The
 `snowflake` backend reuses an active Snowpark session when no authentication
 arguments are given; a borrowed session cannot be reconfigured, so passing
@@ -58,7 +58,7 @@ sdm-client's `DRIVER_LOAD_FAILED`).
 Pure-python. Database drivers are optional extras:
 
 ```bash
-pip install "sdm-connectors[sqlite]"      # or [duckdb] / [snowflake] / [databricks] / [s3] / [all]
+pip install "sdm-connectors[sqlite]"      # or [duckdb] / [postgres] / [snowflake] / [databricks] / [s3] / [all]
 ```
 
 Consumers depend on it and surface these extras under their own name, e.g.
@@ -68,6 +68,14 @@ Consumers depend on it and surface these extras under their own name, e.g.
 ## Local development
 
 ```bash
-pip install -e ".[sqlite,duckdb,test]"
+pip install -e ".[sqlite,duckdb,postgres,databricks,test]"
 pytest tests
+```
+
+The exactness tests check that a value read here survives all the way onto the
+wire, so they need `sdm-client` as well. They skip without it; install it too
+to run them:
+
+```bash
+pip install -e ../sdm-api -e ../sdm-pql -e ../sdm-client
 ```

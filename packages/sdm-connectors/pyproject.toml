@@ -49,13 +49,19 @@ snowflake = [
     "snowflake-connector-python",
 ]
 databricks = [
-    "databricks-sql-connector>=3.0.0",
+    # 4.0.1 is the first release that reads `user_agent_entry`. Earlier ones
+    # read `_user_agent_entry` only, so the partner attribution this connector
+    # is required to send would be accepted and silently dropped.
+    "databricks-sql-connector>=4.0.1",
+]
+postgres = [
+    "psycopg[binary]>=3.1",
 ]
 s3 = [
     "s3fs>=2023.12.0",
 ]
 all = [
-    "sdm-connectors[sqlite,duckdb,snowflake,databricks,s3]",
+    "sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks,s3]",
 ]
 test = [
     "pytest",
@@ -74,7 +80,7 @@ include = ["sdm_connectors*"]
 "sdm_connectors" = ["py.typed"]
 
 [tool.setuptools.dynamic]
-version = {attr = "sdm_connectors.__version__"}
+version = {attr = "sdm_connectors._version.__version__"}
 
 [tool.pytest.ini_options]
 markers = [
