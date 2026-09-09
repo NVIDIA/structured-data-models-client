@@ -15,8 +15,8 @@ output fields on the call -- so constructing one is free and two of the same
 kind are interchangeable.
 
 The declarations below are **read from the deployments**, not from a design
-document: ``tfm-serving``'s tabular adapter and the relational NIM's universal
-adapter each publish their own task and output lists, and these mirror them.
+document: each NIM's adapter publishes its own task and output lists, and
+these mirror what the tabular and relational deployments actually answer.
 Where a source document disagreed, the servers won.
 
 **A runtime contract describes a deployment, and there is more than one.** The

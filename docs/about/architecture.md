@@ -24,14 +24,14 @@ Verified on `structured-data-api@main`, current as of today.
 **This does not affect anything shipping.** `kumo-tabular` and `kumo-relational` are both in the
 enum, so both work today and neither needs a contract change. What the enum forecloses is the
 source doc's `model="some-future-model"` escape hatch, which is deferred along with the models it
-would have served (§12). An unrecognised id is refused client-side with a message naming the
+would have served (§11). An unrecognised id is refused client-side with a message naming the
 contract change it would need, rather than being sent and rejected.
 
 If a third model is ever wanted, a small MR on `structured-data-api` opens the field. Until then
 this is a note, not a task.
 
 > **Model ids are fine.** An earlier draft claimed the NIMs still served `nemotron-*`. That was a
-> stale local checkout. On `origin/main`, `tfm-serving` declares
+> stale local checkout. The serving side declares
 > `ModelId = Literal["kumo-tabular", "kumo-relational"]`, and the tabular NIM's adapter registration,
 > `/v1/models` entry and `model_manifest.yaml` all say `kumo-tabular`. All three places agree.
 > **Re-clone before copying anything (§8).**
@@ -259,10 +259,10 @@ silently score a whole table.
 primary key, and a tabular frame has none. In phase 7 `Schema` synthesizes a request-local row id for
 a keyless table — a real column, positional, never sent as data and never surfacing in the result,
 which carries `row_index`. `FOR EACH users.<synthetic>` then validates unchanged, so the PQL validator
-is **not** relaxed and no query that is illegal today becomes legal. This is the concrete form of
-review comment #3.
+is **not** relaxed and no query that is illegal today becomes legal. This is the concrete form of what review
+asked for here.
 
-This is the answer to review comment #4. "Unseen" means a row that is not in the tables the schema was
+On the question review raised here: "unseen" means a row that is not in the tables the schema was
 built from. `FOR EACH` enumerates rows that *are* there, so PQL text alone can never produce them. The
 rows are an input, not a derivation — which is exactly why the direct builder carries tabular in v1.
 
@@ -313,8 +313,8 @@ requests may have no key at all. Join on the key when present, otherwise on `row
 ### What each model can produce
 
 The contract defines seven output fields. **This table is read from the servers**, not from the source
-doc — `tfm-serving/src/tfm_serving/adapters/tabular.py` and
-`structured-data-nims/…/rfm_nim/universal_adapter.py` each declare their own capabilities:
+doc — the tabular adapter and the relational NIM's universal adapter each declare their own
+capabilities, and this mirrors what they answer:
 
 | Output | `kumo-relational` | `kumo-tabular` |
 |---|---|---|
@@ -491,27 +491,7 @@ and credentials in a URL are stripped everywhere the URL is rendered.
 
 ---
 
-## 9. Every review comment, resolved
-
-| # | Who | Comment | Resolution |
-|---|---|---|---|
-| 1 | Lei | PQL for TabICL is doable, offers to prototype | **Accepted, with the phase-7 rules named.** `sdm-pql` already ships a `TABULAR` profile; §4 now specifies the two things that were missing — the synthetic row id, and that tabular sends coarse `classification`. |
-| 2 | Lei | Needing a full graph definition is an implementation detail | **Accepted.** Everything is inferred; you never author a schema. §3 |
-| 3 | Lei | `FOR EACH` primary key can be relaxed, or synthesise a row id | **Accepted — synthesise, don't relax.** Direct tabular needs no key at all. Tabular PQL gets a synthetic request-local row id so the validator is untouched. Relational infers a key and folds composite ones. §3, §4 |
-| 4 | Lei | What does "unseen" mean for PQL? | **Answered, and it changed the API.** A row not in the tables the schema was built from. `FOR EACH` can only enumerate rows that are there, so the rows to score are an explicit argument, never derived. §4 |
-| 5 | Lei | "The model can't see your database" is a challengeable assumption | **Deferred, not dismissed.** The wire requires embedded `context` and `predict` today. `materialize()` stays one explicit, replaceable step so a push-down path substitutes there. Trigger: the contract gains source references. |
-| 6 | Manush | Drop primary keys, add composite keys | **Composite keys yes; dropping them, only where that is honestly possible.** Direct tabular needs no key; tabular PQL gets a synthetic one; **relational genuinely cannot drop keys** because samplers join on them — but they are inferred, so you never author one. §3, §4 |
-| 6 | Manush | Client needs `fit` and `predict` | **Accepted, v1.** Sessions are `fit`. §5 |
-| 6 | Manush | No run mode; expose in-context samples and neighbours | **Accepted.** §7 |
-| 6 | Manush | Be able to add explainers | **Accepted.** Explanation is an output field with named formats on `ModelSpec.runtime`. §5 |
-| 7 | Manush | Rename `Graph` → `DB_SCHEMA` | **Accepted as `Schema`** — `DB_SCHEMA` reads as a constant in Python. §3 |
-| 8 | Alex | Does the direct form support related tables? | **Accepted.** `Request(…, related_tables=…)`. §4 |
-| 9 | Alex | Fold schema construction into `PredictiveQuery` | **Accepted.** `PredictiveQuery(text, {"users": df})` works; `Schema` stays available for editing. §3 |
-| 10 | Alex | A single table as a "graph" confuses users | **Accepted.** The name is gone. §3 |
-
----
-
-## 10. Phases
+## 9. Phases
 
 Each phase is independently shippable and tested.
 
@@ -530,24 +510,26 @@ shipping models are already in its enum (§0).
 
 ---
 
-## 11. This gets open-sourced
+## 10. This gets open-sourced
 
 It ships internal first, but public release is the destination, not a maybe. The predecessor client
 reached public by **retrofit** — a full audit plus an OSRB pass after the code existed. We are not
 repeating that. Every rule below is cheap on day one and expensive later.
 
-**Written OSS-clean from commit 1:**
+**Written OSS-clean from commit 1, and now carrying the rest:**
 
-| From commit 1 | Deferred, but a **release blocker** — not optional |
+| Held from commit 1 | Added for the release |
 |---|---|
-| SPDX header on every source file | `LICENSE` + `NOTICE` at the root **and in every distribution's metadata** |
-| A provenance record for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md` |
-| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public CI, publishing provenance, public issue policy |
-| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | A generated **SBOM** covering direct, optional, transitive, build, native and connector dependencies |
+| SPDX header on every source file | `LICENSE` and `NOTICE` at the root, and in every distribution's metadata |
+| A provenance record for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md` |
+| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public issue policy, and the repository URL every package publishes to, checked by the hygiene script |
+| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | — |
 
-`LICENSE` and `NOTICE` are listed as deferred only because the repo starts internal. They **cannot
-ship publicly without them**, and a hand-maintained dependency table is not an SBOM. Treat both as
-gates on the release, not as nice-to-haves.
+Two things in the right-hand column are still open, and neither is a
+nice-to-have. Public CI and publishing provenance land when the repository
+does. A generated **SBOM** covering direct, optional, transitive, build, native
+and connector dependencies is not written yet, and a hand-maintained dependency
+table is not one; treat it as a gate on the release.
 
 License is **Apache-2.0** — it matches the predecessor client, the source of most of what we
 copy, so nothing we carry across needs relicensing.
@@ -596,22 +578,22 @@ a form-filling exercise rather than an audit.
 
 ---
 
-## 12. Deferred, on purpose
+## 11. Deferred, on purpose
 
 | Thing | Why | What would change it |
 |---|---|---|
 | Timeseries, anomaly, Tesseract models | Not asked for yet | A NIM serves one — profiles already exist, plus a contract MR (§6) |
-| Warehouse push-down (comment #5) | The wire requires embedded data | The contract gains source references |
-| Public OSS release | Internal first, written OSS-clean from commit 1 (§11) | A release decision; the retrofit is form-filling, not an audit |
+| Warehouse push-down | The wire requires embedded data | The contract gains source references |
+| Public OSS release | Internal first, written OSS-clean from commit 1 (§10) | A release decision; the retrofit is form-filling, not an audit |
 | Arrow IPC | The wire is JSON-arrays-only everywhere | The contract activates it |
 
 ---
 
-## 13. Open questions for the human
+## 12. Open questions for the human
 
 None outstanding. Two earlier ones are settled:
 
 - **The client is `SDMClient`.**
 - **The contract's closed `model` enum is not a task.** Both shipping models are in it. It only
   forecloses the escape hatch for a third, which is deferred along with the models it would serve
-  (§12). If one is ever wanted, a small `structured-data-api` MR opens the field.
+  (§11). If one is ever wanted, a small `structured-data-api` MR opens the field.

@@ -134,3 +134,24 @@ def test_a_well_formed_response_is_unchanged():
     )
     assert [item.row_index for item in parsed.predictions] == [1, 0]
     assert parsed.model == 'kumo-tabular'
+
+
+def test_an_entity_id_that_is_not_a_string_is_refused():
+    """Every other optional field on a prediction validates; this one used to
+    coerce.
+
+    A response is correlated back to the caller's rows by this id, so a server
+    sending `7` where the contract says a string was quietly turned into `'7'`
+    and matched against something the caller never sent.
+    """
+    with pytest.raises(ResponseContractError) as error:
+        parse(row_index=0, id=7)
+    assert "'id'" in str(error.value)
+
+
+def test_an_entity_id_that_is_absent_or_null_is_still_allowed():
+    """The field is optional in the contract; refusing a type is not the same
+    as requiring a value."""
+    assert parse(row_index=0).id is None
+    assert parse(row_index=0, id=None).id is None
+    assert parse(row_index=0, id='e1').id == 'e1'

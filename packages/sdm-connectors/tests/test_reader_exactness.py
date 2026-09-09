@@ -11,6 +11,8 @@ can take, and the two that used to round.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pandas as pd
 import pytest
 
@@ -273,3 +275,119 @@ def test_a_file_uri_directory_without_a_trailing_slash_is_a_directory():
     assert _resolve_format(f'file://{directory}') == 'parquet'
     assert _resolve_format(directory) == 'parquet'
     assert _resolve_format(f'file://{directory}/') == 'parquet'
+
+
+def test_a_parquet_nullable_integer_is_not_rounded(tmp_path):
+    """CSV was fixed and Parquet was not.
+
+    A Parquet column typed as a nullable integer arrives as float64 whatever
+    its values, so an id past 2**53 is already wrong before any wire rule
+    could catch it.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / 'ids.parquet'
+    pq.write_table(
+        pa.table({'id': pa.array([9007199254740993, None], type=pa.int64())}),
+        path,
+    )
+
+    frame = read('local', path=str(path))
+
+    assert str(frame['id'].iloc[0]) == '9007199254740993'
+
+
+def test_a_parquet_integer_without_nulls_stays_a_plain_integer(tmp_path):
+    """Reading through the null-aware backend must not leave every column an
+    extension dtype."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / 'plain.parquet'
+    pq.write_table(pa.table({'n': pa.array([1, 2], type=pa.int64())}), path)
+
+    assert str(read('local', path=str(path))['n'].dtype) == 'int64'
+
+
+def test_a_parquet_decimal_is_still_a_decimal(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    path = tmp_path / 'dec.parquet'
+    pq.write_table(
+        pa.table(
+            {
+                'd': pa.array(
+                    [Decimal('1.234567890123456789')],
+                    type=pa.decimal128(38, 18),
+                )
+            }
+        ),
+        path,
+    )
+
+    value = read('local', path=str(path))['d'].iloc[0]
+
+    assert isinstance(value, Decimal)
+    assert str(value) == '1.234567890123456789'
+
+
+def test_a_driver_without_arrow_still_reads_integers_exactly():
+    """The last fallback in the fetch ladder built the frame from rows.
+
+    `pd.DataFrame(rows)` promotes an integer column holding a null to float64
+    as it builds, which is the same loss the Arrow path above it exists to
+    avoid, so a driver offering neither Arrow nor a pandas fetch lost the
+    value before anything could check it.
+    """
+    big = 9007199254740993
+
+    class Cursor:
+        description = [('id',), ('v',)]
+
+        def execute(self, sql):
+            pass
+
+        def fetchall(self):
+            return [(big, 1.5), (None, 2.5)]
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    frame = read_table(Connection(), query='select 1')
+
+    assert str(frame['id'].iloc[0]) == str(big)
+    assert list(frame.columns) == ['id', 'v']
+
+
+def test_an_integer_too_wide_for_int64_survives_a_null_beside_it():
+    """`Int64` cannot hold it, and pandas turns it into float64 when something
+    beside it is missing.
+
+    Without a null pandas keeps such a column `object` on its own, which is
+    what made this look handled.
+    """
+    frame = read('local', data={'id': [9223372036854775809, None]})
+
+    assert str(frame['id'].iloc[0]) == '9223372036854775809'
+
+
+def test_a_column_pandas_already_keeps_exact_is_unchanged():
+    frame = read('local', data={'id': [9223372036854775809, 1]})
+
+    assert str(frame['id'].iloc[0]) == '9223372036854775809'
+
+
+def test_ordinary_columns_are_not_turned_into_objects():
+    """Only a column holding an integer too wide for Int64 takes that path."""
+    assert str(read('local', data={'x': [1.5, None]})['x'].dtype) == 'float64'
+    assert str(read('local', data={'b': [True, False]})['b'].dtype) == 'bool'
+    assert (
+        str(read('local', data={'id': [9007199254740993, None]})['id'].dtype)
+        == 'Int64'
+    )

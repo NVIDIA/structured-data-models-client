@@ -60,7 +60,7 @@ def test_error_types_are_exported(name: str) -> None:
     'error',
     [
         NimRequestError(503, code='X', message='m'),
-        MissingExtraError('nemotron_relational', 'nemotron_relational'),
+        MissingExtraError('sdm_relational_engine', 'relational'),
         UnknownModelError('nope', ['kumo-tabular']),
     ],
 )
@@ -151,14 +151,12 @@ def test_partial_entries_still_render() -> None:
     assert format_invalid_params([{'reason': 'b'}]) == ' b'
 
 
-def test_rendered_shape_matches_the_nemotron_relational_path() -> None:
+def test_rendered_shape_matches_the_relational_engine_path() -> None:
     r"""The two renderers cannot share code across the package boundary, so
     the shape is pinned on both sides instead.
     """
-    nemotron_relational_rfm = pytest.importorskip('nemotron_relational.rfm.rfm')
+    engine_rfm = pytest.importorskip('sdm_relational_engine.rfm.rfm')
     params = [{'name': 'x', 'reason': 'y'}, {'name': 'p', 'reason': 'q'}]
-    assert format_invalid_params(
-        params
-    ) == nemotron_relational_rfm._invalid_params_summary(
+    assert format_invalid_params(params) == engine_rfm._invalid_params_summary(
         {'invalid_params': params}
     )

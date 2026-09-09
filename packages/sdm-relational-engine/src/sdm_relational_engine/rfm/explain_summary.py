@@ -148,7 +148,7 @@ _STRUCTURED_NOTE = (
 # engine package, which the client documents as an implementation detail.
 SUMMARY_NEEDS_EXTRA_MESSAGE = (
     "Natural-language explanation summary needs the 'explain' extra: "
-    "pip install 'sdm-client[explain]'. " + _STRUCTURED_NOTE
+    "pip install 'sdm-relational-engine[explain]'. " + _STRUCTURED_NOTE
 )
 
 SUMMARY_UNAVAILABLE_MESSAGE = (

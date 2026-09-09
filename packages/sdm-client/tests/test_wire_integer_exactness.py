@@ -24,6 +24,7 @@ from sdm_client.wire.dtypes import (
     INT64_MAX,
     JSON_SAFE_INT_MAX,
     infer_tfm_dtype,
+    json_ready,
     serialize_cell,
     serialize_column,
 )
@@ -337,3 +338,46 @@ def test_a_float_wider_than_float64_is_refused_where_one_exists():
         pytest.skip('this platform has no float wider than float64')
     with pytest.raises(StructuredDataError):
         serialize_cell(wide, 'float64')
+
+
+class TestInferenceValuesAreHeldToTheSameRule:
+    """`inference=` is hand-written payload, not a typed column.
+
+    The rule that made this branch necessary -- an integer a float64 cannot
+    hold exactly must not travel as a JSON number -- was enforced on table
+    cells and not here, so `inference={'seed': 2**53 + 1}` reached the wire as
+    a number and a reader on a float64 JSON stack got a different seed.
+    """
+
+    def test_an_integer_a_float64_cannot_hold_is_refused(self):
+        with pytest.raises(StructuredDataError) as error:
+            json_ready({'seed': 2**53 + 1})
+        assert error.value.code == 'INVALID_REQUEST'
+
+    def test_a_numpy_integer_is_refused_by_its_value_not_its_type(self):
+        with pytest.raises(StructuredDataError):
+            json_ready({'seed': np.int64(2**53 + 1)})
+        assert json_ready({'seed': np.int64(4)}) == {'seed': 4}
+
+    def test_an_unsigned_integer_past_int64_is_refused(self):
+        with pytest.raises(StructuredDataError):
+            json_ready({'seed': np.uint64(2**64 - 1)})
+
+    def test_the_boundary_is_what_a_float64_actually_holds(self):
+        """Not the safe-integer bound: 2**53 is exact, and so is every even
+        number above it. Refusing on the bound alone rejects values that
+        travel perfectly well."""
+        assert json_ready(2**53) == 2**53
+        assert json_ready(2**53 + 2) == 2**53 + 2
+        assert json_ready(-(2**53)) == -(2**53)
+        with pytest.raises(StructuredDataError):
+            json_ready(2**53 + 1)
+        with pytest.raises(StructuredDataError):
+            json_ready(-(2**53) - 1)
+
+    def test_a_bool_is_not_an_integer_for_this_purpose(self):
+        assert json_ready({'explain': True}) == {'explain': True}
+
+    def test_a_nested_value_is_reached(self):
+        with pytest.raises(StructuredDataError):
+            json_ready({'opts': {'seeds': [1, 2**53 + 1]}})

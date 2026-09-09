@@ -536,7 +536,12 @@ def _entity_values(context: Context, table_name: str) -> list[Any] | None:
         if row_index >= len(key_values):
             values.append(None)
             continue
-        values.append(_json_value(key_values.iloc[row_index]))
+        # The key itself, unconverted. This column is serialised later like
+        # any other, under a dtype inferred from these values, so carrying the
+        # key as it is makes the reference and the row it names infer the same
+        # dtype and travel as the same text. Converting here decided the
+        # encoding twice, and a decimal key rounded on this side only.
+        values.append(key_values.iloc[row_index])
     return values
 
 
@@ -641,8 +646,11 @@ def _populate_relationship_columns(
         if not src_positions:
             continue
         gathered = dst_df[dst_key].iloc[pairs[in_range, 1]]
+        # The key itself, for the same reason: this column is serialised
+        # under a dtype inferred from these values, so a foreign key that is
+        # the destination row's own value travels as that row's own text.
         for position, value in zip(src_positions, gathered):
-            fkey_values[position] = _json_value(value)
+            fkey_values[position] = value
         if all(value is None for value in fkey_values):
             continue
 
@@ -958,6 +966,19 @@ def _target_dtype(task_type: TaskType, target: pd.Series) -> str:
     return dtype
 
 
+def _decimal_text(value: Any) -> str | None:
+    r"""A finite decimal's own digits, for a value that travels as text.
+
+    `_json_value` rounds a fractional decimal through float, so anything that
+    stringifies its result loses digits the declaration promised to keep.
+    Returns ``None`` when *value* is not a decimal, so a caller can fall back
+    to its ordinary conversion.
+    """
+    if isinstance(value, Decimal) and value.is_finite():
+        return format(value, 'f')
+    return None
+
+
 def _target_json_value(task_type: TaskType, value: Any) -> Any:
     task_type = TaskType(task_type)
     if task_type.is_link_pred:
@@ -977,6 +998,10 @@ def _target_json_value(task_type: TaskType, value: Any) -> Any:
                     'Link prediction target stringlist values must not contain '
                     f'null items, but got {value!r}.'
                 )
+            text = _decimal_text(item)
+            if text is not None:
+                result.append(text)
+                continue
             item_value = _json_value(item)
             if item_value is None:
                 raise ValueError(
@@ -986,6 +1011,16 @@ def _target_json_value(task_type: TaskType, value: Any) -> Any:
             result.append(str(item_value))
         return result
 
+    if (
+        task_type != TaskType.BINARY_CLASSIFICATION
+        and _decimal_text(value) is not None
+    ):
+        # Left a decimal on purpose. This value is written into the instance
+        # table and serialised again under the dtype that table declares, and
+        # rounding it here beats that decision to it: a target column declared
+        # `string` because one value is too wide for int64 would still lose
+        # the digits of every fractional value beside it.
+        return value
     value = _json_value(value)
     if task_type != TaskType.BINARY_CLASSIFICATION or value is None:
         return value
@@ -1228,6 +1263,9 @@ def _class_label(value: Any, dtype: str) -> str:
     """
     if dtype == 'bool':
         return 'true' if bool(value) else 'false'
+    text = _decimal_text(value)
+    if text is not None:
+        return text
     return str(_json_value(value))
 
 
@@ -1240,6 +1278,28 @@ def _cell_json_value(value: Any, dtype: str) -> Any:
     another. ``int64`` values outside the JavaScript safe-integer range travel
     as base-10 strings, which is how the contract preserves their precision.
     """
+    # A decimal column is declared `string` when any of its values is too wide
+    # for int64, and the point of that declaration is that every value in it
+    # travels exactly. Normalising first defeats it: `_json_value` rounds a
+    # fractional Decimal through float, and the string branch below then
+    # stringifies the rounded float, so a column declared string to stay exact
+    # quietly loses digits.
+    if dtype == 'string':
+        text = _decimal_text(value)
+        if text is not None:
+            return text
+    if dtype == 'stringlist' and isinstance(value, (list, tuple, np.ndarray)):
+        # Each item, for the same reason and before the same rounding: the
+        # items are stringified, and normalising first stringifies a float.
+        # `ndarray` belongs here too: a column of arrays reaches this the same
+        # way a column of lists does, and testing only for a list sent it back
+        # down the rounding path.
+        return [
+            None
+            if item is None
+            else (_decimal_text(item) or _wire_string(_json_value(item)))
+            for item in value
+        ]
     # Measured before normalisation. `_json_value` turns a whole Decimal too
     # wide for int64 into a string, and a string carries no exactness the
     # float branch below can check, so the loss happened silently.
