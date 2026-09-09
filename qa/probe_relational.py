@@ -131,12 +131,14 @@ def run(client):
         'the graph sent matches the schema',
         'no relationship the schema does not have',
     ) as e:
-        from sdm_client.query import _engine, _to_engine_graph
+        from sdm_client.materializers import RelationalMaterializer
 
         built = schema()
-        graph = _to_engine_graph(_engine(), built)
+        model = RelationalMaterializer(built)._get_model()
         sent = {
-            (edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges
+            (source, foreign_key, target)
+            for source, links in model._sampler.foreign_key_dict.items()
+            for foreign_key, target in links
         }
         described = {
             (link.source_table, link.source_column, link.target_table)
@@ -154,10 +156,15 @@ def run(client):
         'asserting there are no relationships',
         'an empty sequence means empty',
     ) as e:
-        from sdm_client.query import _engine, _to_engine_graph
+        from sdm_client.materializers import RelationalMaterializer
 
         built = Schema.from_data(data.northwind_graph(), relationships=[])
-        edges = _to_engine_graph(_engine(), built).edges
+        model = RelationalMaterializer(built)._get_model()
+        edges = {
+            (source, foreign_key, target)
+            for source, links in model._sampler.foreign_key_dict.items()
+            for foreign_key, target in links
+        }
         if edges:
             fail(e, f'relationships=[] still sent {len(edges)} edges')
 

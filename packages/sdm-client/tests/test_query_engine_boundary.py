@@ -18,6 +18,7 @@ import pytest
 
 from sdm_client import PredictiveQuery, Relationship, Schema
 from sdm_client.errors import StructuredDataError
+from sdm_client.materializers.relational import RelationalMaterializer
 
 pytest.importorskip('sdm_relational_engine')
 
@@ -55,9 +56,7 @@ def query(text: str = 'PREDICT users.churn FOR EACH users.user_id'):
 
 
 def edges_of(built: Schema) -> set:
-    from sdm_client.query import _engine, _to_engine_graph
-
-    graph = _to_engine_graph(_engine(), built)
+    graph = RelationalMaterializer(built)._build_graph()
     return {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
 
 
@@ -150,7 +149,7 @@ def test_the_ceiling_is_refused_before_the_engine_is_reached():
         called = True
         raise AssertionError('the engine was reached')
 
-    built._engine_model = _fail  # type: ignore[method-assign]
+    built._relational_materializer._get_model = _fail  # type: ignore[method-assign]
     with pytest.raises(StructuredDataError):
         built.materialize(indices=list(range(1_001)), num_context_samples=20)
     assert not called
@@ -185,17 +184,22 @@ def test_a_temporal_link_prediction_is_capped_lower_than_everything_else():
     a count between the two has to be refused for that task and allowed for
     every other one.
     """
+    from predictive_query import TaskType
+
     from sdm_client.models import RELATIONAL_LIMITS
-    from sdm_client.query import _check_entity_count
 
     temporal = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
     between = list(range(temporal + 1))
 
-    _check_entity_count(between, 'binary_classification')
-    _check_entity_count(between, None)
+    RelationalMaterializer._check_entity_count(
+        between, TaskType.BINARY_CLASSIFICATION
+    )
+    RelationalMaterializer._check_entity_count(between, None)
 
     with pytest.raises(StructuredDataError) as error:
-        _check_entity_count(between, 'temporal_link_prediction')
+        RelationalMaterializer._check_entity_count(
+            between, TaskType.TEMPORAL_LINK_PREDICTION
+        )
     assert str(temporal) in str(error.value)
     assert error.value.code == 'UNSUPPORTED_REQUEST'
 
@@ -223,7 +227,6 @@ def test_a_relationship_listed_twice_is_linked_once():
     import pandas as pd
 
     from sdm_client import Relationship, Schema
-    from sdm_client.query import _to_engine_graph
 
     users = pd.DataFrame({'user_id': [1, 2], 'age': [20.0, 30.0]})
     orders = pd.DataFrame({'order_id': [1, 2], 'user_id': [1, 2]})
@@ -231,9 +234,7 @@ def test_a_relationship_listed_twice_is_linked_once():
     link = Relationship('orders', 'user_id', 'users', 'user_id')
     schema.relationships = [link, link]
 
-    from sdm_client.query import _engine
-
-    graph = _to_engine_graph(_engine(), schema)
+    graph = RelationalMaterializer(schema)._build_graph()
     edges = {(e.src_table, e.fkey, e.dst_table) for e in graph.edges}
     assert edges == {('orders', 'user_id', 'users')}
 
@@ -246,10 +247,6 @@ def test_a_type_error_is_sorted_by_whether_the_call_bound():
     error's deepest frame is the calling line; a refused value was raised
     from inside the engine.
     """
-    from sdm_client.query import _CALLER_ERRORS, _is_call_signature_error
-
-    assert TypeError in _CALLER_ERRORS
-    assert ValueError in _CALLER_ERRORS
 
     def engine_fn(*, indices):
         return indices
@@ -260,42 +257,42 @@ def test_a_type_error_is_sorted_by_whether_the_call_bound():
     try:
         engine_fn(nope=1)
     except TypeError as error:
-        assert _is_call_signature_error(error)
+        assert RelationalMaterializer._is_call_signature_error(error)
 
     try:
         validator('2024-01-01')
     except TypeError as error:
-        assert not _is_call_signature_error(error)
+        assert not RelationalMaterializer._is_call_signature_error(error)
 
 
 def test_the_frame_test_decides_it_without_help_from_the_message():
     """The message fallback would answer this one too, so it has to be shown
     that the frames alone do.
 
-    A bad call made from `query.py` leaves its deepest frame there, and the
-    two are told apart even when the wording carries no signature phrase at
-    all -- which is the point of not depending on CPython's wording.
+    A bad call made from the relational materializer leaves its deepest frame
+    there, and the two are told apart even when the wording carries no
+    signature phrase at all -- which is the point of not depending on
+    CPython's wording.
     """
-    import sdm_client.query as query
-    from sdm_client.query import _is_call_signature_error
+    import sdm_client.materializers.relational as relational
 
     def engine_fn(*, indices):
         return indices
 
-    # Raised *from* query.py, with a message the phrase list does not match.
+    # Raised from the relational module, with an unmatched message.
     source = compile(
         "def call():\n    raise TypeError('an entirely unrecognised wording')",
-        query.__file__,
+        relational.__file__,
         'exec',
     )
-    namespace: dict = {'__name__': query.__name__}
+    namespace: dict = {'__name__': relational.__name__}
     exec(source, namespace)
     try:
         namespace['call']()
     except TypeError as error:
-        assert _is_call_signature_error(error), (
-            'a TypeError whose deepest frame is query.py is a bad call, '
-            'however it is worded'
+        assert RelationalMaterializer._is_call_signature_error(error), (
+            'a TypeError whose deepest frame is the relational materializer '
+            'is a bad call, however it is worded'
         )
 
     # Raised from anywhere else, same unrecognised wording.
@@ -305,18 +302,16 @@ def test_the_frame_test_decides_it_without_help_from_the_message():
     try:
         elsewhere()
     except TypeError as error:
-        assert not _is_call_signature_error(error)
+        assert not RelationalMaterializer._is_call_signature_error(error)
 
 
 def test_the_message_fallback_covers_a_traceback_free_type_error():
     """A TypeError with no traceback -- reconstructed, or raised across a
     boundary -- still has to be sorted, and only the message is left."""
-    from sdm_client.query import _is_call_signature_error
-
-    assert _is_call_signature_error(
+    assert RelationalMaterializer._is_call_signature_error(
         TypeError("f() got an unexpected keyword argument 'verbose'")
     )
-    assert not _is_call_signature_error(
+    assert not RelationalMaterializer._is_call_signature_error(
         TypeError("'anchor_time' must be a pandas.Timestamp")
     )
 
@@ -326,10 +321,9 @@ def test_a_bad_anchor_time_is_the_callers_fault_not_the_libraries():
     with a hint naming what to pass instead. Removing TypeError from the
     caller bucket turned that into 'the relational engine failed'."""
     from sdm_client.errors import StructuredDataError
-    from sdm_client.query import _engine_errors
 
     with pytest.raises(StructuredDataError) as error:
-        with _engine_errors(None):
+        with RelationalMaterializer(schema())._engine_errors(None):
             raise TypeError(
                 "'anchor_time' must be a pandas.Timestamp or the literal "
                 "'entity' (got str '2024-01-01'); try pd.Timestamp(...)"
@@ -340,10 +334,9 @@ def test_a_bad_anchor_time_is_the_callers_fault_not_the_libraries():
 def test_a_wrong_keyword_into_the_engine_is_reported_as_our_bug():
     """The other half of the same type: this one a user cannot act on."""
     from sdm_client.errors import StructuredDataError
-    from sdm_client.query import _engine_errors
 
     with pytest.raises(StructuredDataError) as error:
-        with _engine_errors(None):
+        with RelationalMaterializer(schema())._engine_errors(None):
             raise TypeError(
                 "_get_task_table() got an unexpected keyword argument 'verbose'"
             )

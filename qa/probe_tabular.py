@@ -563,13 +563,10 @@ def run(client):
         'a predictive query on a real dataset',
         'the query names the target',
     ) as e:
-        from predictive_query import TABULAR as TABULAR_PROFILE  # noqa: PLC0415
-
         ctx, sc = split(data.adult(), 300, 3)
         request = PredictiveQuery(
             'PREDICT person.income FOR EACH person.person_id',
             {'person': ctx},
-            profile=TABULAR_PROFILE,
         ).materialize(predict=sc.drop(columns=['income']))
         frame = client.predict(request, model=KumoTabular()).to_pandas()
         if len(frame) != 3:
