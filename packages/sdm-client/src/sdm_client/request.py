@@ -206,6 +206,11 @@ class Request:
                 f'be absent; drop it with predict.drop(columns=[{target!r}])',
                 code='INVALID_REQUEST',
             )
+        if context[target].notna().sum() == 0:
+            raise StructuredDataError(
+                'context must contain at least one row with a known target',
+                code='INVALID_REQUEST',
+            )
 
         missing = [
             column

@@ -80,6 +80,13 @@ def test_a_context_without_the_target_is_refused():
     assert 'no target column' in str(error.value)
 
 
+def test_a_context_without_any_known_targets_is_refused():
+    unknown_targets = context().assign(churn=pd.NA)
+    with pytest.raises(StructuredDataError) as error:
+        simple_request(context=unknown_targets)
+    assert 'known target' in str(error.value)
+
+
 def test_a_predict_column_the_context_never_had_is_refused():
     predict = to_score().assign(surprise=[1.0, 2.0])
     with pytest.raises(StructuredDataError) as error:
