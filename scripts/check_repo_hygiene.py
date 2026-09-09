@@ -56,6 +56,13 @@ INTERNAL_PATTERNS = (
     re.compile(r'\bnspect-\d', re.IGNORECASE),
     re.compile(r'\bcolossus\b', re.IGNORECASE),
     re.compile(r'\bTODO\([a-z]+\)', re.IGNORECASE),
+    # A private workspace document. The link is dead to every reader outside
+    # the company and the identifier in it is not ours to publish; two of
+    # these shipped in source that was internal until this release.
+    re.compile(r'\bnotion\.so\b', re.IGNORECASE),
+    re.compile(r'docs\.google\.com/document', re.IGNORECASE),
+    re.compile(r'\.atlassian\.net\b', re.IGNORECASE),
+    re.compile(r'\bconfluence\b', re.IGNORECASE),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has

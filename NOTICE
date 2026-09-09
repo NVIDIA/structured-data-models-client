@@ -21,8 +21,10 @@ that fetched from a CDN would simply not draw.
 
 The bundle is upstream bytes, unmodified, and its SHA-256 is pinned in
 rfm/assets/VENDORED.md and asserted by tests/test_vendored_mermaid.py. It is a
-bundle, so the components inside it are enumerated with their copyrights in the
-third-party section of LICENSE. See rfm/assets/MERMAID_LICENSE.
+bundle, so the components inside it are enumerated in the third-party section
+of LICENSE, each with the licence it declares at the version mermaid pins. The
+copyright notices themselves are mermaid's own, carried verbatim in
+rfm/assets/MERMAID_LICENSE.
 
 Everything else in this repository, including the Predictive Query Language in
 packages/sdm-pql, is first-party NVIDIA source maintained here under the
