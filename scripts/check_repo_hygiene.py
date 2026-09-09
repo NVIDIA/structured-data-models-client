@@ -74,14 +74,13 @@ INTERNAL_PATTERNS = (
 # to say where the bytes came from, and a contributor guide has to say where to
 # push. Neither is a leak; both are reviewed deliberately.
 INTERNAL_ALLOWLIST = {
-    'packages/sdm-pql/README.md',
-    'packages/sdm-api/README.md',
+    # A provenance record has to name the repository the bytes came from.
     'packages/sdm-api/src/sdm_api/generated/PROVENANCE.json',
+    # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
     'scripts/generate_sdm_api.py',
-    'README.md',
-    'NOTICE',
-    'CHANGELOG.md',
+    # Runs on the internal instance, and has to keep naming it to work. It
+    # goes when the public repository has its own pipeline.
     '.gitlab-ci.yml',
 }
 
@@ -95,7 +94,15 @@ SHIPPED_SUFFIXES = {
     '.yaml',
     '.yml',
     '.ipynb',
+    # The grammar itself is first-party source and is packaged, so it is read
+    # like any other. Its generated neighbours are excluded by path below.
+    '.g4',
 }
+
+# Shipped files that carry no suffix to recognise them by. Every distribution
+# packages these two, and a licence file is the last place an internal
+# reference should survive.
+SHIPPED_NAMES = {'LICENSE', 'NOTICE'}
 
 # Interfaces earlier generations of this client had. An example naming one sends
 # a reader to an API that does not exist, which is why this is scanned for
@@ -172,9 +179,14 @@ def check_internal() -> int:
         relative = str(path.relative_to(REPO_ROOT))
         if relative in INTERNAL_ALLOWLIST:
             continue
-        if path.suffix not in SHIPPED_SUFFIXES:
+        if (
+            path.suffix not in SHIPPED_SUFFIXES
+            and path.name not in SHIPPED_NAMES
+        ):
             continue
-        if 'grammar' in Path(relative).parts:
+        # Generated parser output is machine-written and enormous; the
+        # grammar it is generated from is neither, and ships.
+        if 'grammar' in Path(relative).parts and path.suffix != '.g4':
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -252,7 +264,10 @@ def check_repository_url() -> int:
     findings = []
     for path in tracked_files():
         relative = str(path.relative_to(REPO_ROOT))
-        if path.suffix not in SHIPPED_SUFFIXES:
+        if (
+            path.suffix not in SHIPPED_SUFFIXES
+            and path.name not in SHIPPED_NAMES
+        ):
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for found in set(REPOSITORY_URL.findall(text)):
