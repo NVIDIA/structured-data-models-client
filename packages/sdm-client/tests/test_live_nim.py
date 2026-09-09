@@ -210,14 +210,11 @@ def test_a_tabular_question_runs_from_predictive_query_text(client):
     a schema and so can only name rows that are already there; these are not.
     """
     pytest.importorskip('predictive_query')
-    from predictive_query import TABULAR
-
     from sdm_client import PredictiveQuery
 
     request = PredictiveQuery(
         'PREDICT instance.churn FOR EACH instance.row_id',
         {'instance': labelled()},
-        profile=TABULAR,
     ).materialize(predict=unlabelled())
 
     assert request.task.target.column_name == 'churn'

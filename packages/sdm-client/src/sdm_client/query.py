@@ -23,96 +23,40 @@ model whose profile accepts it can answer.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from predictive_query import RELATIONAL, TABULAR
 
-from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.models import RELATIONAL_LIMITS
+from sdm_client.errors import StructuredDataError
+from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.request import Request
-from sdm_client.schema import Schema, _as_key_tuple
+from sdm_client.schema import Schema
 
-if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
-    from predictive_query import Profile
-
-# Gathering knobs a caller may pass through to the sampler. `run_mode` is
-# deliberately absent: it is a preset over these, and the client derives the
-# wire value from them rather than asking a caller to know the presets.
-# A resolved query reports a coarse problem type; the wire wants a task kind.
-# Only the coarse classification is emitted, because a tabular model narrows it
-# itself and guessing from cardinality is what the source design got wrong.
-_TASK_FOR_PROBLEM = {
-    'ProblemType.CLASSIFY': 'classification',
-    'CLASSIFY': 'classification',
-    'ProblemType.FORECAST': 'forecasting',
-    'FORECAST': 'forecasting',
-    'ProblemType.RANK': 'ranking',
-    'RANK': 'ranking',
-}
-
-_MATERIALIZE_OPTIONS = frozenset(
-    {
-        'anchor_time',
-        'context_anchor_time',
-        'lag_timesteps',
-        'max_pq_iterations',
-        'num_hops',
-        'num_neighbors',
-        'random_seed',
-        'use_prediction_time',
-        'inference_config',
-        'exclude_cols_dict',
-        'return_embeddings',
-        'top_k',
-    }
-)
-
-
-def _engine() -> Any:
-    r"""The relational engine's ``rfm`` module, or the install that supplies it."""
-    try:
-        from sdm_relational_engine import rfm
-    except ImportError as error:  # pragma: no cover - exercised by extras
-        raise MissingExtraError(
-            'relational', 'sdm-relational-engine'
-        ) from error
-    return rfm
+if TYPE_CHECKING:
+    from predictive_query import Profile, ValidatedPredictiveQuery
 
 
 class PredictiveQuery:
-    r"""A question in PQL, bound to the tables that can answer it.
+    r"""A question expressed in PQL and answered from the tables in its schema.
 
-    Constructing one binds the text to a schema; the query is resolved against
-    that schema when it is materialized, which is also where a query naming a
-    column that does not exist is refused.
+    The query is resolved and validated when :meth:`materialize` builds a request.
+
+    Args:
+        query: PQL query text.
+        data: A schema or mapping of table names to DataFrames.
+
+    Raises:
+        StructuredDataError: If the query is empty or the data is invalid.
     """
 
     def __init__(
         self,
         query: str,
         data: Schema | Mapping[str, pd.DataFrame],
-        *,
-        profile: Profile | None = None,
     ) -> None:
-        r"""Bind ``query`` to ``data``.
-
-        Args:
-            query: The predictive query.
-            data: A :class:`~sdm_client.Schema`, or the frames to infer one
-                from. Passing frames directly is the common case: a caller
-                asking one question should not have to meet ``Schema`` first.
-            profile: What the query is for. Defaults to the relational
-                profile, which accepts the most. A capability may only reject,
-                so a narrower profile refuses more queries, never fewer.
-
-        Raises:
-            StructuredDataError: If the query does not parse or does not
-                validate against the schema.
-            MissingExtraError: If the relational engine is not installed.
-        """
         if not isinstance(query, str) or not query.strip():
             raise StructuredDataError(
                 'query must be a non-empty string', code='INVALID_REQUEST'
@@ -121,8 +65,8 @@ class PredictiveQuery:
         self.schema = (
             data if isinstance(data, Schema) else Schema.from_data(dict(data))
         )
-        self._profile = profile
-        self._model: Any = None
+        self._tabular_materializer = TabularMaterializer(self.schema)
+        self._relational_materializer = RelationalMaterializer(self.schema)
 
     def materialize(
         self,
@@ -132,156 +76,109 @@ class PredictiveQuery:
         num_context_samples: int | None = None,
         **options: Any,
     ) -> Request:
-        r"""Gather the data that answers this query.
+        r"""Build a request with the data needed to answer this query.
 
         Args:
-            indices: The entity keys to predict for. These are rows that exist
-                in the tables.
-            predict: Rows to score that are **not** in the tables. This is the
-                single-table path: a query enumerates rows the tables already
-                hold, so rows it has never seen have to be supplied rather
-                than derived. Mutually exclusive with ``indices``.
-            num_context_samples: How many labelled examples to gather, at
-                least 1. The client derives the endpoint's ``run_mode`` from it
-                rather than asking you to know the presets, and narrows the
-                gathered examples to exactly this many. Omitted, you get the
-                smaller budget of 1,000, which is the endpoint's own default.
-            **options: Sampler options, e.g. ``num_neighbors``, ``anchor_time``.
+            indices: Keys of rows already present in the tables. Mutually
+                exclusive with ``predict``.
+            predict: Rows supplied directly for scoring. Supported for
+                single-table schemas and mutually exclusive with ``indices``.
+            num_context_samples: For ``indices`` requests, the maximum number
+                of labelled context rows to use. Must be at least 1 and
+                defaults to 1,000.
+            **options: Relational sampling options, such as ``num_neighbors``
+                and ``anchor_time``.
 
         Returns:
-            A :class:`~sdm_client.Request` carrying the gathered data.
+            A :class:`~sdm_client.Request` carrying the data.
 
         Raises:
             StructuredDataError: If neither ``indices`` nor ``predict`` is
                 given, if both are, or if an option is not one this accepts.
         """
-        # Before the branch, so a bad value is refused the same way whichever
-        # path it was heading for.
-        num_context_samples = _valid_context_samples(num_context_samples)
+        self._validate_materialize_args(
+            indices=indices,
+            predict=predict,
+            num_context_samples=num_context_samples,
+        )
 
-        if predict is not None and indices is not None:
+        if predict is not None:
+            return self._tabular_materializer.table(
+                query=self._resolve(TABULAR),
+                predict=predict,
+                num_context_samples=num_context_samples,
+                options=options,
+            )
+
+        assert indices is not None
+        return self._relational_materializer.materialize(
+            query=self._resolve(RELATIONAL),
+            indices=indices,
+            num_context_samples=num_context_samples,
+            options=options,
+        )
+
+    @staticmethod
+    def _validate_materialize_args(
+        *,
+        indices: Sequence[Any] | None,
+        predict: pd.DataFrame | None,
+        num_context_samples: int | None,
+    ) -> None:
+        if indices is not None and predict is not None:
             raise StructuredDataError(
                 'pass either indices=[...] to score rows the tables already '
-                'contain, or predict=<frame> to score rows they do not -- not '
-                'both',
+                'contain, or predict=<frame> to score rows they do not—not both',
                 code='INVALID_REQUEST',
             )
-        if predict is not None:
-            if num_context_samples is not None:
-                raise StructuredDataError(
-                    'num_context_samples has nothing to narrow when the rows '
-                    'to score are supplied: the context is the table you gave, '
-                    'in full. Pass a smaller table instead',
-                    code='INVALID_REQUEST',
-                )
-            if options:
-                raise StructuredDataError(
-                    f'{sorted(options)} cannot apply when the rows to score '
-                    f'are supplied: nothing is gathered, so there is nothing '
-                    f'to sample',
-                    code='INVALID_REQUEST',
-                )
-            return self._materialize_rows(predict)
-        if indices is None:
+
+        if indices is None and predict is None:
             raise StructuredDataError(
                 'materialize() needs the rows to score: pass indices=[...] '
                 'naming the entities. There is no all-rows default, because '
                 'it would silently score an entire table',
                 code='INVALID_REQUEST',
             )
-        if not isinstance(indices, Sequence) or isinstance(
-            indices, (str, bytes)
-        ):
-            raise StructuredDataError(
-                f'indices must be a sequence of entity keys, got '
-                f'{type(indices).__name__}',
-                code='INVALID_REQUEST',
-            )
-        if not indices:
-            raise StructuredDataError(
-                'indices is empty, so there is nothing to score',
-                code='INVALID_REQUEST',
-            )
 
-        unknown = sorted(set(options) - _MATERIALIZE_OPTIONS)
-        if unknown:
-            raise StructuredDataError(
-                f'unknown materialize option(s) {unknown}; accepted: '
-                f'{sorted(_MATERIALIZE_OPTIONS)}',
-                code='INVALID_REQUEST',
-            )
-        if 'run_mode' in options:  # pragma: no cover - caught by the above
-            raise StructuredDataError(
-                'run_mode is not a knob here; set num_context_samples and the '
-                'client derives what the endpoint needs',
-                code='INVALID_REQUEST',
-            )
+        if indices is not None:
+            if not isinstance(indices, Sequence) or isinstance(
+                indices, (str, bytes)
+            ):
+                raise StructuredDataError(
+                    f'indices must be a sequence of entity keys, got '
+                    f'{type(indices).__name__}',
+                    code='INVALID_REQUEST',
+                )
+            if len(indices) == 0:
+                raise StructuredDataError(
+                    'indices is empty, so there is nothing to score',
+                    code='INVALID_REQUEST',
+                )
 
-        payloads = self._gather(indices, num_context_samples, options)
-        return Request.materialized(
-            payloads=payloads,
-            schema=self.schema,
-            query=self.text,
-            indices=list(indices),
-            requested_inference={
-                'inference_config': options.get('inference_config') or {}
-            },
-        )
+        if num_context_samples is not None:
+            if isinstance(num_context_samples, bool) or not isinstance(
+                num_context_samples, Integral
+            ):
+                raise StructuredDataError(
+                    'num_context_samples must be a whole number of labelled '
+                    f'examples, got {type(num_context_samples).__name__} '
+                    f'{num_context_samples!r}',
+                    code='INVALID_REQUEST',
+                )
+            if num_context_samples < 1:
+                raise StructuredDataError(
+                    'num_context_samples must be at least 1; a model predicts '
+                    f'from labelled examples, and {num_context_samples} '
+                    f'leaves it none',
+                    code='INVALID_REQUEST',
+                )
 
-    def _materialize_rows(self, predict: pd.DataFrame) -> Request:
-        r"""Build a single-table request for rows the tables do not contain.
-
-        This is the answer to the question the source design left open. A
-        predictive query resolves against a schema, so it can only ever name
-        rows that are already there; scoring a new row means supplying it. The
-        query still earns its place -- it says which column is the target and
-        what kind of question this is -- so the two halves come from different
-        places on purpose.
-
-        The task kind is deliberately **not** narrowed here. A tabular model
-        accepts only the coarse ``classification`` and decides binary against
-        multiclass itself, and narrowing from the target's cardinality is the
-        guess that turns a two-class target into a multiclass one.
-        """
-        if len(self.schema) != 1:
-            raise StructuredDataError(
-                f'scoring supplied rows is the single-table path, and this '
-                f'schema has {len(self.schema)} tables. Use indices=[...] to '
-                f'score entities the tables already contain',
-                code='INVALID_REQUEST',
-            )
-
-        resolved = self._resolve()
-        table_name = next(iter(self.schema))
-        # The language names a column by its table; the wire names it alone.
-        target = resolved.target_column
-        if isinstance(target, str) and target.startswith(f'{table_name}.'):
-            target = target[len(table_name) + 1 :]
-        if target is None or target not in self.schema[table_name]:
-            raise StructuredDataError(
-                f'{self.text!r} does not predict a column of '
-                f'{table_name!r}, so there is nothing to score rows against',
-                code='INVALID_REQUEST',
-            )
-
-        return Request(
-            context=self.schema[table_name].data,
-            predict=predict,
-            target=target,
-            task=_TASK_FOR_PROBLEM.get(
-                str(resolved.problem_type), 'classification'
-            ),
-            schema=self.schema,
-            entity_table=table_name,
-        )
-
-    def _resolve(self) -> Any:
-        r"""Parse and validate this query, under this query's profile."""
-        from predictive_query import RELATIONAL, validate
+    def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
+        r"""Parse and validate the query."""
+        from predictive_query import validate
 
         from sdm_client.schema import to_graph_definition
 
-        profile = self._profile or RELATIONAL
         resolved, response = validate(
             self.text, to_graph_definition(self.schema), profile
         )
@@ -297,458 +194,5 @@ class PredictiveQuery:
             )
         return resolved
 
-    def _gather(
-        self,
-        indices: Sequence[Any],
-        num_context_samples: int | None,
-        options: dict[str, Any],
-    ) -> tuple[dict[str, Any], ...]:
-        r"""Parse, sample and encode, using the engine's own materializer.
-
-        The engine already splits building a request from sending one, and
-        each part it returns is a wire payload. Reimplementing that here would
-        duplicate PQL resolution, point-in-time correctness and neighbourhood
-        sampling that already live -- and are tested -- there.
-
-        What is not delegated is what the caller sees when it goes wrong. The
-        engine raises its own exception types, which are outside this client's
-        documented error surface, so both calls are wrapped.
-        """
-        engine = _engine()
-        run_mode = _run_mode_for(num_context_samples)
-        _check_entity_count(indices)
-
-        model = self._engine_model(engine)
-        # Resolve here rather than letting the engine default to its own
-        # profile: the profile is a public argument, so both paths have to
-        # honour it or it means different things depending on which was used.
-        query_def = self._resolve()
-        with _engine_errors(model):
-            task = model._get_task_table(
-                query=query_def,
-                indices=list(indices),
-                run_mode=run_mode,
-                **{
-                    key: options[key]
-                    for key in (
-                        'anchor_time',
-                        'context_anchor_time',
-                        'lag_timesteps',
-                        'max_pq_iterations',
-                        'random_seed',
-                    )
-                    if key in options
-                },
-            )
-        task._query = query_def.to_string()
-        if not hasattr(task, 'task_type'):
-            raise StructuredDataError(
-                'the resolved task does not say what kind it is, so the '
-                'entity limit for it cannot be checked',
-                code='INTERNAL_ERROR',
-            )
-        _check_entity_count(indices, task.task_type)
-        task = _narrow_context(task, num_context_samples)
-
-        with _engine_errors(model):
-            parts = model.materialize_task(
-                task,
-                run_mode=run_mode,
-                verbose=False,
-                top_k=query_def.top_k,
-                exclude_cols_dict=query_def.get_exclude_cols_dict(),
-                **{
-                    key: options[key]
-                    for key in (
-                        'num_neighbors',
-                        'num_hops',
-                        'inference_config',
-                        'use_prediction_time',
-                        'return_embeddings',
-                        'random_seed',
-                    )
-                    if key in options
-                },
-            )
-        if not parts:
-            raise StructuredDataError(
-                'the engine gathered nothing for this query',
-                code='INVALID_REQUEST',
-            )
-        for part in parts:
-            _check_limits(part, RELATIONAL_LIMITS)
-        _check_shape(self.schema, options, RELATIONAL_LIMITS)
-        return tuple(part.payload for part in parts)
-
-    def _engine_model(self, engine: Any) -> Any:
-        if self._model is None:
-            graph = _to_engine_graph(engine, self.schema)
-            self._model = engine.KumoRelational(graph, verbose=False)
-        return self._model
-
     def __repr__(self) -> str:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
-
-
-@contextmanager
-def _engine_errors(model: Any) -> Iterator[None]:
-    r"""Re-raise what the engine raises as this client's own error.
-
-    ``StructuredDataError`` is documented as the base class for every error
-    this client raises, and the engine's ``ValueError`` and
-    ``TaskReferenceError`` falsified that -- so ``except StructuredDataError``
-    missed exactly the failures a caller is most likely to hit, since they are
-    all caused by ordinary bad input.
-
-    Bad input and a fault in the engine are told apart by type rather than by
-    reading the message: the engine reports the first as a ``ValueError``, a
-    ``KeyError`` or one of its own error classes, and anything else is not the
-    caller's doing and should not be reported as though it were.
-
-    Where the engine dropped rows, the reason is attached. Its message says how
-    many rows went unresolved and not why, and it already knows: every graph
-    build records how many rows had a null key, a duplicated key or no time.
-    """
-    try:
-        yield
-    except StructuredDataError:
-        raise
-    except _CALLER_ERRORS as error:
-        if isinstance(error, TypeError) and _is_call_signature_error(error):
-            raise StructuredDataError(
-                f'the relational engine was called incorrectly by this '
-                f'client: {type(error).__name__}: {error}',
-                code='INTERNAL_ERROR',
-            ) from error
-        raise StructuredDataError(
-            f'{error}{_sanitization_detail(model)}',
-            code='INVALID_REQUEST',
-        ) from error
-    except Exception as error:
-        raise StructuredDataError(
-            f'the relational engine failed while building this request: '
-            f'{type(error).__name__}: {error}',
-            code='INTERNAL_ERROR',
-        ) from error
-
-
-#: How CPython words a call that does not match the callee's signature. Used
-#: only for the case the frame test cannot see: the engine calling *itself*
-#: wrongly, which is its bug rather than the caller's either way.
-_CALL_SIGNATURE_PHRASES = (
-    'unexpected keyword argument',
-    'positional argument',
-    'required argument',
-    'takes no arguments',
-)
-
-
-def _is_call_signature_error(error: TypeError) -> bool:
-    r"""Whether this ``TypeError`` is a bad call rather than a bad value.
-
-    The engine raises ``TypeError`` for both. It rejects a caller's own
-    ``anchor_time`` with one, naming what to pass instead -- that is the
-    caller's to fix. It also raises one when this client passes a keyword the
-    engine does not take, which no caller can act on.
-
-    The question is really "did the call bind?", and the traceback answers it:
-    argument binding fails *before* the callee is entered, so a signature
-    error's deepest frame is still the calling line here, while a value the
-    engine refused was raised from inside the engine. That is exact, and does
-    not depend on how CPython words the message this release.
-
-    The phrase list is the fallback for what the frame test cannot see -- the
-    engine miscalling its own internals, where the deepest frame is the
-    engine's but the fault is still not the caller's.
-    """
-    traceback = error.__traceback__
-    if traceback is not None:
-        deepest = traceback
-        while deepest.tb_next is not None:
-            deepest = deepest.tb_next
-        if deepest.tb_frame.f_globals.get('__name__') == __name__:
-            return True
-    message = str(error)
-    return any(phrase in message for phrase in _CALL_SIGNATURE_PHRASES)
-
-
-def _caller_errors() -> tuple[type[BaseException], ...]:
-    r"""The exception types the engine uses to report bad input.
-
-    ``TypeError`` is both. The engine raises it to reject a caller's own
-    ``anchor_time``, with a hint naming what to pass instead -- and it raises
-    it when this client calls the engine with a keyword it does not take,
-    which is our bug and not something a user can act on. The two are told
-    apart by :func:`_is_call_signature_error` rather than by type.
-    """
-    types: list[type[BaseException]] = [ValueError, KeyError, TypeError]
-    try:
-        from sdm_relational_engine import KumoRelationalError
-    except ImportError:  # pragma: no cover - the extra is optional
-        pass
-    else:
-        types.append(KumoRelationalError)
-    return tuple(types)
-
-
-def _sanitization_detail(model: Any) -> str:
-    r"""What the engine dropped while building the graph, if it dropped any."""
-    report = getattr(model, 'sanitization_report', None)
-    tables = getattr(report, 'tables', None)
-    if not tables:
-        return ''
-    reasons = []
-    for name, table in tables.items():
-        dropped = getattr(table, 'input_rows', 0) - getattr(
-            table, 'output_rows', 0
-        )
-        if dropped <= 0:
-            continue
-        causes = [
-            f'{count} with {label}'
-            for label, count in (
-                ('no primary key', getattr(table, 'null_primary_key_rows', 0)),
-                (
-                    'a repeated primary key',
-                    getattr(table, 'duplicate_primary_key_rows', 0),
-                ),
-                ('no time', getattr(table, 'null_time_rows', 0)),
-            )
-            if count
-        ]
-        reasons.append(
-            f'{name}: {dropped} of {table.input_rows} rows dropped'
-            + (f' ({", ".join(causes)})' if causes else '')
-        )
-    return f' [{"; ".join(reasons)}]' if reasons else ''
-
-
-_CALLER_ERRORS: tuple[type[BaseException], ...] = _caller_errors()
-
-
-def _check_entity_count(indices: Sequence[Any], task_kind: Any = None) -> None:
-    r"""Refuse more entities than the endpoint scores, before gathering any.
-
-    The engine refuses this too, several seconds later, in a message that names
-    a ``batch_size=`` argument this client does not have. Checked twice: once
-    on the count alone, and again once the task kind is known, because a
-    temporal link prediction is capped lower than everything else.
-    """
-    ceiling = RELATIONAL_LIMITS['predict_rows_max']
-    described = 'the endpoint scores at most'
-    if task_kind is not None and 'link_prediction' in str(task_kind):
-        ceiling = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
-        described = 'a temporal link prediction scores at most'
-    if len(indices) > ceiling:
-        raise StructuredDataError(
-            f'{len(indices):,} entities were asked for, and {described} '
-            f'{ceiling:,} at a time; split them across calls',
-            code='UNSUPPORTED_REQUEST',
-        )
-
-
-def _valid_context_samples(value: Any) -> int | None:
-    r"""Reject a count that is not a count.
-
-    This number reaches a frame slice, and pandas is happy to take a negative
-    one -- ``narrow_context(0, -1)`` quietly drops the last example rather than
-    failing. Zero is worse: it gathers nothing and the model is asked to
-    predict from an empty context. A bool is an int in Python, and
-    ``num_context_samples=True`` meaning one example helps nobody.
-    """
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, Integral):
-        raise StructuredDataError(
-            f'num_context_samples must be a whole number of labelled '
-            f'examples, got {type(value).__name__} {value!r}',
-            code='INVALID_REQUEST',
-        )
-    if value < 1:
-        raise StructuredDataError(
-            f'num_context_samples must be at least 1; a model predicts from '
-            f'labelled examples, and {value} leaves it none',
-            code='INVALID_REQUEST',
-        )
-    ceiling = RELATIONAL_LIMITS['context_rows_max']
-    if value > ceiling:
-        raise StructuredDataError(
-            f'num_context_samples is {value:,}, and the endpoint accepts at '
-            f'most {ceiling:,} context rows',
-            code='UNSUPPORTED_REQUEST',
-        )
-    return int(value)
-
-
-def _narrow_context(task: Any, num_context_samples: int | None) -> Any:
-    r"""Gather exactly as many labelled examples as were asked for.
-
-    The endpoint enforces a ceiling, and the engine trims to that ceiling, but
-    a ceiling is not a request: asking for 500 and being handed 4,000 makes the
-    number decorative, which is the whole complaint that retired ``run_mode``.
-    So the count is applied here, where the examples exist and before anything
-    is encoded.
-
-    Asking for more than the data holds is not an error -- there simply are not
-    that many labelled examples -- so this only ever narrows.
-
-    Which examples survive is the engine's existing rule, inherited rather than
-    chosen: the first ``n``. For most tasks the candidates are shuffled before
-    this point, so that is a sample. For forecasting the engine orders context
-    chronologically first, so narrowing keeps the **oldest** ``n``. That is what
-    the endpoint does when it trims to its own ceiling, and matching it means a
-    narrowed request and a capped one behave the same way.
-    """
-    if num_context_samples is None:
-        return task
-    gathered = task.num_context_examples
-    if gathered <= num_context_samples:
-        return task
-    return task.narrow_context(0, num_context_samples)
-
-
-def _run_mode_for(num_context_samples: int | None) -> str:
-    r"""The wire value that admits ``num_context_samples`` labelled examples.
-
-    The endpoint distinguishes only ``fast`` from everything else -- 1,000
-    context rows against 10,000 -- so this is a two-way choice dressed as a
-    four-value enum. Deriving it means a caller sets the number they want
-    rather than learning which preset contains it.
-    """
-    if num_context_samples is None:
-        return 'fast'
-    if num_context_samples <= RELATIONAL_LIMITS['context_rows_fast']:
-        return 'fast'
-    if num_context_samples <= RELATIONAL_LIMITS['context_rows_max']:
-        return 'best'
-    # Unreachable through `materialize`, which validates first. Kept because
-    # this function is callable on its own, and a guard that only holds when
-    # its caller happens to check first is not a guard.
-    raise StructuredDataError(
-        f'num_context_samples is {num_context_samples:,}, and the endpoint '
-        f'accepts at most {RELATIONAL_LIMITS["context_rows_max"]:,} context '
-        f'rows',
-        code='UNSUPPORTED_REQUEST',
-    )
-
-
-def _check_limits(part: Any, limits: Mapping[str, int]) -> None:
-    r"""Refuse a gathered part the endpoint would reject, before sending it."""
-    payload = getattr(part, 'payload', None)
-    if not isinstance(payload, dict):
-        return
-    predict = payload.get('predict', {}).get('instance_table', {})
-    rows = predict.get('rows')
-    if rows is None:
-        return
-    kind = payload.get('task', {}).get('kind')
-    cap = (
-        limits['predict_rows_temporal_link_prediction']
-        if kind == 'temporal_link_prediction'
-        else limits['predict_rows_max']
-    )
-    if len(rows) > cap:
-        raise StructuredDataError(
-            f'this batch scores {len(rows)} rows and the endpoint accepts at '
-            f'most {cap} for a {kind} task',
-            code='UNSUPPORTED_REQUEST',
-        )
-
-
-def _check_shape(
-    schema: Schema, options: Mapping[str, Any], limits: Mapping[str, int]
-) -> None:
-    r"""Refuse a graph wider or deeper than the endpoint will read."""
-    if len(schema) > limits['tables_max']:
-        raise StructuredDataError(
-            f'this schema has {len(schema)} tables and the endpoint reads at '
-            f'most {limits["tables_max"]}',
-            code='UNSUPPORTED_REQUEST',
-        )
-    neighbors = options.get('num_neighbors')
-    hops = len(neighbors) if neighbors else options.get('num_hops')
-    if hops is not None and hops > limits['hops_max']:
-        raise StructuredDataError(
-            f'this request samples {hops} hops and the endpoint reads at most '
-            f'{limits["hops_max"]}',
-            code='UNSUPPORTED_REQUEST',
-        )
-
-
-def _to_engine_graph(engine: Any, schema: Schema) -> Any:
-    r"""Build the engine's graph from this client's schema.
-
-    The schema is the authority, in both directions. The engine can infer a
-    graph from the same frames, but its inference and the schema's do not
-    agree, and a second opinion applied on top of the first is not a schema at
-    all -- so inference is suppressed and exactly the schema's relationships
-    are linked.
-    """
-    schema.check_consistent()
-
-    frames = {name: table.data for name, table in schema.tables.items()}
-    # `edges=[]` suppresses the engine's own link inference. Letting it run and
-    # adding the schema's links on top made the schema additive: an edge the
-    # engine invented stayed, so `Schema` reported three relationships while
-    # four were sent, and `relationships=[]` -- documented as asserting there
-    # are none -- sent four.
-    graph = engine.Graph.from_data(frames, edges=[], verbose=False)
-
-    for name, table in schema.tables.items():
-        engine_table = graph[name]
-        if table.primary_key is not None:
-            engine_table.primary_key = table.primary_key
-        if table.time_column is not None:
-            engine_table.time_column = table.time_column
-        for column_name, column in table.columns.items():
-            if column_name in engine_table:
-                engine_table[column_name].stype = column.stype
-
-    linked: set[tuple[str, str, str]] = set()
-    for link in schema.relationships:
-        edge = (link.source_table, link.source_column, link.target_table)
-        if edge in linked:
-            # The engine refuses an edge it already has. Listing the same
-            # relationship twice is what happens when a caller appends to an
-            # inferred list, and it asks for nothing the first one did not.
-            continue
-        linked.add(edge)
-        graph.link(
-            src_table=link.source_table,
-            fkey=link.source_column,
-            dst_table=link.target_table,
-        )
-    # An engine edge carries no target column: it always joins to the target
-    # table's primary key, which is why the schema is made to say the same
-    # thing before it gets here.
-    sent = {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
-    described = {
-        (link.source_table, link.source_column, link.target_table)
-        for link in schema.relationships
-    }
-    misdirected = [
-        link
-        for link in schema.relationships
-        if link.target_column
-        not in _as_key_tuple(schema[link.target_table].primary_key)
-    ]
-    if misdirected:
-        shown = ', '.join(
-            f'{link.source_table}.{link.source_column} -> '
-            f'{link.target_table}.{link.target_column}'
-            for link in misdirected
-        )
-        raise StructuredDataError(
-            f'{shown} name a target column that is not the primary key '
-            f'of the table they point at, and an edge can only join to that',
-            code='INVALID_REQUEST',
-        )
-    if (
-        sent != described
-    ):  # pragma: no cover - the assertion this fix exists for
-        raise StructuredDataError(
-            f'the graph built for this request does not match the schema: '
-            f'{sorted(sent ^ described)}',
-            code='INTERNAL_ERROR',
-        )
-    return graph

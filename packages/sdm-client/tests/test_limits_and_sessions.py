@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import pytest
 
-from sdm_client import KumoRelational, UnsupportedRequestError
+from sdm_client import KumoRelational, Schema, UnsupportedRequestError
 from sdm_client.adapters.relational import RelationalAdapter
+from sdm_client.errors import StructuredDataError
+from sdm_client.materializers.relational import RelationalMaterializer
 from sdm_client.models import RELATIONAL_LIMITS
 
 
@@ -54,6 +56,15 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     assert RELATIONAL_LIMITS['explanation_predict_rows'] == 1
     assert RELATIONAL_LIMITS['hops_max'] == 6
     assert RELATIONAL_LIMITS['tables_max'] == 15
+
+
+@pytest.mark.parametrize('bad', ['2', True])
+def test_num_hops_must_be_a_whole_number(bad):
+    materializer = RelationalMaterializer(Schema({}))
+    with pytest.raises(StructuredDataError) as error:
+        materializer._check_shape({'num_hops': bad}, RELATIONAL_LIMITS)
+    assert 'num_hops must be a whole number' in str(error.value)
+    assert error.value.code == 'INVALID_REQUEST'
 
 
 def test_an_explanation_covering_more_than_one_entity_is_refused():
