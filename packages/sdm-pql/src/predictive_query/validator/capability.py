@@ -14,7 +14,7 @@ That is what keeps "add a model" from meaning "edit the analyzer". See
 themselves.
 """
 
-from predictive_query.ast import Aggregation, ASTNode, Column, Join
+from predictive_query.ast import Aggregation, ASTNode, Column, Filter, Join
 from predictive_query.profiles import Profile
 from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema import codes
@@ -102,6 +102,50 @@ def check_capabilities(
                     f'(0, 30, days).'
                 ),
                 code=codes.MODEL_NO_STATIC_TARGET,
+                span=span,
+            )
+        )
+
+    if not can.derived_targets and not isinstance(query.target_ast, Column):
+        response.errors.append(
+            ValidationError(
+                title='Derived target not supported',
+                message=(
+                    f'The target is computed from the table rather than '
+                    f'stored in it, and {can.model} predicts a column as it '
+                    f'stands. Add the derived value as a column of '
+                    f"'{table_name(query.entity_column)}' and predict that "
+                    f'column.'
+                ),
+                code=codes.MODEL_NO_DERIVED_TARGET,
+                span=span,
+            )
+        )
+
+    if not can.entity_filters and isinstance(query.entity_ast, Filter):
+        response.errors.append(
+            ValidationError(
+                title='Filter not supported',
+                message=(
+                    f'This query filters the entities it predicts for, and '
+                    f'{can.model} scores the rows it is given. Filter the '
+                    f'rows before constructing the query.'
+                ),
+                code=codes.MODEL_NO_ENTITY_FILTER,
+                span=span,
+            )
+        )
+
+    if not can.counterfactuals and query.whatif_ast is not None:
+        response.errors.append(
+            ValidationError(
+                title='ASSUMING not supported',
+                message=(
+                    f'This query asks what would happen under an ASSUMING '
+                    f'clause, and {can.model} scores the rows it is given as '
+                    f'they stand. Change the values in those rows instead.'
+                ),
+                code=codes.MODEL_NO_COUNTERFACTUAL,
                 span=span,
             )
         )

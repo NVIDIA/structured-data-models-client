@@ -72,6 +72,10 @@ class Capabilities:
         multiple_tables: *Shape.* May a query name more than one table?
         temporal: *Shape.* May a target carry a time window?
         static: *Shape.* May a target carry no time window?
+        entity_filters: *Shape.* May the entity carry a ``WHERE`` filter?
+        counterfactuals: *Shape.* May a query carry an ``ASSUMING`` clause?
+        derived_targets: *Shape.* May the target be anything other than a
+            single column -- a condition, an aggregation, a logical operation?
         link_prediction: *Task.* May a target rank a foreign key?
         forecasting: *Task.* May a query carry a ``FORECAST`` clause?
     """
@@ -83,6 +87,9 @@ class Capabilities:
     multiple_tables: bool = True
     temporal: bool = True
     static: bool = True
+    entity_filters: bool = True
+    counterfactuals: bool = True
+    derived_targets: bool = True
 
     # task
     link_prediction: bool = True
@@ -108,6 +115,9 @@ class Capabilities:
             multiple_tables=False,
             temporal=False,
             static=False,
+            entity_filters=False,
+            counterfactuals=False,
+            derived_targets=False,
             link_prediction=False,
             forecasting=False,
             key_columns_in_filters=False,
@@ -153,14 +163,23 @@ RELATIONAL = Profile(
     mode=Mode.INFERENCE, capabilities=Capabilities(model='a relational model')
 )
 
-#: A single-table model. It sees one table and no relationships, so an
-#: aggregation over a second table is something it cannot answer.
+#: A single-table model. It scores one column of one table as it stands, so
+#: an aggregation over a second table is something it cannot answer. It holds
+#: no history and has no anchor time, so a target may carry no window; and it
+#: is handed the rows it scores, reading neither a filter on the entity nor a
+#: counterfactual, so both would be silently dropped rather than honoured.
+#: The target has to be a real column of the table, because that is the column
+#: the model is asked to fill in.
 TABULAR = Profile(
     mode=Mode.INFERENCE,
     capabilities=Capabilities(
         model='a tabular model',
         relationships=False,
         multiple_tables=False,
+        temporal=False,
+        entity_filters=False,
+        counterfactuals=False,
+        derived_targets=False,
         link_prediction=False,
         forecasting=False,
     ),

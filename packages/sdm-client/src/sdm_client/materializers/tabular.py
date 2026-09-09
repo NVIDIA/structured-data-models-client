@@ -24,7 +24,12 @@ _CONTEXT_SEED = 42
 
 
 class TabularMaterializer:
-    r"""Materialize resolved PQL against a single-table schema."""
+    r"""Materialize resolved PQL against a single-table schema.
+
+    The ``TABULAR`` profile has already refused anything this cannot honour --
+    a filtered entity, an ``ASSUMING`` clause, a windowed or derived target --
+    so the target here is a real column of the one table.
+    """
 
     def __init__(self, schema: Schema) -> None:
         self.schema = schema
