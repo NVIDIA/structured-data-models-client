@@ -68,6 +68,14 @@ Consumers depend on it and surface these extras under their own name, e.g.
 ## Local development
 
 ```bash
-pip install -e ".[sqlite,duckdb,test]"
+pip install -e ".[sqlite,duckdb,postgres,databricks,test]"
 pytest tests
+```
+
+The exactness tests check that a value read here survives all the way onto the
+wire, so they need `sdm-client` as well. They skip without it; install it too
+to run them:
+
+```bash
+pip install -e ../sdm-api -e ../sdm-pql -e ../sdm-client
 ```

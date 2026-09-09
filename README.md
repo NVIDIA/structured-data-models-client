@@ -73,7 +73,7 @@ python3.12 -m venv .venv
   -e './packages/sdm-api[test]' \
   -e './packages/sdm-pql[test]' \
   -e './packages/sdm-client[test]' \
-  -e './packages/sdm-connectors[sqlite,duckdb,test]'
+  -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
 .venv/bin/python -m pytest \
   packages/sdm-api/tests packages/sdm-pql/tests \
   packages/sdm-client/tests packages/sdm-connectors/tests -q

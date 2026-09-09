@@ -23,9 +23,16 @@ BIG = 9_007_199_254_740_993
 
 
 def wire(series: pd.Series) -> list:
-    from sdm_client.wire.dtypes import infer_tfm_dtype, serialize_column
+    r"""What this column becomes on the wire.
 
-    return serialize_column(series, infer_tfm_dtype(series))
+    Reaches across to `sdm-client` on purpose: the point of these tests is
+    that a value read here survives all the way out, and the encoder lives
+    there. Skipped rather than failed when it is absent, so working on this
+    package alone does not require installing the client.
+    """
+    dtypes = pytest.importorskip('sdm_client.wire.dtypes')
+
+    return dtypes.serialize_column(series, dtypes.infer_tfm_dtype(series))
 
 
 # --- CSV: a blank must not promote the column -------------------------------
