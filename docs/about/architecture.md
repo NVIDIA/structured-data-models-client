@@ -536,18 +536,20 @@ It ships internal first, but public release is the destination, not a maybe. The
 reached public by **retrofit** — a full audit plus an OSRB pass after the code existed. We are not
 repeating that. Every rule below is cheap on day one and expensive later.
 
-**Written OSS-clean from commit 1:**
+**Written OSS-clean from commit 1, and now carrying the rest:**
 
-| From commit 1 | Deferred, but a **release blocker** — not optional |
+| Held from commit 1 | Added for the release |
 |---|---|
-| SPDX header on every source file | `LICENSE` + `NOTICE` at the root **and in every distribution's metadata** |
-| A provenance record for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md` |
-| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public CI, publishing provenance, public issue policy |
-| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | A generated **SBOM** covering direct, optional, transitive, build, native and connector dependencies |
+| SPDX header on every source file | `LICENSE` and `NOTICE` at the root, and in every distribution's metadata |
+| A provenance record for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md` |
+| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public issue policy, and the repository URL every package publishes to, checked by the hygiene script |
+| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | — |
 
-`LICENSE` and `NOTICE` are listed as deferred only because the repo starts internal. They **cannot
-ship publicly without them**, and a hand-maintained dependency table is not an SBOM. Treat both as
-gates on the release, not as nice-to-haves.
+Two things in the right-hand column are still open, and neither is a
+nice-to-have. Public CI and publishing provenance land when the repository
+does. A generated **SBOM** covering direct, optional, transitive, build, native
+and connector dependencies is not written yet, and a hand-maintained dependency
+table is not one; treat it as a gate on the release.
 
 License is **Apache-2.0** — it matches the predecessor client, the source of most of what we
 copy, so nothing we carry across needs relicensing.
