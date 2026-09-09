@@ -364,9 +364,13 @@ def test_the_fallback_names_the_parameters_the_query_would_have_found():
     } <= postgres._KNOWN_LIBPQ_ARGS
 
 
-def test_the_fallback_alone_accepts_what_the_loaded_libpq_reports():
-    """Whatever the running libpq accepts must not depend on the query
-    succeeding, for any parameter that existed when this was written.
+def test_the_loaded_libpq_is_the_authority_when_it_can_answer():
+    """Only what this libpq reports, never that unioned with the written-down
+    set.
+
+    A name in the fallback that the running libpq does not know would get past
+    the guard that exists to catch it, and fail later as a connection error
+    from the driver, naming nothing the caller can act on.
     """
     postgres = pytest.importorskip('sdm_connectors.backends.postgres')
     pq = pytest.importorskip('psycopg.pq')
@@ -375,7 +379,30 @@ def test_the_fallback_alone_accepts_what_the_loaded_libpq_reports():
         option.keyword.decode() for option in pq.Conninfo.get_defaults()
     }
 
-    assert reported <= postgres._KNOWN_LIBPQ_ARGS
+    assert postgres._libpq_args() == reported
+
+
+def test_an_option_this_libpq_does_not_know_is_refused_here(monkeypatch):
+    """An older libpq has fewer parameters, and the ones it lacks must be
+    refused at the call site rather than by the driver later."""
+    postgres = pytest.importorskip('sdm_connectors.backends.postgres')
+    pq = pytest.importorskip('psycopg.pq')
+
+    class _Option:
+        def __init__(self, keyword: str) -> None:
+            self.keyword = keyword.encode()
+
+    older = {
+        option.keyword.decode() for option in pq.Conninfo.get_defaults()
+    } - {'sslcertmode'}
+    monkeypatch.setattr(
+        pq.Conninfo,
+        'get_defaults',
+        staticmethod(lambda: [_Option(name) for name in older]),
+    )
+
+    assert 'sslcertmode' not in postgres._libpq_args()
+    assert 'host' in postgres._libpq_args()
 
 
 def test_the_accepted_set_falls_back_when_libpq_cannot_be_asked(monkeypatch):

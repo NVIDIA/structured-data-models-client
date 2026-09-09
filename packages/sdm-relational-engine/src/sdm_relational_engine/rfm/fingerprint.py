@@ -15,9 +15,12 @@ This walks the whole shape a prediction depends on, writes it in a fixed order,
 and hashes the bytes. Two graphs that would behave identically get one name;
 anything a prediction can see changes it.
 
-The engine version is part of it. Rebuilding the same tables under a version
-that reads them differently is a different graph, and a cache that could not
-tell them apart would serve the older reading indefinitely.
+What is *not* part of it is the engine's package version. Versioning on that
+would throw away every downstream cache on a release that had nothing to do
+with graphs, so a name says the shape is the same, not that the engine reading
+it is. `FINGERPRINT_VERSION` below is the version of this encoding, and it is
+the only version here: bump it when the bytes written change, and every name
+changes with it.
 
 Format
 ------

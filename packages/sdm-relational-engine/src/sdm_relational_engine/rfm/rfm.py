@@ -370,11 +370,16 @@ def _fingerprint_of(graph: Any) -> str:
     try:
         return graph_fingerprint(graph)
     except Exception:
-        logging.getLogger('sdm_relational_engine').warning(
-            'Graph could not be fingerprinted, so predictions over it cannot '
-            'be told apart from ones over a different graph.',
-            exc_info=True,
-        )
+        try:
+            logging.getLogger('sdm_relational_engine').warning(
+                'Graph could not be fingerprinted, so predictions over it '
+                'cannot be told apart from ones over a different graph.',
+                exc_info=True,
+            )
+        except Exception:
+            # Saying so must not become the failure either, for the same
+            # reason the fingerprint itself does not fail the model.
+            pass
         return ''
 
 

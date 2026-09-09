@@ -691,3 +691,49 @@ def test_a_run_with_no_anchor_is_still_reported_as_none() -> None:
         _pred_df = None
 
     assert _anchor_of(Task()) == ''
+
+
+def test_a_logger_that_always_raises_does_not_fail_the_prediction() -> None:
+    """The fallback log is guarded too.
+
+    A handler that raises raises for both calls, so an unguarded second one
+    turned a prediction that succeeded into whatever the logger threw, which
+    is the one thing `emit` promises not to do.
+    """
+
+    class Angry(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise OSError('disk full')
+
+    log = logging.getLogger('sdm_relational_engine')
+    handler = Angry()
+    log.addHandler(handler)
+    previous = log.level
+    log.setLevel(logging.DEBUG)
+    try:
+        with recorded(PredictionRecord(graph_fingerprint='abc')):
+            pass
+    finally:
+        log.removeHandler(handler)
+        log.setLevel(previous)
+
+
+def test_a_failed_prediction_still_raises_its_own_error() -> None:
+    """Guarding the logger must not swallow what the caller was told."""
+
+    class Angry(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise OSError('disk full')
+
+    log = logging.getLogger('sdm_relational_engine')
+    handler = Angry()
+    log.addHandler(handler)
+    previous = log.level
+    log.setLevel(logging.DEBUG)
+    try:
+        with pytest.raises(ValueError, match='the real failure'):
+            with recorded(PredictionRecord(graph_fingerprint='abc')):
+                raise ValueError('the real failure')
+    finally:
+        log.removeHandler(handler)
+        log.setLevel(previous)

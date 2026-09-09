@@ -84,11 +84,21 @@ class PredictionRecord:
 
 
 def emit(record: PredictionRecord) -> None:
-    r"""Write one prediction to the log, never failing the call it describes."""
+    r"""Write one prediction to the log, never failing the call it describes.
+
+    The fallback is guarded too. A handler that raises raises for both calls,
+    and an unguarded second one turns a prediction that succeeded into
+    whatever the logger threw, which is the one thing this promises not to do.
+    """
     try:
         logger.info('rfm.predict %s', json.dumps(asdict(record), default=str))
     except Exception:
-        logger.debug('Prediction record could not be emitted', exc_info=True)
+        try:
+            logger.debug(
+                'Prediction record could not be emitted', exc_info=True
+            )
+        except Exception:
+            pass
 
 
 # Everything from the first quote in a message to the last, and a bare list of

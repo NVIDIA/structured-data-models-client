@@ -104,6 +104,13 @@ _KNOWN_LIBPQ_ARGS = frozenset(
 
 
 def _libpq_args() -> frozenset[str]:
+    r"""What the loaded libpq takes, or the written-down set if it cannot say.
+
+    Only one or the other. Unioning them accepts names this libpq does not
+    know, which is worse than not checking at all: the argument gets past the
+    guard that exists to catch it and fails later as a connection error, from
+    the driver, naming nothing the caller can act on.
+    """
     try:
         from psycopg import pq
 
@@ -112,7 +119,7 @@ def _libpq_args() -> frozenset[str]:
         }
     except Exception:
         return _KNOWN_LIBPQ_ARGS
-    return frozenset(reported | _KNOWN_LIBPQ_ARGS)
+    return frozenset(reported)
 
 
 _CONNECT_ARGS = _DRIVER_ARGS | _libpq_args()
