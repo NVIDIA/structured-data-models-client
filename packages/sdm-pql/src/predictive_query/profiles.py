@@ -164,12 +164,7 @@ RELATIONAL = Profile(
 )
 
 #: A single-table model. It scores one column of one table as it stands, so
-#: an aggregation over a second table is something it cannot answer. It holds
-#: no history and has no anchor time, so a target may carry no window; and it
-#: is handed the rows it scores, reading neither a filter on the entity nor a
-#: counterfactual, so both would be silently dropped rather than honoured.
-#: The target has to be a real column of the table, because that is the column
-#: the model is asked to fill in.
+#: an aggregation over a second table is something it cannot answer.
 TABULAR = Profile(
     mode=Mode.INFERENCE,
     capabilities=Capabilities(
