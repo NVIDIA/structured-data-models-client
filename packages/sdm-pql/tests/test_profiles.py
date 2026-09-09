@@ -44,10 +44,7 @@ def test_the_profiles_cover_the_models_we_serve_and_the_ones_we_plan_to():
         'derived_targets': True,
     }
     # One table, one column, as it stands. Everything the tabular
-    # materializer would otherwise read past is refused here instead: a
-    # second table, a window it has no anchor time for, a filter or an
-    # ASSUMING clause it never sees, and a target that is not a column of
-    # the table.
+    # materializer would otherwise read past is refused here instead.
     assert matrix(TABULAR) == {
         'relationships': False,
         'multiple_tables': False,

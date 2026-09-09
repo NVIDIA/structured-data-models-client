@@ -278,13 +278,6 @@ def test_single_table_requests_do_not_accept_options(path, option):
 )
 @pytest.mark.parametrize('path', ['predict', 'indices'])
 def test_a_query_the_tabular_path_would_ignore_is_refused(text, path):
-    """The single-table path reads a column and a column only.
-
-    Each of these asks for something the materializer never looks at: rows
-    narrowed by a filter, a counterfactual, or a value computed rather than
-    stored. Answering the plain query instead would be the wrong answer given
-    confidently, so the profile refuses before anything is materialized.
-    """
     arguments = (
         {'predict': new_rows()} if path == 'predict' else {'indices': [1]}
     )
