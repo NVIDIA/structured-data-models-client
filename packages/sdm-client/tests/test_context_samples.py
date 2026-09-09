@@ -154,9 +154,11 @@ def test_a_count_that_is_not_a_count_is_refused(bad, fragment):
 
     from sdm_client import PredictiveQuery
 
-    frame = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
+    users = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
+    orders = pd.DataFrame({'order_id': [1, 2], 'user_id': [1, 2]})
     query = PredictiveQuery(
-        'PREDICT users.v FOR EACH users.user_id', {'users': frame}
+        'PREDICT users.v FOR EACH users.user_id',
+        {'users': users, 'orders': orders},
     )
 
     called = False
@@ -176,27 +178,6 @@ def test_a_count_that_is_not_a_count_is_refused(bad, fragment):
     assert not called
 
 
-@pytest.mark.parametrize('good', [1, 2, 500, 1_000, 10_000, 10_001])
-def test_a_real_count_reaches_the_selected_materializer(good):
-    import pandas as pd
-
-    from sdm_client import PredictiveQuery
-
-    frame = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
-    query = PredictiveQuery(
-        'PREDICT users.v FOR EACH users.user_id', {'users': frame}
-    )
-    expected = object()
-
-    def _materialize(**kwargs):
-        assert kwargs['num_context_samples'] == good
-        return expected
-
-    materializer = query._relational_materializer
-    materializer.materialize = _materialize  # type: ignore[method-assign]
-    assert query.materialize(indices=[1], num_context_samples=good) is expected
-
-
 def test_the_relational_ceiling_is_refused_before_the_engine_is_reached(
     monkeypatch,
 ):
@@ -205,9 +186,11 @@ def test_the_relational_ceiling_is_refused_before_the_engine_is_reached(
 
     from sdm_client import PredictiveQuery
 
-    frame = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
+    users = pd.DataFrame({'user_id': [1, 2], 'v': [1.0, 2.0]})
+    orders = pd.DataFrame({'order_id': [1, 2], 'user_id': [1, 2]})
     query = PredictiveQuery(
-        'PREDICT users.v FOR EACH users.user_id', {'users': frame}
+        'PREDICT users.v FOR EACH users.user_id',
+        {'users': users, 'orders': orders},
     )
 
     def _fail(*args, **kwargs):

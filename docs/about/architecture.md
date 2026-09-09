@@ -249,7 +249,7 @@ A query says *what* to ask. It never says *which rows* to ask about. That is alw
 | Builder | Rows to score | Available |
 |---|---|---|
 | `Request(context=…, predict=…)` | `predict` — any rows, including rows the model has never seen | v1 |
-| `query.materialize(indices=[…])` | entity keys that exist in the schema's tables | v1, relational |
+| `query.materialize(indices=[…])` | existing rows, looked up by entity key | v1, tabular and relational |
 | `query.materialize(predict=rows_df)` | supplied rows, which need not exist in the tables | phase 7, tabular |
 
 `materialize()` with neither argument raises, naming both. **There is no all-rows default** — it would

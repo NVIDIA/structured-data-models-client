@@ -67,9 +67,13 @@ with client.fit(request, model=KumoRelational()) as fitted:
 
 A query says *what* to predict. It never says *which rows*.
 
-| You want to score | Use |
-|---|---|
-| entities the tables already contain | `materialize(indices=[...])` |
-| rows the tables do not contain | `Request(context=…, predict=…)`, or `materialize(predict=…)` |
+| You want to score | Schema | Use |
+|---|---|---|
+| existing rows | single table | `materialize(indices=[...])` |
+| new rows supplied separately | single table | `Request(context=…, predict=…)` or `materialize(predict=…)` |
+| existing entities | multiple related tables | `materialize(indices=[...])` |
 
 There is no all-rows default, because it would silently score a whole table.
+
+For multiple tables, `materialize()` additionally gathers records related to each
+entity.

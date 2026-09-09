@@ -78,14 +78,20 @@ class PredictiveQuery:
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
 
+        The request takes one of three paths: predict=<frame> uses the full
+        single table as context, indices=[...] with one table builds the request
+        directly in pandas, and indices=[...] with multiple tables uses the
+        existing relational gather.
+
         Args:
             indices: Keys of rows already present in the tables. Mutually
                 exclusive with ``predict``.
             predict: Rows supplied directly for scoring. Supported for
                 single-table schemas and mutually exclusive with ``indices``.
             num_context_samples: For ``indices`` requests, the maximum number
-                of labelled context rows to use. Must be at least 1 and
-                defaults to 1,000.
+                of labelled context rows to use. When omitted, single-table
+                requests use all eligible rows; relational requests use up to
+                1,000.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -97,20 +103,27 @@ class PredictiveQuery:
                 given, if both are, or if an option is not one this accepts.
         """
         self._validate_materialize_args(
+            len_schema=len(self.schema),
             indices=indices,
             predict=predict,
             num_context_samples=num_context_samples,
+            options=options,
         )
 
         if predict is not None:
             return self._tabular_materializer.table(
                 query=self._resolve(TABULAR),
                 predict=predict,
-                num_context_samples=num_context_samples,
-                options=options,
             )
 
         assert indices is not None
+        if len(self.schema) == 1:
+            return self._tabular_materializer.indices(
+                query=self._resolve(TABULAR),
+                indices=indices,
+                num_context_samples=num_context_samples,
+            )
+
         return self._relational_materializer.materialize(
             query=self._resolve(RELATIONAL),
             indices=indices,
@@ -121,16 +134,41 @@ class PredictiveQuery:
     @staticmethod
     def _validate_materialize_args(
         *,
+        len_schema: int,
         indices: Sequence[Any] | None,
         predict: pd.DataFrame | None,
         num_context_samples: int | None,
+        options: dict[str, Any] | None,
     ) -> None:
-        if indices is not None and predict is not None:
+        if len_schema == 1 and options:
             raise StructuredDataError(
-                'pass either indices=[...] to score rows the tables already '
-                'contain, or predict=<frame> to score rows they do not—not both',
+                f'Single-table requests do not accept options: '
+                f'{sorted(options)}. Options apply only to relational '
+                f'materialization',
                 code='INVALID_REQUEST',
             )
+
+        if predict is not None:
+            if len_schema != 1:
+                raise StructuredDataError(
+                    f'predict=<frame> requires a single-table schema; '
+                    f'got {len_schema} tables. For a relational schema, use '
+                    f'indices=[...] to select entities already in the tables',
+                    code='INVALID_REQUEST',
+                )
+            if indices is not None:
+                raise StructuredDataError(
+                    'pass either indices=[...] to score rows the tables already '
+                    'contain, or predict=<frame> to score rows they do not—not both',
+                    code='INVALID_REQUEST',
+                )
+            if num_context_samples is not None:
+                raise StructuredDataError(
+                    'num_context_samples cannot be used with predict=<frame>: '
+                    'the schema table is used as context in full. To use less '
+                    'context, construct the query with a smaller table',
+                    code='INVALID_REQUEST',
+                )
 
         if indices is None and predict is None:
             raise StructuredDataError(

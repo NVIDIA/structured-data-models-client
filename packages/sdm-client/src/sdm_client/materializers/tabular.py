@@ -6,9 +6,12 @@ r"""Build single-table requests from rows supplied by the caller."""
 
 from __future__ import annotations
 
+from collections.abc import Hashable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from predictive_query import Stype
+from predictive_query.validator.utils import col_name, table_name
 
 from sdm_client.errors import StructuredDataError
 from sdm_client.request import Request
@@ -17,14 +20,7 @@ from sdm_client.schema import Schema
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
 
-_TASK_FOR_PROBLEM = {
-    'ProblemType.CLASSIFY': 'classification',
-    'CLASSIFY': 'classification',
-    'ProblemType.FORECAST': 'forecasting',
-    'FORECAST': 'forecasting',
-    'ProblemType.RANK': 'ranking',
-    'RANK': 'ranking',
-}
+_CONTEXT_SEED = 42
 
 
 class TabularMaterializer:
@@ -38,52 +34,83 @@ class TabularMaterializer:
         *,
         query: ValidatedPredictiveQuery,
         predict: pd.DataFrame,
-        num_context_samples: int | None,
-        options: dict[str, Any],
     ) -> Request:
         r"""Build a request from rows supplied separately by the caller."""
-        if num_context_samples is not None:
-            raise StructuredDataError(
-                'num_context_samples cannot be used with predict=<frame>: '
-                'the schema table is used as context in full. To use less '
-                'context, construct the query with a smaller table',
-                code='INVALID_REQUEST',
-            )
-        if options:
-            raise StructuredDataError(
-                f'predict=<frame> does not accept options: {sorted(options)}; '
-                f'the schema table is used as context without sampling',
-                code='INVALID_REQUEST',
-            )
-        if len(self.schema) != 1:
-            raise StructuredDataError(
-                f'predict=<frame> requires a single-table schema; '
-                f'got {len(self.schema)} tables. For a relational schema, use '
-                f'indices=[...] to select entities already in the tables',
-                code='INVALID_REQUEST',
-            )
-
-        table_name = next(iter(self.schema))
-        target = query.target_column
-        if isinstance(target, str) and target.startswith(f'{table_name}.'):
-            target = target[len(table_name) + 1 :]
-        if target is None or target not in self.schema[table_name]:
-            raise StructuredDataError(
-                f'query target {target!r} is not a column in table '
-                f'{table_name!r}',
-                code='INVALID_REQUEST',
-            )
+        entity_table_name = table_name(query.entity_column)
+        target_col = col_name(query.target_column)
 
         return Request(
-            context=self.schema[table_name].data,
+            context=self.schema[entity_table_name].data,
             predict=predict,
-            target=target,
-            # TODO: Derive the runtime task from the validated query.
-            # ProblemType has no REGRESSION member, so this fallback cannot
-            # materialize a tabular regression request.
-            task=_TASK_FOR_PROBLEM.get(
-                str(query.problem_type), 'classification'
-            ),
+            target=target_col,
+            task=self._infer_task_type(query),
             schema=self.schema,
-            entity_table=table_name,
+            entity_table=entity_table_name,
         )
+
+    def indices(
+        self,
+        query: ValidatedPredictiveQuery,
+        indices: Sequence[Any],
+        num_context_samples: int | None,
+    ) -> Request:
+        r"""Build a single-table request for rows the one table does contain."""
+        entity_table_name = table_name(query.entity_column)
+        entity_table = self.schema[entity_table_name].data
+        entity_col = col_name(query.entity_column)
+        target_col = col_name(query.target_column)
+
+        indices = list(indices)
+        positions: dict[Hashable, list[int]] = {}
+        for position, value in enumerate(entity_table[entity_col]):
+            positions.setdefault(value, []).append(position)
+
+        missing = [value for value in indices if value not in positions]
+        if missing:
+            shown = missing[:10]
+            len_missing = len(missing)
+            tail = '' if len_missing == len(shown) else ', ...'
+            raise StructuredDataError(
+                f'{len_missing} of the {len(indices)} indices are not in '
+                f'{query.entity_column}: {shown}{tail}. Pass predict=<frame> '
+                f'to score rows not present in the table',
+                code='INVALID_REQUEST',
+            )
+
+        scored = [
+            position for value in indices for position in positions[value]
+        ]
+        predict = entity_table.iloc[scored].drop(columns=[target_col])
+        context_mask = entity_table[target_col].notna()
+        context_mask.iloc[scored] = False
+        candidates = entity_table[context_mask]
+
+        if num_context_samples is None:
+            context = candidates
+        else:
+            context = candidates.sample(
+                n=min(num_context_samples, len(candidates)),
+                random_state=_CONTEXT_SEED,
+            ).sort_index()
+
+        return Request(
+            context=context,
+            predict=predict,
+            target=target_col,
+            task=self._infer_task_type(query),
+            schema=self.schema,
+            entity_table=entity_table_name,
+        )
+
+    @staticmethod
+    def _infer_task_type(query: ValidatedPredictiveQuery) -> str:
+        if query.target_stype not in {Stype.categorical, Stype.numerical}:
+            raise StructuredDataError(
+                f'tabular materialization requires a categorical or '
+                f'numerical target; {query.target_column!r} has semantic '
+                f'type {query.target_stype.value!r}',
+                code='UNSUPPORTED_REQUEST',
+            )
+        if query.target_stype == Stype.categorical:
+            return 'classification'
+        return 'regression'
