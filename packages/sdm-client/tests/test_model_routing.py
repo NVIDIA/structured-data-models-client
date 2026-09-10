@@ -284,6 +284,8 @@ def test_the_tabular_model_is_refused_a_relationship_on_one_table():
 
 
 def test_options_beside_a_supplied_frame_do_not_advise_a_route_that_refuses_it():
+    """Naming the relational model alone would be refused for the frame, so
+    the remediation has to name indices=[...] as well."""
     frame = pd.DataFrame({'user_id': [901], 'tenure': [3.0]})
     with pytest.raises(StructuredDataError) as error:
         PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
@@ -291,8 +293,6 @@ def test_options_beside_a_supplied_frame_do_not_advise_a_route_that_refuses_it()
         )
     message = str(error.value)
     assert 'num_neighbors' in message
-    # Naming the relational model alone would be refused for the frame, so the
-    # remediation has to name indices=[...] as well.
     assert 'indices=[...]' in message
 
 
@@ -303,3 +303,52 @@ def test_asking_with_both_rows_and_keys_says_so_before_anything_about_routes():
             predict=frame, indices=[1], model='kumo-relational'
         )
     assert 'not both' in str(error.value)
+
+
+# --- a handle is only worth as much as the spec it carries ------------------
+
+
+def test_a_bare_model_handle_is_refused_as_a_client_error():
+    """`Model` is exported, so it can be constructed. It carries no spec, and
+    reading one off it left an AttributeError where this client documents a
+    refusal."""
+    from sdm_client.models import Model
+
+    with pytest.raises(UnknownModelError):
+        PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
+            indices=[1, 2, 3], model=Model()
+        )
+
+
+def test_a_handle_carrying_an_unregistered_spec_is_refused():
+    """A handle is a name for one of the models this contract carries, not a
+    way to describe a new one. Its spec decides the route and the limits the
+    request is checked against, and the id it names is a closed enum on the
+    wire, so an unregistered one would gather work that cannot be sent."""
+    from predictive_query import RELATIONAL as RELATIONAL_PROFILE
+
+    from sdm_client.base import ModelSpec, RuntimeContract
+    from sdm_client.models import Model
+
+    class Invented(Model):
+        spec = ModelSpec(
+            model_id='not-a-real-model',
+            profile=RELATIONAL_PROFILE,
+            runtime=RuntimeContract(
+                tasks=frozenset({'classification'}),
+                outputs=frozenset({'prediction'}),
+            ),
+        )
+
+    with pytest.raises(UnknownModelError) as error:
+        PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
+            indices=[1, 2, 3], model=Invented()
+        )
+    assert 'not-a-real-model' in str(error.value)
+
+
+def test_the_shipped_handles_are_still_accepted():
+    from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR, spec_for
+
+    assert spec_for(KumoTabular()) is KUMO_TABULAR
+    assert spec_for(KumoRelational()) is KUMO_RELATIONAL

@@ -86,9 +86,13 @@ class PredictiveQuery:
         in pandas, and the relational route gathers the tables as a graph.
 
         ``model`` chooses between the last two. Left unsaid, the schema's shape
-        decides: one table is gathered tabularly and several relationally. Name
-        a model when that default is not what you want -- a single table is a
-        graph of one node, and the relational model answers it.
+        decides, and the shape that counts is the one
+        :attr:`~sdm_client.Request.is_relational` reports: a relationship sends
+        a schema relationally as surely as a second table does, so a lone table
+        that points at itself is gathered as the graph it is. Name a model when
+        that default is not what you want -- a single table with no
+        relationships is a graph of one node, and the relational model answers
+        it.
 
         Args:
             indices: Keys of rows already present in the tables. Mutually
@@ -116,10 +120,6 @@ class PredictiveQuery:
                 ``model`` cannot answer a schema of this shape.
         """
         spec = spec_for(model) if model is not None else None
-        # Left unsaid, the shape decides -- and the shape that makes a request
-        # relational is the one `Request.is_relational` reports, which counts a
-        # relationship as much as a second table. A schema of one table that
-        # points at itself is a graph.
         relational = (
             spec.profile == RELATIONAL
             if spec is not None
@@ -169,9 +169,18 @@ class PredictiveQuery:
         num_context_samples: int | None,
         options: dict[str, Any] | None,
     ) -> None:
-        # Which rows to score is a property of the call rather than of the
-        # route, and naming a model resolves neither, so both are settled
-        # before anything below can advise one.
+        r"""Refuse a call that cannot be gathered, in an order that advises.
+
+        Which rows to score is a property of the call rather than of the route,
+        and naming a model resolves neither, so both are settled before
+        anything below can suggest one. The route comes next, because a model
+        that cannot read this schema at all explains every refusal after it.
+
+        Each message names a way out that works. Gathering options are the
+        awkward one: the relational model honours them but scores rows the
+        tables already hold, so naming it alone would land the caller on the
+        next refusal, and the message names ``indices`` as well.
+        """
         if indices is not None and predict is not None:
             raise StructuredDataError(
                 'pass either indices=[...] to score rows the tables already '
@@ -187,9 +196,6 @@ class PredictiveQuery:
                 code='INVALID_REQUEST',
             )
 
-        # The tabular route reads one table and no relationships. Reachable
-        # only when the caller named the tabular model, since the shape-based
-        # default sends either the other way.
         if not relational and len_schema != 1:
             raise StructuredDataError(
                 f'{model_id} answers from a single table, and this schema has '
@@ -208,9 +214,6 @@ class PredictiveQuery:
             )
 
         if not relational and options:
-            # Naming the relational model is only half the remedy: it scores
-            # rows the tables already hold, so a supplied frame would be
-            # refused next. Name both halves rather than one that leads there.
             raise StructuredDataError(
                 f'gathering options apply only to relational materialization: '
                 f'{sorted(options)}. Pass indices=[...] with '

@@ -119,6 +119,8 @@ def test_a_row_index_outside_the_batch_is_refused():
 
 
 def test_the_same_row_answered_twice_is_refused():
+    """Named for the repeat rather than for the row it leaves unanswered as a
+    consequence, so this pins the duplicate guard and not the later one."""
     schema = schema_for(list(range(1, 21)))
     payload = payload_for(schema, [3, 7])
     with pytest.raises(StructuredDataError) as error:
@@ -128,8 +130,6 @@ def test_the_same_row_answered_twice_is_refused():
             payload,
         )
     assert error.value.code == 'INVALID_RESPONSE'
-    # Named for the repeat rather than for the row it left unanswered as a
-    # consequence, so this pins the duplicate guard and not the later one.
     assert 'more than once' in str(error.value)
 
 

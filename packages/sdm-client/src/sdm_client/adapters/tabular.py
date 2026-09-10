@@ -135,10 +135,6 @@ class TabularAdapter:
     def _envelope(
         self, request: Request, outputs: tuple[str, ...]
     ) -> dict[str, Any]:
-        # Gathered for the other model. Its frames were left empty because the
-        # sampled rows live in `payloads`, so shaping an envelope from them
-        # reads a column that is not there and fails as a KeyError rather than
-        # as one of this client's errors.
         if request.payloads is not None:
             raise UnsupportedRequestError(
                 f'this request was gathered for '
@@ -269,12 +265,19 @@ def _named_entities(
 
     **A mismatch is an error, not a silent pass.** Rewriting an id is exactly
     the operation that can misattribute an answer, so a row is checked against
-    the batch it claims to belong to before its id is replaced.
+    the batch it claims to belong to before its id is replaced. The endpoint
+    answers under the list of key values and the relational endpoint answers
+    under the key itself, so a key is recognised in either shape; an id in any
+    other shape is not second-guessed, because only a key this batch contains
+    can be known to be the wrong one.
 
-    Those checks are about the batch rather than about the key, so they hold
-    for a request that has no key to put back too: a composite key, or rows the
+    Those checks are about the batch rather than about the key, so they hold for
+    a request that has no key to put back too: a composite key, or rows the
     caller supplied without the key column, still have to be answered once each
-    and no more.
+    and no more. What such a request has nothing of is a value to restore, and a
+    null key is the same case -- ``str`` would turn it into ``'None'``, which
+    reads as a key that was asked about. Rows in a shape this cannot read at
+    all, a format other than ``arrays``, are left alone entirely.
     """
     import dataclasses
 
@@ -282,8 +285,6 @@ def _named_entities(
         return list(items)
     table = payload.get('predict', {}).get('instance_table', {})
     rows = table.get('rows')
-    # Rows in a shape this does not read -- a format other than `arrays` -- can
-    # be neither counted nor keyed, so nothing here applies to them.
     if not isinstance(rows, list):
         return list(items)
     columns = table.get('columns') or []
@@ -292,18 +293,11 @@ def _named_entities(
         payload.get('schema', {}).get('instance_table', {}).get('primary_key')
         or []
     )
-    # A composite key has no single value to stand for the row, and rows the
-    # caller supplied directly need not carry the key column at all. Neither is
-    # an error; there is simply nothing to put back.
     keys = (
         [row[columns.index(key[0])] for row in rows]
         if len(key) == 1 and key[0] in columns
         else None
     )
-    # Which rows the endpoint's own id could be naming. It answers under the
-    # list of key values, and the relational endpoint answers under the key
-    # itself, so both are shapes a key can be recognised in. Several rows may
-    # share an entity value, so a key stands for a set of positions.
     rows_named_by: dict[str, set[int]] = {}
     for position, value in enumerate(keys or ()):
         for shape in (str([value]), str(value)):
@@ -330,11 +324,6 @@ def _named_entities(
                 f'the response answers row {index} more than once',
                 code='INVALID_RESPONSE',
             )
-        # The endpoint answers under the key it scored. When that key names
-        # rows of this batch and `index` is not one of them, the two halves of
-        # the answer disagree and relabelling by `row_index` would attach it to
-        # the wrong entity. An id in some other shape is not second-guessed:
-        # only a key this batch contains can be known to be the wrong one.
         claimed = rows_named_by.get(str(item.id))
         if claimed is not None and index not in claimed:
             raise StructuredDataError(
@@ -343,9 +332,6 @@ def _named_entities(
                 code='INVALID_RESPONSE',
             )
         seen.add(index)
-        # A null names no row, so there is nothing to put back. `str` would
-        # turn it into 'None', which reads as a key that was asked about. NaN
-        # does not arrive here: the encoder writes it as null.
         value = None if keys is None else keys[index]
         named.append(
             item if value is None else dataclasses.replace(item, id=str(value))

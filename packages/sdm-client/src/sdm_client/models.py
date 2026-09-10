@@ -178,15 +178,28 @@ def spec_for(model: str | Model) -> ModelSpec:
     sending one -- so that both accept the same arguments and refuse the same
     ones the same way.
 
+    A handle is a name for one of the models below, not a way to describe a new
+    one, so it is worth exactly the spec it carries. That spec chooses the route
+    a request is gathered for and the limits it is checked against, and the id
+    it names is a closed enum on the wire -- so one this module did not declare
+    is refused here rather than gathering work that cannot be sent. ``Model``
+    itself declares ``spec`` without defining one, so a bare ``Model()`` is that
+    same refusal rather than an ``AttributeError``.
+
     Args:
         model: A model handle such as ``KumoTabular()``, or a model id.
 
     Raises:
-        UnknownModelError: If ``model`` is an id the contract does not carry.
+        UnknownModelError: If ``model`` is an id, or a handle, the contract does
+            not carry.
         StructuredDataError: If ``model`` is neither a handle nor an id.
     """
     if isinstance(model, Model):
-        return model.spec
+        spec = getattr(model, 'spec', None)
+        if isinstance(spec, ModelSpec) and MODELS.get(spec.model_id) is spec:
+            return spec
+        named = getattr(spec, 'model_id', None) or type(model).__name__
+        raise UnknownModelError(named, list(MODELS))
     if isinstance(model, str):
         spec = MODELS.get(model)
         if spec is None:

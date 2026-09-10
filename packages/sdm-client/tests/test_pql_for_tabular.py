@@ -264,6 +264,4 @@ def test_single_table_requests_do_not_accept_options(path, option):
     message = str(error.value)
     assert 'apply only to relational materialization' in message
     assert option in message
-    # The refusal names the way to have them honoured rather than only the
-    # rule: one table can be gathered as a graph when the caller says so.
     assert 'KumoRelational' in message

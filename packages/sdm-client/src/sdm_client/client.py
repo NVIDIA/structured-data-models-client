@@ -93,18 +93,16 @@ class FittedModel:
         r"""Score ``request``'s rows against the pinned context.
 
         Only the rows travel: the context, schema and task were pinned when
-        this handle was created.
+        this handle was created. Reading the answer needs both halves, though
+        -- the key an id stands for is named in the pinned schema -- so the
+        adapter is handed the whole request while the wire gets only the half
+        the contract allows on a scoring call.
         """
         if self._closed:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
             )
-        # A session split the request in two: model, task, schema and context
-        # were pinned at fit time and only the rows travel now. Reading the
-        # answer needs both halves -- the key an id stands for is named in the
-        # pinned schema -- so the adapter is handed the whole request while the
-        # wire gets only the half the contract allows here.
         parts = [
             self._adapter.normalize(
                 self._client._transport.session_predict(
