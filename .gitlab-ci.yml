@@ -68,6 +68,14 @@ engine:
     # job had it.
     - pip install -q -e './packages/sdm-relational-engine[test]'
     - cd packages/sdm-relational-engine && python -m pytest tests -q
+    # The client's suite again, with an engine present. The `test` job does
+    # not install one, so every client test that needs the engine skips there
+    # and runs nowhere; a change to how a request is routed then breaks them
+    # unseen. Running the whole suite rather than a name filter, because the
+    # next such test will not be named like the current ones.
+    - cd "$CI_PROJECT_DIR"
+    - pip install -q -e './packages/sdm-client[test]'
+    - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
 
 # Each distribution is built the way an index would build it: in an isolated
 # environment holding only the build backend, with none of the runtime
