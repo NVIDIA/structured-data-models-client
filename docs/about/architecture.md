@@ -255,6 +255,14 @@ A query says *what* to ask. It never says *which rows* to ask about. That is alw
 `materialize()` with neither argument raises, naming both. **There is no all-rows default** — it would
 silently score a whole table.
 
+**The model a request is gathered for is an argument, not a consequence of the schema's shape.**
+`materialize(model=…)` takes the same handle or id that `predict()` does. Left unsaid, the shape
+decides — one table tabular, several relational — but a single table is a graph of one node, and
+`model='kumo-relational'` gathers it as one. Without that argument the two models could disagree
+with no way to reconcile them: a one-table request was always built tabular, so the relational
+model was refused it and nothing the caller passed could say otherwise. Gathering and sending
+disagree loudly now: each adapter refuses a request gathered for the other before it is sent.
+
 **Tabular PQL has no key to name, and that is decided, not open.** `FOR EACH` today must name a
 primary key, and a tabular frame has none. In phase 7 `Schema` synthesizes a request-local row id for
 a keyless table — a real column, positional, never sent as data and never surfacing in the result,

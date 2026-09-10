@@ -6,6 +6,28 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Behaviour worth knowing before you rely on it
 
+**`materialize()` takes the model it is gathering for.** It used to pick by
+counting tables, and the model was named later at `predict()`. For a one-table
+schema those two decisions could disagree with no way to reconcile them: the
+request was always built for `kumo-tabular`, so `predict(model='kumo-relational')`
+refused it and no argument could say otherwise. `materialize(model=…)` now takes
+the same handle or id `predict()` does. Left unsaid, the shape still decides —
+one table tabular, several relational — so existing calls are unchanged.
+
+Gathering and sending for different models is now refused where it used to raise
+a bare `KeyError` from inside the adapter: a request carrying relational payloads
+is not shaped into a tabular envelope, and the message names the model it was
+gathered for.
+
+**`id` holds the key you asked about, on both models.** The relational path
+already returned the caller's own key; the tabular path returned what the
+endpoint echoed, which is the stringified list of primary-key values — `'[1]'`
+where you asked about `1`. Both now return `'1'`, so a result joins back onto
+your rows whichever model answered. As with the relational path, a response that
+names a row outside the batch, or answers one twice, is refused rather than
+silently re-keyed. A composite key, or rows supplied without the key column, are
+left as the endpoint sent them: there is no single value to put back.
+
 **A `DECIMAL` column travels as the number it is, and a fractional one rounds.**
 A warehouse `DECIMAL`/`NUMBER` arrives as `Decimal`, which is exact and
 unbounded, and the wire has no such type. So: a whole-number decimal is sent as

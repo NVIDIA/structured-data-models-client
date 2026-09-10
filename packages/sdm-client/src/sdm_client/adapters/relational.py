@@ -326,10 +326,13 @@ class RelationalAdapter:
         payloads = request.payloads
         if not payloads:
             raise UnsupportedRequestError(
-                'a relational request has to be gathered first. Build it with '
-                'PredictiveQuery(...).materialize(indices=[...]) rather than '
-                'with Request(context=..., predict=...), which is the '
-                'single-table form',
+                'a relational request has to be gathered first, and this '
+                'one was not. Build it with '
+                'PredictiveQuery(...).materialize(indices=[...], '
+                "model='kumo-relational') -- a schema of one table is "
+                'gathered for the tabular model unless the relational one is '
+                'named -- rather than with Request(context=..., '
+                'predict=...), which is the single-table form',
                 details={'model': KUMO_RELATIONAL.model_id},
             )
         return payloads

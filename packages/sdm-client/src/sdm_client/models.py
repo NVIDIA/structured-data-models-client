@@ -38,6 +38,7 @@ from predictive_query import RELATIONAL, TABULAR
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
+from sdm_client.errors import StructuredDataError, UnknownModelError
 
 # Sizes the relational endpoint enforces. It refuses past them, so the client
 # refuses first with a message that names the limit. See the architecture note
@@ -168,3 +169,31 @@ MODELS = {
     KUMO_TABULAR.model_id: KUMO_TABULAR,
     KUMO_RELATIONAL.model_id: KUMO_RELATIONAL,
 }
+
+
+def spec_for(model: str | Model) -> ModelSpec:
+    r"""The specification behind a model handle or a model id.
+
+    Shared by the two places a model is named -- gathering a request and
+    sending one -- so that both accept the same arguments and refuse the same
+    ones the same way.
+
+    Args:
+        model: A model handle such as ``KumoTabular()``, or a model id.
+
+    Raises:
+        UnknownModelError: If ``model`` is an id the contract does not carry.
+        StructuredDataError: If ``model`` is neither a handle nor an id.
+    """
+    if isinstance(model, Model):
+        return model.spec
+    if isinstance(model, str):
+        spec = MODELS.get(model)
+        if spec is None:
+            raise UnknownModelError(model, list(MODELS))
+        return spec
+    raise StructuredDataError(
+        f'model must be a model handle or a model id, got '
+        f'{type(model).__name__}',
+        code='INVALID_REQUEST',
+    )

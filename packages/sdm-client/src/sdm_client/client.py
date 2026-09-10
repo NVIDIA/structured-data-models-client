@@ -29,7 +29,7 @@ from sdm_client.base import (
 )
 from sdm_client.core.transport import Transport, redact_url
 from sdm_client.errors import StructuredDataError, UnknownModelError
-from sdm_client.models import MODELS, Model
+from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 
@@ -346,18 +346,7 @@ class SDMClient:
 
     @staticmethod
     def _spec(model: str | Model) -> ModelSpec:
-        if isinstance(model, Model):
-            return model.spec
-        if isinstance(model, str):
-            spec = MODELS.get(model)
-            if spec is None:
-                raise UnknownModelError(model, list(MODELS))
-            return spec
-        raise StructuredDataError(
-            f'model must be a model handle or a model id, got '
-            f'{type(model).__name__}',
-            code='INVALID_REQUEST',
-        )
+        return spec_for(model)
 
     def close(self) -> None:
         r"""Release pooled connections and retire this client.

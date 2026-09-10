@@ -32,6 +32,7 @@ from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
+from sdm_client.models import Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import Schema
 
@@ -74,14 +75,19 @@ class PredictiveQuery:
         indices: Sequence[Any] | None = None,
         predict: pd.DataFrame | None = None,
         num_context_samples: int | None = None,
+        model: str | Model | None = None,
         **options: Any,
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
 
         The request takes one of three paths: predict=<frame> uses the full
-        single table as context, indices=[...] with one table builds the request
-        directly in pandas, and indices=[...] with multiple tables uses the
-        existing relational gather.
+        single table as context, the tabular route builds the request directly
+        in pandas, and the relational route gathers the tables as a graph.
+
+        ``model`` chooses between the last two. Left unsaid, the schema's shape
+        decides: one table is gathered tabularly and several relationally. Name
+        a model when that default is not what you want -- a single table is a
+        graph of one node, and the relational model answers it.
 
         Args:
             indices: Keys of rows already present in the tables. Mutually
@@ -92,6 +98,9 @@ class PredictiveQuery:
                 of labelled context rows to use. When omitted, single-table
                 requests use all eligible rows; relational requests use up to
                 1,000.
+            model: The model this request is being gathered for, as a handle
+                such as ``KumoRelational()`` or a model id. Defaults to the
+                schema's shape.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -99,10 +108,21 @@ class PredictiveQuery:
             A :class:`~sdm_client.Request` carrying the data.
 
         Raises:
+            UnknownModelError: If ``model`` is an id the contract does not
+                carry.
             StructuredDataError: If neither ``indices`` nor ``predict`` is
-                given, if both are, or if an option is not one this accepts.
+                given, if both are, if an option is not one this accepts, or if
+                ``model`` cannot answer a schema of this shape.
         """
+        spec = spec_for(model) if model is not None else None
+        relational = (
+            spec.profile is RELATIONAL
+            if spec is not None
+            else len(self.schema) > 1
+        )
         self._validate_materialize_args(
+            relational=relational,
+            model_id=spec.model_id if spec is not None else None,
             len_schema=len(self.schema),
             indices=indices,
             predict=predict,
@@ -117,7 +137,7 @@ class PredictiveQuery:
             )
 
         assert indices is not None
-        if len(self.schema) == 1:
+        if not relational:
             return self._tabular_materializer.indices(
                 query=self._resolve(TABULAR),
                 indices=indices,
@@ -134,17 +154,31 @@ class PredictiveQuery:
     @staticmethod
     def _validate_materialize_args(
         *,
+        relational: bool,
+        model_id: str | None,
         len_schema: int,
         indices: Sequence[Any] | None,
         predict: pd.DataFrame | None,
         num_context_samples: int | None,
         options: dict[str, Any] | None,
     ) -> None:
-        if len_schema == 1 and options:
+        # The tabular route reads one table. Reachable only when the caller
+        # named the tabular model, since the shape-based default sends a wider
+        # schema the other way.
+        if not relational and len_schema != 1:
             raise StructuredDataError(
-                f'Single-table requests do not accept options: '
-                f'{sorted(options)}. Options apply only to relational '
-                f'materialization',
+                f'{model_id} answers from a single table, and this schema has '
+                f'{len_schema}. Pass model=KumoRelational() to gather them as '
+                f'a graph',
+                code='INVALID_REQUEST',
+            )
+
+        if not relational and options:
+            raise StructuredDataError(
+                f'a single-table request takes no gathering options: '
+                f'{sorted(options)}. They apply only to relational '
+                f'materialization, so pass model=KumoRelational() to gather '
+                f'this schema as a graph',
                 code='INVALID_REQUEST',
             )
 
@@ -154,6 +188,14 @@ class PredictiveQuery:
                     f'predict=<frame> requires a single-table schema; '
                     f'got {len_schema} tables. For a relational schema, use '
                     f'indices=[...] to select entities already in the tables',
+                    code='INVALID_REQUEST',
+                )
+            if relational:
+                raise StructuredDataError(
+                    'predict=<frame> is the single-table form, and '
+                    f'{model_id} scores rows the tables already contain. '
+                    f'Pass indices=[...] naming them, or gather this request '
+                    f'for the tabular model',
                     code='INVALID_REQUEST',
                 )
             if indices is not None:

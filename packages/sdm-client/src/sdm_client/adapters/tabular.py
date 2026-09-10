@@ -33,8 +33,8 @@ from sdm_api.generated.tfm_api import (
 )
 
 from sdm_client.base import ModelSpec
-from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_TABULAR
+from sdm_client.errors import StructuredDataError, UnsupportedRequestError
+from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import (
@@ -116,7 +116,7 @@ class TabularAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=parsed.predictions,
+            items=_named_entities(parsed.predictions, payload),
             metadata=parsed.metadata,
             outputs=outputs,
         )
@@ -135,6 +135,19 @@ class TabularAdapter:
     def _envelope(
         self, request: Request, outputs: tuple[str, ...]
     ) -> dict[str, Any]:
+        # Gathered for the other model. Its frames were left empty because the
+        # sampled rows live in `payloads`, so shaping an envelope from them
+        # reads a column that is not there and fails as a KeyError rather than
+        # as one of this client's errors.
+        if request.payloads is not None:
+            raise UnsupportedRequestError(
+                f'this request was gathered for '
+                f'{KUMO_RELATIONAL.model_id} and carries the sampled '
+                f'payloads that model reads. Gather it with '
+                f'materialize(..., model={self.spec.model_id!r}) to ask '
+                f'this one'
+            )
+
         # The same question the relational path asks, at the same moment: a
         # column re-declared one assignment at a time can be left saying it
         # holds one thing and means another, and neither assignment is the
@@ -237,3 +250,67 @@ def _raw_dtype_of(series: pd.Series) -> str:
     ``'string'`` first is what made it decide the outcome.
     """
     return infer_tfm_dtype(series)
+
+
+def _named_entities(
+    items: tuple[Any, ...], payload: dict[str, Any] | None
+) -> list[Any]:
+    r"""Put the caller's key back on each row, and check it belongs there.
+
+    The endpoint answers under the stringified list of primary-key values, so
+    a row the caller asked about as ``1`` comes back as ``'[1]'``. The
+    relational path already returns the caller's own key, and
+    :mod:`sdm_client.result` tells callers to join on it, so a key that only
+    joins on one of the two models is a difference they have no reason to
+    expect.
+
+    The key is read from the payload that produced this response, so a run
+    split into several calls maps each batch against its own rows.
+
+    **A mismatch is an error, not a silent pass.** Rewriting an id is exactly
+    the operation that can misattribute an answer, so a row is checked against
+    the batch it claims to belong to before its id is replaced.
+    """
+    import dataclasses
+
+    if payload is None:
+        return list(items)
+    key = (
+        payload.get('schema', {}).get('instance_table', {}).get('primary_key')
+        or []
+    )
+    table = payload.get('predict', {}).get('instance_table', {})
+    columns = table.get('columns') or []
+    rows = table.get('rows') or []
+    # A composite key has no single value to stand for the row, and rows the
+    # caller supplied directly need not carry the key column at all. Neither
+    # is an error; there is simply nothing to put back.
+    if len(key) != 1 or key[0] not in columns:
+        return list(items)
+
+    keys = [row[columns.index(key[0])] for row in rows]
+
+    named: list[Any] = []
+    seen: set[int] = set()
+    for item in items:
+        index = item.row_index
+        if index is None:
+            raise StructuredDataError(
+                'the response is missing a row_index, so its answer cannot be '
+                'attributed to a row',
+                code='INVALID_RESPONSE',
+            )
+        if not 0 <= index < len(keys):
+            raise StructuredDataError(
+                f'the response names row_index {index}, and this batch asked '
+                f'about {len(keys)} rows',
+                code='INVALID_RESPONSE',
+            )
+        if index in seen:
+            raise StructuredDataError(
+                f'the response answers row {index} more than once',
+                code='INVALID_RESPONSE',
+            )
+        seen.add(index)
+        named.append(dataclasses.replace(item, id=str(keys[index])))
+    return named
