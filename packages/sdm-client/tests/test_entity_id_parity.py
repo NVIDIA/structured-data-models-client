@@ -375,3 +375,15 @@ def test_a_keyless_batch_answered_in_full_keeps_every_id():
         answer(['x', 'y']), ('prediction',), keyless_payload()
     )
     assert [item.id for item in result.items] == ['x', 'y']
+
+
+def test_a_batch_the_endpoint_answers_without_an_id_keeps_none():
+    """With no key column supplied the endpoint sends no id at all, and there
+    is none to invent. `result` tells callers to join on row_index there."""
+    payload = keyless_payload()
+    response = answer(['x', 'y'])
+    for item in response['predictions']:
+        item.pop('id')
+    result = TabularAdapter().normalize(response, ('prediction',), payload)
+    assert [item.id for item in result.items] == [None, None]
+    assert 'id' not in result.to_pandas().columns
