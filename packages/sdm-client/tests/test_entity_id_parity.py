@@ -207,3 +207,30 @@ def test_a_session_scoring_call_still_sends_only_what_the_contract_allows():
         'inference',
         'metadata',
     }
+
+
+def test_the_adapter_reads_the_answer_against_the_whole_request():
+    """The pinned half names the task and schema. Without them an adapter
+    cannot tell a forecast's repeated rows from a duplicate answer, nor say
+    which column an id stands for."""
+    schema = schema_for(list(range(1, 21)))
+    seen: list[dict] = []
+
+    class Recording(TabularAdapter):
+        def normalize(self, response, outputs, payload=None):
+            seen.append(payload or {})
+            return super().normalize(response, outputs, payload)
+
+    from sdm_client import SDMClient
+
+    client = SDMClient(url='http://localhost:8000')
+    client._transport = StubTransport(answer(['[3]', '[7]']))
+    client._adapters['kumo-tabular'] = Recording()
+    request = PredictiveQuery(QUERY, schema).materialize(indices=[3, 7])
+    fitted = client.fit(request, model='kumo-tabular')
+    fitted.predict(request)
+
+    assert seen, 'normalize was never reached'
+    assert 'task' in seen[0]
+    assert 'schema' in seen[0]
+    assert 'predict' in seen[0]

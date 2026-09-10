@@ -116,7 +116,7 @@ class PredictiveQuery:
         """
         spec = spec_for(model) if model is not None else None
         relational = (
-            spec.profile is RELATIONAL
+            spec.profile == RELATIONAL
             if spec is not None
             else len(self.schema) > 1
         )

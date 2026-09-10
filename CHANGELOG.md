@@ -28,6 +28,13 @@ names a row outside the batch, or answers one twice, is refused rather than
 silently re-keyed. A composite key, or rows supplied without the key column, are
 left as the endpoint sent them: there is no single value to put back.
 
+A session answers the same way, which needed the adapter to be handed the whole
+request rather than the half that just went over the wire. That also settles a
+latent one: a relational session could not tell a forecast's repeated rows from
+a duplicate answer, because the task kind was pinned at fit time and the adapter
+only ever saw the scoring call. The wire is unchanged -- a session's scoring
+call still carries only what the contract allows there.
+
 **A `DECIMAL` column travels as the number it is, and a fractional one rounds.**
 A warehouse `DECIMAL`/`NUMBER` arrives as `Decimal`, which is exact and
 unbounded, and the wire has no such type. So: a whole-number decimal is sent as
