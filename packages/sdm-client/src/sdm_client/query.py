@@ -115,15 +115,20 @@ class PredictiveQuery:
                 ``model`` cannot answer a schema of this shape.
         """
         spec = spec_for(model) if model is not None else None
+        # Left unsaid, the shape decides -- and the shape that makes a request
+        # relational is the one `Request.is_relational` reports, which counts a
+        # relationship as much as a second table. A schema of one table that
+        # points at itself is a graph.
         relational = (
             spec.profile == RELATIONAL
             if spec is not None
-            else len(self.schema) > 1
+            else len(self.schema) > 1 or bool(self.schema.relationships)
         )
         self._validate_materialize_args(
             relational=relational,
             model_id=spec.model_id if spec is not None else None,
             len_schema=len(self.schema),
+            relationships=len(self.schema.relationships),
             indices=indices,
             predict=predict,
             num_context_samples=num_context_samples,
@@ -157,14 +162,33 @@ class PredictiveQuery:
         relational: bool,
         model_id: str | None,
         len_schema: int,
+        relationships: int,
         indices: Sequence[Any] | None,
         predict: pd.DataFrame | None,
         num_context_samples: int | None,
         options: dict[str, Any] | None,
     ) -> None:
-        # The tabular route reads one table. Reachable only when the caller
-        # named the tabular model, since the shape-based default sends a wider
-        # schema the other way.
+        # Which rows to score is a property of the call rather than of the
+        # route, and naming a model resolves neither, so both are settled
+        # before anything below can advise one.
+        if indices is not None and predict is not None:
+            raise StructuredDataError(
+                'pass either indices=[...] to score rows the tables already '
+                'contain, or predict=<frame> to score rows they do not—not both',
+                code='INVALID_REQUEST',
+            )
+
+        if indices is None and predict is None:
+            raise StructuredDataError(
+                'materialize() needs the rows to score: pass indices=[...] '
+                'naming the entities. There is no all-rows default, because '
+                'it would silently score an entire table',
+                code='INVALID_REQUEST',
+            )
+
+        # The tabular route reads one table and no relationships. Reachable
+        # only when the caller named the tabular model, since the shape-based
+        # default sends either the other way.
         if not relational and len_schema != 1:
             raise StructuredDataError(
                 f'{model_id} answers from a single table, and this schema has '
@@ -173,12 +197,23 @@ class PredictiveQuery:
                 code='INVALID_REQUEST',
             )
 
-        if not relational and options:
+        if not relational and relationships:
             raise StructuredDataError(
-                f'a single-table request takes no gathering options: '
-                f'{sorted(options)}. They apply only to relational '
-                f'materialization, so pass model=KumoRelational() to gather '
-                f'this schema as a graph',
+                f'{model_id} reads no relationships, and this schema declares '
+                f'{relationships}. Pass model=KumoRelational() to gather it as '
+                f'a graph, or drop the relationship to ask about the table on '
+                f'its own',
+                code='INVALID_REQUEST',
+            )
+
+        if not relational and options:
+            # Naming the relational model is only half the remedy: it scores
+            # rows the tables already hold, so a supplied frame would be
+            # refused next. Name both halves rather than one that leads there.
+            raise StructuredDataError(
+                f'gathering options apply only to relational materialization: '
+                f'{sorted(options)}. Pass indices=[...] with '
+                f'model=KumoRelational() to gather this schema as a graph',
                 code='INVALID_REQUEST',
             )
 
@@ -193,15 +228,9 @@ class PredictiveQuery:
             if relational:
                 raise StructuredDataError(
                     'predict=<frame> is the single-table form, and '
-                    f'{model_id} scores rows the tables already contain. '
-                    f'Pass indices=[...] naming them, or gather this request '
-                    f'for the tabular model',
-                    code='INVALID_REQUEST',
-                )
-            if indices is not None:
-                raise StructuredDataError(
-                    'pass either indices=[...] to score rows the tables already '
-                    'contain, or predict=<frame> to score rows they do not—not both',
+                    f'{model_id or "a relational gather"} scores rows the '
+                    f'tables already contain. Pass indices=[...] naming them, '
+                    f'or gather this request for the tabular model',
                     code='INVALID_REQUEST',
                 )
             if num_context_samples is not None:
@@ -211,14 +240,6 @@ class PredictiveQuery:
                     'context, construct the query with a smaller table',
                     code='INVALID_REQUEST',
                 )
-
-        if indices is None and predict is None:
-            raise StructuredDataError(
-                'materialize() needs the rows to score: pass indices=[...] '
-                'naming the entities. There is no all-rows default, because '
-                'it would silently score an entire table',
-                code='INVALID_REQUEST',
-            )
 
         if indices is not None:
             if not isinstance(indices, Sequence) or isinstance(

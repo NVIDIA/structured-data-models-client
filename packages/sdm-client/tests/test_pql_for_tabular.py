@@ -262,7 +262,7 @@ def test_single_table_requests_do_not_accept_options(path, option):
         query().materialize(**arguments, **{option: [8, 8]})
 
     message = str(error.value)
-    assert 'takes no gathering options' in message
+    assert 'apply only to relational materialization' in message
     assert option in message
     # The refusal names the way to have them honoured rather than only the
     # rule: one table can be gathered as a graph when the caller says so.

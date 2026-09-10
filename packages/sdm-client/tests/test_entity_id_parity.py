@@ -128,6 +128,9 @@ def test_the_same_row_answered_twice_is_refused():
             payload,
         )
     assert error.value.code == 'INVALID_RESPONSE'
+    # Named for the repeat rather than for the row it left unanswered as a
+    # consequence, so this pins the duplicate guard and not the later one.
+    assert 'more than once' in str(error.value)
 
 
 def test_an_answer_with_no_row_index_is_refused():
@@ -249,3 +252,68 @@ def test_the_adapter_reads_the_answer_against_the_whole_request():
     assert 'task' in seen[0]
     assert 'schema' in seen[0]
     assert 'predict' in seen[0]
+
+
+# --- row_index is trusted only as far as it can be checked ------------------
+
+
+def test_a_batch_left_partly_unanswered_is_refused():
+    """Relabelling by row_index assumes the batch was answered in full;
+    a short response would silently drop the rows it omitted."""
+    schema = schema_for(list(range(1, 21)))
+    payload = payload_for(schema, [3, 7])
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['[3]'], row_indices=[0]), ('prediction',), payload
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_an_answer_carrying_another_rows_key_is_refused():
+    """The endpoint answers under the key it scored. If that key belongs to a
+    different row of this batch, row_index and id disagree and relabelling by
+    row_index would attach the answer to the wrong entity."""
+    schema = schema_for(list(range(1, 21)))
+    payload = payload_for(schema, [3, 7])
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['[7]', '[3]']), ('prediction',), payload
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_an_id_in_a_shape_this_client_does_not_recognise_is_left_to_row_index():
+    """Only a recognisable key can disagree. An endpoint that formats its id
+    some other way is not second-guessed."""
+    schema = schema_for(list(range(1, 21)))
+    payload = payload_for(schema, [3, 7])
+    result = TabularAdapter().normalize(
+        answer(['row-0', 'row-1']), ('prediction',), payload
+    )
+    assert [item.id for item in result.items] == ['3', '7']
+
+
+def test_rows_sharing_a_key_are_each_answered_under_it():
+    """Several rows can carry the same entity value -- the key is inferred and
+    warned about, not refused -- and all of them are scored. The endpoint
+    answers each under that shared key, and none of them is a mismatch."""
+    frame = pd.DataFrame(
+        {
+            'user_id': list(range(200)),
+            'churn': ['yes', 'no'] * 100,
+            'tenure': [float(index) for index in range(200)],
+        }
+    )
+    frame.loc[[7, 8], 'user_id'] = 6
+    with pytest.warns(UserWarning):
+        query = PredictiveQuery(QUERY, {'users': frame})
+    request = query.materialize(indices=[6])
+    adapter = TabularAdapter()
+    payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
+    scored = len(payload['predict']['instance_table']['rows'])
+    assert scored == 3
+
+    result = adapter.normalize(
+        answer(['[6]'] * scored), ('prediction',), payload
+    )
+    assert [item.id for item in result.items] == ['6'] * scored

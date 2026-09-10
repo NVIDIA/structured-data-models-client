@@ -148,6 +148,24 @@ def test_the_tabular_model_is_refused_a_schema_with_relationships():
     assert 'kumo-tabular' in str(error.value)
 
 
+def test_the_tabular_model_is_refused_a_second_table_carrying_no_relationship():
+    """Two unrelated tables are still two. This is the count alone, with no
+    relationship for the neighbouring check to catch instead."""
+    schema = Schema.from_data(
+        {
+            'users': one_table()['users'].data,
+            'notes': pd.DataFrame({'note_id': [1, 2], 'body': ['a', 'b']}),
+        },
+        relationships=[],
+    )
+    assert not schema.relationships
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(ONE_TABLE_QUERY, schema).materialize(
+            indices=[1, 2, 3], model='kumo-tabular'
+        )
+    assert 'answers from a single table' in str(error.value)
+
+
 def test_a_supplied_frame_is_refused_for_the_relational_model():
     with pytest.raises(StructuredDataError) as error:
         PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
@@ -217,3 +235,71 @@ def test_a_tabular_request_refused_by_the_relational_model_says_how_to_gather_it
         list(adapter.prediction_plan(request, ('prediction',)))
     assert error.value.code == 'UNSUPPORTED_REQUEST'
     assert "model='kumo-relational'" in str(error.value)
+
+
+# --- relationships make a schema relational, whatever its table count -------
+
+
+def self_referencing() -> Schema:
+    """One table that points at itself: `is_relational` is true on one table."""
+    frame = pd.DataFrame(
+        {
+            'emp_id': range(1, 41),
+            'manager_id': [None] + [1 + index % 5 for index in range(39)],
+            'left': ['yes', 'no'] * 20,
+            'tenure': [float(index % 24) for index in range(40)],
+        }
+    )
+    schema = Schema.from_data(
+        {'employees': frame},
+        relationships=[
+            Relationship('employees', 'manager_id', 'employees', 'emp_id')
+        ],
+    )
+    schema['employees'].primary_key = 'emp_id'
+    return schema
+
+
+SELF_QUERY = 'PREDICT employees.left FOR EACH employees.emp_id'
+
+
+def test_one_table_with_a_relationship_defaults_to_relational():
+    engine_or_skip()
+    request = PredictiveQuery(SELF_QUERY, self_referencing()).materialize(
+        indices=[2, 3]
+    )
+    assert request.payloads is not None
+
+
+def test_the_tabular_model_is_refused_a_relationship_on_one_table():
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(SELF_QUERY, self_referencing()).materialize(
+            indices=[2, 3], model='kumo-tabular'
+        )
+    assert error.value.code == 'INVALID_REQUEST'
+    assert 'relationship' in str(error.value)
+
+
+# --- a refusal names a way out that works -----------------------------------
+
+
+def test_options_beside_a_supplied_frame_do_not_advise_a_route_that_refuses_it():
+    frame = pd.DataFrame({'user_id': [901], 'tenure': [3.0]})
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
+            predict=frame, num_neighbors=[8, 8]
+        )
+    message = str(error.value)
+    assert 'num_neighbors' in message
+    # Naming the relational model alone would be refused for the frame, so the
+    # remediation has to name indices=[...] as well.
+    assert 'indices=[...]' in message
+
+
+def test_asking_with_both_rows_and_keys_says_so_before_anything_about_routes():
+    frame = pd.DataFrame({'user_id': [901], 'tenure': [3.0]})
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(ONE_TABLE_QUERY, one_table()).materialize(
+            predict=frame, indices=[1], model='kumo-relational'
+        )
+    assert 'not both' in str(error.value)

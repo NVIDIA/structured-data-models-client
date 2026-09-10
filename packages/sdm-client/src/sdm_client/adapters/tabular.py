@@ -290,6 +290,11 @@ def _named_entities(
 
     at = columns.index(key[0])
     keys = [row[at] for row in rows]
+    # Which rows the endpoint's own id could be naming. Several rows may share
+    # an entity value, so a key stands for a set of positions rather than one.
+    rows_named_by: dict[str, set[int]] = {}
+    for position, value in enumerate(keys):
+        rows_named_by.setdefault(str([value]), set()).add(position)
 
     named: list[Any] = []
     seen: set[int] = set()
@@ -312,6 +317,18 @@ def _named_entities(
                 f'the response answers row {index} more than once',
                 code='INVALID_RESPONSE',
             )
+        # The endpoint answers under the key it scored. When that key names
+        # rows of this batch and `index` is not one of them, the two halves of
+        # the answer disagree and relabelling by `row_index` would attach it to
+        # the wrong entity. An id in some other shape is not second-guessed:
+        # only a key this batch contains can be known to be the wrong one.
+        claimed = rows_named_by.get(str(item.id))
+        if claimed is not None and index not in claimed:
+            raise StructuredDataError(
+                f'the response pairs row_index {index} with id {item.id!r}, '
+                f'and this batch asked about {keys[index]!r} there',
+                code='INVALID_RESPONSE',
+            )
         seen.add(index)
         # A null names no row, so there is nothing to put back. `str` would
         # turn it into 'None', which reads as a key that was asked about. NaN
@@ -319,5 +336,12 @@ def _named_entities(
         value = keys[index]
         named.append(
             item if value is None else dataclasses.replace(item, id=str(value))
+        )
+
+    if seen != set(range(len(keys))):
+        missing = sorted(set(range(len(keys))) - seen)
+        raise StructuredDataError(
+            f'the response left row(s) {missing} unanswered',
+            code='INVALID_RESPONSE',
         )
     return named
