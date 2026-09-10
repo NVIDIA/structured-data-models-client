@@ -264,3 +264,25 @@ def test_single_table_requests_do_not_accept_options(path, option):
     message = str(error.value)
     assert 'Single-table requests do not accept options' in message
     assert option in message
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        'PREDICT users.churn FOR EACH users.user_id WHERE users.age > 45',
+        'PREDICT users.churn FOR EACH users.user_id ASSUMING users.age > 65',
+        'PREDICT users.age > 30 FOR EACH users.user_id',
+        'PREDICT COUNT(users.*, 0, 30, days) FOR EACH users.user_id',
+        'PREDICT SUM(users.age, 0, 30, days) FOR EACH users.user_id',
+    ],
+)
+@pytest.mark.parametrize('path', ['predict', 'indices'])
+def test_a_query_the_tabular_path_would_ignore_is_refused(text, path):
+    arguments = (
+        {'predict': new_rows()} if path == 'predict' else {'indices': [1]}
+    )
+    with pytest.raises(StructuredDataError) as error:
+        query(text).materialize(**arguments)
+
+    assert error.value.code == 'INVALID_REQUEST'
+    assert 'a tabular model' in str(error.value)
