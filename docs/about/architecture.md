@@ -48,6 +48,7 @@ from sdm_client import (
     Schema,
     PredictiveQuery,
     KumoRelational,
+    KumoTabular,
 )
 
 schema = Schema.from_data({'users': users_df, 'orders': orders_df})
@@ -60,17 +61,23 @@ with SDMClient(url='http://localhost:8000') as client:
     result = client.predict(request, model=KumoRelational())
 ```
 
-The same request runs on any model whose profile accepts it. A one-table question accepts both:
+A one-table question can be put to either model. The two read a request differently, though, so it
+is **gathered** for one of them — say which when it is not the default:
 
 ```python
 schema = Schema.from_data({'users': users_df})
-request = PredictiveQuery(
-    'PREDICT users.churn FOR EACH users.user_id', schema
-).materialize(indices=[1, 2])
+question = PredictiveQuery('PREDICT users.churn FOR EACH users.user_id', schema)
 
-client.predict(request, model=KumoTabular())  # ✅
-client.predict(request, model=KumoRelational())  # ✅ same request
+client.predict(question.materialize(indices=[1, 2]), model=KumoTabular())  # ✅ the default
+client.predict(
+    question.materialize(indices=[1, 2], model=KumoRelational()),  # ✅ gathered as a graph
+    model=KumoRelational(),
+)
 ```
+
+Gather and send for the same model. A request built for one is refused by the other rather than
+reshaped, because the relational gather samples a neighbourhood the tabular envelope has nowhere to
+put.
 
 A relational aggregation is relational-only — the `TABULAR` profile rejects related tables, and says so
 before anything is sent.
@@ -257,8 +264,9 @@ silently score a whole table.
 
 **The model a request is gathered for is an argument, not a consequence of the schema's shape.**
 `materialize(model=…)` takes the same handle or id that `predict()` does. Left unsaid, the shape
-decides — one table tabular, several relational — but a single table is a graph of one node, and
-`model='kumo-relational'` gathers it as one. Without that argument the two models could disagree
+decides, and the shape that counts is the one `Request.is_relational` reports: a second table or a
+relationship sends it relationally, so a lone table that points at itself is gathered as the graph
+it is. Everything else is tabular, and `model='kumo-relational'` gathers it as a graph of one node. Without that argument the two models could disagree
 with no way to reconcile them: a one-table request was always built tabular, so the relational
 model was refused it and nothing the caller passed could say otherwise. Gathering and sending
 disagree loudly now: each adapter refuses a request gathered for the other before it is sent.

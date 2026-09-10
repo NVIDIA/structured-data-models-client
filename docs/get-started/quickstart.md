@@ -81,8 +81,9 @@ entity.
 ## Which model it is gathered for
 
 The two models read a request differently, so it is gathered for one of them.
-Left unsaid, the schema's shape decides: one table is gathered for
-`kumo-tabular`, several for `kumo-relational`.
+Left unsaid, the schema's shape decides: a schema of one table with no
+relationships is gathered for `kumo-tabular`, and anything wider — a second
+table, or a table that points at itself — for `kumo-relational`.
 
 Name a model when that default is not what you want. A single table is a graph
 of one node, and the relational model answers it:

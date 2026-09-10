@@ -11,8 +11,11 @@ counting tables, and the model was named later at `predict()`. For a one-table
 schema those two decisions could disagree with no way to reconcile them: the
 request was always built for `kumo-tabular`, so `predict(model='kumo-relational')`
 refused it and no argument could say otherwise. `materialize(model=…)` now takes
-the same handle or id `predict()` does. Left unsaid, the shape still decides —
-one table tabular, several relational — so existing calls are unchanged.
+the same handle or id `predict()` does. Left unsaid, the shape still decides,
+so existing calls are unchanged: one table with no relationships is tabular, and
+anything wider is relational. That now counts a relationship as well as a second
+table, matching `Request.is_relational` — a lone table pointing at itself used to
+be gathered tabularly and then refused by the model for needing relationships.
 
 Gathering and sending for different models is now refused where it used to raise
 a bare `KeyError` from inside the adapter: a request carrying relational payloads

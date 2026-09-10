@@ -282,6 +282,17 @@ def test_an_answer_carrying_another_rows_key_is_refused():
     assert error.value.code == 'INVALID_RESPONSE'
 
 
+def test_an_answer_carrying_another_rows_bare_key_is_refused():
+    """The endpoint may answer under the key itself rather than under a list of
+    one -- that is the shape the relational endpoint uses. Both are keys this
+    batch can be checked against."""
+    schema = schema_for(list(range(1, 21)))
+    payload = payload_for(schema, [3, 7])
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(answer(['7', '3']), ('prediction',), payload)
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
 def test_an_id_in_a_shape_this_client_does_not_recognise_is_left_to_row_index():
     """Only a recognisable key can disagree. An endpoint that formats its id
     some other way is not second-guessed."""

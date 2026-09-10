@@ -290,11 +290,14 @@ def _named_entities(
 
     at = columns.index(key[0])
     keys = [row[at] for row in rows]
-    # Which rows the endpoint's own id could be naming. Several rows may share
-    # an entity value, so a key stands for a set of positions rather than one.
+    # Which rows the endpoint's own id could be naming. It answers under the
+    # list of key values, and the relational endpoint answers under the key
+    # itself, so both are shapes a key can be recognised in. Several rows may
+    # share an entity value, so a key stands for a set of positions.
     rows_named_by: dict[str, set[int]] = {}
     for position, value in enumerate(keys):
-        rows_named_by.setdefault(str([value]), set()).add(position)
+        for shape in (str([value]), str(value)):
+            rows_named_by.setdefault(shape, set()).add(position)
 
     named: list[Any] = []
     seen: set[int] = set()
