@@ -352,3 +352,16 @@ def test_the_shipped_handles_are_still_accepted():
 
     assert spec_for(KumoTabular()) is KUMO_TABULAR
     assert spec_for(KumoRelational()) is KUMO_RELATIONAL
+
+
+def test_a_frame_on_a_self_referencing_schema_is_told_what_would_work():
+    """Gathering it for the tabular model is refused for the relationship, so
+    naming that model is not a way out of this one."""
+    frame = pd.DataFrame({'emp_id': [901], 'manager_id': [1], 'tenure': [3.0]})
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(SELF_QUERY, self_referencing()).materialize(
+            predict=frame
+        )
+    message = str(error.value)
+    assert 'indices=[...]' in message
+    assert 'drop the relationship' in message

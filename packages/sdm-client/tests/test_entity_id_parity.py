@@ -387,3 +387,38 @@ def test_a_batch_the_endpoint_answers_without_an_id_keeps_none():
     result = TabularAdapter().normalize(response, ('prediction',), payload)
     assert [item.id for item in result.items] == [None, None]
     assert 'id' not in result.to_pandas().columns
+
+
+def test_an_answer_carrying_a_key_from_outside_the_batch_is_refused():
+    """`'[999]'` is the shape the endpoint answers in, so it is a key this
+    client can read. That it names no row of this batch makes it more wrong
+    than a permuted one, not less."""
+    schema = schema_for(list(range(1, 21)))
+    payload = payload_for(schema, [3, 7])
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['[999]', '[998]']), ('prediction',), payload
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_the_key_for_a_row_has_to_be_that_rows_key():
+    """One right answer and one wrong one is still a wrong response."""
+    schema = schema_for(list(range(1, 21)))
+    payload = payload_for(schema, [3, 7])
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['[3]', '[999]']), ('prediction',), payload
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_a_session_keeps_the_pinned_schema_and_not_the_pinned_context():
+    """The context lives on the endpoint once a session pins it. Reading the
+    answer needs the task and the schema, so holding the encoded rows a second
+    time buys nothing and keeps a dataset alive for the handle's lifetime."""
+    schema = schema_for(list(range(1, 21)))
+    fitted, _, _ = fitted_on(schema, answer(['[3]', '[7]']))
+    assert 'schema' in fitted._pinned
+    assert 'task' in fitted._pinned
+    assert 'context' not in fitted._pinned

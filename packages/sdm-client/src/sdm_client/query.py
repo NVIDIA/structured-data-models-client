@@ -176,10 +176,14 @@ class PredictiveQuery:
         anything below can suggest one. The route comes next, because a model
         that cannot read this schema at all explains every refusal after it.
 
-        Each message names a way out that works. Gathering options are the
-        awkward one: the relational model honours them but scores rows the
-        tables already hold, so naming it alone would land the caller on the
-        next refusal, and the message names ``indices`` as well.
+        Each message names a way out that works, which sometimes depends on the
+        schema rather than only on the call. Gathering options are honoured by
+        the relational model, which scores rows the tables already hold, so
+        naming that model alone would land the caller on the next refusal and
+        the message names ``indices`` too. A supplied frame can be gathered
+        tabularly only where the schema has no relationship to lose, so where
+        it has one the message says to drop it rather than to name a model that
+        would be refused for it.
         """
         if indices is not None and predict is not None:
             raise StructuredDataError(
@@ -230,11 +234,17 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
             if relational:
+                instead = (
+                    'drop the relationship to gather this table for the '
+                    'tabular model'
+                    if relationships
+                    else 'gather this request for the tabular model'
+                )
                 raise StructuredDataError(
                     'predict=<frame> is the single-table form, and '
                     f'{model_id or "a relational gather"} scores rows the '
                     f'tables already contain. Pass indices=[...] naming them, '
-                    f'or gather this request for the tabular model',
+                    f'or {instead}',
                     code='INVALID_REQUEST',
                 )
             if num_context_samples is not None:

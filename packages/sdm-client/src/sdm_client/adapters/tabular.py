@@ -248,6 +248,26 @@ def _raw_dtype_of(series: pd.Series) -> str:
     return infer_tfm_dtype(series)
 
 
+def _key_named_by(value: str) -> str | None:
+    r"""The key an id names, or ``None`` if it names no key this can read.
+
+    The endpoint answers under the list of primary-key values, and how it
+    renders that list is its own business: a key that travelled as a JSON
+    string comes back quoted, one that travelled as a number does not. So the
+    brackets and any one pair of quotes are stripped and the key compared,
+    rather than the rendering.
+
+    Anything not written that way may be a correlation token of the endpoint's
+    own, which is not this client's to judge.
+    """
+    if not (value.startswith('[') and value.endswith(']')):
+        return None
+    inner = value[1:-1].strip()
+    if len(inner) >= 2 and inner[0] == inner[-1] and inner[0] in '\'"':
+        inner = inner[1:-1]
+    return inner
+
+
 def _named_entities(
     items: tuple[Any, ...], payload: dict[str, Any] | None
 ) -> list[Any]:
@@ -267,9 +287,10 @@ def _named_entities(
     the operation that can misattribute an answer, so a row is checked against
     the batch it claims to belong to before its id is replaced. The endpoint
     answers under the list of key values and the relational endpoint answers
-    under the key itself, so a key is recognised in either shape; an id in any
-    other shape is not second-guessed, because only a key this batch contains
-    can be known to be the wrong one.
+    under the key itself, so a key is recognised in either shape, and an id
+    recognisable as a key has to be the key of the row it was paired with. An id
+    in any other shape is not second-guessed: it may be a correlation token of
+    the endpoint's own.
 
     Those checks are about the batch rather than about the key, so they hold for
     a request that has no key to put back too: a composite key, or rows the
@@ -298,10 +319,7 @@ def _named_entities(
         if len(key) == 1 and key[0] in columns
         else None
     )
-    rows_named_by: dict[str, set[int]] = {}
-    for position, value in enumerate(keys or ()):
-        for shape in (str([value]), str(value)):
-            rows_named_by.setdefault(shape, set()).add(position)
+    keys_in_batch = {str(value) for value in keys or ()}
 
     named: list[Any] = []
     seen: set[int] = set()
@@ -324,13 +342,18 @@ def _named_entities(
                 f'the response answers row {index} more than once',
                 code='INVALID_RESPONSE',
             )
-        claimed = rows_named_by.get(str(item.id))
-        if claimed is not None and index not in claimed:
-            raise StructuredDataError(
-                f'the response pairs row_index {index} with id {item.id!r}, '
-                f'and this batch asked about {keys[index]!r} there',
-                code='INVALID_RESPONSE',
-            )
+        if keys is not None and item.id is not None:
+            answered = str(item.id)
+            named_key = _key_named_by(answered)
+            if named_key is None and answered in keys_in_batch:
+                named_key = answered
+            if named_key is not None and named_key != str(keys[index]):
+                raise StructuredDataError(
+                    f'the response pairs row_index {index} with id '
+                    f'{item.id!r}, and this batch asked about '
+                    f'{keys[index]!r} there',
+                    code='INVALID_RESPONSE',
+                )
         seen.add(index)
         value = None if keys is None else keys[index]
         named.append(

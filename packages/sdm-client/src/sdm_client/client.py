@@ -64,6 +64,12 @@ class FittedModel:
 
     Close it when done, or use it as a context manager. A session holds memory
     on the endpoint until it is released or expires.
+
+    ``pinned`` is what the session pinned, minus the context itself. Reading an
+    answer needs the task and the schema -- the key an id stands for is named
+    there -- but the rows have been uploaded and live on the endpoint, so
+    keeping a second encoded copy for the lifetime of the handle would hold a
+    whole dataset for nothing.
     """
 
     def __init__(
@@ -305,7 +311,13 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        return FittedModel(self, adapter, str(session_id), fields, payload)
+        return FittedModel(
+            self,
+            adapter,
+            str(session_id),
+            fields,
+            {key: value for key, value in payload.items() if key != 'context'},
+        )
 
     def _prepare(
         self,
