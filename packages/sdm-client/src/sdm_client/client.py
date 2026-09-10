@@ -72,11 +72,13 @@ class FittedModel:
         adapter: ModelAdapter,
         session_id: str,
         outputs: tuple[str, ...],
+        pinned: dict[str, Any] | None = None,
     ) -> None:
         self._client = client
         self._adapter = adapter
         self._session_id = session_id
         self._outputs = outputs
+        self._pinned = pinned or {}
         self._closed = False
 
     @property
@@ -98,13 +100,18 @@ class FittedModel:
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
             )
+        # A session split the request in two: model, task, schema and context
+        # were pinned at fit time and only the rows travel now. Reading the
+        # answer needs both halves -- the key an id stands for is named in the
+        # pinned schema -- so the adapter is handed the whole request while the
+        # wire gets only the half the contract allows here.
         parts = [
             self._adapter.normalize(
                 self._client._transport.session_predict(
                     self._session_id, payload
                 ),
                 self._outputs,
-                payload,
+                {**self._pinned, **payload},
             )
             for payload in self._adapter.session_prediction_plan(
                 request, self._outputs
@@ -300,7 +307,7 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        return FittedModel(self, adapter, str(session_id), fields)
+        return FittedModel(self, adapter, str(session_id), fields, payload)
 
     def _prepare(
         self,

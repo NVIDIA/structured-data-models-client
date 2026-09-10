@@ -157,3 +157,53 @@ def test_rows_supplied_without_the_key_keep_the_endpoints_id():
 def test_a_response_read_without_its_payload_is_unchanged():
     result = TabularAdapter().normalize(answer(['[3]']), ('prediction',), None)
     assert [item.id for item in result.items] == ['[3]']
+
+
+# --- a session answers the same way a one-shot call does --------------------
+
+
+class StubTransport:
+    """Enough of the transport for a session, recording what was sent."""
+
+    def __init__(self, response: dict) -> None:
+        self.response = response
+        self.scored: list[dict] = []
+
+    def create_session(self, payload: dict) -> dict:
+        self.created = payload
+        return {'session_id': 'sess_1'}
+
+    def session_predict(self, session_id: str, payload: dict) -> dict:
+        self.scored.append(payload)
+        return self.response
+
+    def delete_session(self, session_id: str) -> None:
+        return None
+
+
+def fitted_on(schema: Schema, response: dict):
+    from sdm_client import SDMClient
+
+    client = SDMClient(url='http://localhost:8000')
+    transport = StubTransport(response)
+    client._transport = transport
+    request = PredictiveQuery(QUERY, schema).materialize(indices=[3, 7])
+    return client.fit(request, model='kumo-tabular'), transport, request
+
+
+def test_a_session_returns_the_same_key_a_one_shot_call_does():
+    schema = schema_for(list(range(1, 21)))
+    fitted, _, request = fitted_on(schema, answer(['[3]', '[7]']))
+    assert [item.id for item in fitted.predict(request).items] == ['3', '7']
+
+
+def test_a_session_scoring_call_still_sends_only_what_the_contract_allows():
+    schema = schema_for(list(range(1, 21)))
+    fitted, transport, request = fitted_on(schema, answer(['[3]', '[7]']))
+    fitted.predict(request)
+    assert set(transport.scored[0]) <= {
+        'predict',
+        'output',
+        'inference',
+        'metadata',
+    }
