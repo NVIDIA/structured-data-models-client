@@ -73,7 +73,7 @@ client.predict(request, model=KumoRelational())  # ✅ same request
 ```
 
 A relational aggregation is relational-only — the `TABULAR` profile rejects related tables, and says so
-before anything is sent. So do the other things a single-table model cannot honour: a time window, a
+before anything is sent. `TABULAR` also refuses target with a time window, a
 `WHERE` filter on the entity, an `ASSUMING` clause, and a target that is not a column of the table.
 
 Two ways to build the one `Request`:
