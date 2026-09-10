@@ -262,10 +262,12 @@ def _key_named_by(value: str) -> str | None:
     gets compared. Taking the text apart by hand instead would refuse a correct
     answer for any key an escape appears in.
 
-    Anything not written that way may be a correlation token of the endpoint's
-    own, which is not this client's to judge. The contract bounds an id at 1024
-    characters, so anything longer is not one either, and is declined before
-    being parsed.
+    Anything not written that way is left alone rather than refused. The
+    contract calls this field a *service-generated* row identifier and names
+    ``row_index`` as what to align on, so an endpoint is entitled to answer
+    under a token of its own and refusing one would break a compliant
+    deployment. It bounds an id at 1024 characters, so anything longer is not
+    one either, and is declined before being parsed.
     """
     import ast
 
