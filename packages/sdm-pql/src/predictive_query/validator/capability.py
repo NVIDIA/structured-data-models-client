@@ -106,7 +106,10 @@ def check_capabilities(
             )
         )
 
-    if not can.derived_targets and not isinstance(query.target_ast, Column):
+    target = query.target_ast
+    if isinstance(target, Join):
+        target = target.rhs_target
+    if not can.derived_targets and not isinstance(target, Column):
         response.errors.append(
             ValidationError(
                 title='Derived target not supported',
