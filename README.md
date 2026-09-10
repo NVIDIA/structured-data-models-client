@@ -30,8 +30,9 @@ with SDMClient(url='http://localhost:8000') as client:
     print(result.to_pandas())
 ```
 
-**The model is an argument, not a method.** The same request runs on any model
-whose profile accepts it.
+**The model is an argument, not a method.** Either model answers through the
+same call; the request is gathered for one of them, and `materialize(model=...)`
+says which when the schema's shape is not the answer you want.
 
 ## Status
 

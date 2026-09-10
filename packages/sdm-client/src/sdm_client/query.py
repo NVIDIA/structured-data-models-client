@@ -17,8 +17,9 @@ enumerate rows that are already in the tables:
 :meth:`~PredictiveQuery.materialize` is the gathering step, and it is explicit
 because it is the expensive one: it parses the query, finds labelled examples
 in history, samples the neighbourhood of each entity, and encodes the result.
-Nothing is sent -- what comes back is a :class:`~sdm_client.Request` that any
-model whose profile accepts it can answer.
+Nothing is sent -- what comes back is a :class:`~sdm_client.Request` gathered
+for one model. Which one follows the schema's shape unless ``model`` says
+otherwise, and the model asked to answer it has to be that same one.
 """
 
 from __future__ import annotations

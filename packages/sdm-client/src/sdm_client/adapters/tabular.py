@@ -270,32 +270,42 @@ def _named_entities(
     **A mismatch is an error, not a silent pass.** Rewriting an id is exactly
     the operation that can misattribute an answer, so a row is checked against
     the batch it claims to belong to before its id is replaced.
+
+    Those checks are about the batch rather than about the key, so they hold
+    for a request that has no key to put back too: a composite key, or rows the
+    caller supplied without the key column, still have to be answered once each
+    and no more.
     """
     import dataclasses
 
     if payload is None:
         return list(items)
+    table = payload.get('predict', {}).get('instance_table', {})
+    rows = table.get('rows')
+    # Rows in a shape this does not read -- a format other than `arrays` -- can
+    # be neither counted nor keyed, so nothing here applies to them.
+    if not isinstance(rows, list):
+        return list(items)
+    columns = table.get('columns') or []
+
     key = (
         payload.get('schema', {}).get('instance_table', {}).get('primary_key')
         or []
     )
-    table = payload.get('predict', {}).get('instance_table', {})
-    columns = table.get('columns') or []
-    rows = table.get('rows') or []
     # A composite key has no single value to stand for the row, and rows the
-    # caller supplied directly need not carry the key column at all. Neither
-    # is an error; there is simply nothing to put back.
-    if len(key) != 1 or key[0] not in columns:
-        return list(items)
-
-    at = columns.index(key[0])
-    keys = [row[at] for row in rows]
+    # caller supplied directly need not carry the key column at all. Neither is
+    # an error; there is simply nothing to put back.
+    keys = (
+        [row[columns.index(key[0])] for row in rows]
+        if len(key) == 1 and key[0] in columns
+        else None
+    )
     # Which rows the endpoint's own id could be naming. It answers under the
     # list of key values, and the relational endpoint answers under the key
     # itself, so both are shapes a key can be recognised in. Several rows may
     # share an entity value, so a key stands for a set of positions.
     rows_named_by: dict[str, set[int]] = {}
-    for position, value in enumerate(keys):
+    for position, value in enumerate(keys or ()):
         for shape in (str([value]), str(value)):
             rows_named_by.setdefault(shape, set()).add(position)
 
@@ -309,10 +319,10 @@ def _named_entities(
                 'attributed to a row',
                 code='INVALID_RESPONSE',
             )
-        if not 0 <= index < len(keys):
+        if not 0 <= index < len(rows):
             raise StructuredDataError(
                 f'the response names row_index {index}, and this batch asked '
-                f'about {len(keys)} rows',
+                f'about {len(rows)} rows',
                 code='INVALID_RESPONSE',
             )
         if index in seen:
@@ -336,13 +346,13 @@ def _named_entities(
         # A null names no row, so there is nothing to put back. `str` would
         # turn it into 'None', which reads as a key that was asked about. NaN
         # does not arrive here: the encoder writes it as null.
-        value = keys[index]
+        value = None if keys is None else keys[index]
         named.append(
             item if value is None else dataclasses.replace(item, id=str(value))
         )
 
-    if seen != set(range(len(keys))):
-        missing = sorted(set(range(len(keys))) - seen)
+    if seen != set(range(len(rows))):
+        missing = sorted(set(range(len(rows))) - seen)
         raise StructuredDataError(
             f'the response left row(s) {missing} unanswered',
             code='INVALID_RESPONSE',

@@ -328,3 +328,50 @@ def test_rows_sharing_a_key_are_each_answered_under_it():
         answer(['[6]'] * scored), ('prediction',), payload
     )
     assert [item.id for item in result.items] == ['6'] * scored
+
+
+# --- checking the batch does not depend on having a key to put back ---------
+
+
+def keyless_payload() -> dict:
+    """Two rows to score, supplied without the key column."""
+    schema = schema_for(list(range(1, 21)))
+    request = PredictiveQuery(QUERY, schema).materialize(
+        predict=pd.DataFrame({'tenure': [3.0, 4.0]})
+    )
+    return list(TabularAdapter().prediction_plan(request, ('prediction',)))[0]
+
+
+def test_a_keyless_batch_left_partly_unanswered_is_still_refused():
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['x'], row_indices=[0]), ('prediction',), keyless_payload()
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_a_keyless_batch_answered_twice_for_one_row_is_still_refused():
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['x', 'y'], row_indices=[0, 0]),
+            ('prediction',),
+            keyless_payload(),
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_a_keyless_batch_naming_a_row_outside_it_is_still_refused():
+    with pytest.raises(StructuredDataError) as error:
+        TabularAdapter().normalize(
+            answer(['x', 'y'], row_indices=[0, 5]),
+            ('prediction',),
+            keyless_payload(),
+        )
+    assert error.value.code == 'INVALID_RESPONSE'
+
+
+def test_a_keyless_batch_answered_in_full_keeps_every_id():
+    result = TabularAdapter().normalize(
+        answer(['x', 'y']), ('prediction',), keyless_payload()
+    )
+    assert [item.id for item in result.items] == ['x', 'y']
