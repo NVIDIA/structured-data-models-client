@@ -59,6 +59,9 @@ _DEFAULT_OUTPUTS = {
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
 _SESSION_SCORING = ('predict', 'output', 'metadata')
 
+# What the contract allows a `PredictionItem.id` to be.
+_MAX_ID_LENGTH = 1024
+
 
 def _request_id() -> str:
     return f'sdm-{uuid.uuid4().hex[:12]}'
@@ -253,19 +256,28 @@ def _key_named_by(value: str) -> str | None:
 
     The endpoint answers under the list of primary-key values, and how it
     renders that list is its own business: a key that travelled as a JSON
-    string comes back quoted, one that travelled as a number does not. So the
-    brackets and any one pair of quotes are stripped and the key compared,
-    rather than the rendering.
+    string comes back quoted, one that travelled as a number does not, and one
+    carrying a newline or a backslash comes back with that escaped. So the
+    rendering is read back into the value it stands for, and the value is what
+    gets compared. Taking the text apart by hand instead would refuse a correct
+    answer for any key an escape appears in.
 
     Anything not written that way may be a correlation token of the endpoint's
-    own, which is not this client's to judge.
+    own, which is not this client's to judge. The contract bounds an id at 1024
+    characters, so anything longer is not one either, and is declined before
+    being parsed.
     """
-    if not (value.startswith('[') and value.endswith(']')):
+    import ast
+
+    if len(value) > _MAX_ID_LENGTH:
         return None
-    inner = value[1:-1].strip()
-    if len(inner) >= 2 and inner[0] == inner[-1] and inner[0] in '\'"':
-        inner = inner[1:-1]
-    return inner
+    try:
+        named = ast.literal_eval(value)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return None
+    if not isinstance(named, list) or len(named) != 1:
+        return None
+    return str(named[0])
 
 
 def _named_entities(

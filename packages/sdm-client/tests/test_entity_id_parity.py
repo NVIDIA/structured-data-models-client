@@ -422,3 +422,17 @@ def test_a_session_keeps_the_pinned_schema_and_not_the_pinned_context():
     assert 'schema' in fitted._pinned
     assert 'task' in fitted._pinned
     assert 'context' not in fitted._pinned
+
+
+@pytest.mark.parametrize('awkward', ['a\nb', 'a\\b', 'a\tb', "it's", 'x"y'])
+def test_a_key_that_has_to_be_escaped_is_still_its_own_key(awkward):
+    """The endpoint renders its key list with the escapes that make it
+    readable back. Comparing the rendered text instead of the value it stands
+    for refuses a correct answer for any key carrying one."""
+    keys = [awkward] + [f'k{index}' for index in range(19)]
+    schema = schema_for(keys)
+    payload = payload_for(schema, [awkward])
+    result = TabularAdapter().normalize(
+        answer([str([awkward])]), ('prediction',), payload
+    )
+    assert [item.id for item in result.items] == [awkward]
