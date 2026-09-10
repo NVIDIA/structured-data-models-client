@@ -198,8 +198,43 @@ def test_a_contradictory_column_is_refused_before_anything_is_sent():
 
 def test_the_relational_path_asks_before_building_a_request():
     """The check has to run as the schema becomes a request, not only when a
-    caller thinks to call it."""
+    caller thinks to call it.
+
+    A schema with more than one table takes the relational path, which asks
+    while gathering. A single table now takes the tabular one, which asks
+    while building the envelope; that case is covered below.
+    """
     pytest.importorskip('sdm_relational_engine')
+
+    users = pd.DataFrame({'user_id': [1, 2, 3], 'seg': [*'abc']})
+    orders = pd.DataFrame({'order_id': [1, 2, 3], 'user_id': [1, 2, 3]})
+    schema = Schema.from_data(
+        {'users': users, 'orders': orders},
+        relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
+    )
+    schema['users'].primary_key = 'user_id'
+    schema['orders'].primary_key = 'order_id'
+    schema['users']['seg'].dtype = 'timestamp[us]'
+
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(
+            'PREDICT users.seg FOR EACH users.user_id', schema
+        ).materialize(indices=[1])
+    assert error.value.code == 'INVALID_REQUEST'
+
+
+def test_a_single_table_request_is_still_checked_before_the_wire():
+    """Extending single-table materialization routed this to the tabular
+    materializer, which asks when it builds the envelope rather than when it
+    gathers.
+
+    Later, but still before anything is sent, which is the property that
+    matters. The test above used to cover this case and passed only because
+    of the older routing.
+    """
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client.adapters.tabular import TabularAdapter
 
     schema = Schema.from_data(
         {'users': pd.DataFrame({'user_id': [1, 2], 'age': [20.0, 30.0]})},
@@ -208,10 +243,12 @@ def test_the_relational_path_asks_before_building_a_request():
     schema['users'].primary_key = 'user_id'
     schema['users']['age'].dtype = 'timestamp[us]'
 
+    request = PredictiveQuery(
+        'PREDICT users.age FOR EACH users.user_id', schema
+    ).materialize(indices=[1])
+
     with pytest.raises(StructuredDataError) as error:
-        PredictiveQuery(
-            'PREDICT users.age FOR EACH users.user_id', schema
-        ).materialize(indices=[1])
+        next(TabularAdapter().prediction_plan(request, ('prediction',)))
     assert error.value.code == 'INVALID_REQUEST'
 
 
