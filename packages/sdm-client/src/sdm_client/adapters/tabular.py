@@ -288,7 +288,8 @@ def _named_entities(
     if len(key) != 1 or key[0] not in columns:
         return list(items)
 
-    keys = [row[columns.index(key[0])] for row in rows]
+    at = columns.index(key[0])
+    keys = [row[at] for row in rows]
 
     named: list[Any] = []
     seen: set[int] = set()
@@ -312,5 +313,11 @@ def _named_entities(
                 code='INVALID_RESPONSE',
             )
         seen.add(index)
-        named.append(dataclasses.replace(item, id=str(keys[index])))
+        # A null names no row, so there is nothing to put back. `str` would
+        # turn it into 'None', which reads as a key that was asked about. NaN
+        # does not arrive here: the encoder writes it as null.
+        value = keys[index]
+        named.append(
+            item if value is None else dataclasses.replace(item, id=str(value))
+        )
     return named

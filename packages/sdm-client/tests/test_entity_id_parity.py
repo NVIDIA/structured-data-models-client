@@ -154,6 +154,21 @@ def test_rows_supplied_without_the_key_keep_the_endpoints_id():
     assert [item.id for item in result.items] == ['x', 'y']
 
 
+def test_a_row_whose_key_is_null_keeps_the_endpoints_id():
+    """A null names no row, so there is nothing to put back. Turning it into
+    the string 'None' would read as a key that was asked about."""
+    schema = schema_for(list(range(1, 21)))
+    request = PredictiveQuery(QUERY, schema).materialize(
+        predict=pd.DataFrame({'user_id': [None, 902], 'tenure': [3.0, 4.0]})
+    )
+    adapter = TabularAdapter()
+    payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
+    result = adapter.normalize(
+        answer(['[None]', '[902.0]']), ('prediction',), payload
+    )
+    assert [item.id for item in result.items] == ['[None]', '902.0']
+
+
 def test_a_response_read_without_its_payload_is_unchanged():
     result = TabularAdapter().normalize(answer(['[3]']), ('prediction',), None)
     assert [item.id for item in result.items] == ['[3]']
