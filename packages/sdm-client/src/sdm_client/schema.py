@@ -200,12 +200,14 @@ class Table:
     duplicate_keys: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
+        self._check_name(self.name)
         # `Schema.from_data` checks this while inferring, but a hand-built
         # `Table` reached the adapters unchecked and a list cell surfaced much
         # later as `TypeError: unhashable type: 'list'` from label collection.
         frame = getattr(self, 'data', None)
         if frame is not None:
             for column in frame.columns:
+                self._check_name(column)
                 require_scalar_cells(frame[column], f'{self.name}.{column}')
 
     def __setattr__(self, key: str, value: Any) -> None:
@@ -248,6 +250,21 @@ class Table:
                 f'e.g. {quality.example!r}. Those rows are '
                 f'indistinguishable to the model.',
                 stacklevel=_warning_stacklevel(),
+            )
+
+    def _check_name(self, name: str) -> None:
+        if not isinstance(name, str) or not name:
+            raise StructuredDataError(
+                f'The name {name!r} must be a non-empty string.',
+                code='INVALID_REQUEST',
+            )
+        invalid_chars = ['`', '\n', '\r', '.']
+        name_invalid_chars = [char for char in invalid_chars if char in name]
+        if len(name_invalid_chars) > 0:
+            raise StructuredDataError(
+                f'The name {name!r} contains '
+                f'one or more invalid characters: {name_invalid_chars}.',
+                code='INVALID_REQUEST',
             )
 
     def _check_column(self, name: str) -> None:

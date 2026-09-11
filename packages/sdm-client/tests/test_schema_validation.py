@@ -598,3 +598,28 @@ def test_untyped_cannot_be_set_by_a_caller():
     with pytest.raises(StructuredDataError) as error:
         column.untyped = True
     assert 'cannot be set' in str(error.value)
+
+
+# --- a name a query could never spell is refused at the door ----------------
+
+
+@pytest.mark.parametrize(
+    'name',
+    ['sound`pressure', 'sound\npressure', 'sound\rpressure', 'sound.pressure'],
+    ids=['backtick', 'newline', 'carriage-return', 'dot'],
+)
+@pytest.mark.parametrize('where', ['column', 'table'])
+def test_a_name_no_query_can_spell_is_refused(name, where):
+    frame = pd.DataFrame({name if where == 'column' else 'value': [1.0, 2.0]})
+    with pytest.raises(StructuredDataError) as error:
+        Schema.from_data({name if where == 'table' else 'records': frame})
+    assert error.value.code == 'INVALID_REQUEST'
+    assert repr(name) in str(error.value)
+
+
+@pytest.mark.parametrize(
+    'name', ['scaled-sound-pressure', 'Customer ID', 'ünïcode', '1st_reading']
+)
+def test_a_name_quoting_can_carry_is_accepted(name):
+    built = Schema.from_data({'records': pd.DataFrame({name: [1.0, 2.0]})})
+    assert name in built['records']
