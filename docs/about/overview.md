@@ -17,9 +17,11 @@ result = client.predict(request, model=KumoTabular())
 result = client.predict(request, model=KumoRelational())
 ```
 
-The same `Request` runs on any model whose profile accepts it. A model that
-cannot answer a request says so *before* anything is sent, because what a model
-may be asked is declared as data rather than discovered from a 422.
+One call answers with either model. The request itself is gathered for one of
+them -- the two read it differently -- so `materialize(model=...)` says which,
+and defaults to what the schema's shape implies. A model that cannot answer a
+request says so *before* anything is sent, because what a model may be asked is
+declared as data rather than discovered from a 422.
 
 ## Two models today
 

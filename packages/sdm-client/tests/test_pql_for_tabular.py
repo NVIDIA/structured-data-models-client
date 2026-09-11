@@ -262,8 +262,9 @@ def test_single_table_requests_do_not_accept_options(path, option):
         query().materialize(**arguments, **{option: [8, 8]})
 
     message = str(error.value)
-    assert 'Single-table requests do not accept options' in message
+    assert 'apply only to relational materialization' in message
     assert option in message
+    assert 'KumoRelational' in message
 
 
 @pytest.mark.parametrize(

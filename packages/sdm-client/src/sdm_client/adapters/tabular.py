@@ -33,8 +33,8 @@ from sdm_api.generated.tfm_api import (
 )
 
 from sdm_client.base import ModelSpec
-from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_TABULAR
+from sdm_client.errors import StructuredDataError, UnsupportedRequestError
+from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import (
@@ -58,6 +58,9 @@ _DEFAULT_OUTPUTS = {
 # its request id is what correlates the call with the endpoint's logs.
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
 _SESSION_SCORING = ('predict', 'output', 'metadata')
+
+# What the contract allows a `PredictionItem.id` to be.
+_MAX_ID_LENGTH = 1024
 
 
 def _request_id() -> str:
@@ -116,7 +119,7 @@ class TabularAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=parsed.predictions,
+            items=_named_entities(parsed.predictions, payload),
             metadata=parsed.metadata,
             outputs=outputs,
         )
@@ -135,6 +138,15 @@ class TabularAdapter:
     def _envelope(
         self, request: Request, outputs: tuple[str, ...]
     ) -> dict[str, Any]:
+        if request.payloads is not None:
+            raise UnsupportedRequestError(
+                f'this request was gathered for '
+                f'{KUMO_RELATIONAL.model_id} and carries the sampled '
+                f'payloads that model reads. Gather it with '
+                f'materialize(..., model={self.spec.model_id!r}) to ask '
+                f'this one'
+            )
+
         # The same question the relational path asks, at the same moment: a
         # column re-declared one assignment at a time can be left saying it
         # holds one thing and means another, and neither assignment is the
@@ -237,3 +249,135 @@ def _raw_dtype_of(series: pd.Series) -> str:
     ``'string'`` first is what made it decide the outcome.
     """
     return infer_tfm_dtype(series)
+
+
+def _key_named_by(value: str) -> str | None:
+    r"""The key an id names, or ``None`` if it names no key this can read.
+
+    The endpoint answers under the list of primary-key values, and how it
+    renders that list is its own business: a key that travelled as a JSON
+    string comes back quoted, one that travelled as a number does not, and one
+    carrying a newline or a backslash comes back with that escaped. So the
+    rendering is read back into the value it stands for, and the value is what
+    gets compared. Taking the text apart by hand instead would refuse a correct
+    answer for any key an escape appears in.
+
+    Anything not written that way is left alone rather than refused. The
+    contract calls this field a *service-generated* row identifier and names
+    ``row_index`` as what to align on, so an endpoint is entitled to answer
+    under a token of its own and refusing one would break a compliant
+    deployment. It bounds an id at 1024 characters, so anything longer is not
+    one either, and is declined before being parsed.
+    """
+    import ast
+
+    if len(value) > _MAX_ID_LENGTH:
+        return None
+    try:
+        named = ast.literal_eval(value)
+    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+        return None
+    if not isinstance(named, list) or len(named) != 1:
+        return None
+    return str(named[0])
+
+
+def _named_entities(
+    items: tuple[Any, ...], payload: dict[str, Any] | None
+) -> list[Any]:
+    r"""Put the caller's key back on each row, and check it belongs there.
+
+    The endpoint answers under the stringified list of primary-key values, so
+    a row the caller asked about as ``1`` comes back as ``'[1]'``. The
+    relational path already returns the caller's own key, and
+    :mod:`sdm_client.result` tells callers to join on it, so a key that only
+    joins on one of the two models is a difference they have no reason to
+    expect.
+
+    The key is read from the payload that produced this response, so a run
+    split into several calls maps each batch against its own rows.
+
+    **A mismatch is an error, not a silent pass.** Rewriting an id is exactly
+    the operation that can misattribute an answer, so a row is checked against
+    the batch it claims to belong to before its id is replaced. The endpoint
+    answers under the list of key values and the relational endpoint answers
+    under the key itself, so a key is recognised in either shape, and an id
+    recognisable as a key has to be the key of the row it was paired with. An id
+    in any other shape is not second-guessed: it may be a correlation token of
+    the endpoint's own.
+
+    Those checks are about the batch rather than about the key, so they hold for
+    a request that has no key to put back too: a composite key, or rows the
+    caller supplied without the key column, still have to be answered once each
+    and no more. What such a request has nothing of is a value to restore, and a
+    null key is the same case -- ``str`` would turn it into ``'None'``, which
+    reads as a key that was asked about. Rows in a shape this cannot read at
+    all, a format other than ``arrays``, are left alone entirely.
+    """
+    import dataclasses
+
+    if payload is None:
+        return list(items)
+    table = payload.get('predict', {}).get('instance_table', {})
+    rows = table.get('rows')
+    if not isinstance(rows, list):
+        return list(items)
+    columns = table.get('columns') or []
+
+    key = (
+        payload.get('schema', {}).get('instance_table', {}).get('primary_key')
+        or []
+    )
+    keys = (
+        [row[columns.index(key[0])] for row in rows]
+        if len(key) == 1 and key[0] in columns
+        else None
+    )
+    keys_in_batch = {str(value) for value in keys or ()}
+
+    named: list[Any] = []
+    seen: set[int] = set()
+    for item in items:
+        index = item.row_index
+        if index is None:
+            raise StructuredDataError(
+                'the response is missing a row_index, so its answer cannot be '
+                'attributed to a row',
+                code='INVALID_RESPONSE',
+            )
+        if not 0 <= index < len(rows):
+            raise StructuredDataError(
+                f'the response names row_index {index}, and this batch asked '
+                f'about {len(rows)} rows',
+                code='INVALID_RESPONSE',
+            )
+        if index in seen:
+            raise StructuredDataError(
+                f'the response answers row {index} more than once',
+                code='INVALID_RESPONSE',
+            )
+        if keys is not None and item.id is not None:
+            answered = str(item.id)
+            named_key = _key_named_by(answered)
+            if named_key is None and answered in keys_in_batch:
+                named_key = answered
+            if named_key is not None and named_key != str(keys[index]):
+                raise StructuredDataError(
+                    f'the response pairs row_index {index} with id '
+                    f'{item.id!r}, and this batch asked about '
+                    f'{keys[index]!r} there',
+                    code='INVALID_RESPONSE',
+                )
+        seen.add(index)
+        value = None if keys is None else keys[index]
+        named.append(
+            item if value is None else dataclasses.replace(item, id=str(value))
+        )
+
+    if seen != set(range(len(rows))):
+        missing = sorted(set(range(len(rows))) - seen)
+        raise StructuredDataError(
+            f'the response left row(s) {missing} unanswered',
+            code='INVALID_RESPONSE',
+        )
+    return named

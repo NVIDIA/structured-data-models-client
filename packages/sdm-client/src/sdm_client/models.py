@@ -38,6 +38,7 @@ from predictive_query import RELATIONAL, TABULAR
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
+from sdm_client.errors import StructuredDataError, UnknownModelError
 
 # Sizes the relational endpoint enforces. It refuses past them, so the client
 # refuses first with a message that names the limit. See the architecture note
@@ -168,3 +169,44 @@ MODELS = {
     KUMO_TABULAR.model_id: KUMO_TABULAR,
     KUMO_RELATIONAL.model_id: KUMO_RELATIONAL,
 }
+
+
+def spec_for(model: str | Model) -> ModelSpec:
+    r"""The specification behind a model handle or a model id.
+
+    Shared by the two places a model is named -- gathering a request and
+    sending one -- so that both accept the same arguments and refuse the same
+    ones the same way.
+
+    A handle is a name for one of the models below, not a way to describe a new
+    one, so it is worth exactly the spec it carries. That spec chooses the route
+    a request is gathered for and the limits it is checked against, and the id
+    it names is a closed enum on the wire -- so one this module did not declare
+    is refused here rather than gathering work that cannot be sent. ``Model``
+    itself declares ``spec`` without defining one, so a bare ``Model()`` is that
+    same refusal rather than an ``AttributeError``.
+
+    Args:
+        model: A model handle such as ``KumoTabular()``, or a model id.
+
+    Raises:
+        UnknownModelError: If ``model`` is an id, or a handle, the contract does
+            not carry.
+        StructuredDataError: If ``model`` is neither a handle nor an id.
+    """
+    if isinstance(model, Model):
+        spec = getattr(model, 'spec', None)
+        if isinstance(spec, ModelSpec) and MODELS.get(spec.model_id) is spec:
+            return spec
+        named = getattr(spec, 'model_id', None) or type(model).__name__
+        raise UnknownModelError(named, list(MODELS))
+    if isinstance(model, str):
+        spec = MODELS.get(model)
+        if spec is None:
+            raise UnknownModelError(model, list(MODELS))
+        return spec
+    raise StructuredDataError(
+        f'model must be a model handle or a model id, got '
+        f'{type(model).__name__}',
+        code='INVALID_REQUEST',
+    )

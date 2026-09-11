@@ -29,7 +29,7 @@ from sdm_client.base import (
 )
 from sdm_client.core.transport import Transport, redact_url
 from sdm_client.errors import StructuredDataError, UnknownModelError
-from sdm_client.models import MODELS, Model
+from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 
@@ -64,6 +64,12 @@ class FittedModel:
 
     Close it when done, or use it as a context manager. A session holds memory
     on the endpoint until it is released or expires.
+
+    ``pinned`` is what the session pinned, minus the context itself. Reading an
+    answer needs the task and the schema -- the key an id stands for is named
+    there -- but the rows have been uploaded and live on the endpoint, so
+    keeping a second encoded copy for the lifetime of the handle would hold a
+    whole dataset for nothing.
     """
 
     def __init__(
@@ -72,11 +78,13 @@ class FittedModel:
         adapter: ModelAdapter,
         session_id: str,
         outputs: tuple[str, ...],
+        pinned: dict[str, Any] | None = None,
     ) -> None:
         self._client = client
         self._adapter = adapter
         self._session_id = session_id
         self._outputs = outputs
+        self._pinned = pinned or {}
         self._closed = False
 
     @property
@@ -91,7 +99,10 @@ class FittedModel:
         r"""Score ``request``'s rows against the pinned context.
 
         Only the rows travel: the context, schema and task were pinned when
-        this handle was created.
+        this handle was created. Reading the answer needs both halves, though
+        -- the key an id stands for is named in the pinned schema -- so the
+        adapter is handed the whole request while the wire gets only the half
+        the contract allows on a scoring call.
         """
         if self._closed:
             raise StructuredDataError(
@@ -104,7 +115,7 @@ class FittedModel:
                     self._session_id, payload
                 ),
                 self._outputs,
-                payload,
+                {**self._pinned, **payload},
             )
             for payload in self._adapter.session_prediction_plan(
                 request, self._outputs
@@ -300,7 +311,13 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        return FittedModel(self, adapter, str(session_id), fields)
+        return FittedModel(
+            self,
+            adapter,
+            str(session_id),
+            fields,
+            {key: value for key, value in payload.items() if key != 'context'},
+        )
 
     def _prepare(
         self,
@@ -346,18 +363,7 @@ class SDMClient:
 
     @staticmethod
     def _spec(model: str | Model) -> ModelSpec:
-        if isinstance(model, Model):
-            return model.spec
-        if isinstance(model, str):
-            spec = MODELS.get(model)
-            if spec is None:
-                raise UnknownModelError(model, list(MODELS))
-            return spec
-        raise StructuredDataError(
-            f'model must be a model handle or a model id, got '
-            f'{type(model).__name__}',
-            code='INVALID_REQUEST',
-        )
+        return spec_for(model)
 
     def close(self) -> None:
         r"""Release pooled connections and retire this client.

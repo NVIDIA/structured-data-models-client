@@ -77,3 +77,21 @@ There is no all-rows default, because it would silently score a whole table.
 
 For multiple tables, `materialize()` additionally gathers records related to each
 entity.
+
+## Which model it is gathered for
+
+The two models read a request differently, so it is gathered for one of them.
+Left unsaid, the schema's shape decides: a schema of one table with no
+relationships is gathered for `kumo-tabular`, and anything wider — a second
+table, or a table that points at itself — for `kumo-relational`.
+
+Name a model when that default is not what you want. A single table is a graph
+of one node, and the relational model answers it:
+
+```python
+request = query.materialize(indices=[7, 12, 3], model='kumo-relational')
+client.predict(request, model='kumo-relational')
+```
+
+Gather and send for the same model. A request built for one is refused by the
+other, before anything is sent.
