@@ -287,3 +287,42 @@ def test_a_query_the_tabular_path_would_ignore_is_refused(text, path):
 
     assert error.value.code == 'INVALID_REQUEST'
     assert 'a tabular model' in str(error.value)
+
+
+# --- a quoted name resolves to the column the data has ----------------------
+
+
+def airfoil(n: int = 30) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            'Row ID': range(n),
+            'attack-angle': [float(i) for i in range(n)],
+            'scaled-sound-pressure': [100.0 + i for i in range(n)],
+        }
+    )
+
+
+QUOTED = (
+    'PREDICT `air foil`.`scaled-sound-pressure` FOR EACH `air foil`.`Row ID`'
+)
+
+
+def test_a_quoted_target_is_dropped_from_the_rows_to_score():
+    """`target_column` once returned the query's spelling, backticks and all,
+    and the drop of the target from the scored rows missed the column. The
+    table and entity are quoted too, so the whole name path is exercised."""
+    request = PredictiveQuery(QUOTED, {'air foil': airfoil()}).materialize(
+        indices=[28, 29]
+    )
+    assert request.task.target.column_name == 'scaled-sound-pressure'
+    assert 'scaled-sound-pressure' not in request.predict.instance_table.columns
+    assert 'attack-angle' in request.predict.instance_table.columns
+
+
+def test_a_quoted_target_names_the_column_rows_supplied_separately_lack():
+    rows = airfoil().iloc[:2].drop(columns=['scaled-sound-pressure'])
+    request = PredictiveQuery(QUOTED, {'air foil': airfoil()}).materialize(
+        predict=rows
+    )
+    assert request.task.target.column_name == 'scaled-sound-pressure'
+    assert request.task.kind == 'regression'

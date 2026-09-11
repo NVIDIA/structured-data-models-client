@@ -280,6 +280,9 @@ class ValidatedPredictiveQuery(ParsedPredictiveQuery):
 
     @property
     def target_column(self) -> str:
+        column = self.get_final_target_column()
+        if column is not None:
+            return column.fqn
         return self.target_ast.to_string()
 
     @property
