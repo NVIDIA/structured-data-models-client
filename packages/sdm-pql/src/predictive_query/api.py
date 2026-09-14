@@ -10,7 +10,10 @@ from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema import codes
 from predictive_query.schema.common import ValidationError, ValidationResponse
 from predictive_query.schema.graph import GraphDefinition
-from predictive_query.validator.capability import check_capabilities
+from predictive_query.validator.capability import (
+    check_capabilities,
+    check_parsed_capabilities,
+)
 from predictive_query.validator.predictive_query_validator import (
     PredictiveQueryValidator,
 )
@@ -63,6 +66,13 @@ def validate(
                 )
             ]
         )
+
+    # Before resolution, because a model that cannot answer this shape of
+    # question cannot answer it against any schema, and resolving first put a
+    # schema complaint in front of a capability problem.
+    parsed_capability = check_parsed_capabilities(parsed, profile)
+    if not parsed_capability.ok:
+        return None, parsed_capability
 
     resolved, response = PredictiveQueryValidator(
         graph, mode=profile.mode, can=profile.capabilities

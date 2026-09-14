@@ -142,9 +142,15 @@ class ModelValidator:
             aggregated_col_name = target_ast.get_target_column_name()
             _, target_is_fkey = self._is_key_col(aggregated_col_name)
 
+            # A `LIST_DISTINCT` over a column that is not a foreign key is a
+            # multilabel target whether or not the query ranks it. Asking only
+            # about the ranked form let the plain one through to the engine,
+            # which does not implement it, so a caller was told the SDK had
+            # broken -- `INTERNAL_ERROR` -- when the answer is that this model
+            # does not serve that kind of task. On a foreign key both forms
+            # resolve to link prediction and are left alone.
             if parsed_query.problem_type == ProblemType.CLASSIFY or (
-                parsed_query.problem_type == ProblemType.RANK
-                and target_ast.stype == Stype.multicategorical
+                target_ast.stype == Stype.multicategorical
                 and not target_is_fkey
             ):
                 response.errors.append(
@@ -160,10 +166,36 @@ class ModelValidator:
                         code=codes.MODEL_NO_MULTILABEL,
                     )
                 )
-            # Limit LP top K
-            elif parsed_query.problem_type == ProblemType.RANK:
+            else:
+                # Both, rather than one and then the other. A query can be
+                # static *and* ask for too many candidates, and reporting only
+                # the first sends a caller to fix it and be refused again for
+                # the second, which is the shape of defect this is fixing.
+                if target_ast.aggr_time_range is None:
+                    # Outside the RANK branch, because a static LIST_DISTINCT
+                    # is refused whether or not it ranks. Asking only about the
+                    # ranked form let the plain one reach the engine, which
+                    # asserts.
+                    response.errors.append(
+                        ValidationError(
+                            title='Static Link Prediction not supported',
+                            message=(
+                                'LIST_DISTINCT without a time range is not '
+                                'supported by the foundation model. Give it a '
+                                'time range such as (0, 30, days), which needs '
+                                'a time column on the aggregated table. To '
+                                'make predictions with this query as written, '
+                                'train a new model.'
+                            ),
+                            code=codes.MODEL_NO_STATIC_LINK_PREDICTION,
+                        )
+                    )
                 top_k = parsed_query.top_k
-                if top_k is not None and top_k > MAX_TOP_K:
+                if (
+                    parsed_query.problem_type == ProblemType.RANK
+                    and top_k is not None
+                    and top_k > MAX_TOP_K
+                ):
                     response.errors.append(
                         ValidationError(
                             title='Top k is too large',
@@ -174,19 +206,6 @@ class ModelValidator:
                                 f'train a new model.'
                             ),
                             code=codes.MODEL_TOP_K_TOO_LARGE,
-                        )
-                    )
-                if target_ast.aggr_time_range is None:
-                    response.errors.append(
-                        ValidationError(
-                            title='Static Link Prediction not supported',
-                            message=(
-                                'LIST_DISTINCT without a time range is '
-                                'not supported by the foundation model.'
-                                'To make predictions with this query, '
-                                'train a new model.'
-                            ),
-                            code=codes.MODEL_NO_STATIC_LINK_PREDICTION,
                         )
                     )
 
