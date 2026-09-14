@@ -184,6 +184,16 @@ class RelationalMaterializer:
             engine_table = graph[name]
             if table.primary_key is not None:
                 engine_table.primary_key = table.primary_key
+            else:
+                # Said, not merely left unsaid. The engine infers a key from a
+                # column *name* without checking uniqueness, so a child's
+                # foreign key called `ID` -- holding [1, 1, 2, 2, 3] -- becomes
+                # that table's primary key, and linking it is then refused for
+                # being one. The client let the caller set the key to None and
+                # then never passed that on, so a correct schema over correct
+                # data could not be materialized and the error named a key the
+                # caller had explicitly removed.
+                engine_table.primary_key = None
             if table.time_column is not None:
                 engine_table.time_column = table.time_column
             for column_name, column in table.columns.items():

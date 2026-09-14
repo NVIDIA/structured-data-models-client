@@ -17,7 +17,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -34,6 +34,7 @@ from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
+from sdm_client.schema import _as_key_tuple
 
 # A NIM that does not serve the session routes at all, as opposed to one that
 # has merely forgotten this session.
@@ -82,6 +83,7 @@ class FittedModel:
         outputs: tuple[str, ...],
         pinned: dict[str, Any] | None = None,
         named_outputs: Sequence[str] | None = None,
+        pinned_keys: frozenset[Any] = frozenset(),
     ) -> None:
         self._client = client
         self._adapter = adapter
@@ -90,6 +92,7 @@ class FittedModel:
         self._named_outputs = (
             None if named_outputs is None else tuple(named_outputs)
         )
+        self._pinned_keys = pinned_keys
         self._pinned = pinned or {}
         self._closed = False
 
@@ -122,6 +125,7 @@ class FittedModel:
             )
         if request.nothing_to_score:
             return _empty_answer(self.model, self._outputs)
+        _warn_scoring_what_was_pinned(request, self._pinned_keys)
         parts = [
             self._adapter.normalize(
                 self._client._transport.session_predict(
@@ -367,6 +371,7 @@ class SDMClient:
             fields,
             {key: value for key, value in payload.items() if key != 'context'},
             named_outputs=outputs,
+            pinned_keys=_keys_in(payload, 'context'),
         )
 
     def _prepare(
@@ -496,4 +501,113 @@ def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
     """
     return PredictionResult(
         model=model, request_id='', items=(), outputs=tuple(outputs)
+    )
+
+
+def _keys_in(payload: dict[str, Any] | None, half: str) -> frozenset[Any]:
+    r"""The entity keys one half of a wire envelope holds.
+
+    Kept when a session is opened, and only the keys: the context itself is
+    deliberately not kept, since holding a second encoded copy of a whole
+    dataset for the life of the handle is what `pinned` exists to avoid. A set
+    of keys is small enough to keep and is the only thing needed to notice that
+    a later call scores rows the context already answers.
+
+    The key is named in the schema rather than in the rows, and the two models
+    name it differently: a relational envelope carries an opaque entity
+    reference, a tabular one carries the caller's own key column.
+    """
+    if not isinstance(payload, dict):
+        return frozenset()
+    table = (payload.get(half) or {}).get('instance_table') or {}
+    columns = table.get('columns')
+    rows = table.get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return frozenset()
+    named: Any = next(
+        (name for name in columns if str(name).startswith('__kumo_entity_ref')),
+        None,
+    )
+    if named is None:
+        named = ((payload.get('schema') or {}).get('instance_table') or {}).get(
+            'primary_key'
+        )
+    if named is None:
+        return frozenset()
+    wanted = named if isinstance(named, list) else [named]
+    if any(name not in columns for name in wanted):
+        return frozenset()
+    at = [columns.index(name) for name in wanted]
+    return frozenset(
+        _named_by(row[position] for position in at)
+        for row in rows
+        if isinstance(row, list) and len(row) > max(at)
+    )
+
+
+def _named_by(values: Iterable[Any]) -> str:
+    r"""One way of writing a key, whichever side of the wire it came from.
+
+    A pinned key is read from the encoded payload and a scored key from the
+    frame, and the two disagree about the same value: an integer past the
+    JS-safe range travels as a base-10 string by contract, so
+    `9007199254740993` on one side and `'9007199254740993'` on the other would
+    never meet, and the warning would go quiet on precisely the warehouse keys
+    it matters most for.
+
+    A composite key becomes a tuple of its parts rather than nothing at all,
+    which is what reading only single-column keys amounted to.
+    """
+    return repr(tuple(str(value) for value in values))
+
+
+def _warn_scoring_what_was_pinned(
+    request: Request, pinned: frozenset[Any]
+) -> None:
+    r"""Say when a call scores rows the pinned context already answers.
+
+    A session pins the context gathered by the `fit()` request, which excluded
+    the rows *that* request named. Every later call names different rows, and
+    nothing excluded those, so they sit in the pinned context with their target
+    values and the model is asked to predict what it has been shown. Measured
+    on a target that is pure noise, a session scored 0.595 where the same rows
+    scored one-shot came back 0.455, against a chance rate of 0.5.
+
+    It cannot be fixed here: the context lives on the endpoint and the rows
+    cannot be taken out of it. Nor can the caller fix it after the fact -- the
+    equivalent of the one-shot remedy is to blank the targets before `fit()`,
+    which means knowing every row the session will ever score, and a caller who
+    knows that has no reason to open a session. So it is reported, with the two
+    things that do work.
+    """
+    if not pinned:
+        return
+    scored = _scored_keys(request)
+    shown = scored & pinned
+    if not shown:
+        return
+    warnings.warn(
+        f'{len(shown)} of the {len(scored)} rows being scored are in this '
+        f"session's pinned context, with their target values, so the model "
+        f'is being asked about rows it has already been shown the answers '
+        f'for. The context was chosen when fit() ran and cannot be changed '
+        f'now. Either clear the target on every row this session may score '
+        f'before calling fit(), or use predict(), which excludes the rows it '
+        f'scores from the context it sends.',
+        stacklevel=caller_stacklevel(),
+    )
+
+
+def _scored_keys(request: Request) -> frozenset[Any]:
+    if request.payloads:
+        return frozenset().union(
+            *(_keys_in(payload, 'predict') for payload in request.payloads)
+        )
+    frame = getattr(request.predict, 'instance_table', None)
+    table = request.schema[request.entity_table] if request.schema else None
+    names = _as_key_tuple(getattr(table, 'primary_key', None))
+    if frame is None or not names or any(n not in frame for n in names):
+        return frozenset()
+    return frozenset(
+        _named_by(values) for values in zip(*(frame[n] for n in names))
     )
