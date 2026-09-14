@@ -273,6 +273,19 @@ class PredictiveQuery:
                     'indices is empty, so there is nothing to score',
                     code='INVALID_REQUEST',
                 )
+            unusable = [value for value in indices if not _is_hashable(value)]
+            if unusable:
+                kinds = sorted({type(v).__name__ for v in unusable})
+                raise StructuredDataError(
+                    f'indices must be entity keys, and {len(unusable)} of the '
+                    f'{len(indices)} given cannot be one: {kinds}. A key is '
+                    f'looked up by value, so it has to be hashable. This is '
+                    f'what a row of json.loads(...) or '
+                    f'frame.to_dict("records") gives you; pass the key field '
+                    f'of each instead, e.g. [row[{"<key>"!r}] for row in '
+                    f'rows].',
+                    code='INVALID_REQUEST',
+                )
 
         if num_context_samples is not None:
             if isinstance(num_context_samples, bool) or not isinstance(
@@ -315,3 +328,18 @@ class PredictiveQuery:
 
     def __repr__(self) -> str:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
+
+
+def _is_hashable(value: Any) -> bool:
+    r"""Whether this value can be a dict key, asked by trying.
+
+    `isinstance(value, Hashable)` is structural: a class that defines
+    `__hash__` and raises from it passes, and the `TypeError` surfaces later
+    from inside pandas, which is the shape of failure this check exists to
+    prevent.
+    """
+    try:
+        hash(value)
+    except TypeError:
+        return False
+    return True

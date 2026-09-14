@@ -110,11 +110,18 @@ class FittedModel:
         adapter is handed the whole request while the wire gets only the half
         the contract allows on a scoring call.
         """
+        if not isinstance(request, Request):
+            raise StructuredDataError(
+                f'request must be a Request, got {type(request).__name__}',
+                code='INVALID_REQUEST',
+            )
         if self._closed:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
             )
+        if request.nothing_to_score:
+            return _empty_answer(self.model, self._outputs)
         parts = [
             self._adapter.normalize(
                 self._client._transport.session_predict(
@@ -137,17 +144,47 @@ class FittedModel:
         )
 
     def close(self) -> None:
-        r"""Release the pinned context. Safe to call twice."""
+        r"""Release the pinned context. Safe to call twice.
+
+        The handle is marked closed only once the endpoint has released the
+        session. Marking it first made a failed release permanent: the next
+        call returned early and sent nothing, so the one thing the endpoint
+        asks for when it answers `429 Session maintenance is already pending;
+        retry the request later` was the one thing the handle could not do.
+        """
         if self._closed:
             return
-        self._closed = True
         self._client._transport.delete_session(self._session_id)
+        self._closed = True
 
     def __enter__(self) -> FittedModel:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        self.close()
+        r"""Release the context, and do not turn a failure to release it into
+        the result of the block.
+
+        The body has already done its work. A session that outlives its handle
+        is reclaimed by the endpoint's own expiry, so raising here would report
+        a successful block as failed over something that resolves itself.
+        `close()` still raises, for a caller who wants to know and retry.
+
+        Nothing is said at all when the body is already raising. The warning
+        would be an error under `-W error`, and an error from `__exit__`
+        replaces the exception the block was raising -- so the one place this
+        must not speak is the one where speaking loses the real failure.
+        """
+        try:
+            self.close()
+        except Exception as error:
+            if exc and exc[0] is not None:
+                return
+            warnings.warn(
+                f'the pinned context of session {self._session_id} was not '
+                f'released: {error}. It will be reclaimed when it expires. '
+                f'Call close() to try again.',
+                stacklevel=caller_stacklevel(),
+            )
 
     def __repr__(self) -> str:
         state = 'closed' if self._closed else 'open'
@@ -249,6 +286,8 @@ class SDMClient:
             NimRequestError: If the endpoint answered with an error.
         """
         adapter, fields = self._prepare(request, model, outputs)
+        if request.nothing_to_score:
+            return _empty_answer(adapter.spec.model_id, fields)
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
@@ -440,3 +479,21 @@ def _report_absent(
             stacklevel=caller_stacklevel(),
         )
     return result
+
+
+def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
+    r"""The answer to a request with no rows in it, without asking.
+
+    `Request` allows a zero-row `predict` on purpose: the contract sets no
+    minimum and an empty batch inside a loop is a reasonable no-op. Sent, it
+    was not a no-op -- the endpoint cannot encode zero rows and answered
+    `500 Unexpected server error`, so the one shape documented as harmless was
+    the one that failed, and failed opaquely.
+
+    Nothing is asked, because there is nothing to ask about. The result carries
+    the columns the request would have produced, which `to_pandas()` already
+    knows how to build with no rows in them.
+    """
+    return PredictionResult(
+        model=model, request_id='', items=(), outputs=tuple(outputs)
+    )

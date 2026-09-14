@@ -95,7 +95,8 @@ class RelationalMaterializer:
         run_mode = self._run_mode_for(num_context_samples)
         self._check_entity_count(indices)
         self._check_shape(options, RELATIONAL_LIMITS)
-        model = self._get_model()
+        with self._engine_errors():
+            model = self._get_model()
 
         with self._engine_errors(model):
             task = model._get_task_table(
@@ -231,8 +232,19 @@ class RelationalMaterializer:
         return graph
 
     @contextmanager
-    def _engine_errors(self, model: KumoRelational) -> Iterator[None]:
-        r"""Re-raise engine failures through this client's error surface."""
+    def _engine_errors(
+        self, model: KumoRelational | None = None
+    ) -> Iterator[None]:
+        r"""Re-raise engine failures through this client's error surface.
+
+        ``model`` is optional because the phase that most needs this is the one
+        that builds it. `Graph.from_data`, the key and stype assignments, the
+        links and `graph.validate()` all raise bare `ValueError` out of a
+        package the caller never imported, and all of them used to run one line
+        above this guard -- so a caller who wrote the `except
+        StructuredDataError` the reference tells them to write did not catch
+        the whole construction phase.
+        """
         try:
             from sdm_relational_engine import KumoRelationalError
         except ImportError:  # pragma: no cover - the extra is optional

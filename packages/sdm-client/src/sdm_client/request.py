@@ -331,11 +331,51 @@ class Request:
 
     @property
     def context_rows(self) -> int:
-        return len(self.context.instance_table)
+        r"""How many rows the model will learn the answer from, in total.
+
+        A relational request keeps its rows in the gathered envelopes rather
+        than in ``context``, which stays an empty frame. Reading the frame
+        reported nought for every graph request -- and these two counts are the
+        only description of a request there is before it is sent, so the one
+        shape whose size is worth checking was the one that would not say.
+
+        Summed across envelopes, because a request gathered in several parts
+        gives each part its own context: that is why a session refuses a split
+        request rather than pinning the first one's.
+        """
+        return self._rows('context')
 
     @property
     def predict_rows(self) -> int:
-        return len(self.predict.instance_table)
+        r"""How many rows are being asked about, across every call."""
+        return self._rows('predict')
+
+    def _rows(self, half: str) -> int:
+        if self.payloads:
+            return sum(
+                _envelope_rows(payload, half) or 0 for payload in self.payloads
+            )
+        return len(getattr(self, half).instance_table)
+
+    @property
+    def nothing_to_score(self) -> bool:
+        r"""Whether this request is known to ask about no rows at all.
+
+        Distinct from ``predict_rows == 0``, and the distinction matters:
+        `predict()` answers a request with nothing in it without sending, so a
+        payload whose rows simply cannot be read must not be mistaken for one
+        that is empty. An unreadable envelope is a request that should reach
+        the endpoint and be refused, not one that quietly succeeds with an
+        empty answer.
+        """
+        if self.payloads:
+            counts = [
+                _envelope_rows(payload, 'predict') for payload in self.payloads
+            ]
+            return all(count is not None for count in counts) and not any(
+                counts
+            )
+        return len(self.predict.instance_table) == 0
 
     def __repr__(self) -> str:
         shape = 'relational' if self.is_relational else 'single-table'
@@ -380,3 +420,26 @@ def _require_frame(value: Any, name: str) -> pd.DataFrame:
             code='INVALID_REQUEST',
         )
     return value
+
+
+def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
+    r"""How many instance rows one wire envelope carries, or `None`.
+
+    Read defensively, and report not knowing as not knowing. These counts are
+    what `repr` shows, so a request that cannot describe itself is worse than
+    one that describes itself roughly -- but `nothing_to_score` decides whether
+    to answer without sending, and there `None` and `0` are opposite answers.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    half_of = payload.get(half)
+    if not isinstance(half_of, Mapping):
+        return None
+    instance_table = half_of.get('instance_table')
+    if not isinstance(instance_table, Mapping):
+        return None
+    rows = instance_table.get('rows')
+    # A list, specifically. `Sized` admits `{}` and `''`, which would be read
+    # as an envelope carrying no rows rather than as one that cannot be read,
+    # and those are the two answers this has to keep apart.
+    return len(rows) if isinstance(rows, (list, tuple)) else None
