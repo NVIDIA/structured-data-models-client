@@ -497,15 +497,23 @@ class Schema:
     """
 
     def check_consistent(self) -> None:
-        r"""Refuse any column whose storage and meaning contradict.
+        r"""Refuse any column whose storage and meaning contradict, and any
+        relationship that cannot join.
 
         Asked once, as the schema becomes a request, because a caller
         re-declaring a column sets its storage and its meaning one at a time
         and either order passes through a pair that does not hold.
+
+        The relationships are asked about here as well as on assignment.
+        `relationships` is an ordinary list, so `schema.relationships.append(
+        link)` reaches it without passing the setter, and this is the question
+        a caller runs to find out whether their schema holds together -- it
+        should not be the one place that does not look.
         """
         for table in self.tables.values():
             for column in table.columns.values():
                 column.check_consistent()
+        self._check_relationships(self.relationships)
 
     def __init__(
         self,
@@ -514,6 +522,53 @@ class Schema:
     ) -> None:
         self._tables = dict(tables)
         self.relationships = list(relationships)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        r"""Hold an assigned relationship to the same standard as a passed one.
+
+        `Schema.from_data(relationships=[link])` checks that both columns exist
+        and that their dtypes can join; `schema.relationships = [link]` is the
+        same statement and checked nothing, so a link that one route refuses
+        the other accepted -- and `check_consistent()`, which a caller runs to
+        ask exactly this, passed it.
+        """
+        if key == 'relationships' and hasattr(self, '_tables'):
+            value = list(value)
+            self._check_relationships(value)
+        object.__setattr__(self, key, value)
+
+    def _check_relationships(self, links: Sequence[Relationship]) -> None:
+        for link in links:
+            if not isinstance(link, Relationship):
+                raise StructuredDataError(
+                    f'a relationship must be a Relationship, got '
+                    f'{type(link).__name__}: {link!r}. Build one with '
+                    f'Relationship(source_table, source_column, '
+                    f'target_table, target_column)',
+                    code='INVALID_REQUEST',
+                )
+            _require_column(self._tables, link.source_table, link.source_column)
+            _require_column(self._tables, link.target_table, link.target_column)
+            _require_joinable(self._tables, link)
+
+    def snapshot(self) -> Schema:
+        r"""This schema as it stands, so a later edit cannot reach back.
+
+        `materialize()` is the gathering step and what it returns is read as
+        finished, but the request kept the caller's schema by reference and the
+        adapter reads it again at send time -- so editing a column's meaning
+        after materializing changed what was sent, silently, and an agent
+        reusing one schema across several questions had no way to see it.
+
+        The rows are shared rather than copied: they are the data, they are
+        what the request is about, and duplicating a warehouse extract per
+        question to guard against an edit nobody makes to a frame would cost
+        more than the defect. What is copied is everything a schema *says*.
+        """
+        return Schema(
+            {name: _copy_table(table) for name, table in self._tables.items()},
+            list(self.relationships),
+        )
 
     @classmethod
     def from_data(
@@ -583,6 +638,14 @@ class Schema:
         else:
             inferred = list(relationships)
             for link in inferred:
+                if not isinstance(link, Relationship):
+                    raise StructuredDataError(
+                        f'a relationship must be a Relationship, got '
+                        f'{type(link).__name__}: {link!r}. Build one with '
+                        f'Relationship(source_table, source_column, '
+                        f'target_table, target_column)',
+                        code='INVALID_REQUEST',
+                    )
                 _require_column(built, link.source_table, link.source_column)
                 _require_column(built, link.target_table, link.target_column)
                 _require_joinable(built, link)
@@ -693,9 +756,11 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
             f'table {name!r} column names must be strings; got {non_strings}',
             code='INVALID_REQUEST',
         )
-    # Before any column is described: a list cell cannot be typed, and asking
-    # would raise `unhashable type: 'list'` from inside pandas rather than say
-    # anything useful.
+    # Before any column is described, and not merely for tidiness: typing a
+    # column asks for its distinct values, and a list cell makes that raise
+    # `unhashable type: 'list'` from inside pandas. `Table.__post_init__` asks
+    # the same question again for a table built by hand, which is the route
+    # that has not passed through here.
     for column in frame.columns:
         require_scalar_cells(frame[column], f'{name}.{column}')
 
@@ -731,10 +796,43 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
     return table
 
 
+def _copy_table(table: Table) -> Table:
+    r"""The same table again, field for field, judging nothing.
+
+    Built without the constructor and without the checked setters, for two
+    reasons. Inference deliberately accepts a key with a null in it -- it warns
+    and goes on, because refusing would break frames that worked -- and
+    assignment refuses one, so copying through the setter turned a schema
+    `from_data` had accepted into a request that could not be materialized.
+    And `Table.__post_init__` walks every cell of every column, which on a
+    warehouse extract is a second full scan added to every single request.
+    """
+    copied = Table.__new__(Table)
+    object.__setattr__(copied, 'name', table.name)
+    object.__setattr__(copied, 'data', table.data)
+    object.__setattr__(
+        copied,
+        'columns',
+        {name: _copy_column(column) for name, column in table.columns.items()},
+    )
+    for carried in ('primary_key', 'time_column', 'duplicate_keys'):
+        object.__setattr__(copied, carried, getattr(table, carried))
+    for column in copied.columns.values():
+        object.__setattr__(column, '_table', copied)
+    return copied
+
+
 def _copy_column(column: Column) -> Column:
-    made = Column(name=column.name, dtype=column.dtype, stype=column.stype)
-    for recorded in ('untyped', 'stype_declared'):
-        object.__setattr__(made, recorded, getattr(column, recorded))
+    r"""The same column again, without re-judging it.
+
+    Built field by field rather than through the constructor: a schema is
+    allowed to be inconsistent between two assignments -- that is what
+    `check_consistent` exists to ask about later -- so copying one must not be
+    the moment its storage and meaning are held against each other.
+    """
+    made = Column.__new__(Column)
+    for field_name in ('name', 'dtype', 'stype', 'untyped', 'stype_declared'):
+        object.__setattr__(made, field_name, getattr(column, field_name))
     return made
 
 
@@ -744,22 +842,32 @@ def _column(series: pd.Series, name: str) -> Column:
     `untyped` is set after construction because it is not an init field: a
     caller must not be able to build a column that names a dtype and claims to
     have none, which is the state the adapter resolves by discarding the dtype.
+
+    The values are read once and the answer passed down. `infer_tfm_dtype` on
+    an object column walks every cell, and asking it three times -- for the
+    dtype, again inside the stype, and again for `untyped` -- is what made
+    describing a million rows of warehouse `Decimal` take five seconds before
+    anything was sent. The same data already typed takes three hundredths.
     """
-    built = Column(name=name, dtype=_dtype_of(series), stype=_stype_of(series))
-    if infer_tfm_dtype(series) == UNTYPED:
+    inferred = infer_tfm_dtype(series)
+    built = Column(
+        name=name,
+        dtype=_dtype_of(inferred),
+        stype=_stype_of(series, inferred),
+    )
+    if inferred == UNTYPED:
         object.__setattr__(built, 'untyped', True)
     return built
 
 
-def _dtype_of(series: pd.Series) -> str:
-    dtype = infer_tfm_dtype(series)
+def _dtype_of(inferred: str) -> str:
     # An all-null object column carries no type. Calling it a string is the
     # safe fallback: it round-trips whatever arrives without claiming a width.
-    return 'string' if dtype == UNTYPED else dtype
+    return 'string' if inferred == UNTYPED else inferred
 
 
-def _stype_of(series: pd.Series) -> str:
-    dtype = _dtype_of(series)
+def _stype_of(series: pd.Series, inferred: str | None = None) -> str:
+    dtype = _dtype_of(infer_tfm_dtype(series) if inferred is None else inferred)
     if dtype.startswith('timestamp'):
         return 'timestamp'
     if dtype in {'int32', 'int64', 'float32', 'float64'}:

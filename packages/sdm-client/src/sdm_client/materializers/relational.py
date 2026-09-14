@@ -12,6 +12,7 @@ from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from predictive_query.validator.utils import table_name
 
 from sdm_client.core import dates
 from sdm_client.errors import MissingExtraError, StructuredDataError
@@ -79,9 +80,10 @@ class RelationalMaterializer:
         payloads = self._gather(query, indices, num_context_samples, options)
         return Request.materialized(
             payloads=payloads,
-            schema=self.schema,
+            schema=self.schema.snapshot(),
             query=query.to_string(),
             indices=list(indices),
+            entity_table=table_name(query.entity_column),
             requested_inference={
                 'inference_config': options.get('inference_config') or {}
             },

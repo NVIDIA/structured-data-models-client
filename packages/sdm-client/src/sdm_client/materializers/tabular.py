@@ -46,11 +46,14 @@ class TabularMaterializer:
     ) -> Request:
         r"""Build a request from rows supplied separately by the caller."""
         entity_table_name = table_name(query.entity_column)
+        entity_col = col_name(query.entity_column)
         target_col = col_name(query.target_column)
 
         return Request(
             context=_context_within_limit(
-                self.schema[entity_table_name].data,
+                _without_the_rows_being_scored(
+                    self.schema[entity_table_name].data, predict, entity_col
+                ),
                 None,
                 entity_table_name,
                 'This route takes no num_context_samples, so choose the '
@@ -59,7 +62,7 @@ class TabularMaterializer:
             predict=predict,
             target=target_col,
             task=self._infer_task_type(query),
-            schema=self.schema,
+            schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
 
@@ -113,7 +116,7 @@ class TabularMaterializer:
             predict=predict,
             target=target_col,
             task=self._infer_task_type(query),
-            schema=self.schema,
+            schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
 
@@ -171,3 +174,26 @@ def _context_within_limit(
             stacklevel=caller_stacklevel(),
         )
     return candidates.sample(n=wanted, random_state=_CONTEXT_SEED).sort_index()
+
+
+def _without_the_rows_being_scored(
+    table: pd.DataFrame, predict: pd.DataFrame, entity_col: str
+) -> pd.DataFrame:
+    r"""The table, minus any row the caller is about to ask about.
+
+    The `indices=` route does this and this one did not, so the two
+    single-table routes disagreed about whether a row may be both scored and
+    shown. Rows supplied separately are often rows the table already holds --
+    that is how anyone checks a model against answers they have -- and leaving
+    them in the context hands the model those answers, labelled, and returns
+    what reads like accuracy.
+
+    Rows the table does not hold are what the route is for, and they simply
+    match nothing here.
+    """
+    if entity_col not in table.columns or entity_col not in predict.columns:
+        return table
+    scored = set(predict[entity_col])
+    if not scored:
+        return table
+    return table[~table[entity_col].isin(scored)]

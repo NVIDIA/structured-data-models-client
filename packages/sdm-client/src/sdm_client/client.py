@@ -609,5 +609,6 @@ def _scored_keys(request: Request) -> frozenset[Any]:
     if frame is None or not names or any(n not in frame for n in names):
         return frozenset()
     return frozenset(
-        _named_by(values) for values in zip(*(frame[n] for n in names))
+        _named_by(values)
+        for values in zip(*(frame[n] for n in names), strict=True)
     )

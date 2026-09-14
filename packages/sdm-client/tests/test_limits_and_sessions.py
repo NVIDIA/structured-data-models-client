@@ -229,6 +229,7 @@ def test_the_preflight_runs_through_a_real_materialized_request():
         schema=schema,
         query='PREDICT ... FOR EACH users.user_id',
         indices=[1, 2, 3],
+        entity_table='users',
     )
     assert request.payloads
     assert request.query.startswith('PREDICT')

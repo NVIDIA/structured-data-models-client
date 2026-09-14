@@ -280,6 +280,7 @@ class Request:
         schema: Schema,
         query: str,
         indices: list[Any],
+        entity_table: str,
         requested_inference: Mapping[str, Any] | None = None,
     ) -> Request:
         r"""A request whose data has already been gathered.
@@ -302,14 +303,19 @@ class Request:
                 column_name=target.get('column_name', ''),
                 dtype=target.get('dtype', ''),
             ),
-            entity_table=None,
+            entity_table=entity_table,
             options=dict(first.get('task', {}).get('options', {})),
         )
         empty = pd.DataFrame()
         request.context = Split(instance_table=empty)
         request.predict = Split(instance_table=empty)
         request.inference = dict(first.get('inference', {}))
-        request.entity_table = next(iter(schema), 'instance')
+        # Named by the query, not by whichever table the caller's dict
+        # happened to hold first. Every pre-send description of a relational
+        # request read it from insertion order, so `entity_table` answered
+        # correctly or incorrectly depending on how the schema was built, and
+        # a programmatic caller could not use it as a guard.
+        request.entity_table = entity_table
         request.query = query
         request.indices = indices
         request._payloads = payloads
