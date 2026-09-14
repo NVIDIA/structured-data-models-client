@@ -106,6 +106,12 @@ class Column:
         stype: What the column *means* -- ``'numerical'``, ``'categorical'``,
             ``'ID'``, ``'text'``, ``'timestamp'``. This is the one worth
             correcting: it decides how the model encodes the column.
+        stype_declared: Whether the meaning was assigned rather than inferred.
+            An all-null column is typed ``categorical`` because a schema has to
+            say something, and that placeholder is not a claim about the
+            values; a meaning the caller assigned is. Recorded so the two can
+            be told apart, since only the second is worth refusing a
+            contradiction against.
         untyped: Whether the values carried no type at all -- an all-null
             object column. ``dtype`` is ``'string'`` for those, because a
             schema has to name something and a string round-trips whatever
@@ -119,6 +125,7 @@ class Column:
     dtype: str
     stype: str
     untyped: bool = field(init=False, default=False)
+    stype_declared: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
@@ -136,6 +143,9 @@ class Column:
         if key == 'stype':
             self._check_stype(value)
             self._check_supports_dtype(value, getattr(self, 'dtype', None))
+            if hasattr(self, 'stype'):
+                # Not the first assignment, so somebody chose this.
+                object.__setattr__(self, 'stype_declared', True)
         if key == 'dtype' and getattr(self, 'untyped', False):
             # `untyped` records that inference had nothing to go on. A caller
             # naming the dtype is the information it was missing, so the
@@ -742,8 +752,8 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
 
 def _copy_column(column: Column) -> Column:
     made = Column(name=column.name, dtype=column.dtype, stype=column.stype)
-    if column.untyped:
-        object.__setattr__(made, 'untyped', True)
+    for recorded in ('untyped', 'stype_declared'):
+        object.__setattr__(made, recorded, getattr(column, recorded))
     return made
 
 

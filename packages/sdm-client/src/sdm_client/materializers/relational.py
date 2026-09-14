@@ -11,10 +11,12 @@ from contextlib import contextmanager
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
+
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Schema, _as_key_tuple
+from sdm_client.schema import Schema, Table, _as_key_tuple
 
 if TYPE_CHECKING:
     from predictive_query import TaskType, ValidatedPredictiveQuery
@@ -173,7 +175,7 @@ class RelationalMaterializer:
         self.schema.check_consistent()
 
         frames = {
-            name: table.data for name, table in self.schema.tables.items()
+            name: _as_typed(table) for name, table in self.schema.tables.items()
         }
         graph = Graph.from_data(frames, edges=[], verbose=False)
 
@@ -444,3 +446,88 @@ class RelationalMaterializer:
                 f'{limits["hops_max"]}',
                 code='UNSUPPORTED_REQUEST',
             )
+
+
+def _as_typed(table: Table) -> pd.DataFrame:
+    r"""The table's rows, with any decimal column cast to what it was typed.
+
+    A warehouse `DECIMAL` arrives from pandas as an `object` column of
+    :class:`~decimal.Decimal`. The schema layer reads the values and types it
+    -- `int64` for whole numbers, `float64` otherwise -- and the tabular path
+    sends it happily. The relational path handed the engine the raw frame
+    instead, which re-infers from the object column, reaches a different answer
+    and eventually meets a `Decimal` where a dtype name belongs:
+
+        dtype '<class 'decimal.Decimal'>' not understood
+
+    naming no table, no column and no remedy. Since every numeric column of a
+    Databricks or Snowflake table is `DECIMAL`, that is the first question
+    anyone asks of a warehouse through this SDK's own connector.
+
+    The two halves also disagreed about what such a column is. The engine maps
+    decimal content to float unconditionally, so an exact identifier became a
+    float and composite keys over warehouse data were refused outright. Handing
+    over the type the schema already computed settles both: there is one answer
+    now, and it is the one the schema reports.
+    """
+    frame = table.data
+    if frame is None or frame.empty:
+        return frame
+    cast = {}
+    for name, column in table.columns.items():
+        if name not in frame.columns or not _holds_decimal(frame[name]):
+            continue
+        cast[name] = _to_declared(
+            frame[name], column.dtype, f'{table.name}.{name}'
+        )
+    return frame.assign(**cast) if cast else frame
+
+
+def _holds_decimal(values: pd.Series) -> bool:
+    if isinstance(getattr(values.dtype, 'pyarrow_dtype', None), object):
+        if 'decimal' in str(getattr(values.dtype, 'pyarrow_dtype', '')):
+            return True
+    if not pd.api.types.is_object_dtype(values.dtype):
+        return False
+    return pd.api.types.infer_dtype(values, skipna=True) == 'decimal'
+
+
+def _to_declared(values: pd.Series, dtype: str, where: str) -> pd.Series:
+    r"""``values`` as ``dtype``, exactly.
+
+    Only what the schema asked for. A whole decimal too wide for an `int64` is
+    typed `string` precisely so its digits survive, and reading "not an int" as
+    "a float" would put 9223372036854775808 back as 9.223372036854776e+18 --
+    the corruption this exists to prevent, reintroduced one branch over.
+
+    A column with a missing value cannot be a plain `int64`, so it becomes
+    pandas' nullable `Int64` rather than widening to float and rounding an
+    identifier.
+    """
+    if dtype.startswith('float'):
+        return pd.to_numeric(values.astype(object), errors='coerce').astype(
+            'float64'
+        )
+    if not dtype.startswith('int'):
+        # `string`, for a whole number wider than an int64 holds. Only the
+        # digits matter and only a string keeps all of them.
+        return values.map(lambda value: None if pd.isna(value) else str(value))
+    # int() on the Decimal, never pd.to_numeric: that converts through a
+    # float64 and 9007199254740993 comes back 9007199254740992. These are
+    # identifiers, and the low bit is the whole of their job.
+    fractional = values.map(
+        lambda value: not pd.isna(value) and value != int(value)
+    )
+    if fractional.any():
+        example = values[fractional].iloc[0]
+        raise StructuredDataError(
+            f'column {where} is declared {dtype!r} and holds {example!r}, '
+            f'which is not a whole number. Sending it would round the value '
+            f'without saying so; declare the column float64, or round it '
+            f'yourself if that is what you meant',
+            code='INVALID_REQUEST',
+        )
+    whole = values.map(lambda value: pd.NA if pd.isna(value) else int(value))
+    if whole.isna().any():
+        return whole.astype('Int64')
+    return whole.astype('int64')

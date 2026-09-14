@@ -37,6 +37,7 @@ from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
+from sdm_client.schema import Column, supports_dtype
 from sdm_client.wire import (
     UNTYPED,
     encode_table,
@@ -194,7 +195,11 @@ class TabularAdapter:
         schema_columns = {
             name: {
                 'dtype': dtypes[name],
-                'stype': self._stype_for(request, table[name].stype, name),
+                'stype': _coherent_stype(
+                    self._stype_for(request, table[name].stype, name),
+                    dtypes[name],
+                    table[name],
+                ),
             }
             for name in context.columns
         }
@@ -387,3 +392,33 @@ def _named_entities(
             code='INVALID_RESPONSE',
         )
     return named
+
+
+#: What a dtype means when nothing else says. Only reached for a column whose
+#: meaning was never claimed, so it is the dtype's own reading rather than a
+#: guess about the data.
+_MEANING_OF = {
+    'timestamp[us]': 'timestamp',
+    'int64': 'numerical',
+    'int32': 'numerical',
+    'float64': 'numerical',
+    'float32': 'numerical',
+    'bool': 'categorical',
+}
+
+
+def _coherent_stype(stype: str, dtype: str, column: Column) -> str:
+    r"""A meaning the dtype can actually carry.
+
+    An all-null context column is typed `categorical` because a schema has to
+    say something. The scored rows then decide its dtype, and if they hold
+    timestamps the column goes out as `timestamp[us]` meaning `categorical` --
+    which is not a thing a column can be, and is the same self-contradiction on
+    the wire that a scored frame re-typing a real column used to produce.
+
+    Only the placeholder is overridden. A meaning the caller assigned is a
+    claim and is refused rather than quietly rewritten, before it reaches here.
+    """
+    if supports_dtype(stype, dtype) or column.stype_declared:
+        return stype
+    return _MEANING_OF.get(dtype, 'categorical')

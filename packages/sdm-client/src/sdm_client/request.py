@@ -36,8 +36,8 @@ from typing import Any
 import pandas as pd
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.schema import Schema
-from sdm_client.wire import is_container
+from sdm_client.schema import Schema, supports_dtype
+from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -230,6 +230,10 @@ class Request:
                 {entity_table: context, **related},
                 relationships=None if related else (),
             )
+
+        _check_scored_values_mean_what_the_schema_says(
+            predict, schema, entity_table
+        )
 
         # And the other direction: a feature the model was shown has to be
         # supplied for the rows being scored. The endpoint rejects a predict
@@ -443,3 +447,69 @@ def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
     # as an envelope carrying no rows rather than as one that cannot be read,
     # and those are the two answers this has to keep apart.
     return len(rows) if isinstance(rows, (list, tuple)) else None
+
+
+def _check_scored_values_mean_what_the_schema_says(
+    predict: pd.DataFrame, schema: Schema, entity_table: str | None
+) -> None:
+    r"""Refuse rows whose values contradict what their column means.
+
+    The columns of the two halves are already checked against each other, by
+    name, each with a message naming the fix. The values were not, and the
+    adapter widens a column's dtype to cover both halves -- rightly, for the
+    case it was written for: an all-null context column carries no type, and
+    taking the context's answer alone would send the scored half's integers as
+    text.
+
+    Nothing bounded it. A column the schema declares `float64` meaning
+    `numerical` could be widened to `string` by scored rows holding text, and
+    `stype` is read from the schema on another path and is not widened with it,
+    so the request went out declaring a column that is `string` and
+    `numerical` at once -- which is not a thing a column can be. It was
+    answered rather than refused: measured against the live endpoint on a
+    target that is exactly three times a feature, the scored rows came back
+    300.0, 329.9 and 299.7 where the truth is 300, 330 and 360. Plausible
+    numbers, one wrong by a sixth, and nothing in the answer to say so.
+
+    Only a contradiction is refused. Integers in a `float64` column and unseen
+    labels in a `categorical` one still mean what the column means, and pass.
+
+    Runs after the schema is settled rather than beside the column checks it
+    belongs with: a request built by hand may carry no schema at all, and one
+    is inferred from the context a few lines below. Checking before that ran
+    left the hand-built request -- the one with no query to have validated it
+    -- as the only one not covered.
+    """
+    if predict is None or entity_table is None or entity_table not in schema:
+        # Not skipped merely for being empty: `pd.Series([], dtype='int64')`
+        # still says int64, and a zero-row batch that declares a type the
+        # column cannot mean would build the same contradictory envelope as a
+        # full one. A column that genuinely carries no type reports UNTYPED
+        # below and is skipped there.
+        return
+    table = schema[entity_table]
+    for name in predict.columns:
+        column = table.columns.get(name)
+        if column is None:
+            continue
+        if column.untyped and not column.stype_declared:
+            # No claim to contradict. An all-null context column is what
+            # widening exists for, and the `categorical` it was given is a
+            # placeholder rather than a finding, so the scored rows decide both
+            # its type and its meaning. Once a caller has said what the column
+            # means, that is a claim like any other.
+            continue
+        arriving = infer_tfm_dtype(predict[name])
+        if arriving == UNTYPED or supports_dtype(column.stype, arriving):
+            continue
+        raise StructuredDataError(
+            f'the rows being scored hold {arriving!r} in column {name!r}, and '
+            f'the schema declares it {column.dtype!r} meaning '
+            f'{column.stype!r}, which {arriving!r} cannot mean. Sent, the '
+            f'column would be described as both at once and answered with '
+            f'numbers that are wrong without saying so. Convert it before '
+            f'scoring -- predict[{name!r}] = pd.to_numeric(predict[{name!r}]) '
+            f'-- or say what the column really is with '
+            f'schema[{entity_table!r}][{name!r}].stype = ...',
+            code='INVALID_REQUEST',
+        )
