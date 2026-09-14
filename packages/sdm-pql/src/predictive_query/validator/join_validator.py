@@ -2,6 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from collections import deque
+
 from predictive_query.ast import (
     Aggregation,
     ASTNode,
@@ -136,6 +138,53 @@ class JoinValidator:
             return True
         return any(self._contains_aggregation(child) for child in node.children)
 
+    def _route_between(self, start: str, goal: str) -> list[str]:
+        r"""The shortest route of foreign keys from ``start`` to ``goal``.
+
+        Only for explaining a refusal. An aggregation joins on a single key, so
+        a target two tables away cannot be expressed however short the route
+        is -- but "there is no foreign key from C to A" is false when C reaches
+        A through B, and it sends the caller to add a key rather than to ask
+        the question one level down.
+
+        Directed, child to parent, because an undirected walk invents routes
+        that cannot be travelled. `A -> B` is the reverse of `B -> A` and
+        finding it would advise aggregating the parent for each child, which is
+        the query that was just refused; two children of one parent are joined
+        to it and to nothing else, and finding `C -> A -> D` would advise a
+        join between siblings that does not exist. The parent of a group is the
+        table whose own primary key is in it.
+        """
+        points_at: dict[str, set[str]] = {}
+        for col_group in self.graph.col_groups:
+            tables = {column.table_name for column in col_group.columns}
+            parents = {
+                table
+                for table in tables
+                if self.graph.tables[table].pkey is not None
+                and ColumnKey(table, self.graph.tables[table].pkey)
+                in col_group.columns
+            }
+            if len(parents) != 1:
+                # Two tables joined on each other's key, or neither on its own:
+                # no parent to name, so no route through here.
+                continue
+            parent = next(iter(parents))
+            for child in tables - {parent}:
+                points_at.setdefault(child, set()).add(parent)
+
+        seen = {start}
+        queue: deque[list[str]] = deque([[start]])
+        while queue:
+            route = queue.popleft()
+            for parent in sorted(points_at.get(route[-1], ())):
+                if parent == goal:
+                    return [*route, parent]
+                if parent not in seen:
+                    seen.add(parent)
+                    queue.append([*route, parent])
+        return []
+
     def _find_keys(
         self,
         node: Column | Aggregation,
@@ -187,11 +236,22 @@ class JoinValidator:
                 if col.table_name == table_of_interest
                 and not (fkey_table == pkey_table and col.col_name == pkey_col)
             ]
-            if is_keys_group:
-                keys = curr_keys
-            else:
-                assert is_rev_keys_group
-                reverse_keys = curr_keys
+            assert is_keys_group or is_rev_keys_group
+            found = keys if is_keys_group else reverse_keys
+            # Accumulated across groups, not assigned from the last one. A
+            # group qualifies by holding the parent key, which every child of
+            # that parent does, so a sibling's group reaches here with no
+            # column of the table being asked about and used to overwrite the
+            # answer an earlier group had found. That left only the
+            # last-declared child of a parent aggregatable, and reversing the
+            # declaration order swapped which one worked.
+            #
+            # Accumulating is also what makes the ambiguity check true: two
+            # foreign keys from one table into the same parent arrive as two
+            # groups, and taking the last would see one key and call the join
+            # unique when it is not. Repeats are dropped so that a group seen
+            # twice cannot report an ambiguity that is not there.
+            found.extend(key for key in curr_keys if key not in found)
 
         if isinstance(node, Aggregation):
             pkey_name = self.graph.tables[pkey_table].pkey
@@ -303,14 +363,45 @@ class JoinValidator:
                         )
                     )
             if is_aggregation or len(reverse_keys) == 0:
+                through = self._route_between(fkey_table, pkey_table)
+                if through and isinstance(node, Aggregation):
+                    # There is a way from one table to the other; it is just
+                    # longer than a join can be. Saying "there is no foreign
+                    # key" sends the caller to add one that already exists a
+                    # hop away, which is the wrong repair for the wrong
+                    # problem.
+                    explanation = (
+                        f'{fkey_table} reaches {pkey_table} through '
+                        f'{" -> ".join(through)}, and an aggregation joins on '
+                        f'one key rather than following a path, so its target '
+                        f'has to be a table that points at {pkey_table} '
+                        f'directly. Aggregate {fkey_table} for each '
+                        f'{through[1]} instead, or carry '
+                        f"{pkey_table}'s key on {fkey_table} as well."
+                    )
+                elif through:
+                    # The same distance, a different question: this one reads a
+                    # column rather than aggregating rows, so the repair is a
+                    # column one hop away rather than an aggregation one level
+                    # down.
+                    explanation = (
+                        f'{node.fqn} is on {pkey_table}, which {fkey_table} '
+                        f'reaches through {" -> ".join(through)}, and a query '
+                        f'follows one foreign key rather than a path. Ask for '
+                        f'a column of {through[1]} instead, or carry '
+                        f"{pkey_table}'s key on {fkey_table} as well."
+                    )
+                else:
+                    explanation = (
+                        f'There is no foreign key from table {fkey_table} to '
+                        f'table {pkey_table}. {additional_explanation}'
+                    )
                 response.errors.append(
                     ValidationError(
                         title='Missing foreign key',
                         message=f'{node.get_location().message_start}: '
                         f"Encountered an error when processing '{node}'. "
-                        f'There is no foreign key from table '
-                        f'{fkey_table} to table {pkey_table}. '
-                        f'{additional_explanation}',
+                        f'{explanation}',
                         code=codes.JOIN_MISSING_FOREIGN_KEY,
                         span=Span.at(node.get_location()),
                     )
