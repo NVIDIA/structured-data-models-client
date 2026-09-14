@@ -44,6 +44,17 @@ _SCALAR_FIELDS = ('row_index', 'id', 'forecast_step', 'prediction')
 _MAPPING_FIELDS = {'probabilities': 'probability', 'quantiles': 'quantile'}
 _SEQUENCE_FIELDS = ('scores', 'embeddings')
 
+# Every field a caller may ask for, and where the answer carries it. All but
+# `explanation` ride on the items; that one is lifted out by the adapter.
+_ITEM_FIELDS = (
+    'prediction',
+    'probabilities',
+    'quantiles',
+    'scores',
+    'rankings',
+    'embeddings',
+)
+
 
 class PredictionResult:
     r"""The answer to one request.
@@ -72,6 +83,39 @@ class PredictionResult:
         self.outputs = tuple(outputs)
         self.metadata = dict(metadata or {})
         self._explanation = explanation
+
+    def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
+        r"""Which of ``requested`` the answer does not carry.
+
+        A field a model produces for one task kind and not another is accepted
+        by the endpoint, answered `200`, and simply left out -- so a caller who
+        names it reads a frame that has no such column and nothing anywhere
+        said why. Rather than deciding in advance which model produces what for
+        which kind, which is a moving target across deployments, this reports
+        what the answer turned out not to contain.
+        """
+        if not self.items:
+            # Nothing came back, so nothing can be looked for. An empty batch
+            # is a supported request with a real empty answer, and reporting
+            # every field as missing would make the one case that is always
+            # legitimate the noisiest.
+            return ()
+        return tuple(
+            name for name in dict.fromkeys(requested) if not self._carries(name)
+        )
+
+    def _carries(self, name: str) -> bool:
+        if name == 'explanation':
+            return self._explanation is not None
+        if name not in _ITEM_FIELDS:
+            # Not a field this type knows how to look for. Reporting it absent
+            # would be a guess, and the request was refused already if it were
+            # a field no model produces.
+            return True
+        return any(
+            getattr(item, name, None) not in (None, {}, [], ())
+            for item in self.items
+        )
 
     @property
     def explanation(self) -> dict[str, Any] | None:

@@ -34,7 +34,6 @@ Nothing here contacts a model. Inference reads your frames locally.
 from __future__ import annotations
 
 import re
-import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -42,6 +41,7 @@ from typing import Any, NamedTuple
 
 import pandas as pd
 
+from sdm_client.core.warnings import caller_stacklevel
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire import (
     UNTYPED,
@@ -345,7 +345,7 @@ class Table:
                 f'{quality.duplicates} time(s) it has already been used, '
                 f'e.g. {quality.example!r}. Those rows are '
                 f'indistinguishable to the model.{remedy}',
-                stacklevel=_warning_stacklevel(),
+                stacklevel=caller_stacklevel(),
             )
 
     def _check_name(self, name: str) -> None:
@@ -726,7 +726,7 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
             f'no value for it. Those rows cannot be scored and the model '
             f'will not see them; fill or drop them, or name a different '
             f'primary key.',
-            stacklevel=_warning_stacklevel(),
+            stacklevel=caller_stacklevel(),
         )
         object.__setattr__(table, 'primary_key', inferred)
         table._adopt_key(inferred)
@@ -860,7 +860,7 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
             f'frame[{name!r}] = pd.to_datetime(frame[{name!r}]{how}) -- or '
             f'set schema[{table.name!r}][{name!r}].stype = {"timestamp"!r} '
             f'afterwards.',
-            stacklevel=_warning_stacklevel(),
+            stacklevel=caller_stacklevel(),
         )
         return name
     return None
@@ -967,7 +967,7 @@ def _warn_table_cannot_be_linked_to(
             f'of {name!r} and {"are" if len(candidates) > 1 else "is"} named '
             f'by another table too; if that is the key, say so with '
             f'primary_keys={{{name!r}: {suggestion}}}.',
-            stacklevel=_warning_stacklevel(),
+            stacklevel=caller_stacklevel(),
         )
 
 
@@ -1092,23 +1092,6 @@ def supports_dtype(stype: str, dtype: str) -> bool:
         )
     except ValueError:
         return True
-
-
-def _warning_stacklevel() -> int:
-    r"""How far up to point a warning so it lands on the caller's line.
-
-    Assigning a key warns three frames up; inferring one warns from deeper,
-    because `Schema.from_data` reaches the same setter through `_infer_table`.
-    A fixed number is right for one route and blames this module on the other,
-    which is the route most callers take. Counting the frames that belong to
-    this file answers for both.
-    """
-    depth = 1
-    frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get('__name__') == __name__:
-        depth += 1
-        frame = frame.f_back
-    return depth
 
 
 class _KeyQuality(NamedTuple):

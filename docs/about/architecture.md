@@ -470,13 +470,22 @@ nothing, which is the defect this replaced. The count narrows the gathered
 examples where they are built, before anything is encoded.
 
 The client **pre-flights the server's limits before sending**, so you get a readable error instead of
-a 500.
+a 500. Both endpoints cap a context; the rest of these are the relational one's.
 
-| Size limit | Value |
+| Size limit (relational) | Value |
 |---|---|
 | context rows | 1,000 with an explanation, else 10,000 |
 | predict rows | 1,000, or 200 for link prediction |
 | explanation | exactly 1 entity, and forces the `fast` budget |
+
+| Size limit (tabular) | Value |
+|---|---|
+| context rows | 10,000 |
+
+The tabular cap is enforced where the context is chosen. A number above it is
+refused with the limit named; omitting the number takes a sample of 10,000 and
+says so, because the alternative is encoding a table of any size and being
+refused at the far end.
 
 | Structural limit (relational) | Value |
 |---|---|

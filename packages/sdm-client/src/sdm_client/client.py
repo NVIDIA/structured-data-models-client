@@ -16,6 +16,7 @@ the endpoint and credential of the client that started it.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from types import TracebackType
 from typing import Any
@@ -28,6 +29,7 @@ from sdm_client.base import (
     describe,
 )
 from sdm_client.core.transport import Transport, redact_url
+from sdm_client.core.warnings import caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
@@ -79,11 +81,15 @@ class FittedModel:
         session_id: str,
         outputs: tuple[str, ...],
         pinned: dict[str, Any] | None = None,
+        named_outputs: Sequence[str] | None = None,
     ) -> None:
         self._client = client
         self._adapter = adapter
         self._session_id = session_id
         self._outputs = outputs
+        self._named_outputs = (
+            None if named_outputs is None else tuple(named_outputs)
+        )
         self._pinned = pinned or {}
         self._closed = False
 
@@ -126,7 +132,9 @@ class FittedModel:
                 'the adapter produced no scoring call for this request',
                 code='INVALID_REQUEST',
             )
-        return PredictionResult.merge(parts)
+        return _report_absent(
+            PredictionResult.merge(parts), self._named_outputs, self.model
+        )
 
     def close(self) -> None:
         r"""Release the pinned context. Safe to call twice."""
@@ -253,7 +261,9 @@ class SDMClient:
                 'the adapter produced no call for this request',
                 code='INVALID_REQUEST',
             )
-        return PredictionResult.merge(parts)
+        return _report_absent(
+            PredictionResult.merge(parts), outputs, adapter.spec.model_id
+        )
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -317,6 +327,7 @@ class SDMClient:
             str(session_id),
             fields,
             {key: value for key, value in payload.items() if key != 'context'},
+            named_outputs=outputs,
         )
 
     def _prepare(
@@ -397,3 +408,35 @@ class SDMClient:
 
     def __repr__(self) -> str:
         return f'SDMClient(url={redact_url(self._transport.url)!r})'
+
+
+def _report_absent(
+    result: PredictionResult, requested: Sequence[str] | None, model: str
+) -> PredictionResult:
+    r"""Say when the answer does not carry a field the caller named.
+
+    Only for fields the caller named. The defaults are chosen per task kind and
+    a model is entitled not to fill one of them; a caller who named a field is
+    waiting for a column that is not going to appear.
+
+    Not raised, because the answer is a real answer to the rest of the request
+    and the endpoint accepted it. A caller who wants this to be fatal can turn
+    warnings into errors; a caller who does not now at least knows.
+
+    It reports what the answer did not contain and does not say why. The reason
+    varies and is not knowable from here: `kumo-relational` returns
+    `prediction` for a regression asked on its own and omits it when quantiles
+    are asked for alongside, so "the model does not produce it for this task
+    kind" would be false in exactly the case that prompted this.
+    """
+    if not requested:
+        return result
+    absent = result.absent(requested)
+    if absent:
+        warnings.warn(
+            f'{model} answered without {list(absent)}, which this request '
+            f'asked for, so no column of to_pandas() will carry it. The '
+            f'answer to the rest of the request is unaffected.',
+            stacklevel=caller_stacklevel(),
+        )
+    return result

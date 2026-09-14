@@ -6,6 +6,7 @@ r"""Build single-table requests from rows supplied by the caller."""
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Hashable, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -13,7 +14,9 @@ import pandas as pd
 from predictive_query import Stype
 from predictive_query.validator.utils import col_name, table_name
 
+from sdm_client.core.warnings import caller_stacklevel
 from sdm_client.errors import StructuredDataError
+from sdm_client.models import TABULAR_LIMITS
 from sdm_client.request import Request
 from sdm_client.schema import Schema
 
@@ -21,6 +24,7 @@ if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
 
 _CONTEXT_SEED = 42
+_CONTEXT_ROWS_MAX = TABULAR_LIMITS['context_rows_max']
 
 
 class TabularMaterializer:
@@ -45,7 +49,13 @@ class TabularMaterializer:
         target_col = col_name(query.target_column)
 
         return Request(
-            context=self.schema[entity_table_name].data,
+            context=_context_within_limit(
+                self.schema[entity_table_name].data,
+                None,
+                entity_table_name,
+                'This route takes no num_context_samples, so choose the '
+                'context by building the schema from the rows you want.',
+            ),
             predict=predict,
             target=target_col,
             task=self._infer_task_type(query),
@@ -90,13 +100,13 @@ class TabularMaterializer:
         context_mask.iloc[scored] = False
         candidates = entity_table[context_mask]
 
-        if num_context_samples is None:
-            context = candidates
-        else:
-            context = candidates.sample(
-                n=min(num_context_samples, len(candidates)),
-                random_state=_CONTEXT_SEED,
-            ).sort_index()
+        context = _context_within_limit(
+            candidates,
+            num_context_samples,
+            entity_table_name,
+            'Pass num_context_samples to choose how many, or select the rows '
+            'yourself.',
+        )
 
         return Request(
             context=context,
@@ -119,3 +129,45 @@ class TabularMaterializer:
         if query.target_stype == Stype.categorical:
             return 'classification'
         return 'regression'
+
+
+def _context_within_limit(
+    candidates: pd.DataFrame,
+    num_context_samples: int | None,
+    table: str,
+    remedy: str,
+) -> pd.DataFrame:
+    r"""The context rows, never more than the endpoint will take.
+
+    The endpoint refuses a context above its limit, and refuses it *after* the
+    whole thing has been encoded into JSON and transmitted -- a table of
+    hundreds of thousands of rows sent in full to be told the limit is ten
+    thousand. The relational side has declared its limits and refused locally
+    all along; this is the same thing on the other model.
+
+    A number the caller named above the limit is an error, because they asked
+    for something that cannot happen and quietly giving them less would answer
+    a different question. Saying nothing is a choice about how much data the
+    model sees, so it is made here and said out loud.
+    """
+    if num_context_samples is not None:
+        if num_context_samples > _CONTEXT_ROWS_MAX:
+            raise StructuredDataError(
+                f'num_context_samples is {num_context_samples:,}, and the '
+                f'endpoint accepts at most {_CONTEXT_ROWS_MAX:,} context '
+                f'rows',
+                code='UNSUPPORTED_REQUEST',
+            )
+        wanted = num_context_samples
+    else:
+        wanted = _CONTEXT_ROWS_MAX
+    if len(candidates) <= wanted:
+        return candidates
+    if num_context_samples is None:
+        warnings.warn(
+            f'{table} has {len(candidates):,} rows that could be context and '
+            f'the endpoint accepts {_CONTEXT_ROWS_MAX:,}, so {wanted:,} were '
+            f'sampled. {remedy}',
+            stacklevel=caller_stacklevel(),
+        )
+    return candidates.sample(n=wanted, random_state=_CONTEXT_SEED).sort_index()

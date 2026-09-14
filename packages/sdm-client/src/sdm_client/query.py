@@ -81,9 +81,11 @@ class PredictiveQuery:
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
 
-        The request takes one of three paths: predict=<frame> uses the full
-        single table as context, the tabular route builds the request directly
-        in pandas, and the relational route gathers the tables as a graph.
+        The request takes one of three paths: predict=<frame> uses the single
+        table as context, the tabular route builds the request directly in
+        pandas, and the relational route gathers the tables as a graph. Either
+        single-table path samples the context down to what the endpoint
+        accepts, and says so when it does.
 
         ``model`` chooses between the last two. Left unsaid, the schema's shape
         decides, and the shape that counts is the one
@@ -100,8 +102,9 @@ class PredictiveQuery:
             predict: Rows supplied directly for scoring. Supported for
                 single-table schemas and mutually exclusive with ``indices``.
             num_context_samples: For ``indices`` requests, the maximum number
-                of labelled context rows to use. When omitted, single-table
-                requests use all eligible rows; relational requests use up to
+                of labelled context rows to use. Capped at what the endpoint
+                accepts. When omitted, a single-table request uses every
+                eligible row up to that cap, and a relational one uses up to
                 1,000.
             model: The model this request is being gathered for, as a handle
                 such as ``KumoRelational()`` or a model id. Defaults to the
@@ -249,9 +252,10 @@ class PredictiveQuery:
                 )
             if num_context_samples is not None:
                 raise StructuredDataError(
-                    'num_context_samples cannot be used with predict=<frame>: '
-                    'the schema table is used as context in full. To use less '
-                    'context, construct the query with a smaller table',
+                    'num_context_samples cannot be used with '
+                    'predict=<frame>: the schema table is the context. To '
+                    'choose the context, build the schema from the rows you '
+                    'want',
                     code='INVALID_REQUEST',
                 )
 

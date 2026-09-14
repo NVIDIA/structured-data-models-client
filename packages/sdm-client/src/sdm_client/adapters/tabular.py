@@ -78,7 +78,13 @@ class TabularAdapter:
     def prediction_plan(
         self, request: Request, outputs: tuple[str, ...]
     ) -> Iterator[dict[str, Any]]:
-        r"""One payload. The endpoint caps nothing this model has to split on."""
+        r"""One payload.
+
+        The endpoint caps the context at 10,000 rows, which is enforced where
+        the context is chosen rather than by splitting here: every call would
+        have to carry the same context, so splitting would multiply the upload
+        without raising the cap.
+        """
         yield self._envelope(request, outputs)
 
     def session_plan(

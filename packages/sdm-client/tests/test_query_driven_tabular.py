@@ -185,7 +185,7 @@ def test_the_task_kind_is_not_narrowed_from_the_targets_cardinality():
 
 
 def test_the_contexts_differ_by_design():
-    """Disjoint on one path; the whole table on the other."""
+    """Disjoint on one path; the table itself on the other."""
     frame = users()
     from_indices = query(frame).materialize(indices=[1, 2])
     from_rows = query(frame).materialize(
