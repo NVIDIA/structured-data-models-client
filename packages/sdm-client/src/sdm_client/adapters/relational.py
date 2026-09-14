@@ -34,6 +34,7 @@ from sdm_client.errors import (
 from sdm_client.models import KUMO_RELATIONAL
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
+from sdm_client.wire import as_declared
 
 # What to ask for when the caller named nothing, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -176,7 +177,10 @@ class RelationalAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=_named_entities(parsed.predictions, payload),
+            items=_as_declared_target(
+                _named_entities(parsed.predictions, payload),
+                payload,
+            ),
             metadata=parsed.metadata,
             outputs=outputs,
             explanation=explanation,
@@ -410,7 +414,12 @@ def _named_entities(
     if reference is None:
         return list(items)
 
-    entities = [row[columns.index(reference)] for row in rows]
+    entities = [
+        as_declared(
+            row[columns.index(reference)], _key_dtype(payload, reference)
+        )
+        for row in rows
+    ]
     instances = (
         [row[columns.index('instance_id')] for row in rows]
         if 'instance_id' in columns
@@ -476,7 +485,7 @@ def _named_entities(
                     f'{instances[index]!r} there',
                     code='INVALID_RESPONSE',
                 )
-        named.append(dataclasses.replace(item, id=str(entities[index])))
+        named.append(dataclasses.replace(item, id=entities[index]))
 
     answered = {index for index, _ in seen}
     if answered != set(range(len(entities))):
@@ -496,3 +505,71 @@ def _forecast_task(payload: dict[str, Any]) -> bool:
     duplicate guard for every other row in the response.
     """
     return payload.get('task', {}).get('kind') == 'forecasting'
+
+
+def _key_dtype(payload: dict[str, Any], reference: str) -> str | None:
+    r"""The dtype of the column the entity reference stands for.
+
+    An integer wider than a double travels as a base-10 string by contract, so
+    a key past 2**53 comes back as text unless what it was is looked up. The
+    reference column itself is declared `string` -- it is a transport key --
+    so the answer is on the table it points at.
+    """
+    schema = payload.get('schema', {})
+    for link in schema.get('relationships', []):
+        if list(link.get('source_columns') or []) != [reference]:
+            continue
+        target = link.get('target_table')
+        columns = link.get('target_columns') or []
+        if not target or len(columns) != 1:
+            return None
+        return (
+            schema.get('related_tables', {})
+            .get(target, {})
+            .get('columns', {})
+            .get(columns[0], {})
+            .get('dtype')
+        )
+    return None
+
+
+def _as_declared_target(items: list[Any], payload: dict[str, Any] | None):
+    r"""Give `prediction` back as the type the target column holds.
+
+    One endpoint renders a class label as a string and the other sends the
+    number, for the same question on the same integer-coded target. Both are
+    legal and the values agree; only their types differ, so
+
+        sum(1 for row in result if row.prediction == 0)
+
+    counted one of five on one model and none of five on the other -- no
+    exception, a plausible-looking answer, and wrong in the direction of "this
+    class never occurs". The target's dtype is on the wire, so it is read back
+    with it.
+
+    Class labels only. They are values the column held, so giving them back as
+    the column's own type is restoring something. A regression's answer is a
+    number the model computed, and rounding that to the target's dtype would be
+    this client deciding how precise the answer is.
+    """
+    import dataclasses
+
+    task = (payload or {}).get('task', {})
+    if 'classification' not in str(task.get('kind', '')):
+        # Only a class label. A regression's answer is a number the model
+        # computed rather than one of the values the column held, so reshaping
+        # it would be this client deciding how precise the answer is.
+        return items
+    dtype = task.get('target', {}).get('dtype')
+    if not dtype or not (dtype.startswith('int') or dtype.startswith('float')):
+        return items
+    read = []
+    for item in items:
+        value = getattr(item, 'prediction', None)
+        restored = as_declared(value, dtype)
+        read.append(
+            item
+            if restored is value
+            else dataclasses.replace(item, prediction=restored)
+        )
+    return read

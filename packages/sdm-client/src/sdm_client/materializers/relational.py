@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from sdm_client.core import dates
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
@@ -475,12 +476,74 @@ def _as_typed(table: Table) -> pd.DataFrame:
         return frame
     cast = {}
     for name, column in table.columns.items():
-        if name not in frame.columns or not _holds_decimal(frame[name]):
+        if name not in frame.columns:
             continue
-        cast[name] = _to_declared(
-            frame[name], column.dtype, f'{table.name}.{name}'
-        )
+        where = f'{table.name}.{name}'
+        if name == table.time_column and _holds_text(frame[name]):
+            cast[name] = _to_time(frame[name], where)
+        elif _holds_decimal(frame[name]):
+            cast[name] = _to_declared(frame[name], column.dtype, where)
     return frame.assign(**cast) if cast else frame
+
+
+def _holds_text(values: pd.Series) -> bool:
+    r"""Whether this column holds strings, rather than merely being `object`.
+
+    An `object` column can hold `datetime.date` or `pd.Timestamp` as readily as
+    text, and `infer_tfm_dtype` already calls those `timestamp[us]`. Reading
+    the dtype alone would send a column of real dates down the text path and
+    refuse it for being ambiguous, which it is not.
+    """
+    if not (
+        pd.api.types.is_object_dtype(values.dtype)
+        or pd.api.types.is_string_dtype(values.dtype)
+    ):
+        return False
+    return pd.api.types.infer_dtype(values, skipna=True) == 'string'
+
+
+def _to_time(values: pd.Series, where: str) -> pd.Series:
+    r"""A string time column read as dates, or refused for saying two things.
+
+    `supports_dtype('timestamp', 'string')` is true, so a column of date
+    strings can be named as a table's time column and is accepted. The strings
+    then have to become timestamps before the model sees them, and that was
+    left to `pd.to_datetime`'s defaults, which read an ambiguous slash date
+    month-first. A day-first column was silently re-dated -- twelve monthly
+    events across a year became twelve daily events in one week of February --
+    and nothing in the request, the schema or the response recorded that a
+    conversion had happened at all. It surfaced, when it surfaced, as an
+    unrelated complaint about anchor times.
+
+    So only a year-first column is read, because only a year-first column says
+    one thing. `02/01/2020` is the 2nd of January to half the world and the 1st
+    of February to the other half, and the column does not say which; the
+    caller does, by converting it themselves.
+
+    The shape check reads a sample and is only a pre-filter; the conversion
+    below reads every value, so a column that changes shape in its last row is
+    caught there rather than here.
+    """
+    present = values.dropna()
+    if present.empty:
+        return values
+    if dates.looks_unambiguous(present):
+        how = dates.conversion_that_works(present)
+        if how is not None:
+            return dates.read(values, how)
+    example = next(
+        (value for value in present if isinstance(value, str)), present.iloc[0]
+    )
+    column = where.split('.')[-1]
+    raise StructuredDataError(
+        f'{where} is the time column and holds text such as {example!r}, '
+        f'which does not say unambiguously what date it is: read day-first it '
+        f'is one date and month-first another, and nothing in the column says '
+        f'which. Convert it yourself so the reading is yours -- '
+        f'frame[{column!r}] = pd.to_datetime(frame[{column!r}], '
+        f'dayfirst=True) -- or store it year-first',
+        code='INVALID_REQUEST',
+    )
 
 
 def _holds_decimal(values: pd.Series) -> bool:

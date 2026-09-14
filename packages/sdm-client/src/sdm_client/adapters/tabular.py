@@ -32,6 +32,7 @@ from sdm_api.generated.tfm_api import (
     ResponseContractError,
 )
 
+from sdm_client.adapters.relational import _as_declared_target
 from sdm_client.base import ModelSpec
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
@@ -40,6 +41,7 @@ from sdm_client.result import PredictionResult
 from sdm_client.schema import Column, supports_dtype
 from sdm_client.wire import (
     UNTYPED,
+    as_declared,
     encode_table,
     infer_tfm_dtype,
     json_ready,
@@ -126,7 +128,10 @@ class TabularAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=_named_entities(parsed.predictions, payload),
+            items=_as_declared_target(
+                _named_entities(parsed.predictions, payload),
+                payload,
+            ),
             metadata=parsed.metadata,
             outputs=outputs,
         )
@@ -339,9 +344,19 @@ def _named_entities(
         payload.get('schema', {}).get('instance_table', {}).get('primary_key')
         or []
     )
+    named_key = key[0] if len(key) == 1 else None
+    key_dtype = (
+        payload.get('schema', {})
+        .get('instance_table', {})
+        .get('columns', {})
+        .get(named_key, {})
+        .get('dtype')
+        if named_key
+        else None
+    )
     keys = (
-        [row[columns.index(key[0])] for row in rows]
-        if len(key) == 1 and key[0] in columns
+        [as_declared(row[columns.index(named_key)], key_dtype) for row in rows]
+        if named_key and named_key in columns
         else None
     )
     keys_in_batch = {str(value) for value in keys or ()}
@@ -382,7 +397,7 @@ def _named_entities(
         seen.add(index)
         value = None if keys is None else keys[index]
         named.append(
-            item if value is None else dataclasses.replace(item, id=str(value))
+            item if value is None else dataclasses.replace(item, id=value)
         )
 
     if seen != set(range(len(rows))):

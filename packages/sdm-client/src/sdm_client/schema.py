@@ -33,7 +33,6 @@ Nothing here contacts a model. Inference reads your frames locally.
 
 from __future__ import annotations
 
-import re
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -41,6 +40,7 @@ from typing import Any, NamedTuple
 
 import pandas as pd
 
+from sdm_client.core import dates
 from sdm_client.core.warnings import caller_stacklevel
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire import (
@@ -74,25 +74,6 @@ _MAX_CATEGORICAL_CARDINALITY = 64
 _KEY_UNIQUENESS = 0.99
 
 _KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
-
-# A cheap pre-filter, not the test. Whether a column is really dates is
-# settled by converting it; this only decides which columns are worth the
-# conversion, so that a table of prose columns does not pay for one each. It
-# matches whole rather than by prefix for the same reason: to reject sooner.
-_DATE_TEXT = re.compile(
-    r'\d{4}[-/]\d{2}[-/]\d{2}'
-    r'([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?'
-)
-
-# Enough rows to be sure the whole column has one shape, few enough that
-# inference stays cheap on a table of millions.
-_DATE_TEXT_SAMPLE = 1000
-
-# `4711-01-02` is a part number and a valid date, and pandas reads it as the
-# year 4711 without complaint. Nothing in the value distinguishes the two, so
-# the window does: a column of transactional dates lands inside it, and a code
-# that happens to be date-shaped usually does not.
-_PLAUSIBLE_YEARS = (1900, 2100)
 
 
 @dataclass
@@ -847,10 +828,7 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
         if column.dtype != 'string' or column.stype == 'ID':
             continue
         present = frame[name].dropna()
-        sample = present.head(_DATE_TEXT_SAMPLE)
-        if sample.empty or not all(
-            isinstance(v, str) and _DATE_TEXT.fullmatch(v) for v in sample
-        ):
+        if not dates.looks_unambiguous(present):
             # Not a correctness check -- the conversion below rejects
             # everything this would, and more. It is here so that the ordinary
             # case, a table whose string columns are names and descriptions,
@@ -860,7 +838,7 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
         # the whole column rather than sampling or reasoning about it: whether
         # the values past the sample hold their shape, whether they are real
         # dates, and which form of the call a caller should be told to make.
-        how = _conversion_that_works(present)
+        how = dates.conversion_that_works(present)
         if how is None:
             continue
         warnings.warn(
@@ -873,31 +851,6 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
             stacklevel=caller_stacklevel(),
         )
         return name
-    return None
-
-
-def _conversion_that_works(values: pd.Series) -> str | None:
-    r"""The arguments `pd.to_datetime` needs for this column, or nothing.
-
-    Run rather than reasoned about. A column of impossible dates coerces to
-    NaT and one of mixed UTC offsets raises instead of coercing, and both are
-    date-shaped enough to reach here. A column that converts to years no
-    warehouse holds is a code that looks like a date, and telling its owner to
-    convert it would turn part numbers into timestamps.
-    """
-    first, last = _PLAUSIBLE_YEARS
-    for arguments, named in (({}, ''), ({'utc': True}, ', utc=True')):
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                converted = pd.to_datetime(values, errors='coerce', **arguments)
-        except (ValueError, TypeError, OverflowError):
-            continue
-        if converted.isna().any():
-            continue
-        years = converted.dt.year
-        if first <= years.min() and years.max() <= last:
-            return named
     return None
 
 
@@ -1179,6 +1132,24 @@ def to_graph_definition(schema: Schema) -> Any:
                 PQLColumn(name=column.name, stype=stype, dtype=dtype)
             )
         key = table.primary_key
+        if key is not None and not isinstance(key, str):
+            # `TableDefinition.pkey` is a single column name, so the language
+            # has no form for a composite key and cannot be given one. It is
+            # dropped rather than refused, because the engine does support one
+            # and the request that follows will carry it -- but the language
+            # resolves this query against a table it believes has no identity,
+            # so a question that needs one is answered as though the table had
+            # none, and until now nothing said so.
+            warnings.warn(
+                f'table {name!r} has the composite primary key '
+                f'{list(key)}, and a predictive query can only name a single '
+                f'key column, so this query is resolved against {name!r} as '
+                f'though it had no key. The request still carries the '
+                f'composite key; only the query does not see it. Name a '
+                f'single column as the primary key if the query needs to '
+                f'identify a row of {name!r}.',
+                stacklevel=caller_stacklevel(),
+            )
         tables[name] = TableDefinition(
             cols=columns,
             pkey=key if isinstance(key, str) else None,

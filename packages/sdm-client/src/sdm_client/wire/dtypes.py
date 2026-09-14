@@ -578,3 +578,38 @@ def serialize_column(series: pd.Series, dtype: str) -> list[Any]:
     # by `serialize_cell`'s `str(value)` fallback as the repr of a Python list.
     require_scalar_cells(series, f'column {series.name!r}')
     return [serialize_cell(value, dtype) for value in series.tolist()]
+
+
+def as_declared(value: Any, dtype: str | None) -> Any:
+    r"""``value`` read back as ``dtype``, or unchanged if it cannot be.
+
+    The wire is text in places where the caller had a number: an integer wider
+    than a double travels as a base-10 string by contract, and one endpoint
+    renders a class label as a string where the other sends the number. Both
+    are legal, and both leave the caller holding a different type depending on
+    which model answered -- so `result.prediction == 0` counted nothing on one
+    of them, silently and in the direction of "this class never occurs".
+
+    Reading it back is a cast, not a parse: anything that does not convert
+    exactly is returned untouched rather than guessed at.
+    """
+    if value is None or dtype is None or isinstance(value, bool):
+        # A bool is an int in Python and is not a number the caller wrote.
+        return value
+    try:
+        if dtype.startswith('int'):
+            read = int(value)
+            if isinstance(value, str):
+                # `int` accepts only an exact integer literal from text, so
+                # reaching here means it was one.
+                return read
+            # `int(1.9)` does not raise, and a number that is not whole is not
+            # this integer under another name -- true of a float, a numpy
+            # float and a Decimal alike, so it is asked of the value rather
+            # than of its type.
+            return read if read == value else value
+        if dtype.startswith('float'):
+            return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return value
+    return value
