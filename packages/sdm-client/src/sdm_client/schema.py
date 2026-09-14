@@ -33,6 +33,7 @@ Nothing here contacts a model. Inference reads your frames locally.
 
 from __future__ import annotations
 
+import re
 import sys
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
@@ -73,6 +74,25 @@ _MAX_CATEGORICAL_CARDINALITY = 64
 _KEY_UNIQUENESS = 0.99
 
 _KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
+
+# A cheap pre-filter, not the test. Whether a column is really dates is
+# settled by converting it; this only decides which columns are worth the
+# conversion, so that a table of prose columns does not pay for one each. It
+# matches whole rather than by prefix for the same reason: to reject sooner.
+_DATE_TEXT = re.compile(
+    r'\d{4}[-/]\d{2}[-/]\d{2}'
+    r'([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?'
+)
+
+# Enough rows to be sure the whole column has one shape, few enough that
+# inference stays cheap on a table of millions.
+_DATE_TEXT_SAMPLE = 1000
+
+# `4711-01-02` is a part number and a valid date, and pandas reads it as the
+# year 4711 without complaint. Nothing in the value distinguishes the two, so
+# the window does: a column of transactional dates lands inside it, and a code
+# that happens to be date-shaped usually does not.
+_PLAUSIBLE_YEARS = (1900, 2100)
 
 
 @dataclass
@@ -122,6 +142,36 @@ class Column:
             # adapter must stop substituting UNTYPED and send what was asked.
             object.__setattr__(self, 'untyped', False)
         object.__setattr__(self, key, value)
+        if key == 'stype' and value == 'timestamp':
+            self._adopt_as_time_column()
+
+    def _adopt_as_time_column(self) -> None:
+        r"""Let a column named as a timestamp order the table it belongs to.
+
+        `Table._check_time_column` already sets a column's stype when the
+        column is named as the time column. Only that direction was wired, so
+        a caller correcting an inferred schema the way the SDK's own error
+        messages teach -- ``schema[table][column].stype = 'timestamp'`` -- got
+        a table reporting `stype='timestamp'` and `time_column=None` at the
+        same time, and every temporal query on it was refused for want of a
+        time column the schema said was there.
+
+        Only an absent time column is filled: naming a second timestamp does
+        not displace the first. Nothing is adopted when inference already
+        chose, so this resolves the contradiction rather than overriding a
+        decision.
+        """
+        table = getattr(self, '_table', None)
+        if table is None or getattr(table, 'time_column', None) is not None:
+            return
+        if self.name in _as_key_tuple(getattr(table, 'primary_key', None)):
+            # Refusing here would raise from an stype assignment; the two
+            # meanings contradict, and `check_consistent` is where that is
+            # reported.
+            return
+        # Direct, because the checked route sets this column's stype, which
+        # would re-enter here before the attribute it guards on is set.
+        object.__setattr__(table, 'time_column', self.name)
 
     def check_consistent(self) -> None:
         r"""Refuse a column whose storage and meaning contradict each other.
@@ -209,6 +259,33 @@ class Table:
             for column in frame.columns:
                 self._check_name(column)
                 require_scalar_cells(frame[column], f'{self.name}.{column}')
+        self._own_columns()
+
+    def _own_columns(self) -> None:
+        r"""Point every column at this table, and take a copy of any that is
+        already pointing somewhere else.
+
+        The back-reference is what lets a column make itself the time column
+        when it is told it is a timestamp. One `Column` handed to two tables
+        could only point at one of them, so setting the stype through the
+        first would have ordered the second. A column belongs to a table;
+        handing the same one to two is asking for two columns.
+        """
+        borrowed = [
+            name
+            for name, column in self.columns.items()
+            if getattr(column, '_table', None) not in (None, self)
+        ]
+        if borrowed:
+            # A new dict, so a caller who kept theirs does not find entries
+            # they did not put there.
+            object.__setattr__(self, 'columns', dict(self.columns))
+            for name in borrowed:
+                self.columns[name] = _copy_column(self.columns[name])
+        for column in self.columns.values():
+            # Set directly: a back-reference is not a field, and must stay out
+            # of equality and `repr`.
+            object.__setattr__(column, '_table', self)
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
@@ -506,7 +583,6 @@ class Schema:
             _require_table(built, name).time_column = _require_column(
                 built, name, column
             )
-
         if relationships is None:
             inferred = _infer_relationships(built)
             # Held to the same contract as an explicit link. Inference matches
@@ -522,6 +598,17 @@ class Schema:
 
         schema = cls(built, inferred)
         schema._mark_key_columns()
+        # Last, because what inference cost is not knowable until the
+        # overrides have been applied and the relationships settled. A caller
+        # who named the time column is not missing one, and a caller who
+        # passed relationships did not have any dropped.
+        dates = {
+            name: named
+            for name, table in built.items()
+            if (named := _warn_dates_stored_as_text(table)) is not None
+        }
+        if relationships is None:
+            _warn_table_cannot_be_linked_to(built, dates)
         return schema
 
     @property
@@ -653,6 +740,13 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
     return table
 
 
+def _copy_column(column: Column) -> Column:
+    made = Column(name=column.name, dtype=column.dtype, stype=column.stype)
+    if column.untyped:
+        object.__setattr__(made, 'untyped', True)
+    return made
+
+
 def _column(series: pd.Series, name: str) -> Column:
     r"""One column, with the record of whether inference had anything to go on.
 
@@ -720,9 +814,180 @@ def _infer_primary_key(
     return None
 
 
+def _warn_dates_stored_as_text(table: Table) -> str | None:
+    r"""Say when the only candidate timestamp is a string, and was not used.
+
+    Inference types a string by how many distinct values it holds and never
+    reads it as a date, which is deliberate: a parser loose enough to read a
+    warehouse `DATE` column also reads part codes as dates and dies later, on
+    a value it should not have touched. The cost is that a wholly temporal
+    dataset -- a warehouse that hands back `DATE` as `STRING`, which is
+    ordinary -- infers to a schema with no time in it, and the caller learns
+    only when a temporal query is refused, or never, if the query they wrote
+    happened to be static.
+
+    So the column is still not parsed, and the declining is no longer silent.
+    Only a table that ended with no time column is worth a word; one that
+    found its timestamp does not need to hear about a date-shaped string.
+    """
+    frame = table.data
+    if table.time_column is not None or frame is None or frame.empty:
+        return None
+    for name, column in table.columns.items():
+        if column.dtype != 'string' or column.stype == 'ID':
+            continue
+        present = frame[name].dropna()
+        sample = present.head(_DATE_TEXT_SAMPLE)
+        if sample.empty or not all(
+            isinstance(v, str) and _DATE_TEXT.fullmatch(v) for v in sample
+        ):
+            # Not a correctness check -- the conversion below rejects
+            # everything this would, and more. It is here so that the ordinary
+            # case, a table whose string columns are names and descriptions,
+            # does not pay to have each one parsed as a date.
+            continue
+        # Every remaining question is answered by running the conversion on
+        # the whole column rather than sampling or reasoning about it: whether
+        # the values past the sample hold their shape, whether they are real
+        # dates, and which form of the call a caller should be told to make.
+        how = _conversion_that_works(present)
+        if how is None:
+            continue
+        warnings.warn(
+            f'{table.name}.{name} holds dates but is stored as text, so it is '
+            f'not the time column and no temporal query can use it. Convert '
+            f'it before inferring -- '
+            f'frame[{name!r}] = pd.to_datetime(frame[{name!r}]{how}) -- or '
+            f'set schema[{table.name!r}][{name!r}].stype = {"timestamp"!r} '
+            f'afterwards.',
+            stacklevel=_warning_stacklevel(),
+        )
+        return name
+    return None
+
+
+def _conversion_that_works(values: pd.Series) -> str | None:
+    r"""The arguments `pd.to_datetime` needs for this column, or nothing.
+
+    Run rather than reasoned about. A column of impossible dates coerces to
+    NaT and one of mixed UTC offsets raises instead of coercing, and both are
+    date-shaped enough to reach here. A column that converts to years no
+    warehouse holds is a code that looks like a date, and telling its owner to
+    convert it would turn part numbers into timestamps.
+    """
+    first, last = _PLAUSIBLE_YEARS
+    for arguments, named in (({}, ''), ({'utc': True}, ', utc=True')):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                converted = pd.to_datetime(values, errors='coerce', **arguments)
+        except (ValueError, TypeError, OverflowError):
+            continue
+        if converted.isna().any():
+            continue
+        years = converted.dt.year
+        if first <= years.min() and years.max() <= last:
+            return named
+    return None
+
+
 def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
     stamps = [name for name, c in columns.items() if c.stype == 'timestamp']
     return stamps[0] if len(stamps) == 1 else None
+
+
+def _warn_table_cannot_be_linked_to(
+    tables: Mapping[str, Table], dates: Mapping[str, str]
+) -> None:
+    r"""Say when a table has no key and something wanted to point at it.
+
+    `_infer_primary_key` requires a key-shaped name, and rightly: uniqueness
+    alone would nominate any high-cardinality measurement. But a great many
+    real keys are domain codes -- `IATA_CODE`, `SKU`, `ISBN`, `VIN` -- and no
+    suffix rule will cover them.
+
+    That is not merely a missing key. `_infer_relationships` can only point an
+    edge at a *declared* key, so a table that has none is not a candidate
+    target for anything: every relationship into it is lost, the tables are
+    dropped from the request, and the model answers from less data than it was
+    given with nothing on screen to say so.
+
+    Nominating a key here was tried and withdrawn. Uniqueness within one frame
+    does not distinguish a key from a foreign key that happens not to repeat in
+    the rows to hand -- a two-row extract of `line_items` has a unique
+    `ORDER_NO` -- so nominating turns a child into a parent and invents an edge
+    between two facts. Worse, a second table keyed on a name makes that name
+    ambiguous, and `_infer_relationships` then declines *every* edge using it:
+    the guess does not merely risk a wrong link, it can delete the right ones
+    from a schema whose keys the caller declared correctly.
+
+    So the caller is asked instead, and only where the question is real. A
+    keyless table no other table names loses no edges. Nor does one whose
+    candidate column is already another table's key -- that column is a
+    foreign key, naming it here would make the name ambiguous, and ambiguity
+    deletes the edges that were working. A warning that talks a caller into
+    the failure it was written to prevent is worse than silence.
+
+    `dates` names, per table, a column already reported as a date stored as
+    text. A column cannot be both the time column and the primary key, so
+    asking for it here would contradict the other warning, and a caller who
+    followed both in order would end with neither.
+    """
+    named_elsewhere: dict[str, set[str]] = {}
+    keyed_by = set()
+    for name, table in tables.items():
+        for column in table.columns:
+            named_elsewhere.setdefault(column, set()).add(name)
+        if isinstance(table.primary_key, str):
+            keyed_by.add(table.primary_key)
+
+    for name, table in tables.items():
+        if table.primary_key is not None:
+            continue
+        frame = table.data
+        if frame is None or frame.empty:
+            continue
+        candidates = [
+            column
+            for column, meta in table.columns.items()
+            if _could_identify_a_row(table, frame, column, meta)
+            and len(named_elsewhere.get(column, ())) > 1
+            and column not in keyed_by
+            and column != dates.get(name)
+        ]
+        if not candidates:
+            continue
+        suggestion = repr(candidates[0]) if len(candidates) == 1 else '...'
+        warnings.warn(
+            f'No column of {name!r} is named like a key, so it has no primary '
+            f'key, and nothing can link to a table without one: every '
+            f'relationship pointing at {name!r} is dropped and it reaches the '
+            f'model unjoined. {_and_list(candidates)} '
+            f'{"identify" if len(candidates) > 1 else "identifies"} every row '
+            f'of {name!r} and {"are" if len(candidates) > 1 else "is"} named '
+            f'by another table too; if that is the key, say so with '
+            f'primary_keys={{{name!r}: {suggestion}}}.',
+            stacklevel=_warning_stacklevel(),
+        )
+
+
+def _could_identify_a_row(
+    table: Table, frame: pd.DataFrame, column: str, meta: Column
+) -> bool:
+    if column == table.time_column:
+        return False
+    if meta.dtype != 'string' and not meta.dtype.startswith('int'):
+        return False
+    if frame[column].isna().any():
+        return False
+    return _key_quality(frame, (column,)).duplicates == 0
+
+
+def _and_list(names: Sequence[str]) -> str:
+    quoted = [repr(name) for name in names]
+    if len(quoted) < 3:
+        return ' and '.join(quoted)
+    return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
 
 
 def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
