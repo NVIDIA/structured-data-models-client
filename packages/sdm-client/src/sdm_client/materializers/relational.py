@@ -749,7 +749,10 @@ def _drop_context_that_answers_the_question(
     The two halves carry their own `instance_id` space, so removing a context
     row means removing the related rows that hang off it and nothing else.
     """
-    found: list[tuple[Mapping[str, Any], set[Any]]] = []
+    # Keyed by identity and unioned, because two payloads can share one
+    # context object: counting the entries would report a row once per entry,
+    # and keeping only the first entry's rows would leave the rest behind.
+    found: dict[int, tuple[Mapping[str, Any], set[Any]]] = {}
     for payload in payloads:
         context = payload.get('context')
         predict = payload.get('predict')
@@ -766,31 +769,29 @@ def _drop_context_that_answers_the_question(
         answered = _instances_matching(
             context.get('instance_table'), asked, anchor_column, windowed
         )
-        if answered:
-            found.append((context, answered))
+        if not answered:
+            continue
+        carried = found.setdefault(id(context), (context, set()))
+        carried[1].update(answered)
     if not found:
         return
 
-    # Warning before removing anything, because a caller running with
+    # Said before anything is removed: a caller running with
     # `simplefilter('error')` turns this into a raise, and a raise partway
-    # through leaves the payloads it had already reached stripped of rows the
-    # caller never learned were gone.
-    # Counted over distinct contexts, because two payloads can share one and
-    # the same row must not be reported twice.
-    counted = {id(context): len(answered) for context, answered in found}
+    # through would leave the payloads it had already reached stripped of rows
+    # the caller never learned were gone. The wording therefore describes the
+    # context this call sends rather than an edit already made, so that it
+    # reads true whether it is a warning or the exception that stops the call.
     warnings.warn(
-        f'{sum(counted.values())} of the rows sampled as context are the rows '
-        f'being scored, at the same moment, carrying the value being asked '
-        f'for. They are being left out, so the model is not shown the answers '
-        f'to its own question; the context will be that many rows smaller '
-        f'than it would otherwise have been.',
+        f'{sum(len(answered) for _, answered in found.values())} of the rows '
+        f'sampled as context are the rows being scored, at the same moment, '
+        f'carrying the value being asked for. The context this call sends '
+        f'leaves them out, so the model is not shown the answers to its own '
+        f'question, and is that many rows smaller than the sample it was '
+        f'drawn from.',
         stacklevel=caller_stacklevel(),
     )
-    applied: set[int] = set()
-    for context, answered in found:
-        if id(context) in applied:
-            continue
-        applied.add(id(context))
+    for context, answered in found.values():
         _remove_instances(context.get('instance_table'), answered)
         for related in (context.get('related_tables') or {}).values():
             _remove_instances(related, answered)

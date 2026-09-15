@@ -1033,21 +1033,24 @@ def _warn_table_cannot_be_linked_to(
         if not candidates:
             continue
         suggestion = repr(candidates[0]) if len(candidates) == 1 else '...'
-        many = len(candidates) > 1
+        if len(candidates) > 1:
+            identify, are, each = 'identify', 'are', 'each of them'
+            declare, instead = 'one of them identifies', 'they instead name'
+            shared, owner = 'tables', 'those tables are the ones that need'
+        else:
+            identify, are, each = 'identifies', 'is', 'it'
+            declare, instead = 'it identifies', 'it instead names'
+            shared, owner = 'table', 'that table is the one that needs'
         warnings.warn(
             f'No column of {name!r} is named like a key, so it has no primary '
             f'key, and nothing can link to a table without one: every '
             f'relationship pointing at {name!r} is dropped and it reaches the '
-            f'model unjoined. {_and_list(candidates)} '
-            f'{"identify" if many else "identifies"} every row '
-            f'of {name!r} and {"are" if many else "is"} named '
-            f'by another table too, which makes '
-            f'{"each of them" if many else "it"} either a key or a foreign '
-            f'key that happens not to repeat in the rows read. If '
-            f'{"one of them identifies" if many else "it identifies"} '
-            f'{name!r}, say so with primary_keys={{{name!r}: {suggestion}}}; '
-            f'if {"they instead name" if many else "it instead names"} '
-            f"another table's rows, that table is the one that needs the key.",
+            f'model unjoined. {_and_list(candidates)} {identify} every row '
+            f'of {name!r} and {are} named by another table too, which makes '
+            f'{each} either a key or a foreign key that happens not to repeat '
+            f'in the rows read. If {declare} {name!r}, say so with '
+            f'primary_keys={{{name!r}: {suggestion}}}; if {instead} the rows '
+            f'of the {shared} they are shared with, {owner} the key.',
             stacklevel=caller_stacklevel(),
         )
 
