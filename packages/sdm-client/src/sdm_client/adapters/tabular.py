@@ -22,7 +22,9 @@ context, so a client that narrowed it would both be guessing and be rejected.
 
 from __future__ import annotations
 
+import sys
 import uuid
+import warnings
 from collections.abc import Iterator
 from typing import Any
 
@@ -65,6 +67,18 @@ _MAX_ID_LENGTH = 1024
 
 def _request_id() -> str:
     return f'sdm-{uuid.uuid4().hex[:12]}'
+
+
+def _caller_stacklevel() -> int:
+    r"""How far up to point a warning so it lands on the caller's line."""
+    depth = 1
+    frame = sys._getframe(1)
+    while frame is not None and frame.f_globals.get('__name__', '').startswith(
+        'sdm_client'
+    ):
+        depth += 1
+        frame = frame.f_back
+    return depth
 
 
 class TabularAdapter:
@@ -185,13 +199,22 @@ class TabularAdapter:
                 code='INVALID_REQUEST',
             )
 
-        schema_columns = {
-            name: {
+        schema_columns = {}
+        as_text = []
+        for name in context.columns:
+            declared = table[name].stype
+            if declared == 'text':
+                as_text.append(name)
+            schema_columns[name] = {
                 'dtype': dtypes[name],
-                'stype': self._stype_for(request, table[name].stype, name),
+                'stype': self._stype_for(request, declared, name),
             }
-            for name in context.columns
-        }
+        if as_text:
+            warnings.warn(
+                f'{self.spec.model_id} cannot read a text column, so '
+                f'{", ".join(as_text)} travel(s) as categorical instead. ',
+                stacklevel=_caller_stacklevel(),
+            )
         instance_schema: dict[str, Any] = {'columns': schema_columns}
         key = table.primary_key
         if key:
@@ -229,7 +252,13 @@ class TabularAdapter:
         for a classification one. The task is what settles it, and only the
         adapter knows the task, so the correction happens here rather than
         being baked into the schema a caller may reuse for another question.
+
+        The same argument carries a second correction: inference is also
+        model-agnostic, and ``'text'`` is a type this model cannot read at
+        all. Only the adapter knows which model is being asked.
         """
+        if inferred == 'text':
+            return 'categorical'
         if column != request.task.target.column_name:
             return inferred
         if request.task.is_classification:

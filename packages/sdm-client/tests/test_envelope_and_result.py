@@ -75,6 +75,56 @@ def test_a_regression_target_is_not_forced_to_categorical():
     assert columns['label']['stype'] == 'numerical'
 
 
+def _text_request(distinct: int = 200) -> Request:
+    n = 400
+    context = pd.DataFrame(
+        {
+            'row_id': range(n),
+            'code': [f'RES-{i % distinct:05d}' for i in range(n)],
+            'region': [f'R{i % 3}' for i in range(n)],
+            'label': [i % 2 for i in range(n)],
+        }
+    )
+    predict = pd.DataFrame(
+        {
+            'row_id': [90, 91],
+            'code': ['RES-00001', 'RES-00002'],
+            'region': ['R0', 'R1'],
+        }
+    )
+    return Request(
+        context=context, predict=predict, target='label', task='classification'
+    )
+
+
+def test_a_text_column_is_sent_as_categorical_because_tabular_cannot_read_text():
+    """`text` is refused outright by the endpoint; `categorical` never is.
+
+    So the column travels as labels rather than costing the whole request a
+    422 that names no column.
+    """
+    request = _text_request()
+    assert request.schema['instance']['code'].stype == 'text'
+    with pytest.warns(UserWarning, match='cannot read a text column'):
+        body = next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    columns = body['schema']['instance_table']['columns']
+    assert columns['code']['stype'] == 'categorical'
+    assert columns['code']['dtype'] == 'string'
+
+
+def test_the_warning_names_every_rewritten_column_once():
+    """Two real datasets hit 9 and 13 such columns; one warning, not thirteen."""
+    request = _text_request()
+    request.schema['instance']['region'].stype = 'text'
+    with pytest.warns(UserWarning) as caught:
+        next(TabularAdapter().prediction_plan(request, ('prediction',)))
+    messages = [
+        str(w.message) for w in caught if 'cannot read a text' in str(w.message)
+    ]
+    assert len(messages) == 1
+    assert 'code' in messages[0] and 'region' in messages[0]
+
+
 def test_the_task_kind_is_sent_as_given_and_never_narrowed():
     assert envelope('classification')['task']['kind'] == 'classification'
 
