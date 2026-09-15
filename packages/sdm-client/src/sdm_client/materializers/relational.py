@@ -13,6 +13,7 @@ from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from predictive_query.ast import Filter
 from predictive_query.validator.model_validator import (
     MAX_TOP_K as _MAX_TOP_K,
 )
@@ -82,6 +83,7 @@ class RelationalMaterializer:
                 code='INVALID_REQUEST',
             )
 
+        _warn_the_filter_chose_only_the_examples(query, indices)
         payloads = self._gather(query, indices, num_context_samples, options)
         _drop_context_that_answers_the_question(
             payloads,
@@ -853,3 +855,35 @@ def _remove_instances(table: Any, instances: set[Any]) -> None:
             isinstance(row, list) and len(row) > at and row[at] in instances
         )
     ]
+
+
+def _warn_the_filter_chose_only_the_examples(
+    query: ValidatedPredictiveQuery, indices: Sequence[Any]
+) -> None:
+    r"""Say that an entity filter shapes the context and not the scored rows.
+
+    `FOR EACH sellers.seller_id WHERE sellers.seller_state = 'RJ'` reads as one
+    question and is answered as two. The filter selects the labelled examples
+    the model learns from; the rows actually scored are the caller's indices,
+    untouched by it. Measured on synthetic data, a filter matching 12 of 50
+    named sellers still scored all 50 -- so the model was shown a thousand
+    northern sellers and then asked about thirty-eight southern ones, with
+    nothing said and predictions that look entirely ordinary.
+
+    Reported rather than repaired. Applying the filter here would mean
+    evaluating the condition a second time, against the sampled neighbourhood
+    the engine builds to evaluate it the first time, and two implementations of
+    one condition disagreeing is a worse failure than the one being fixed.
+    Naming the condition is what the caller needs to act, either by narrowing
+    the indices or by dropping the filter.
+    """
+    if not indices or not isinstance(query.entity_ast, Filter):
+        return
+    warnings.warn(
+        f'the entity filter {str(query.entity_ast.condition)!r} selects the '
+        f'labelled examples the model learns from, and does not narrow the '
+        f'{len(indices)} rows named for scoring -- those are scored as given, '
+        f'whether or not they satisfy it. Pass only indices that satisfy the '
+        f'condition if that is what you meant.',
+        stacklevel=caller_stacklevel(),
+    )

@@ -355,3 +355,130 @@ def test_a_task_naming_no_anchor_column_falls_back_to_the_plain_name():
     assert [row[0] for row in payload['context']['instance_table']['rows']] == [
         10
     ]
+
+
+# --- what the documented window actually covers ----------------------------
+
+
+@pytest.mark.parametrize(
+    'offset, counted',
+    [(0, False), (1, True), (29, True), (30, True), (31, False)],
+)
+def test_the_window_opens_after_the_anchor_and_closes_on_its_last_day(
+    offset, counted
+):
+    """`(anchor, anchor + 30 days]`, which is what the engine implements:
+    `target_time > start` and `target_time <= end`.
+
+    Read per anchor. The engine samples several context anchors, and pooling
+    their labels answers a different question -- a row at the anchor looks
+    counted because it is exactly thirty days after the *previous* anchor,
+    which is the right edge of that window rather than the left edge of this
+    one.
+    """
+    anchor = pd.Timestamp('2023-06-01')
+    rows = []
+    identifier = 0
+    for user in range(200):
+        rows.append(
+            {
+                'eid': identifier,
+                'uid': user,
+                'amt': 1.0,
+                'ts': anchor - pd.Timedelta(days=120),
+            }
+        )
+        identifier += 1
+        rows.append(
+            {
+                'eid': identifier,
+                'uid': user,
+                'amt': 1.0,
+                'ts': anchor + pd.Timedelta(days=offset),
+            }
+        )
+        identifier += 1
+    events = pd.DataFrame(rows)
+    users = pd.DataFrame({'uid': range(200), 'seg': ['x', 'y'] * 100})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'events': events},
+            primary_keys={'users': 'uid', 'events': 'eid'},
+            time_columns={'events': 'ts'},
+            relationships=[Relationship('events', 'uid', 'users', 'uid')],
+        )
+        request = PredictiveQuery(
+            'PREDICT COUNT(events.*, 0, 30, days) FOR EACH users.uid', schema
+        ).materialize(
+            indices=[1, 2, 3],
+            model=KumoRelational(),
+            anchor_time=anchor + pd.Timedelta(days=90),
+            context_anchor_time=anchor,
+        )
+    context = request.payloads[0]['context']['instance_table']
+    columns = context['columns']
+    at_anchor = columns.index('__kumo_anchor_time')
+    target = columns.index('TARGET')
+    pinned = str(anchor.date())
+    labels = {
+        row[target]
+        for row in context['rows']
+        if str(row[at_anchor]).startswith(pinned)
+    }
+
+    assert labels, 'the pinned anchor produced no context rows'
+    assert (labels == {1.0}) is counted, sorted(labels)
+
+
+# --- an entity filter shapes the context and not the scored rows -----------
+
+
+def filtered_graph() -> Schema:
+    rng = np.random.default_rng(31)
+    sellers = pd.DataFrame(
+        {'sid': range(300), 'region': rng.choice(['north', 'south'], 300)}
+    )
+    items = pd.DataFrame(
+        {
+            'iid': range(1500),
+            'sid': rng.integers(0, 300, 1500),
+            'ts': pd.to_datetime('2023-01-01')
+            + pd.to_timedelta(rng.integers(0, 120, 1500), 'D'),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {'sellers': sellers, 'items': items},
+            primary_keys={'sellers': 'sid', 'items': 'iid'},
+            time_columns={'items': 'ts'},
+            relationships=[Relationship('items', 'sid', 'sellers', 'sid')],
+        )
+
+
+def test_an_entity_filter_says_it_does_not_narrow_the_scored_rows():
+    """The filter selects the labelled examples and leaves the named rows
+    alone, so a filter matching a quarter of them still scores all of them and
+    the answers look entirely ordinary."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT COUNT(items.*, 0, 30, days) FOR EACH sellers.sid '
+            "WHERE sellers.region = 'north'",
+            filtered_graph(),
+        ).materialize(indices=list(range(50)), model=KumoRelational())
+    said = [str(w.message) for w in caught if 'entity filter' in str(w.message)]
+    assert said, [str(w.message) for w in caught]
+    assert "sellers.region = 'north'" in said[0]
+    assert '50 rows named for scoring' in said[0]
+
+
+def test_a_query_with_no_entity_filter_says_nothing():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT COUNT(items.*, 0, 30, days) FOR EACH sellers.sid',
+            filtered_graph(),
+        ).materialize(indices=list(range(50)), model=KumoRelational())
+    assert not any('entity filter' in str(w.message) for w in caught)

@@ -22,6 +22,17 @@ The tabular cap was measured at the boundary rather than read from a document:
 10,000 context rows are answered and 10,001 come back as
 `422 UNSUPPORTED_SHAPE N_train 10001 exceeds limit 10000`.
 
+## Aggregation windows open after the anchor and close on their last day
+
+A window written `0, 30, days` covers `(anchor, anchor + 30 days]`. A row at the
+anchor itself does not count; one a day later does; one exactly thirty days
+later does; one thirty-one days later does not.
+
+Measured against the engine's own labels rather than read off the grammar, with
+the context anchor pinned and a single row placed at each offset in turn — and
+read per anchor, because the engine samples several and pooling them answers a
+different question.
+
 ## There is no `run_mode`
 
 The endpoint takes one, and this client derives it. It distinguishes only a
