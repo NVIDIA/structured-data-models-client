@@ -188,10 +188,12 @@ class JoinValidator:
                 and not (fkey_table == pkey_table and col.col_name == pkey_col)
             ]
             if is_keys_group:
-                keys = curr_keys
+                keys.extend(k for k in curr_keys if k not in keys)
             else:
                 assert is_rev_keys_group
-                reverse_keys = curr_keys
+                reverse_keys.extend(
+                    k for k in curr_keys if k not in reverse_keys
+                )
 
         if isinstance(node, Aggregation):
             pkey_name = self.graph.tables[pkey_table].pkey

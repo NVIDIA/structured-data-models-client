@@ -652,11 +652,10 @@ class ConditionNodeTypeValidator(NodeTypeValidator):
         typed_val = node.value.typed_value()
         value_str = node.value.to_string()
         if node.op == MemberOp.IS_IN:
-            response.warnings.append(
-                ValidationWarning(
+            response.errors.append(
+                ValidationError(
                     message=f'{node.get_location().message_start}: '
-                    f'Operator {symbol(node.op)} is deprecated '
-                    f'and will be removed in a future version. '
+                    f'Operator {symbol(node.op)} is deprecated. '
                     f'Please use operator `IN` instead.',
                     title='Operation Deprecated',
                     code=codes.TYPE_OPERATOR_DEPRECATED,
