@@ -779,16 +779,17 @@ def _drop_context_that_answers_the_question(
     # Said before anything is removed: a caller running with
     # `simplefilter('error')` turns this into a raise, and a raise partway
     # through would leave the payloads it had already reached stripped of rows
-    # the caller never learned were gone. The wording therefore describes the
-    # context this call sends rather than an edit already made, so that it
-    # reads true whether it is a warning or the exception that stops the call.
+    # the caller never learned were gone. Which is also why both sentences
+    # state the rule rather than the edit -- raised as an exception, no edit
+    # has been made and no context has been sent, and a message claiming
+    # either would be false in the one case the ordering exists for.
+    total = sum(len(answered) for _, answered in found.values())
     warnings.warn(
-        f'{sum(len(answered) for _, answered in found.values())} of the rows '
-        f'sampled as context are the rows being scored, at the same moment, '
-        f'carrying the value being asked for. The context this call sends '
-        f'leaves them out, so the model is not shown the answers to its own '
-        f'question, and is that many rows smaller than the sample it was '
-        f'drawn from.',
+        f'{total} of the rows sampled as context are the rows being scored, '
+        f'at the same moment, carrying the value being asked for. Rows that '
+        f'carry the answer to the question being asked are not sent as '
+        f'context, so the context holds {total} fewer rows than were sampled '
+        f'for it.',
         stacklevel=caller_stacklevel(),
     )
     for context, answered in found.values():

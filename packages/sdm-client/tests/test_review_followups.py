@@ -63,8 +63,15 @@ def test_a_raised_warning_leaves_the_payload_whole():
 
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        with pytest.raises(UserWarning):
+        with pytest.raises(UserWarning) as raised:
             _drop_context_that_answers_the_question(payloads, windowed=False)
+
+    # The text is read in the raise path too: it is stated as the rule the
+    # client follows, because nothing has been removed and nothing sent here.
+    said = str(raised.value)
+    assert 'are not sent as context' in said
+    assert 'have been left out' not in said
+    assert 'leaves them out' not in said
 
     assert payloads[0]['context']['instance_table']['rows'] == before
     assert (
@@ -84,7 +91,7 @@ def test_the_rows_still_go_when_the_warning_is_only_a_warning():
         [1, 'e2', '2024-01-01', 8.0]
     ]
     assert payloads[0]['context']['related_tables']['e']['rows'] == [[1, 2.0]]
-    assert any('leaves them out' in str(w.message) for w in caught)
+    assert any('are not sent as context' in str(w.message) for w in caught)
 
 
 def test_two_payloads_sharing_a_context_strip_the_union_of_their_rows():
@@ -117,6 +124,32 @@ def test_two_payloads_sharing_a_context_strip_the_union_of_their_rows():
     assert context['related_tables']['e']['rows'] == [[1, 2.0]]
 
 
+def test_two_payloads_finding_the_same_row_count_it_once():
+    """The other half of identity-keying: accumulating rather than unioning
+    reports one row as two and reads as a bigger loss than happened."""
+    shared = payload_with_a_shared_row()
+    twin = {
+        'task': shared['task'],
+        'context': shared['context'],
+        'predict': {
+            'instance_table': {
+                'columns': ['__kumo_entity_ref_0', '__kumo_anchor_time'],
+                'rows': [['e1', '2024-01-01']],
+            }
+        },
+    }
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _drop_context_that_answers_the_question((shared, twin), windowed=False)
+
+    assert any('1 of the rows' in str(w.message) for w in caught)
+    assert not any('2 of the rows' in str(w.message) for w in caught)
+    assert shared['context']['instance_table']['rows'] == [
+        [1, 'e2', '2024-01-01', 8.0]
+    ]
+
+
 def test_the_suggestion_reads_as_a_sentence_for_several_candidates(recwarn):
     """Plural candidates took a singular tail, so the message fell apart on
     exactly the graphs with most to say."""
@@ -134,6 +167,8 @@ def test_the_suggestion_reads_as_a_sentence_for_several_candidates(recwarn):
     )
 
     said = ' '.join(str(w.message) for w in recwarn)
+    assert "'ORDER_NO' and 'SKU' identify every row" in said
+    assert 'are named by other tables too' in said
     assert 'each of them either a key or a foreign key' in said
     assert 'If one of them identifies' in said
     assert 'if they instead name' in said
@@ -159,6 +194,8 @@ def test_a_unique_column_is_offered_as_a_key_and_as_a_foreign_key(recwarn):
 
     said = ' '.join(str(w.message) for w in recwarn)
     assert 'nothing can link to a table without one' in said
+    assert "'ORDER_NO' identifies every row" in said
+    assert 'is named by another table too' in said
     assert 'makes it either a key or a foreign key' in said
     assert 'If it identifies' in said
     assert 'that table is the one that needs the key' in said
