@@ -83,6 +83,11 @@ class RelationalMaterializer:
             )
 
         payloads = self._gather(query, indices, num_context_samples, options)
+        _drop_context_that_answers_the_question(
+            payloads,
+            windowed=getattr(query.target_ast, 'date_offset_range', None)
+            is not None,
+        )
         return Request.materialized(
             payloads=payloads,
             schema=self.schema.snapshot(),
@@ -706,3 +711,145 @@ def _warn_rows_the_graph_dropped(model: KumoRelational) -> None:
         f'what you meant.',
         stacklevel=caller_stacklevel(),
     )
+
+
+#: What the wire calls the column carrying the entity a row is about.
+_ENTITY_REF = '__kumo_entity_ref'
+
+#: And the moment it is asked about.
+_ANCHOR = '__kumo_anchor_time'
+
+
+def _drop_context_that_answers_the_question(
+    payloads: tuple[dict[str, Any], ...], *, windowed: bool = True
+) -> None:
+    r"""Take out of the context any row that is a scored row at its own anchor.
+
+    On a target with no time window the entity being scored is sampled into the
+    context as well, at the same anchor, carrying the value being asked for --
+    so the model is shown the answer to the question it is being asked.
+    Measured against the live endpoint on a label that is pure noise, a hundred
+    scored entities came back 0.660 correct where chance is 0.500.
+
+    **What counts as the same question depends on the target.** For an
+    aggregation, an entity in the context at an *earlier* anchor is not a leak:
+    it is an earlier example, with its features cut at that anchor and its
+    label window closed before the prediction window opens, and it is what
+    temporal in-context learning runs on. Dropping those would delete the
+    examples an aggregation depends on, to fix a leak that is not there. So
+    there, only the same entity at the same moment goes.
+
+    A static column is not a window over anything. Its value does not move with
+    the anchor, so the same entity at *any* anchor carries the answer being
+    asked for -- which a caller reaches by setting `context_anchor_time`, and
+    which matching on the anchor alone would have let straight through.
+
+    The two halves carry their own `instance_id` space, so removing a context
+    row means removing the related rows that hang off it and nothing else.
+    """
+    for payload in payloads:
+        context = payload.get('context')
+        predict = payload.get('predict')
+        if not isinstance(context, Mapping) or not isinstance(predict, Mapping):
+            continue
+        anchor_column = (payload.get('task') or {}).get(
+            'anchor_time_column'
+        ) or _ANCHOR
+        asked = _entities_at_anchors(
+            predict.get('instance_table'), anchor_column, windowed
+        )
+        if not asked:
+            continue
+        table = context.get('instance_table')
+        answered = _instances_matching(table, asked, anchor_column, windowed)
+        if not answered:
+            continue
+        _remove_instances(table, answered)
+        for related in (context.get('related_tables') or {}).values():
+            _remove_instances(related, answered)
+        warnings.warn(
+            f'{len(answered)} of the rows sampled as context are the rows '
+            f'being scored, at the same moment, carrying the value being '
+            f'asked for. They have been left out, so the model is not shown '
+            f'the answers to its own question; the context is that many rows '
+            f'smaller than it would otherwise have been.',
+            stacklevel=caller_stacklevel(),
+        )
+
+
+def _positions(
+    table: Any, anchor_column: str
+) -> tuple[list[Any], list[Any], int | None, int | None]:
+    r"""Where the entity and the anchor sit in a wire table.
+
+    The anchor column is read from the task rather than assumed: the engine
+    suffixes the name when it would collide with a real column, and looking
+    only for the bare name went blind on exactly those graphs.
+    """
+    columns = (table or {}).get('columns')
+    rows = (table or {}).get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return [], [], None, None
+    reference = next(
+        (
+            index
+            for index, name in enumerate(columns)
+            if str(name).startswith(_ENTITY_REF)
+        ),
+        None,
+    )
+    anchor = columns.index(anchor_column) if anchor_column in columns else None
+    return columns, rows, reference, anchor
+
+
+def _entities_at_anchors(
+    table: Any, anchor_column: str = _ANCHOR, windowed: bool = True
+) -> set[tuple[Any, Any]]:
+    columns, rows, reference, anchor = _positions(table, anchor_column)
+    if reference is None or (windowed and anchor is None):
+        return set()
+    needed = max(reference, anchor) if windowed else reference
+    return {
+        (row[reference], row[anchor] if windowed else None)
+        for row in rows
+        if isinstance(row, list) and len(row) > needed
+    }
+
+
+def _instances_matching(
+    table: Any,
+    asked: set[tuple[Any, Any]],
+    anchor_column: str = _ANCHOR,
+    windowed: bool = True,
+) -> set[Any]:
+    columns, rows, reference, anchor = _positions(table, anchor_column)
+    if reference is None or 'instance_id' not in columns:
+        return set()
+    if windowed and anchor is None:
+        return set()
+    at = columns.index('instance_id')
+    needed = max(reference, at, anchor) if windowed else max(reference, at)
+    return {
+        row[at]
+        for row in rows
+        if isinstance(row, list)
+        and len(row) > needed
+        and (row[reference], row[anchor] if windowed else None) in asked
+    }
+
+
+def _remove_instances(table: Any, instances: set[Any]) -> None:
+    columns = (table or {}).get('columns')
+    rows = (table or {}).get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return
+    if 'instance_id' not in columns:
+        return
+    at = columns.index('instance_id')
+    table['rows'] = [
+        row
+        for row in rows
+        if not (
+            isinstance(row, list) and len(row) > at and row[at] in instances
+        )
+    ]
