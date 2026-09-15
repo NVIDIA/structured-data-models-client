@@ -667,6 +667,7 @@ class Schema:
         }
         if relationships is None:
             _warn_table_cannot_be_linked_to(built, dates)
+        _warn_stype_was_decided_by_the_rows_read(built)
         return schema
 
     @property
@@ -915,6 +916,74 @@ def _infer_primary_key(
         if distinct >= len(frame) * _KEY_UNIQUENESS:
             return name
     return None
+
+
+#: Above this share of rows being distinct, a string column's value count is
+#: bounded by the frame rather than by the column, so it says nothing about
+#: how many values the column really holds.
+_UNSATURATED = 0.5
+
+#: And below this share of the categorical limit, growth has too far to go for
+#: the frame to be what decides: two values in four rows are unsaturated by
+#: the measure above and are still nowhere near becoming sixty-five.
+_WITHIN_REACH = 0.5
+
+
+def _warn_stype_was_decided_by_the_rows_read(
+    tables: Mapping[str, Table],
+) -> None:
+    r"""Say when `categorical` was decided by the size of the frame.
+
+    A string column is called `categorical` when it holds few enough distinct
+    values and `text` otherwise, and the count is taken from the frame handed
+    in. For a column whose values repeat that is the same answer at any size:
+    `state` holds 27 values in ten thousand rows and in a hundred thousand.
+    For one that does not, the count is not a property of the column at all --
+    it is a property of how many rows were read, and reading more rows moves
+    it. So a request written against `df.head(100)` and then pointed at the
+    table describes a column two different ways, with nothing in between to
+    say the description changed.
+
+    Which is worth saying only where it can happen, and that takes both of two
+    measures. The first is whether the values have run out: a column whose
+    distinct count tracks its row count has not shown how many values it has,
+    only how many rows were looked at. The second is whether there is anything
+    within reach -- two values in four rows have not saturated either, and are
+    nowhere near becoming sixty-five, so saying so is noise on every small
+    frame. Nearness to the threshold alone is not the signal, because 53
+    distinct in 100 rows is not near 64 by any measure and still flips.
+
+    This is the same property the primary-key inference documents about
+    uniqueness, and it has the same remedy, which is to say what the column is
+    when the frame is a sample.
+    """
+    for name, table in tables.items():
+        frame = table.data
+        if frame is None or len(frame) == 0:
+            continue
+        for column, meta in table.columns.items():
+            if meta.stype_declared or meta.stype != 'categorical':
+                continue
+            if meta.dtype != 'string' or column not in frame:
+                continue
+            distinct = frame[column].nunique(dropna=True)
+            if distinct < len(frame) * _UNSATURATED:
+                continue
+            if distinct < _MAX_CATEGORICAL_CARDINALITY * _WITHIN_REACH:
+                continue
+            warnings.warn(
+                f'{name}.{column} holds {distinct} distinct values in the '
+                f'{len(frame)} rows read, so the rows ran out before the '
+                f'values did and the count is a measure of the frame rather '
+                f'than of the column. It is read as categorical here because '
+                f'{distinct} is at most {_MAX_CATEGORICAL_CARDINALITY}; on '
+                f'more rows the same column would pass that and be read as '
+                f'text, which the models treat differently. If this frame is '
+                f'a sample, say what the column is with '
+                f"{name}[{column!r}].stype = 'categorical' (or 'text'), so "
+                f'that it does not change under a larger one.',
+                stacklevel=caller_stacklevel(),
+            )
 
 
 def _warn_dates_stored_as_text(table: Table) -> str | None:
