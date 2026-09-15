@@ -1033,17 +1033,32 @@ def _warn_table_cannot_be_linked_to(
         if not candidates:
             continue
         suggestion = repr(candidates[0]) if len(candidates) == 1 else '...'
+        # Two agreements, and they do not move together: several columns can
+        # be shared with one table, and one column with several. Counting
+        # either by the other made the sentence disagree with the graph.
+        elsewhere = {
+            other
+            for column in candidates
+            for other in named_elsewhere.get(column, ())
+            if other != name
+        }
         if len(candidates) > 1:
             identify, each = 'identify', 'each of them'
-            are = 'are named by other tables too'
+            subject, verb = 'they', 'are'
             declare = 'one of them identifies'
-            instead = 'they instead name the rows of the tables they are'
-            owner = 'those tables are the ones that need'
+            instead = 'they instead name the rows of'
         else:
             identify, each = 'identifies', 'it'
-            are = 'is named by another table too'
+            subject, verb = 'it', 'is'
             declare = 'it identifies'
-            instead = 'it instead names the rows of the table it is'
+            instead = 'it instead names the rows of'
+        if len(elsewhere) > 1:
+            are = f'{verb} named by other tables too'
+            shared = f'the tables {subject} {verb} shared with'
+            owner = 'those tables are the ones that need'
+        else:
+            are = f'{verb} named by another table too'
+            shared = f'the table {subject} {verb} shared with'
             owner = 'that table is the one that needs'
         warnings.warn(
             f'No column of {name!r} is named like a key, so it has no primary '
@@ -1053,8 +1068,8 @@ def _warn_table_cannot_be_linked_to(
             f'of {name!r} and {are}, which makes '
             f'{each} either a key or a foreign key that happens not to repeat '
             f'in the rows read. If {declare} {name!r}, say so with '
-            f'primary_keys={{{name!r}: {suggestion}}}; if {instead} shared '
-            f'with, {owner} the key.',
+            f'primary_keys={{{name!r}: {suggestion}}}; if {instead} '
+            f'{shared}, {owner} the key.',
             stacklevel=caller_stacklevel(),
         )
 

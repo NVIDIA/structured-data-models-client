@@ -172,6 +172,7 @@ def test_the_suggestion_reads_as_a_sentence_for_several_candidates(recwarn):
     assert 'each of them either a key or a foreign key' in said
     assert 'If one of them identifies' in said
     assert 'if they instead name' in said
+    assert 'the tables they are shared with' in said
     assert 'those tables are the ones that need the key' in said
     assert 'it identifies' not in said
 
@@ -196,6 +197,50 @@ def test_a_unique_column_is_offered_as_a_key_and_as_a_foreign_key(recwarn):
     assert 'nothing can link to a table without one' in said
     assert "'ORDER_NO' identifies every row" in said
     assert 'is named by another table too' in said
+    assert 'the table it is shared with' in said
+    assert 'they are shared with' not in said
     assert 'makes it either a key or a foreign key' in said
     assert 'If it identifies' in said
     assert 'that table is the one that needs the key' in said
+
+
+def one_unkeyed_table(candidates: int, others: int) -> dict:
+    """`candidates` unique columns of an unkeyed table, spread over `others`
+    tables that each declare a key of their own."""
+    columns = [f'K{i}' for i in range(candidates)]
+    frames = {
+        'li': pd.DataFrame(
+            {c: [f'{c}a', f'{c}b'] for c in columns} | {'q': [1, 2]}
+        )
+    }
+    keys = {}
+    for i in range(others):
+        held = columns[i::others] or columns
+        frames[f't{i}'] = pd.DataFrame(
+            {f'ID{i}': [1, 2]} | {c: [f'{c}a', f'{c}b'] for c in held}
+        )
+        keys[f't{i}'] = f'ID{i}'
+    return frames, keys
+
+
+@pytest.mark.parametrize(
+    ('candidates', 'others', 'expected'),
+    [
+        (1, 1, 'the table it is shared with, that table is the one'),
+        (2, 1, 'the table they are shared with, that table is the one'),
+        (1, 2, 'the tables it is shared with, those tables are the ones'),
+        (2, 2, 'the tables they are shared with, those tables are the ones'),
+    ],
+)
+def test_the_sentence_agrees_for_every_count_of_column_and_table(
+    candidates, others, expected, recwarn
+):
+    """The two counts move independently: several columns can be shared with
+    one table, and one column with several. Agreeing either by the other put
+    a sentence in front of the caller that disagrees with their own graph."""
+    frames, keys = one_unkeyed_table(candidates, others)
+    Schema.from_data(frames, primary_keys=keys)
+
+    said = ' '.join(str(w.message) for w in recwarn)
+    assert 'nothing can link to a table without one' in said
+    assert expected in said

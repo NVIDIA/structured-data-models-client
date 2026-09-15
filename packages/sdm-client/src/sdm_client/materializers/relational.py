@@ -788,8 +788,7 @@ def _drop_context_that_answers_the_question(
         f'{total} of the rows sampled as context are the rows being scored, '
         f'at the same moment, carrying the value being asked for. Rows that '
         f'carry the answer to the question being asked are not sent as '
-        f'context, so the context holds {total} fewer rows than were sampled '
-        f'for it.',
+        f'context, so these do not go into it.',
         stacklevel=caller_stacklevel(),
     )
     for context, answered in found.values():
