@@ -73,6 +73,8 @@ def test_a_raised_warning_leaves_the_payload_whole():
 
 
 def test_the_rows_still_go_when_the_warning_is_only_a_warning():
+    """A companion, not a second proof: this passes before the change too.
+    It is here so that moving the warning cannot quietly cost the removal."""
     payloads = [payload_with_a_shared_row()]
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -82,7 +84,47 @@ def test_the_rows_still_go_when_the_warning_is_only_a_warning():
         [1, 'e2', '2024-01-01', 8.0]
     ]
     assert payloads[0]['context']['related_tables']['e']['rows'] == [[1, 2.0]]
-    assert any('left out' in str(w.message) for w in caught)
+    assert any('being left out' in str(w.message) for w in caught)
+
+
+def test_one_payload_listed_twice_is_counted_and_stripped_once():
+    """Two entries sharing a context must not report the same row twice, nor
+    strip it twice."""
+    payload = payload_with_a_shared_row()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _drop_context_that_answers_the_question(
+            (payload, payload), windowed=False
+        )
+
+    assert any('1 of the rows' in str(w.message) for w in caught)
+    assert payload['context']['instance_table']['rows'] == [
+        [1, 'e2', '2024-01-01', 8.0]
+    ]
+
+
+def test_the_suggestion_reads_as_a_sentence_for_several_candidates(recwarn):
+    """Plural candidates took a singular tail, so the message fell apart on
+    exactly the graphs with most to say."""
+    Schema.from_data(
+        {
+            'line_items': pd.DataFrame(
+                {'ORDER_NO': ['O1', 'O2'], 'SKU': ['s1', 's2'], 'qty': [1, 2]}
+            ),
+            'shipments': pd.DataFrame(
+                {'SHIPMENT_ID': [1, 2], 'ORDER_NO': ['O1', 'O2']}
+            ),
+            'stock': pd.DataFrame({'STOCK_ID': [1, 2], 'SKU': ['s1', 's2']}),
+        },
+        primary_keys={'shipments': 'SHIPMENT_ID', 'stock': 'STOCK_ID'},
+    )
+
+    said = ' '.join(str(w.message) for w in recwarn)
+    assert 'identify every row' in said
+    assert 'each of them either a key or a foreign key' in said
+    assert 'If one of them identifies' in said
+    assert 'if they instead name' in said
+    assert 'it identifies' not in said
 
 
 def test_a_unique_column_is_offered_as_a_key_and_as_a_foreign_key(recwarn):
@@ -103,5 +145,6 @@ def test_a_unique_column_is_offered_as_a_key_and_as_a_foreign_key(recwarn):
 
     said = ' '.join(str(w.message) for w in recwarn)
     assert 'nothing can link to a table without one' in said
-    assert 'foreign key that happens not to repeat' in said
+    assert 'makes it either a key or a foreign key' in said
+    assert 'If it identifies' in said
     assert 'that table is the one that needs the key' in said

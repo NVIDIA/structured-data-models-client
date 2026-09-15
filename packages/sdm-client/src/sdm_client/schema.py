@@ -1033,18 +1033,21 @@ def _warn_table_cannot_be_linked_to(
         if not candidates:
             continue
         suggestion = repr(candidates[0]) if len(candidates) == 1 else '...'
+        many = len(candidates) > 1
         warnings.warn(
             f'No column of {name!r} is named like a key, so it has no primary '
             f'key, and nothing can link to a table without one: every '
             f'relationship pointing at {name!r} is dropped and it reaches the '
             f'model unjoined. {_and_list(candidates)} '
-            f'{"identify" if len(candidates) > 1 else "identifies"} every row '
-            f'of {name!r} and {"are" if len(candidates) > 1 else "is"} named '
-            f'by another table too, which is either a key or a foreign key '
-            f'that happens not to repeat in the rows read. If it identifies '
+            f'{"identify" if many else "identifies"} every row '
+            f'of {name!r} and {"are" if many else "is"} named '
+            f'by another table too, which makes '
+            f'{"each of them" if many else "it"} either a key or a foreign '
+            f'key that happens not to repeat in the rows read. If '
+            f'{"one of them identifies" if many else "it identifies"} '
             f'{name!r}, say so with primary_keys={{{name!r}: {suggestion}}}; '
-            f"if it instead names another table's rows, that table is the "
-            f'one that needs the key.',
+            f'if {"they instead name" if many else "it instead names"} '
+            f"another table's rows, that table is the one that needs the key.",
             stacklevel=caller_stacklevel(),
         )
 

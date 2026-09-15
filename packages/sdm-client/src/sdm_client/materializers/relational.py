@@ -775,15 +775,22 @@ def _drop_context_that_answers_the_question(
     # `simplefilter('error')` turns this into a raise, and a raise partway
     # through leaves the payloads it had already reached stripped of rows the
     # caller never learned were gone.
+    # Counted over distinct contexts, because two payloads can share one and
+    # the same row must not be reported twice.
+    counted = {id(context): len(answered) for context, answered in found}
     warnings.warn(
-        f'{sum(len(a) for _, a in found)} of the rows sampled as context are '
-        f'the rows being scored, at the same moment, carrying the value being '
-        f'asked for. They have been left out, so the model is not shown the '
-        f'answers to its own question; the context is that many rows smaller '
+        f'{sum(counted.values())} of the rows sampled as context are the rows '
+        f'being scored, at the same moment, carrying the value being asked '
+        f'for. They are being left out, so the model is not shown the answers '
+        f'to its own question; the context will be that many rows smaller '
         f'than it would otherwise have been.',
         stacklevel=caller_stacklevel(),
     )
+    applied: set[int] = set()
     for context, answered in found:
+        if id(context) in applied:
+            continue
+        applied.add(id(context))
         _remove_instances(context.get('instance_table'), answered)
         for related in (context.get('related_tables') or {}).values():
             _remove_instances(related, answered)
