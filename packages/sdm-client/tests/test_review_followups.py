@@ -72,6 +72,9 @@ def test_a_raised_warning_leaves_the_payload_whole():
     assert 'are not sent as context' in said
     assert 'have been left out' not in said
     assert 'leaves them out' not in said
+    # Nor may it describe the size of a context that was never built.
+    assert 'the context holds' not in said
+    assert 'fewer rows than were sampled' not in said
 
     assert payloads[0]['context']['instance_table']['rows'] == before
     assert (
