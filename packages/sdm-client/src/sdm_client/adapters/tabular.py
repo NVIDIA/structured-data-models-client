@@ -278,6 +278,13 @@ def _key_named_by(value: str) -> str | None:
     gets compared. Taking the text apart by hand instead would refuse a correct
     answer for any key an escape appears in.
 
+    Read as JSON first, because JSON is what the endpoint answers with, and
+    only as a Python literal if that fails. The two agree on everything except
+    a character above U+FFFF: JSON writes it as a surrogate pair and
+    `ast.literal_eval` reads the halves as two separate characters that never
+    recombine, so a key containing one could never be matched back and the
+    request failed at the client's own id check.
+
     Anything not written that way is left alone rather than refused. The
     contract calls this field a *service-generated* row identifier and names
     ``row_index`` as what to align on, so an endpoint is entitled to answer
@@ -286,13 +293,25 @@ def _key_named_by(value: str) -> str | None:
     one either, and is declined before being parsed.
     """
     import ast
+    import json
 
     if len(value) > _MAX_ID_LENGTH:
         return None
+    named: Any = None
     try:
-        named = ast.literal_eval(value)
-    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
-        return None
+        named = json.loads(value)
+    except (ValueError, TypeError, RecursionError):
+        # Not JSON, so read it as the Python rendering it must then be.
+        try:
+            named = ast.literal_eval(value)
+        except (
+            ValueError,
+            SyntaxError,
+            TypeError,
+            MemoryError,
+            RecursionError,
+        ):
+            return None
     if not isinstance(named, list) or len(named) != 1:
         return None
     return str(named[0])

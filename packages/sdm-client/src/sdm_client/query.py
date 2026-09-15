@@ -24,6 +24,7 @@ otherwise, and the model asked to answer it has to be that same one.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
@@ -35,6 +36,7 @@ from sdm_client.errors import StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
 from sdm_client.request import Request
+from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
 
 if TYPE_CHECKING:
@@ -321,13 +323,69 @@ class PredictiveQuery:
             )
             raise StructuredDataError(
                 f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {reasons}',
+                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}',
                 code='INVALID_REQUEST',
             )
         return resolved
 
+    def _why_the_target_is_text(self, reasons: str) -> str:
+        r"""Say why a target is `text`, when that is what refused the query.
+
+        Inference types a string column by how many distinct values it holds,
+        and past sixty-four it is `text` rather than `categorical`. That is a
+        reasonable rule for a feature and a poor one for a target: an ordinary
+        multiclass label with seventy classes is refused as unpredictable, and
+        the refusal names a semantic type the caller never chose. Worse, it
+        depends on how many rows were handed to `from_data`, so the same query
+        answers on a sample and stops answering on the full table.
+
+        Setting the meaning by hand fixes it, verified at seventy classes and
+        at two hundred, so the refusal now says so.
+        """
+        if 'semantic type text' not in reasons:
+            return ''
+        # The target, not whichever text column comes first. A schema with a
+        # free-text feature and a many-class label has two, and naming the
+        # wrong one is a remedy that changes nothing about the refusal.
+        named = self._target_named_by_the_query()
+        if named is None:
+            return ''
+        table, name = named
+        column = self.schema[table].columns.get(name)
+        if column is None or column.stype != 'text' or column.stype_declared:
+            return ''
+        distinct = self.schema[table].data[name].nunique()
+        return (
+            f'. {table}.{name} holds {distinct:,} distinct values, and a '
+            f'string column with more than {_MAX_CATEGORICAL} is typed text '
+            f'rather than categorical -- a fair rule for a feature and a poor '
+            f'one for a label. If it is a label, say so with '
+            f"schema[{table!r}][{name!r}].stype = 'categorical'"
+        )
+
+    def _target_named_by_the_query(self) -> tuple[str, str] | None:
+        r"""The table and column the query predicts, read from its text.
+
+        Read from the text rather than from a resolved query, because this runs
+        precisely when resolution failed.
+        """
+        match = _PREDICTED_COLUMN.search(self.text)
+        if match is None:
+            return None
+        table, name = match.group(1), match.group(2)
+        if table not in self.schema:
+            return None
+        return table, name
+
     def __repr__(self) -> str:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
+
+
+#: `PREDICT <table>.<column>` -- the plain column target, which is the only
+#: shape a semantic type can be refused for.
+_PREDICTED_COLUMN = re.compile(
+    r'PREDICT\s+([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s', re.IGNORECASE
+)
 
 
 def _is_hashable(value: Any) -> bool:

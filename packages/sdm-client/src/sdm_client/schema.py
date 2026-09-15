@@ -575,7 +575,7 @@ class Schema:
         cls,
         tables: Mapping[str, pd.DataFrame],
         *,
-        primary_keys: Mapping[str, str] | None = None,
+        primary_keys: Mapping[str, str | Sequence[str]] | None = None,
         time_columns: Mapping[str, str] | None = None,
         relationships: Sequence[Relationship] | None = None,
     ) -> Schema:
@@ -584,7 +584,11 @@ class Schema:
         Args:
             tables: Frames by table name. The name matters: a predictive query
                 names columns through it.
-            primary_keys: Overrides for the inferred key of a table.
+            primary_keys: Overrides for the inferred key of a table. A
+                sequence of column names declares a composite key, which the
+                setter has always taken; the annotation said otherwise and so
+                pushed anyone with one onto the assignment route, which until
+                recently validated nothing.
             time_columns: Overrides for the inferred time column of a table.
             relationships: Overrides for the inferred relationships. Pass an
                 empty sequence to assert there are none.

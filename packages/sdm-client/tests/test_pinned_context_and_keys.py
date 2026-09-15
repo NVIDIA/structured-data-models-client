@@ -462,7 +462,8 @@ def test_a_composite_overlap_is_reported():
 
     scored = _scored_keys(request)
     assert scored == {
-        _named_by([a, b]) for a, b in zip(data['a'].head(6), data['b'].head(6))
+        _named_by([a, b])
+        for a, b in zip(data['a'].head(6), data['b'].head(6), strict=True)
     }
 
     said = warnings_from(lambda: handle(scored).predict(request))

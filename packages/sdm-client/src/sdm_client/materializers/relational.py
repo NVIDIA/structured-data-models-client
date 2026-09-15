@@ -6,15 +6,20 @@ r"""Gather and encode relational requests with the relational engine."""
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from predictive_query.validator.model_validator import (
+    MAX_TOP_K as _MAX_TOP_K,
+)
 from predictive_query.validator.utils import table_name
 
 from sdm_client.core import dates
+from sdm_client.core.warnings import caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
@@ -102,6 +107,7 @@ class RelationalMaterializer:
         self._check_shape(options, RELATIONAL_LIMITS)
         with self._engine_errors():
             model = self._get_model()
+        _warn_rows_the_graph_dropped(model)
 
         with self._engine_errors(model):
             task = model._get_task_table(
@@ -135,8 +141,8 @@ class RelationalMaterializer:
                 task,
                 run_mode=run_mode,
                 verbose=False,
-                top_k=query.top_k,
-                exclude_cols_dict=query.get_exclude_cols_dict(),
+                top_k=_candidates_to_rank(query, options),
+                exclude_cols_dict=_columns_to_leave_out(query, options),
                 **{
                     key: options[key]
                     for key in (
@@ -606,3 +612,97 @@ def _to_declared(values: pd.Series, dtype: str, where: str) -> pd.Series:
     if whole.isna().any():
         return whole.astype('Int64')
     return whole.astype('int64')
+
+
+def _columns_to_leave_out(
+    query: ValidatedPredictiveQuery, options: Mapping[str, Any]
+) -> dict[str, list[str]]:
+    r"""Every column either the query or the caller asked to keep back.
+
+    `exclude_cols_dict` was accepted by `materialize()`, checked against the
+    options this route takes, and then not passed on: the query's own answer
+    was sent in its place, so the one option someone reaches for to keep a
+    column away from the model did nothing.
+
+    Merged rather than replaced. The query excludes columns for reasons of its
+    own -- the target among them -- and letting a caller's list stand in for
+    that would hand the model back something the query had deliberately
+    removed.
+    """
+    merged = {
+        table: list(columns)
+        for table, columns in (query.get_exclude_cols_dict() or {}).items()
+    }
+    # `.get(name)` and not `.get(name) or {}`: an empty list is not a mapping
+    # and saying nothing about it is the same silence this is fixing, so only
+    # an absent option and an explicit `None` mean "nothing to exclude".
+    given = options.get('exclude_cols_dict')
+    if given is None:
+        given = {}
+    if not isinstance(given, Mapping):
+        raise StructuredDataError(
+            f'exclude_cols_dict must map a table name to the columns to leave '
+            f'out, got {type(given).__name__}',
+            code='INVALID_REQUEST',
+        )
+    for table, columns in given.items():
+        if isinstance(columns, str) or not isinstance(columns, Sequence):
+            raise StructuredDataError(
+                f'exclude_cols_dict[{table!r}] must be a sequence of column '
+                f'names, got {type(columns).__name__}',
+                code='INVALID_REQUEST',
+            )
+        kept = merged.setdefault(table, [])
+        kept.extend(column for column in columns if column not in kept)
+    return merged
+
+
+def _candidates_to_rank(
+    query: ValidatedPredictiveQuery, options: Mapping[str, Any]
+) -> int | None:
+    r"""How many candidates to rank, held to the limits the language holds.
+
+    A `TOP K` written in the query is checked -- at least one, and no more than
+    the endpoint ranks. Passing it as an option went straight through to the
+    task, so an override could put a number in a request that the same number
+    written in the query would have been refused for.
+    """
+    if 'top_k' not in options:
+        return query.top_k
+    given = options['top_k']
+    if isinstance(given, bool) or not isinstance(given, Integral):
+        raise StructuredDataError(
+            f'top_k must be a whole number of candidates, got '
+            f'{type(given).__name__}',
+            code='INVALID_REQUEST',
+        )
+    if not 1 <= int(given) <= _MAX_TOP_K:
+        raise StructuredDataError(
+            f'top_k is {given}, and this model ranks between 1 and '
+            f'{_MAX_TOP_K} candidates',
+            code='INVALID_REQUEST',
+        )
+    return int(given)
+
+
+def _warn_rows_the_graph_dropped(model: KumoRelational) -> None:
+    r"""Say what the engine left out while building the graph.
+
+    A fact row with no time, no key, or a key another row already used cannot
+    be placed in the graph and is dropped. The count and the reason are worked
+    out either way -- `_sanitization_detail` builds the sentence -- and it was
+    only ever shown when something else had already failed. So a request that
+    succeeded was answered from a graph smaller than the one the caller
+    passed, the result looked ordinary, and the number was sitting there
+    unread.
+    """
+    detail = RelationalMaterializer._sanitization_detail(model)
+    if not detail:
+        return
+    warnings.warn(
+        f'the graph was built without some of the rows given to it '
+        f'{detail.strip()}. Those rows are not in the context the model sees; '
+        f'fill the missing values or drop the rows yourself if that is not '
+        f'what you meant.',
+        stacklevel=caller_stacklevel(),
+    )
