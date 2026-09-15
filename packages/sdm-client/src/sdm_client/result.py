@@ -64,6 +64,12 @@ class PredictionResult:
         request_id: The endpoint's id for the call, useful when reading its
             logs.
         items: The response items, in the order the endpoint returned them.
+            Each item's ``id`` is the key that was asked about, in the type
+            the schema gave it, not the string the wire carried. The wire
+            spells every id as text, and a relational request spells it as an
+            opaque transport reference, so an item handed back unchanged would
+            answer a question about ``uid 3`` with something that is neither
+            ``3`` nor recognisably about it.
         metadata: Whatever the endpoint reported alongside the predictions.
     """
 

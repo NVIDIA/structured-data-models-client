@@ -749,6 +749,7 @@ def _drop_context_that_answers_the_question(
     The two halves carry their own `instance_id` space, so removing a context
     row means removing the related rows that hang off it and nothing else.
     """
+    found: list[tuple[Mapping[str, Any], set[Any]]] = []
     for payload in payloads:
         context = payload.get('context')
         predict = payload.get('predict')
@@ -762,21 +763,30 @@ def _drop_context_that_answers_the_question(
         )
         if not asked:
             continue
-        table = context.get('instance_table')
-        answered = _instances_matching(table, asked, anchor_column, windowed)
-        if not answered:
-            continue
-        _remove_instances(table, answered)
+        answered = _instances_matching(
+            context.get('instance_table'), asked, anchor_column, windowed
+        )
+        if answered:
+            found.append((context, answered))
+    if not found:
+        return
+
+    # Warning before removing anything, because a caller running with
+    # `simplefilter('error')` turns this into a raise, and a raise partway
+    # through leaves the payloads it had already reached stripped of rows the
+    # caller never learned were gone.
+    warnings.warn(
+        f'{sum(len(a) for _, a in found)} of the rows sampled as context are '
+        f'the rows being scored, at the same moment, carrying the value being '
+        f'asked for. They have been left out, so the model is not shown the '
+        f'answers to its own question; the context is that many rows smaller '
+        f'than it would otherwise have been.',
+        stacklevel=caller_stacklevel(),
+    )
+    for context, answered in found:
+        _remove_instances(context.get('instance_table'), answered)
         for related in (context.get('related_tables') or {}).values():
             _remove_instances(related, answered)
-        warnings.warn(
-            f'{len(answered)} of the rows sampled as context are the rows '
-            f'being scored, at the same moment, carrying the value being '
-            f'asked for. They have been left out, so the model is not shown '
-            f'the answers to its own question; the context is that many rows '
-            f'smaller than it would otherwise have been.',
-            stacklevel=caller_stacklevel(),
-        )
 
 
 def _positions(

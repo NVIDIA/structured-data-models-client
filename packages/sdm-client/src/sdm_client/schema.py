@@ -1040,8 +1040,11 @@ def _warn_table_cannot_be_linked_to(
             f'model unjoined. {_and_list(candidates)} '
             f'{"identify" if len(candidates) > 1 else "identifies"} every row '
             f'of {name!r} and {"are" if len(candidates) > 1 else "is"} named '
-            f'by another table too; if that is the key, say so with '
-            f'primary_keys={{{name!r}: {suggestion}}}.',
+            f'by another table too, which is either a key or a foreign key '
+            f'that happens not to repeat in the rows read. If it identifies '
+            f'{name!r}, say so with primary_keys={{{name!r}: {suggestion}}}; '
+            f"if it instead names another table's rows, that table is the "
+            f'one that needs the key.',
             stacklevel=caller_stacklevel(),
         )
 
