@@ -964,24 +964,38 @@ def _warn_stype_was_decided_by_the_rows_read(
         for column, meta in table.columns.items():
             if meta.stype_declared or meta.stype != 'categorical':
                 continue
+            # The count decides the meaning for strings only, which is
+            # what this is about: a bool is categorical by its type and not
+            # by how many values it holds. Today that makes the check a
+            # precondition rather than a filter, since the only other
+            # categorical dtype is bool and two values never come within
+            # reach of the limit below. It is stated so that a dtype added
+            # to the categorical side later does not inherit a message
+            # about a count that did not decide it.
             if meta.dtype != 'string' or column not in frame:
                 continue
             distinct = frame[column].nunique(dropna=True)
-            if distinct < len(frame) * _UNSATURATED:
+            # Measured against the rows that hold a value, because that is
+            # what the distinct count was taken from: a column of forty
+            # values and a hundred and sixty nulls has saturated nothing,
+            # and dividing by the height of the frame would say it had.
+            present = int(frame[column].count())
+            if not present or distinct < present * _UNSATURATED:
                 continue
             if distinct < _MAX_CATEGORICAL_CARDINALITY * _WITHIN_REACH:
                 continue
             warnings.warn(
                 f'{name}.{column} holds {distinct} distinct values in the '
-                f'{len(frame)} rows read, so the rows ran out before the '
-                f'values did and the count is a measure of the frame rather '
-                f'than of the column. It is read as categorical here because '
-                f'{distinct} is at most {_MAX_CATEGORICAL_CARDINALITY}; on '
-                f'more rows the same column would pass that and be read as '
-                f'text, which the models treat differently. If this frame is '
-                f'a sample, say what the column is with '
-                f"{name}[{column!r}].stype = 'categorical' (or 'text'), so "
-                f'that it does not change under a larger one.',
+                f'{present} rows that have one, so the rows ran out before '
+                f'the values did and the count is a measure of the frame '
+                f'rather than of the column. It is read as categorical here '
+                f'because {distinct} is at most '
+                f'{_MAX_CATEGORICAL_CARDINALITY}; on more rows the same '
+                f'column could pass that and be read as text, which the '
+                f'models treat differently. If this frame is a sample, say '
+                f'what the column is with '
+                f"schema[{name!r}][{column!r}].stype = 'categorical' (or "
+                f"'text'), so that it does not change under a larger one.",
                 stacklevel=caller_stacklevel(),
             )
 

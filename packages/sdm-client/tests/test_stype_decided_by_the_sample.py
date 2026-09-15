@@ -38,9 +38,9 @@ def said_about(frame: pd.DataFrame) -> str:
 def test_a_column_whose_values_never_repeat_is_reported():
     said = said_about(pd.DataFrame({'city': [f'c{i}' for i in range(64)]}))
 
-    assert 'holds 64 distinct values in the 64 rows read' in said
+    assert 'holds 64 distinct values in the 64 rows that have one' in said
     assert 'the rows ran out before the values did' in said
-    assert "b['city'].stype = 'categorical'" in said
+    assert "schema['b']['city'].stype = 'categorical'" in said
 
 
 def test_the_case_that_nearness_to_the_threshold_would_miss():
@@ -49,7 +49,7 @@ def test_the_case_that_nearness_to_the_threshold_would_miss():
         pd.DataFrame({'city': [f'c{i % 53}' for i in range(100)]})
     )
 
-    assert 'holds 53 distinct values in the 100 rows read' in said
+    assert 'holds 53 distinct values in the 100 rows that have one' in said
 
 
 @pytest.mark.parametrize(
@@ -95,6 +95,32 @@ def test_a_numeric_column_is_not_reported():
     """The cardinality rule decides string columns only; a numeric column is
     numerical at every size and has nothing to flip."""
     said = said_about(pd.DataFrame({'v': [float(i) for i in range(64)]}))
+
+    assert 'rows ran out' not in said
+
+
+def test_a_boolean_column_is_not_reported():
+    """A bool is categorical by its type rather than by a count, and says
+    nothing. Two values never come within reach of the limit, so this does not
+    reach the dtype precondition and does not claim to cover it."""
+    said = said_about(pd.DataFrame({'flag': [i % 2 == 0 for i in range(64)]}))
+
+    assert 'rows ran out' not in said
+
+
+def test_nulls_do_not_dilute_the_measure():
+    """The distinct count is taken over rows that have a value, so the share
+    must be too. Forty values among a hundred and sixty nulls has saturated
+    nothing, and dividing by the height of the frame said it had."""
+    said = said_about(
+        pd.DataFrame({'city': [f'c{i}' for i in range(40)] + [None] * 160})
+    )
+
+    assert 'holds 40 distinct values in the 40 rows that have one' in said
+
+
+def test_an_all_null_column_is_not_reported():
+    said = said_about(pd.DataFrame({'city': [None] * 100}))
 
     assert 'rows ran out' not in said
 
