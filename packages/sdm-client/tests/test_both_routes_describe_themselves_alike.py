@@ -542,3 +542,35 @@ def test_a_number_written_as_text_is_not_moved():
 
     assert ids == [0, 1, '7', 2]
     assert context.related_tables['e']['instance_id'].tolist() == ids
+
+
+def test_an_unreadable_envelope_takes_no_place_in_the_sequence():
+    """One that cannot be read contributes nothing, which has to include not
+    contributing a position: counting it moved the first readable envelope
+    off the numbers it arrived with, and leaving those alone is the one thing
+    this promises."""
+    alone = _split_from((keyed_envelope([], [3]),), 'context')
+    behind = _split_from(({'context': {}}, keyed_envelope([], [3])), 'context')
+
+    assert alone.instance_table['instance_id'].tolist() == [3]
+    assert behind.instance_table['instance_id'].tolist() == [3]
+
+
+def test_an_unreadable_envelope_in_the_middle_changes_nothing():
+    without = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 1])), 'context'
+    )
+    through = _split_from(
+        (
+            keyed_envelope([], [0, 1]),
+            {'context': {}},
+            keyed_envelope([], [0, 1]),
+        ),
+        'context',
+    )
+
+    assert (
+        through.instance_table['instance_id'].tolist()
+        == without.instance_table['instance_id'].tolist()
+        == [0, 1, 2, 3]
+    )

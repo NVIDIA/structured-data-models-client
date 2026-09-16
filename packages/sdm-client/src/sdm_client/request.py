@@ -692,7 +692,11 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
                 related.setdefault(name, []).append(shifted)
         seen = 0 if frame is None else len(frame)
         already = max(already + seen, highest + shift + 1)
-        first = False
+        # An envelope that carried no numbered rows has not taken a place in
+        # the sequence, so the next one that does is still the first. Counting
+        # it moved the first readable envelope off the numbers it arrived
+        # with, which is the one thing this promises not to do.
+        first = first and lowest is None
 
     def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
         if not frames:
