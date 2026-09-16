@@ -54,7 +54,12 @@ def payload_with_a_shared_row() -> dict:
 def test_a_raised_warning_leaves_the_payload_whole():
     """The warning is the caller's only notice that rows went. Turning it into
     an error must not also be what strips them: a raise partway through left
-    the payload short of rows nobody was told about."""
+    the payload short of rows nobody was told about.
+
+    The text is read in the raise path too. It states the rule the client
+    follows rather than an edit already made, because here nothing has been
+    removed and no context has been sent, so it may not describe the size of
+    one that was never built."""
     payloads = [payload_with_a_shared_row()]
     before = [list(r) for r in payloads[0]['context']['instance_table']['rows']]
     related_before = [
@@ -66,13 +71,10 @@ def test_a_raised_warning_leaves_the_payload_whole():
         with pytest.raises(UserWarning) as raised:
             _drop_context_that_answers_the_question(payloads, windowed=False)
 
-    # The text is read in the raise path too: it is stated as the rule the
-    # client follows, because nothing has been removed and nothing sent here.
     said = str(raised.value)
     assert 'are not sent as context' in said
     assert 'have been left out' not in said
     assert 'leaves them out' not in said
-    # Nor may it describe the size of a context that was never built.
     assert 'the context holds' not in said
     assert 'fewer rows than were sampled' not in said
 

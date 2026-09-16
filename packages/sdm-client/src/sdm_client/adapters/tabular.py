@@ -291,6 +291,8 @@ def _key_named_by(value: str) -> str | None:
     under a token of its own and refusing one would break a compliant
     deployment. It bounds an id at 1024 characters, so anything longer is not
     one either, and is declined before being parsed.
+
+    A value that is not JSON is read as the Python rendering it must then be.
     """
     import ast
     import json
@@ -301,7 +303,6 @@ def _key_named_by(value: str) -> str | None:
     try:
         named = json.loads(value)
     except (ValueError, TypeError, RecursionError):
-        # Not JSON, so read it as the Python rendering it must then be.
         try:
             named = ast.literal_eval(value)
         except (

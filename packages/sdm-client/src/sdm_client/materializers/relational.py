@@ -185,6 +185,17 @@ class RelationalMaterializer:
         return self._model
 
     def _build_graph(self) -> Graph:
+        r"""The engine graph the schema describes.
+
+        A table without a primary key has that said rather than left unsaid.
+        The engine infers a key from a column *name* without checking that it
+        identifies a row, so a child's foreign key called `ID` holding
+        `[1, 1, 2, 2, 3]` becomes that table's key, and linking it is then
+        refused for being one. Passing `None` through is what lets a caller
+        undo that; leaving it out meant a correct schema over correct data
+        could not be materialized, and the refusal named a key the caller had
+        explicitly removed.
+        """
         r"""Build exactly the graph described by the client schema."""
         from sdm_relational_engine.rfm import Graph
 
@@ -200,14 +211,6 @@ class RelationalMaterializer:
             if table.primary_key is not None:
                 engine_table.primary_key = table.primary_key
             else:
-                # Said, not merely left unsaid. The engine infers a key from a
-                # column *name* without checking uniqueness, so a child's
-                # foreign key called `ID` -- holding [1, 1, 2, 2, 3] -- becomes
-                # that table's primary key, and linking it is then refused for
-                # being one. The client let the caller set the key to None and
-                # then never passed that on, so a correct schema over correct
-                # data could not be materialized and the error named a key the
-                # caller had explicitly removed.
                 engine_table.primary_key = None
             if table.time_column is not None:
                 engine_table.time_column = table.time_column
@@ -591,18 +594,20 @@ def _to_declared(values: pd.Series, dtype: str, where: str) -> pd.Series:
     A column with a missing value cannot be a plain `int64`, so it becomes
     pandas' nullable `Int64` rather than widening to float and rounding an
     identifier.
+
+    The remaining declaration is `string`, which is how a whole number wider
+    than an int64 travels: only the digits matter and only a string keeps all
+    of them. An integer is read with `int()` on the value and never through
+    `pd.to_numeric`, which converts by way of a float64 and brings
+    9007199254740993 back as 9007199254740992. These are identifiers, and the
+    low bit is the whole of their job.
     """
     if dtype.startswith('float'):
         return pd.to_numeric(values.astype(object), errors='coerce').astype(
             'float64'
         )
     if not dtype.startswith('int'):
-        # `string`, for a whole number wider than an int64 holds. Only the
-        # digits matter and only a string keeps all of them.
         return values.map(lambda value: None if pd.isna(value) else str(value))
-    # int() on the Decimal, never pd.to_numeric: that converts through a
-    # float64 and 9007199254740993 comes back 9007199254740992. These are
-    # identifiers, and the low bit is the whole of their job.
     fractional = values.map(
         lambda value: not pd.isna(value) and value != int(value)
     )
@@ -635,14 +640,16 @@ def _columns_to_leave_out(
     own -- the target among them -- and letting a caller's list stand in for
     that would hand the model back something the query had deliberately
     removed.
+
+    Only an absent option and an explicit `None` mean there is nothing to
+    exclude. Anything else is read and refused if it is not a mapping, since
+    passing over a value that cannot be one is the same silence this exists to
+    remove.
     """
     merged = {
         table: list(columns)
         for table, columns in (query.get_exclude_cols_dict() or {}).items()
     }
-    # `.get(name)` and not `.get(name) or {}`: an empty list is not a mapping
-    # and saying nothing about it is the same silence this is fixing, so only
-    # an absent option and an explicit `None` mean "nothing to exclude".
     given = options.get('exclude_cols_dict')
     if given is None:
         given = {}
@@ -748,10 +755,20 @@ def _drop_context_that_answers_the_question(
 
     The two halves carry their own `instance_id` space, so removing a context
     row means removing the related rows that hang off it and nothing else.
+
+    What is found is collected before any of it is taken, keyed by the identity
+    of the context it belongs to and unioned: two payloads can share one
+    context object, where counting the entries would report a row once per
+    entry and keeping only the first entry's rows would leave the rest behind.
+
+    The notice comes before the removal. A caller running with
+    `simplefilter('error')` turns it into a raise, and a raise partway through
+    would leave the payloads it had already reached short of rows nobody was
+    told were gone. Which is why it states the rule rather than the edit:
+    raised as an exception, nothing has been removed and no context has been
+    sent, and a message claiming either would be false in the one case the
+    ordering exists for.
     """
-    # Keyed by identity and unioned, because two payloads can share one
-    # context object: counting the entries would report a row once per entry,
-    # and keeping only the first entry's rows would leave the rest behind.
     found: dict[int, tuple[Mapping[str, Any], set[Any]]] = {}
     for payload in payloads:
         context = payload.get('context')
@@ -776,13 +793,6 @@ def _drop_context_that_answers_the_question(
     if not found:
         return
 
-    # Said before anything is removed: a caller running with
-    # `simplefilter('error')` turns this into a raise, and a raise partway
-    # through would leave the payloads it had already reached stripped of rows
-    # the caller never learned were gone. Which is also why both sentences
-    # state the rule rather than the edit -- raised as an exception, no edit
-    # has been made and no context has been sent, and a message claiming
-    # either would be false in the one case the ordering exists for.
     total = sum(len(answered) for _, answered in found.values())
     warnings.warn(
         f'{total} of the rows sampled as context are the rows being scored, '

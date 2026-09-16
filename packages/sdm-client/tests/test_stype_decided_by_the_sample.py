@@ -120,6 +120,8 @@ def test_nulls_do_not_dilute_the_measure():
 
 
 def test_an_all_null_column_is_not_reported():
+    """A column with no values has none to have run out of. Held as behaviour
+    rather than as a guard: no value count can put it within reach."""
     said = said_about(pd.DataFrame({'city': [None] * 100}))
 
     assert 'rows ran out' not in said

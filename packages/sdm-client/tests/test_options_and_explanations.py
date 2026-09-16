@@ -38,9 +38,12 @@ RNG = np.random.default_rng(11)
 
 
 def graph(*, null_times: int = 0, duplicate_keys: int = 0) -> Schema:
-    # 600 users so that a handful of repeats stays inside the tolerance
-    # inference allows; an explicit key is held to the same bar and refused
-    # above it, which is a different bug's territory.
+    """A two-table graph, with as many repeated keys or null times as asked.
+
+    600 users, so that a handful of repeats stays inside the tolerance
+    inference allows. An explicit key is held to the same bar and refused
+    above it, which is a different bug's territory.
+    """
     users = pd.DataFrame(
         {
             'uid': [*range(600 - duplicate_keys), *range(duplicate_keys)],

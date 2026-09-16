@@ -341,12 +341,14 @@ class PredictiveQuery:
 
         Setting the meaning by hand fixes it, verified at seventy classes and
         at two hundred, so the refusal now says so.
+
+        The column named is the target rather than whichever text column comes
+        first. A schema with a free-text feature and a many-class label has
+        two, and naming the wrong one offers a remedy that changes nothing
+        about the refusal.
         """
         if 'semantic type text' not in reasons:
             return ''
-        # The target, not whichever text column comes first. A schema with a
-        # free-text feature and a many-class label has two, and naming the
-        # wrong one is a remedy that changes nothing about the refusal.
         named = self._target_named_by_the_query()
         if named is None:
             return ''

@@ -32,6 +32,10 @@ def validate(
     fails resolution fails for every model; a query that fails only capability
     is good PQL that something else can answer.
 
+    Capability is asked first. A model that cannot answer this shape of
+    question cannot answer it against any schema, and resolving first put a
+    complaint about the schema in front of a capability problem.
+
     Args:
         query: The predictive query, as text.
         graph: The schema to resolve names and types against. No rows.
@@ -67,9 +71,6 @@ def validate(
             ]
         )
 
-    # Before resolution, because a model that cannot answer this shape of
-    # question cannot answer it against any schema, and resolving first put a
-    # schema complaint in front of a capability problem.
     parsed_capability = check_parsed_capabilities(parsed, profile)
     if not parsed_capability.ok:
         return None, parsed_capability

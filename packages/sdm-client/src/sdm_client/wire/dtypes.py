@@ -592,21 +592,21 @@ def as_declared(value: Any, dtype: str | None) -> Any:
 
     Reading it back is a cast, not a parse: anything that does not convert
     exactly is returned untouched rather than guessed at.
+
+    A bool is an int in Python and is not a number the caller wrote, so it is
+    excluded. From text, `int` accepts only an exact integer literal, so
+    reaching the conversion means it was one. From a number, `int(1.9)` does
+    not raise and a value that is not whole is not this integer under another
+    name, which is true of a float, a numpy float and a `Decimal` alike and so
+    is asked of the value rather than of its type.
     """
     if value is None or dtype is None or isinstance(value, bool):
-        # A bool is an int in Python and is not a number the caller wrote.
         return value
     try:
         if dtype.startswith('int'):
             read = int(value)
             if isinstance(value, str):
-                # `int` accepts only an exact integer literal from text, so
-                # reaching here means it was one.
                 return read
-            # `int(1.9)` does not raise, and a number that is not whole is not
-            # this integer under another name -- true of a float, a numpy
-            # float and a Decimal alike, so it is asked of the value rather
-            # than of its type.
             return read if read == value else value
         if dtype.startswith('float'):
             return float(value)

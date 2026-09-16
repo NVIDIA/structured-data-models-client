@@ -203,14 +203,15 @@ class RelationalAdapter:
         and the second names the columns by counting the payload rather than by
         reading a declared type, because a cardinality complaint is about the
         values.
+
+        A different complaint needs a different remedy. Where the columns are
+        already categorical, telling their owner to make them categorical
+        would be advice that changes nothing.
         """
         columns, complaint = _columns_the_endpoint_means(error, payload)
         if not columns:
             return error
         if complaint == 'cardinality':
-            # A different complaint needs a different remedy: these columns are
-            # already categorical, and telling their owner to make them
-            # categorical would be advice that changes nothing.
             message = (
                 f'{getattr(error, "message", error)}. In this request that is '
                 f'{", ".join(columns)}. A column with that many distinct '
@@ -619,14 +620,15 @@ def _as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     the column's own type is restoring something. A regression's answer is a
     number the model computed, and rounding that to the target's dtype would be
     this client deciding how precise the answer is.
+
+    Only a class label is reshaped. A regression's answer is a number the
+    model computed rather than one of the values the column held, so giving it
+    the column's type would be this client deciding how precise the answer is.
     """
     import dataclasses
 
     task = (payload or {}).get('task', {})
     if 'classification' not in str(task.get('kind', '')):
-        # Only a class label. A regression's answer is a number the model
-        # computed rather than one of the values the column held, so reshaping
-        # it would be this client deciding how precise the answer is.
         return items
     dtype = task.get('target', {}).get('dtype')
     if not dtype or not (dtype.startswith('int') or dtype.startswith('float')):

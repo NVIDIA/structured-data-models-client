@@ -57,6 +57,12 @@ def single_table() -> Schema:
 
 
 def graph(*, timed: bool, linked: bool = True) -> Schema:
+    """A graph of users, movies and ratings, with or without time and links.
+
+    Asked for without time, the column is dropped rather than left undeclared:
+    inference finds a timestamp and the refusals rightly point at it, which is
+    a different situation from a graph with no time in it at all.
+    """
     users = pd.DataFrame({'USERID': range(60), 'AGE': RNG.integers(18, 70, 60)})
     movies = pd.DataFrame(
         {'MOVIEID': range(40), 'GENRE': RNG.choice(list('pqr'), 40)}
@@ -73,9 +79,6 @@ def graph(*, timed: bool, linked: bool = True) -> Schema:
         }
     )
     if not timed:
-        # Dropped, not merely left undeclared: inference finds a timestamp
-        # column and the refusals rightly point at it, which is a different
-        # situation from a graph that has no time in it at all.
         ratings = ratings.drop(columns=['when'])
     tables = {'users': users, 'ratings': ratings}
     links = [Relationship('ratings', 'USERID', 'users', 'USERID')]

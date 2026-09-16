@@ -310,11 +310,6 @@ class Request:
         request.context = Split(instance_table=empty)
         request.predict = Split(instance_table=empty)
         request.inference = dict(first.get('inference', {}))
-        # Named by the query, not by whichever table the caller's dict
-        # happened to hold first. Every pre-send description of a relational
-        # request read it from insertion order, so `entity_table` answered
-        # correctly or incorrectly depending on how the schema was built, and
-        # a programmatic caller could not use it as a guard.
         request.entity_table = entity_table
         request.query = query
         request.indices = indices
@@ -439,6 +434,10 @@ def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
     what `repr` shows, so a request that cannot describe itself is worse than
     one that describes itself roughly -- but `nothing_to_score` decides whether
     to answer without sending, and there `None` and `0` are opposite answers.
+
+    A list, specifically: `Sized` admits `{}` and `''`, which would read as an
+    envelope carrying no rows rather than as one that cannot be read, and
+    those are the two answers this has to keep apart.
     """
     if not isinstance(payload, Mapping):
         return None
@@ -449,9 +448,6 @@ def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
     if not isinstance(instance_table, Mapping):
         return None
     rows = instance_table.get('rows')
-    # A list, specifically. `Sized` admits `{}` and `''`, which would be read
-    # as an envelope carrying no rows rather than as one that cannot be read,
-    # and those are the two answers this has to keep apart.
     return len(rows) if isinstance(rows, (list, tuple)) else None
 
 
@@ -485,13 +481,18 @@ def _check_scored_values_mean_what_the_schema_says(
     is inferred from the context a few lines below. Checking before that ran
     left the hand-built request -- the one with no query to have validated it
     -- as the only one not covered.
+
+    A column is not skipped merely for holding nothing. `pd.Series([],
+    dtype='int64')` still says int64, and a zero-row batch declaring a type
+    the column cannot mean builds the same contradictory envelope as a full
+    one. A column that genuinely carries no type reports UNTYPED and is
+    skipped for that reason instead. An all-null context column, by contrast,
+    has no claim to contradict: the `categorical` it was given is a
+    placeholder rather than a finding, so the scored rows decide both its type
+    and its meaning, and only once a caller has said what the column means is
+    that a claim like any other.
     """
     if predict is None or entity_table is None or entity_table not in schema:
-        # Not skipped merely for being empty: `pd.Series([], dtype='int64')`
-        # still says int64, and a zero-row batch that declares a type the
-        # column cannot mean would build the same contradictory envelope as a
-        # full one. A column that genuinely carries no type reports UNTYPED
-        # below and is skipped there.
         return
     table = schema[entity_table]
     for name in predict.columns:
@@ -499,11 +500,6 @@ def _check_scored_values_mean_what_the_schema_says(
         if column is None:
             continue
         if column.untyped and not column.stype_declared:
-            # No claim to contradict. An all-null context column is what
-            # widening exists for, and the `categorical` it was given is a
-            # placeholder rather than a finding, so the scored rows decide both
-            # its type and its meaning. Once a caller has said what the column
-            # means, that is a claim like any other.
             continue
         arriving = infer_tfm_dtype(predict[name])
         if arriving == UNTYPED or supports_dtype(column.stype, arriving):

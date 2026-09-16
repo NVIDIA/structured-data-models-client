@@ -112,10 +112,18 @@ class Column:
         self._check_stype(self.stype)
 
     def __setattr__(self, key: str, value: Any) -> None:
+        r"""Assign a field, keeping the three that describe each other true.
+
+        `untyped` is derived rather than declared. It records that inference
+        found no type, and the adapter reads it as authority over `dtype`, so
+        letting it be set is letting a column claim a dtype and hold none.
+        Naming the dtype is the information it was missing, which is why doing
+        so clears it and the adapter stops substituting.
+
+        `stype_declared` separates a meaning that was chosen from one that was
+        inferred, and a second assignment is what distinguishes them.
+        """
         if key == 'untyped':
-            # Derived, not declared: it records that inference found no type,
-            # and the adapter reads it as authority over `dtype`. Letting it
-            # be set is letting a column say it has a dtype and has none.
             raise StructuredDataError(
                 "'untyped' is inferred from the values and cannot be set; "
                 'assign the dtype you want instead',
@@ -125,12 +133,8 @@ class Column:
             self._check_stype(value)
             self._check_supports_dtype(value, getattr(self, 'dtype', None))
             if hasattr(self, 'stype'):
-                # Not the first assignment, so somebody chose this.
                 object.__setattr__(self, 'stype_declared', True)
         if key == 'dtype' and getattr(self, 'untyped', False):
-            # `untyped` records that inference had nothing to go on. A caller
-            # naming the dtype is the information it was missing, so the
-            # adapter must stop substituting UNTYPED and send what was asked.
             object.__setattr__(self, 'untyped', False)
         object.__setattr__(self, key, value)
         if key == 'stype' and value == 'timestamp':
@@ -151,17 +155,21 @@ class Column:
         not displace the first. Nothing is adopted when inference already
         chose, so this resolves the contradiction rather than overriding a
         decision.
+
+        A column that is also part of the key is left alone rather than
+        refused: the two meanings contradict, and raising from an stype
+        assignment would report it from the wrong place. `check_consistent`
+        is where that is said.
+
+        The time column is set directly because the checked route assigns this
+        column's stype, which would re-enter here before the attribute it
+        guards on exists.
         """
         table = getattr(self, '_table', None)
         if table is None or getattr(table, 'time_column', None) is not None:
             return
         if self.name in _as_key_tuple(getattr(table, 'primary_key', None)):
-            # Refusing here would raise from an stype assignment; the two
-            # meanings contradict, and `check_consistent` is where that is
-            # reported.
             return
-        # Direct, because the checked route sets this column's stype, which
-        # would re-enter here before the attribute it guards on is set.
         object.__setattr__(table, 'time_column', self.name)
 
     def check_consistent(self) -> None:
@@ -241,10 +249,14 @@ class Table:
     duplicate_keys: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:
+        r"""Check the names and the cells, and take ownership of the columns.
+
+        `Schema.from_data` checks the cells while inferring, but a hand-built
+        `Table` reached the adapters unchecked, where a list cell surfaced
+        much later as `TypeError: unhashable type: 'list'` raised from label
+        collection, naming nothing the caller had written.
+        """
         self._check_name(self.name)
-        # `Schema.from_data` checks this while inferring, but a hand-built
-        # `Table` reached the adapters unchecked and a list cell surfaced much
-        # later as `TypeError: unhashable type: 'list'` from label collection.
         frame = getattr(self, 'data', None)
         if frame is not None:
             for column in frame.columns:
@@ -261,6 +273,11 @@ class Table:
         could only point at one of them, so setting the stype through the
         first would have ordered the second. A column belongs to a table;
         handing the same one to two is asking for two columns.
+
+        A borrowed column is copied into a new dict, so that a caller holding
+        the one they passed does not find entries in it they did not put
+        there. The back-reference itself is set directly: it is not a field,
+        and must stay out of equality and `repr`.
         """
         borrowed = [
             name
@@ -268,20 +285,15 @@ class Table:
             if getattr(column, '_table', None) not in (None, self)
         ]
         if borrowed:
-            # A new dict, so a caller who kept theirs does not find entries
-            # they did not put there.
             object.__setattr__(self, 'columns', dict(self.columns))
             for name in borrowed:
                 self.columns[name] = _copy_column(self.columns[name])
         for column in self.columns.values():
-            # Set directly: a back-reference is not a field, and must stay out
-            # of equality and `repr`.
             object.__setattr__(column, '_table', self)
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
             if value is None:
-                # No key, so nothing tolerated and nothing to report.
                 object.__setattr__(self, 'duplicate_keys', 0)
                 object.__setattr__(self, key, None)
                 return
@@ -301,10 +313,16 @@ class Table:
         check tolerated is recorded and said out loud. Inference does all three
         after nominating a key; assignment has to as well, or the two routes
         describe the same table differently.
+
+        A repeat is the one visible sign that the column identifies something
+        coarser than a row, most often a parent on a table whose real key is
+        that column together with another. Naming that possibility is what
+        makes the warning actionable; saying only that the rows are
+        indistinguishable describes the symptom. A column that cannot be a key
+        at all has already been refused by `_check_key`.
         """
         names = _as_key_tuple(value)
         for name in names:
-            # `_check_key` has already refused a column that cannot be one.
             self.columns[name].stype = 'ID'
         frame = getattr(self, 'data', None)
         if frame is None or frame.empty:
@@ -312,11 +330,6 @@ class Table:
         quality = _key_quality(frame, names)
         object.__setattr__(self, 'duplicate_keys', quality.duplicates)
         if quality.duplicates:
-            # A repeat is the one visible sign that this column identifies
-            # something coarser than a row -- most often a parent, on a table
-            # whose real key is that column together with another. Naming that
-            # possibility is what makes the warning actionable; saying only
-            # that the rows are indistinguishable describes the symptom.
             together = ', '.join(
                 repr(other)
                 for other in self.columns
@@ -370,6 +383,11 @@ class Table:
         caller means. An explicit key is an assertion rather than a guess, so
         it is held to the same standard the inference applies -- and a caller
         who states something false should hear so.
+
+        A null is refused however few there are. It is not a near miss on
+        uniqueness: the engine drops those rows rather than scoring them, and
+        a single one passed silently because `duplicated` does not flag one
+        null.
         """
         names = (value,) if isinstance(value, str) else tuple(value)
         if not names:
@@ -397,10 +415,6 @@ class Table:
             return
         quality = _key_quality(frame, names)
         if quality.nulls:
-            # Refused however few. A missing key is not a near-miss on
-            # uniqueness -- the engine drops those rows rather than scoring
-            # them, and a single one used to pass silently because
-            # `duplicated` does not flag one null.
             raise StructuredDataError(
                 f'{".".join((self.name, *names))} has {quality.nulls} row(s) '
                 f'with no value, so those rows cannot be identified; fill or '
@@ -448,8 +462,6 @@ class Table:
     def __repr__(self) -> str:
         key = f', primary_key={self.primary_key!r}' if self.primary_key else ''
         time = f', time_column={self.time_column!r}' if self.time_column else ''
-        # A tolerated duplicate changes which row the model is shown, so it
-        # belongs where a caller will actually see it.
         repeats = (
             f', {self.duplicate_keys} repeated keys'
             if self.duplicate_keys
@@ -624,8 +636,6 @@ class Schema:
 
         for name, key in (primary_keys or {}).items():
             table = _require_table(built, name)
-            # The setter takes a composite key, so this has to as well, or the
-            # two ways of saying the same thing disagree.
             for column in _as_key_tuple(key):
                 _require_column(built, name, column)
             table.primary_key = key
@@ -635,9 +645,6 @@ class Schema:
             )
         if relationships is None:
             inferred = _infer_relationships(built)
-            # Held to the same contract as an explicit link. Inference matches
-            # on name alone, so it can pair columns whose dtypes cannot join,
-            # and `query.py` would send that edge unchanged.
             inferred = [link for link in inferred if _is_joinable(built, link)]
         else:
             inferred = list(relationships)
@@ -656,10 +663,6 @@ class Schema:
 
         schema = cls(built, inferred)
         schema._mark_key_columns()
-        # Last, because what inference cost is not knowable until the
-        # overrides have been applied and the relationships settled. A caller
-        # who named the time column is not missing one, and a caller who
-        # passed relationships did not have any dropped.
         dates = {
             name: named
             for name, table in built.items()
@@ -761,11 +764,6 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
             f'table {name!r} column names must be strings; got {non_strings}',
             code='INVALID_REQUEST',
         )
-    # Before any column is described, and not merely for tidiness: typing a
-    # column asks for its distinct values, and a list cell makes that raise
-    # `unhashable type: 'list'` from inside pandas. `Table.__post_init__` asks
-    # the same question again for a table built by hand, which is the route
-    # that has not passed through here.
     for column in frame.columns:
         require_scalar_cells(frame[column], f'{name}.{column}')
 
@@ -956,6 +954,19 @@ def _warn_stype_was_decided_by_the_rows_read(
     This is the same property the primary-key inference documents about
     uniqueness, and it has the same remedy, which is to say what the column is
     when the frame is a sample.
+
+    The count decides the meaning for strings only, which is what this is
+    about: a bool is categorical by its type rather than by how many values it
+    holds. That makes the dtype check a precondition rather than a filter
+    today, since the only other categorical dtype is bool and two values never
+    come within reach of the limit. It is stated so that a dtype added to the
+    categorical side later does not inherit a message about a count that did
+    not decide it.
+
+    The share is measured against the rows that hold a value, because that is
+    what the distinct count was taken from. A column of forty values among a
+    hundred and sixty nulls has saturated nothing, and dividing by the height
+    of the frame said it had.
     """
     for name, table in tables.items():
         frame = table.data
@@ -964,23 +975,11 @@ def _warn_stype_was_decided_by_the_rows_read(
         for column, meta in table.columns.items():
             if meta.stype_declared or meta.stype != 'categorical':
                 continue
-            # The count decides the meaning for strings only, which is
-            # what this is about: a bool is categorical by its type and not
-            # by how many values it holds. Today that makes the check a
-            # precondition rather than a filter, since the only other
-            # categorical dtype is bool and two values never come within
-            # reach of the limit below. It is stated so that a dtype added
-            # to the categorical side later does not inherit a message
-            # about a count that did not decide it.
             if meta.dtype != 'string' or column not in frame:
                 continue
             distinct = frame[column].nunique(dropna=True)
-            # Measured against the rows that hold a value, because that is
-            # what the distinct count was taken from: a column of forty
-            # values and a hundred and sixty nulls has saturated nothing,
-            # and dividing by the height of the frame would say it had.
             present = int(frame[column].count())
-            if not present or distinct < present * _UNSATURATED:
+            if distinct < present * _UNSATURATED:
                 continue
             if distinct < _MAX_CATEGORICAL_CARDINALITY * _WITHIN_REACH:
                 continue
@@ -1015,6 +1014,16 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
     So the column is still not parsed, and the declining is no longer silent.
     Only a table that ended with no time column is worth a word; one that
     found its timestamp does not need to hear about a date-shaped string.
+
+    The shape test is not a correctness check: the conversion below rejects
+    everything it would, and more. It is there so that the ordinary case, a
+    table whose string columns are names and descriptions, does not pay to
+    have every one of them parsed as a date.
+
+    Every remaining question is answered by running that conversion over the
+    whole column rather than sampling it or reasoning about it: whether the
+    values past the sample hold their shape, whether they are real dates, and
+    which form of the call the caller should be told to make.
     """
     frame = table.data
     if table.time_column is not None or frame is None or frame.empty:
@@ -1024,15 +1033,7 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
             continue
         present = frame[name].dropna()
         if not dates.looks_unambiguous(present):
-            # Not a correctness check -- the conversion below rejects
-            # everything this would, and more. It is here so that the ordinary
-            # case, a table whose string columns are names and descriptions,
-            # does not pay to have each one parsed as a date.
             continue
-        # Every remaining question is answered by running the conversion on
-        # the whole column rather than sampling or reasoning about it: whether
-        # the values past the sample hold their shape, whether they are real
-        # dates, and which form of the call a caller should be told to make.
         how = dates.conversion_that_works(present)
         if how is None:
             continue
@@ -1090,6 +1091,11 @@ def _warn_table_cannot_be_linked_to(
     text. A column cannot be both the time column and the primary key, so
     asking for it here would contradict the other warning, and a caller who
     followed both in order would end with neither.
+
+    How many columns could be the key and how many tables they are shared with
+    are two counts, and they do not move together: several columns can be
+    shared with one table, and one column with several. Agreeing either by the
+    other made the sentence disagree with the graph it describes.
     """
     named_elsewhere: dict[str, set[str]] = {}
     keyed_by = set()
@@ -1116,9 +1122,6 @@ def _warn_table_cannot_be_linked_to(
         if not candidates:
             continue
         suggestion = repr(candidates[0]) if len(candidates) == 1 else '...'
-        # Two agreements, and they do not move together: several columns can
-        # be shared with one table, and one column with several. Counting
-        # either by the other made the sentence disagree with the graph.
         elsewhere = {
             other
             for column in candidates
@@ -1330,6 +1333,14 @@ def to_graph_definition(schema: Schema) -> Any:
     The language resolves a query against names and types with no rows
     attached, which is what this hands it. Built here rather than in the query
     module so that a schema has exactly one translation into what PQL reads.
+
+    `TableDefinition.pkey` is a single column name, so the language has no
+    form for a composite key and cannot be given one. It is dropped rather
+    than refused, because the engine does support one and the request that
+    follows carries it. What the drop costs is that the language resolves the
+    query against a table it believes has no identity, so a question that
+    needs one is answered as though the table had none, which is why it is
+    said rather than done quietly.
     """
     from predictive_query.schema.graph import (
         ColumnKey,
@@ -1356,13 +1367,6 @@ def to_graph_definition(schema: Schema) -> Any:
             )
         key = table.primary_key
         if key is not None and not isinstance(key, str):
-            # `TableDefinition.pkey` is a single column name, so the language
-            # has no form for a composite key and cannot be given one. It is
-            # dropped rather than refused, because the engine does support one
-            # and the request that follows will carry it -- but the language
-            # resolves this query against a table it believes has no identity,
-            # so a question that needs one is answered as though the table had
-            # none, and until now nothing said so.
             warnings.warn(
                 f'table {name!r} has the composite primary key '
                 f'{list(key)}, and a predictive query can only name a single '

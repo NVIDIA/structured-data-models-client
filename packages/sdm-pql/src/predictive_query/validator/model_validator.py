@@ -76,6 +76,19 @@ class ModelValidator:
 
         Returns:
             List of encountered errors/warnings.
+
+        A `LIST_DISTINCT` over a column that is not a foreign key is a
+        multilabel target whether or not the query ranks it, and it is refused
+        outside the RANK branch for that reason. Asking only about the ranked
+        form let the plain one reach the engine, which does not implement it,
+        so a caller was told the SDK had broken with `INTERNAL_ERROR` when the
+        answer is that this model does not serve that kind of task. On a
+        foreign key both forms resolve to link prediction and are left alone.
+
+        Every reason a query is refused is collected before any is raised. A
+        query can be static *and* ask for too many candidates, and reporting
+        only the first sends the caller to fix it and be refused again for the
+        second, which is the shape of defect this exists to remove.
         """
         response = ValidationResponse()
         if parsed_query.rfm_query:
@@ -142,13 +155,6 @@ class ModelValidator:
             aggregated_col_name = target_ast.get_target_column_name()
             _, target_is_fkey = self._is_key_col(aggregated_col_name)
 
-            # A `LIST_DISTINCT` over a column that is not a foreign key is a
-            # multilabel target whether or not the query ranks it. Asking only
-            # about the ranked form let the plain one through to the engine,
-            # which does not implement it, so a caller was told the SDK had
-            # broken -- `INTERNAL_ERROR` -- when the answer is that this model
-            # does not serve that kind of task. On a foreign key both forms
-            # resolve to link prediction and are left alone.
             if parsed_query.problem_type == ProblemType.CLASSIFY or (
                 target_ast.stype == Stype.multicategorical
                 and not target_is_fkey
@@ -167,15 +173,7 @@ class ModelValidator:
                     )
                 )
             else:
-                # Both, rather than one and then the other. A query can be
-                # static *and* ask for too many candidates, and reporting only
-                # the first sends a caller to fix it and be refused again for
-                # the second, which is the shape of defect this is fixing.
                 if target_ast.aggr_time_range is None:
-                    # Outside the RANK branch, because a static LIST_DISTINCT
-                    # is refused whether or not it ranks. Asking only about the
-                    # ranked form let the plain one reach the engine, which
-                    # asserts.
                     response.errors.append(
                         ValidationError(
                             title='Static Link Prediction not supported',

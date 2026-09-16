@@ -154,6 +154,9 @@ class JoinValidator:
         to it and to nothing else, and finding `C -> A -> D` would advise a
         join between siblings that does not exist. The parent of a group is the
         table whose own primary key is in it.
+
+        Two tables joined on each other's key, or neither on its own, name no
+        parent between them and so have no route through here.
         """
         points_at: dict[str, set[str]] = {}
         for col_group in self.graph.col_groups:
@@ -166,8 +169,6 @@ class JoinValidator:
                 in col_group.columns
             }
             if len(parents) != 1:
-                # Two tables joined on each other's key, or neither on its own:
-                # no parent to name, so no route through here.
                 continue
             parent = next(iter(parents))
             for child in tables - {parent}:
@@ -200,6 +201,26 @@ class JoinValidator:
         contains an error unless exactly one key is valid, because guessing the
         join would change the query. ``node`` only makes those errors specific;
         it takes no part in choosing the key.
+
+        Keys are accumulated across groups rather than taken from the last.
+        A group qualifies by holding the parent key, which every child of that
+        parent does, so a sibling's group arrives holding no column of the
+        table being asked about and overwrote the answer an earlier group had
+        found. That left only the last-declared child of a parent aggregatable,
+        and reversing the declaration order swapped which one worked.
+
+        Accumulating is also what makes the ambiguity check true: two foreign
+        keys from one table into the same parent arrive as two groups, and
+        taking the last would see one key and call the join unique when it is
+        not. Repeats are dropped so that a group seen twice cannot report an
+        ambiguity that is not there.
+
+        A table that is reachable but further than a join can go is named as
+        such. Saying there is no foreign key would send the caller to add one
+        that already exists a hop away, which is the wrong repair for the
+        wrong problem; and reading a column rather than aggregating rows is
+        the same distance asked a different way, so its repair is a column one
+        hop away rather than an aggregation one level down.
         """
         response = ValidationResponse()
         keys = []
@@ -238,19 +259,6 @@ class JoinValidator:
             ]
             assert is_keys_group or is_rev_keys_group
             found = keys if is_keys_group else reverse_keys
-            # Accumulated across groups, not assigned from the last one. A
-            # group qualifies by holding the parent key, which every child of
-            # that parent does, so a sibling's group reaches here with no
-            # column of the table being asked about and used to overwrite the
-            # answer an earlier group had found. That left only the
-            # last-declared child of a parent aggregatable, and reversing the
-            # declaration order swapped which one worked.
-            #
-            # Accumulating is also what makes the ambiguity check true: two
-            # foreign keys from one table into the same parent arrive as two
-            # groups, and taking the last would see one key and call the join
-            # unique when it is not. Repeats are dropped so that a group seen
-            # twice cannot report an ambiguity that is not there.
             found.extend(key for key in curr_keys if key not in found)
 
         if isinstance(node, Aggregation):
@@ -365,11 +373,6 @@ class JoinValidator:
             if is_aggregation or len(reverse_keys) == 0:
                 through = self._route_between(fkey_table, pkey_table)
                 if through and isinstance(node, Aggregation):
-                    # There is a way from one table to the other; it is just
-                    # longer than a join can be. Saying "there is no foreign
-                    # key" sends the caller to add one that already exists a
-                    # hop away, which is the wrong repair for the wrong
-                    # problem.
                     explanation = (
                         f'{fkey_table} reaches {pkey_table} through '
                         f'{" -> ".join(through)}, and an aggregation joins on '
@@ -380,10 +383,6 @@ class JoinValidator:
                         f"{pkey_table}'s key on {fkey_table} as well."
                     )
                 elif through:
-                    # The same distance, a different question: this one reads a
-                    # column rather than aggregating rows, so the repair is a
-                    # column one hop away rather than an aggregation one level
-                    # down.
                     explanation = (
                         f'{node.fqn} is on {pkey_table}, which {fkey_table} '
                         f'reaches through {" -> ".join(through)}, and a query '

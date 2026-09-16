@@ -73,6 +73,20 @@ class LocalGraphStore:
         Args:
             table_name: The table name.
             pkey: The primary keys to receive node IDs for.
+
+        Keys are cast to the Python type of the index's first element, and
+        failing that to the index's own dtype. The first is what this always
+        did and is right for a numpy-backed index, where `type(np.int64(3))`
+        is `np.int64` and pandas accepts it, and for an object index of one
+        uniform type, where it coerces a key that arrived as text. But an
+        object index holds whatever is in cell zero, and that is a class
+        rather than a dtype: a column of `Decimal` raised `dtype '<class
+        'decimal.Decimal'>' not understood`. Falling back to the index's dtype
+        answers that without giving up the coercion in the other case.
+
+        `TypeError` is caught alongside `ValueError` because the cast raises it
+        for exactly the case the message describes, so the message never ran
+        and the raw pandas complaint escaped in its place.
         """
         if table_name not in self.df_dict.keys():
             raise KeyError(f"Table '{table_name}' does not exist")
@@ -87,24 +101,12 @@ class LocalGraphStore:
 
         pkey_map = self.pkey_map_dict[table_name]
 
-        # The Python type of the index's first element, then the index's own
-        # dtype. The first is what this always did, and it is right for a
-        # numpy-backed index -- `type(np.int64(3))` is `np.int64`, which pandas
-        # accepts -- and for an object index of one uniform type, where it
-        # coerces a key that arrived as text. But an object index holds
-        # whatever is in cell zero, and that is a class rather than a dtype: a
-        # column of `Decimal` raised `dtype '<class 'decimal.Decimal'>' not
-        # understood` here. Falling back to the index's dtype answers that
-        # case without giving up the coercion in the other one.
         failure: Exception | None = None
         for target in (type(pkey_map.index[0]), pkey_map.index.dtype):
             try:
                 pkey = pkey.astype(target)
                 break
             except (ValueError, TypeError) as e:
-                # `TypeError` as well as `ValueError`: the cast raised it for
-                # exactly the case the message below describes, so the message
-                # never ran and the raw pandas complaint escaped instead.
                 failure = e
         else:
             raise ValueError(
