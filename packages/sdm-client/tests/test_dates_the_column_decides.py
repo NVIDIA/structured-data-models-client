@@ -114,3 +114,22 @@ def test_a_timestamp_column_is_read_the_way_it_said():
         '2024-03-15 08:30',
         '2024-01-02 09:00',
     ]
+
+
+# --- the year window is for deciding what a column is, not for overruling ---
+
+
+def test_a_declared_time_column_is_not_refused_for_its_century():
+    """A table of nineteenth century records is a real table. The plausible
+    year window exists to tell a part code from a date on a column nobody has
+    described; a caller who named their time column has already said."""
+    old = pd.Series(['1899-01-01', '1899-02-14', '1875-06-30'])
+
+    assert dates.conversion_that_works(old) is None
+    assert dates.conversion_that_works(old, only_plausible_years=False) == ''
+
+
+def test_a_part_code_is_still_not_a_date_where_nothing_said_it_was():
+    codes = pd.Series([f'{4711 + i}-01-02' for i in range(5)])
+
+    assert dates.conversion_that_works(codes) is None

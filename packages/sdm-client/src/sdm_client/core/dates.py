@@ -103,7 +103,9 @@ def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
     return day_comes_first(values) is not None
 
 
-def conversion_that_works(values: pd.Series) -> str | None:
+def conversion_that_works(
+    values: pd.Series, *, only_plausible_years: bool = True
+) -> str | None:
     r"""The arguments `pd.to_datetime` needs for this column, or nothing.
 
     Run rather than reasoned about. A column of impossible dates coerces to
@@ -111,6 +113,12 @@ def conversion_that_works(values: pd.Series) -> str | None:
     date-shaped enough to reach here. A column that converts to years no
     warehouse holds is a code that looks like a date, and telling its owner to
     convert it would turn part numbers into timestamps.
+
+    That window is for deciding whether an undeclared column is a date at all.
+    A caller who has named the column as their time column has answered that,
+    and `only_plausible_years=False` takes the answer: a table of nineteenth
+    century records is a real table, and refusing it for the year it holds
+    would be this package overruling what it was told.
     """
     first, last = PLAUSIBLE_YEARS
     order = day_comes_first(values)
@@ -126,6 +134,8 @@ def conversion_that_works(values: pd.Series) -> str | None:
             continue
         if converted.isna().any():
             continue
+        if not only_plausible_years:
+            return named
         years = converted.dt.year
         if first <= years.min() and years.max() <= last:
             return named

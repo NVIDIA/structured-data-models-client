@@ -555,7 +555,7 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
     if present.empty:
         return values
     if dates.looks_unambiguous(present):
-        how = dates.conversion_that_works(present)
+        how = dates.conversion_that_works(present, only_plausible_years=False)
         if how is not None:
             return dates.read(values, how)
     example = next(
