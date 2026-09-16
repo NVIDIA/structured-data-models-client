@@ -76,3 +76,16 @@ def test_an_undecidable_column_is_still_refused():
 
 def test_a_part_code_that_opens_like_a_date_is_not_one():
     assert dates.day_comes_first(pd.Series(['15/03/2024-REV2'])) is None
+
+
+def test_the_deciding_value_is_found_wherever_it_is():
+    """One deciding value is enough and it can be anywhere. Sampling the front
+    of the column would refuse one that answers, a thousand rows later."""
+    late = pd.Series(['01/02/2024'] * 1000 + ['03/15/2024'])
+
+    assert dates.day_comes_first(late) is False
+    assert dates.looks_unambiguous(late)
+
+
+def test_a_column_that_never_decides_is_still_refused_however_long():
+    assert dates.day_comes_first(pd.Series(['01/02/2024'] * 2000)) is None

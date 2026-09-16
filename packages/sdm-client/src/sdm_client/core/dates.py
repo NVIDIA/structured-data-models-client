@@ -37,11 +37,12 @@ SAMPLE = 1000
 PLAUSIBLE_YEARS = (1900, 2100)
 
 
-#: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be.
-_TWO_PART = re.compile(r'(\d{1,2})[-/](\d{1,2})[-/]\d{2,4}')
+#: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be. Anchored, so a
+#: part code that opens like a date and continues is not read as one.
+_TWO_PART_PATTERN = r'^(\d{1,2})[-/](\d{1,2})[-/]\d{2,4}$'
 
 
-def day_comes_first(values: pd.Series, limit: int = SAMPLE) -> bool | None:
+def day_comes_first(values: pd.Series, limit: int | None = None) -> bool | None:
     r"""Which way round a slash-separated column reads, if it says.
 
     `02/01/2024` is two dates and the column cannot tell you which. But a
@@ -52,18 +53,24 @@ def day_comes_first(values: pd.Series, limit: int = SAMPLE) -> bool | None:
     So the question is not whether a single value is ambiguous -- most are --
     but whether anything in the column decides it. `None` means nothing did,
     which is also the answer when the column contradicts itself.
+
+    Every value is read, rather than the sample the shape test takes. One
+    deciding value is enough and it can be anywhere: a column of a thousand
+    `01/02/2024` followed by one `03/15/2024` is decided by the last of them,
+    and sampling the front of it would refuse a column that answers. Read as
+    two columns of numbers rather than a loop, so the whole of a large one
+    costs about what the sample did.
     """
     read = values.head(limit) if limit else values
-    first_over, second_over = False, False
-    for value in read:
-        if not isinstance(value, str):
-            continue
-        found = _TWO_PART.fullmatch(value.strip())
-        if found is None:
-            continue
-        one, two = int(found.group(1)), int(found.group(2))
-        first_over = first_over or one > 12
-        second_over = second_over or two > 12
+    if read.empty:
+        return None
+    parts = read.astype(str).str.extract(_TWO_PART_PATTERN)
+    if parts.empty:
+        return None
+    one = pd.to_numeric(parts[0], errors='coerce')
+    two = pd.to_numeric(parts[1], errors='coerce')
+    first_over = bool((one > 12).any())
+    second_over = bool((two > 12).any())
     if first_over == second_over:
         return None
     return first_over
@@ -72,9 +79,11 @@ def day_comes_first(values: pd.Series, limit: int = SAMPLE) -> bool | None:
 def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
     r"""Whether the column says what its dates are.
 
-    Year-first says it outright. A slash-separated column says it when one of
-    its own values rules a reading out, which is the ordinary case for any
-    column spanning more than twelve days.
+    Year-first says it outright, and the shape of a sample answers that: the
+    column has one shape throughout. A slash-separated column says it when one
+    of its own values rules a reading out, which is the ordinary case for any
+    column spanning more than twelve days -- and that question is asked of the
+    whole column, because the value that answers it can be anywhere.
 
     Matches whole rather than by prefix: a part code can open with something
     date-shaped and continue.
@@ -87,7 +96,7 @@ def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
         for value in read
     ):
         return True
-    return day_comes_first(read, limit=0) is not None
+    return day_comes_first(values) is not None
 
 
 def conversion_that_works(values: pd.Series) -> str | None:
