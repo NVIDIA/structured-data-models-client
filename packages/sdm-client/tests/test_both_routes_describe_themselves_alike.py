@@ -356,3 +356,23 @@ def test_a_stored_half_does_not_outrank_the_envelopes():
 
     assert len(request.predict.instance_table) == request.predict_rows == 1
     assert not request.nothing_to_score
+
+
+def test_which_route_a_request_is_on_is_one_answer():
+    """Reading, counting and replacing must agree about it. An empty tuple of
+    envelopes read as gathered for the refusal and as not gathered for the
+    read, so the object took its frames and then would not let them be
+    replaced."""
+    request = Request.__new__(Request)
+    request._payloads = ()
+    request._context = Split(
+        instance_table=pd.DataFrame({'rid': [1], 'amount': [2.0]})
+    )
+    request._predict = Split(instance_table=pd.DataFrame({'rid': [7, 8, 9]}))
+
+    assert request.predict_rows == 3
+    assert len(request.predict.instance_table) == 3
+
+    request.predict = Split(instance_table=pd.DataFrame({'rid': [4]}))
+
+    assert request.predict_rows == 1

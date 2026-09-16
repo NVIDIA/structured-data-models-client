@@ -396,8 +396,11 @@ class Request:
         would change what the request reports and not what it sends, which is
         worse than not being allowed: the object would describe rows the model
         never sees.
+
+        Gathered is read the same way here as everywhere else on this object,
+        so that the route a request is on is one answer rather than four.
         """
-        if getattr(self, '_payloads', None) is None:
+        if not self.payloads:
             return
         raise StructuredDataError(
             f'{half} cannot be replaced on a request gathered by a predictive '
