@@ -258,3 +258,20 @@ def test_the_sentence_agrees_for_every_count_of_column_and_table(
     said = ' '.join(str(w.message) for w in recwarn)
     assert 'nothing can link to a table without one' in said
     assert expected in said
+
+
+@pytest.mark.parametrize(
+    ('windowed', 'said'),
+    [(True, 'at the same moment'), (False, 'at one moment or another')],
+)
+def test_the_notice_says_which_rows_it_took(windowed, said):
+    """The two targets lose different rows. A window closes, so only the same
+    moment carries the answer; a static column does not move, so every moment
+    does. One sentence for both was true of only one of them."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _drop_context_that_answers_the_question(
+            (payload_with_a_shared_row(),), windowed=windowed
+        )
+
+    assert any(said in str(w.message) for w in caught)

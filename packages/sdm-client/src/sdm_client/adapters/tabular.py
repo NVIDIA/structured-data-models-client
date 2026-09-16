@@ -32,7 +32,6 @@ from sdm_api.generated.tfm_api import (
     ResponseContractError,
 )
 
-from sdm_client.adapters.relational import _as_declared_target
 from sdm_client.base import ModelSpec
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
@@ -47,6 +46,7 @@ from sdm_client.wire import (
     json_ready,
     widen_tfm_dtype,
 )
+from sdm_client.wire.answers import as_declared_target
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -128,7 +128,7 @@ class TabularAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=_as_declared_target(
+            items=as_declared_target(
                 _named_entities(parsed.predictions, payload),
                 payload,
             ),

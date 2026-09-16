@@ -35,6 +35,7 @@ from sdm_client.models import KUMO_RELATIONAL
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import as_declared
+from sdm_client.wire.answers import as_declared_target
 
 # What to ask for when the caller named nothing, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -177,7 +178,7 @@ class RelationalAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=_as_declared_target(
+            items=as_declared_target(
                 _named_entities(parsed.predictions, payload),
                 payload,
             ),
@@ -600,42 +601,3 @@ def _key_dtype(payload: dict[str, Any], reference: str) -> str | None:
             .get('dtype')
         )
     return None
-
-
-def _as_declared_target(items: list[Any], payload: dict[str, Any] | None):
-    r"""Give `prediction` back as the type the target column holds.
-
-    One endpoint renders a class label as a string and the other sends the
-    number, for the same question on the same integer-coded target. Both are
-    legal and the values agree; only their types differ, so
-
-        sum(1 for row in result if row.prediction == 0)
-
-    counted one of five on one model and none of five on the other -- no
-    exception, a plausible-looking answer, and wrong in the direction of "this
-    class never occurs". The target's dtype is on the wire, so it is read back
-    with it.
-
-    Class labels only. They are values the column held, so giving them back as
-    the column's own type is restoring something. A regression's answer is a
-    number the model computed, and rounding that to the target's dtype would be
-    this client deciding how precise the answer is.
-    """
-    import dataclasses
-
-    task = (payload or {}).get('task', {})
-    if 'classification' not in str(task.get('kind', '')):
-        return items
-    dtype = task.get('target', {}).get('dtype')
-    if not dtype or not (dtype.startswith('int') or dtype.startswith('float')):
-        return items
-    read = []
-    for item in items:
-        value = getattr(item, 'prediction', None)
-        restored = as_declared(value, dtype)
-        read.append(
-            item
-            if restored is value
-            else dataclasses.replace(item, prediction=restored)
-        )
-    return read

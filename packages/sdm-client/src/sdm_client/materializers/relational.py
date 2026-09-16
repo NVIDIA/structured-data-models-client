@@ -797,11 +797,15 @@ def _drop_context_that_answers_the_question(
         return
 
     total = sum(len(answered) for _, answered in found.values())
+    # The two targets lose different rows, so they are told different things.
+    # A window closes, so only the same moment carries the answer; a static
+    # column does not move, so every moment does.
+    when = 'at the same moment' if windowed else 'at one moment or another'
     warnings.warn(
         f'{total} of the rows sampled as context are the rows being scored, '
-        f'at the same moment, carrying the value being asked for. Rows that '
-        f'carry the answer to the question being asked are not sent as '
-        f'context, so these do not go into it.',
+        f'{when}, carrying the value being asked for. Rows that carry the '
+        f'answer to the question being asked are not sent as context, so '
+        f'these do not go into it.',
         category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )

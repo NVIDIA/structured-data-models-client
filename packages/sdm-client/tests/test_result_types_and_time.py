@@ -359,12 +359,12 @@ def test_only_a_class_label_is_given_the_targets_type(kind, expected):
     column's type restores something. A regression's answer is a number the
     model computed, and reshaping it would be this client deciding how precise
     the answer is."""
-    from sdm_client.adapters.relational import _as_declared_target
+    from sdm_client.wire.answers import as_declared_target
 
     payload = {
         'task': {'kind': kind, 'target': {'dtype': 'int64'}},
     }
-    assert _as_declared_target([item('2')], payload)[0].prediction == expected
+    assert as_declared_target([item('2')], payload)[0].prediction == expected
 
 
 # --- a column of date objects is not text ----------------------------------
