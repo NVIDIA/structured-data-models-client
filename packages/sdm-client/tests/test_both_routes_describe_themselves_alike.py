@@ -617,3 +617,20 @@ def test_an_infinite_id_is_not_something_to_move_past():
         float('inf'),
         0,
     ]
+
+
+def test_a_number_too_large_to_hold_is_not_a_description():
+    """Pandas raises building a frame around it. A description that cannot be
+    made is not worth failing the call for, so the envelope contributes
+    nothing and the readable one beside it is unaffected."""
+    huge = {
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id'],
+                'rows': [[10**400]],
+            }
+        }
+    }
+    context = _split_from((huge, keyed_envelope([], [0, 1])), 'context')
+
+    assert context.instance_table['instance_id'].tolist() == [0, 1]

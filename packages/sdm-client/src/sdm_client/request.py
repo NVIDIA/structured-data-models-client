@@ -576,8 +576,9 @@ def _wire_frame(table: Any) -> pd.DataFrame | None:
         return None
     try:
         return pd.DataFrame(rows, columns=columns)
-    except (TypeError, ValueError):
-        # A row wider than its header raises rather than padding. Reading a
+    except (TypeError, ValueError, OverflowError):
+        # A row wider than its header raises rather than padding, and a
+        # number too large for pandas to hold raises as well. Reading a
         # request is a description of it, and a description that cannot be
         # made is not worth failing the call for.
         return None
@@ -594,9 +595,17 @@ def _is_a_number(value: Any) -> bool:
         and not isinstance(value, bool)
         and not pd.isna(value)
         # An infinity is a number that no other can be moved past, and
-        # rounding one has no answer at all.
-        and math.isfinite(value)
+        # rounding one has no answer at all. An integer too large to ask the
+        # question of is the same case, and asking raises.
+        and _is_finite(value)
     )
+
+
+def _is_finite(value: int | float) -> bool:
+    try:
+        return math.isfinite(value)
+    except (OverflowError, ValueError):
+        return False
 
 
 def _instance_bounds(
