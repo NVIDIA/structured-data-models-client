@@ -386,3 +386,25 @@ def test_no_envelopes_and_never_gathered_are_one_state():
     request._payloads = ()
 
     assert request.payloads is None
+
+
+def test_the_adapters_agree_with_the_request_about_its_route():
+    """The route is asked through one property, and the adapters ask it too.
+    A request whose halves come from its frames must be one the frame model
+    will take, or the object and the adapter would disagree about what it is
+    while each looked right alone."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=KumoTabular())
+    request._payloads = ()
+
+    assert request.payloads is None
+    assert request.predict_rows == 2
+
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    envelope_built = TabularAdapter()._envelope(request, ('prediction',))
+
+    assert len(envelope_built['predict']['instance_table']['rows']) == 2
