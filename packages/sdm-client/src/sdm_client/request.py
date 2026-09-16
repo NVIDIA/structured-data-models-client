@@ -369,6 +369,12 @@ class Request:
         the same rule: it was a plain attribute before this was a property,
         and what is held is what was put there. Only the route that holds
         nothing reads the envelopes.
+
+        Which makes these a description of the request rather than a handle
+        into it. Editing a frame read from here changes what is sent only on
+        the route that happens to keep its data that way; on the other it is
+        read from the envelopes again and the edit is not there. Assigning the
+        half is what changes the request, and does so on both.
         """
         held = getattr(self, f'_{half}', None)
         if held is not None:
@@ -401,7 +407,8 @@ class Request:
 
         Summed across envelopes, because a request gathered in several parts
         gives each part its own context: that is why a session refuses a split
-        request rather than pinning the first one's.
+        request rather than pinning the first one's. A half a caller assigned
+        is counted instead, since that half is then what the request holds.
         """
         return self._rows('context')
 
@@ -411,7 +418,10 @@ class Request:
         return self._rows('predict')
 
     def _rows(self, half: str) -> int:
-        if self.payloads:
+        # A half that was put there is the request; the envelopes are only
+        # where the other route keeps its rows. Counting them regardless left
+        # an assigned half reported at the size it replaced.
+        if getattr(self, f'_{half}', None) is None and self.payloads:
             return sum(
                 _envelope_rows(payload, half) or 0 for payload in self.payloads
             )

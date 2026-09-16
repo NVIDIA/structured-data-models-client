@@ -301,3 +301,24 @@ def test_a_related_tables_that_is_not_a_mapping_is_ignored():
 
     assert len(context.instance_table) == 1
     assert context.related_tables == {}
+
+
+@pytest.mark.parametrize('model', ['tabular', 'relational'])
+def test_assigning_a_half_is_what_changes_the_request(model):
+    """The halves describe the request; they are not a handle into it. One
+    route keeps its data as these frames and the other as wire envelopes, so
+    editing a frame read from here lands on one and not the other. Assignment
+    is the operation that means the same thing on both."""
+    pytest.importorskip('sdm_relational_engine')
+
+    chosen = KumoTabular() if model == 'tabular' else KumoRelational()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=chosen)
+
+    request.predict = Split(instance_table=pd.DataFrame({'rid': [7, 8, 9]}))
+
+    assert request.predict_rows == 3
+    assert request.predict.instance_table['rid'].tolist() == [7, 8, 9]
