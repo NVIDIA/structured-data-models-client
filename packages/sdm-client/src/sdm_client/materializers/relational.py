@@ -25,6 +25,7 @@ from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
 from sdm_client.schema import Schema, Table, _as_key_tuple
+from sdm_client.wire.dtypes import arrow_decimal_type
 
 if TYPE_CHECKING:
     from predictive_query import TaskType, ValidatedPredictiveQuery
@@ -577,9 +578,13 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
 
 
 def _holds_decimal(values: pd.Series) -> bool:
-    if isinstance(getattr(values.dtype, 'pyarrow_dtype', None), object):
-        if 'decimal' in str(getattr(values.dtype, 'pyarrow_dtype', '')):
-            return True
+    r"""Whether a column holds decimals, however it was read.
+
+    Through Arrow the dtype says so; through pandas it is an `object` column
+    and only the values do.
+    """
+    if arrow_decimal_type(values.dtype) is not None:
+        return True
     if not pd.api.types.is_object_dtype(values.dtype):
         return False
     return pd.api.types.infer_dtype(values, skipna=True) == 'decimal'

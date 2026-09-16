@@ -216,7 +216,7 @@ def infer_tfm_dtype(series: pd.Series) -> str:
         return 'int64'
     if pd.api.types.is_float_dtype(dtype):
         return 'float64' if dtype.itemsize > 4 else 'float32'
-    decimal_type = _arrow_decimal_type(dtype)
+    decimal_type = arrow_decimal_type(dtype)
     if decimal_type is not None:
         return _decimal_dtype(series, decimal_type)
     if pd.api.types.is_object_dtype(dtype):
@@ -234,7 +234,7 @@ def infer_tfm_dtype(series: pd.Series) -> str:
 _INT64_SAFE_PRECISION = 18
 
 
-def _arrow_decimal_type(dtype: Any) -> Any | None:
+def arrow_decimal_type(dtype: Any) -> Any | None:
     r"""``dtype``'s Arrow decimal type, or ``None`` if it is not one.
 
     A warehouse ``DECIMAL`` reaches us two ways. Read through pandas it is an
