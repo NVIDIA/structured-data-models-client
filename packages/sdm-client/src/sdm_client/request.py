@@ -587,6 +587,15 @@ def _wire_frame(table: Any) -> pd.DataFrame | None:
 INSTANCE_ID = 'instance_id'
 
 
+def _is_a_number(value: Any) -> bool:
+    r"""Whether ``value`` is a number that can be moved along."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and not pd.isna(value)
+    )
+
+
 def _instance_bounds(
     frame: pd.DataFrame | None,
 ) -> tuple[int, int | None]:
@@ -605,12 +614,19 @@ def _instance_bounds(
 
 
 def _past(frame: pd.DataFrame | None, shift: int) -> pd.DataFrame | None:
-    r"""``frame`` with its ``instance_id`` moved along by ``shift``."""
+    r"""``frame`` with its numeric ``instance_id`` moved along by ``shift``.
+
+    Only the numbers move. An id that is not one cannot be moved past
+    anything, and replacing it with the nothing it coerces to would lose the
+    value rather than relocate it -- so it is left where it is, still tying
+    its related rows to the instance it always named.
+    """
     if frame is None or not shift or INSTANCE_ID not in frame:
         return frame
     moved = frame.copy()
-    numbers = pd.to_numeric(moved[INSTANCE_ID], errors='coerce')
-    moved[INSTANCE_ID] = numbers + shift
+    moved[INSTANCE_ID] = moved[INSTANCE_ID].map(
+        lambda value: value + shift if _is_a_number(value) else value
+    )
     return moved
 
 
@@ -627,6 +643,11 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
     Concatenated across envelopes, because more than one is batching and
     batching is transport. A caller reads this object to see one question, so
     the halves it exposes are the whole of each half.
+
+    An `instance_id` that is not a number is left exactly as it is. There is
+    no arithmetic that moves it past another, so two envelopes using the same
+    one stay indistinguishable here -- which is what they already were, and
+    is a malformed envelope rather than something this can repair.
     """
     instances: list[pd.DataFrame] = []
     related: dict[str, list[pd.DataFrame]] = {}

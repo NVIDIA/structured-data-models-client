@@ -419,7 +419,7 @@ def keyed_envelope(scored: list[int], known: list[int]) -> dict:
         'context': {
             'instance_table': {
                 'columns': ['instance_id', 'v'],
-                'rows': [[i, float(i)] for i in known],
+                'rows': [[i, 1.0] for i in known],
             },
             'related_tables': {
                 'e': {
@@ -510,3 +510,18 @@ def test_an_envelope_with_no_instance_column_is_left_alone():
     )
 
     assert context.instance_table['v'].tolist() == [1.0, 2.0]
+
+
+def test_an_id_that_is_not_a_number_is_left_as_it_is():
+    """There is no arithmetic that moves it past another, and replacing it
+    with the nothing it coerces to would lose the value rather than relocate
+    it -- so it stays, still tying its related rows to the instance it named.
+    """
+    context = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 'x'])), 'context'
+    )
+    ids = context.instance_table['instance_id'].tolist()
+
+    assert ids[:3] == [0, 1, 2]
+    assert ids[3] == 'x'
+    assert context.related_tables['e']['instance_id'].tolist() == ids
