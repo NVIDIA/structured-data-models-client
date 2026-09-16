@@ -111,6 +111,14 @@ def _named_by(values: Iterable[Any]) -> str:
 def scored_keys(
     request: Request, *, with_anchor: bool = False
 ) -> frozenset[Any]:
+    r"""The keys a request is asking about.
+
+    Read from the envelopes where there are any, and from the frame where
+    there are not. Only the first can carry a moment: a request holding
+    frames is a single-table one, and a single-table model is not asked for a
+    window over time -- the query is refused before it reaches here, so there
+    is no moment in the frame to put in the key and none to look for.
+    """
     if request.payloads:
         return frozenset().union(
             *(

@@ -31,6 +31,7 @@ import pytest
 
 from sdm_client import (
     KumoRelational,
+    KumoTabular,
     PredictiveQuery,
     Relationship,
     Schema,
@@ -631,3 +632,36 @@ def test_the_moment_is_read_from_the_task_not_assumed(moment, warns):
         )
 
     assert bool(caught) is warns
+
+
+def test_a_frame_backed_request_has_no_moment_to_compare():
+    """The frame-backed half belongs to the single-table route, and a
+    single-table model is not asked for a window over time -- the query is
+    refused before it reaches here. So there is no moment in the frame to put
+    in the key, and `with_anchor` has nothing to do there."""
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {
+            'rid': range(60),
+            'x': rng.normal(0, 1, 60),
+            'amount': rng.gamma(2.0, 5.0, 60),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'t': frame}, primary_keys={'t': 'rid'})
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', schema
+        ).materialize(indices=[1, 2])
+
+    assert request.payloads is None
+    assert not request.target_moves_with_time
+    assert '__kumo_anchor_time' not in request.predict.instance_table
+    assert scored_keys(request) == scored_keys(request, with_anchor=True)
+
+    with pytest.raises(StructuredDataError):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            PredictiveQuery(
+                'PREDICT AVG(t.amount, 0, 7, days) FOR EACH t.rid', schema
+            ).materialize(indices=[1], model=KumoTabular())
