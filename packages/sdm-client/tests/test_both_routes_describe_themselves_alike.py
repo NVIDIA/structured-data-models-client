@@ -466,8 +466,12 @@ def test_one_envelope_is_numbered_as_it_arrived():
     [
         ([0, 1, 2], [0, 1], [0, 1, 2, 3, 4]),
         ([0, 5, 9], [0, 1], [0, 5, 9, 10, 11]),
-        ([-1], [-1], [-1, 0]),
-        ([3], [3], [3, 7]),
+        ([3], [3], [3, 4]),
+        # an envelope numbering from below zero lands back among the ids
+        # already taken if it is only offset, however far the offset has gone
+        ([3], [-1], [3, 4]),
+        ([0, 1, 2], [-1], [0, 1, 2, 3]),
+        ([-1], [-1], [-1, 1]),
     ],
 )
 def test_no_two_envelopes_share_an_instance(first, second, expected):

@@ -594,13 +594,21 @@ def _highest_instance(frame: pd.DataFrame | None) -> int:
     return int(numbers.max()) if not numbers.empty else -1
 
 
-def _past(frame: pd.DataFrame | None, already: int) -> pd.DataFrame | None:
-    r"""``frame`` with its ``instance_id`` moved past ``already``."""
-    if frame is None or not already or INSTANCE_ID not in frame:
+def _lowest_instance(frame: pd.DataFrame | None) -> int | None:
+    r"""The smallest ``instance_id`` a frame carries, or nothing."""
+    if frame is None or INSTANCE_ID not in frame or frame.empty:
+        return None
+    numbers = pd.to_numeric(frame[INSTANCE_ID], errors='coerce').dropna()
+    return int(numbers.min()) if not numbers.empty else None
+
+
+def _past(frame: pd.DataFrame | None, shift: int) -> pd.DataFrame | None:
+    r"""``frame`` with its ``instance_id`` moved along by ``shift``."""
+    if frame is None or not shift or INSTANCE_ID not in frame:
         return frame
     moved = frame.copy()
     numbers = pd.to_numeric(moved[INSTANCE_ID], errors='coerce')
-    moved[INSTANCE_ID] = numbers + already
+    moved[INSTANCE_ID] = numbers + shift
     return moved
 
 
@@ -621,6 +629,7 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
     instances: list[pd.DataFrame] = []
     related: dict[str, list[pd.DataFrame]] = {}
     already = 0
+    first = True
     for payload in payloads:
         half_of = payload.get(half) if isinstance(payload, Mapping) else None
         if not isinstance(half_of, Mapping):
@@ -637,22 +646,23 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         # ties a related row to the instance it hangs off. Stacking them
         # unchanged puts the second envelope's row 0 beside the first's, so a
         # join that was exact within one envelope silently crosses between
-        # them. Moving each envelope's numbering past the last keeps the tie.
-        moved = _past(frame, already)
-        highest = _highest_instance(frame)
-        seen = 0 if frame is None else len(frame)
-        if moved is not None:
+        # them. The first envelope is left as it arrived; each one after has
+        # its lowest id put where the numbers so far ran out, which an offset
+        # alone did not do -- an envelope numbering from below zero landed
+        # back among ids already taken however far the offset had advanced.
+        numbered = [frame, *(table for _, table in parts)]
+        highest = max((_highest_instance(t) for t in numbered), default=-1)
+        floors = [_lowest_instance(t) for t in numbered]
+        lowest = min((n for n in floors if n is not None), default=None)
+        shift = 0 if first or lowest is None else already - lowest
+        if (moved := _past(frame, shift)) is not None:
             instances.append(moved)
         for name, table in parts:
-            shifted = _past(table, already)
-            if shifted is not None:
+            if (shifted := _past(table, shift)) is not None:
                 related.setdefault(name, []).append(shifted)
-            highest = max(highest, _highest_instance(table))
-        # Past the ids this envelope used, and past its rows. The first keeps
-        # the next envelope clear of numbers already taken; the second keeps
-        # the offset moving even for an envelope whose ids say otherwise, so
-        # that one numbered oddly cannot leave two envelopes sharing an id.
-        already = max(already + seen, already + highest + 1)
+        seen = 0 if frame is None else len(frame)
+        already = max(already + seen, highest + shift + 1)
+        first = False
 
     def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
         if not frames:
