@@ -41,7 +41,7 @@ from typing import Any, NamedTuple
 import pandas as pd
 
 from sdm_client.core import dates
-from sdm_client.core.warnings import caller_stacklevel
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire import (
     UNTYPED,
@@ -349,6 +349,7 @@ class Table:
                 f'{quality.duplicates} time(s) it has already been used, '
                 f'e.g. {quality.example!r}. Those rows are '
                 f'indistinguishable to the model.{remedy}',
+                category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
 
@@ -800,6 +801,7 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
             f'no value for it. Those rows cannot be scored and the model '
             f'will not see them; fill or drop them, or name a different '
             f'primary key.',
+            category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
         object.__setattr__(table, 'primary_key', inferred)
@@ -1010,6 +1012,7 @@ def _warn_stype_was_decided_by_the_rows_read(
                 f'what the column is with '
                 f"schema[{name!r}][{column!r}].stype = 'categorical' (or "
                 f"'text'), so that it does not change under a larger one.",
+                category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
 
@@ -1059,6 +1062,7 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
             f'frame[{name!r}] = pd.to_datetime(frame[{name!r}]{how}) -- or '
             f'set schema[{table.name!r}][{name!r}].stype = {"timestamp"!r} '
             f'afterwards.',
+            category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
         return name
@@ -1171,6 +1175,7 @@ def _warn_table_cannot_be_linked_to(
             f'in the rows read. If {declare} {name!r}, say so with '
             f'primary_keys={{{name!r}: {suggestion}}}; if {instead} '
             f'{shared}, {owner} the key.',
+            category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
 
@@ -1390,6 +1395,7 @@ def to_graph_definition(schema: Schema) -> Any:
                 f'composite key; only the query does not see it. Name a '
                 f'single column as the primary key if the query needs to '
                 f'identify a row of {name!r}.',
+                category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
         tables[name] = TableDefinition(

@@ -21,6 +21,7 @@ calls a reasonable no-op, was sent to an endpoint that cannot encode zero rows.
 
 from __future__ import annotations
 
+import contextlib
 import warnings
 
 import pandas as pd
@@ -185,24 +186,22 @@ def test_a_close_that_worked_is_not_repeated():
     assert transport.calls == 1
 
 
-def test_a_block_that_succeeded_is_not_reported_as_failed():
-    """The body did its work, and a session outliving its handle is reclaimed
-    by the endpoint's own expiry."""
+def test_a_failure_to_release_is_reported_as_one():
+    """It is a real failure, and raising it is what the block did before the
+    masking case below was handled. A caller who wraps the block in `try` is
+    relying on hearing about it."""
     transport = Transport(fail_times=99)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
+    with pytest.raises(NimRequestError):
         with handle(client=Client(transport)):
             pass
-    said = [str(w.message) for w in caught]
-    assert any('was not released' in s for s in said), said
-    assert any('close() to try again' in s for s in said)
 
 
 def test_the_handle_is_still_open_after_a_failed_exit():
+    """The release can be tried again, which is the whole of the fix: a
+    handle whose `__exit__` failed is not left marked closed."""
     transport = Transport(fail_times=1)
     fitted = handle(client=Client(transport))
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
+    with contextlib.suppress(NimRequestError):
         with fitted:
             pass
     fitted.close()
@@ -478,13 +477,14 @@ def test_a_failed_release_says_nothing_while_the_body_is_raising():
     assert transport.calls == 1
 
 
-def test_a_failed_release_still_speaks_when_the_body_succeeded():
+def test_a_failed_release_is_raised_when_the_body_succeeded():
+    """A failure to release is a real failure, and a caller wrapping the block
+    in `try` is relying on hearing about it. That is what the block did before
+    the masking case was handled, and it still does."""
     transport = Transport(fail_times=99)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
+    with pytest.raises(NimRequestError):
         with handle(client=Client(transport)):
             pass
-    assert any('was not released' in str(w.message) for w in caught)
 
 
 @pytest.mark.parametrize('rows', [{}, '', 0, None, {'a': 1}, 'ab'])

@@ -14,7 +14,7 @@ import pandas as pd
 from predictive_query import Stype
 from predictive_query.validator.utils import col_name, table_name
 
-from sdm_client.core.warnings import caller_stacklevel
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
 from sdm_client.models import TABULAR_LIMITS
 from sdm_client.request import Request
@@ -171,6 +171,7 @@ def _context_within_limit(
             f'{table} has {len(candidates):,} rows that could be context and '
             f'the endpoint accepts {_CONTEXT_ROWS_MAX:,}, so {wanted:,} were '
             f'sampled. {remedy}',
+            category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
     return candidates.sample(n=wanted, random_state=_CONTEXT_SEED).sort_index()

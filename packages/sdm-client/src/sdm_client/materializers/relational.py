@@ -20,7 +20,7 @@ from predictive_query.validator.model_validator import (
 from predictive_query.validator.utils import table_name
 
 from sdm_client.core import dates
-from sdm_client.core.warnings import caller_stacklevel
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
@@ -717,6 +717,7 @@ def _warn_rows_the_graph_dropped(model: KumoRelational) -> None:
         f'{detail.strip()}. Those rows are not in the context the model sees; '
         f'fill the missing values or drop the rows yourself if that is not '
         f'what you meant.',
+        category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )
 
@@ -798,6 +799,7 @@ def _drop_context_that_answers_the_question(
         f'at the same moment, carrying the value being asked for. Rows that '
         f'carry the answer to the question being asked are not sent as '
         f'context, so these do not go into it.',
+        category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )
     for context, answered in found.values():
@@ -912,5 +914,6 @@ def _warn_the_filter_chose_only_the_examples(
         f'{len(indices)} rows named for scoring -- those are scored as given, '
         f'whether or not they satisfy it. Pass only indices that satisfy the '
         f'condition if that is what you meant.',
+        category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )

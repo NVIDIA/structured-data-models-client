@@ -2,11 +2,28 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Where a warning should say it came from."""
+r"""Where a warning should say it came from, and what kind it is."""
 
 from __future__ import annotations
 
 import sys
+
+
+class SDMWarning(UserWarning):
+    r"""What this package says when it will answer, but not as asked.
+
+    Every warning raised from here carries it. A caller who wants none of
+    them, or wants all of them to stop the run, can say so once:
+
+    .. code-block:: python
+
+        warnings.filterwarnings('ignore', category=SDMWarning)
+        warnings.filterwarnings('error', category=SDMWarning)
+
+    It derives from `UserWarning`, which is what these were before it existed,
+    so a filter written against that keeps catching them.
+    """
+
 
 _PACKAGE = __name__.split('.')[0]
 

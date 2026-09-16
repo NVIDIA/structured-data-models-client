@@ -29,7 +29,7 @@ from sdm_client.base import (
     describe,
 )
 from sdm_client.core.transport import Transport, redact_url
-from sdm_client.core.warnings import caller_stacklevel
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
@@ -165,30 +165,25 @@ class FittedModel:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        r"""Release the context, and do not turn a failure to release it into
-        the result of the block.
+        r"""Release the context, raising as it did before -- unless the block
+        is already failing.
 
-        The body has already done its work. A session that outlives its handle
-        is reclaimed by the endpoint's own expiry, so raising here would report
-        a successful block as failed over something that resolves itself.
-        `close()` still raises, for a caller who wants to know and retry.
+        A failure to release is a real failure and is raised, which is what a
+        caller wrapping the block in `try` relies on.
 
-        Nothing is said at all when the body is already raising. The warning
-        would be an error under `-W error`, and an error from `__exit__`
-        replaces the exception the block was raising -- so the one place this
-        must not speak is the one where speaking loses the real failure.
+        The exception is a block that is already raising, where nothing is
+        said at all. Anything leaving `__exit__` replaces the exception the
+        block was raising, and under `-W error` that includes a warning, so
+        the one place this must not speak is the one where speaking would
+        lose the failure the caller actually needs to see. There the session
+        is left to the endpoint's own expiry, and `close()` can be called
+        again by a caller who wants to know.
         """
         try:
             self.close()
-        except Exception as error:
-            if exc and exc[0] is not None:
-                return
-            warnings.warn(
-                f'the pinned context of session {self._session_id} was not '
-                f'released: {error}. It will be reclaimed when it expires. '
-                f'Call close() to try again.',
-                stacklevel=caller_stacklevel(),
-            )
+        except Exception:
+            if not (exc and exc[0] is not None):
+                raise
 
     def __repr__(self) -> str:
         state = 'closed' if self._closed else 'open'
@@ -481,6 +476,7 @@ def _report_absent(
             f'{model} answered without {list(absent)}, which this request '
             f'asked for, so no column of to_pandas() will carry it. The '
             f'answer to the rest of the request is unaffected.',
+            category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
     return result
@@ -594,6 +590,7 @@ def _warn_scoring_what_was_pinned(
         f'now. Either clear the target on every row this session may score '
         f'before calling fit(), or use predict(), which excludes the rows it '
         f'scores from the context it sends.',
+        category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )
 
