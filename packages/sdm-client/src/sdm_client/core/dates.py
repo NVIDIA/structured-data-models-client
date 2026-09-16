@@ -37,9 +37,13 @@ SAMPLE = 1000
 PLAUSIBLE_YEARS = (1900, 2100)
 
 
-#: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be. Anchored, so a
-#: part code that opens like a date and continues is not read as one.
-_TWO_PART_PATTERN = r'^(\d{1,2})[-/](\d{1,2})[-/]\d{2,4}$'
+#: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be, with or without
+#: a time after it -- a warehouse hands back both. Anchored, so a part code
+#: that opens like a date and continues into something else is not read as one.
+_TWO_PART_PATTERN = (
+    r'^(\d{1,2})[-/](\d{1,2})[-/]\d{2,4}'
+    r'(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$'
+)
 
 
 def day_comes_first(values: pd.Series, limit: int | None = None) -> bool | None:

@@ -89,3 +89,28 @@ def test_the_deciding_value_is_found_wherever_it_is():
 
 def test_a_column_that_never_decides_is_still_refused_however_long():
     assert dates.day_comes_first(pd.Series(['01/02/2024'] * 2000)) is None
+
+
+@pytest.mark.parametrize(
+    ('values', 'decided'),
+    [
+        (['03/15/2024 00:00:00', '04/16/2024 00:00:00'], False),
+        (['15/03/2024 08:30', '16/04/2024 09:00'], True),
+        (['15/03/2024T08:30:00+01:00'], True),
+        (['01/02/2024 00:00:00', '03/05/2024 00:00:00'], None),
+        (['15/03/2024 batch7'], None),
+    ],
+)
+def test_a_time_after_the_date_does_not_hide_what_it_says(values, decided):
+    """A warehouse hands back both shapes. Reading only the date-only one
+    refused a timestamp column that says perfectly well which way it reads."""
+    assert dates.day_comes_first(pd.Series(values, dtype=object)) is decided
+
+
+def test_a_timestamp_column_is_read_the_way_it_said():
+    got = dates.read(pd.Series(['15/03/2024 08:30', '02/01/2024 09:00']), '')
+
+    assert list(got.dt.strftime('%Y-%m-%d %H:%M')) == [
+        '2024-03-15 08:30',
+        '2024-01-02 09:00',
+    ]
