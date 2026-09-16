@@ -209,9 +209,19 @@ def test_envelopes_that_disagree_on_columns_keep_every_column():
 # --- built when read, not while materializing -------------------------------
 
 
-def test_the_halves_are_not_built_until_they_are_read():
+def test_the_halves_are_not_built_until_they_are_read(monkeypatch):
     """The adapter sends the envelopes as they are, so a request that is
-    materialized and sent must not pay to copy rows nobody looks at."""
+    materialized and sent must not pay to read rows nobody looks at."""
+    import sdm_client.request as module
+
+    built: list[str] = []
+    real = module._split_from
+    monkeypatch.setattr(
+        module,
+        '_split_from',
+        lambda payloads, half: built.append(half) or real(payloads, half),
+    )
+
     request = Request.materialized(
         payloads=(envelope([1, 2], [10, 11]),),
         schema=one_table(),
@@ -220,36 +230,17 @@ def test_the_halves_are_not_built_until_they_are_read():
         entity_table='t',
     )
 
-    assert request._context is None
-    assert request._predict is None
+    assert built == []
+    assert request.context_rows == 2
+    assert built == [], 'counting rows must not build the frames either'
 
-    rows = len(request.context.instance_table)
-
-    assert rows == 2
-    assert request._context is not None
-
-
-def test_a_half_can_still_be_assigned():
-    """It was a plain attribute before, and a caller may still set it."""
-    request = Request.materialized(
-        payloads=(envelope([1], [10]),),
-        schema=one_table(),
-        query='PREDICT t.amount FOR EACH t.rid',
-        indices=[1],
-        entity_table='t',
-    )
-    request.context = Split(instance_table=pd.DataFrame({'id': [7, 8, 9]}))
-
-    assert len(request.context.instance_table) == 3
-
-    # and it stays theirs, rather than being rebuilt from the envelopes
-    assert len(request.context.instance_table) == 3
+    assert len(request.context.instance_table) == 2
+    assert built == ['context']
 
 
-def test_the_cache_does_not_outlive_the_rows_it_describes():
-    """Leaked context rows are taken out of the envelopes in place. A half
-    read before that happened must not go on describing rows the request no
-    longer sends."""
+def test_a_half_reflects_an_edit_that_kept_the_row_count():
+    """A count is not a fingerprint. Rows are edited in place as well as
+    removed, and a half held between reads would describe the old ones."""
     payloads = [envelope([1], [10, 11, 12])]
     request = Request.materialized(
         payloads=tuple(payloads),
@@ -259,25 +250,34 @@ def test_the_cache_does_not_outlive_the_rows_it_describes():
         entity_table='t',
     )
 
-    assert len(request.context.instance_table) == 3
+    assert request.context.instance_table['id'].tolist() == [10, 11, 12]
 
-    payloads[0]['context']['instance_table']['rows'].pop()
+    payloads[0]['context']['instance_table']['rows'][1] = [99, 1.0]
     request._payloads = tuple(payloads)
 
-    assert len(request.context.instance_table) == 2
-    assert request.context_rows == 2
+    assert request.context.instance_table['id'].tolist() == [10, 99, 12]
 
 
-def test_a_half_read_twice_without_a_change_is_the_same_frame():
+def test_a_half_can_still_be_assigned():
+    """It was a plain attribute before it was a property, and a caller may
+    still set it. What is held is what was put there, so only the route
+    holding nothing reads the envelopes."""
+    payloads = [envelope([1], [10, 11, 12])]
     request = Request.materialized(
-        payloads=(envelope([1], [10]),),
+        payloads=tuple(payloads),
         schema=one_table(),
         query='PREDICT t.amount FOR EACH t.rid',
         indices=[1],
         entity_table='t',
     )
+    request.context = Split(instance_table=pd.DataFrame({'id': [7, 8, 9]}))
 
-    assert request.context is request.context
+    assert request.context.instance_table['id'].tolist() == [7, 8, 9]
+
+    payloads[0]['context']['instance_table']['rows'].pop()
+    request._payloads = tuple(payloads)
+
+    assert request.context.instance_table['id'].tolist() == [7, 8, 9]
 
 
 def test_an_object_with_no_payloads_attribute_still_answers():

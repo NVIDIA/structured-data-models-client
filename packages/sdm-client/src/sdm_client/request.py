@@ -340,7 +340,6 @@ class Request:
     @context.setter
     def context(self, value: Split) -> None:
         self._context = value
-        self._context_assigned = True
 
     @property
     def predict(self) -> Split:
@@ -350,33 +349,31 @@ class Request:
     @predict.setter
     def predict(self, value: Split) -> None:
         self._predict = value
-        self._predict_assigned = True
 
     def _half(self, half: str) -> Split:
-        r"""One half, built from the envelopes and kept until they change.
+        r"""One half, read from the envelopes that carry it.
 
-        The count of rows the envelopes carry is what the cache is held
-        against. Leaked context rows are taken out of those envelopes in
-        place, and a half read before that happened would otherwise keep
-        describing rows the request no longer sends.
+        Read on access rather than while materializing, because the adapter
+        sends those envelopes as they are and building the frames eagerly
+        would copy every row of every request on the path where nothing looks
+        at them.
 
-        A half a caller assigned is theirs and is returned as given. It was a
-        plain attribute before this was a property, and rebuilding over it
-        from the envelopes would make the assignment look like it had worked
-        and then quietly undo it.
+        Not held between reads. The envelopes are edited in place -- leaked
+        context rows are taken out of them -- so a kept frame would go on
+        describing rows the request no longer sends, and a cache correct only
+        for the edits made today is a trap for the ones made later. Reading is
+        a few milliseconds per thousand rows, against a call that spends
+        hundreds on the wire.
+
+        A half a caller assigned is theirs and is returned as given, which is
+        the same rule: it was a plain attribute before this was a property,
+        and what is held is what was put there. Only the route that holds
+        nothing reads the envelopes.
         """
         held = getattr(self, f'_{half}', None)
-        if getattr(self, f'_{half}_assigned', False):
+        if held is not None:
             return held
-        payloads = self.payloads
-        if payloads is None:
-            return held if held is not None else Split(pd.DataFrame())
-        carried = sum(_envelope_rows(p, half) or 0 for p in payloads)
-        if held is None or getattr(self, f'_{half}_rows', None) != carried:
-            held = _split_from(payloads, half)
-            object.__setattr__(self, f'_{half}', held)
-            object.__setattr__(self, f'_{half}_rows', carried)
-        return held
+        return _split_from(self.payloads or (), half)
 
     @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
