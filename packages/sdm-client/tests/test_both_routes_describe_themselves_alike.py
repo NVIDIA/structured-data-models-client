@@ -459,3 +459,47 @@ def test_one_envelope_is_numbered_as_it_arrived():
     context = _split_from((keyed_envelope([0], [0, 1, 2]),), 'context')
 
     assert context.instance_table['instance_id'].tolist() == [0, 1, 2]
+
+
+@pytest.mark.parametrize(
+    ('first', 'second', 'expected'),
+    [
+        ([0, 1, 2], [0, 1], [0, 1, 2, 3, 4]),
+        ([0, 5, 9], [0, 1], [0, 5, 9, 10, 11]),
+        ([-1], [-1], [-1, 0]),
+        ([3], [3], [3, 7]),
+    ],
+)
+def test_no_two_envelopes_share_an_instance(first, second, expected):
+    """Past the ids an envelope used and past its rows. The first keeps the
+    next clear of numbers already taken; the second keeps the offset moving
+    for an envelope numbered oddly, which could otherwise leave two sharing
+    an id and a join crossing between them."""
+    context = _split_from(
+        (keyed_envelope([], first), keyed_envelope([], second)), 'context'
+    )
+    ids = context.instance_table['instance_id'].tolist()
+
+    assert ids == expected
+    assert not context.instance_table['instance_id'].duplicated().any()
+    assert context.related_tables['e']['instance_id'].tolist() == ids
+
+
+def test_an_envelope_with_no_instance_column_is_left_alone():
+    context = _split_from(
+        (
+            {
+                'context': {
+                    'instance_table': {'columns': ['v'], 'rows': [[1.0]]}
+                }
+            },
+            {
+                'context': {
+                    'instance_table': {'columns': ['v'], 'rows': [[2.0]]}
+                }
+            },
+        ),
+        'context',
+    )
+
+    assert context.instance_table['v'].tolist() == [1.0, 2.0]

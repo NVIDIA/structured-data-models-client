@@ -640,6 +640,7 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         # them. Moving each envelope's numbering past the last keeps the tie.
         moved = _past(frame, already)
         highest = _highest_instance(frame)
+        seen = 0 if frame is None else len(frame)
         if moved is not None:
             instances.append(moved)
         for name, table in parts:
@@ -647,7 +648,11 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
             if shifted is not None:
                 related.setdefault(name, []).append(shifted)
             highest = max(highest, _highest_instance(table))
-        already += highest + 1
+        # Past the ids this envelope used, and past its rows. The first keeps
+        # the next envelope clear of numbers already taken; the second keeps
+        # the offset moving even for an envelope whose ids say otherwise, so
+        # that one numbered oddly cannot leave two envelopes sharing an id.
+        already = max(already + seen, already + highest + 1)
 
     def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
         if not frames:
