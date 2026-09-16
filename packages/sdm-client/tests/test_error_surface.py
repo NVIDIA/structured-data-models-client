@@ -240,6 +240,8 @@ def test_a_failure_while_building_the_graph_is_a_client_error():
     """`Graph.from_data`, the key and stype assignments, the links and
     `graph.validate()` all ran one line above the guard that converts their
     failures."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = relational_schema(
         pd.DataFrame(
             {
@@ -261,6 +263,8 @@ def test_a_failure_while_building_the_graph_is_a_client_error():
 def test_a_working_graph_is_not_affected():
     """The child needs a key of its own; a table whose primary key is also the
     link column is refused for a different reason."""
+    pytest.importorskip('sdm_relational_engine')
+
     parent = pd.DataFrame({'ID': range(40), 'label': ['a', 'b'] * 20})
     child = pd.DataFrame(
         {
@@ -321,6 +325,8 @@ def test_a_relational_request_reports_the_rows_it_carries():
     zero-row request without sending, so a relational request that claims to
     have no rows gets an empty answer and never reaches the endpoint.
     """
+    pytest.importorskip('sdm_relational_engine')
+
     parent = pd.DataFrame({'ID': range(40), 'label': ['a', 'b'] * 20})
     child = pd.DataFrame(
         {

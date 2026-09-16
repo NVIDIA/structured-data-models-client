@@ -108,6 +108,8 @@ def same_anchor_overlap(request) -> list:
 
 
 def test_a_static_target_leaves_no_row_answering_its_own_question():
+    pytest.importorskip('sdm_relational_engine')
+
     request, _ = gathered(STATIC)
     assert same_anchor_overlap(request) == []
 
@@ -115,11 +117,15 @@ def test_a_static_target_leaves_no_row_answering_its_own_question():
 def test_removing_them_is_said_out_loud():
     """The context is smaller than it would otherwise have been, and that is a
     change to what the model sees."""
+    pytest.importorskip('sdm_relational_engine')
+
     _, said = gathered(STATIC)
     assert any('being scored' in s for s in said), said
 
 
 def test_the_rows_removed_are_counted():
+    pytest.importorskip('sdm_relational_engine')
+
     _, said = gathered(STATIC)
     complaint = next(s for s in said if 'being scored' in s)
     assert complaint.startswith('5 of the rows')
@@ -131,6 +137,8 @@ def test_the_rows_removed_are_counted():
 def test_an_aggregation_keeps_the_entity_at_earlier_anchors():
     """Those rows are earlier examples, with features cut at their own anchor
     and a label window that closes before the prediction window opens."""
+    pytest.importorskip('sdm_relational_engine')
+
     request, said = gathered(WINDOWED)
     payload = request.payloads[0]
     context = payload['context']['instance_table']
@@ -148,11 +156,15 @@ def test_an_aggregation_keeps_the_entity_at_earlier_anchors():
 
 
 def test_an_aggregation_keeps_every_context_row_it_gathered():
+    pytest.importorskip('sdm_relational_engine')
+
     request, _ = gathered(WINDOWED)
     assert len(request.payloads[0]['context']['instance_table']['rows']) > 300
 
 
 def test_a_static_target_keeps_everything_that_is_not_the_answer():
+    pytest.importorskip('sdm_relational_engine')
+
     request, _ = gathered(STATIC)
     rows = request.payloads[0]['context']['instance_table']['rows']
     assert len(rows) == 295
@@ -164,6 +176,8 @@ def test_a_static_target_keeps_everything_that_is_not_the_answer():
 def test_related_rows_of_a_removed_instance_go_with_it():
     """Each half carries its own `instance_id` space, so a context row left
     behind by its instance is an orphan."""
+    pytest.importorskip('sdm_relational_engine')
+
     request, _ = gathered(STATIC)
     context = request.payloads[0]['context']
     instances = {
@@ -176,6 +190,8 @@ def test_related_rows_of_a_removed_instance_go_with_it():
 
 
 def test_the_predict_half_is_untouched():
+    pytest.importorskip('sdm_relational_engine')
+
     request, _ = gathered(STATIC)
     predict = request.payloads[0]['predict']
     assert len(predict['instance_table']['rows']) == 5
@@ -243,6 +259,8 @@ def test_a_static_target_removes_the_entity_at_any_anchor():
     every anchor, so the same entity at an earlier one carries the answer just
     as plainly. Matching on the anchor alone let that straight through, and a
     caller reaches it by setting `context_anchor_time`."""
+    pytest.importorskip('sdm_relational_engine')
+
     request, said = gathered(
         STATIC,
         anchor_time=pd.Timestamp('2023-06-01'),
@@ -255,6 +273,8 @@ def test_a_static_target_removes_the_entity_at_any_anchor():
 def test_an_aggregation_keeps_earlier_anchors_even_when_they_are_chosen():
     """The same option on a windowed target is asking for earlier examples,
     which is the thing this must not delete."""
+    pytest.importorskip('sdm_relational_engine')
+
     request, said = gathered(
         WINDOWED,
         anchor_time=pd.Timestamp('2023-06-01'),
@@ -265,6 +285,8 @@ def test_an_aggregation_keeps_earlier_anchors_even_when_they_are_chosen():
 
 
 def test_a_static_target_removes_the_entity_from_the_default_gather_too():
+    pytest.importorskip('sdm_relational_engine')
+
     request, _ = gathered(STATIC)
     assert entities_in_context(request).isdisjoint({1, 2, 3, 4, 5})
 
@@ -376,6 +398,8 @@ def test_the_window_opens_after_the_anchor_and_closes_on_its_last_day(
     which is the right edge of that window rather than the left edge of this
     one.
     """
+    pytest.importorskip('sdm_relational_engine')
+
     anchor = pd.Timestamp('2023-06-01')
     rows = []
     identifier = 0
@@ -461,6 +485,8 @@ def test_an_entity_filter_says_it_does_not_narrow_the_scored_rows():
     """The filter selects the labelled examples and leaves the named rows
     alone, so a filter matching a quarter of them still scores all of them and
     the answers look entirely ordinary."""
+    pytest.importorskip('sdm_relational_engine')
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         PredictiveQuery(
@@ -475,6 +501,8 @@ def test_an_entity_filter_says_it_does_not_narrow_the_scored_rows():
 
 
 def test_a_query_with_no_entity_filter_says_nothing():
+    pytest.importorskip('sdm_relational_engine')
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         PredictiveQuery(

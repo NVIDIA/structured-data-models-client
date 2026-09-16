@@ -199,6 +199,8 @@ def test_a_column_with_no_table_to_point_at_is_refused():
 def test_a_foreign_key_list_distinct_still_works(query):
     """Both forms resolve to link prediction, which the model does serve. The
     refusal must not widen onto them."""
+    pytest.importorskip('sdm_relational_engine')
+
     assert answer(query, graph(timed=True), KumoRelational()) == (
         'temporal_link_prediction'
     )
@@ -249,6 +251,8 @@ def test_a_static_list_distinct_is_refused_not_asserted(query):
 def test_the_advice_the_static_refusal_gives_works_when_time_exists():
     """The whole point of changing the wording: adding a time range is a query
     that answers."""
+    pytest.importorskip('sdm_relational_engine')
+
     assert (
         answer(
             'PREDICT COUNT(ratings.*, 0, 30, days) FOR EACH users.USERID',
@@ -307,6 +311,8 @@ def test_a_named_aggregation_is_pointed_at_the_entity_table():
 
 
 def test_the_advice_that_message_gives_is_a_query_that_answers():
+    pytest.importorskip('sdm_relational_engine')
+
     assert (
         answer(
             'PREDICT users.AGE FOR EACH users.USERID',

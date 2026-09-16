@@ -200,6 +200,8 @@ def test_the_relational_path_takes_a_decimal_frame():
     """It refused with `dtype '<class 'decimal.Decimal'>' not understood`,
     naming no table, no column and no remedy -- on the same frame the tabular
     path had already answered."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = warehouse_schema()
     request = PredictiveQuery(
         'PREDICT users.AGE FOR EACH users.USERID', schema
@@ -212,6 +214,8 @@ def test_the_engine_is_told_the_type_the_schema_computed():
     """The two halves disagreed: the client read the values and called a whole
     Decimal column `int64`, the engine mapped decimal content to float
     unconditionally. An exact identifier in a float is the part that bites."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = warehouse_schema()
     assert schema['users']['USERID'].dtype == 'int64'
 
@@ -228,6 +232,8 @@ def test_the_engine_is_told_the_type_the_schema_computed():
 def test_a_composite_key_over_decimals_materializes():
     """The engine refuses a key part it has typed float, so this was blocked
     outright on warehouse data."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = warehouse_schema(
         primary_keys={'users': 'USERID', 'ratings': ['USERID', 'RID']}
     )

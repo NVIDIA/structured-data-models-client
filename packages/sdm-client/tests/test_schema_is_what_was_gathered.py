@@ -195,6 +195,8 @@ def test_a_snapshot_keeps_what_was_recorded_about_a_column():
 def test_a_relational_request_names_the_entity_the_query_named(order):
     """It was read from dict insertion order, so it answered correctly or
     incorrectly depending on how the caller built their dict."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = graph(order)
     request = PredictiveQuery(
         'PREDICT SUM(events.amt, 0, 30, days) FOR EACH stores.sid', schema
@@ -261,6 +263,8 @@ def test_a_predict_frame_without_the_key_column_removes_nothing():
 def test_editing_the_schema_does_not_change_a_relational_request_either():
     """Both materializers hand the request a schema, and both had to stop
     handing over the caller's live one."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = graph()
     request = PredictiveQuery(
         'PREDICT SUM(events.amt, 0, 30, days) FOR EACH stores.sid', schema

@@ -115,6 +115,8 @@ TRUTH = pd.to_datetime([f'2020-{month:02d}-02' for month in range(1, 13)] * 10)
     ids=['datetime', 'iso date', 'iso datetime', 'slash', 'iso utc'],
 )
 def test_a_year_first_column_reads_the_same_as_real_timestamps(form):
+    pytest.importorskip('sdm_relational_engine')
+
     rendered = (
         pd.Series(TRUTH) if form is None else pd.Series(TRUTH).dt.strftime(form)
     )
@@ -124,6 +126,8 @@ def test_a_year_first_column_reads_the_same_as_real_timestamps(form):
 def test_a_day_first_column_is_refused_rather_than_re_dated():
     """Read month-first, all 24 of these dates move: twelve monthly events
     across a year become twelve daily events in one week of February."""
+    pytest.importorskip('sdm_relational_engine')
+
     ambiguous = pd.Series(TRUTH).dt.strftime('%d/%m/%Y %H:%M:%S')
     with pytest.raises(StructuredDataError) as raised:
         on_the_wire(graph(ambiguous))
@@ -134,6 +138,8 @@ def test_a_day_first_column_is_refused_rather_than_re_dated():
 
 
 def test_a_time_column_that_is_already_timestamps_is_untouched():
+    pytest.importorskip('sdm_relational_engine')
+
     assert on_the_wire(graph(TRUTH))[0] == '2020-01-02'
 
 
@@ -171,6 +177,8 @@ def test_a_dropped_composite_key_says_so():
     """`TableDefinition.pkey` is one column name, so the language has no form
     for a composite key. It was dropped in silence, and the schema went on
     reporting it."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = composite_schema()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
@@ -186,6 +194,8 @@ def test_a_dropped_composite_key_says_so():
 
 def test_the_composite_key_still_reaches_the_request():
     """Dropped for the query, not for the engine, which does support one."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = composite_schema()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -278,6 +288,8 @@ def test_a_code_that_merely_opens_with_a_date_is_not_read_as_one():
 def test_an_ambiguous_value_past_the_sample_is_still_found():
     """Reading a sample would let the last row be the one that says something
     else, and a column read two ways is the whole defect."""
+    pytest.importorskip('sdm_relational_engine')
+
     values = pd.Series(
         [f'2020-01-{1 + i % 28:02d}' for i in range(1500)] + ['02/01/2020']
     )
@@ -377,6 +389,8 @@ def test_an_object_column_of_datetimes_is_not_read_as_text():
 
 
 def test_a_time_column_of_date_objects_materializes():
+    pytest.importorskip('sdm_relational_engine')
+
     import datetime
 
     objects = pd.Series(

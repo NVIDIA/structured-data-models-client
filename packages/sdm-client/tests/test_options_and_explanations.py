@@ -88,6 +88,8 @@ def wire_columns(request, table: str = 'events') -> dict:
 def test_a_column_the_caller_excluded_does_not_reach_the_model():
     """It was accepted, checked against the options this route takes, and then
     the query's own answer was sent in its place."""
+    pytest.importorskip('sdm_relational_engine')
+
     schema = graph()
     request = gather(schema, exclude_cols_dict={'events': ['secret']})
 
@@ -97,10 +99,14 @@ def test_a_column_the_caller_excluded_does_not_reach_the_model():
 
 
 def test_a_column_nobody_excluded_still_reaches_the_model():
+    pytest.importorskip('sdm_relational_engine')
+
     assert 'secret' in wire_columns(gather(graph()))
 
 
 def test_excluding_one_column_keeps_the_rest():
+    pytest.importorskip('sdm_relational_engine')
+
     request = gather(graph(), exclude_cols_dict={'events': ['secret']})
     assert {'amt', 'ts'} <= set(wire_columns(request))
 
@@ -140,6 +146,8 @@ def test_no_exclusions_at_all_is_still_the_query_s_own():
 def test_rows_dropped_for_a_missing_time_are_reported():
     """The count and the reason were worked out either way and shown only when
     something else had already failed."""
+    pytest.importorskip('sdm_relational_engine')
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         gather(graph(null_times=120))
@@ -156,6 +164,8 @@ def test_rows_dropped_for_a_missing_time_are_reported():
 def test_rows_dropped_for_a_repeated_key_are_reported():
     """Inference tolerates a nearly-unique key, and the rows it tolerates are
     the ones the engine then drops."""
+    pytest.importorskip('sdm_relational_engine')
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         gather(graph(duplicate_keys=5))
@@ -170,6 +180,8 @@ def test_rows_dropped_for_a_repeated_key_are_reported():
 
 
 def test_a_graph_that_lost_nothing_says_nothing():
+    pytest.importorskip('sdm_relational_engine')
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         gather(graph())
@@ -222,6 +234,8 @@ def refusal(message: str, status: int = 422) -> NimRequestError:
 def test_a_cardinality_refusal_names_the_columns_that_are_over():
     """The deployments word this two ways and only one was matched, so on the
     one that counts, the hook never ran."""
+    pytest.importorskip('sdm_relational_engine')
+
     explained = RelationalAdapter().explain_error(
         refusal('categorical cardinality 120 exceeds limit 100.'),
         counted_payload(),
@@ -234,6 +248,8 @@ def test_a_cardinality_refusal_names_the_columns_that_are_over():
 def test_a_cardinality_refusal_advises_something_that_helps():
     """These columns are already categorical, so telling their owner to make
     them categorical would change nothing."""
+    pytest.importorskip('sdm_relational_engine')
+
     explained = RelationalAdapter().explain_error(
         refusal('categorical cardinality 120 exceeds limit 100.'),
         counted_payload(),

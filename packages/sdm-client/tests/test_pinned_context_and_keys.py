@@ -229,6 +229,8 @@ def test_a_child_keyed_id_can_be_linked():
     """The engine infers a key from a column *name* without checking
     uniqueness, so `ID` holding [1, 1, 2, 2, 3] became that table's primary
     key. The client let the caller set it to None and never passed that on."""
+    pytest.importorskip('sdm_relational_engine')
+
     severity = pd.DataFrame({'ID': [1, 1, 2, 2, 3], 'sev': list('abcde')})
     location = pd.DataFrame({'ID': [1, 2, 3], 'loc': list('xyz')})
     with warnings.catch_warnings():
@@ -253,6 +255,8 @@ def test_a_child_keyed_id_can_be_linked():
 def test_a_declared_key_is_still_passed_to_the_engine():
     """Read off the engine graph, because the wire renames a related table's
     key to the transport's own columns and would hide either answer."""
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_client.materializers.relational import RelationalMaterializer
 
     severity = pd.DataFrame({'sid': range(5), 'ID': [1, 1, 2, 2, 3]})
@@ -275,6 +279,8 @@ def test_a_declared_key_is_still_passed_to_the_engine():
 def test_a_key_set_to_none_reaches_the_engine_as_none():
     """The engine had already guessed `ID`, and the client only ever assigned
     a key it had, so the guess survived."""
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_client.materializers.relational import RelationalMaterializer
 
     severity = pd.DataFrame({'ID': [1, 1, 2, 2, 3], 'sev': list('abcde')})
@@ -323,6 +329,8 @@ def test_the_engine_looks_up_a_key_on_an_object_index():
     index of `Decimal` is a class rather than a dtype, and the guard below the
     cast caught `ValueError` while the cast raised `TypeError`, so the message
     written for exactly this never ran."""
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_relational_engine.rfm import Graph
     from sdm_relational_engine.rfm.backend.local.graph_store import (
         LocalGraphStore,
@@ -339,6 +347,8 @@ def test_the_engine_looks_up_a_key_on_an_object_index():
 
 
 def test_a_key_the_engine_does_not_hold_is_still_reported_clearly():
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_relational_engine.rfm import Graph
     from sdm_relational_engine.rfm.backend.local.graph_store import (
         LocalGraphStore,
@@ -384,6 +394,8 @@ def test_a_key_that_cannot_be_cast_gets_the_engines_own_message():
     """The guard below the cast catches `ValueError`, and a cast from a string
     raises that -- but from a list or a mapping it raises `TypeError`, which
     escaped as a raw pandas complaint past the message written for it."""
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_relational_engine.rfm import Graph
     from sdm_relational_engine.rfm.backend.local.graph_store import (
         LocalGraphStore,
@@ -513,6 +525,8 @@ def test_an_object_index_still_coerces_what_it_used_to(held, asked):
     """The element type is tried first because that is what coerced a key
     arriving as text against an index of ints; the index's own dtype is the
     fallback for the case where the element type is a class pandas refuses."""
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_relational_engine.rfm import Graph
     from sdm_relational_engine.rfm.backend.local.graph_store import (
         LocalGraphStore,

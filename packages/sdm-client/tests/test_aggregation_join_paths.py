@@ -105,6 +105,8 @@ THREE = Relationship('E', 'a_id', 'A', 'a_id')
 @pytest.mark.parametrize('child', ['B.b_amt', 'D.d_amt'])
 def test_any_child_of_a_parent_can_be_aggregated(order, child):
     """Which one worked used to be decided by declaration order, silently."""
+    pytest.importorskip('sdm_relational_engine')
+
     request = materialize(
         f'PREDICT SUM({child}, 0, 30, days) FOR EACH A.a_id',
         ['A', 'B', 'D'],
@@ -115,6 +117,8 @@ def test_any_child_of_a_parent_can_be_aggregated(order, child):
 
 @pytest.mark.parametrize('child', ['B.b_amt', 'D.d_amt', 'E.e_amt'])
 def test_three_children_all_work(child):
+    pytest.importorskip('sdm_relational_engine')
+
     request = materialize(
         f'PREDICT SUM({child}, 0, 30, days) FOR EACH A.a_id',
         ['A', 'B', 'D', 'E'],
@@ -198,6 +202,8 @@ def test_two_keys_in_separate_groups_are_both_seen():
 
 
 def test_one_key_from_one_table_is_not_ambiguous():
+    pytest.importorskip('sdm_relational_engine')
+
     request = materialize(
         'PREDICT SUM(B.b_amt, 0, 30, days) FOR EACH A.a_id', ['A', 'B'], [ONE]
     )
@@ -214,6 +220,8 @@ CHAIN = [
 
 
 def test_each_single_hop_of_a_chain_works():
+    pytest.importorskip('sdm_relational_engine')
+
     assert (
         materialize(
             'PREDICT SUM(B.b_amt, 0, 30, days) FOR EACH A.a_id',
@@ -250,6 +258,8 @@ def test_two_hops_are_refused_by_naming_the_route():
 
 def test_the_remedy_the_refusal_names_actually_works():
     """The one thing that makes naming the route worth doing."""
+    pytest.importorskip('sdm_relational_engine')
+
     assert (
         materialize(
             'PREDICT SUM(C.c_amt, 0, 30, days) FOR EACH B.b_id',
