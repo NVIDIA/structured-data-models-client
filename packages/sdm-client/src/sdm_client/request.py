@@ -29,7 +29,7 @@ and does not belong in a type you read.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -266,8 +266,8 @@ class Request:
             entity_table=entity_table if related else None,
             options=dict(task_options or {}),
         )
-        self.context = Split(instance_table=context, related_tables=related)
-        self.predict = Split(instance_table=predict, related_tables=related)
+        self._context = Split(instance_table=context, related_tables=related)
+        self._predict = Split(instance_table=predict, related_tables=related)
         self.inference = dict(inference or {})
         self.requested_inference = dict(inference or {})
         self.entity_table = entity_table
@@ -312,9 +312,8 @@ class Request:
             entity_table=entity_table,
             options=dict(first.get('task', {}).get('options', {})),
         )
-        empty = pd.DataFrame()
-        request.context = Split(instance_table=empty)
-        request.predict = Split(instance_table=empty)
+        request._context = None
+        request._predict = None
         request.inference = dict(first.get('inference', {}))
         request.entity_table = entity_table
         request.query = query
@@ -325,6 +324,35 @@ class Request:
         # drop something that was asked for.
         request.requested_inference = dict(requested_inference or {})
         return request
+
+    @property
+    def context(self) -> Split:
+        r"""The rows where the answer is known.
+
+        Read from the wire envelopes on the route that keeps its data as
+        envelopes, and on first access rather than while materializing: the
+        adapter sends those envelopes as they are, so building the frames
+        eagerly would copy every context row of every request on a path where
+        nothing reads them.
+        """
+        if self._context is None:
+            self._context = _split_from(self._payloads or (), 'context')
+        return self._context
+
+    @context.setter
+    def context(self, value: Split) -> None:
+        self._context = value
+
+    @property
+    def predict(self) -> Split:
+        r"""The rows being asked about. Built the way `context` is."""
+        if self._predict is None:
+            self._predict = _split_from(self._payloads or (), 'predict')
+        return self._predict
+
+    @predict.setter
+    def predict(self, value: Split) -> None:
+        self._predict = value
 
     @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
@@ -431,6 +459,58 @@ def _require_frame(value: Any, name: str) -> pd.DataFrame:
             code='INVALID_REQUEST',
         )
     return value
+
+
+def _wire_frame(table: Any) -> pd.DataFrame | None:
+    r"""One wire table as a frame, or nothing if it cannot be read as one."""
+    if not isinstance(table, Mapping):
+        return None
+    columns = table.get('columns')
+    rows = table.get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
+    r"""The rows of one half, gathered from the envelopes that carry them.
+
+    A relational request keeps its data as finished wire envelopes, and these
+    two attributes are how a caller reads what it holds. Leaving them empty
+    described the shape of the storage rather than the request: a relational
+    `context` reported no rows while `context_rows` on the same object
+    reported several hundred, so the object answered its own question twice
+    and differently.
+
+    Concatenated across envelopes, because more than one is batching and
+    batching is transport. A caller reads this object to see one question, so
+    the halves it exposes are the whole of each half.
+    """
+    instances: list[pd.DataFrame] = []
+    related: dict[str, list[pd.DataFrame]] = {}
+    for payload in payloads:
+        half_of = payload.get(half) if isinstance(payload, Mapping) else None
+        if not isinstance(half_of, Mapping):
+            continue
+        frame = _wire_frame(half_of.get('instance_table'))
+        if frame is not None:
+            instances.append(frame)
+        for name, table in (half_of.get('related_tables') or {}).items():
+            frame = _wire_frame(table)
+            if frame is not None:
+                related.setdefault(name, []).append(frame)
+
+    def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
+        if not frames:
+            return pd.DataFrame()
+        if len(frames) == 1:
+            return frames[0]
+        return pd.concat(frames, ignore_index=True)
+
+    return Split(
+        instance_table=joined(instances),
+        related_tables={name: joined(f) for name, f in related.items()},
+    )
 
 
 def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
