@@ -613,6 +613,13 @@ class Schema:
             StructuredDataError: If ``tables`` is empty, a value is not a
                 DataFrame, a name is not a string, or an override names
                 something that does not exist.
+
+        An inferred relationship is held to the same contract as an explicit
+        one, and dropped rather than refused when it fails. Inference matches
+        on name alone, so it can pair columns whose dtypes cannot join, and
+        `query.py` would send that edge unchanged; a caller who wrote the
+        relationship is told it cannot join, while a caller who never asked
+        for it is not refused for a guess this made on their behalf.
         """
         if not tables:
             raise StructuredDataError(
@@ -750,6 +757,14 @@ def _as_key_tuple(key: str | Sequence[str] | None) -> tuple[str, ...]:
 
 
 def _infer_table(name: str, frame: pd.DataFrame) -> Table:
+    r"""Describe a frame as a table, inferring the types, key and time column.
+
+    The cells are checked before any column is described. Typing a column asks
+    for its distinct values, and a list cell makes that raise `unhashable
+    type: 'list'` from inside pandas, naming nothing the caller wrote.
+    `Table.__post_init__` asks the same question again for a table built by
+    hand, which is the route that has not passed through here.
+    """
     if frame.columns.has_duplicates:
         duplicates = sorted(
             {str(c) for c in frame.columns[frame.columns.duplicated()]}

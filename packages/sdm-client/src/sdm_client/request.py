@@ -292,6 +292,12 @@ class Request:
 
         This is still one request. Batching is transport, and a caller reads
         this object to see one question.
+
+        `entity_table` is named by the query rather than taken from whichever
+        table the caller's dict happened to hold first. Every pre-send
+        description of a relational request read it from insertion order, so
+        it answered correctly or incorrectly depending on how the schema was
+        built, and a programmatic caller could not use it as a guard.
         """
         request = cls.__new__(cls)
         request.schema = schema
@@ -489,8 +495,8 @@ def _check_scored_values_mean_what_the_schema_says(
     skipped for that reason instead. An all-null context column, by contrast,
     has no claim to contradict: the `categorical` it was given is a
     placeholder rather than a finding, so the scored rows decide both its type
-    and its meaning, and only once a caller has said what the column means is
-    that a claim like any other.
+    and its meaning. Once a caller has said what the column means, that is a
+    claim like any other.
     """
     if predict is None or entity_table is None or entity_table not in schema:
         return

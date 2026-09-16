@@ -185,7 +185,7 @@ class RelationalMaterializer:
         return self._model
 
     def _build_graph(self) -> Graph:
-        r"""The engine graph the schema describes.
+        r"""Build exactly the graph described by the client schema.
 
         A table without a primary key has that said rather than left unsaid.
         The engine infers a key from a column *name* without checking that it
@@ -196,7 +196,6 @@ class RelationalMaterializer:
         could not be materialized, and the refusal named a key the caller had
         explicitly removed.
         """
-        r"""Build exactly the graph described by the client schema."""
         from sdm_relational_engine.rfm import Graph
 
         self.schema.check_consistent()
