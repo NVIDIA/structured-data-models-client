@@ -13,7 +13,7 @@ client, which should have to ask only whether two sets of rows overlap.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.schema import _as_key_tuple
@@ -21,8 +21,23 @@ from sdm_client.schema import _as_key_tuple
 if TYPE_CHECKING:
     from sdm_client.request import Request
 
-#: The column a relational envelope puts the moment in.
+#: What a relational envelope calls the moment, when nothing of the caller's
+#: is called that already.
 _ANCHOR = '__kumo_anchor_time'
+
+
+def _anchor_column(payload: dict[str, Any] | None) -> str:
+    r"""What this envelope calls the moment.
+
+    Read from the task rather than assumed. The engine suffixes the name when
+    a column of the caller's own is called that, so looking only for the bare
+    name goes blind on exactly the graphs that have one.
+    """
+    task = (payload or {}).get('task')
+    named = (
+        task.get('anchor_time_column') if isinstance(task, Mapping) else None
+    )
+    return str(named) if named else _ANCHOR
 
 
 def keys_in(
@@ -66,8 +81,10 @@ def keys_in(
     if any(name not in columns for name in wanted):
         return frozenset()
     at = [columns.index(name) for name in wanted]
-    if with_anchor and _ANCHOR in columns:
-        at = [*at, columns.index(_ANCHOR)]
+    if with_anchor:
+        anchor = _anchor_column(payload)
+        if anchor in columns:
+            at = [*at, columns.index(anchor)]
     return frozenset(
         _named_by(row[position] for position in at)
         for row in rows

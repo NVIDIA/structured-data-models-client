@@ -549,16 +549,13 @@ def test_an_object_index_still_coerces_what_it_used_to(held, asked):
 # --- a window makes the moment part of the question -------------------------
 
 
-def pinned_at(rows):
+def pinned_at(rows, anchor='__kumo_anchor_time'):
     return {
+        'task': {'anchor_time_column': anchor},
         'schema': {'instance_table': {'primary_key': 'instance_id'}},
         'context': {
             'instance_table': {
-                'columns': [
-                    'instance_id',
-                    '__kumo_entity_ref_0',
-                    '__kumo_anchor_time',
-                ],
+                'columns': ['instance_id', '__kumo_entity_ref_0', anchor],
                 'rows': rows,
             }
         },
@@ -566,18 +563,16 @@ def pinned_at(rows):
 
 
 class Scoring:
-    def __init__(self, rows, windowed):
+    def __init__(self, rows, windowed, anchor='__kumo_anchor_time'):
         self.payloads = (
             {
+                'task': {'anchor_time_column': anchor},
                 'predict': {
                     'instance_table': {
-                        'columns': [
-                            '__kumo_entity_ref_0',
-                            '__kumo_anchor_time',
-                        ],
+                        'columns': ['__kumo_entity_ref_0', anchor],
                         'rows': rows,
                     }
-                }
+                },
             },
         )
         self.target_moves_with_time = windowed
@@ -612,3 +607,27 @@ def test_the_moment_counts_only_where_the_answer_moves(
         )
 
     assert bool(caught) is warns, label
+
+
+@pytest.mark.parametrize(
+    ('moment', 'warns'), [('2024-01-01', True), ('2024-06-01', False)]
+)
+def test_the_moment_is_read_from_the_task_not_assumed(moment, warns):
+    """The engine suffixes the anchor column when a column of the caller's own
+    is called that, so looking for the bare name goes blind on exactly the
+    graphs that have one -- and every later call about a pinned entity is a
+    warning again."""
+    anchor = '__kumo_anchor_time_1'
+    pinned = keys_in(
+        pinned_at([[0, 'e1', '2024-01-01']], anchor),
+        'context',
+        with_anchor=True,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _warn_scoring_what_was_pinned(
+            Scoring([['e1', moment]], True, anchor), pinned, True
+        )
+
+    assert bool(caught) is warns
