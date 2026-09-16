@@ -593,6 +593,9 @@ def _is_a_number(value: Any) -> bool:
         isinstance(value, (int, float))
         and not isinstance(value, bool)
         and not pd.isna(value)
+        # An infinity is a number that no other can be moved past, and
+        # rounding one has no answer at all.
+        and math.isfinite(value)
     )
 
 
@@ -690,13 +693,15 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         for name, table in parts:
             if (shifted := _past(table, shift)) is not None:
                 related.setdefault(name, []).append(shifted)
-        seen = 0 if frame is None else len(frame)
-        already = max(already + seen, highest + shift + 1)
         # An envelope that carried no numbered rows has not taken a place in
-        # the sequence, so the next one that does is still the first. Counting
-        # it moved the first readable envelope off the numbers it arrived
-        # with, which is the one thing this promises not to do.
-        first = first and lowest is None
+        # the sequence: it reserves none of it, and the next one that does is
+        # still the first. Counting it moved the first readable envelope off
+        # the numbers it arrived with, which is the one thing this promises
+        # not to do.
+        if lowest is not None:
+            seen = 0 if frame is None else len(frame)
+            already = max(already + seen, highest + shift + 1)
+            first = False
 
     def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
         if not frames:

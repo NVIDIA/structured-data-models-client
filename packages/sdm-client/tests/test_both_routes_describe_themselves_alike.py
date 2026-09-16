@@ -574,3 +574,46 @@ def test_an_unreadable_envelope_in_the_middle_changes_nothing():
         == without.instance_table['instance_id'].tolist()
         == [0, 1, 2, 3]
     )
+
+
+def test_rows_with_no_number_reserve_no_numbers():
+    """Taking no place in the sequence means reserving none of it either. Five
+    unnumbered rows in the middle had been pushing the envelope after them
+    five places along, for positions nothing was using."""
+    unnumbered = {
+        'context': {
+            'instance_table': {
+                'columns': ['v'],
+                'rows': [[float(i)] for i in range(5)],
+            }
+        }
+    }
+    without = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 1])), 'context'
+    )
+    through = _split_from(
+        (keyed_envelope([], [0, 1]), unnumbered, keyed_envelope([], [0, 1])),
+        'context',
+    )
+    numbered = [
+        value
+        for value in through.instance_table['instance_id'].tolist()
+        if value == value
+    ]
+
+    assert numbered == without.instance_table['instance_id'].tolist()
+    assert numbered == [0, 1, 2, 3]
+
+
+def test_an_infinite_id_is_not_something_to_move_past():
+    """It is a number that no other can be moved past, and rounding one has
+    no answer at all -- `math.ceil` raises on it."""
+    context = _split_from(
+        (keyed_envelope([], [float('inf')]), keyed_envelope([], [0])),
+        'context',
+    )
+
+    assert context.instance_table['instance_id'].tolist() == [
+        float('inf'),
+        0,
+    ]
