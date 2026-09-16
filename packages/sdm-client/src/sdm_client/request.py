@@ -367,10 +367,12 @@ class Request:
         a few milliseconds per thousand rows, against a call that spends
         hundreds on the wire.
 
-        A half a caller assigned is theirs and is returned as given, which is
-        the same rule: it was a plain attribute before this was a property,
-        and what is held is what was put there. Only the route that holds
-        nothing reads the envelopes.
+        Where there are envelopes they are the request, and they are what is
+        read, in step with the counts beside them and with what the adapter
+        sends. A half stored alongside them cannot have been put there through
+        the setter, which refuses exactly that, but an object restored from an
+        older pickle carries one; reading it would describe rows that are
+        neither counted nor sent.
 
         Which makes these a description of the request rather than a handle
         into it. Editing a frame read from here changes what is sent only on
@@ -378,10 +380,11 @@ class Request:
         read from the envelopes again and the edit is not there. Assigning the
         half is what changes the request, and does so on both.
         """
+        payloads = self.payloads
+        if payloads:
+            return _split_from(payloads, half)
         held = getattr(self, f'_{half}', None)
-        if held is not None:
-            return held
-        return _split_from(self.payloads or (), half)
+        return held if held is not None else Split(pd.DataFrame())
 
     def _refuse_if_gathered(self, half: str) -> None:
         r"""Refuse to replace a half of a request that is already gathered.

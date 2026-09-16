@@ -337,3 +337,22 @@ def test_a_gathered_request_refuses_a_replacement(half):
     assert 'already encoded' in str(refused.value)
     assert 'Materialize the query again' in str(refused.value)
     assert request.predict_rows == 1
+
+
+def test_a_stored_half_does_not_outrank_the_envelopes():
+    """The setter refuses this state, but an object restored from a pickle
+    written before it carries one. The envelopes are what is counted and what
+    is sent, so they are what is read."""
+    request = Request.materialized(
+        payloads=(envelope([1], [10, 11]),),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1],
+        entity_table='t',
+    )
+    request.__dict__['_predict'] = Split(
+        instance_table=pd.DataFrame({'id': [7, 8, 9]})
+    )
+
+    assert len(request.predict.instance_table) == request.predict_rows == 1
+    assert not request.nothing_to_score
