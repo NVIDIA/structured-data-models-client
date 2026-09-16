@@ -1140,44 +1140,53 @@ def _warn_table_cannot_be_linked_to(
         ]
         if not candidates:
             continue
-        suggestion = repr(candidates[0]) if len(candidates) == 1 else '...'
         elsewhere = {
             other
             for column in candidates
             for other in named_elsewhere.get(column, ())
             if other != name
         }
-        if len(candidates) > 1:
-            identify, each = 'identify', 'each of them'
-            subject, verb = 'they', 'are'
-            declare = 'one of them identifies'
-            instead = 'they instead name the rows of'
-        else:
-            identify, each = 'identifies', 'it'
-            subject, verb = 'it', 'is'
-            declare = 'it identifies'
-            instead = 'it instead names the rows of'
-        if len(elsewhere) > 1:
-            are = f'{verb} named by other tables too'
-            shared = f'the tables {subject} {verb} shared with'
-            owner = 'those tables are the ones that need'
-        else:
-            are = f'{verb} named by another table too'
-            shared = f'the table {subject} {verb} shared with'
-            owner = 'that table is the one that needs'
         warnings.warn(
-            f'No column of {name!r} is named like a key, so it has no primary '
-            f'key, and nothing can link to a table without one: every '
-            f'relationship pointing at {name!r} is dropped and it reaches the '
-            f'model unjoined. {_and_list(candidates)} {identify} every row '
-            f'of {name!r} and {are}, which makes '
-            f'{each} either a key or a foreign key that happens not to repeat '
-            f'in the rows read. If {declare} {name!r}, say so with '
-            f'primary_keys={{{name!r}: {suggestion}}}; if {instead} '
-            f'{shared}, {owner} the key.',
+            _unlinkable_table_reads(name, candidates, len(elsewhere)),
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
+
+
+def _unlinkable_table_reads(
+    name: str, candidates: Sequence[str], tables_sharing: int
+) -> str:
+    r"""What to say about a table nothing can link to.
+
+    Kept apart from the search that found it, because the two are different
+    kinds of difficult. Deciding which columns could be the key is about the
+    data; saying so is about English, and the sentence has to agree with the
+    graph on two counts that move independently -- how many columns could be
+    the key, and how many tables they are shared with. Several columns can be
+    shared with one table, and one column with several.
+    """
+    many, shared_by_many = len(candidates) > 1, tables_sharing > 1
+    subject, verb = ('they', 'are') if many else ('it', 'is')
+    tables = 'tables' if shared_by_many else 'table'
+    return (
+        f'No column of {name!r} is named like a key, so it has no primary '
+        f'key, and nothing can link to a table without one: every '
+        f'relationship pointing at {name!r} is dropped and it reaches the '
+        f'model unjoined. '
+        f'{_and_list(candidates)} {"identify" if many else "identifies"} '
+        f'every row of {name!r} and {verb} named by '
+        f'{"other tables" if shared_by_many else "another table"} too, which '
+        f'makes {"each of them" if many else "it"} either a key or a foreign '
+        f'key that happens not to repeat in the rows read. '
+        f'If {"one of them identifies" if many else "it identifies"} '
+        f'{name!r}, say so with primary_keys={{{name!r}: '
+        f'{repr(candidates[0]) if not many else "..."}}}; '
+        f'if {subject} instead '
+        f'{"name" if many else "names"} the rows of the {tables} {subject} '
+        f'{verb} shared with, '
+        f'{"those tables are the ones that need" if shared_by_many else "that table is the one that needs"} '
+        f'the key.'
+    )
 
 
 def _could_identify_a_row(

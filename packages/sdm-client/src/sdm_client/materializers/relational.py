@@ -542,10 +542,13 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
     conversion had happened at all. It surfaced, when it surfaced, as an
     unrelated complaint about anchor times.
 
-    So only a year-first column is read, because only a year-first column says
-    one thing. `02/01/2020` is the 2nd of January to half the world and the 1st
-    of February to the other half, and the column does not say which; the
-    caller does, by converting it themselves.
+    So a column is read only where it says what its dates are. A year-first one
+    says it outright. A slash-separated one says it when a value of its own
+    rules a reading out -- no month is 15, so `15/03/2020` is day-first and
+    every other row reads the same way -- which is the ordinary case for any
+    column spanning more than twelve days. Where nothing decides, `02/01/2020`
+    is the 2nd of January to half the world and the 1st of February to the
+    other half, and there the caller says, by converting it themselves.
 
     The shape check reads a sample and is only a pre-filter; the conversion
     below reads every value, so a column that changes shape in its last row is

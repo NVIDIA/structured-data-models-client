@@ -501,6 +501,9 @@ def test_materialized_without_an_entity_table_reads_the_query_not_the_dict():
     """The argument did not exist before, so a caller who predates it must
     still get an answer, and not the insertion order it replaced. The
     envelopes carry the query's own answer, which is what is read.
+
+    `events` is given first so that insertion order and the query disagree,
+    which is the only arrangement that can tell them apart.
     """
     pytest.importorskip('sdm_relational_engine')
 
@@ -518,7 +521,6 @@ def test_materialized_without_an_entity_table_reads_the_query_not_the_dict():
     query = 'PREDICT SUM(events.amt, 0, 30, days) FOR EACH users.uid'
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        # events first, so insertion order and the query disagree
         schema = Schema.from_data(
             {'events': events, 'users': users},
             primary_keys={'users': 'uid', 'events': 'eid'},

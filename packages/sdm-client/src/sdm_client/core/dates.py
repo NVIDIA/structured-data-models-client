@@ -15,13 +15,16 @@ from __future__ import annotations
 
 import re
 import warnings
+from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 
-#: Year first, always. `02/01/2020` is the 2nd of January to half the world
-#: and the 1st of February to the other half, and nothing in the column says
-#: which; `2020-01-02` says it.
-UNAMBIGUOUS = re.compile(
+#: A date that leads with its year, which is one of the two ways a column can
+#: say what it holds. `2020-01-02` says it outright; `02/01/2020` is the 2nd of
+#: January to half the world and the 1st of February to the other half, and is
+#: decided, if at all, by `day_comes_first`.
+YEAR_FIRST = re.compile(
     r'\d{4}[-/]\d{2}[-/]\d{2}'
     r'([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?'
 )
@@ -96,16 +99,45 @@ def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
     if read.empty:
         return False
     if all(
-        isinstance(value, str) and UNAMBIGUOUS.fullmatch(value)
-        for value in read
+        isinstance(value, str) and YEAR_FIRST.fullmatch(value) for value in read
     ):
         return True
     return day_comes_first(values) is not None
 
 
+@dataclass(frozen=True)
+class Conversion:
+    r"""The call that reads one column, as arguments rather than as text.
+
+    `pd.to_datetime` takes these; a message shows them. Carrying the decision
+    as a value keeps those two from drifting, and keeps the reading that was
+    checked as the reading that is applied -- deciding it again at the point
+    of use is how the two come to disagree.
+    """
+
+    utc: bool = False
+    dayfirst: bool | None = None
+
+    @property
+    def arguments(self) -> dict[str, Any]:
+        r"""What to pass `pd.to_datetime`."""
+        given: dict[str, Any] = {}
+        if self.utc:
+            given['utc'] = True
+        if self.dayfirst is not None:
+            given['dayfirst'] = self.dayfirst
+        return given
+
+    def __str__(self) -> str:
+        r"""How to write the call, for a message that tells someone to make it."""
+        return ''.join(
+            f', {name}={value!r}' for name, value in self.arguments.items()
+        )
+
+
 def conversion_that_works(
     values: pd.Series, *, only_plausible_years: bool = True
-) -> str | None:
+) -> Conversion | None:
     r"""The arguments `pd.to_datetime` needs for this column, or nothing.
 
     Run rather than reasoned about. A column of impossible dates coerces to
@@ -122,36 +154,32 @@ def conversion_that_works(
     """
     first, last = PLAUSIBLE_YEARS
     order = day_comes_first(values)
-    extra = {} if order is None else {'dayfirst': order}
-    for arguments, named in (({}, ''), ({'utc': True}, ', utc=True')):
+    for utc in (False, True):
+        candidate = Conversion(utc=utc, dayfirst=order)
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 converted = pd.to_datetime(
-                    values, errors='coerce', **arguments, **extra
+                    values, errors='coerce', **candidate.arguments
                 )
         except (ValueError, TypeError, OverflowError):
             continue
         if converted.isna().any():
             continue
         if not only_plausible_years:
-            return named
+            return candidate
         years = converted.dt.year
         if first <= years.min() and years.max() <= last:
-            return named
+            return candidate
     return None
 
 
-def read(values: pd.Series, arguments: str) -> pd.Series:
-    r"""``values`` as datetimes, by the call `conversion_that_works` named.
+def read(values: pd.Series, conversion: Conversion) -> pd.Series:
+    r"""``values`` as datetimes, by the call `conversion_that_works` found.
 
-    A slash-separated column is read the way its own values said, since
-    reading it the other way is exactly the silent wrong answer this is here
-    to prevent.
+    The conversion is carried rather than worked out again, so the reading
+    that was checked against the whole column is the reading applied to it.
     """
-    first = day_comes_first(values)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        if first is None:
-            return pd.to_datetime(values, utc=bool(arguments))
-        return pd.to_datetime(values, utc=bool(arguments), dayfirst=first)
+        return pd.to_datetime(values, **conversion.arguments)

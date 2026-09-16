@@ -2,7 +2,16 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Three things a review found after the fixes they belong to had landed."""
+"""What the client says about a request has to be true when it is said.
+
+Two notices are easy to get subtly wrong. The one about context rows that
+carry the answer being asked for is issued before those rows are removed, so
+that a caller running with warnings as errors gets the raise with the
+payloads still whole -- which means it must describe the rule rather than an
+edit already made. And the one about a column that could be a key has to
+agree with the graph it is describing, for one candidate and for several, and
+for one table it is shared with and for several.
+"""
 
 from __future__ import annotations
 

@@ -35,8 +35,8 @@ from sdm_client import (
     Relationship,
     Schema,
 )
-from sdm_client.client import _keys_in, _named_by, _scored_keys
 from sdm_client.errors import StructuredDataError
+from sdm_client.wire.keys import _named_by, keys_in, scored_keys
 
 D = decimal.Decimal
 
@@ -58,7 +58,7 @@ def test_a_tabular_context_is_read_by_its_declared_key():
         [[1, 0.5, 'a'], [2, 0.6, 'b']],
         primary_key=['rid'],
     )
-    assert _keys_in(payload, 'context') == {_named_by([1]), _named_by([2])}
+    assert keys_in(payload, 'context') == {_named_by([1]), _named_by([2])}
 
 
 def test_a_relational_context_is_read_by_its_entity_reference():
@@ -70,7 +70,7 @@ def test_a_relational_context_is_read_by_its_entity_reference():
         [[0, 7, 1.0], [1, 11, 2.0]],
         primary_key=['instance_id'],
     )
-    assert _keys_in(payload, 'context') == {_named_by([7]), _named_by([11])}
+    assert keys_in(payload, 'context') == {_named_by([7]), _named_by([11])}
 
 
 @pytest.mark.parametrize(
@@ -97,14 +97,14 @@ def test_a_relational_context_is_read_by_its_entity_reference():
 def test_a_context_this_cannot_read_yields_no_keys(payload):
     """Reporting a key it did not find would be worse than reporting none:
     the warning it feeds is about rows, and a wrong row set is a wrong claim."""
-    assert _keys_in(payload, 'context') == frozenset()
+    assert keys_in(payload, 'context') == frozenset()
 
 
 def test_a_row_too_short_to_hold_the_key_is_skipped():
     payload = envelope(
         'context', ['x', 'rid'], [[0.5, 1], [0.6]], primary_key=['rid']
     )
-    assert _keys_in(payload, 'context') == {_named_by([1])}
+    assert keys_in(payload, 'context') == {_named_by([1])}
 
 
 # --- scoring rows the context already answers ------------------------------
@@ -219,7 +219,7 @@ def test_a_session_that_pinned_nothing_says_nothing():
 def test_the_rows_being_scored_are_read_from_the_request():
     data = frame()
     request = query(data).materialize(indices=[1, 2, 3])
-    assert _scored_keys(request) == {_named_by([k]) for k in (1, 2, 3)}
+    assert scored_keys(request) == {_named_by([k]) for k in (1, 2, 3)}
 
 
 # --- a key set to None is taken back from the engine -----------------------
@@ -433,7 +433,7 @@ def test_a_composite_key_is_a_tuple_rather_than_nothing():
         [[1, 'x', 0.5], [2, 'y', 0.6]],
         primary_key=['a', 'b'],
     )
-    assert _keys_in(payload, 'context') == {
+    assert keys_in(payload, 'context') == {
         _named_by([1, 'x']),
         _named_by([2, 'y']),
     }
@@ -472,7 +472,7 @@ def test_a_composite_overlap_is_reported():
         entity_table='t',
     )
 
-    scored = _scored_keys(request)
+    scored = scored_keys(request)
     assert scored == {
         _named_by([a, b])
         for a, b in zip(data['a'].head(6), data['b'].head(6), strict=True)

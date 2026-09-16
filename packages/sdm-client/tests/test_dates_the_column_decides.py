@@ -62,7 +62,9 @@ def test_the_column_is_read_the_way_it_said(values, read_as):
     """The same three days written three ways, all landing on the same days.
     Reading a day-first column month-first is the silent wrong answer this
     exists to prevent, and it is wrong by up to eleven months."""
-    got = dates.read(pd.Series(values), '')
+    got = dates.read(
+        pd.Series(values), dates.conversion_that_works(pd.Series(values))
+    )
 
     assert list(got.dt.strftime('%Y-%m-%d')) == read_as
 
@@ -108,7 +110,10 @@ def test_a_time_after_the_date_does_not_hide_what_it_says(values, decided):
 
 
 def test_a_timestamp_column_is_read_the_way_it_said():
-    got = dates.read(pd.Series(['15/03/2024 08:30', '02/01/2024 09:00']), '')
+    got = dates.read(
+        pd.Series(['15/03/2024 08:30', '02/01/2024 09:00']),
+        dates.Conversion(dayfirst=True),
+    )
 
     assert list(got.dt.strftime('%Y-%m-%d %H:%M')) == [
         '2024-03-15 08:30',
@@ -126,10 +131,33 @@ def test_a_declared_time_column_is_not_refused_for_its_century():
     old = pd.Series(['1899-01-01', '1899-02-14', '1875-06-30'])
 
     assert dates.conversion_that_works(old) is None
-    assert dates.conversion_that_works(old, only_plausible_years=False) == ''
+    assert dates.conversion_that_works(old, only_plausible_years=False) == (
+        dates.Conversion()
+    )
 
 
 def test_a_part_code_is_still_not_a_date_where_nothing_said_it_was():
     codes = pd.Series([f'{4711 + i}-01-02' for i in range(5)])
 
     assert dates.conversion_that_works(codes) is None
+
+
+# --- the conversion is carried, not worked out again -----------------------
+
+
+@pytest.mark.parametrize(
+    ('conversion', 'written'),
+    [
+        (dates.Conversion(), ''),
+        (dates.Conversion(utc=True), ', utc=True'),
+        (dates.Conversion(dayfirst=True), ', dayfirst=True'),
+        (dates.Conversion(dayfirst=False), ', dayfirst=False'),
+    ],
+)
+def test_a_conversion_writes_itself_as_the_call_it_is(conversion, written):
+    """The message that tells someone to make the call and the call itself
+    come from one place, so they cannot drift apart."""
+    assert str(conversion) == written
+    assert list(conversion.arguments) == (
+        [k.split('=')[0].strip() for k in written.split(', ') if k]
+    )

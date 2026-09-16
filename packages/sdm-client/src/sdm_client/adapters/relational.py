@@ -620,10 +620,6 @@ def _as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     the column's own type is restoring something. A regression's answer is a
     number the model computed, and rounding that to the target's dtype would be
     this client deciding how precise the answer is.
-
-    Only a class label is reshaped. A regression's answer is a number the
-    model computed rather than one of the values the column held, so giving it
-    the column's type would be this client deciding how precise the answer is.
     """
     import dataclasses
 
