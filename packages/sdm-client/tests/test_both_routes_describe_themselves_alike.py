@@ -322,3 +322,45 @@ def test_assigning_a_half_is_what_changes_the_request(model):
 
     assert request.predict_rows == 3
     assert request.predict.instance_table['rid'].tolist() == [7, 8, 9]
+
+
+@pytest.mark.parametrize('model', ['tabular', 'relational'])
+def test_emptying_a_request_by_assignment_is_seen_as_empty(model):
+    """`predict()` answers an empty request without sending. Reading the
+    envelopes regardless would send one the caller had emptied."""
+    pytest.importorskip('sdm_relational_engine')
+
+    chosen = KumoTabular() if model == 'tabular' else KumoRelational()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=chosen)
+
+    assert not request.nothing_to_score
+
+    request.predict = Split(
+        instance_table=pd.DataFrame({'rid': pd.Series([], dtype='int64')})
+    )
+
+    assert request.nothing_to_score
+    assert request.predict_rows == 0
+
+
+def test_filling_an_empty_request_by_assignment_is_not_seen_as_empty():
+    """And the other way: dropping it as empty would lose the rows."""
+    payload = envelope([], [10, 11])
+    request = Request.materialized(
+        payloads=(payload,),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[],
+        entity_table='t',
+    )
+
+    assert request.nothing_to_score
+
+    request.predict = Split(instance_table=pd.DataFrame({'rid': [7, 8]}))
+
+    assert not request.nothing_to_score
+    assert request.predict_rows == 2

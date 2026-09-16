@@ -437,8 +437,12 @@ class Request:
         that is empty. An unreadable envelope is a request that should reach
         the endpoint and be refused, not one that quietly succeeds with an
         empty answer.
+
+        A `predict` half a caller assigned is what the request asks about, so
+        it is read instead of the envelopes. Counting those regardless would
+        send a request the caller had emptied, and drop one they had filled.
         """
-        if self.payloads:
+        if self._predict is None and self.payloads:
             counts = [
                 _envelope_rows(payload, 'predict') for payload in self.payloads
             ]
