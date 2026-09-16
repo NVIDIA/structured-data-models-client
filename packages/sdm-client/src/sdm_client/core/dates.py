@@ -37,8 +37,44 @@ SAMPLE = 1000
 PLAUSIBLE_YEARS = (1900, 2100)
 
 
+#: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be.
+_TWO_PART = re.compile(r'(\d{1,2})[-/](\d{1,2})[-/]\d{2,4}')
+
+
+def day_comes_first(values: pd.Series, limit: int = SAMPLE) -> bool | None:
+    r"""Which way round a slash-separated column reads, if it says.
+
+    `02/01/2024` is two dates and the column cannot tell you which. But a
+    column holding `15/03/2024` has said: no month is 15, so the first
+    component is the day, and every other row reads the same way. The same
+    argument the other way round for `03/15/2024`.
+
+    So the question is not whether a single value is ambiguous -- most are --
+    but whether anything in the column decides it. `None` means nothing did,
+    which is also the answer when the column contradicts itself.
+    """
+    read = values.head(limit) if limit else values
+    first_over, second_over = False, False
+    for value in read:
+        if not isinstance(value, str):
+            continue
+        found = _TWO_PART.fullmatch(value.strip())
+        if found is None:
+            continue
+        one, two = int(found.group(1)), int(found.group(2))
+        first_over = first_over or one > 12
+        second_over = second_over or two > 12
+    if first_over == second_over:
+        return None
+    return first_over
+
+
 def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
-    r"""Whether every value read is year-first and whole.
+    r"""Whether the column says what its dates are.
+
+    Year-first says it outright. A slash-separated column says it when one of
+    its own values rules a reading out, which is the ordinary case for any
+    column spanning more than twelve days.
 
     Matches whole rather than by prefix: a part code can open with something
     date-shaped and continue.
@@ -46,10 +82,12 @@ def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
     read = values.head(limit) if limit else values
     if read.empty:
         return False
-    return all(
+    if all(
         isinstance(value, str) and UNAMBIGUOUS.fullmatch(value)
         for value in read
-    )
+    ):
+        return True
+    return day_comes_first(read, limit=0) is not None
 
 
 def conversion_that_works(values: pd.Series) -> str | None:
@@ -62,11 +100,15 @@ def conversion_that_works(values: pd.Series) -> str | None:
     convert it would turn part numbers into timestamps.
     """
     first, last = PLAUSIBLE_YEARS
+    order = day_comes_first(values)
+    extra = {} if order is None else {'dayfirst': order}
     for arguments, named in (({}, ''), ({'utc': True}, ', utc=True')):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                converted = pd.to_datetime(values, errors='coerce', **arguments)
+                converted = pd.to_datetime(
+                    values, errors='coerce', **arguments, **extra
+                )
         except (ValueError, TypeError, OverflowError):
             continue
         if converted.isna().any():
@@ -78,7 +120,15 @@ def conversion_that_works(values: pd.Series) -> str | None:
 
 
 def read(values: pd.Series, arguments: str) -> pd.Series:
-    r"""``values`` as datetimes, by the call `conversion_that_works` named."""
+    r"""``values`` as datetimes, by the call `conversion_that_works` named.
+
+    A slash-separated column is read the way its own values said, since
+    reading it the other way is exactly the silent wrong answer this is here
+    to prevent.
+    """
+    first = day_comes_first(values)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        return pd.to_datetime(values, utc=bool(arguments))
+        if first is None:
+            return pd.to_datetime(values, utc=bool(arguments))
+        return pd.to_datetime(values, utc=bool(arguments), dayfirst=first)
