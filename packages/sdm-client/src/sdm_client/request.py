@@ -29,6 +29,7 @@ and does not belong in a type you read.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -586,20 +587,21 @@ def _wire_frame(table: Any) -> pd.DataFrame | None:
 INSTANCE_ID = 'instance_id'
 
 
-def _highest_instance(frame: pd.DataFrame | None) -> int:
-    r"""The largest ``instance_id`` a frame carries, or ``-1`` for none."""
-    if frame is None or INSTANCE_ID not in frame or frame.empty:
-        return -1
-    numbers = pd.to_numeric(frame[INSTANCE_ID], errors='coerce').dropna()
-    return int(numbers.max()) if not numbers.empty else -1
+def _instance_bounds(
+    frame: pd.DataFrame | None,
+) -> tuple[int, int | None]:
+    r"""How far an ``instance_id`` column reaches, rounded outwards.
 
-
-def _lowest_instance(frame: pd.DataFrame | None) -> int | None:
-    r"""The smallest ``instance_id`` a frame carries, or nothing."""
+    Outwards because these bound a shift: truncating toward zero would round
+    a floor of `-0.5` up to `0` and leave the shift half a step short, which
+    is enough for two envelopes to land on the same id.
+    """
     if frame is None or INSTANCE_ID not in frame or frame.empty:
-        return None
+        return -1, None
     numbers = pd.to_numeric(frame[INSTANCE_ID], errors='coerce').dropna()
-    return int(numbers.min()) if not numbers.empty else None
+    if numbers.empty:
+        return -1, None
+    return math.ceil(numbers.max()), math.floor(numbers.min())
 
 
 def _past(frame: pd.DataFrame | None, shift: int) -> pd.DataFrame | None:
@@ -651,9 +653,11 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         # alone did not do -- an envelope numbering from below zero landed
         # back among ids already taken however far the offset had advanced.
         numbered = [frame, *(table for _, table in parts)]
-        highest = max((_highest_instance(t) for t in numbered), default=-1)
-        floors = [_lowest_instance(t) for t in numbered]
-        lowest = min((n for n in floors if n is not None), default=None)
+        bounds = [_instance_bounds(t) for t in numbered]
+        highest = max((top for top, _ in bounds), default=-1)
+        lowest = min(
+            (floor for _, floor in bounds if floor is not None), default=None
+        )
         shift = 0 if first or lowest is None else already - lowest
         if (moved := _past(frame, shift)) is not None:
             instances.append(moved)

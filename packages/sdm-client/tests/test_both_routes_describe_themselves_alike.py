@@ -472,6 +472,9 @@ def test_one_envelope_is_numbered_as_it_arrived():
         ([3], [-1], [3, 4]),
         ([0, 1, 2], [-1], [0, 1, 2, 3]),
         ([-1], [-1], [-1, 1]),
+        # rounded outwards: truncating a floor of -0.5 toward zero leaves the
+        # shift half a step short, which is enough to land on a taken id
+        ([0.5], [-0.5], [0.5, 2.5]),
     ],
 )
 def test_no_two_envelopes_share_an_instance(first, second, expected):
