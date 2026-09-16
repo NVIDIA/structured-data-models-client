@@ -21,8 +21,13 @@ from sdm_client.schema import _as_key_tuple
 if TYPE_CHECKING:
     from sdm_client.request import Request
 
+#: The column a relational envelope puts the moment in.
+_ANCHOR = '__kumo_anchor_time'
 
-def keys_in(payload: dict[str, Any] | None, half: str) -> frozenset[Any]:
+
+def keys_in(
+    payload: dict[str, Any] | None, half: str, *, with_anchor: bool = False
+) -> frozenset[Any]:
     r"""The entity keys one half of a wire envelope holds.
 
     Kept when a session is opened, and only the keys: the context itself is
@@ -34,6 +39,11 @@ def keys_in(payload: dict[str, Any] | None, half: str) -> frozenset[Any]:
     The key is named in the schema rather than in the rows, and the two models
     name it differently: a relational envelope carries an opaque entity
     reference, a tabular one carries the caller's own key column.
+
+    `with_anchor` puts the moment into the key. An entity asked about over a
+    window is a different question at a different moment, so the context has
+    only answered the one it was asked at; an entity whose answer is a
+    standing value has been given away at any moment at all.
     """
     if not isinstance(payload, dict):
         return frozenset()
@@ -56,6 +66,8 @@ def keys_in(payload: dict[str, Any] | None, half: str) -> frozenset[Any]:
     if any(name not in columns for name in wanted):
         return frozenset()
     at = [columns.index(name) for name in wanted]
+    if with_anchor and _ANCHOR in columns:
+        at = [*at, columns.index(_ANCHOR)]
     return frozenset(
         _named_by(row[position] for position in at)
         for row in rows
@@ -79,10 +91,15 @@ def _named_by(values: Iterable[Any]) -> str:
     return repr(tuple(str(value) for value in values))
 
 
-def scored_keys(request: Request) -> frozenset[Any]:
+def scored_keys(
+    request: Request, *, with_anchor: bool = False
+) -> frozenset[Any]:
     if request.payloads:
         return frozenset().union(
-            *(keys_in(payload, 'predict') for payload in request.payloads)
+            *(
+                keys_in(payload, 'predict', with_anchor=with_anchor)
+                for payload in request.payloads
+            )
         )
     frame = getattr(request.predict, 'instance_table', None)
     table = request.schema[request.entity_table] if request.schema else None

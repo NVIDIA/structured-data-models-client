@@ -281,6 +281,7 @@ class Request:
         query: str,
         indices: list[Any],
         entity_table: str | None = None,
+        windowed: bool = False,
         requested_inference: Mapping[str, Any] | None = None,
     ) -> Request:
         r"""A request whose data has already been gathered.
@@ -304,6 +305,7 @@ class Request:
         envelopes carry the query's own answer, which is read instead.
         """
         request = cls.__new__(cls)
+        request._windowed = windowed
         if entity_table is None:
             entity_table = _entity_table_in(payloads)
         request.schema = schema
@@ -415,6 +417,21 @@ class Request:
             f'you want instead.',
             code='INVALID_REQUEST',
         )
+
+    @property
+    def target_moves_with_time(self) -> bool:
+        r"""Whether the answer is a window rather than a standing value.
+
+        An aggregation is a window: the same entity asked about at a later
+        moment is a different question, and the answer to one is not the
+        answer to the other. A column is not: it has one value, and whoever
+        has seen it has the answer whenever they are asked.
+
+        Which is the difference between a context that has answered the
+        question and one that merely mentions the same entity, so anything
+        deciding whether a row was already given away has to know it.
+        """
+        return getattr(self, '_windowed', False)
 
     @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
@@ -565,6 +582,28 @@ def _wire_frame(table: Any) -> pd.DataFrame | None:
         return None
 
 
+#: What ties a related row to the instance it hangs off.
+INSTANCE_ID = 'instance_id'
+
+
+def _highest_instance(frame: pd.DataFrame | None) -> int:
+    r"""The largest ``instance_id`` a frame carries, or ``-1`` for none."""
+    if frame is None or INSTANCE_ID not in frame or frame.empty:
+        return -1
+    numbers = pd.to_numeric(frame[INSTANCE_ID], errors='coerce').dropna()
+    return int(numbers.max()) if not numbers.empty else -1
+
+
+def _past(frame: pd.DataFrame | None, already: int) -> pd.DataFrame | None:
+    r"""``frame`` with its ``instance_id`` moved past ``already``."""
+    if frame is None or not already or INSTANCE_ID not in frame:
+        return frame
+    moved = frame.copy()
+    numbers = pd.to_numeric(moved[INSTANCE_ID], errors='coerce')
+    moved[INSTANCE_ID] = numbers + already
+    return moved
+
+
 def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
     r"""The rows of one half, gathered from the envelopes that carry them.
 
@@ -581,20 +620,34 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
     """
     instances: list[pd.DataFrame] = []
     related: dict[str, list[pd.DataFrame]] = {}
+    already = 0
     for payload in payloads:
         half_of = payload.get(half) if isinstance(payload, Mapping) else None
         if not isinstance(half_of, Mapping):
             continue
         frame = _wire_frame(half_of.get('instance_table'))
-        if frame is not None:
-            instances.append(frame)
         tables = half_of.get('related_tables')
-        for name, table in (
-            tables.items() if isinstance(tables, Mapping) else ()
-        ):
-            frame = _wire_frame(table)
-            if frame is not None:
-                related.setdefault(name, []).append(frame)
+        parts = [
+            (name, _wire_frame(table))
+            for name, table in (
+                tables.items() if isinstance(tables, Mapping) else ()
+            )
+        ]
+        # Each envelope numbers its rows from zero, and `instance_id` is what
+        # ties a related row to the instance it hangs off. Stacking them
+        # unchanged puts the second envelope's row 0 beside the first's, so a
+        # join that was exact within one envelope silently crosses between
+        # them. Moving each envelope's numbering past the last keeps the tie.
+        moved = _past(frame, already)
+        highest = _highest_instance(frame)
+        if moved is not None:
+            instances.append(moved)
+        for name, table in parts:
+            shifted = _past(table, already)
+            if shifted is not None:
+                related.setdefault(name, []).append(shifted)
+            highest = max(highest, _highest_instance(table))
+        already += highest + 1
 
     def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
         if not frames:

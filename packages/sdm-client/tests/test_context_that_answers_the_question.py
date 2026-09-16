@@ -510,3 +510,32 @@ def test_a_query_with_no_entity_filter_says_nothing():
             filtered_graph(),
         ).materialize(indices=list(range(50)), model=KumoRelational())
     assert not any('entity filter' in str(w.message) for w in caught)
+
+
+def test_both_tabular_routes_build_the_same_context(recwarn):
+    """The same table asked the same question two ways built two different
+    contexts: one route left out the rows with no label and the other did
+    not, so `predict=<frame>` shipped rows that teach nothing and take up
+    room in a context the endpoint caps."""
+    pytest.importorskip('sdm_relational_engine')
+
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {
+            'rid': range(100),
+            'x': rng.normal(0, 1, 100),
+            'label': rng.choice([*'ab'], 100),
+        }
+    )
+    frame.loc[frame.index[:30], 'label'] = None
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'t': frame}, primary_keys={'t': 'rid'})
+        query = 'PREDICT t.label FOR EACH t.rid'
+        by_index = PredictiveQuery(query, schema).materialize(indices=[90, 91])
+        by_frame = PredictiveQuery(query, schema).materialize(
+            predict=frame[frame.rid.isin([90, 91])].drop(columns=['label'])
+        )
+
+    assert by_index.context_rows == by_frame.context_rows
+    assert by_frame.context.instance_table['label'].notna().all()

@@ -44,15 +44,24 @@ class TabularMaterializer:
         query: ValidatedPredictiveQuery,
         predict: pd.DataFrame,
     ) -> Request:
-        r"""Build a request from rows supplied separately by the caller."""
+        r"""Build a request from rows supplied separately by the caller.
+
+        The context is the table minus the rows being scored and minus the
+        rows with nothing to teach. The other route already left out both;
+        this one left out neither, so the same table asked the same question
+        two ways built two different contexts.
+        """
         entity_table_name = table_name(query.entity_column)
         entity_col = col_name(query.entity_column)
         target_col = col_name(query.target_column)
 
         return Request(
             context=_context_within_limit(
-                _without_the_rows_being_scored(
-                    self.schema[entity_table_name].data, predict, entity_col
+                _rows_that_carry_an_answer(
+                    _without_the_rows_being_scored(
+                        self.schema[entity_table_name].data, predict, entity_col
+                    ),
+                    target_col,
                 ),
                 None,
                 entity_table_name,
@@ -175,6 +184,19 @@ def _context_within_limit(
             stacklevel=caller_stacklevel(),
         )
     return candidates.sample(n=wanted, random_state=_CONTEXT_SEED).sort_index()
+
+
+def _rows_that_carry_an_answer(
+    frame: pd.DataFrame, target: str
+) -> pd.DataFrame:
+    r"""The rows that can teach the model something.
+
+    A row whose target is null is not an example of anything. It takes up
+    room in a context the endpoint caps, and says nothing in exchange.
+    """
+    if target not in frame:
+        return frame
+    return frame[frame[target].notna()]
 
 
 def _without_the_rows_being_scored(

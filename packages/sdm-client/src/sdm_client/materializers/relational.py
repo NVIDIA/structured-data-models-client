@@ -86,13 +86,13 @@ class RelationalMaterializer:
 
         _warn_the_filter_chose_only_the_examples(query, indices)
         payloads = self._gather(query, indices, num_context_samples, options)
-        _drop_context_that_answers_the_question(
-            payloads,
-            windowed=getattr(query.target_ast, 'date_offset_range', None)
-            is not None,
+        windowed = (
+            getattr(query.target_ast, 'date_offset_range', None) is not None
         )
+        _drop_context_that_answers_the_question(payloads, windowed=windowed)
         return Request.materialized(
             payloads=payloads,
+            windowed=windowed,
             schema=self.schema.snapshot(),
             query=query.to_string(),
             indices=list(indices),

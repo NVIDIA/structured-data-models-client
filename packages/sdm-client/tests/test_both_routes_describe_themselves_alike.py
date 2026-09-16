@@ -408,3 +408,54 @@ def test_the_adapters_agree_with_the_request_about_its_route():
     envelope_built = TabularAdapter()._envelope(request, ('prediction',))
 
     assert len(envelope_built['predict']['instance_table']['rows']) == 2
+
+
+# --- batching is transport, and the rows still tie to their own instance ----
+
+
+def keyed_envelope(scored: list[int], known: list[int]) -> dict:
+    """An envelope that numbers its rows, as a gathered one does."""
+    return {
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id', 'v'],
+                'rows': [[i, float(i)] for i in known],
+            },
+            'related_tables': {
+                'e': {
+                    'columns': ['instance_id', 'w'],
+                    'rows': [[i, 1.0] for i in known],
+                }
+            },
+        },
+        'predict': {
+            'instance_table': {
+                'columns': ['instance_id'],
+                'rows': [[i] for i in scored],
+            }
+        },
+    }
+
+
+def test_instance_ids_do_not_collide_across_envelopes():
+    """Each envelope numbers its rows from zero, and `instance_id` is what
+    ties a related row to the instance it hangs off. Stacking them unchanged
+    put the second envelope's row 0 beside the first's, so a join exact within
+    one envelope silently crossed between them."""
+    payloads = (
+        keyed_envelope([0, 1], [0, 1, 2]),
+        keyed_envelope([0], [0, 1]),
+    )
+
+    context = _split_from(payloads, 'context')
+    instances = context.instance_table['instance_id'].tolist()
+
+    assert instances == [0, 1, 2, 3, 4]
+    assert not context.instance_table['instance_id'].duplicated().any()
+    assert context.related_tables['e']['instance_id'].tolist() == instances
+
+
+def test_one_envelope_is_numbered_as_it_arrived():
+    context = _split_from((keyed_envelope([0], [0, 1, 2]),), 'context')
+
+    assert context.instance_table['instance_id'].tolist() == [0, 1, 2]

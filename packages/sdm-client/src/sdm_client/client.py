@@ -84,6 +84,7 @@ class FittedModel:
         pinned: dict[str, Any] | None = None,
         named_outputs: Sequence[str] | None = None,
         pinned_keys: frozenset[Any] = frozenset(),
+        pinned_over_a_window: bool = False,
     ) -> None:
         self._client = client
         self._adapter = adapter
@@ -93,6 +94,7 @@ class FittedModel:
             None if named_outputs is None else tuple(named_outputs)
         )
         self._pinned_keys = pinned_keys
+        self._pinned_over_a_window = pinned_over_a_window
         self._pinned = pinned or {}
         self._closed = False
 
@@ -125,7 +127,9 @@ class FittedModel:
             )
         if request.nothing_to_score:
             return _empty_answer(self.model, self._outputs)
-        _warn_scoring_what_was_pinned(request, self._pinned_keys)
+        _warn_scoring_what_was_pinned(
+            request, self._pinned_keys, self._pinned_over_a_window
+        )
         parts = [
             self._adapter.normalize(
                 self._client._transport.session_predict(
@@ -366,7 +370,10 @@ class SDMClient:
             fields,
             {key: value for key, value in payload.items() if key != 'context'},
             named_outputs=outputs,
-            pinned_keys=keys_in(payload, 'context'),
+            pinned_keys=keys_in(
+                payload, 'context', with_anchor=request.target_moves_with_time
+            ),
+            pinned_over_a_window=request.target_moves_with_time,
         )
 
     def _prepare(
@@ -501,7 +508,7 @@ def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
 
 
 def _warn_scoring_what_was_pinned(
-    request: Request, pinned: frozenset[Any]
+    request: Request, pinned: frozenset[Any], over_a_window: bool = False
 ) -> None:
     r"""Say when a call scores rows the pinned context already answers.
 
@@ -518,10 +525,15 @@ def _warn_scoring_what_was_pinned(
     which means knowing every row the session will ever score, and a caller who
     knows that has no reason to open a session. So it is reported, with the two
     things that do work.
+
+    An entity asked about over a window is only given away at the moment it
+    was pinned at, so there the moment is part of what is compared. Comparing
+    the entity alone called every later call about the same entity a leak,
+    which under warnings-as-errors is a working session that stops working.
     """
     if not pinned:
         return
-    scored = scored_keys(request)
+    scored = scored_keys(request, with_anchor=over_a_window)
     shown = scored & pinned
     if not shown:
         return

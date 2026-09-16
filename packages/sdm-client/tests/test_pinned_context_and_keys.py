@@ -35,6 +35,7 @@ from sdm_client import (
     Relationship,
     Schema,
 )
+from sdm_client.client import _warn_scoring_what_was_pinned
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.keys import _named_by, keys_in, scored_keys
 
@@ -543,3 +544,71 @@ def test_an_object_index_still_coerces_what_it_used_to(held, asked):
     store = LocalGraphStore(graph, verbose=False)
 
     assert len(store.get_node_id('people', pd.Series(asked))) == 1
+
+
+# --- a window makes the moment part of the question -------------------------
+
+
+def pinned_at(rows):
+    return {
+        'schema': {'instance_table': {'primary_key': 'instance_id'}},
+        'context': {
+            'instance_table': {
+                'columns': [
+                    'instance_id',
+                    '__kumo_entity_ref_0',
+                    '__kumo_anchor_time',
+                ],
+                'rows': rows,
+            }
+        },
+    }
+
+
+class Scoring:
+    def __init__(self, rows, windowed):
+        self.payloads = (
+            {
+                'predict': {
+                    'instance_table': {
+                        'columns': [
+                            '__kumo_entity_ref_0',
+                            '__kumo_anchor_time',
+                        ],
+                        'rows': rows,
+                    }
+                }
+            },
+        )
+        self.target_moves_with_time = windowed
+
+
+CONTEXT = [[0, 'e1', '2024-01-01'], [1, 'e2', '2024-01-01']]
+
+
+@pytest.mark.parametrize(
+    ('label', 'windowed', 'scored', 'warns'),
+    [
+        ('a window, a later moment', True, [['e1', '2024-06-01']], False),
+        ('a window, the same moment', True, [['e1', '2024-01-01']], True),
+        ('a standing value, later', False, [['e1', '2024-06-01']], True),
+        ('a window, another entity', True, [['e9', '2024-01-01']], False),
+    ],
+)
+def test_the_moment_counts_only_where_the_answer_moves(
+    label, windowed, scored, warns
+):
+    """An entity asked about over a window is given away only at the moment
+    it was pinned at; one whose answer is a standing value is given away at
+    any moment at all. Comparing the entity alone called every later call
+    about the same entity a leak, and under warnings-as-errors that is a
+    working session that stops working."""
+    pinned = keys_in(pinned_at(CONTEXT), 'context', with_anchor=windowed)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _warn_scoring_what_was_pinned(
+            Scoring(scored, windowed), pinned, windowed
+        )
+
+    assert bool(caught) is warns, label
