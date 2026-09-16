@@ -604,13 +604,18 @@ def _instance_bounds(
     Outwards because these bound a shift: truncating toward zero would round
     a floor of `-0.5` up to `0` and leave the shift half a step short, which
     is enough for two envelopes to land on the same id.
+
+    Only the values a shift can move are measured. Reading `'7'` as seven
+    would let it decide how far the next envelope moves while staying where
+    it is itself, so it would set the distance for a journey it does not
+    make.
     """
     if frame is None or INSTANCE_ID not in frame or frame.empty:
         return -1, None
-    numbers = pd.to_numeric(frame[INSTANCE_ID], errors='coerce').dropna()
-    if numbers.empty:
+    movable = [value for value in frame[INSTANCE_ID] if _is_a_number(value)]
+    if not movable:
         return -1, None
-    return math.ceil(numbers.max()), math.floor(numbers.min())
+    return math.ceil(max(movable)), math.floor(min(movable))
 
 
 def _past(frame: pd.DataFrame | None, shift: int) -> pd.DataFrame | None:

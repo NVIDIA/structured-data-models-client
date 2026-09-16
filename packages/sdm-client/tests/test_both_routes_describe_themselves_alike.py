@@ -525,3 +525,20 @@ def test_an_id_that_is_not_a_number_is_left_as_it_is():
     assert ids[:3] == [0, 1, 2]
     assert ids[3] == 'x'
     assert context.related_tables['e']['instance_id'].tolist() == ids
+
+
+def test_a_number_written_as_text_is_not_moved():
+    """It is measured by the same rule it is moved by, so a value that stays
+    where it is does not decide how far anything else goes.
+
+    Held as behaviour, not as a guard: measuring with a looser rule only ever
+    moves the next envelope further than needed, never less, so no input
+    distinguishes the two by whether ids collide. Checked exhaustively over
+    every pair drawn from numbers and numeric-looking text."""
+    context = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], ['7', 2])), 'context'
+    )
+    ids = context.instance_table['instance_id'].tolist()
+
+    assert ids == [0, 1, '7', 2]
+    assert context.related_tables['e']['instance_id'].tolist() == ids
