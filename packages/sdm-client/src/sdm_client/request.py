@@ -335,24 +335,48 @@ class Request:
         eagerly would copy every context row of every request on a path where
         nothing reads them.
         """
-        if self._context is None:
-            self._context = _split_from(self._payloads or (), 'context')
-        return self._context
+        return self._half('context')
 
     @context.setter
     def context(self, value: Split) -> None:
         self._context = value
+        self._context_assigned = True
 
     @property
     def predict(self) -> Split:
         r"""The rows being asked about. Built the way `context` is."""
-        if self._predict is None:
-            self._predict = _split_from(self._payloads or (), 'predict')
-        return self._predict
+        return self._half('predict')
 
     @predict.setter
     def predict(self, value: Split) -> None:
         self._predict = value
+        self._predict_assigned = True
+
+    def _half(self, half: str) -> Split:
+        r"""One half, built from the envelopes and kept until they change.
+
+        The count of rows the envelopes carry is what the cache is held
+        against. Leaked context rows are taken out of those envelopes in
+        place, and a half read before that happened would otherwise keep
+        describing rows the request no longer sends.
+
+        A half a caller assigned is theirs and is returned as given. It was a
+        plain attribute before this was a property, and rebuilding over it
+        from the envelopes would make the assignment look like it had worked
+        and then quietly undo it.
+        """
+        held = getattr(self, f'_{half}', None)
+        if getattr(self, f'_{half}_assigned', False):
+            return held
+        payloads = self.payloads
+        if payloads is None:
+            return held if held is not None else Split(pd.DataFrame())
+        carried = sum(_envelope_rows(p, half) or 0 for p in payloads)
+        if held is None or getattr(self, f'_{half}_rows', None) != carried:
+            held = _split_from(payloads, half)
+            object.__setattr__(self, f'_{half}', held)
+            object.__setattr__(self, f'_{half}_rows', carried)
+        return held
 
     @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
@@ -495,7 +519,10 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         frame = _wire_frame(half_of.get('instance_table'))
         if frame is not None:
             instances.append(frame)
-        for name, table in (half_of.get('related_tables') or {}).items():
+        tables = half_of.get('related_tables')
+        for name, table in (
+            tables.items() if isinstance(tables, Mapping) else ()
+        ):
             frame = _wire_frame(table)
             if frame is not None:
                 related.setdefault(name, []).append(frame)

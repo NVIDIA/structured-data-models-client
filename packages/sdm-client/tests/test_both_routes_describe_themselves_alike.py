@@ -229,18 +229,6 @@ def test_the_halves_are_not_built_until_they_are_read():
     assert request._context is not None
 
 
-def test_reading_twice_reads_one_frame():
-    request = Request.materialized(
-        payloads=(envelope([1], [10]),),
-        schema=one_table(),
-        query='PREDICT t.amount FOR EACH t.rid',
-        indices=[1],
-        entity_table='t',
-    )
-
-    assert request.context is request.context
-
-
 def test_a_half_can_still_be_assigned():
     """It was a plain attribute before, and a caller may still set it."""
     request = Request.materialized(
@@ -253,3 +241,63 @@ def test_a_half_can_still_be_assigned():
     request.context = Split(instance_table=pd.DataFrame({'id': [7, 8, 9]}))
 
     assert len(request.context.instance_table) == 3
+
+    # and it stays theirs, rather than being rebuilt from the envelopes
+    assert len(request.context.instance_table) == 3
+
+
+def test_the_cache_does_not_outlive_the_rows_it_describes():
+    """Leaked context rows are taken out of the envelopes in place. A half
+    read before that happened must not go on describing rows the request no
+    longer sends."""
+    payloads = [envelope([1], [10, 11, 12])]
+    request = Request.materialized(
+        payloads=tuple(payloads),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1],
+        entity_table='t',
+    )
+
+    assert len(request.context.instance_table) == 3
+
+    payloads[0]['context']['instance_table']['rows'].pop()
+    request._payloads = tuple(payloads)
+
+    assert len(request.context.instance_table) == 2
+    assert request.context_rows == 2
+
+
+def test_a_half_read_twice_without_a_change_is_the_same_frame():
+    request = Request.materialized(
+        payloads=(envelope([1], [10]),),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1],
+        entity_table='t',
+    )
+
+    assert request.context is request.context
+
+
+def test_an_object_with_no_payloads_attribute_still_answers():
+    """`__new__` and unpickling both produce one, and the attribute beside
+    this one already reads defensively for that reason."""
+    bare = Request.__new__(Request)
+
+    assert len(bare.context.instance_table) == 0
+    assert len(bare.predict.instance_table) == 0
+
+
+def test_a_related_tables_that_is_not_a_mapping_is_ignored():
+    payload = {
+        'context': {
+            'instance_table': {'columns': ['id'], 'rows': [[1]]},
+            'related_tables': 'bad',
+        }
+    }
+
+    context = _split_from((payload,), 'context')
+
+    assert len(context.instance_table) == 1
+    assert context.related_tables == {}
