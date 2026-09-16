@@ -24,6 +24,7 @@ import pytest
 
 from sdm_client import KumoRelational, PredictiveQuery, Relationship, Schema
 from sdm_client.errors import StructuredDataError
+from sdm_client.request import Request
 
 RNG = np.random.default_rng(7)
 
@@ -494,3 +495,47 @@ def test_something_that_is_not_a_relationship_is_named(route):
             )
     assert 'must be a Relationship' in str(raised.value)
     assert 'tuple' in str(raised.value)
+
+
+def test_materialized_without_an_entity_table_reads_the_query_not_the_dict():
+    """The argument did not exist before, so a caller who predates it must
+    still get an answer, and not the insertion order it replaced. The
+    envelopes carry the query's own answer, which is what is read.
+    """
+    pytest.importorskip('sdm_relational_engine')
+
+    rng = np.random.default_rng(0)
+    users = pd.DataFrame({'uid': range(60), 'seg': rng.choice([*'xy'], 60)})
+    events = pd.DataFrame(
+        {
+            'eid': range(240),
+            'uid': rng.integers(0, 60, 240),
+            'amt': rng.gamma(2.0, 10.0, 240),
+            'ts': pd.to_datetime('2023-01-01')
+            + pd.to_timedelta(rng.integers(0, 100, 240), 'D'),
+        }
+    )
+    query = 'PREDICT SUM(events.amt, 0, 30, days) FOR EACH users.uid'
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        # events first, so insertion order and the query disagree
+        schema = Schema.from_data(
+            {'events': events, 'users': users},
+            primary_keys={'users': 'uid', 'events': 'eid'},
+            time_columns={'events': 'ts'},
+            relationships=[Relationship('events', 'uid', 'users', 'uid')],
+        )
+        gathered = PredictiveQuery(query, schema).materialize(
+            indices=[1, 2], model=KumoRelational()
+        )
+
+    assert list(schema.tables)[0] == 'events'
+
+    without = Request.materialized(
+        payloads=gathered.payloads,
+        schema=schema,
+        query=query,
+        indices=[1, 2],
+    )
+
+    assert without.entity_table == 'users'

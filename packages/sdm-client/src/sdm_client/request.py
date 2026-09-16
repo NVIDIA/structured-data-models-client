@@ -280,7 +280,7 @@ class Request:
         schema: Schema,
         query: str,
         indices: list[Any],
-        entity_table: str,
+        entity_table: str | None = None,
         requested_inference: Mapping[str, Any] | None = None,
     ) -> Request:
         r"""A request whose data has already been gathered.
@@ -298,8 +298,14 @@ class Request:
         description of a relational request read it from insertion order, so
         it answered correctly or incorrectly depending on how the schema was
         built, and a programmatic caller could not use it as a guard.
+
+        It is optional because it was not there to pass before, and a caller
+        who does not name it is not asking for insertion order back: the
+        envelopes carry the query's own answer, which is read instead.
         """
         request = cls.__new__(cls)
+        if entity_table is None:
+            entity_table = _entity_table_in(payloads)
         request.schema = schema
         first = payloads[0]
         target = first.get('task', {}).get('target', {})
@@ -524,6 +530,22 @@ def _require_frame(value: Any, name: str) -> pd.DataFrame:
             code='INVALID_REQUEST',
         )
     return value
+
+
+def _entity_table_in(payloads: Sequence[Mapping[str, Any]]) -> str:
+    r"""The table the query asks about, as the envelopes record it.
+
+    `task.entity_table_names` is the query's own answer and is what the
+    caller would otherwise have passed. Read here so that a caller who
+    predates the argument gets that rather than the insertion order this
+    replaced.
+    """
+    for payload in payloads:
+        task = payload.get('task') if isinstance(payload, Mapping) else None
+        named = (task or {}).get('entity_table_names')
+        if isinstance(named, (list, tuple)) and named:
+            return str(named[0])
+    return ''
 
 
 def _wire_frame(table: Any) -> pd.DataFrame | None:
