@@ -26,6 +26,7 @@ from sdm_client import (
     Relationship,
     Schema,
 )
+from sdm_client.errors import StructuredDataError
 from sdm_client.request import Request, Split, _split_from
 
 RNG = np.random.default_rng(3)
@@ -258,28 +259,6 @@ def test_a_half_reflects_an_edit_that_kept_the_row_count():
     assert request.context.instance_table['id'].tolist() == [10, 99, 12]
 
 
-def test_a_half_can_still_be_assigned():
-    """It was a plain attribute before it was a property, and a caller may
-    still set it. What is held is what was put there, so only the route
-    holding nothing reads the envelopes."""
-    payloads = [envelope([1], [10, 11, 12])]
-    request = Request.materialized(
-        payloads=tuple(payloads),
-        schema=one_table(),
-        query='PREDICT t.amount FOR EACH t.rid',
-        indices=[1],
-        entity_table='t',
-    )
-    request.context = Split(instance_table=pd.DataFrame({'id': [7, 8, 9]}))
-
-    assert request.context.instance_table['id'].tolist() == [7, 8, 9]
-
-    payloads[0]['context']['instance_table']['rows'].pop()
-    request._payloads = tuple(payloads)
-
-    assert request.context.instance_table['id'].tolist() == [7, 8, 9]
-
-
 def test_an_object_with_no_payloads_attribute_still_answers():
     """`__new__` and unpickling both produce one, and the attribute beside
     this one already reads defensively for that reason."""
@@ -303,41 +282,31 @@ def test_a_related_tables_that_is_not_a_mapping_is_ignored():
     assert context.related_tables == {}
 
 
-@pytest.mark.parametrize('model', ['tabular', 'relational'])
-def test_assigning_a_half_is_what_changes_the_request(model):
-    """The halves describe the request; they are not a handle into it. One
-    route keeps its data as these frames and the other as wire envelopes, so
-    editing a frame read from here lands on one and not the other. Assignment
-    is the operation that means the same thing on both."""
-    pytest.importorskip('sdm_relational_engine')
+# --- what a half may be replaced with, and where ----------------------------
 
-    chosen = KumoTabular() if model == 'tabular' else KumoRelational()
+
+def test_the_direct_route_takes_a_replacement():
+    """The route that keeps its rows as these frames is the one where putting
+    a frame here is meaningful, and everything reading it follows."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = PredictiveQuery(
             'PREDICT t.amount FOR EACH t.rid', one_table()
-        ).materialize(indices=[1, 2], model=chosen)
+        ).materialize(indices=[1, 2], model=KumoTabular())
 
     request.predict = Split(instance_table=pd.DataFrame({'rid': [7, 8, 9]}))
 
     assert request.predict_rows == 3
     assert request.predict.instance_table['rid'].tolist() == [7, 8, 9]
+    assert not request.nothing_to_score
 
 
-@pytest.mark.parametrize('model', ['tabular', 'relational'])
-def test_emptying_a_request_by_assignment_is_seen_as_empty(model):
-    """`predict()` answers an empty request without sending. Reading the
-    envelopes regardless would send one the caller had emptied."""
-    pytest.importorskip('sdm_relational_engine')
-
-    chosen = KumoTabular() if model == 'tabular' else KumoRelational()
+def test_emptying_the_direct_route_is_seen_as_empty():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = PredictiveQuery(
             'PREDICT t.amount FOR EACH t.rid', one_table()
-        ).materialize(indices=[1, 2], model=chosen)
-
-    assert not request.nothing_to_score
+        ).materialize(indices=[1, 2], model=KumoTabular())
 
     request.predict = Split(
         instance_table=pd.DataFrame({'rid': pd.Series([], dtype='int64')})
@@ -347,20 +316,24 @@ def test_emptying_a_request_by_assignment_is_seen_as_empty(model):
     assert request.predict_rows == 0
 
 
-def test_filling_an_empty_request_by_assignment_is_not_seen_as_empty():
-    """And the other way: dropping it as empty would lose the rows."""
-    payload = envelope([], [10, 11])
+@pytest.mark.parametrize('half', ['context', 'predict'])
+def test_a_gathered_request_refuses_a_replacement(half):
+    """Its rows are already encoded, and the encoding carries what a frame
+    does not: the reference each row is addressed by and the moment it is
+    asked at. Accepting one would change what the request reports and not
+    what it sends, so the object would describe rows the model never sees."""
     request = Request.materialized(
-        payloads=(payload,),
+        payloads=(envelope([1], [10, 11]),),
         schema=one_table(),
         query='PREDICT t.amount FOR EACH t.rid',
-        indices=[],
+        indices=[1],
         entity_table='t',
     )
 
-    assert request.nothing_to_score
+    with pytest.raises(StructuredDataError) as refused:
+        setattr(request, half, Split(instance_table=pd.DataFrame({'id': [7]})))
 
-    request.predict = Split(instance_table=pd.DataFrame({'rid': [7, 8]}))
-
-    assert not request.nothing_to_score
-    assert request.predict_rows == 2
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'already encoded' in str(refused.value)
+    assert 'Materialize the query again' in str(refused.value)
+    assert request.predict_rows == 1

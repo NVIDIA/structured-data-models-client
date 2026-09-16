@@ -339,6 +339,7 @@ class Request:
 
     @context.setter
     def context(self, value: Split) -> None:
+        self._refuse_if_gathered('context')
         self._context = value
 
     @property
@@ -348,6 +349,7 @@ class Request:
 
     @predict.setter
     def predict(self, value: Split) -> None:
+        self._refuse_if_gathered('predict')
         self._predict = value
 
     def _half(self, half: str) -> Split:
@@ -381,6 +383,27 @@ class Request:
             return held
         return _split_from(self.payloads or (), half)
 
+    def _refuse_if_gathered(self, half: str) -> None:
+        r"""Refuse to replace a half of a request that is already gathered.
+
+        A gathered request holds finished wire envelopes, and the adapter
+        sends those. An envelope carries what a frame cannot -- the entity
+        references the rows are addressed by, and the anchor each is asked
+        at -- so a `Split` put here could not be turned back into one. It
+        would change what the request reports and not what it sends, which is
+        worse than not being allowed: the object would describe rows the model
+        never sees.
+        """
+        if getattr(self, '_payloads', None) is None:
+            return
+        raise StructuredDataError(
+            f'{half} cannot be replaced on a request gathered by a predictive '
+            f'query: its rows are already encoded, and the encoding carries '
+            f'what a frame does not. Materialize the query again for the rows '
+            f'you want instead.',
+            code='INVALID_REQUEST',
+        )
+
     @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
         r"""The gathered wire envelopes, when this came from a query."""
@@ -407,8 +430,7 @@ class Request:
 
         Summed across envelopes, because a request gathered in several parts
         gives each part its own context: that is why a session refuses a split
-        request rather than pinning the first one's. A half a caller assigned
-        is counted instead, since that half is then what the request holds.
+        request rather than pinning the first one's.
         """
         return self._rows('context')
 
@@ -418,10 +440,7 @@ class Request:
         return self._rows('predict')
 
     def _rows(self, half: str) -> int:
-        # A half that was put there is the request; the envelopes are only
-        # where the other route keeps its rows. Counting them regardless left
-        # an assigned half reported at the size it replaced.
-        if getattr(self, f'_{half}', None) is None and self.payloads:
+        if self.payloads:
             return sum(
                 _envelope_rows(payload, half) or 0 for payload in self.payloads
             )
@@ -438,11 +457,8 @@ class Request:
         the endpoint and be refused, not one that quietly succeeds with an
         empty answer.
 
-        A `predict` half a caller assigned is what the request asks about, so
-        it is read instead of the envelopes. Counting those regardless would
-        send a request the caller had emptied, and drop one they had filled.
         """
-        if self._predict is None and self.payloads:
+        if self.payloads:
             counts = [
                 _envelope_rows(payload, 'predict') for payload in self.payloads
             ]

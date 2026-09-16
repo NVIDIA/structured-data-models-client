@@ -393,7 +393,6 @@ def test_an_unreadable_payload_is_not_treated_as_empty():
 
     request = Request.__new__(Request)
     request._payloads = ({'predict': {'instance_table': {}}},)
-    request.predict = None
 
     assert request.nothing_to_score is False
     assert request.predict_rows == 0
@@ -404,7 +403,6 @@ def test_a_readable_empty_payload_is_treated_as_empty():
 
     request = Request.__new__(Request)
     request._payloads = ({'predict': {'instance_table': {'rows': []}}},)
-    request.predict = None
 
     assert request.nothing_to_score is True
 
@@ -417,7 +415,6 @@ def test_one_unreadable_part_is_enough_to_send():
         {'predict': {'instance_table': {'rows': []}}},
         {'predict': {'instance_table': {}}},
     )
-    request.predict = None
 
     assert request.nothing_to_score is False
 
@@ -439,7 +436,6 @@ def test_a_split_request_counts_the_context_of_every_part():
             'predict': {'instance_table': {'rows': [[8]]}},
         },
     )
-    request.context = request.predict = None
 
     assert request.context_rows == 5
     assert request.predict_rows == 3
