@@ -412,8 +412,16 @@ class Request:
 
     @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
-        r"""The gathered wire envelopes, when this came from a query."""
-        return getattr(self, '_payloads', None)
+        r"""The gathered wire envelopes, when this came from a query.
+
+        No envelopes and never having been gathered are the same request, and
+        are reported the same way. They were told apart once, so an empty
+        tuple read as gathered here and as not gathered where the rows are,
+        and an object could belong to neither route: the halves it reported
+        came from its frames while the adapters refused it for carrying
+        envelopes.
+        """
+        return getattr(self, '_payloads', None) or None
 
     @property
     def is_relational(self) -> bool:

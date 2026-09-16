@@ -376,3 +376,13 @@ def test_which_route_a_request_is_on_is_one_answer():
     request.predict = Split(instance_table=pd.DataFrame({'rid': [4]}))
 
     assert request.predict_rows == 1
+
+
+def test_no_envelopes_and_never_gathered_are_one_state():
+    """Told apart, an empty tuple left an object on neither route: its halves
+    came from its frames while the adapters refused it for carrying
+    envelopes."""
+    request = Request.__new__(Request)
+    request._payloads = ()
+
+    assert request.payloads is None
