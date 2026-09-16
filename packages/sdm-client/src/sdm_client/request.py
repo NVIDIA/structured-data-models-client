@@ -556,7 +556,13 @@ def _wire_frame(table: Any) -> pd.DataFrame | None:
     rows = table.get('rows')
     if not isinstance(columns, list) or not isinstance(rows, list):
         return None
-    return pd.DataFrame(rows, columns=columns)
+    try:
+        return pd.DataFrame(rows, columns=columns)
+    except (TypeError, ValueError):
+        # A row wider than its header raises rather than padding. Reading a
+        # request is a description of it, and a description that cannot be
+        # made is not worth failing the call for.
+        return None
 
 
 def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:

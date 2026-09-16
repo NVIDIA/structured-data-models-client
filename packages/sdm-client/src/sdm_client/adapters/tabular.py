@@ -183,7 +183,7 @@ class TabularAdapter:
         for name in predict.columns:
             if name in dtypes:
                 dtypes[name] = widen_tfm_dtype(
-                    (dtypes[name], _raw_dtype_of(predict[name]))
+                    (dtypes[name], _raw_dtype_of(predict[name], dtypes[name]))
                 )
         # Untyped on both sides means there is genuinely no information, and
         # 'string' round-trips whatever arrives without claiming a width.
@@ -258,12 +258,29 @@ def _dtype_of(series: pd.Series) -> str:
     return dtype if dtype != UNTYPED else 'string'
 
 
-def _raw_dtype_of(series: pd.Series) -> str:
+def _raw_dtype_of(series: pd.Series, declared: str | None = None) -> str:
     r"""Like :func:`_dtype_of`, but keeping UNTYPED as the answer.
 
     A column with no values contributes nothing to a widening. Turning it into
     ``'string'`` first is what made it decide the outcome.
+
+    A `float64` that is float only because pandas has no integer that holds a
+    null is reported as the integer it was declared to be. Widening on it sent
+    an id through a float: `9007199254740993` left as `9007199254740992.0`,
+    which is the corruption the integer rules exist to prevent, arriving by the
+    one route that looks like an ordinary type difference. The values decide,
+    not the dtype -- a genuine float column of whole numbers is still a float,
+    because nothing declared it otherwise.
     """
+    if (
+        declared
+        and declared.startswith('int')
+        and pd.api.types.is_float_dtype(series.dtype)
+        and series.isna().any()
+    ):
+        present = series.dropna()
+        if present.empty or bool((present == present.astype('int64')).all()):
+            return declared
     return infer_tfm_dtype(series)
 
 
@@ -433,7 +450,6 @@ def _named_entities(
 #: meaning was never claimed, so it is the dtype's own reading rather than a
 #: guess about the data.
 _MEANING_OF = {
-    'timestamp[us]': 'timestamp',
     'int64': 'numerical',
     'int32': 'numerical',
     'float64': 'numerical',
@@ -456,4 +472,10 @@ def _coherent_stype(stype: str, dtype: str, column: Column) -> str:
     """
     if supports_dtype(stype, dtype) or column.stype_declared:
         return stype
+    # Every spelling of a timestamp, not one of them. The contract writes
+    # `timestamp[us]`, but a hand-built schema may say `[ns]`, `[ms]` or `[s]`,
+    # and reading those as categorical puts a dtype and a meaning on the wire
+    # that contradict each other -- which is what this exists to prevent.
+    if dtype.startswith('timestamp'):
+        return 'timestamp'
     return _MEANING_OF.get(dtype, 'categorical')

@@ -164,7 +164,13 @@ def test_rows_supplied_without_the_key_keep_the_endpoints_id():
 
 def test_a_row_whose_key_is_null_keeps_the_endpoints_id():
     """A null names no row, so there is nothing to put back. Turning it into
-    the string 'None' would read as a key that was asked about."""
+    the string 'None' would read as a key that was asked about.
+
+    The key beside it stays an integer. Pandas has no integer that holds a
+    null, so a column of `[None, 902]` arrives as float, and widening on that
+    sent an id through a float: the schema said `int64` and the wire said
+    `float64`, which is how an identifier loses its low bit.
+    """
     schema = schema_for(list(range(1, 21)))
     request = PredictiveQuery(QUERY, schema).materialize(
         predict=pd.DataFrame({'user_id': [None, 902], 'tenure': [3.0, 4.0]})
@@ -172,9 +178,9 @@ def test_a_row_whose_key_is_null_keeps_the_endpoints_id():
     adapter = TabularAdapter()
     payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
     result = adapter.normalize(
-        answer(['[None]', '[902.0]']), ('prediction',), payload
+        answer(['[None]', '[902]']), ('prediction',), payload
     )
-    assert [item.id for item in result.items] == ['[None]', 902.0]
+    assert [item.id for item in result.items] == ['[None]', 902]
 
 
 def test_a_response_read_without_its_payload_is_unchanged():
