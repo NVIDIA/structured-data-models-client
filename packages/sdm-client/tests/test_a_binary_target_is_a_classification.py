@@ -23,7 +23,7 @@ from decimal import Decimal
 import pandas as pd
 import pytest
 
-from sdm_client import PredictiveQuery, Schema, SDMWarning
+from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMWarning
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers.tabular import _holds_two_whole_numbers
@@ -226,3 +226,57 @@ class TestTheWireStillSaysWhatItSaid:
         data = frame([i % 2 for i in range(40)])
         schema = Schema.from_data({'people': data})
         assert schema['people']['churn'].stype == 'numerical'
+
+
+class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
+    """`task=` settles a single-table question, and only a single-table one.
+
+    A relational query does not have its kind derived here at all -- the engine
+    resolves the query and states it in the payload. So there is nothing for an
+    override to override, and the first version of this accepted the argument
+    and dropped it, which is worse than not accepting it.
+    """
+
+    @staticmethod
+    def graph():
+        users = pd.DataFrame(
+            {'uid': range(20), 'age': [20.0 + i for i in range(20)]}
+        )
+        buys = pd.DataFrame(
+            {
+                'bid': range(400),
+                'uid': [i % 20 for i in range(400)],
+                'amt': [1.0 + i for i in range(400)],
+                'ts': pd.date_range('2026-01-01', periods=400, freq='6h'),
+            }
+        )
+        return Schema.from_data({'users': users, 'buys': buys})
+
+    @staticmethod
+    def query(schema):
+        return PredictiveQuery(
+            'PREDICT COUNT(buys.*, 0, 30, days) FOR EACH users.uid', schema
+        )
+
+    def test_a_relational_query_still_materializes_without_one(self):
+        pytest.importorskip('sdm_relational_engine')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            request = self.query(self.graph()).materialize(
+                indices=[0, 1], model=KumoRelational()
+            )
+        assert request.task.kind == 'regression'
+
+    def test_passing_one_is_refused_and_says_why(self):
+        pytest.importorskip('sdm_relational_engine')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            with pytest.raises(StructuredDataError) as raised:
+                self.query(self.graph()).materialize(
+                    indices=[0, 1],
+                    model=KumoRelational(),
+                    task='classification',
+                )
+        said = str(raised.value)
+        assert 'classification' in said
+        assert 'relational' in said

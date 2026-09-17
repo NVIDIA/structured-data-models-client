@@ -249,9 +249,11 @@ So there are two different answers, and neither is "guess from cardinality":
   their storage — a 0/1 column with one missing value arrives as `float64` and is still a label.
   Only that case: three whole numbers may be a count, and a fractional pair is not a label, so
   both are left as regressions.
-- **The caller has the last word, on both paths.** `task=` on the direct builder, or
-  `materialize(task=…)` on either PQL path, is authoritative and overrides everything above it.
-  Stating it also silences the warning, which is the point of the warning.
+- **The caller has the last word where there is a decision to make.** `task=` on the direct
+  builder, or `materialize(task=…)` on the single-table PQL path, is authoritative and overrides
+  everything above it. Stating it also silences the warning, which is the point of the warning.
+  A relational query has no such decision — the engine resolves the query and states the kind in
+  the payload — so passing `task=` with one is refused rather than quietly dropped.
 
 PQL's own `TaskType` already has `BINARY_CLASSIFICATION` and `MULTICLASS_CLASSIFICATION`, but a query
 resolves only to the coarse `ProblemType` (`CLASSIFY`/`RANK`/`FORECAST`) — the narrowing happens

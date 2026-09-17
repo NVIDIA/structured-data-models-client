@@ -44,8 +44,10 @@ The first release is being assembled. Nothing here has shipped yet.
   made for classification targets and could not make while the task was wrong.
   If you were relying on the old reading, pass `task='regression'` to keep it.
 - **`materialize()` takes `task=`.** A query names a target, not what is asked
-  of it, and the tabular path had no way to say. It is authoritative, and
-  stating it silences the warning above.
+  of it, and the single-table path had no way to say. It is authoritative, and
+  stating it silences the warning above. A relational query resolves to its own
+  kind in the engine, so passing `task=` with one is refused rather than
+  silently ignored.
 - `predictive_query` attached no logging handler, so its warnings reached the
   stderr of any application that had not configured logging. It now installs a
   `NullHandler`; applications that *have* configured logging still receive the

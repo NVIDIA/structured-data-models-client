@@ -121,7 +121,9 @@ class PredictiveQuery:
                 it. A query names a target, not what is being asked of it, and
                 a column of whole numbers reads as either a label or a
                 quantity. Stating it here is authoritative and silences the
-                warning that otherwise says which reading was taken.
+                warning that otherwise says which reading was taken. Single
+                table only: a relational query resolves to its own kind and
+                passing this with one is refused rather than ignored.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -186,6 +188,21 @@ class PredictiveQuery:
                 indices=indices,
                 num_context_samples=num_context_samples,
                 task=task,
+            )
+
+        if task is not None:
+            # Refused rather than ignored. The relational path does not derive
+            # a task kind at all -- the engine resolves the query and states it
+            # in the payload -- so there is nothing here for an override to
+            # override, and accepting the argument to drop it would be worse
+            # than not accepting it.
+            raise StructuredDataError(
+                f'task={task!r} settles what a single-table question is '
+                f'asking, which only the tabular route has to decide. A '
+                f'relational query resolves to its own kind, so state it in '
+                f'the query rather than beside it',
+                code='INVALID_REQUEST',
+                details={'task': repr(task)},
             )
 
         return self._relational_materializer.materialize(
