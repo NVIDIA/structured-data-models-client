@@ -27,6 +27,30 @@ _CONTEXT_SEED = 42
 _CONTEXT_ROWS_MAX = TABULAR_LIMITS['context_rows_max']
 
 
+#: What the tabular deployment answers. Stated here rather than read from a
+#: ``ModelSpec`` because a materializer builds a request before a model handle
+#: is necessarily in hand; ``models.py`` is the source of truth and a test in
+#: tests/ holds the two together.
+TABULAR_TASK_KINDS = frozenset({'classification', 'regression'})
+
+
+def _holds_two_whole_numbers(target: pd.Series) -> bool:
+    r"""Whether ``target`` is two distinct whole numbers and nothing else.
+
+    Two is the whole rule. Three might be a count -- 0, 1 and 2 items bought
+    is a regression and reads identically -- so anything wider is left alone
+    and the caller settles it with ``task=``. Floats are left alone for the
+    same reason: 0.5 and 1.5 are two values, and neither is a label.
+    """
+    values = target.dropna().unique()
+    if len(values) != 2:
+        return False
+    try:
+        return all(float(value).is_integer() for value in values)
+    except (TypeError, ValueError):
+        return False
+
+
 class TabularMaterializer:
     r"""Materialize resolved PQL against a single-table schema.
 
@@ -43,6 +67,7 @@ class TabularMaterializer:
         *,
         query: ValidatedPredictiveQuery,
         predict: pd.DataFrame,
+        task: str | None = None,
     ) -> Request:
         r"""Build a request from rows supplied separately by the caller.
 
@@ -70,7 +95,9 @@ class TabularMaterializer:
             ),
             predict=predict,
             target=target_col,
-            task=self._infer_task_type(query),
+            task=self._task_kind(
+                query, self.schema[entity_table_name].data[target_col], task
+            ),
             schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
@@ -80,6 +107,7 @@ class TabularMaterializer:
         query: ValidatedPredictiveQuery,
         indices: Sequence[Any],
         num_context_samples: int | None,
+        task: str | None = None,
     ) -> Request:
         r"""Build a single-table request for rows the one table does contain."""
         entity_table_name = table_name(query.entity_column)
@@ -124,13 +152,23 @@ class TabularMaterializer:
             context=context,
             predict=predict,
             target=target_col,
-            task=self._infer_task_type(query),
+            task=self._task_kind(query, entity_table[target_col], task),
             schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
 
     @staticmethod
-    def _infer_task_type(query: ValidatedPredictiveQuery) -> str:
+    def _task_kind(
+        query: ValidatedPredictiveQuery,
+        target: pd.Series,
+        stated: str | None,
+    ) -> str:
+        r"""What is being asked of the target, and who decided it.
+
+        A stated kind is authoritative and nothing below runs. Otherwise the
+        semantic type decides, except for the one case where it decided wrong
+        often enough to matter: a target holding two whole numbers.
+        """
         if query.target_stype not in {Stype.categorical, Stype.numerical}:
             raise StructuredDataError(
                 f'tabular materialization requires a categorical or '
@@ -138,7 +176,32 @@ class TabularMaterializer:
                 f'type {query.target_stype.value!r}',
                 code='UNSUPPORTED_REQUEST',
             )
+        if stated is not None:
+            if stated not in TABULAR_TASK_KINDS:
+                raise StructuredDataError(
+                    f'the tabular model does not serve the task kind '
+                    f'{stated!r}; it serves '
+                    f'{sorted(TABULAR_TASK_KINDS)}',
+                    code='UNSUPPORTED_REQUEST',
+                    details={
+                        'task': stated,
+                        'supported': sorted(TABULAR_TASK_KINDS),
+                    },
+                )
+            return stated
         if query.target_stype == Stype.categorical:
+            return 'classification'
+        if _holds_two_whole_numbers(target):
+            warnings.warn(
+                f'{query.target_column} holds two whole numbers, which is how '
+                f'a binary label is usually written, so this is being asked as '
+                f'a classification. If they are quantities rather than labels, '
+                f'pass task="regression" to ask for one; pass '
+                f'task="classification" to say this was meant and silence '
+                f'this.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
             return 'classification'
         return 'regression'
 

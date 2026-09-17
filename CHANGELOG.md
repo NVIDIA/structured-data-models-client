@@ -26,6 +26,24 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **A binary target asked through a predictive query is a classification.**
+  `PREDICT users.churn FOR EACH users.user_id`, over a column of 0 and 1, was
+  gathered as a regression: 0 and 1 are integers, integers are numerical, and a
+  numerical target meant regression. The endpoint answered it — with continuous
+  values near 0.5, which read like probabilities and are not. Nothing warned.
+
+  A target holding exactly two whole numbers is now asked as a classification,
+  and the client says so. Only that case changes: three whole numbers may be a
+  count, and two floats are not labels, so both remain regressions.
+
+  **This changes what goes over the wire** for such a request — `task.kind`
+  becomes `classification`, and the target column is declared `categorical`
+  rather than `numerical`, which is the correction the tabular adapter already
+  made for classification targets and could not make while the task was wrong.
+  If you were relying on the old reading, pass `task='regression'` to keep it.
+- **`materialize()` takes `task=`.** A query names a target, not what is asked
+  of it, and the tabular path had no way to say. It is authoritative, and
+  stating it silences the warning above.
 - `predictive_query` attached no logging handler, so its warnings reached the
   stderr of any application that had not configured logging. It now installs a
   `NullHandler`; applications that *have* configured logging still receive the

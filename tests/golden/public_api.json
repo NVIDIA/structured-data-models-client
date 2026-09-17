@@ -771,7 +771,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
-          "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, candidates: 'Sequence[Any] | None' = None, **options: 'Any') -> 'Request'"
+          "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, candidates: 'Sequence[Any] | None' = None, task: 'str | None' = None, **options: 'Any') -> 'Request'"
         },
         "signature": "(query: 'str', data: 'Schema | Mapping[str, pd.DataFrame]') -> 'None'"
       },

@@ -323,6 +323,22 @@ class TestConfigurationTellsTheTruth:
                 f'baseline does not select it -- but {selected} does'
             )
 
+    def test_the_tabular_task_kinds_match_what_the_model_declares(self):
+        """`TABULAR_TASK_KINDS` restates what `models.py` says, and says so.
+
+        The materializer refuses a stated `task=` the tabular deployment does
+        not serve, and it has to do that before a model handle is necessarily
+        in hand -- so the list is written twice. A comment claiming two things
+        agree is the kind this file exists to check.
+        """
+        from sdm_client.materializers.tabular import TABULAR_TASK_KINDS
+        from sdm_client.models import spec_for
+
+        assert TABULAR_TASK_KINDS == spec_for('kumo-tabular').runtime.tasks, (
+            'the materializer and the model spec disagree about what the '
+            'tabular deployment serves'
+        )
+
     def test_the_recorded_style_backlog_is_clean_where_the_note_says_it_is(
         self,
     ):

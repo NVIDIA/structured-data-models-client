@@ -8077,7 +8077,7 @@
             },
             "churn": {
               "dtype": "int64",
-              "stype": "numerical"
+              "stype": "categorical"
             },
             "segment": {
               "dtype": "string",
@@ -8094,7 +8094,7 @@
         }
       },
       "task": {
-        "kind": "regression",
+        "kind": "classification",
         "target": {
           "column_name": "churn",
           "dtype": "int64"

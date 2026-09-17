@@ -237,11 +237,19 @@ categorical. What the two models actually accept settles it, and they differ:
 
 So there are two different answers, and neither is "guess from cardinality":
 
-- **Tabular has nothing to decide.** The NIM takes only the coarse `classification`, and the model
-  resolves binary vs multiclass itself. The client sends `classification` and never narrows it.
-  The blocker does not exist on this path.
-- **Relational takes the precise kind, and the caller may state it.** `task=` on the direct builder,
-  or `materialize(task=…)` on the PQL path, is authoritative and overrides everything below it.
+- **Tabular has nothing to decide *between* classifications.** The NIM takes only the coarse
+  `classification`, and the model resolves binary vs multiclass itself. The client sends
+  `classification` and never narrows it. The blocker does not exist on this path.
+- **It does have to decide classification against regression, and it got that wrong.** A query
+  names a target; it does not say what is being asked of it. The derivation read the target's
+  semantic type, integers are numerical, and so `PREDICT users.churn` over a 0/1 column was
+  gathered as a *regression* — answered with continuous values near 0.5 that read like
+  probabilities and are not. Zero-and-one is the most common way there is to write a binary
+  label, so that exact case now derives `classification` and says so. Only that case: three
+  whole numbers may be a count, and two floats are not labels, so both are left as regressions.
+- **The caller has the last word, on both paths.** `task=` on the direct builder, or
+  `materialize(task=…)` on either PQL path, is authoritative and overrides everything above it.
+  Stating it also silences the warning, which is the point of the warning.
 
 PQL's own `TaskType` already has `BINARY_CLASSIFICATION` and `MULTICLASS_CLASSIFICATION`, but a query
 resolves only to the coarse `ProblemType` (`CLASSIFY`/`RANK`/`FORECAST`) — the narrowing happens

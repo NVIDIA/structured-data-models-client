@@ -81,6 +81,7 @@ class PredictiveQuery:
         num_context_samples: int | None = None,
         model: str | Model | None = None,
         candidates: Sequence[Any] | None = None,
+        task: str | None = None,
         **options: Any,
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
@@ -116,6 +117,11 @@ class PredictiveQuery:
             candidates: The rows a ranking is over. A ranking is answered as
                 one question per candidate, so the set has to be named rather
                 than assumed, and one call is made for each.
+            task: The kind of question this is, when the target does not settle
+                it. A query names a target, not what is being asked of it, and
+                a column of whole numbers reads as either a label or a
+                quantity. Stating it here is authoritative and silences the
+                warning that otherwise says which reading was taken.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -170,6 +176,7 @@ class PredictiveQuery:
             return self._tabular_materializer.table(
                 query=asked,
                 predict=predict,
+                task=task,
             )
 
         assert indices is not None
@@ -178,6 +185,7 @@ class PredictiveQuery:
                 query=asked,
                 indices=indices,
                 num_context_samples=num_context_samples,
+                task=task,
             )
 
         return self._relational_materializer.materialize(
