@@ -14,14 +14,45 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import subprocess
 import sys
+from collections.abc import Sequence
 
 import tomllib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PACKAGES = REPO / 'packages'
 GOLDEN = REPO / 'tests' / 'golden'
+
+
+def _split_rule(code: str) -> tuple[str, str]:
+    """A ruff code as its linter prefix and its number, e.g. ``('FIX', '002')``."""
+    match = re.match(r'([A-Z]+)(\d*)', code)
+    assert match, f'not a ruff rule code: {code!r}'
+    return match.group(1), match.group(2)
+
+
+def _linter_of(code: str) -> str:
+    return _split_rule(code)[0]
+
+
+def _covered_by(rule: str, selectors: Sequence[str]) -> bool:
+    """Whether any selector actually enables ``rule``.
+
+    Plain string prefixes are wrong here: `'FIX002'.startswith('F')` is True,
+    but ruff's `F` is Pyflakes and `FIX` is flake8-fixme -- selecting one does
+    not select the other, which is verifiable with
+    `ruff check --isolated --select F` against a file full of FIXMEs. Treating
+    them as the same family quietly dropped FIX002 out of the backlog this test
+    is meant to be checking.
+    """
+    rule_linter, rule_number = _split_rule(rule)
+    return any(
+        selector_linter == rule_linter
+        and rule_number.startswith(selector_number)
+        for selector_linter, selector_number in map(_split_rule, selectors)
+    )
 
 
 def _pyproject(name: str) -> dict:
@@ -207,11 +238,11 @@ class TestConfigurationTellsTheTruth:
         """
         engine = _pyproject('sdm-relational-engine')['tool']['ruff']['lint']
         root = tomllib.loads((REPO / 'pyproject.toml').read_text())
-        selected = tuple(root['tool']['ruff']['lint']['select'])
+        selected = root['tool']['ruff']['lint']['select']
         backlog = [
             rule
             for rule in engine.get('ignore', [])
-            if not rule.startswith('D') and not rule.startswith(selected)
+            if _linter_of(rule) != 'D' and not _covered_by(rule, selected)
         ]
         assert backlog, 'the recorded style backlog vanished; update this test'
 

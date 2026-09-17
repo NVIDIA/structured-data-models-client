@@ -23,6 +23,12 @@ permissions: {}
 jobs:
   build:
     runs-on: ubuntu-latest
+    # workflow_dispatch can be started from any ref, and everything below reads
+    # GITHUB_REF_NAME as if it were a tag. A branch called v1.2.0 would have
+    # satisfied the version check and published from it; --verify-tag only runs
+    # afterwards, in attach-sbom, which is too late to stop an upload. Refuse
+    # here, where nothing has been built yet.
+    if: github.ref_type == 'tag'
     permissions:
       contents: read
     steps:
