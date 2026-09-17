@@ -24,7 +24,6 @@ from sdm_client.decompose import Decomposition
 
 
 def shop() -> Schema:
-    pytest.importorskip('sdm_relational_engine')
     rows = 300
     users = pd.DataFrame({'uid': [1, 2, 3], 'seg': list('abc')})
     items = pd.DataFrame({'iid': [10, 11, 12], 'kind': list('xyz')})
@@ -59,6 +58,7 @@ def test_a_candidate_is_carried_as_the_value_not_as_its_text():
     written into, which turned every key into a string and broke the join
     back onto the caller's frame.
     """
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
         'FOR EACH users.uid',
@@ -106,6 +106,7 @@ def test_a_quote_in_a_candidate_never_reaches_the_query():
 def test_a_forecast_keeps_the_filter_its_aggregation_had():
     """`COUNT(buys.* WHERE channel="web", ...)` forecast per step must still
     be about web, not about everything."""
+    pytest.importorskip('sdm_relational_engine')
     parts = parts_of_query(
         'PREDICT COUNT(buys.* WHERE buys.channel="web", 0, 7, days) '
         'FORECAST 3 TIMEFRAMES FOR EACH users.uid',
@@ -157,6 +158,7 @@ def test_only_a_link_into_another_table_is_ever_rewritten(column):
 
 def test_ranking_a_real_foreign_key_still_works():
     """The guard above must not refuse the case it exists to protect."""
+    pytest.importorskip('sdm_relational_engine')
     parts = parts_of_query(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
         'FOR EACH users.uid',
@@ -174,6 +176,7 @@ def test_ranking_a_real_foreign_key_still_works():
 
 def test_forecast_steps_are_numbered_from_one():
     """`forecast_step` in the contract's own examples is 1, 2, 3."""
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 3 TIMEFRAMES '
         'FOR EACH users.uid',
@@ -183,6 +186,7 @@ def test_forecast_steps_are_numbered_from_one():
 
 
 def test_each_step_moves_the_window_by_its_own_span():
+    pytest.importorskip('sdm_relational_engine')
     parts = parts_of_query(
         'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 3 TIMEFRAMES '
         'FOR EACH users.uid',
@@ -238,6 +242,7 @@ def test_a_ranking_answer_keeps_the_row_each_entity_was_asked_on():
 
 def test_a_forecast_answer_keeps_the_row_and_adds_the_step():
     """A point in the series is named by the pair, so the row must survive."""
+    pytest.importorskip('sdm_relational_engine')
 
     from sdm_api.generated.tfm_api import PredictionItem
 
@@ -295,6 +300,7 @@ def test_candidates_are_refused_on_a_question_that_ranks_nothing():
 
 
 def test_a_repeated_candidate_is_asked_about_once():
+    pytest.importorskip('sdm_relational_engine')
     parts = parts_of_query(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
         'FOR EACH users.uid',
@@ -311,6 +317,7 @@ def test_an_entity_filter_survives_into_every_forecast_step():
     """`FOR EACH users.uid WHERE users.seg="a"` chooses which rows become
     labelled examples. A part that drops it is answered from a different
     population than the one asked about, and says nothing about it."""
+    pytest.importorskip('sdm_relational_engine')
     parts = parts_of_query(
         'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
         'FOR EACH users.uid WHERE users.seg="a"',
@@ -322,6 +329,7 @@ def test_an_entity_filter_survives_into_every_forecast_step():
 
 
 def test_an_entity_filter_survives_into_every_candidate():
+    pytest.importorskip('sdm_relational_engine')
     parts = parts_of_query(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
         'FOR EACH users.uid WHERE users.seg="a"',
@@ -408,6 +416,7 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
 def test_the_top_k_option_overrides_the_number_written_in_the_query():
     """`materialize(top_k=1)` on a query saying `RANK TOP 3` once gave three
     candidates back, because the merge reparsed the original text."""
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 3 '
         'FOR EACH users.uid',
@@ -417,6 +426,7 @@ def test_the_top_k_option_overrides_the_number_written_in_the_query():
 
 
 def test_the_number_written_in_the_query_is_used_when_nothing_overrides_it():
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
         'FOR EACH users.uid',
@@ -442,6 +452,7 @@ def test_a_part_carries_no_top_k_in_the_task_it_sends():
     refused by the endpoint for carrying an option it cannot act on:
     `422 does not act on these task options: ['top_k']`. The merge is where
     the number is used, so it must not travel."""
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 3 '
         'FOR EACH users.uid',
@@ -459,6 +470,7 @@ def test_a_part_carries_no_top_k_in_the_task_it_sends():
 def test_a_session_refuses_a_rewritten_question(monkeypatch):
     """`fit()` once pinned the first part and answered as though it were the
     whole question: a ranking came back as one candidate's `'true'`."""
+    pytest.importorskip('sdm_relational_engine')
     from sdm_client import SDMClient
 
     client = SDMClient('http://127.0.0.1:9', api_key='none')
@@ -475,6 +487,7 @@ def test_a_session_still_takes_an_ordinary_question():
     """The refusal must not reach past the case it is for. Nothing is sent
     here: the refusal above happens before any call, so reaching the endpoint
     at all is what tells the two apart."""
+    pytest.importorskip('sdm_relational_engine')
     from sdm_client import SDMClient
 
     client = SDMClient('http://127.0.0.1:9', api_key='none', max_retries=0)
@@ -494,6 +507,7 @@ def test_a_session_still_takes_an_ordinary_question():
 def test_a_ranking_refuses_a_field_it_does_not_build():
     """Asking for `quantiles` once gave back a result naming `quantiles` and
     carrying `prediction` and `rankings`."""
+    pytest.importorskip('sdm_relational_engine')
     from sdm_client import SDMClient
 
     client = SDMClient('http://127.0.0.1:9', api_key='none')
@@ -556,6 +570,7 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
     got a series back with only its predictions and no sign that the rest of
     the request had been ignored.
     """
+    pytest.importorskip('sdm_relational_engine')
     from sdm_api.generated.tfm_api import PredictionItem
 
     from sdm_client import SDMClient
@@ -713,6 +728,7 @@ def test_a_rewritten_request_reports_what_all_its_parts_hold():
     """An agent budgeting a call reads these. Reporting the first part's
     counts undercounts by one per candidate, which for a full candidate set
     is two orders of magnitude."""
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
         'FOR EACH users.uid',
@@ -727,6 +743,7 @@ def test_a_rewritten_request_reports_what_all_its_parts_hold():
 
 
 def test_an_ordinary_request_still_reports_its_own_size():
+    pytest.importorskip('sdm_relational_engine')
     request = PredictiveQuery(
         'PREDICT COUNT(buys.*, 0, 7, days) > 0 FOR EACH users.uid',
         shop(),
