@@ -245,8 +245,10 @@ So there are two different answers, and neither is "guess from cardinality":
   semantic type, integers are numerical, and so `PREDICT users.churn` over a 0/1 column was
   gathered as a *regression* — answered with continuous values near 0.5 that read like
   probabilities and are not. Zero-and-one is the most common way there is to write a binary
-  label, so that exact case now derives `classification` and says so. Only that case: three
-  whole numbers may be a count, and two floats are not labels, so both are left as regressions.
+  label, so that exact case now derives `classification` and says so. The values decide, not
+  their storage — a 0/1 column with one missing value arrives as `float64` and is still a label.
+  Only that case: three whole numbers may be a count, and a fractional pair is not a label, so
+  both are left as regressions.
 - **The caller has the last word, on both paths.** `task=` on the direct builder, or
   `materialize(task=…)` on either PQL path, is authoritative and overrides everything above it.
   Stating it also silences the warning, which is the point of the warning.

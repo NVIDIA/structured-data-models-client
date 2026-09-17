@@ -18,12 +18,15 @@ a count. What settles those is the caller, and `task=` now exists to say so.
 from __future__ import annotations
 
 import warnings
+from decimal import Decimal
 
 import pandas as pd
 import pytest
 
 from sdm_client import PredictiveQuery, Schema, SDMWarning
+from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
+from sdm_client.materializers.tabular import _holds_two_whole_numbers
 
 QUERY = 'PREDICT people.churn FOR EACH people.person_id'
 
@@ -73,11 +76,47 @@ class TestTheDerivation:
             request = materialize([pair[i % 2] for i in range(40)])
         assert request.task.kind == 'classification'
 
-    def test_a_two_valued_float_target_is_left_as_a_regression(self):
+    def test_a_fractional_pair_is_left_as_a_regression(self):
         """0.5 and 1.5 are two values and neither is a label."""
+        request = materialize([0.5 if i % 2 else 1.5 for i in range(40)])
+        assert request.task.kind == 'regression'
+
+    def test_whole_numbers_stored_as_floats_read_the_same_way(self):
+        """The rule is about the values, not how pandas happens to hold them.
+
+        A 0/1 column with one missing value arrives as ``float64``, and it is
+        still a label. Reading 2.0 and 3.0 differently from 2 and 3 would be an
+        accident of storage rather than a distinction anyone meant.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
-            request = materialize([0.5 if i % 2 else 1.5 for i in range(40)])
+            request = materialize([2.0 if i % 2 else 3.0 for i in range(40)])
+        assert request.task.kind == 'classification'
+
+    def test_a_decimal_that_is_not_quite_whole_is_a_regression(self):
+        """Going through a float would round this to 2 and call it a label."""
+        request = materialize(
+            [
+                Decimal('2.0000000000000000001') if i % 2 else Decimal('3')
+                for i in range(40)
+            ]
+        )
+        assert request.task.kind == 'regression'
+
+    def test_integers_too_large_to_be_floats_do_not_raise(self):
+        """``float()`` overflows on these; the check must not go through one.
+
+        Tested on the predicate rather than end to end, because pandas refuses
+        the column first: ``pd.DataFrame`` raises ``OverflowError: int too
+        large to convert to float`` while building it, long before any of this
+        runs. The predicate is still written not to raise, so that what decides
+        is the column's shape and not an accident of arithmetic.
+        """
+        huge = pd.Series([10**400, 10**401], dtype=object)
+        assert _holds_two_whole_numbers(huge) is True
+
+    def test_a_single_valued_target_is_left_alone(self):
+        request = materialize([1] * 40)
         assert request.task.kind == 'regression'
 
     def test_a_continuous_target_is_still_a_regression(self):
@@ -126,14 +165,61 @@ class TestTheCallerHasTheLastWord:
             materialize([i % 2 for i in range(40)], task='forecasting')
         assert 'forecasting' in str(raised.value)
 
+    @pytest.mark.parametrize(
+        'bad', [['regression'], {'kind': 'r'}, 42, object()]
+    )
+    def test_a_task_that_is_not_a_string_is_refused_as_one(self, bad):
+        """An unhashable value used to raise TypeError out of a set lookup."""
+        with pytest.raises(StructuredDataError):
+            materialize([i % 2 for i in range(40)], task=bad)
+
 
 class TestTheWireStillSaysWhatItSaid:
+    @staticmethod
+    def _payload(request):
+        return next(
+            iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+        )
+
     def test_the_target_dtype_is_untouched_by_the_task_it_implies(self):
         """Only the task kind moves. The column is described as it always was."""
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             request = materialize([i % 2 for i in range(40)])
         assert request.task.target.dtype == 'int64'
+
+    def test_the_payload_declares_the_target_categorical_once_it_classifies(
+        self,
+    ):
+        """The adapter already made this correction; it could not, before.
+
+        Checked on the payload rather than the Request, because the Request
+        carries the schema a caller may reuse for another question and this
+        correction is the adapter's, not the schema's.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            request = materialize([i % 2 for i in range(40)])
+        columns = self._payload(request)['schema']['instance_table']['columns']
+        assert columns['churn'] == {'dtype': 'int64', 'stype': 'categorical'}
+
+    def test_a_regression_target_is_still_declared_numerical(self):
+        request = materialize([float(i) for i in range(40)])
+        columns = self._payload(request)['schema']['instance_table']['columns']
+        assert columns['churn']['stype'] == 'numerical'
+
+    def test_nothing_but_the_target_column_moved(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            classified = self._payload(materialize([i % 2 for i in range(40)]))
+        regressed = self._payload(
+            materialize([i % 2 for i in range(40)], task='regression')
+        )
+        a = classified['schema']['instance_table']['columns']
+        b = regressed['schema']['instance_table']['columns']
+        assert {k: v for k, v in a.items() if k != 'churn'} == {
+            k: v for k, v in b.items() if k != 'churn'
+        }
 
     def test_the_schema_still_calls_the_column_numerical(self):
         """The fix is about the question asked, not about retyping the data."""

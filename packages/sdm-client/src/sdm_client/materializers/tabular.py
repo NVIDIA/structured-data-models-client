@@ -6,8 +6,10 @@ r"""Build single-table requests from rows supplied by the caller."""
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from collections.abc import Hashable, Sequence
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -34,17 +36,47 @@ _CONTEXT_ROWS_MAX = TABULAR_LIMITS['context_rows_max']
 TABULAR_TASK_KINDS = frozenset({'classification', 'regression'})
 
 
+def _is_whole(value: object) -> bool:
+    r"""Whether ``value`` is a number with nothing after the decimal point.
+
+    Deliberately not ``float(value).is_integer()``. That silently answers yes
+    for ``Decimal('2.0000000000000000001')``, which rounds to 2.0 on the way
+    through a float, and raises ``OverflowError`` for an integer too large to
+    be one at all -- so a warehouse column of exact decimals or big integers
+    got the wrong answer or no answer.
+    """
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, numbers.Integral):
+        return True
+    if isinstance(value, Decimal):
+        return value.is_finite() and value == value.to_integral_value()
+    if isinstance(value, numbers.Real):
+        try:
+            return float(value).is_integer()
+        except (OverflowError, TypeError, ValueError):
+            return False
+    return False
+
+
 def _holds_two_whole_numbers(target: pd.Series) -> bool:
     r"""Whether ``target`` is two distinct whole numbers and nothing else.
 
-    Two is the whole rule. Three might be a count -- 0, 1 and 2 items bought
-    is a regression and reads identically -- so anything wider is left alone
-    and the caller settles it with ``task=``. Floats are left alone for the
-    same reason: 0.5 and 1.5 are two values, and neither is a label.
+    Two is the whole rule, and it is about the values rather than how they are
+    stored: a 0/1 column with one missing value arrives from pandas as
+    ``float64``, and it is still a label. So ``2.0`` and ``3.0`` read the same
+    way as ``2`` and ``3`` -- treating those differently would be an accident
+    of storage, not a distinction anyone meant.
+
+    What is excluded is anything wider or fractional. Three whole numbers may
+    be a count -- 0, 1 and 2 items bought is a regression and reads
+    identically -- and 0.5 and 1.5 are two values of which neither is a label.
+    Both are left alone, and ``task=`` settles them.
     """
     values = target.dropna().unique()
     if len(values) != 2:
         return False
+    return all(_is_whole(value) for value in values)
     try:
         return all(float(value).is_integer() for value in values)
     except (TypeError, ValueError):
@@ -177,7 +209,10 @@ class TabularMaterializer:
                 code='UNSUPPORTED_REQUEST',
             )
         if stated is not None:
-            if stated not in TABULAR_TASK_KINDS:
+            # Checked before the membership test: an unhashable value raises
+            # TypeError out of `in frozenset`, which is not an error about
+            # anything the caller did wrong.
+            if not isinstance(stated, str) or stated not in TABULAR_TASK_KINDS:
                 raise StructuredDataError(
                     f'the tabular model does not serve the task kind '
                     f'{stated!r}; it serves '

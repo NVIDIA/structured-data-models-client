@@ -33,8 +33,10 @@ The first release is being assembled. Nothing here has shipped yet.
   values near 0.5, which read like probabilities and are not. Nothing warned.
 
   A target holding exactly two whole numbers is now asked as a classification,
-  and the client says so. Only that case changes: three whole numbers may be a
-  count, and two floats are not labels, so both remain regressions.
+  and the client says so. It is the values that decide, not how pandas holds
+  them — a 0/1 column with one missing value arrives as `float64` and is still
+  a label. Only that case changes: three whole numbers may be a count, and a
+  fractional pair like 0.5/1.5 is not a label, so both remain regressions.
 
   **This changes what goes over the wire** for such a request — `task.kind`
   becomes `classification`, and the target column is declared `categorical`
