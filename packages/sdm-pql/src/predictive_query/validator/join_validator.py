@@ -257,9 +257,13 @@ class JoinValidator:
                 if col.table_name == table_of_interest
                 and not (fkey_table == pkey_table and col.col_name == pkey_col)
             ]
-            assert is_keys_group or is_rev_keys_group
-            found = keys if is_keys_group else reverse_keys
-            found.extend(key for key in curr_keys if key not in found)
+            if is_keys_group:
+                keys.extend(k for k in curr_keys if k not in keys)
+            else:
+                assert is_rev_keys_group
+                reverse_keys.extend(
+                    k for k in curr_keys if k not in reverse_keys
+                )
 
         if isinstance(node, Aggregation):
             pkey_name = self.graph.tables[pkey_table].pkey

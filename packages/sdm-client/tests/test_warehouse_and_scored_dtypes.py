@@ -487,15 +487,22 @@ def test_a_placeholder_never_goes_out_contradicting_itself(
     assert supports_dtype(column['stype'], column['dtype'])
 
 
-def test_a_declared_meaning_is_never_quietly_rewritten():
-    """It is refused instead, which is why the rewrite can be safe."""
+def test_a_declared_meaning_is_never_quietly_rewritten(recwarn):
+    """`text` is the one meaning this model cannot read at all, so it is
+    carried as categorical rather than sent to be refused. That is a rewrite
+    of what the caller declared, which is why it is said out loud: the rule is
+    not that a declared meaning is never changed, but that it is never changed
+    in silence."""
     schema = placeholder_schema()
     schema['t']['unknown'].stype = 'text'
     request = PredictiveQuery(
         'PREDICT t.amount FOR EACH t.rid', schema
     ).materialize(predict=pd.DataFrame({'rid': [10], 'unknown': ['some text']}))
 
-    assert wire_column(request, 'unknown')['stype'] == 'text'
+    assert wire_column(request, 'unknown')['stype'] == 'categorical'
+    said = ' '.join(str(w.message) for w in recwarn)
+    assert 'cannot read a text column' in said
+    assert 'unknown' in said
 
 
 def test_a_copied_column_keeps_what_was_recorded_about_it():

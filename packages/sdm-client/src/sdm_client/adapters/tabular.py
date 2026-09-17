@@ -23,6 +23,7 @@ context, so a client that narrowed it would both be guessing and be rejected.
 from __future__ import annotations
 
 import uuid
+import warnings
 from collections.abc import Iterator
 from typing import Any
 
@@ -33,6 +34,7 @@ from sdm_api.generated.tfm_api import (
 )
 
 from sdm_client.base import ModelSpec
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
@@ -197,17 +199,27 @@ class TabularAdapter:
                 code='INVALID_REQUEST',
             )
 
-        schema_columns = {
-            name: {
+        schema_columns = {}
+        as_text = []
+        for name in context.columns:
+            declared = table[name].stype
+            if declared == 'text':
+                as_text.append(name)
+            schema_columns[name] = {
                 'dtype': dtypes[name],
                 'stype': _coherent_stype(
-                    self._stype_for(request, table[name].stype, name),
+                    self._stype_for(request, declared, name),
                     dtypes[name],
                     table[name],
                 ),
             }
-            for name in context.columns
-        }
+        if as_text:
+            warnings.warn(
+                f'{self.spec.model_id} cannot read a text column, so '
+                f'{", ".join(as_text)} travel(s) as categorical instead. ',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
         instance_schema: dict[str, Any] = {'columns': schema_columns}
         key = table.primary_key
         if key:
@@ -245,7 +257,13 @@ class TabularAdapter:
         for a classification one. The task is what settles it, and only the
         adapter knows the task, so the correction happens here rather than
         being baked into the schema a caller may reuse for another question.
+
+        The same argument carries a second correction: inference is also
+        model-agnostic, and ``'text'`` is a type this model cannot read at
+        all. Only the adapter knows which model is being asked.
         """
+        if inferred == 'text':
+            return 'categorical'
         if column != request.task.target.column_name:
             return inferred
         if request.task.is_classification:

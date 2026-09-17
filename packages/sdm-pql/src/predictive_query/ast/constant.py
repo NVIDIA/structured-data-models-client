@@ -7,6 +7,7 @@ import json
 import logging
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from pydantic.dataclasses import dataclass
 
@@ -62,6 +63,8 @@ class Constant(ASTNode):
         dtype = None
         if value is None:
             return cls(value='NULL', dtype_maybe=None)
+        if isinstance(value, np.generic):
+            value = value.item()
         if isinstance(value, bool):
             dtype = Dtype.bool
         elif isinstance(value, int):
