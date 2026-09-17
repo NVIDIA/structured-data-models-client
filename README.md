@@ -63,8 +63,11 @@ Five distributions, released together on one version.
 | `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
 | `sdm-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
 
-Only `sdm-relational-engine` is native, so the tabular model works anywhere and
-the relational model needs Linux x86-64.
+Only `sdm-relational-engine` is native. The other four are pure Python and
+install anywhere, on 3.10 through 3.14. The engine publishes wheels for Linux
+x86-64 on 3.10–3.13, so that is where `pip install sdm-client[relational]`
+resolves; it builds from source on other platforms given a compiler and CMake,
+which is what the development instructions below do.
 
 ## Development
 
@@ -77,8 +80,13 @@ python3.12 -m venv .venv
   -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
 .venv/bin/python -m pytest \
   packages/sdm-api/tests packages/sdm-pql/tests \
-  packages/sdm-client/tests packages/sdm-connectors/tests -q
+  packages/sdm-client/tests packages/sdm-connectors/tests tests -q
 ```
+
+`tests/` at the root is the cross-package suite: that the five distributions
+agree on a version and a licence, that the recorded public surface and wire
+payloads still match, and that the claims the configuration files make about
+themselves are true.
 
 The relational engine is a native build and is installed and tested on its
 own, from its own directory:
@@ -88,7 +96,22 @@ own, from its own directory:
 cd packages/sdm-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 
-Lint and format with `ruff`; the formatter owns line length.
+Lint and format with `ruff`; the formatter owns line length. Type-check with
+`mypy`, which is blocking in CI:
+
+```bash
+.venv/bin/mypy packages/sdm-api/src packages/sdm-pql/src \
+               packages/sdm-client/src packages/sdm-connectors/src
+```
+
+Changing anything a caller can observe — an exported name, a signature, or the
+shape of a request on the wire — means re-recording the snapshot in the same
+commit, which is what makes it visible in review:
+
+```bash
+.venv/bin/python scripts/snapshot_public_api.py --write
+.venv/bin/python scripts/snapshot_wire_payloads.py --write
+```
 
 ## Vendored code
 
@@ -117,6 +140,7 @@ Full documentation is under [`docs/`](docs/index.md):
 - [Overview](docs/about/overview.md) and [Architecture](docs/about/architecture.md)
 - [Prerequisites](docs/get-started/prerequisites.md), [Installation](docs/get-started/installation.md), [Quickstart](docs/get-started/quickstart.md)
 - [Prediction output](docs/reference/prediction-output.md) and [Limits](docs/reference/limits.md)
+- [Stability](docs/reference/stability.md) — what is public, and what a version bump means
 
 ## Testing
 

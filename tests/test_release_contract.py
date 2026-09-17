@@ -240,3 +240,162 @@ class TestConfigurationTellsTheTruth:
             'style backlog the engine records, so the note beside that ignore '
             f'list is now wrong:\n{result.stdout}{result.stderr}'
         )
+
+
+class TestDocumentedExamples:
+    """Examples are the most-read code in the repository and nothing ran them.
+
+    Executing them needs a live NIM, so that belongs in the live suite. What can
+    be checked with nothing running is still most of what goes wrong in a
+    published example: it stopped being valid Python, or it names something the
+    library no longer exports.
+    """
+
+    @staticmethod
+    def _python_blocks() -> list[tuple[str, str]]:
+        import re
+
+        blocks = []
+        sources = [REPO / 'README.md'] + sorted((REPO / 'docs').rglob('*.md'))
+        for path in sources:
+            for match in re.finditer(
+                r'^```python\n(.*?)^```', path.read_text(), re.S | re.M
+            ):
+                blocks.append((str(path.relative_to(REPO)), match.group(1)))
+        return blocks
+
+    def test_every_documented_python_block_is_valid_python(self):
+        import ast
+
+        broken = []
+        for where, source in self._python_blocks():
+            try:
+                ast.parse(source)
+            except SyntaxError as error:
+                broken.append(f'{where}: {error}')
+        assert not broken, (
+            'a fenced ```python block no longer parses. Make it runnable, or '
+            'fence it as ```text if it is deliberately a fragment:\n'
+            + '\n'.join(broken)
+        )
+
+    def test_every_symbol_the_documentation_imports_still_exists(self):
+        import ast
+        import importlib
+
+        missing = []
+        for where, source in self._python_blocks():
+            try:
+                tree = ast.parse(source)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                if not node.module or not node.module.startswith(
+                    ('sdm_', 'predictive_query')
+                ):
+                    continue
+                try:
+                    module = importlib.import_module(node.module)
+                except ImportError:  # an extra this environment lacks
+                    continue
+                missing += [
+                    f'{where}: {node.module}.{alias.name}'
+                    for alias in node.names
+                    if not hasattr(module, alias.name)
+                ]
+        assert not missing, (
+            'the documentation imports names the library no longer exports:\n'
+            + '\n'.join(missing)
+        )
+
+    def test_the_readme_quickstart_imports_only_public_names(self):
+        import ast
+        import importlib
+
+        readme = (REPO / 'README.md').read_text()
+        import re
+
+        for match in re.finditer(r'^```python\n(.*?)^```', readme, re.S | re.M):
+            for node in ast.walk(ast.parse(match.group(1))):
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == 'sdm_client'
+                ):
+                    exported = importlib.import_module('sdm_client').__all__
+                    outside = [
+                        alias.name
+                        for alias in node.names
+                        if alias.name not in exported
+                    ]
+                    assert not outside, (
+                        f'the README imports {outside} from sdm_client, which '
+                        f'is not in __all__ -- so the first thing a new user '
+                        f'copies is an unsupported import'
+                    )
+
+
+class TestInterpreterSupportIsStated:
+    """`requires-python` and the classifiers are two claims about one thing.
+
+    They disagreed: every distribution admitted 3.14 through `requires-python`
+    and none of them listed it, so an index would show a package as unsupported
+    on an interpreter it runs on perfectly well.
+    """
+
+    @staticmethod
+    def _admitted(requires: str) -> list[str]:
+        floor = requires.split(',')[0].strip().lstrip('>=').strip()
+        ceiling = None
+        for clause in requires.split(','):
+            clause = clause.strip()
+            if clause.startswith('<'):
+                ceiling = clause.lstrip('<=').strip()
+        known = ['3.10', '3.11', '3.12', '3.13', '3.14']
+        admitted = [v for v in known if v >= floor]
+        if ceiling:
+            admitted = [v for v in admitted if v < ceiling]
+        return admitted
+
+    def test_every_admitted_interpreter_is_also_a_classifier(self):
+        for name in _distributions():
+            project = _pyproject(name)['project']
+            admitted = self._admitted(project['requires-python'])
+            classified = {
+                line.rsplit('::', 1)[-1].strip()
+                for line in project.get('classifiers', [])
+                if line.startswith('Programming Language :: Python :: 3.')
+            }
+            missing = [v for v in admitted if v not in classified]
+            assert not missing, (
+                f'{name} admits Python {missing} through requires-python '
+                f'{project["requires-python"]!r} but does not classify them, so '
+                f'an index reports it unsupported on an interpreter it runs on'
+            )
+
+    def test_an_extra_narrower_than_its_parent_says_so(self):
+        """The relational extra does not resolve on every Python the client does.
+
+        That is correct -- the engine is a native build with a shorter wheel
+        matrix -- but pip's error names a distribution, not a reason. Anything
+        that narrow has to be explained where someone reads it.
+        """
+        client = _pyproject('sdm-client')
+        engine = _pyproject('sdm-relational-engine')
+        if (
+            client['project']['requires-python']
+            == engine['project']['requires-python']
+        ):
+            return
+        source = (PACKAGES / 'sdm-client' / 'pyproject.toml').read_text()
+        assert '3.14' in source and 'native build' in source, (
+            'sdm-client admits interpreters its [relational] extra cannot '
+            'install on, and its pyproject does not explain that anywhere'
+        )
+        install_doc = (
+            REPO / 'docs' / 'get-started' / 'installation.md'
+        ).read_text()
+        assert 'relational' in install_doc, (
+            'the installation guide does not mention the relational extra'
+        )

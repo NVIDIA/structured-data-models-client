@@ -460,7 +460,7 @@ The client's four-tier `debug/fast/normal/best` ladder was a client-side fiction
 So the user sets the real numbers, and the client derives the wire value:
 
 ```python
-query.materialize(indices=[…], num_context_samples=500, num_neighbors=[8, 8])
+query.materialize(indices=[1, 2, 3], num_context_samples=500, num_neighbors=[8, 8])
 ```
 
 **And the number is honoured, not just used to pick a bucket.** The endpoint's

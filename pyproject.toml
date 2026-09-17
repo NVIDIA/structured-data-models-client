@@ -95,6 +95,31 @@ module = [
 ]
 disable_error_code = ["unused-ignore"]
 
+# Coverage is measured to be read, not to be hit. There is no percentage gate
+# here on purpose: a number can be raised by tests that assert nothing, and the
+# useful signal is which branches no test reaches at all. Branch coverage,
+# because line coverage counts an `if` as covered when only one side ever runs.
+#
+# What it found when it was first turned on, and what the number is for:
+# `predictive_query.rewriting` -- 401 statements, exported from that package's
+# `__all__`, reached by no test and imported by nothing in this repository.
+[tool.coverage.run]
+branch = true
+source_pkgs = ["sdm_api", "sdm_client", "sdm_connectors", "predictive_query"]
+omit = [
+    # ANTLR's output. Excluded from ruff and mypy for the same reason.
+    "*/predictive_query/grammar/*",
+]
+
+[tool.coverage.report]
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
+
+
 # Registered here as well as per package, so that running the whole workspace
 # from the repository root neither warns about unknown marks nor silently
 # selects a test that opens a socket.

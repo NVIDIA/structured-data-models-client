@@ -26,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
@@ -50,6 +51,13 @@ Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 [project.optional-dependencies]
 # A model that does heavy client-side work brings its own runtime; a warehouse
 # driver is opt-in the same way, through the shared connectors package.
+#
+# `relational` is deliberately narrower than this distribution: the engine is a
+# native build that publishes wheels for 3.10-3.13, so `sdm-client[relational]`
+# does not resolve on 3.14 while plain `sdm-client` does. pip reports that as
+# "No matching distribution found for sdm-relational-engine", which names the
+# symptom and not the reason, so it is written down here and in the
+# installation guide.
 relational = ["sdm-relational-engine==1.0.0"]
 sqlite = ["sdm-connectors[sqlite]==1.0.0"]
 duckdb = ["sdm-connectors[duckdb]==1.0.0"]

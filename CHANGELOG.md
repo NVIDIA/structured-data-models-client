@@ -1,8 +1,43 @@
 # Changelog
 
+Kept in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) shape, and
+versioned by [semantic versioning](https://semver.org) as
+[`docs/reference/stability.md`](docs/reference/stability.md) defines it for
+these packages. All five distributions share one version and one entry.
+
 ## Unreleased
 
 The first release is being assembled. Nothing here has shipped yet.
+
+### Added
+
+- `docs/reference/stability.md`: the compatibility contract — what is public,
+  what a version bump means, and the deprecation path. Enforced rather than
+  stated: `tests/golden/` records the exported surface of every distribution and
+  the wire payloads of four canonical requests, and `tests/test_release_contract.py`
+  compares them on every run.
+- `RELEASING.md`, and a publish workflow using PyPI Trusted Publishing with PEP
+  740 attestations and a CycloneDX SBOM. No upload token exists.
+- A blocking `mypy` job. All five distributions ship `py.typed`; nothing checked
+  them until now.
+- Branch coverage, measured to be read rather than gated on a number.
+- CI jobs that run the suite against the *installed wheel*, audit dependencies,
+  and generate an SBOM.
+
+### Fixed
+
+- `predictive_query` attached no logging handler, so its warnings reached the
+  stderr of any application that had not configured logging. It now installs a
+  `NullHandler`; applications that *have* configured logging still receive the
+  records, unchanged.
+- `sdm-api`, `sdm-pql` and `sdm-client` each declared their version in two
+  places. There is now one literal per distribution, in `_version.py`, and a
+  test that the five agree.
+- The four pure-Python distributions admitted Python 3.14 through
+  `requires-python` but did not classify it. They now do — and the narrower
+  range of the `[relational]` extra, which is a native build, is documented
+  where users meet it rather than surfacing as an unexplained pip resolver
+  error.
 
 ### Behaviour worth knowing before you rely on it
 
