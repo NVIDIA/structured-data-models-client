@@ -69,7 +69,7 @@ jobs:
         run: |
           python -m pip install --upgrade cyclonedx-bom
           python -m pip install "./packages/sdm-client[sqlite,duckdb]"
-          cyclonedx-py environment --output-format JSON --outfile dist/sbom.cyclonedx.json
+          cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
 
       - uses: actions/upload-artifact@v4

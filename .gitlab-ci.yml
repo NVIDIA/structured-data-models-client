@@ -209,7 +209,7 @@ sbom:
     - pip install -q cyclonedx-bom
     - VERSION=$(cat dist/VERSION)
     - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
-    - cyclonedx-py environment --output-format JSON --outfile "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
+    - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
     - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
   artifacts:
     paths:
