@@ -29,6 +29,7 @@ That is the whole reason candidates must be named rather than assumed.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.errors import StructuredDataError
@@ -45,11 +46,16 @@ def parts_of(
     query: ValidatedPredictiveQuery,
     text: str,
     candidates: list[Any] | None,
-) -> list[str] | None:
+) -> list[tuple[str, Any]] | None:
     r"""The queries this one is asked as, or nothing if it is asked as itself.
 
-    Returns query text rather than requests: each part is gathered like any
-    other query, which is what gives it the context its own labels need.
+    Returns query text paired with what the part is about -- the candidate it
+    asks after, or the step it covers. The pair matters: reading the candidate
+    back out of the text it was written into loses its type and trusts a
+    string the caller chose.
+
+    Each part is gathered like any other query, which is what gives it the
+    context its own labels need.
     """
     kind = str(getattr(query, 'problem_type', ''))
     if kind.endswith('RANK'):
@@ -72,8 +78,9 @@ def _window(query: ValidatedPredictiveQuery) -> tuple[int, int, str]:
 
 
 def _per_candidate(
-    query: ValidatedPredictiveQuery, candidates: list[Any] | None
-) -> list[str]:
+    query: ValidatedPredictiveQuery,
+    candidates: list[Any] | None,
+) -> list[tuple[str, Any]]:
     r"""One binary question per candidate, ordered by how sure the answer is.
 
     The endpoint has no ranking task, and a ranking it could serve would still
@@ -83,12 +90,21 @@ def _per_candidate(
     """
     aggregation = query.get_final_target_aggregation()
     ranked = str(aggregation.target)
-    table = ranked.split('.')[0]
+    if ' WHERE ' in ranked:
+        raise StructuredDataError(
+            f'the rows to rank are chosen by a filter ({ranked!r}), and each '
+            f'candidate is asked about with a filter of its own, so the two '
+            f'would have to be combined into one question this cannot write. '
+            f'Rank without the filter, or narrow the rows before building the '
+            f'schema.',
+            code='INVALID_REQUEST',
+        )
+    table, _, column = ranked.partition('.')
     if candidates is None:
         raise StructuredDataError(
             f'a ranking is over a set of candidates, and this model has no '
             f'ranking task to choose them with, so they have to be named: '
-            f'materialize(..., candidates=frame[{ranked.split(".")[-1]!r}]). '
+            f'materialize(..., candidates=frame[{column!r}]). '
             f'One call is made per candidate.',
             code='INVALID_REQUEST',
         )
@@ -101,23 +117,35 @@ def _per_candidate(
     _refuse_too_many(len(unique), 'candidates')
     start, end, unit = _window(query)
     return [
-        f'PREDICT COUNT({table}.* WHERE {ranked}={_as_literal(value)}, '
-        f'{start}, {end}, {unit}) > 0 FOR EACH {query.entity_column}'
+        (
+            f'PREDICT COUNT({table}.* WHERE {ranked}={_as_literal(value)}, '
+            f'{start}, {end}, {unit}) > 0 FOR EACH {query.entity_column}',
+            value,
+        )
         for value in unique
     ]
 
 
-def _per_step(query: ValidatedPredictiveQuery) -> list[str]:
-    r"""One question per step, each about the window that step covers."""
+def _per_step(query: ValidatedPredictiveQuery) -> list[tuple[str, Any]]:
+    r"""One question per step, each about the window that step covers.
+
+    The aggregation is rebuilt from what it aggregates, which carries any
+    filter it had: `COUNT(buys.* WHERE channel="web", ...)` keeps its channel.
+    Only the window moves.
+    """
     steps = int(getattr(query, 'num_forecasts', 1) or 1)
     _refuse_too_many(steps, 'forecast steps')
     aggregation = query.get_final_target_aggregation()
     start, end, unit = _window(query)
     span = end - start
     return [
-        f'PREDICT {aggregation.aggr}({aggregation.target}, '
-        f'{start + step * span}, {end + step * span}, {unit}) '
-        f'FOR EACH {query.entity_column}'
+        (
+            f'PREDICT {aggregation.aggr}({aggregation.target}, '
+            f'{start + step * span}, {end + step * span}, {unit}) '
+            f'FOR EACH {query.entity_column}',
+            # The contract numbers steps from one.
+            step + 1,
+        )
         for step in range(steps)
     ]
 
@@ -135,7 +163,43 @@ def _refuse_too_many(many: int, what: str) -> None:
 
 
 def _as_literal(value: Any) -> str:
-    r"""``value`` as the query language writes it."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return f'"{value}"'
-    return str(value)
+    r"""``value`` as the query language writes it.
+
+    A candidate is a key, and a key that cannot be written as one is refused
+    rather than escaped into something that parses as a different question.
+    """
+    # Candidates usually come out of a frame, where a whole number is a numpy
+    # integer and not an ``int``, and the two have to be written alike.
+    if hasattr(value, 'item'):
+        try:
+            value = value.item()
+        except (AttributeError, ValueError):
+            pass
+    if value is None:
+        raise StructuredDataError(
+            'a candidate names a row, and a missing value names none',
+            code='INVALID_REQUEST',
+        )
+    if isinstance(value, bool):
+        raise StructuredDataError(
+            'a candidate names a row, and True and False do not',
+            code='INVALID_REQUEST',
+        )
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not math.isfinite(value) or value != int(value):
+            raise StructuredDataError(
+                f'{value!r} cannot name a row to rank',
+                code='INVALID_REQUEST',
+            )
+        return str(int(value))
+    text = str(value)
+    if any(character in text for character in '"\'\\,()') or not text.strip():
+        raise StructuredDataError(
+            f'the candidate {value!r} cannot be written into a query: a key '
+            f'holding a quote, a comma, a bracket or nothing at all would '
+            f'read as part of the question rather than as the row it names',
+            code='INVALID_REQUEST',
+        )
+    return f'"{text}"'

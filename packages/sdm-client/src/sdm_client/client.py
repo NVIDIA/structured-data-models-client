@@ -341,7 +341,7 @@ class SDMClient:
             self.predict(part, model=model, outputs=wanted) for part in parts
         ]
         if ranking:
-            return _ranked(answers, parts, asked, outputs)
+            return _ranked(answers, request.about or (), asked, outputs)
         return _by_step(answers, request)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -646,17 +646,9 @@ def _warn_scoring_what_was_pinned(
 _RANKING_PARTS = ('prediction', 'probabilities')
 
 
-def _candidate_of(query: str) -> Any:
-    r"""Which candidate a part was about, as its query names it."""
-    _, _, rest = query.partition('WHERE ')
-    named, _, _ = rest.partition(',')
-    _, _, value = named.partition('=')
-    return value.strip().strip('"')
-
-
 def _ranked(
     answers: list[PredictionResult],
-    parts: tuple[Request, ...],
+    about: tuple[Any, ...],
     asked: str,
     outputs: Sequence[str] | None,
 ) -> PredictionResult:
@@ -665,27 +657,35 @@ def _ranked(
     Ordered by how sure the answer to that candidate's question was, which is
     what a ranking is: the questions were asked separately and only their
     order matters between them.
+
+    Each entity keeps the row it was asked about on, so the answer joins back
+    onto the frame the caller scored. The candidates are the values the caller
+    named, not what they looked like once written into a query.
     """
 
     from sdm_api.generated.tfm_api import PredictionItem
 
-    per_entity: dict[Any, list[tuple[float, Any]]] = {}
-    for answer, part in zip(answers, parts, strict=True):
-        candidate = _candidate_of(part.query or '')
+    scores: dict[Any, list[tuple[float, Any]]] = {}
+    rows: dict[Any, int | None] = {}
+    for answer, candidate in zip(answers, about, strict=True):
         for item in answer.items:
             sure = (item.probabilities or {}).get('true')
             if sure is None:
                 sure = (item.probabilities or {}).get('True', 0.0)
-            per_entity.setdefault(item.id, []).append((float(sure), candidate))
+            scores.setdefault(item.id, []).append((float(sure), candidate))
+            rows.setdefault(item.id, item.row_index)
 
     top = _top_k_of(asked)
     items = []
-    for row, (entity, scored) in enumerate(per_entity.items()):
+    for position, (entity, scored) in enumerate(scores.items()):
+        # Sort only on the score: candidates are of the caller's type and two
+        # of them need not be comparable to each other.
         scored.sort(key=lambda pair: pair[0], reverse=True)
         chosen = scored[:top] if top else scored
+        row = rows[entity]
         items.append(
             PredictionItem(
-                row_index=row,
+                row_index=position if row is None else row,
                 id=entity,
                 prediction=[candidate for _, candidate in chosen],
                 rankings=tuple(
@@ -694,9 +694,8 @@ def _ranked(
                 ),
             )
         )
-    model = answers[0].model if answers else ''
     return PredictionResult(
-        model=model,
+        model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(outputs or ('prediction', 'rankings')),
@@ -718,18 +717,18 @@ def _by_step(
 
     `forecast_step` is the field the contract already carries for this, so a
     reader of the frame gets the series it asked for without knowing that it
-    arrived as several answers.
+    arrived as several answers. An entity keeps its own row across the steps:
+    the pair of row and step is what names a point in the series, which is how
+    the contract reads it.
     """
     import dataclasses
 
-    items = []
-    row = 0
-    for step, answer in enumerate(answers):
-        for item in answer.items:
-            items.append(
-                dataclasses.replace(item, row_index=row, forecast_step=step)
-            )
-            row += 1
+    steps = request.about or tuple(range(1, len(answers) + 1))
+    items = [
+        dataclasses.replace(item, forecast_step=step)
+        for step, answer in zip(steps, answers, strict=True)
+        for item in answer.items
+    ]
     return PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',

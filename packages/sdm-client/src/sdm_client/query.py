@@ -331,7 +331,7 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
 
-    def _in_parts(self, parts: list[str], **how: Any) -> Request:
+    def _in_parts(self, parts: list[tuple[str, Any]], **how: Any) -> Request:
         r"""Gather the questions this one is asked as, and keep them together.
 
         Each is gathered like any other query, because each needs the context
@@ -343,13 +343,17 @@ class PredictiveQuery:
 
         how = {name: value for name, value in how.items() if value is not None}
         gathered = [
-            PredictiveQuery(part, self.schema).materialize(**how)
-            for part in parts
+            PredictiveQuery(text, self.schema).materialize(**how)
+            for text, _ in parts
         ]
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])
         whole._parts = tuple(gathered)
+        # What each part asks after, as the caller gave it. Reading it back
+        # out of the query it was written into would give a string where they
+        # gave a key, and a ranking is meant to be joined back onto rows.
+        whole._about = tuple(about for _, about in parts)
         whole._asked = self.text
         return whole
 

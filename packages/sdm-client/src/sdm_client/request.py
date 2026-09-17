@@ -431,6 +431,16 @@ class Request:
         return getattr(self, '_parts', None)
 
     @property
+    def about(self) -> tuple[Any, ...] | None:
+        r"""What each part asks after: a candidate, or a step.
+
+        Kept as the caller gave it. The query a part was written as says the
+        same thing, but says it as text, and a candidate read back out of
+        text is a string where a key was meant.
+        """
+        return getattr(self, '_about', None)
+
+    @property
     def asked(self) -> str | None:
         r"""The query a caller wrote, when this was gathered as several."""
         return getattr(self, '_asked', None)
