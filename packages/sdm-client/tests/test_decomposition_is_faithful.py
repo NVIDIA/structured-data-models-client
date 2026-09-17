@@ -586,3 +586,148 @@ def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
         ('prediction', 'quantiles'),
     ]
     assert answer.outputs == ('prediction', 'quantiles')
+
+
+# --- an entity asked about twice is answered twice -------------------------
+
+
+def test_the_same_entity_at_two_rows_gets_two_answers():
+    """Rows are what a ranking answers, and one entity may sit on several.
+
+    Folding them by entity gave back one row where two were asked, and put
+    every candidate into it twice over, so a top-2 could name one candidate
+    in both places.
+    """
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.client import _ranked
+    from sdm_client.result import PredictionResult
+
+    def answer(scores):
+        return PredictionResult(
+            model='kumo-relational',
+            request_id='r',
+            items=[
+                PredictionItem(
+                    row_index=row,
+                    id=1,
+                    probabilities={'true': score, 'false': 1 - score},
+                )
+                for row, score in enumerate(scores)
+            ],
+            outputs=('prediction', 'probabilities'),
+        )
+
+    merged = _ranked(
+        [answer([0.1, 0.9]), answer([0.8, 0.2])],
+        Decomposition('ranking', (('q10', 10), ('q11', 11)), top=1),
+        None,
+    )
+    assert len(merged.items) == 2
+    by_row = {item.row_index: item for item in merged.items}
+    assert by_row[0].prediction == [11]
+    assert by_row[1].prediction == [10]
+    assert all(item.id == 1 for item in merged.items)
+
+
+def test_a_candidate_is_never_named_twice_for_one_row():
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.client import _ranked
+    from sdm_client.result import PredictionResult
+
+    def answer(score):
+        return PredictionResult(
+            model='kumo-relational',
+            request_id='r',
+            items=[
+                PredictionItem(
+                    row_index=row,
+                    id=7,
+                    probabilities={'true': score, 'false': 1 - score},
+                )
+                for row in (0, 1)
+            ],
+            outputs=('prediction', 'probabilities'),
+        )
+
+    merged = _ranked(
+        [answer(0.9), answer(0.8)],
+        Decomposition('ranking', (('q10', 10), ('q11', 11)), top=2),
+        None,
+    )
+    for item in merged.items:
+        assert len(set(item.prediction)) == len(item.prediction)
+
+
+# --- a ranking builds the fields asked for, and no others ------------------
+
+
+@pytest.mark.parametrize(
+    ('asked', 'has_prediction', 'has_rankings'),
+    [
+        (None, True, True),
+        (['prediction'], True, False),
+        (['rankings'], False, True),
+        (['prediction', 'rankings'], True, True),
+    ],
+)
+def test_a_ranking_carries_only_the_fields_asked_for(
+    asked, has_prediction, has_rankings
+):
+    """The merge builds these fields itself, so a field not asked for is one
+    it should not put in the frame."""
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.client import _ranked
+    from sdm_client.result import PredictionResult
+
+    answer = PredictionResult(
+        model='kumo-relational',
+        request_id='r',
+        items=[
+            PredictionItem(
+                row_index=0, id=1, probabilities={'true': 0.9, 'false': 0.1}
+            )
+        ],
+        outputs=('prediction', 'probabilities'),
+    )
+    merged = _ranked(
+        [answer], Decomposition('ranking', (('q10', 10),), top=1), asked
+    )
+    item = merged.items[0]
+    assert (item.prediction is not None) is has_prediction
+    assert (item.rankings is not None) is has_rankings
+    columns = list(merged.to_pandas().columns)
+    assert ('prediction' in columns) is has_prediction
+    assert ('rankings' in columns) is has_rankings
+
+
+# --- the size reported is the size that will be sent -----------------------
+
+
+def test_a_rewritten_request_reports_what_all_its_parts_hold():
+    """An agent budgeting a call reads these. Reporting the first part's
+    counts undercounts by one per candidate, which for a full candidate set
+    is two orders of magnitude."""
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12])
+    parts = request.parts
+    assert len(parts) == 3
+    assert len(request.payloads) == sum(len(p.payloads) for p in parts)
+    assert request.context_rows == sum(p.context_rows for p in parts)
+    assert request.predict_rows == sum(p.predict_rows for p in parts)
+    assert request.context_rows > parts[0].context_rows
+
+
+def test_an_ordinary_request_still_reports_its_own_size():
+    request = PredictiveQuery(
+        'PREDICT COUNT(buys.*, 0, 7, days) > 0 FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3])
+    assert request.parts is None
+    assert request.predict_rows == 3
+    assert request.context_rows > 0

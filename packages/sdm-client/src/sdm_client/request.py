@@ -474,7 +474,18 @@ class Request:
         came from its frames while the adapters refused it for carrying
         envelopes.
         """
-        return getattr(self, '_payloads', None) or None
+        mine = getattr(self, '_payloads', None) or None
+        parts = self.parts
+        if parts is None:
+            return mine
+        # A question asked as several carries all of their envelopes: this is
+        # the object the caller holds, and its size is the size of what will
+        # be sent. Reporting one part's would undercount by as many parts as
+        # there are, which for a ranking is one per candidate.
+        gathered = tuple(
+            envelope for part in parts for envelope in part.payloads or ()
+        )
+        return gathered or mine
 
     @property
     def is_relational(self) -> bool:

@@ -671,31 +671,45 @@ def _ranked(
 
     from sdm_api.generated.tfm_api import PredictionItem
 
+    # Keyed by the row, not by the entity on it: the same entity may be asked
+    # about more than once, at different moments, and folding those together
+    # would answer with one row where two were asked and could put the same
+    # candidate in it twice.
     scores: dict[Any, list[tuple[float, Any]]] = {}
-    rows: dict[Any, int | None] = {}
+    asked_about: dict[Any, tuple[int | None, Any]] = {}
     for answer, (_, candidate) in zip(answers, rewritten.parts, strict=True):
         for item in answer.items:
-            scores.setdefault(item.id, []).append(
+            where = (item.row_index, item.id)
+            scores.setdefault(where, []).append(
                 (_how_sure(item, candidate), candidate)
             )
-            rows.setdefault(item.id, item.row_index)
+            asked_about.setdefault(where, (item.row_index, item.id))
 
     top = rewritten.top
+    wanted = tuple(outputs or _RANKING_OUTPUTS)
     items = []
-    for position, (entity, scored) in enumerate(scores.items()):
+    for position, (where, scored) in enumerate(scores.items()):
+        row, entity = asked_about[where]
         # Sort only on the score: candidates are of the caller's type and two
         # of them need not be comparable to each other.
         scored.sort(key=lambda pair: pair[0], reverse=True)
         chosen = scored[:top] if top else scored
-        row = rows[entity]
         items.append(
             PredictionItem(
                 row_index=position if row is None else row,
                 id=entity,
-                prediction=[candidate for _, candidate in chosen],
-                rankings=tuple(
-                    {'candidate': candidate, 'score': score}
-                    for score, candidate in chosen
+                prediction=(
+                    [candidate for _, candidate in chosen]
+                    if 'prediction' in wanted
+                    else None
+                ),
+                rankings=(
+                    tuple(
+                        {'candidate': candidate, 'score': score}
+                        for score, candidate in chosen
+                    )
+                    if 'rankings' in wanted
+                    else None
                 ),
             )
         )
@@ -703,7 +717,7 @@ def _ranked(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
-        outputs=tuple(outputs or _RANKING_OUTPUTS),
+        outputs=wanted,
     )
 
 
