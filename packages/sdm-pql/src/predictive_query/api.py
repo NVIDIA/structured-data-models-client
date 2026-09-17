@@ -10,7 +10,10 @@ from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema import codes
 from predictive_query.schema.common import ValidationError, ValidationResponse
 from predictive_query.schema.graph import GraphDefinition
-from predictive_query.validator.capability import check_capabilities
+from predictive_query.validator.capability import (
+    check_capabilities,
+    check_parsed_capabilities,
+)
 from predictive_query.validator.predictive_query_validator import (
     PredictiveQueryValidator,
 )
@@ -28,6 +31,10 @@ def validate(
     Capability decides whether this particular model will take it. A query that
     fails resolution fails for every model; a query that fails only capability
     is good PQL that something else can answer.
+
+    Capability is asked first. A model that cannot answer this shape of
+    question cannot answer it against any schema, and resolving first put a
+    complaint about the schema in front of a capability problem.
 
     Args:
         query: The predictive query, as text.
@@ -63,6 +70,10 @@ def validate(
                 )
             ]
         )
+
+    parsed_capability = check_parsed_capabilities(parsed, profile)
+    if not parsed_capability.ok:
+        return None, parsed_capability
 
     resolved, response = PredictiveQueryValidator(
         graph, mode=profile.mode, can=profile.capabilities

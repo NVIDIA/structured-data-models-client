@@ -284,8 +284,17 @@ def _build_retry(
     client cannot reconcile. Connection failures stay retryable either way:
     urllib3 gates read and status retries on the method but not connect ones,
     and a request that never reached the server cannot have had an effect.
+
+    ``DELETE`` is always retryable. Releasing a session is idempotent by
+    contract -- the NIM answers 204 whether or not the session is still there
+    -- and the status it returns when it cannot release one right now is a
+    `429` whose message asks the caller to retry. Leaving it out meant the
+    client raised the one error it documents as worth retrying and then did
+    not retry it.
     """
-    methods = {'GET', 'POST'} if retry_post else {'GET'}
+    methods = {'GET', 'DELETE'}
+    if retry_post:
+        methods.add('POST')
     options: dict[str, Any] = {
         'total': max_retries,
         'connect': max_retries,

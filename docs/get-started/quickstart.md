@@ -49,8 +49,18 @@ with SDMClient(url='http://localhost:8001') as client:
 labelled examples in history, samples each entity's neighbourhood and encodes
 the result. It is a separate call because it is the expensive one.
 
-**Pick a window your data can support.** A query over `0, 30, days` needs 30
-days of history before the anchor, and you will be told if it does not have it.
+**Pick a window your data can support.** An example's features come from
+before its anchor and its label from the window after it, so a query over
+`0, 30, days` needs a dataset that spans comfortably more than 30 days: one
+shorter than the window leaves no anchor with a label after it, and nothing to
+learn from. You will be told if it does not have it.
+
+**The window opens after the anchor and closes on its last day.** `0, 30,
+days` covers `(anchor, anchor + 30 days]`: a row at the anchor itself does not
+count, one a day later does, one exactly thirty days later does, one thirty-one
+days later does not. It is worth knowing if you are computing the same
+aggregate yourself to check a model against a baseline, because taking either
+edge the other way moves every number.
 
 ## Asking the same context several questions
 

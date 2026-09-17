@@ -249,7 +249,7 @@ def test_predict_does_not_accept_a_context_count(count):
 
     message = str(error.value)
     assert 'cannot be used with predict=<frame>' in message
-    assert 'schema table is used as context in full' in message
+    assert 'build the schema from the rows you want' in message
 
 
 @pytest.mark.parametrize('path', ['predict', 'indices'])

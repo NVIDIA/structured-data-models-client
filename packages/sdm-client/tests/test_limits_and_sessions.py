@@ -229,6 +229,7 @@ def test_the_preflight_runs_through_a_real_materialized_request():
         schema=schema,
         query='PREDICT ... FOR EACH users.user_id',
         indices=[1, 2, 3],
+        entity_table='users',
     )
     assert request.payloads
     assert request.query.startswith('PREDICT')
@@ -281,7 +282,7 @@ def test_the_caller_entity_replaces_the_transport_key():
         ],
         payload,
     )
-    assert [entry.id for entry in out] == ['10', '11']
+    assert [entry.id for entry in out] == [10, 11]
 
 
 @pytest.mark.parametrize(
@@ -324,7 +325,7 @@ def test_a_forecast_may_answer_a_row_once_per_step():
         payload,
     )
     assert [entry.forecast_step for entry in out] == [1, 2]
-    assert {entry.id for entry in out} == {'10'}
+    assert {entry.id for entry in out} == {10}
 
 
 def test_a_forecast_answering_the_same_step_twice_is_refused():

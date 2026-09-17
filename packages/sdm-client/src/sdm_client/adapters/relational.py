@@ -34,6 +34,8 @@ from sdm_client.errors import (
 from sdm_client.models import KUMO_RELATIONAL
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
+from sdm_client.wire import as_declared
+from sdm_client.wire.answers import as_declared_target
 
 # What to ask for when the caller named nothing, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -176,7 +178,10 @@ class RelationalAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=_named_entities(parsed.predictions, payload),
+            items=as_declared_target(
+                _named_entities(parsed.predictions, payload),
+                payload,
+            ),
             metadata=parsed.metadata,
             outputs=outputs,
             explanation=explanation,
@@ -191,13 +196,31 @@ class RelationalAdapter:
         ``Schema.from_data`` marks any string column with more than 64 distinct
         values as ``text``, so a real dataset acquires them in bulk and the
         endpoint names none of them. The payload it just refused does.
+
+        The deployments word this two ways and only one of them was matched, so
+        on the one that says ``categorical cardinality 13812 exceeds limit
+        10000`` the hook never ran and the caller got a number and a limit
+        against a graph of twenty-two string columns. Both forms are read now,
+        and the second names the columns by counting the payload rather than by
+        reading a declared type, because a cardinality complaint is about the
+        values.
+
+        A different complaint needs a different remedy. Where the columns are
+        already categorical, telling their owner to make them categorical
+        would be advice that changes nothing.
         """
-        match = _UNSUPPORTED_STYPE.search(str(error))
-        if match is None:
-            return error
-        columns = _columns_with_stype(payload, match.group(1))
+        columns, complaint = _columns_the_endpoint_means(error, payload)
         if not columns:
             return error
+        if complaint == 'cardinality':
+            message = (
+                f'{getattr(error, "message", error)}. In this request that is '
+                f'{", ".join(columns)}. A column with that many distinct '
+                f'values carries no signal the model can use; leave it out '
+                f'with materialize(..., exclude_cols_dict=...), or replace it '
+                f'with something coarser.'
+            )
+            return _reworded(error, message)
         # The payload does not carry the entity table's real name --
         # `instance_table` is what the wire calls it -- so an example naming
         # it would render a line the caller cannot run. Prefer a related
@@ -219,22 +242,7 @@ class RelationalAdapter:
             f'{", ".join(columns)}. Set a supported type on each, e.g. '
             f'{suggestion}'
         )
-        if isinstance(error, NimRequestError):
-            return NimRequestError(
-                error.status_code,
-                code=error.code,
-                message=message,
-                details=error.details,
-            )
-        rebuilt = StructuredDataError(
-            message, code=error.code, details=error.details
-        )
-        status = getattr(error, 'status_code', None)
-        if status is not None:
-            # `fit()` reads this to decide whether an endpoint simply does not
-            # serve sessions; losing it turns a clean fallback into a failure.
-            rebuilt.status_code = status
-        return rebuilt
+        return _reworded(error, message)
 
     def close(self) -> None:
         r"""Nothing to release: gathering happens in the query, which owns
@@ -340,6 +348,72 @@ class RelationalAdapter:
 
 _UNSUPPORTED_STYPE = re.compile(r"semantic type '([^']+)' is unsupported")
 
+#: The other wording, from the deployment that counts rather than names.
+_TOO_MANY_LABELS = re.compile(
+    r'cardinality (\d+) exceeds limit (\d+)', re.IGNORECASE
+)
+
+
+def _columns_the_endpoint_means(
+    error: Exception, payload: Mapping[str, Any]
+) -> tuple[list[str], str]:
+    r"""The columns a refusal is about, and which complaint it was."""
+    said = str(error)
+    named = _UNSUPPORTED_STYPE.search(said)
+    if named is not None:
+        return _columns_with_stype(payload, named.group(1)), 'stype'
+    counted = _TOO_MANY_LABELS.search(said)
+    if counted is None:
+        return [], ''
+    return _columns_over(payload, int(counted.group(2))), 'cardinality'
+
+
+def _reworded(error: Exception, message: str) -> Exception:
+    r"""The same refusal, saying more."""
+    if isinstance(error, NimRequestError):
+        return NimRequestError(
+            error.status_code,
+            code=error.code,
+            message=message,
+            details=error.details,
+        )
+    rebuilt = StructuredDataError(
+        message,
+        code=getattr(error, 'code', None),
+        details=getattr(error, 'details', None),
+    )
+    status = getattr(error, 'status_code', None)
+    if status is not None:
+        # `fit()` reads this to decide whether an endpoint simply does not
+        # serve sessions; losing it turns a clean fallback into a failure.
+        rebuilt.status_code = status
+    return rebuilt
+
+
+def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
+    r"""Every ``table.column`` holding more distinct values than ``limit``.
+
+    The endpoint reports one number and the limit it broke, which says nothing
+    about where to look. The rows it just refused do.
+
+    Counted by the engine's own helper rather than here. What the guard counts
+    is not every cell: it is string cells only, across the predict half as well
+    as the context, reduced to the larger of the two -- and a text cell travels
+    as a list of tokens, which it counts individually. Counting it a second way
+    here would name columns the endpoint was not talking about, a numeric key
+    among them.
+    """
+    try:
+        from sdm_relational_engine.rfm.payload import high_cardinality_columns
+    except ImportError:  # pragma: no cover - the extra is optional
+        return []
+    return [
+        f'{table}.{column} ({count:,} values)'
+        for table, column, count in high_cardinality_columns(
+            dict(payload), limit
+        )
+    ]
+
 
 def _distinct_labels(payload: Mapping[str, Any], column: Any) -> int | None:
     r"""How many distinct values the context holds for ``column``."""
@@ -410,7 +484,12 @@ def _named_entities(
     if reference is None:
         return list(items)
 
-    entities = [row[columns.index(reference)] for row in rows]
+    entities = [
+        as_declared(
+            row[columns.index(reference)], _key_dtype(payload, reference)
+        )
+        for row in rows
+    ]
     instances = (
         [row[columns.index('instance_id')] for row in rows]
         if 'instance_id' in columns
@@ -476,7 +555,7 @@ def _named_entities(
                     f'{instances[index]!r} there',
                     code='INVALID_RESPONSE',
                 )
-        named.append(dataclasses.replace(item, id=str(entities[index])))
+        named.append(dataclasses.replace(item, id=entities[index]))
 
     answered = {index for index, _ in seen}
     if answered != set(range(len(entities))):
@@ -496,3 +575,29 @@ def _forecast_task(payload: dict[str, Any]) -> bool:
     duplicate guard for every other row in the response.
     """
     return payload.get('task', {}).get('kind') == 'forecasting'
+
+
+def _key_dtype(payload: dict[str, Any], reference: str) -> str | None:
+    r"""The dtype of the column the entity reference stands for.
+
+    An integer wider than a double travels as a base-10 string by contract, so
+    a key past 2**53 comes back as text unless what it was is looked up. The
+    reference column itself is declared `string` -- it is a transport key --
+    so the answer is on the table it points at.
+    """
+    schema = payload.get('schema', {})
+    for link in schema.get('relationships', []):
+        if list(link.get('source_columns') or []) != [reference]:
+            continue
+        target = link.get('target_table')
+        columns = link.get('target_columns') or []
+        if not target or len(columns) != 1:
+            return None
+        return (
+            schema.get('related_tables', {})
+            .get(target, {})
+            .get('columns', {})
+            .get(columns[0], {})
+            .get('dtype')
+        )
+    return None

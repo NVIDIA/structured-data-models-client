@@ -132,7 +132,7 @@ class PredictiveQueryValidator:
             return None, response
 
         # validate time ranges
-        self.time_range_validator = TimeRangeValidator(self.graph)
+        self.time_range_validator = TimeRangeValidator(self.graph, self.mode)
         response = merge(
             response,
             self.time_range_validator.validate_time_ranges(parsed_query),

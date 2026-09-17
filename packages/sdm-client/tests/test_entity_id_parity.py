@@ -70,7 +70,7 @@ def test_the_endpoints_stringified_list_becomes_the_key():
     result = TabularAdapter().normalize(
         answer(['[3]', '[7]']), ('prediction',), payload
     )
-    assert [item.id for item in result.items] == ['3', '7']
+    assert [item.id for item in result.items] == [3, 7]
 
 
 def test_the_frame_joins_back_onto_the_rows_that_were_scored():
@@ -81,7 +81,7 @@ def test_the_frame_joins_back_onto_the_rows_that_were_scored():
         .normalize(answer(['[3]', '[7]']), ('prediction',), payload)
         .to_pandas()
     )
-    assert list(frame['id']) == ['3', '7']
+    assert list(frame['id']) == [3, 7]
 
 
 def test_a_string_key_is_returned_as_that_string():
@@ -94,13 +94,18 @@ def test_a_string_key_is_returned_as_that_string():
 
 
 def test_a_key_beyond_the_safe_integer_range_stays_exact():
+    """Past 2**53 a key travels as a base-10 string by contract, so it comes
+    back as text unless what the column holds is looked up. The digits were
+    never in doubt; which type they arrived as was, and a string will not join
+    against the int64 column it came from."""
     wide = 9007199254740993
     schema = schema_for([wide + index for index in range(20)])
     payload = payload_for(schema, [wide, wide + 1])
     result = TabularAdapter().normalize(
         answer([f'[{wide}]', f'[{wide + 1}]']), ('prediction',), payload
     )
-    assert [item.id for item in result.items] == [str(wide), str(wide + 1)]
+    assert [item.id for item in result.items] == [wide, wide + 1]
+    assert result.items[0].id == 9007199254740993
 
 
 # --- rewriting an id must not misattribute an answer ------------------------
@@ -159,7 +164,13 @@ def test_rows_supplied_without_the_key_keep_the_endpoints_id():
 
 def test_a_row_whose_key_is_null_keeps_the_endpoints_id():
     """A null names no row, so there is nothing to put back. Turning it into
-    the string 'None' would read as a key that was asked about."""
+    the string 'None' would read as a key that was asked about.
+
+    The key beside it stays an integer. Pandas has no integer that holds a
+    null, so a column of `[None, 902]` arrives as float, and widening on that
+    sent an id through a float: the schema said `int64` and the wire said
+    `float64`, which is how an identifier loses its low bit.
+    """
     schema = schema_for(list(range(1, 21)))
     request = PredictiveQuery(QUERY, schema).materialize(
         predict=pd.DataFrame({'user_id': [None, 902], 'tenure': [3.0, 4.0]})
@@ -167,9 +178,9 @@ def test_a_row_whose_key_is_null_keeps_the_endpoints_id():
     adapter = TabularAdapter()
     payload = list(adapter.prediction_plan(request, ('prediction',)))[0]
     result = adapter.normalize(
-        answer(['[None]', '[902.0]']), ('prediction',), payload
+        answer(['[None]', '[902]']), ('prediction',), payload
     )
-    assert [item.id for item in result.items] == ['[None]', '902.0']
+    assert [item.id for item in result.items] == ['[None]', 902]
 
 
 def test_a_response_read_without_its_payload_is_unchanged():
@@ -212,7 +223,7 @@ def fitted_on(schema: Schema, response: dict):
 def test_a_session_returns_the_same_key_a_one_shot_call_does():
     schema = schema_for(list(range(1, 21)))
     fitted, _, request = fitted_on(schema, answer(['[3]', '[7]']))
-    assert [item.id for item in fitted.predict(request).items] == ['3', '7']
+    assert [item.id for item in fitted.predict(request).items] == [3, 7]
 
 
 def test_a_session_scoring_call_still_sends_only_what_the_contract_allows():
@@ -301,7 +312,7 @@ def test_an_id_in_a_shape_this_client_does_not_recognise_is_left_to_row_index():
     result = TabularAdapter().normalize(
         answer(['row-0', 'row-1']), ('prediction',), payload
     )
-    assert [item.id for item in result.items] == ['3', '7']
+    assert [item.id for item in result.items] == [3, 7]
 
 
 def test_rows_sharing_a_key_are_each_answered_under_it():
@@ -327,7 +338,7 @@ def test_rows_sharing_a_key_are_each_answered_under_it():
     result = adapter.normalize(
         answer(['[6]'] * scored), ('prediction',), payload
     )
-    assert [item.id for item in result.items] == ['6'] * scored
+    assert [item.id for item in result.items] == [6] * scored
 
 
 # --- checking the batch does not depend on having a key to put back ---------

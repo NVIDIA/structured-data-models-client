@@ -1,0 +1,636 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""A request describes what it holds, whichever route gathered it.
+
+`context` and `predict` are documented as the rows where the answer is known
+and the rows being asked about. The relational route keeps its data as
+finished wire envelopes, and these two were left empty for it, so the same
+object reported several hundred context rows through `context_rows` and none
+at all through `context`. One question, answered twice and differently.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from sdm_client import (
+    KumoRelational,
+    KumoTabular,
+    PredictiveQuery,
+    Relationship,
+    Schema,
+)
+from sdm_client.errors import StructuredDataError
+from sdm_client.request import Request, Split, _split_from
+
+RNG = np.random.default_rng(3)
+
+
+def one_table() -> Schema:
+    frame = pd.DataFrame(
+        {
+            'rid': range(400),
+            'x': RNG.normal(0, 1, 400),
+            'amount': RNG.gamma(2.0, 20.0, 400).round(2),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data({'t': frame}, primary_keys={'t': 'rid'})
+
+
+def envelope(scored: list[int], known: list[int]) -> dict:
+    return {
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'a', 'dtype': 'float64'},
+        },
+        'context': {
+            'instance_table': {
+                'columns': ['id', 'v'],
+                'rows': [[i, 1.0] for i in known],
+            },
+            'related_tables': {
+                'e': {'columns': ['id'], 'rows': [[i] for i in known]}
+            },
+        },
+        'predict': {
+            'instance_table': {
+                'columns': ['id'],
+                'rows': [[i] for i in scored],
+            }
+        },
+    }
+
+
+def test_the_two_routes_report_the_same_halves_for_the_same_question():
+    pytest.importorskip('sdm_relational_engine')
+
+    schema = one_table()
+    query = 'PREDICT t.amount FOR EACH t.rid'
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        tabular = PredictiveQuery(query, schema).materialize(
+            indices=[1, 2], model=KumoTabular()
+        )
+        relational = PredictiveQuery(query, schema).materialize(
+            indices=[1, 2], model=KumoRelational()
+        )
+
+    assert len(relational.context.instance_table) == len(
+        tabular.context.instance_table
+    )
+    assert len(relational.predict.instance_table) == len(
+        tabular.predict.instance_table
+    )
+
+
+@pytest.mark.parametrize('model', ['tabular', 'relational'])
+def test_a_request_agrees_with_its_own_counts(model):
+    """The halves and the counts are two readings of one thing."""
+    pytest.importorskip('sdm_relational_engine')
+
+    chosen = KumoTabular() if model == 'tabular' else KumoRelational()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=chosen)
+
+    assert len(request.context.instance_table) == request.context_rows
+    assert len(request.predict.instance_table) == request.predict_rows
+    assert request.context_rows > 0
+
+
+def test_a_relational_request_shows_the_tables_it_carries():
+    pytest.importorskip('sdm_relational_engine')
+
+    users = pd.DataFrame({'uid': range(300), 'seg': RNG.choice([*'xy'], 300)})
+    events = pd.DataFrame(
+        {
+            'eid': range(1200),
+            'uid': RNG.integers(0, 300, 1200),
+            'amt': RNG.gamma(2.0, 10.0, 1200),
+            'ts': pd.to_datetime('2023-01-01')
+            + pd.to_timedelta(RNG.integers(0, 150, 1200), 'D'),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'events': events},
+            primary_keys={'users': 'uid', 'events': 'eid'},
+            time_columns={'events': 'ts'},
+            relationships=[Relationship('events', 'uid', 'users', 'uid')],
+        )
+        request = PredictiveQuery(
+            'PREDICT SUM(events.amt, 0, 30, days) FOR EACH users.uid', schema
+        ).materialize(indices=list(range(8)), model=KumoRelational())
+
+    assert set(request.context.related_tables) == {'users', 'events'}
+    assert len(request.context.instance_table) == request.context_rows
+
+
+# --- batching is transport, so the halves are the whole of each half --------
+
+
+def test_several_envelopes_read_as_one_question():
+    payloads = (envelope([1, 2], [10, 11, 12]), envelope([3], [13, 14]))
+
+    context = _split_from(payloads, 'context')
+    predict = _split_from(payloads, 'predict')
+
+    assert len(context.instance_table) == 5
+    assert len(predict.instance_table) == 3
+    assert len(context.related_tables['e']) == 5
+    assert list(context.instance_table.index) == list(range(5))
+
+
+@pytest.mark.parametrize(
+    'broken',
+    [
+        {'context': 'not a mapping'},
+        {},
+        {'context': {}},
+        {'context': {'instance_table': 'not a mapping'}},
+        {'context': {'instance_table': {'rows': [[1]]}}},
+        {'context': {'instance_table': {'columns': ['id']}}},
+        {'context': {'instance_table': {'columns': 'id', 'rows': [[1]]}}},
+        {'context': {'instance_table': {'columns': ['id'], 'rows': 'nope'}}},
+    ],
+)
+def test_an_envelope_that_cannot_be_read_contributes_nothing(broken):
+    """Read defensively, the way the counts beside them are. A half that
+    cannot be read is not a half carrying no rows, and neither is a related
+    table: reporting either as empty would describe the request wrongly
+    rather than decline to describe it."""
+    context = _split_from((envelope([1], [10]), broken), 'context')
+
+    assert len(context.instance_table) == 1
+    assert len(context.related_tables['e']) == 1
+
+
+def test_an_unreadable_related_table_does_not_cost_the_rows_beside_it():
+    """The halves are read per table, so one table that cannot be read leaves
+    the instance rows and the other tables where they are."""
+    broken = {
+        'context': {
+            'instance_table': {'columns': ['id', 'v'], 'rows': [[9, 1.0]]},
+            'related_tables': {'e': 'not a mapping'},
+        }
+    }
+
+    context = _split_from((envelope([1], [10]), broken), 'context')
+
+    assert len(context.instance_table) == 2
+    assert len(context.related_tables['e']) == 1
+
+
+def test_envelopes_that_disagree_on_columns_keep_every_column():
+    """Dropping to the intersection would lose a column silently; the union
+    with gaps says which rows lacked it."""
+    first = envelope([1], [10])
+    second = envelope([2], [11])
+    second['context']['instance_table']['columns'] = ['id', 'v', 'extra']
+    second['context']['instance_table']['rows'] = [[11, 1.0, 'x']]
+
+    context = _split_from((first, second), 'context')
+
+    assert set(context.instance_table.columns) == {'id', 'v', 'extra'}
+    assert len(context.instance_table) == 2
+    assert context.instance_table['extra'].isna().sum() == 1
+
+
+# --- built when read, not while materializing -------------------------------
+
+
+def test_the_halves_are_not_built_until_they_are_read(monkeypatch):
+    """The adapter sends the envelopes as they are, so a request that is
+    materialized and sent must not pay to read rows nobody looks at."""
+    import sdm_client.request as module
+
+    built: list[str] = []
+    real = module._split_from
+    monkeypatch.setattr(
+        module,
+        '_split_from',
+        lambda payloads, half: built.append(half) or real(payloads, half),
+    )
+
+    request = Request.materialized(
+        payloads=(envelope([1, 2], [10, 11]),),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1, 2],
+        entity_table='t',
+    )
+
+    assert built == []
+    assert request.context_rows == 2
+    assert built == [], 'counting rows must not build the frames either'
+
+    assert len(request.context.instance_table) == 2
+    assert built == ['context']
+
+
+def test_a_half_reflects_an_edit_that_kept_the_row_count():
+    """A count is not a fingerprint. Rows are edited in place as well as
+    removed, and a half held between reads would describe the old ones."""
+    payloads = [envelope([1], [10, 11, 12])]
+    request = Request.materialized(
+        payloads=tuple(payloads),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1],
+        entity_table='t',
+    )
+
+    assert request.context.instance_table['id'].tolist() == [10, 11, 12]
+
+    payloads[0]['context']['instance_table']['rows'][1] = [99, 1.0]
+    request._payloads = tuple(payloads)
+
+    assert request.context.instance_table['id'].tolist() == [10, 99, 12]
+
+
+def test_an_object_with_no_payloads_attribute_still_answers():
+    """`__new__` and unpickling both produce one, and the attribute beside
+    this one already reads defensively for that reason."""
+    bare = Request.__new__(Request)
+
+    assert len(bare.context.instance_table) == 0
+    assert len(bare.predict.instance_table) == 0
+
+
+def test_a_related_tables_that_is_not_a_mapping_is_ignored():
+    payload = {
+        'context': {
+            'instance_table': {'columns': ['id'], 'rows': [[1]]},
+            'related_tables': 'bad',
+        }
+    }
+
+    context = _split_from((payload,), 'context')
+
+    assert len(context.instance_table) == 1
+    assert context.related_tables == {}
+
+
+# --- what a half may be replaced with, and where ----------------------------
+
+
+def test_the_direct_route_takes_a_replacement():
+    """The route that keeps its rows as these frames is the one where putting
+    a frame here is meaningful, and everything reading it follows."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=KumoTabular())
+
+    request.predict = Split(instance_table=pd.DataFrame({'rid': [7, 8, 9]}))
+
+    assert request.predict_rows == 3
+    assert request.predict.instance_table['rid'].tolist() == [7, 8, 9]
+    assert not request.nothing_to_score
+
+
+def test_emptying_the_direct_route_is_seen_as_empty():
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=KumoTabular())
+
+    request.predict = Split(
+        instance_table=pd.DataFrame({'rid': pd.Series([], dtype='int64')})
+    )
+
+    assert request.nothing_to_score
+    assert request.predict_rows == 0
+
+
+@pytest.mark.parametrize('half', ['context', 'predict'])
+def test_a_gathered_request_refuses_a_replacement(half):
+    """Its rows are already encoded, and the encoding carries what a frame
+    does not: the reference each row is addressed by and the moment it is
+    asked at. Accepting one would change what the request reports and not
+    what it sends, so the object would describe rows the model never sees."""
+    request = Request.materialized(
+        payloads=(envelope([1], [10, 11]),),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1],
+        entity_table='t',
+    )
+
+    with pytest.raises(StructuredDataError) as refused:
+        setattr(request, half, Split(instance_table=pd.DataFrame({'id': [7]})))
+
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'already encoded' in str(refused.value)
+    assert 'Materialize the query again' in str(refused.value)
+    assert request.predict_rows == 1
+
+
+def test_a_stored_half_does_not_outrank_the_envelopes():
+    """The setter refuses this state, but an object restored from a pickle
+    written before it carries one. The envelopes are what is counted and what
+    is sent, so they are what is read."""
+    request = Request.materialized(
+        payloads=(envelope([1], [10, 11]),),
+        schema=one_table(),
+        query='PREDICT t.amount FOR EACH t.rid',
+        indices=[1],
+        entity_table='t',
+    )
+    request.__dict__['_predict'] = Split(
+        instance_table=pd.DataFrame({'id': [7, 8, 9]})
+    )
+
+    assert len(request.predict.instance_table) == request.predict_rows == 1
+    assert not request.nothing_to_score
+
+
+def test_which_route_a_request_is_on_is_one_answer():
+    """Reading, counting and replacing must agree about it. An empty tuple of
+    envelopes read as gathered for the refusal and as not gathered for the
+    read, so the object took its frames and then would not let them be
+    replaced."""
+    request = Request.__new__(Request)
+    request._payloads = ()
+    request._context = Split(
+        instance_table=pd.DataFrame({'rid': [1], 'amount': [2.0]})
+    )
+    request._predict = Split(instance_table=pd.DataFrame({'rid': [7, 8, 9]}))
+
+    assert request.predict_rows == 3
+    assert len(request.predict.instance_table) == 3
+
+    request.predict = Split(instance_table=pd.DataFrame({'rid': [4]}))
+
+    assert request.predict_rows == 1
+
+
+def test_no_envelopes_and_never_gathered_are_one_state():
+    """Told apart, an empty tuple left an object on neither route: its halves
+    came from its frames while the adapters refused it for carrying
+    envelopes."""
+    request = Request.__new__(Request)
+    request._payloads = ()
+
+    assert request.payloads is None
+
+
+def test_the_adapters_agree_with_the_request_about_its_route():
+    """The route is asked through one property, and the adapters ask it too.
+    A request whose halves come from its frames must be one the frame model
+    will take, or the object and the adapter would disagree about what it is
+    while each looked right alone."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT t.amount FOR EACH t.rid', one_table()
+        ).materialize(indices=[1, 2], model=KumoTabular())
+    request._payloads = ()
+
+    assert request.payloads is None
+    assert request.predict_rows == 2
+
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    envelope_built = TabularAdapter()._envelope(request, ('prediction',))
+
+    assert len(envelope_built['predict']['instance_table']['rows']) == 2
+
+
+# --- batching is transport, and the rows still tie to their own instance ----
+
+
+def keyed_envelope(scored: list[int], known: list[int]) -> dict:
+    """An envelope that numbers its rows, as a gathered one does."""
+    return {
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id', 'v'],
+                'rows': [[i, 1.0] for i in known],
+            },
+            'related_tables': {
+                'e': {
+                    'columns': ['instance_id', 'w'],
+                    'rows': [[i, 1.0] for i in known],
+                }
+            },
+        },
+        'predict': {
+            'instance_table': {
+                'columns': ['instance_id'],
+                'rows': [[i] for i in scored],
+            }
+        },
+    }
+
+
+def test_instance_ids_do_not_collide_across_envelopes():
+    """Each envelope numbers its rows from zero, and `instance_id` is what
+    ties a related row to the instance it hangs off. Stacking them unchanged
+    put the second envelope's row 0 beside the first's, so a join exact within
+    one envelope silently crossed between them."""
+    payloads = (
+        keyed_envelope([0, 1], [0, 1, 2]),
+        keyed_envelope([0], [0, 1]),
+    )
+
+    context = _split_from(payloads, 'context')
+    instances = context.instance_table['instance_id'].tolist()
+
+    assert instances == [0, 1, 2, 3, 4]
+    assert not context.instance_table['instance_id'].duplicated().any()
+    assert context.related_tables['e']['instance_id'].tolist() == instances
+
+
+def test_one_envelope_is_numbered_as_it_arrived():
+    context = _split_from((keyed_envelope([0], [0, 1, 2]),), 'context')
+
+    assert context.instance_table['instance_id'].tolist() == [0, 1, 2]
+
+
+@pytest.mark.parametrize(
+    ('first', 'second', 'expected'),
+    [
+        ([0, 1, 2], [0, 1], [0, 1, 2, 3, 4]),
+        ([0, 5, 9], [0, 1], [0, 5, 9, 10, 11]),
+        ([3], [3], [3, 4]),
+        # an envelope numbering from below zero lands back among the ids
+        # already taken if it is only offset, however far the offset has gone
+        ([3], [-1], [3, 4]),
+        ([0, 1, 2], [-1], [0, 1, 2, 3]),
+        ([-1], [-1], [-1, 1]),
+        # rounded outwards: truncating a floor of -0.5 toward zero leaves the
+        # shift half a step short, which is enough to land on a taken id
+        ([0.5], [-0.5], [0.5, 2.5]),
+    ],
+)
+def test_no_two_envelopes_share_an_instance(first, second, expected):
+    """Past the ids an envelope used and past its rows. The first keeps the
+    next clear of numbers already taken; the second keeps the offset moving
+    for an envelope numbered oddly, which could otherwise leave two sharing
+    an id and a join crossing between them."""
+    context = _split_from(
+        (keyed_envelope([], first), keyed_envelope([], second)), 'context'
+    )
+    ids = context.instance_table['instance_id'].tolist()
+
+    assert ids == expected
+    assert not context.instance_table['instance_id'].duplicated().any()
+    assert context.related_tables['e']['instance_id'].tolist() == ids
+
+
+def test_an_envelope_with_no_instance_column_is_left_alone():
+    context = _split_from(
+        (
+            {
+                'context': {
+                    'instance_table': {'columns': ['v'], 'rows': [[1.0]]}
+                }
+            },
+            {
+                'context': {
+                    'instance_table': {'columns': ['v'], 'rows': [[2.0]]}
+                }
+            },
+        ),
+        'context',
+    )
+
+    assert context.instance_table['v'].tolist() == [1.0, 2.0]
+
+
+def test_an_id_that_is_not_a_number_is_left_as_it_is():
+    """There is no arithmetic that moves it past another, and replacing it
+    with the nothing it coerces to would lose the value rather than relocate
+    it -- so it stays, still tying its related rows to the instance it named.
+    """
+    context = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 'x'])), 'context'
+    )
+    ids = context.instance_table['instance_id'].tolist()
+
+    assert ids[:3] == [0, 1, 2]
+    assert ids[3] == 'x'
+    assert context.related_tables['e']['instance_id'].tolist() == ids
+
+
+def test_a_number_written_as_text_is_not_moved():
+    """It is measured by the same rule it is moved by, so a value that stays
+    where it is does not decide how far anything else goes.
+
+    Held as behaviour, not as a guard: measuring with a looser rule only ever
+    moves the next envelope further than needed, never less, so no input
+    distinguishes the two by whether ids collide. Checked exhaustively over
+    every pair drawn from numbers and numeric-looking text."""
+    context = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], ['7', 2])), 'context'
+    )
+    ids = context.instance_table['instance_id'].tolist()
+
+    assert ids == [0, 1, '7', 2]
+    assert context.related_tables['e']['instance_id'].tolist() == ids
+
+
+def test_an_unreadable_envelope_takes_no_place_in_the_sequence():
+    """One that cannot be read contributes nothing, which has to include not
+    contributing a position: counting it moved the first readable envelope
+    off the numbers it arrived with, and leaving those alone is the one thing
+    this promises."""
+    alone = _split_from((keyed_envelope([], [3]),), 'context')
+    behind = _split_from(({'context': {}}, keyed_envelope([], [3])), 'context')
+
+    assert alone.instance_table['instance_id'].tolist() == [3]
+    assert behind.instance_table['instance_id'].tolist() == [3]
+
+
+def test_an_unreadable_envelope_in_the_middle_changes_nothing():
+    without = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 1])), 'context'
+    )
+    through = _split_from(
+        (
+            keyed_envelope([], [0, 1]),
+            {'context': {}},
+            keyed_envelope([], [0, 1]),
+        ),
+        'context',
+    )
+
+    assert (
+        through.instance_table['instance_id'].tolist()
+        == without.instance_table['instance_id'].tolist()
+        == [0, 1, 2, 3]
+    )
+
+
+def test_rows_with_no_number_reserve_no_numbers():
+    """Taking no place in the sequence means reserving none of it either. Five
+    unnumbered rows in the middle had been pushing the envelope after them
+    five places along, for positions nothing was using."""
+    unnumbered = {
+        'context': {
+            'instance_table': {
+                'columns': ['v'],
+                'rows': [[float(i)] for i in range(5)],
+            }
+        }
+    }
+    without = _split_from(
+        (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 1])), 'context'
+    )
+    through = _split_from(
+        (keyed_envelope([], [0, 1]), unnumbered, keyed_envelope([], [0, 1])),
+        'context',
+    )
+    numbered = [
+        value
+        for value in through.instance_table['instance_id'].tolist()
+        if value == value
+    ]
+
+    assert numbered == without.instance_table['instance_id'].tolist()
+    assert numbered == [0, 1, 2, 3]
+
+
+def test_an_infinite_id_is_not_something_to_move_past():
+    """It is a number that no other can be moved past, and rounding one has
+    no answer at all -- `math.ceil` raises on it."""
+    context = _split_from(
+        (keyed_envelope([], [float('inf')]), keyed_envelope([], [0])),
+        'context',
+    )
+
+    assert context.instance_table['instance_id'].tolist() == [
+        float('inf'),
+        0,
+    ]
+
+
+def test_a_number_too_large_to_hold_is_not_a_description():
+    """Pandas raises building a frame around it. A description that cannot be
+    made is not worth failing the call for, so the envelope contributes
+    nothing and the readable one beside it is unaffected."""
+    huge = {
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id'],
+                'rows': [[10**400]],
+            }
+        }
+    }
+    context = _split_from((huge, keyed_envelope([], [0, 1])), 'context')
+
+    assert context.instance_table['instance_id'].tolist() == [0, 1]

@@ -71,7 +71,13 @@ class Capabilities:
         relationships: *Shape.* May a query reach across a foreign key?
         multiple_tables: *Shape.* May a query name more than one table?
         temporal: *Shape.* May a target carry a time window?
-        static: *Shape.* May a target carry no time window?
+        static: *Shape.* Does this model add a refusal of its own for a
+            target with no time window? ``True`` means it adds none, which is
+            not the same as every static target being answerable: the language
+            refuses a static aggregation before any capability is consulted,
+            so a model with ``static=True`` still takes only a static
+            **column**. Read as a promise about static aggregations it is
+            wrong, and on a graph with no time column that is most of them.
         entity_filters: *Shape.* May the entity carry a ``WHERE`` filter?
         counterfactuals: *Shape.* May a query carry an ``ASSUMING`` clause?
         derived_targets: *Shape.* May the target be anything other than a

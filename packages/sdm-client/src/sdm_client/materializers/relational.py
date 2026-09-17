@@ -6,15 +6,26 @@ r"""Gather and encode relational requests with the relational engine."""
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
+from predictive_query.ast import Filter
+from predictive_query.validator.model_validator import (
+    MAX_TOP_K as _MAX_TOP_K,
+)
+from predictive_query.validator.utils import table_name
+
+from sdm_client.core import dates
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import RELATIONAL_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Schema, _as_key_tuple
+from sdm_client.schema import Schema, Table, _as_key_tuple
+from sdm_client.wire.dtypes import arrow_decimal_type
 
 if TYPE_CHECKING:
     from predictive_query import TaskType, ValidatedPredictiveQuery
@@ -73,12 +84,19 @@ class RelationalMaterializer:
                 code='INVALID_REQUEST',
             )
 
+        _warn_the_filter_chose_only_the_examples(query, indices)
         payloads = self._gather(query, indices, num_context_samples, options)
+        windowed = (
+            getattr(query.target_ast, 'date_offset_range', None) is not None
+        )
+        _drop_context_that_answers_the_question(payloads, windowed=windowed)
         return Request.materialized(
             payloads=payloads,
-            schema=self.schema,
+            windowed=windowed,
+            schema=self.schema.snapshot(),
             query=query.to_string(),
             indices=list(indices),
+            entity_table=table_name(query.entity_column),
             requested_inference={
                 'inference_config': options.get('inference_config') or {}
             },
@@ -95,7 +113,9 @@ class RelationalMaterializer:
         run_mode = self._run_mode_for(num_context_samples)
         self._check_entity_count(indices)
         self._check_shape(options, RELATIONAL_LIMITS)
-        model = self._get_model()
+        with self._engine_errors():
+            model = self._get_model()
+        _warn_rows_the_graph_dropped(model)
 
         with self._engine_errors(model):
             task = model._get_task_table(
@@ -129,8 +149,8 @@ class RelationalMaterializer:
                 task,
                 run_mode=run_mode,
                 verbose=False,
-                top_k=query.top_k,
-                exclude_cols_dict=query.get_exclude_cols_dict(),
+                top_k=_candidates_to_rank(query, options),
+                exclude_cols_dict=_columns_to_leave_out(query, options),
                 **{
                     key: options[key]
                     for key in (
@@ -166,13 +186,23 @@ class RelationalMaterializer:
         return self._model
 
     def _build_graph(self) -> Graph:
-        r"""Build exactly the graph described by the client schema."""
+        r"""Build exactly the graph described by the client schema.
+
+        A table without a primary key has that said rather than left unsaid.
+        The engine infers a key from a column *name* without checking that it
+        identifies a row, so a child's foreign key called `ID` holding
+        `[1, 1, 2, 2, 3]` becomes that table's key, and linking it is then
+        refused for being one. Passing `None` through is what lets a caller
+        undo that; leaving it out meant a correct schema over correct data
+        could not be materialized, and the refusal named a key the caller had
+        explicitly removed.
+        """
         from sdm_relational_engine.rfm import Graph
 
         self.schema.check_consistent()
 
         frames = {
-            name: table.data for name, table in self.schema.tables.items()
+            name: _as_typed(table) for name, table in self.schema.tables.items()
         }
         graph = Graph.from_data(frames, edges=[], verbose=False)
 
@@ -180,6 +210,8 @@ class RelationalMaterializer:
             engine_table = graph[name]
             if table.primary_key is not None:
                 engine_table.primary_key = table.primary_key
+            else:
+                engine_table.primary_key = None
             if table.time_column is not None:
                 engine_table.time_column = table.time_column
             for column_name, column in table.columns.items():
@@ -231,8 +263,19 @@ class RelationalMaterializer:
         return graph
 
     @contextmanager
-    def _engine_errors(self, model: KumoRelational) -> Iterator[None]:
-        r"""Re-raise engine failures through this client's error surface."""
+    def _engine_errors(
+        self, model: KumoRelational | None = None
+    ) -> Iterator[None]:
+        r"""Re-raise engine failures through this client's error surface.
+
+        ``model`` is optional because the phase that most needs this is the one
+        that builds it. `Graph.from_data`, the key and stype assignments, the
+        links and `graph.validate()` all raise bare `ValueError` out of a
+        package the caller never imported, and all of them used to run one line
+        above this guard -- so a caller who wrote the `except
+        StructuredDataError` the reference tells them to write did not catch
+        the whole construction phase.
+        """
         try:
             from sdm_relational_engine import KumoRelationalError
         except ImportError:  # pragma: no cover - the extra is optional
@@ -432,3 +475,457 @@ class RelationalMaterializer:
                 f'{limits["hops_max"]}',
                 code='UNSUPPORTED_REQUEST',
             )
+
+
+def _as_typed(table: Table) -> pd.DataFrame:
+    r"""The table's rows, with any decimal column cast to what it was typed.
+
+    A warehouse `DECIMAL` arrives from pandas as an `object` column of
+    :class:`~decimal.Decimal`. The schema layer reads the values and types it
+    -- `int64` for whole numbers, `float64` otherwise -- and the tabular path
+    sends it happily. The relational path handed the engine the raw frame
+    instead, which re-infers from the object column, reaches a different answer
+    and eventually meets a `Decimal` where a dtype name belongs:
+
+        dtype '<class 'decimal.Decimal'>' not understood
+
+    naming no table, no column and no remedy. Since every numeric column of a
+    Databricks or Snowflake table is `DECIMAL`, that is the first question
+    anyone asks of a warehouse through this SDK's own connector.
+
+    The two halves also disagreed about what such a column is. The engine maps
+    decimal content to float unconditionally, so an exact identifier became a
+    float and composite keys over warehouse data were refused outright. Handing
+    over the type the schema already computed settles both: there is one answer
+    now, and it is the one the schema reports.
+    """
+    frame = table.data
+    if frame is None or frame.empty:
+        return frame
+    cast = {}
+    for name, column in table.columns.items():
+        if name not in frame.columns:
+            continue
+        where = f'{table.name}.{name}'
+        if name == table.time_column and _holds_text(frame[name]):
+            cast[name] = _to_time(frame[name], where)
+        elif _holds_decimal(frame[name]):
+            cast[name] = _to_declared(frame[name], column.dtype, where)
+    return frame.assign(**cast) if cast else frame
+
+
+def _holds_text(values: pd.Series) -> bool:
+    r"""Whether this column holds strings, rather than merely being `object`.
+
+    An `object` column can hold `datetime.date` or `pd.Timestamp` as readily as
+    text, and `infer_tfm_dtype` already calls those `timestamp[us]`. Reading
+    the dtype alone would send a column of real dates down the text path and
+    refuse it for being ambiguous, which it is not.
+    """
+    if not (
+        pd.api.types.is_object_dtype(values.dtype)
+        or pd.api.types.is_string_dtype(values.dtype)
+    ):
+        return False
+    return pd.api.types.infer_dtype(values, skipna=True) == 'string'
+
+
+def _to_time(values: pd.Series, where: str) -> pd.Series:
+    r"""A string time column read as dates, or refused for saying two things.
+
+    `supports_dtype('timestamp', 'string')` is true, so a column of date
+    strings can be named as a table's time column and is accepted. The strings
+    then have to become timestamps before the model sees them, and that was
+    left to `pd.to_datetime`'s defaults, which read an ambiguous slash date
+    month-first. A day-first column was silently re-dated -- twelve monthly
+    events across a year became twelve daily events in one week of February --
+    and nothing in the request, the schema or the response recorded that a
+    conversion had happened at all. It surfaced, when it surfaced, as an
+    unrelated complaint about anchor times.
+
+    So a column is read only where it says what its dates are. A year-first one
+    says it outright. A slash-separated one says it when a value of its own
+    rules a reading out -- no month is 15, so `15/03/2020` is day-first and
+    every other row reads the same way -- which is the ordinary case for any
+    column spanning more than twelve days. Where nothing decides, `02/01/2020`
+    is the 2nd of January to half the world and the 1st of February to the
+    other half, and there the caller says, by converting it themselves.
+
+    The shape check reads a sample and is only a pre-filter; the conversion
+    below reads every value, so a column that changes shape in its last row is
+    caught there rather than here.
+    """
+    present = values.dropna()
+    if present.empty:
+        return values
+    if dates.looks_unambiguous(present):
+        how = dates.conversion_that_works(present, only_plausible_years=False)
+        if how is not None:
+            return dates.read(values, how)
+    example = next(
+        (value for value in present if isinstance(value, str)), present.iloc[0]
+    )
+    column = where.split('.')[-1]
+    raise StructuredDataError(
+        f'{where} is the time column and holds text such as {example!r}, '
+        f'which does not say unambiguously what date it is: read day-first it '
+        f'is one date and month-first another, and nothing in the column says '
+        f'which. Convert it yourself so the reading is yours -- '
+        f'frame[{column!r}] = pd.to_datetime(frame[{column!r}], '
+        f'dayfirst=True) -- or store it year-first',
+        code='INVALID_REQUEST',
+    )
+
+
+def _holds_decimal(values: pd.Series) -> bool:
+    r"""Whether a column holds decimals, however it was read.
+
+    Through Arrow the dtype says so; through pandas it is an `object` column
+    and only the values do.
+    """
+    if arrow_decimal_type(values.dtype) is not None:
+        return True
+    if not pd.api.types.is_object_dtype(values.dtype):
+        return False
+    return pd.api.types.infer_dtype(values, skipna=True) == 'decimal'
+
+
+def _to_declared(values: pd.Series, dtype: str, where: str) -> pd.Series:
+    r"""``values`` as ``dtype``, exactly.
+
+    Only what the schema asked for. A whole decimal too wide for an `int64` is
+    typed `string` precisely so its digits survive, and reading "not an int" as
+    "a float" would put 9223372036854775808 back as 9.223372036854776e+18 --
+    the corruption this exists to prevent, reintroduced one branch over.
+
+    A column with a missing value cannot be a plain `int64`, so it becomes
+    pandas' nullable `Int64` rather than widening to float and rounding an
+    identifier.
+
+    The remaining declaration is `string`, which is how a whole number wider
+    than an int64 travels: only the digits matter and only a string keeps all
+    of them. An integer is read with `int()` on the value and never through
+    `pd.to_numeric`, which converts by way of a float64 and brings
+    9007199254740993 back as 9007199254740992. These are identifiers, and the
+    low bit is the whole of their job.
+    """
+    if dtype.startswith('float'):
+        return pd.to_numeric(values.astype(object), errors='coerce').astype(
+            'float64'
+        )
+    if not dtype.startswith('int'):
+        return values.map(lambda value: None if pd.isna(value) else str(value))
+    fractional = values.map(
+        lambda value: not pd.isna(value) and value != int(value)
+    )
+    if fractional.any():
+        example = values[fractional].iloc[0]
+        raise StructuredDataError(
+            f'column {where} is declared {dtype!r} and holds {example!r}, '
+            f'which is not a whole number. Sending it would round the value '
+            f'without saying so; declare the column float64, or round it '
+            f'yourself if that is what you meant',
+            code='INVALID_REQUEST',
+        )
+    whole = values.map(lambda value: pd.NA if pd.isna(value) else int(value))
+    if whole.isna().any():
+        return whole.astype('Int64')
+    return whole.astype('int64')
+
+
+def _columns_to_leave_out(
+    query: ValidatedPredictiveQuery, options: Mapping[str, Any]
+) -> dict[str, list[str]]:
+    r"""Every column either the query or the caller asked to keep back.
+
+    `exclude_cols_dict` was accepted by `materialize()`, checked against the
+    options this route takes, and then not passed on: the query's own answer
+    was sent in its place, so the one option someone reaches for to keep a
+    column away from the model did nothing.
+
+    Merged rather than replaced. The query excludes columns for reasons of its
+    own -- the target among them -- and letting a caller's list stand in for
+    that would hand the model back something the query had deliberately
+    removed.
+
+    Only an absent option and an explicit `None` mean there is nothing to
+    exclude. Anything else is read and refused if it is not a mapping, since
+    passing over a value that cannot be one is the same silence this exists to
+    remove.
+    """
+    merged = {
+        table: list(columns)
+        for table, columns in (query.get_exclude_cols_dict() or {}).items()
+    }
+    given = options.get('exclude_cols_dict')
+    if given is None:
+        given = {}
+    if not isinstance(given, Mapping):
+        raise StructuredDataError(
+            f'exclude_cols_dict must map a table name to the columns to leave '
+            f'out, got {type(given).__name__}',
+            code='INVALID_REQUEST',
+        )
+    for table, columns in given.items():
+        if isinstance(columns, str) or not isinstance(columns, Sequence):
+            raise StructuredDataError(
+                f'exclude_cols_dict[{table!r}] must be a sequence of column '
+                f'names, got {type(columns).__name__}',
+                code='INVALID_REQUEST',
+            )
+        kept = merged.setdefault(table, [])
+        kept.extend(column for column in columns if column not in kept)
+    return merged
+
+
+def _candidates_to_rank(
+    query: ValidatedPredictiveQuery, options: Mapping[str, Any]
+) -> int | None:
+    r"""How many candidates to rank, held to the limits the language holds.
+
+    A `TOP K` written in the query is checked -- at least one, and no more than
+    the endpoint ranks. Passing it as an option went straight through to the
+    task, so an override could put a number in a request that the same number
+    written in the query would have been refused for.
+    """
+    if 'top_k' not in options:
+        return query.top_k
+    given = options['top_k']
+    if isinstance(given, bool) or not isinstance(given, Integral):
+        raise StructuredDataError(
+            f'top_k must be a whole number of candidates, got '
+            f'{type(given).__name__}',
+            code='INVALID_REQUEST',
+        )
+    if not 1 <= int(given) <= _MAX_TOP_K:
+        raise StructuredDataError(
+            f'top_k is {given}, and this model ranks between 1 and '
+            f'{_MAX_TOP_K} candidates',
+            code='INVALID_REQUEST',
+        )
+    return int(given)
+
+
+def _warn_rows_the_graph_dropped(model: KumoRelational) -> None:
+    r"""Say what the engine left out while building the graph.
+
+    A fact row with no time, no key, or a key another row already used cannot
+    be placed in the graph and is dropped. The count and the reason are worked
+    out either way -- `_sanitization_detail` builds the sentence -- and it was
+    only ever shown when something else had already failed. So a request that
+    succeeded was answered from a graph smaller than the one the caller
+    passed, the result looked ordinary, and the number was sitting there
+    unread.
+    """
+    detail = RelationalMaterializer._sanitization_detail(model)
+    if not detail:
+        return
+    warnings.warn(
+        f'the graph was built without some of the rows given to it '
+        f'{detail.strip()}. Those rows are not in the context the model sees; '
+        f'fill the missing values or drop the rows yourself if that is not '
+        f'what you meant.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+#: What the wire calls the column carrying the entity a row is about.
+_ENTITY_REF = '__kumo_entity_ref'
+
+#: And the moment it is asked about.
+_ANCHOR = '__kumo_anchor_time'
+
+
+def _drop_context_that_answers_the_question(
+    payloads: tuple[dict[str, Any], ...], *, windowed: bool = True
+) -> None:
+    r"""Take out of the context any row that is a scored row at its own anchor.
+
+    On a target with no time window the entity being scored is sampled into the
+    context as well, at the same anchor, carrying the value being asked for --
+    so the model is shown the answer to the question it is being asked.
+    Measured against the live endpoint on a label that is pure noise, a hundred
+    scored entities came back 0.660 correct where chance is 0.500.
+
+    **What counts as the same question depends on the target.** For an
+    aggregation, an entity in the context at an *earlier* anchor is not a leak:
+    it is an earlier example, with its features cut at that anchor and its
+    label window closed before the prediction window opens, and it is what
+    temporal in-context learning runs on. Dropping those would delete the
+    examples an aggregation depends on, to fix a leak that is not there. So
+    there, only the same entity at the same moment goes.
+
+    A static column is not a window over anything. Its value does not move with
+    the anchor, so the same entity at *any* anchor carries the answer being
+    asked for -- which a caller reaches by setting `context_anchor_time`, and
+    which matching on the anchor alone would have let straight through.
+
+    The two halves carry their own `instance_id` space, so removing a context
+    row means removing the related rows that hang off it and nothing else.
+
+    What is found is collected before any of it is taken, keyed by the identity
+    of the context it belongs to and unioned: two payloads can share one
+    context object, where counting the entries would report a row once per
+    entry and keeping only the first entry's rows would leave the rest behind.
+
+    The notice comes before the removal. A caller running with
+    `simplefilter('error')` turns it into a raise, and a raise partway through
+    would leave the payloads it had already reached short of rows nobody was
+    told were gone. Which is why it states the rule rather than the edit:
+    raised as an exception, nothing has been removed and no context has been
+    sent, and a message claiming either would be false in the one case the
+    ordering exists for.
+    """
+    found: dict[int, tuple[Mapping[str, Any], set[Any]]] = {}
+    for payload in payloads:
+        context = payload.get('context')
+        predict = payload.get('predict')
+        if not isinstance(context, Mapping) or not isinstance(predict, Mapping):
+            continue
+        anchor_column = (payload.get('task') or {}).get(
+            'anchor_time_column'
+        ) or _ANCHOR
+        asked = _entities_at_anchors(
+            predict.get('instance_table'), anchor_column, windowed
+        )
+        if not asked:
+            continue
+        answered = _instances_matching(
+            context.get('instance_table'), asked, anchor_column, windowed
+        )
+        if not answered:
+            continue
+        carried = found.setdefault(id(context), (context, set()))
+        carried[1].update(answered)
+    if not found:
+        return
+
+    total = sum(len(answered) for _, answered in found.values())
+    # The two targets lose different rows, so they are told different things.
+    # A window closes, so only the same moment carries the answer; a static
+    # column does not move, so every moment does.
+    when = 'at the same moment' if windowed else 'at one moment or another'
+    warnings.warn(
+        f'{total} of the rows sampled as context are the rows being scored, '
+        f'{when}, carrying the value being asked for. Rows that carry the '
+        f'answer to the question being asked are not sent as context, so '
+        f'these do not go into it.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+    for context, answered in found.values():
+        _remove_instances(context.get('instance_table'), answered)
+        for related in (context.get('related_tables') or {}).values():
+            _remove_instances(related, answered)
+
+
+def _positions(
+    table: Any, anchor_column: str
+) -> tuple[list[Any], list[Any], int | None, int | None]:
+    r"""Where the entity and the anchor sit in a wire table.
+
+    The anchor column is read from the task rather than assumed: the engine
+    suffixes the name when it would collide with a real column, and looking
+    only for the bare name went blind on exactly those graphs.
+    """
+    columns = (table or {}).get('columns')
+    rows = (table or {}).get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return [], [], None, None
+    reference = next(
+        (
+            index
+            for index, name in enumerate(columns)
+            if str(name).startswith(_ENTITY_REF)
+        ),
+        None,
+    )
+    anchor = columns.index(anchor_column) if anchor_column in columns else None
+    return columns, rows, reference, anchor
+
+
+def _entities_at_anchors(
+    table: Any, anchor_column: str = _ANCHOR, windowed: bool = True
+) -> set[tuple[Any, Any]]:
+    columns, rows, reference, anchor = _positions(table, anchor_column)
+    if reference is None or (windowed and anchor is None):
+        return set()
+    needed = max(reference, anchor) if windowed else reference
+    return {
+        (row[reference], row[anchor] if windowed else None)
+        for row in rows
+        if isinstance(row, list) and len(row) > needed
+    }
+
+
+def _instances_matching(
+    table: Any,
+    asked: set[tuple[Any, Any]],
+    anchor_column: str = _ANCHOR,
+    windowed: bool = True,
+) -> set[Any]:
+    columns, rows, reference, anchor = _positions(table, anchor_column)
+    if reference is None or 'instance_id' not in columns:
+        return set()
+    if windowed and anchor is None:
+        return set()
+    at = columns.index('instance_id')
+    needed = max(reference, at, anchor) if windowed else max(reference, at)
+    return {
+        row[at]
+        for row in rows
+        if isinstance(row, list)
+        and len(row) > needed
+        and (row[reference], row[anchor] if windowed else None) in asked
+    }
+
+
+def _remove_instances(table: Any, instances: set[Any]) -> None:
+    columns = (table or {}).get('columns')
+    rows = (table or {}).get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return
+    if 'instance_id' not in columns:
+        return
+    at = columns.index('instance_id')
+    table['rows'] = [
+        row
+        for row in rows
+        if not (
+            isinstance(row, list) and len(row) > at and row[at] in instances
+        )
+    ]
+
+
+def _warn_the_filter_chose_only_the_examples(
+    query: ValidatedPredictiveQuery, indices: Sequence[Any]
+) -> None:
+    r"""Say that an entity filter shapes the context and not the scored rows.
+
+    `FOR EACH sellers.seller_id WHERE sellers.seller_state = 'RJ'` reads as one
+    question and is answered as two. The filter selects the labelled examples
+    the model learns from; the rows actually scored are the caller's indices,
+    untouched by it. Measured on synthetic data, a filter matching 12 of 50
+    named sellers still scored all 50 -- so the model was shown a thousand
+    northern sellers and then asked about thirty-eight southern ones, with
+    nothing said and predictions that look entirely ordinary.
+
+    Reported rather than repaired. Applying the filter here would mean
+    evaluating the condition a second time, against the sampled neighbourhood
+    the engine builds to evaluate it the first time, and two implementations of
+    one condition disagreeing is a worse failure than the one being fixed.
+    Naming the condition is what the caller needs to act, either by narrowing
+    the indices or by dropping the filter.
+    """
+    if not indices or not isinstance(query.entity_ast, Filter):
+        return
+    warnings.warn(
+        f'the entity filter {str(query.entity_ast.condition)!r} selects the '
+        f'labelled examples the model learns from, and does not narrow the '
+        f'{len(indices)} rows named for scoring -- those are scored as given, '
+        f'whether or not they satisfy it. Pass only indices that satisfy the '
+        f'condition if that is what you meant.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )

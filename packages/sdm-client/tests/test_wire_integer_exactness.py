@@ -381,3 +381,67 @@ class TestInferenceValuesAreHeldToTheSameRule:
     def test_a_nested_value_is_reached(self):
         with pytest.raises(StructuredDataError):
             json_ready({'opts': {'seeds': [1, 2**53 + 1]}})
+
+
+def test_a_null_does_not_send_an_integer_key_through_a_float():
+    """Pandas has no integer that holds a null, so a key column of
+    `[None, 902]` arrives as float. Widening on that put `float64` on the wire
+    for a column the schema calls `int64`, which is how an identifier loses its
+    low bit: an id past the float53 boundary left as a different id.
+    """
+    import warnings
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    frame = pd.DataFrame(
+        {'user_id': range(1, 21), 'tenure': [1.0] * 20, 'churn': ['a'] * 20}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': frame}, primary_keys={'users': 'user_id'}
+        )
+        request = PredictiveQuery(
+            'PREDICT users.churn FOR EACH users.user_id', schema
+        ).materialize(
+            predict=pd.DataFrame({'user_id': [None, 902], 'tenure': [3.0, 4.0]})
+        )
+    payload = list(TabularAdapter().prediction_plan(request, ('prediction',)))[
+        0
+    ]
+    columns = payload['schema']['instance_table']['columns']
+
+    assert columns['user_id']['dtype'] == 'int64'
+    assert payload['predict']['instance_table']['rows'][1][0] == 902
+
+
+def test_a_column_that_is_genuinely_float_stays_float():
+    """The values decide, not the presence of a null. A float column of whole
+    numbers is still a float, because nothing declared it otherwise."""
+    import warnings
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    frame = pd.DataFrame(
+        {'user_id': range(1, 21), 'tenure': [1.5] * 20, 'churn': ['a'] * 20}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': frame}, primary_keys={'users': 'user_id'}
+        )
+        request = PredictiveQuery(
+            'PREDICT users.churn FOR EACH users.user_id', schema
+        ).materialize(
+            predict=pd.DataFrame({'user_id': [901, 902], 'tenure': [None, 4.0]})
+        )
+    payload = list(TabularAdapter().prediction_plan(request, ('prediction',)))[
+        0
+    ]
+
+    assert (
+        payload['schema']['instance_table']['columns']['tenure']['dtype']
+        == 'float64'
+    )

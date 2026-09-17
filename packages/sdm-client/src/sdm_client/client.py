@@ -16,6 +16,7 @@ the endpoint and credential of the client that started it.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from types import TracebackType
 from typing import Any
@@ -28,10 +29,12 @@ from sdm_client.base import (
     describe,
 )
 from sdm_client.core.transport import Transport, redact_url
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
+from sdm_client.wire.keys import keys_in, scored_keys
 
 # A NIM that does not serve the session routes at all, as opposed to one that
 # has merely forgotten this session.
@@ -79,11 +82,19 @@ class FittedModel:
         session_id: str,
         outputs: tuple[str, ...],
         pinned: dict[str, Any] | None = None,
+        named_outputs: Sequence[str] | None = None,
+        pinned_keys: frozenset[Any] = frozenset(),
+        pinned_over_a_window: bool = False,
     ) -> None:
         self._client = client
         self._adapter = adapter
         self._session_id = session_id
         self._outputs = outputs
+        self._named_outputs = (
+            None if named_outputs is None else tuple(named_outputs)
+        )
+        self._pinned_keys = pinned_keys
+        self._pinned_over_a_window = pinned_over_a_window
         self._pinned = pinned or {}
         self._closed = False
 
@@ -104,11 +115,21 @@ class FittedModel:
         adapter is handed the whole request while the wire gets only the half
         the contract allows on a scoring call.
         """
+        if not isinstance(request, Request):
+            raise StructuredDataError(
+                f'request must be a Request, got {type(request).__name__}',
+                code='INVALID_REQUEST',
+            )
         if self._closed:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
             )
+        if request.nothing_to_score:
+            return _empty_answer(self.model, self._outputs)
+        _warn_scoring_what_was_pinned(
+            request, self._pinned_keys, self._pinned_over_a_window
+        )
         parts = [
             self._adapter.normalize(
                 self._client._transport.session_predict(
@@ -126,20 +147,47 @@ class FittedModel:
                 'the adapter produced no scoring call for this request',
                 code='INVALID_REQUEST',
             )
-        return PredictionResult.merge(parts)
+        return _report_absent(
+            PredictionResult.merge(parts), self._named_outputs, self.model
+        )
 
     def close(self) -> None:
-        r"""Release the pinned context. Safe to call twice."""
+        r"""Release the pinned context. Safe to call twice.
+
+        The handle is marked closed only once the endpoint has released the
+        session. Marking it first made a failed release permanent: the next
+        call returned early and sent nothing, so the one thing the endpoint
+        asks for when it answers `429 Session maintenance is already pending;
+        retry the request later` was the one thing the handle could not do.
+        """
         if self._closed:
             return
-        self._closed = True
         self._client._transport.delete_session(self._session_id)
+        self._closed = True
 
     def __enter__(self) -> FittedModel:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        self.close()
+        r"""Release the context, raising as it did before -- unless the block
+        is already failing.
+
+        A failure to release is a real failure and is raised, which is what a
+        caller wrapping the block in `try` relies on.
+
+        The exception is a block that is already raising, where nothing is
+        said at all. Anything leaving `__exit__` replaces the exception the
+        block was raising, and under `-W error` that includes a warning, so
+        the one place this must not speak is the one where speaking would
+        lose the failure the caller actually needs to see. There the session
+        is left to the endpoint's own expiry, and `close()` can be called
+        again by a caller who wants to know.
+        """
+        try:
+            self.close()
+        except Exception:
+            if not (exc and exc[0] is not None):
+                raise
 
     def __repr__(self) -> str:
         state = 'closed' if self._closed else 'open'
@@ -241,6 +289,8 @@ class SDMClient:
             NimRequestError: If the endpoint answered with an error.
         """
         adapter, fields = self._prepare(request, model, outputs)
+        if request.nothing_to_score:
+            return _empty_answer(adapter.spec.model_id, fields)
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
@@ -253,7 +303,9 @@ class SDMClient:
                 'the adapter produced no call for this request',
                 code='INVALID_REQUEST',
             )
-        return PredictionResult.merge(parts)
+        return _report_absent(
+            PredictionResult.merge(parts), outputs, adapter.spec.model_id
+        )
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -317,6 +369,11 @@ class SDMClient:
             str(session_id),
             fields,
             {key: value for key, value in payload.items() if key != 'context'},
+            named_outputs=outputs,
+            pinned_keys=keys_in(
+                payload, 'context', with_anchor=request.target_moves_with_time
+            ),
+            pinned_over_a_window=request.target_moves_with_time,
         )
 
     def _prepare(
@@ -397,3 +454,97 @@ class SDMClient:
 
     def __repr__(self) -> str:
         return f'SDMClient(url={redact_url(self._transport.url)!r})'
+
+
+def _report_absent(
+    result: PredictionResult, requested: Sequence[str] | None, model: str
+) -> PredictionResult:
+    r"""Say when the answer does not carry a field the caller named.
+
+    Only for fields the caller named. The defaults are chosen per task kind and
+    a model is entitled not to fill one of them; a caller who named a field is
+    waiting for a column that is not going to appear.
+
+    Not raised, because the answer is a real answer to the rest of the request
+    and the endpoint accepted it. A caller who wants this to be fatal can turn
+    warnings into errors; a caller who does not now at least knows.
+
+    It reports what the answer did not contain and does not say why. The reason
+    varies and is not knowable from here: `kumo-relational` returns
+    `prediction` for a regression asked on its own and omits it when quantiles
+    are asked for alongside, so "the model does not produce it for this task
+    kind" would be false in exactly the case that prompted this.
+    """
+    if not requested:
+        return result
+    absent = result.absent(requested)
+    if absent:
+        warnings.warn(
+            f'{model} answered without {list(absent)}, which this request '
+            f'asked for, so no column of to_pandas() will carry it. The '
+            f'answer to the rest of the request is unaffected.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    return result
+
+
+def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
+    r"""The answer to a request with no rows in it, without asking.
+
+    `Request` allows a zero-row `predict` on purpose: the contract sets no
+    minimum and an empty batch inside a loop is a reasonable no-op. Sent, it
+    was not a no-op -- the endpoint cannot encode zero rows and answered
+    `500 Unexpected server error`, so the one shape documented as harmless was
+    the one that failed, and failed opaquely.
+
+    Nothing is asked, because there is nothing to ask about. The result carries
+    the columns the request would have produced, which `to_pandas()` already
+    knows how to build with no rows in them.
+    """
+    return PredictionResult(
+        model=model, request_id='', items=(), outputs=tuple(outputs)
+    )
+
+
+def _warn_scoring_what_was_pinned(
+    request: Request, pinned: frozenset[Any], over_a_window: bool = False
+) -> None:
+    r"""Say when a call scores rows the pinned context already answers.
+
+    A session pins the context gathered by the `fit()` request, which excluded
+    the rows *that* request named. Every later call names different rows, and
+    nothing excluded those, so they sit in the pinned context with their target
+    values and the model is asked to predict what it has been shown. Measured
+    on a target that is pure noise, a session scored 0.595 where the same rows
+    scored one-shot came back 0.455, against a chance rate of 0.5.
+
+    It cannot be fixed here: the context lives on the endpoint and the rows
+    cannot be taken out of it. Nor can the caller fix it after the fact -- the
+    equivalent of the one-shot remedy is to blank the targets before `fit()`,
+    which means knowing every row the session will ever score, and a caller who
+    knows that has no reason to open a session. So it is reported, with the two
+    things that do work.
+
+    An entity asked about over a window is only given away at the moment it
+    was pinned at, so there the moment is part of what is compared. Comparing
+    the entity alone called every later call about the same entity a leak,
+    which under warnings-as-errors is a working session that stops working.
+    """
+    if not pinned:
+        return
+    scored = scored_keys(request, with_anchor=over_a_window)
+    shown = scored & pinned
+    if not shown:
+        return
+    warnings.warn(
+        f'{len(shown)} of the {len(scored)} rows being scored are in this '
+        f"session's pinned context, with their target values, so the model "
+        f'is being asked about rows it has already been shown the answers '
+        f'for. The context was chosen when fit() ran and cannot be changed '
+        f'now. Either clear the target on every row this session may score '
+        f'before calling fit(), or use predict(), which excludes the rows it '
+        f'scores from the context it sends.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )

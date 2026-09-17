@@ -22,6 +22,7 @@ defaults to what the schema's shape implies.
 from sdm_client._version import __version__
 from sdm_client.base import ModelCapabilities, ModelSpec, RuntimeContract
 from sdm_client.client import FittedModel, SDMClient
+from sdm_client.core.warnings import SDMWarning
 from sdm_client.errors import (
     MissingExtraError,
     NimRequestError,
@@ -36,6 +37,7 @@ from sdm_client.result import PredictionResult
 from sdm_client.schema import Column, Relationship, Schema, Table
 
 __all__ = [
+    'SDMWarning',
     'Column',
     'FittedModel',
     'KumoRelational',

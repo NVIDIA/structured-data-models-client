@@ -9,6 +9,7 @@ from predictive_query.ast import (
     Filter,
     Join,
 )
+from predictive_query.profiles import Mode
 from predictive_query.query import ParsedPredictiveQuery
 from predictive_query.schema import codes
 from predictive_query.schema.common import (
@@ -34,8 +35,60 @@ class TimeRangeValidator:
     TARGET = 'TARGET'  # Validate target definition
     ASSUMPTION = 'ASSUMPTION'  # Validate whatif definition
 
-    def __init__(self, graph: GraphDefinition) -> None:
+    def __init__(
+        self, graph: GraphDefinition, mode: Mode = Mode.TRAINING
+    ) -> None:
         self.graph = graph
+        self.mode = mode
+
+    def _instead_of_aggregating(self, target_col_fqn: str) -> str:
+        r"""What to ask instead, when the aggregated table has no time column.
+
+        The advice was to drop the aggregation and ask for the target column
+        by name. For `COUNT(ratings.*)` that renders `PREDICT ratings.*`,
+        which the grammar refuses -- a wildcard is legal only inside `COUNT` --
+        so the remedy for one refusal was a second refusal. And for a
+        foundation model the rewrite is wrong even when it renders: a column of
+        a table the entity points at has many values per entity and is refused
+        for that instead.
+        """
+        if target_col_fqn.endswith('.*'):
+            return (
+                '. There is no static form of this query to fall back on: a '
+                'wildcard is only legal inside COUNT, so ask about a column '
+                'of the entity table instead'
+            )
+        if self.mode is Mode.INFERENCE:
+            return (
+                ', or ask about a column of the entity table instead of an '
+                'aggregation'
+            )
+        return (
+            f' or remove the aggregation and turn this into a static '
+            f'prediction problem with "PREDICT {target_col_fqn}"'
+        )
+
+    def _static_advice(self) -> str:
+        r"""What to do instead, for the model this is speaking for.
+
+        `LIST_DISTINCT` combined with `RANK` is the language's one static
+        aggregation, and naming it is right when a model is being trained. A
+        foundation model refuses it too, so naming it there sent a caller to a
+        query that is itself refused, and the second refusal named the first
+        one back.
+        """
+        if self.mode is Mode.INFERENCE:
+            return (
+                'A foundation model has no static aggregation at all: every '
+                'aggregation it answers is over a window, so give this one a '
+                'time range such as (0, 30, days). That needs a time column '
+                'on the aggregated table; without one, ask about a column of '
+                'the entity instead of an aggregation.'
+            )
+        return (
+            'At the moment, static usage aggregations is only supported for '
+            'LIST_DISTINCT combined with RANK.'
+        )
 
     def validate_tree(
         self,
@@ -219,9 +272,8 @@ class TimeRangeValidator:
                         f'required to use a time range since it defines '
                         f'a temporal prediction. To fix this, you can '
                         f'update your graph to include a "Create date" '
-                        f'column in {target_table_name} or remove the '
-                        f'aggregation and turn this into a static prediction '
-                        f'problem with "PREDICT {target_col_fqn}".',
+                        f'column in {target_table_name}'
+                        f'{self._instead_of_aggregating(target_col_fqn)}',
                         code=codes.TIME_TABLE_HAS_NO_TIME_COLUMN,
                         span=Span.at(node.get_location()),
                     )
@@ -279,9 +331,7 @@ class TimeRangeValidator:
                             title='Aggregation missing a time range',
                             message=f'{node.get_location().message_start}: '
                             f'{query_name} aggregation {node} '
-                            'is missing a time range. At the moment, static '
-                            'usage aggregations is only supported for '
-                            'LIST_DISTINCT combined with RANK.',
+                            f'is missing a time range. {self._static_advice()}',
                             code=codes.TIME_AGGREGATION_NEEDS_RANGE,
                             span=Span.at(node.get_location()),
                         )

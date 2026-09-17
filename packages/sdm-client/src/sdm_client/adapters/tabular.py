@@ -22,7 +22,6 @@ context, so a client that narrowed it would both be guessing and be rejected.
 
 from __future__ import annotations
 
-import sys
 import uuid
 import warnings
 from collections.abc import Iterator
@@ -35,17 +34,21 @@ from sdm_api.generated.tfm_api import (
 )
 
 from sdm_client.base import ModelSpec
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
+from sdm_client.schema import Column, supports_dtype
 from sdm_client.wire import (
     UNTYPED,
+    as_declared,
     encode_table,
     infer_tfm_dtype,
     json_ready,
     widen_tfm_dtype,
 )
+from sdm_client.wire.answers import as_declared_target
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -69,18 +72,6 @@ def _request_id() -> str:
     return f'sdm-{uuid.uuid4().hex[:12]}'
 
 
-def _caller_stacklevel() -> int:
-    r"""How far up to point a warning so it lands on the caller's line."""
-    depth = 1
-    frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get('__name__', '').startswith(
-        'sdm_client'
-    ):
-        depth += 1
-        frame = frame.f_back
-    return depth
-
-
 class TabularAdapter:
     r"""Shapes and reads ``kumo-tabular`` requests."""
 
@@ -92,7 +83,13 @@ class TabularAdapter:
     def prediction_plan(
         self, request: Request, outputs: tuple[str, ...]
     ) -> Iterator[dict[str, Any]]:
-        r"""One payload. The endpoint caps nothing this model has to split on."""
+        r"""One payload.
+
+        The endpoint caps the context at 10,000 rows, which is enforced where
+        the context is chosen rather than by splitting here: every call would
+        have to carry the same context, so splitting would multiply the upload
+        without raising the cap.
+        """
         yield self._envelope(request, outputs)
 
     def session_plan(
@@ -133,7 +130,10 @@ class TabularAdapter:
         return PredictionResult(
             model=parsed.model,
             request_id=parsed.id,
-            items=_named_entities(parsed.predictions, payload),
+            items=as_declared_target(
+                _named_entities(parsed.predictions, payload),
+                payload,
+            ),
             metadata=parsed.metadata,
             outputs=outputs,
         )
@@ -185,7 +185,7 @@ class TabularAdapter:
         for name in predict.columns:
             if name in dtypes:
                 dtypes[name] = widen_tfm_dtype(
-                    (dtypes[name], _raw_dtype_of(predict[name]))
+                    (dtypes[name], _raw_dtype_of(predict[name], dtypes[name]))
                 )
         # Untyped on both sides means there is genuinely no information, and
         # 'string' round-trips whatever arrives without claiming a width.
@@ -207,13 +207,18 @@ class TabularAdapter:
                 as_text.append(name)
             schema_columns[name] = {
                 'dtype': dtypes[name],
-                'stype': self._stype_for(request, declared, name),
+                'stype': _coherent_stype(
+                    self._stype_for(request, declared, name),
+                    dtypes[name],
+                    table[name],
+                ),
             }
         if as_text:
             warnings.warn(
                 f'{self.spec.model_id} cannot read a text column, so '
                 f'{", ".join(as_text)} travel(s) as categorical instead. ',
-                stacklevel=_caller_stacklevel(),
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
             )
         instance_schema: dict[str, Any] = {'columns': schema_columns}
         key = table.primary_key
@@ -271,12 +276,29 @@ def _dtype_of(series: pd.Series) -> str:
     return dtype if dtype != UNTYPED else 'string'
 
 
-def _raw_dtype_of(series: pd.Series) -> str:
+def _raw_dtype_of(series: pd.Series, declared: str | None = None) -> str:
     r"""Like :func:`_dtype_of`, but keeping UNTYPED as the answer.
 
     A column with no values contributes nothing to a widening. Turning it into
     ``'string'`` first is what made it decide the outcome.
+
+    A `float64` that is float only because pandas has no integer that holds a
+    null is reported as the integer it was declared to be. Widening on it sent
+    an id through a float: `9007199254740993` left as `9007199254740992.0`,
+    which is the corruption the integer rules exist to prevent, arriving by the
+    one route that looks like an ordinary type difference. The values decide,
+    not the dtype -- a genuine float column of whole numbers is still a float,
+    because nothing declared it otherwise.
     """
+    if (
+        declared
+        and declared.startswith('int')
+        and pd.api.types.is_float_dtype(series.dtype)
+        and series.isna().any()
+    ):
+        present = series.dropna()
+        if present.empty or bool((present == present.astype('int64')).all()):
+            return declared
     return infer_tfm_dtype(series)
 
 
@@ -291,21 +313,41 @@ def _key_named_by(value: str) -> str | None:
     gets compared. Taking the text apart by hand instead would refuse a correct
     answer for any key an escape appears in.
 
+    Read as JSON first, because JSON is what the endpoint answers with, and
+    only as a Python literal if that fails. The two agree on everything except
+    a character above U+FFFF: JSON writes it as a surrogate pair and
+    `ast.literal_eval` reads the halves as two separate characters that never
+    recombine, so a key containing one could never be matched back and the
+    request failed at the client's own id check.
+
     Anything not written that way is left alone rather than refused. The
     contract calls this field a *service-generated* row identifier and names
     ``row_index`` as what to align on, so an endpoint is entitled to answer
     under a token of its own and refusing one would break a compliant
     deployment. It bounds an id at 1024 characters, so anything longer is not
     one either, and is declined before being parsed.
+
+    A value that is not JSON is read as the Python rendering it must then be.
     """
     import ast
+    import json
 
     if len(value) > _MAX_ID_LENGTH:
         return None
+    named: Any = None
     try:
-        named = ast.literal_eval(value)
-    except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
-        return None
+        named = json.loads(value)
+    except (ValueError, TypeError, RecursionError):
+        try:
+            named = ast.literal_eval(value)
+        except (
+            ValueError,
+            SyntaxError,
+            TypeError,
+            MemoryError,
+            RecursionError,
+        ):
+            return None
     if not isinstance(named, list) or len(named) != 1:
         return None
     return str(named[0])
@@ -357,9 +399,19 @@ def _named_entities(
         payload.get('schema', {}).get('instance_table', {}).get('primary_key')
         or []
     )
+    named_key = key[0] if len(key) == 1 else None
+    key_dtype = (
+        payload.get('schema', {})
+        .get('instance_table', {})
+        .get('columns', {})
+        .get(named_key, {})
+        .get('dtype')
+        if named_key
+        else None
+    )
     keys = (
-        [row[columns.index(key[0])] for row in rows]
-        if len(key) == 1 and key[0] in columns
+        [as_declared(row[columns.index(named_key)], key_dtype) for row in rows]
+        if named_key and named_key in columns
         else None
     )
     keys_in_batch = {str(value) for value in keys or ()}
@@ -400,7 +452,7 @@ def _named_entities(
         seen.add(index)
         value = None if keys is None else keys[index]
         named.append(
-            item if value is None else dataclasses.replace(item, id=str(value))
+            item if value is None else dataclasses.replace(item, id=value)
         )
 
     if seen != set(range(len(rows))):
@@ -410,3 +462,38 @@ def _named_entities(
             code='INVALID_RESPONSE',
         )
     return named
+
+
+#: What a dtype means when nothing else says. Only reached for a column whose
+#: meaning was never claimed, so it is the dtype's own reading rather than a
+#: guess about the data.
+_MEANING_OF = {
+    'int64': 'numerical',
+    'int32': 'numerical',
+    'float64': 'numerical',
+    'float32': 'numerical',
+    'bool': 'categorical',
+}
+
+
+def _coherent_stype(stype: str, dtype: str, column: Column) -> str:
+    r"""A meaning the dtype can actually carry.
+
+    An all-null context column is typed `categorical` because a schema has to
+    say something. The scored rows then decide its dtype, and if they hold
+    timestamps the column goes out as `timestamp[us]` meaning `categorical` --
+    which is not a thing a column can be, and is the same self-contradiction on
+    the wire that a scored frame re-typing a real column used to produce.
+
+    Only the placeholder is overridden. A meaning the caller assigned is a
+    claim and is refused rather than quietly rewritten, before it reaches here.
+    """
+    if supports_dtype(stype, dtype) or column.stype_declared:
+        return stype
+    # Every spelling of a timestamp, not one of them. The contract writes
+    # `timestamp[us]`, but a hand-built schema may say `[ns]`, `[ms]` or `[s]`,
+    # and reading those as categorical puts a dtype and a meaning on the wire
+    # that contradict each other -- which is what this exists to prevent.
+    if dtype.startswith('timestamp'):
+        return 'timestamp'
+    return _MEANING_OF.get(dtype, 'categorical')

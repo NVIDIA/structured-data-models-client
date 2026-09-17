@@ -16,7 +16,10 @@ themselves.
 
 from predictive_query.ast import Aggregation, ASTNode, Column, Filter, Join
 from predictive_query.profiles import Profile
-from predictive_query.query import ValidatedPredictiveQuery
+from predictive_query.query import (
+    ParsedPredictiveQuery,
+    ValidatedPredictiveQuery,
+)
 from predictive_query.schema import codes
 from predictive_query.schema.common import (
     Span,
@@ -26,6 +29,43 @@ from predictive_query.schema.common import (
 from predictive_query.schema.graph import ColumnKey, GraphDefinition
 from predictive_query.schema.typing import AggregationType
 from predictive_query.validator.utils import col_name, table_name
+
+
+def check_parsed_capabilities(
+    query: ParsedPredictiveQuery, profile: Profile
+) -> ValidationResponse:
+    r"""What the model cannot answer, asked before the query is resolved.
+
+    `check_capabilities` needs a resolved query and so runs last, after
+    resolution has already failed and returned. That put the wrong reason in
+    front of the caller: a tabular model cannot answer a windowed aggregation
+    on any schema, but the refusal came from the resolver trying to join the
+    table to itself and asking for a foreign key from a table to itself. Doing
+    what it said produced a second refusal, and that one a third, none of them
+    mentioning time.
+
+    Only what a parsed query already knows is asked here. The rest still waits
+    for resolution, because it is about the schema rather than the question.
+    """
+    response = ValidationResponse()
+    can = profile.capabilities
+    target = query.target_ast
+    if getattr(target, 'date_offset_range', None) is not None and not (
+        can.temporal
+    ):
+        response.errors.append(
+            ValidationError(
+                title='Time range not supported',
+                message=(
+                    f'The target carries a time range, and {can.model} '
+                    f'predicts a value as it stands. No schema makes this '
+                    f'answerable by {can.model}; ask for the column itself, '
+                    f'or use a model that reads relationships.'
+                ),
+                code=codes.MODEL_NO_TEMPORAL_TARGET,
+            )
+        )
+    return response
 
 
 def check_capabilities(

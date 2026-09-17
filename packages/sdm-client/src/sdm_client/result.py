@@ -44,6 +44,15 @@ _SCALAR_FIELDS = ('row_index', 'id', 'forecast_step', 'prediction')
 _MAPPING_FIELDS = {'probabilities': 'probability', 'quantiles': 'quantile'}
 _SEQUENCE_FIELDS = ('scores', 'embeddings')
 
+_ITEM_FIELDS = (
+    'prediction',
+    'probabilities',
+    'quantiles',
+    'scores',
+    'rankings',
+    'embeddings',
+)
+
 
 class PredictionResult:
     r"""The answer to one request.
@@ -53,6 +62,12 @@ class PredictionResult:
         request_id: The endpoint's id for the call, useful when reading its
             logs.
         items: The response items, in the order the endpoint returned them.
+            Each item's ``id`` is the key that was asked about, in the type
+            the schema gave it, not the string the wire carried. The wire
+            spells every id as text, and a relational request spells it as an
+            opaque transport reference, so an item handed back unchanged would
+            answer a question about ``uid 3`` with something that is neither
+            ``3`` nor recognisably about it.
         metadata: Whatever the endpoint reported alongside the predictions.
     """
 
@@ -72,6 +87,43 @@ class PredictionResult:
         self.outputs = tuple(outputs)
         self.metadata = dict(metadata or {})
         self._explanation = explanation
+
+    def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
+        r"""Which of ``requested`` the answer does not carry.
+
+        A field a model produces for one task kind and not another is accepted
+        by the endpoint, answered `200`, and simply left out -- so a caller who
+        names it reads a frame that has no such column and nothing anywhere
+        said why. Rather than deciding in advance which model produces what for
+        which kind, which is a moving target across deployments, this reports
+        what the answer turned out not to contain.
+
+        An empty batch is a supported request with a real empty answer, so
+        nothing can be looked for and nothing is reported. Calling every field
+        missing there would make the one case that is always legitimate the
+        noisiest.
+        """
+        if not self.items:
+            return ()
+        return tuple(
+            name for name in dict.fromkeys(requested) if not self._carries(name)
+        )
+
+    def _carries(self, name: str) -> bool:
+        r"""Whether the answer holds anything under ``name``.
+
+        A name this type does not know how to look for is treated as carried:
+        reporting it absent would be a guess, and a field no model produces
+        was refused before the request was sent.
+        """
+        if name == 'explanation':
+            return self._explanation is not None
+        if name not in _ITEM_FIELDS:
+            return True
+        return any(
+            getattr(item, name, None) not in (None, {}, [], ())
+            for item in self.items
+        )
 
     @property
     def explanation(self) -> dict[str, Any] | None:

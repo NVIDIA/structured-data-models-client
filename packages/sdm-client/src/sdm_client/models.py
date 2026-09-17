@@ -62,6 +62,18 @@ RELATIONAL_LIMITS = {
     'classes_max': 10,
 }
 
+# The tabular endpoint refuses a context past this, exactly:
+#
+#   [422 UNSUPPORTED_SHAPE] N_train 10001 exceeds limit 10000.
+#
+# Measured against the deployment rather than read from a document, at the
+# boundary: 10,000 rows answer, 10,001 refuse. Declared so the client refuses
+# first, because the alternative is encoding and transmitting an arbitrarily
+# large context to be told the limit at the far end.
+TABULAR_LIMITS = {
+    'context_rows_max': 10_000,
+}
+
 KUMO_TABULAR = ModelSpec(
     model_id=TFM_MODEL_KUMO_TABULAR,
     profile=TABULAR,
@@ -70,6 +82,7 @@ KUMO_TABULAR = ModelSpec(
         # multiclass itself, so this client never narrows it here.
         tasks=frozenset({'classification', 'regression'}),
         outputs=frozenset({'prediction', 'probabilities', 'quantiles'}),
+        limits=TABULAR_LIMITS,
     ),
 )
 

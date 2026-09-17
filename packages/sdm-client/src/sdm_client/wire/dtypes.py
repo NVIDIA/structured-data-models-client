@@ -216,7 +216,7 @@ def infer_tfm_dtype(series: pd.Series) -> str:
         return 'int64'
     if pd.api.types.is_float_dtype(dtype):
         return 'float64' if dtype.itemsize > 4 else 'float32'
-    decimal_type = _arrow_decimal_type(dtype)
+    decimal_type = arrow_decimal_type(dtype)
     if decimal_type is not None:
         return _decimal_dtype(series, decimal_type)
     if pd.api.types.is_object_dtype(dtype):
@@ -234,7 +234,7 @@ def infer_tfm_dtype(series: pd.Series) -> str:
 _INT64_SAFE_PRECISION = 18
 
 
-def _arrow_decimal_type(dtype: Any) -> Any | None:
+def arrow_decimal_type(dtype: Any) -> Any | None:
     r"""``dtype``'s Arrow decimal type, or ``None`` if it is not one.
 
     A warehouse ``DECIMAL`` reaches us two ways. Read through pandas it is an
@@ -578,3 +578,38 @@ def serialize_column(series: pd.Series, dtype: str) -> list[Any]:
     # by `serialize_cell`'s `str(value)` fallback as the repr of a Python list.
     require_scalar_cells(series, f'column {series.name!r}')
     return [serialize_cell(value, dtype) for value in series.tolist()]
+
+
+def as_declared(value: Any, dtype: str | None) -> Any:
+    r"""``value`` read back as ``dtype``, or unchanged if it cannot be.
+
+    The wire is text in places where the caller had a number: an integer wider
+    than a double travels as a base-10 string by contract, and one endpoint
+    renders a class label as a string where the other sends the number. Both
+    are legal, and both leave the caller holding a different type depending on
+    which model answered -- so `result.prediction == 0` counted nothing on one
+    of them, silently and in the direction of "this class never occurs".
+
+    Reading it back is a cast, not a parse: anything that does not convert
+    exactly is returned untouched rather than guessed at.
+
+    A bool is an int in Python and is not a number the caller wrote, so it is
+    excluded. From text, `int` accepts only an exact integer literal, so
+    reaching the conversion means it was one. From a number, `int(1.9)` does
+    not raise and a value that is not whole is not this integer under another
+    name, which is true of a float, a numpy float and a `Decimal` alike and so
+    is asked of the value rather than of its type.
+    """
+    if value is None or dtype is None or isinstance(value, bool):
+        return value
+    try:
+        if dtype.startswith('int'):
+            read = int(value)
+            if isinstance(value, str):
+                return read
+            return read if read == value else value
+        if dtype.startswith('float'):
+            return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return value
+    return value

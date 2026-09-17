@@ -29,15 +29,16 @@ and does not belong in a type you read.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.schema import Schema
-from sdm_client.wire import is_container
+from sdm_client.schema import Schema, supports_dtype
+from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -231,6 +232,10 @@ class Request:
                 relationships=None if related else (),
             )
 
+        _check_scored_values_mean_what_the_schema_says(
+            predict, schema, entity_table
+        )
+
         # And the other direction: a feature the model was shown has to be
         # supplied for the rows being scored. The endpoint rejects a predict
         # half that is missing one, so name it here instead. A primary key is
@@ -262,8 +267,8 @@ class Request:
             entity_table=entity_table if related else None,
             options=dict(task_options or {}),
         )
-        self.context = Split(instance_table=context, related_tables=related)
-        self.predict = Split(instance_table=predict, related_tables=related)
+        self._context = Split(instance_table=context, related_tables=related)
+        self._predict = Split(instance_table=predict, related_tables=related)
         self.inference = dict(inference or {})
         self.requested_inference = dict(inference or {})
         self.entity_table = entity_table
@@ -276,6 +281,8 @@ class Request:
         schema: Schema,
         query: str,
         indices: list[Any],
+        entity_table: str | None = None,
+        windowed: bool = False,
         requested_inference: Mapping[str, Any] | None = None,
     ) -> Request:
         r"""A request whose data has already been gathered.
@@ -287,8 +294,21 @@ class Request:
 
         This is still one request. Batching is transport, and a caller reads
         this object to see one question.
+
+        `entity_table` is named by the query rather than taken from whichever
+        table the caller's dict happened to hold first. Every pre-send
+        description of a relational request read it from insertion order, so
+        it answered correctly or incorrectly depending on how the schema was
+        built, and a programmatic caller could not use it as a guard.
+
+        It is optional because it was not there to pass before, and a caller
+        who does not name it is not asking for insertion order back: the
+        envelopes carry the query's own answer, which is read instead.
         """
         request = cls.__new__(cls)
+        request._windowed = windowed
+        if entity_table is None:
+            entity_table = _entity_table_in(payloads)
         request.schema = schema
         first = payloads[0]
         target = first.get('task', {}).get('target', {})
@@ -298,14 +318,13 @@ class Request:
                 column_name=target.get('column_name', ''),
                 dtype=target.get('dtype', ''),
             ),
-            entity_table=None,
+            entity_table=entity_table,
             options=dict(first.get('task', {}).get('options', {})),
         )
-        empty = pd.DataFrame()
-        request.context = Split(instance_table=empty)
-        request.predict = Split(instance_table=empty)
+        request._context = None
+        request._predict = None
         request.inference = dict(first.get('inference', {}))
-        request.entity_table = next(iter(schema), 'instance')
+        request.entity_table = entity_table
         request.query = query
         request.indices = indices
         request._payloads = payloads
@@ -316,9 +335,117 @@ class Request:
         return request
 
     @property
+    def context(self) -> Split:
+        r"""The rows where the answer is known.
+
+        Read from the wire envelopes on the route that keeps its data as
+        envelopes, and on first access rather than while materializing: the
+        adapter sends those envelopes as they are, so building the frames
+        eagerly would copy every context row of every request on a path where
+        nothing reads them.
+        """
+        return self._half('context')
+
+    @context.setter
+    def context(self, value: Split) -> None:
+        self._refuse_if_gathered('context')
+        self._context = value
+
+    @property
+    def predict(self) -> Split:
+        r"""The rows being asked about. Built the way `context` is."""
+        return self._half('predict')
+
+    @predict.setter
+    def predict(self, value: Split) -> None:
+        self._refuse_if_gathered('predict')
+        self._predict = value
+
+    def _half(self, half: str) -> Split:
+        r"""One half, read from the envelopes that carry it.
+
+        Read on access rather than while materializing, because the adapter
+        sends those envelopes as they are and building the frames eagerly
+        would copy every row of every request on the path where nothing looks
+        at them.
+
+        Not held between reads. The envelopes are edited in place -- leaked
+        context rows are taken out of them -- so a kept frame would go on
+        describing rows the request no longer sends, and a cache correct only
+        for the edits made today is a trap for the ones made later. Reading is
+        a few milliseconds per thousand rows, against a call that spends
+        hundreds on the wire.
+
+        Where there are envelopes they are the request, and they are what is
+        read, in step with the counts beside them and with what the adapter
+        sends. A half stored alongside them cannot have been put there through
+        the setter, which refuses exactly that, but an object restored from an
+        older pickle carries one; reading it would describe rows that are
+        neither counted nor sent.
+
+        Which makes these a description of the request rather than a handle
+        into it. Editing a frame read from here changes what is sent only on
+        the route that happens to keep its data that way; on the other it is
+        read from the envelopes again and the edit is not there. Assigning the
+        half is what changes the request, and does so on both.
+        """
+        payloads = self.payloads
+        if payloads:
+            return _split_from(payloads, half)
+        held = getattr(self, f'_{half}', None)
+        return held if held is not None else Split(pd.DataFrame())
+
+    def _refuse_if_gathered(self, half: str) -> None:
+        r"""Refuse to replace a half of a request that is already gathered.
+
+        A gathered request holds finished wire envelopes, and the adapter
+        sends those. An envelope carries what a frame cannot -- the entity
+        references the rows are addressed by, and the anchor each is asked
+        at -- so a `Split` put here could not be turned back into one. It
+        would change what the request reports and not what it sends, which is
+        worse than not being allowed: the object would describe rows the model
+        never sees.
+
+        Gathered is read the same way here as everywhere else on this object,
+        so that the route a request is on is one answer rather than four.
+        """
+        if not self.payloads:
+            return
+        raise StructuredDataError(
+            f'{half} cannot be replaced on a request gathered by a predictive '
+            f'query: its rows are already encoded, and the encoding carries '
+            f'what a frame does not. Materialize the query again for the rows '
+            f'you want instead.',
+            code='INVALID_REQUEST',
+        )
+
+    @property
+    def target_moves_with_time(self) -> bool:
+        r"""Whether the answer is a window rather than a standing value.
+
+        An aggregation is a window: the same entity asked about at a later
+        moment is a different question, and the answer to one is not the
+        answer to the other. A column is not: it has one value, and whoever
+        has seen it has the answer whenever they are asked.
+
+        Which is the difference between a context that has answered the
+        question and one that merely mentions the same entity, so anything
+        deciding whether a row was already given away has to know it.
+        """
+        return getattr(self, '_windowed', False)
+
+    @property
     def payloads(self) -> tuple[dict[str, Any], ...] | None:
-        r"""The gathered wire envelopes, when this came from a query."""
-        return getattr(self, '_payloads', None)
+        r"""The gathered wire envelopes, when this came from a query.
+
+        No envelopes and never having been gathered are the same request, and
+        are reported the same way. They were told apart once, so an empty
+        tuple read as gathered here and as not gathered where the rows are,
+        and an object could belong to neither route: the halves it reported
+        came from its frames while the adapters refused it for carrying
+        envelopes.
+        """
+        return getattr(self, '_payloads', None) or None
 
     @property
     def is_relational(self) -> bool:
@@ -331,11 +458,52 @@ class Request:
 
     @property
     def context_rows(self) -> int:
-        return len(self.context.instance_table)
+        r"""How many rows the model will learn the answer from, in total.
+
+        A relational request keeps its rows in the gathered envelopes rather
+        than in ``context``, which stays an empty frame. Reading the frame
+        reported nought for every graph request -- and these two counts are the
+        only description of a request there is before it is sent, so the one
+        shape whose size is worth checking was the one that would not say.
+
+        Summed across envelopes, because a request gathered in several parts
+        gives each part its own context: that is why a session refuses a split
+        request rather than pinning the first one's.
+        """
+        return self._rows('context')
 
     @property
     def predict_rows(self) -> int:
-        return len(self.predict.instance_table)
+        r"""How many rows are being asked about, across every call."""
+        return self._rows('predict')
+
+    def _rows(self, half: str) -> int:
+        if self.payloads:
+            return sum(
+                _envelope_rows(payload, half) or 0 for payload in self.payloads
+            )
+        return len(getattr(self, half).instance_table)
+
+    @property
+    def nothing_to_score(self) -> bool:
+        r"""Whether this request is known to ask about no rows at all.
+
+        Distinct from ``predict_rows == 0``, and the distinction matters:
+        `predict()` answers a request with nothing in it without sending, so a
+        payload whose rows simply cannot be read must not be mistaken for one
+        that is empty. An unreadable envelope is a request that should reach
+        the endpoint and be refused, not one that quietly succeeds with an
+        empty answer.
+
+        """
+        if self.payloads:
+            counts = [
+                _envelope_rows(payload, 'predict') for payload in self.payloads
+            ]
+            return all(count is not None for count in counts) and not any(
+                counts
+            )
+        return len(self.predict.instance_table) == 0
 
     def __repr__(self) -> str:
         shape = 'relational' if self.is_relational else 'single-table'
@@ -380,3 +548,268 @@ def _require_frame(value: Any, name: str) -> pd.DataFrame:
             code='INVALID_REQUEST',
         )
     return value
+
+
+def _entity_table_in(payloads: Sequence[Mapping[str, Any]]) -> str:
+    r"""The table the query asks about, as the envelopes record it.
+
+    `task.entity_table_names` is the query's own answer and is what the
+    caller would otherwise have passed. Read here so that a caller who
+    predates the argument gets that rather than the insertion order this
+    replaced.
+    """
+    for payload in payloads:
+        task = payload.get('task') if isinstance(payload, Mapping) else None
+        named = (task or {}).get('entity_table_names')
+        if isinstance(named, (list, tuple)) and named:
+            return str(named[0])
+    return ''
+
+
+def _wire_frame(table: Any) -> pd.DataFrame | None:
+    r"""One wire table as a frame, or nothing if it cannot be read as one."""
+    if not isinstance(table, Mapping):
+        return None
+    columns = table.get('columns')
+    rows = table.get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return None
+    try:
+        return pd.DataFrame(rows, columns=columns)
+    except (TypeError, ValueError, OverflowError):
+        # A row wider than its header raises rather than padding, and a
+        # number too large for pandas to hold raises as well. Reading a
+        # request is a description of it, and a description that cannot be
+        # made is not worth failing the call for.
+        return None
+
+
+#: What ties a related row to the instance it hangs off.
+INSTANCE_ID = 'instance_id'
+
+
+def _is_a_number(value: Any) -> bool:
+    r"""Whether ``value`` is a number that can be moved along."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and not pd.isna(value)
+        # An infinity is a number that no other can be moved past, and
+        # rounding one has no answer at all. An integer too large to ask the
+        # question of is the same case, and asking raises.
+        and _is_finite(value)
+    )
+
+
+def _is_finite(value: int | float) -> bool:
+    try:
+        return math.isfinite(value)
+    except (OverflowError, ValueError):
+        return False
+
+
+def _instance_bounds(
+    frame: pd.DataFrame | None,
+) -> tuple[int, int | None]:
+    r"""How far an ``instance_id`` column reaches, rounded outwards.
+
+    Outwards because these bound a shift: truncating toward zero would round
+    a floor of `-0.5` up to `0` and leave the shift half a step short, which
+    is enough for two envelopes to land on the same id.
+
+    Only the values a shift can move are measured. Reading `'7'` as seven
+    would let it decide how far the next envelope moves while staying where
+    it is itself, so it would set the distance for a journey it does not
+    make.
+    """
+    if frame is None or INSTANCE_ID not in frame or frame.empty:
+        return -1, None
+    movable = [value for value in frame[INSTANCE_ID] if _is_a_number(value)]
+    if not movable:
+        return -1, None
+    return math.ceil(max(movable)), math.floor(min(movable))
+
+
+def _past(frame: pd.DataFrame | None, shift: int) -> pd.DataFrame | None:
+    r"""``frame`` with its numeric ``instance_id`` moved along by ``shift``.
+
+    Only the numbers move. An id that is not one cannot be moved past
+    anything, and replacing it with the nothing it coerces to would lose the
+    value rather than relocate it -- so it is left where it is, still tying
+    its related rows to the instance it always named.
+    """
+    if frame is None or not shift or INSTANCE_ID not in frame:
+        return frame
+    moved = frame.copy()
+    moved[INSTANCE_ID] = moved[INSTANCE_ID].map(
+        lambda value: value + shift if _is_a_number(value) else value
+    )
+    return moved
+
+
+def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
+    r"""The rows of one half, gathered from the envelopes that carry them.
+
+    A relational request keeps its data as finished wire envelopes, and these
+    two attributes are how a caller reads what it holds. Leaving them empty
+    described the shape of the storage rather than the request: a relational
+    `context` reported no rows while `context_rows` on the same object
+    reported several hundred, so the object answered its own question twice
+    and differently.
+
+    Concatenated across envelopes, because more than one is batching and
+    batching is transport. A caller reads this object to see one question, so
+    the halves it exposes are the whole of each half.
+
+    An `instance_id` that is not a number is left exactly as it is. There is
+    no arithmetic that moves it past another, so two envelopes using the same
+    one stay indistinguishable here -- which is what they already were, and
+    is a malformed envelope rather than something this can repair.
+    """
+    instances: list[pd.DataFrame] = []
+    related: dict[str, list[pd.DataFrame]] = {}
+    already = 0
+    first = True
+    for payload in payloads:
+        half_of = payload.get(half) if isinstance(payload, Mapping) else None
+        if not isinstance(half_of, Mapping):
+            continue
+        frame = _wire_frame(half_of.get('instance_table'))
+        tables = half_of.get('related_tables')
+        parts = [
+            (name, _wire_frame(table))
+            for name, table in (
+                tables.items() if isinstance(tables, Mapping) else ()
+            )
+        ]
+        # Each envelope numbers its rows from zero, and `instance_id` is what
+        # ties a related row to the instance it hangs off. Stacking them
+        # unchanged puts the second envelope's row 0 beside the first's, so a
+        # join that was exact within one envelope silently crosses between
+        # them. The first envelope is left as it arrived; each one after has
+        # its lowest id put where the numbers so far ran out, which an offset
+        # alone did not do -- an envelope numbering from below zero landed
+        # back among ids already taken however far the offset had advanced.
+        numbered = [frame, *(table for _, table in parts)]
+        bounds = [_instance_bounds(t) for t in numbered]
+        highest = max((top for top, _ in bounds), default=-1)
+        lowest = min(
+            (floor for _, floor in bounds if floor is not None), default=None
+        )
+        shift = 0 if first or lowest is None else already - lowest
+        if (moved := _past(frame, shift)) is not None:
+            instances.append(moved)
+        for name, table in parts:
+            if (shifted := _past(table, shift)) is not None:
+                related.setdefault(name, []).append(shifted)
+        # An envelope that carried no numbered rows has not taken a place in
+        # the sequence: it reserves none of it, and the next one that does is
+        # still the first. Counting it moved the first readable envelope off
+        # the numbers it arrived with, which is the one thing this promises
+        # not to do.
+        if lowest is not None:
+            seen = 0 if frame is None else len(frame)
+            already = max(already + seen, highest + shift + 1)
+            first = False
+
+    def joined(frames: list[pd.DataFrame]) -> pd.DataFrame:
+        if not frames:
+            return pd.DataFrame()
+        if len(frames) == 1:
+            return frames[0]
+        return pd.concat(frames, ignore_index=True)
+
+    return Split(
+        instance_table=joined(instances),
+        related_tables={name: joined(f) for name, f in related.items()},
+    )
+
+
+def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
+    r"""How many instance rows one wire envelope carries, or `None`.
+
+    Read defensively, and report not knowing as not knowing. These counts are
+    what `repr` shows, so a request that cannot describe itself is worse than
+    one that describes itself roughly -- but `nothing_to_score` decides whether
+    to answer without sending, and there `None` and `0` are opposite answers.
+
+    A list, specifically: `Sized` admits `{}` and `''`, which would read as an
+    envelope carrying no rows rather than as one that cannot be read, and
+    those are the two answers this has to keep apart.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    half_of = payload.get(half)
+    if not isinstance(half_of, Mapping):
+        return None
+    instance_table = half_of.get('instance_table')
+    if not isinstance(instance_table, Mapping):
+        return None
+    rows = instance_table.get('rows')
+    return len(rows) if isinstance(rows, (list, tuple)) else None
+
+
+def _check_scored_values_mean_what_the_schema_says(
+    predict: pd.DataFrame, schema: Schema, entity_table: str | None
+) -> None:
+    r"""Refuse rows whose values contradict what their column means.
+
+    The columns of the two halves are already checked against each other, by
+    name, each with a message naming the fix. The values were not, and the
+    adapter widens a column's dtype to cover both halves -- rightly, for the
+    case it was written for: an all-null context column carries no type, and
+    taking the context's answer alone would send the scored half's integers as
+    text.
+
+    Nothing bounded it. A column the schema declares `float64` meaning
+    `numerical` could be widened to `string` by scored rows holding text, and
+    `stype` is read from the schema on another path and is not widened with it,
+    so the request went out declaring a column that is `string` and
+    `numerical` at once -- which is not a thing a column can be. It was
+    answered rather than refused: measured against the live endpoint on a
+    target that is exactly three times a feature, the scored rows came back
+    300.0, 329.9 and 299.7 where the truth is 300, 330 and 360. Plausible
+    numbers, one wrong by a sixth, and nothing in the answer to say so.
+
+    Only a contradiction is refused. Integers in a `float64` column and unseen
+    labels in a `categorical` one still mean what the column means, and pass.
+
+    Runs after the schema is settled rather than beside the column checks it
+    belongs with: a request built by hand may carry no schema at all, and one
+    is inferred from the context a few lines below. Checking before that ran
+    left the hand-built request -- the one with no query to have validated it
+    -- as the only one not covered.
+
+    A column is not skipped merely for holding nothing. `pd.Series([],
+    dtype='int64')` still says int64, and a zero-row batch declaring a type
+    the column cannot mean builds the same contradictory envelope as a full
+    one. A column that genuinely carries no type reports UNTYPED and is
+    skipped for that reason instead. An all-null context column, by contrast,
+    has no claim to contradict: the `categorical` it was given is a
+    placeholder rather than a finding, so the scored rows decide both its type
+    and its meaning. Once a caller has said what the column means, that is a
+    claim like any other.
+    """
+    if predict is None or entity_table is None or entity_table not in schema:
+        return
+    table = schema[entity_table]
+    for name in predict.columns:
+        column = table.columns.get(name)
+        if column is None:
+            continue
+        if column.untyped and not column.stype_declared:
+            continue
+        arriving = infer_tfm_dtype(predict[name])
+        if arriving == UNTYPED or supports_dtype(column.stype, arriving):
+            continue
+        raise StructuredDataError(
+            f'the rows being scored hold {arriving!r} in column {name!r}, and '
+            f'the schema declares it {column.dtype!r} meaning '
+            f'{column.stype!r}, which {arriving!r} cannot mean. Sent, the '
+            f'column would be described as both at once and answered with '
+            f'numbers that are wrong without saying so. Convert it before '
+            f'scoring -- predict[{name!r}] = pd.to_numeric(predict[{name!r}]) '
+            f'-- or say what the column really is with '
+            f'schema[{entity_table!r}][{name!r}].stype = ...',
+            code='INVALID_REQUEST',
+        )
