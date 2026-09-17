@@ -157,6 +157,7 @@
           "bool",
           "byte",
           "date",
+          "default_stype",
           "float",
           "float32",
           "float64",
@@ -172,7 +173,17 @@
           "timedelta",
           "unsupported"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "is_bool": "(self) -> bool",
+          "is_float": "(self) -> bool",
+          "is_int": "(self) -> bool",
+          "is_list": "(self) -> bool",
+          "is_maybe_timestamp": "(self) -> bool",
+          "is_numerical": "(self) -> bool",
+          "is_string": "(self) -> bool",
+          "is_timestamp": "(self) -> bool",
+          "is_unsupported": "(self) -> bool"
+        },
         "signature": "(*values)"
       },
       "Edge": {
@@ -336,7 +347,9 @@
           "timestamp",
           "unsupported"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "supports_dtype": "(self, dtype: 'Dtype') -> bool"
+        },
         "signature": "(*values)"
       },
       "TABULAR": {
@@ -383,9 +396,20 @@
           "MULTILABEL_RANKING",
           "REGRESSION",
           "STATIC_LINK_PREDICTION",
-          "TEMPORAL_LINK_PREDICTION"
+          "TEMPORAL_LINK_PREDICTION",
+          "is_classification",
+          "is_link_pred",
+          "is_multilabel",
+          "is_node_pred",
+          "is_ranking"
         ],
-        "public_methods": {},
+        "public_methods": {
+          "get_classification_tasks": "() -> list['TaskType']",
+          "get_link_pred_tasks": "() -> list['TaskType']",
+          "get_multilabel_tasks": "() -> list['TaskType']",
+          "get_node_pred_tasks": "() -> list['TaskType']",
+          "get_ranking_tasks": "() -> list['TaskType']"
+        },
         "signature": "(*values)"
       },
       "TimeUnit": {

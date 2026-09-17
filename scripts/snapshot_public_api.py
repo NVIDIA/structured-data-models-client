@@ -27,6 +27,7 @@ import inspect
 import json
 import pathlib
 import sys
+from typing import Any
 
 SNAPSHOT = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -47,23 +48,38 @@ def _signature(obj: object) -> str | None:
         return None
 
 
-def _is_first_party(owner: type, name: str) -> bool:
-    """Whether ``name`` is defined by this project rather than inherited.
+FIRST_PARTY_ROOTS = frozenset(
+    {
+        'sdm_api',
+        'sdm_client',
+        'sdm_connectors',
+        'predictive_query',
+        'sdm_relational_engine',
+    }
+)
 
-    Walks the MRO to find which class actually provides the attribute, and
-    keeps it only when that class comes from a package this repository ships.
+
+def _first_party_attributes(owner: type) -> dict[str, Any]:
+    """Every public attribute this project defines on ``owner`` or its bases.
+
+    Read from ``vars()`` along the MRO rather than through
+    :func:`inspect.getmembers`, which does not surface the methods defined on
+    an ``Enum`` subclass at all -- ``Dtype.is_int`` and the fourteen helpers
+    beside it were recorded nowhere while appearing to be covered.
+
+    Reading the class dictionary also keeps inherited builtins out without a
+    second filter: ``str.encode`` is in ``vars(str)``, and ``str`` is not one
+    of ours.
     """
-    for base in owner.__mro__:
-        if name in vars(base):
-            module = getattr(base, '__module__', '') or ''
-            return module.split('.')[0] in {
-                'sdm_api',
-                'sdm_client',
-                'sdm_connectors',
-                'predictive_query',
-                'sdm_relational_engine',
-            }
-    return False
+    found: dict[str, Any] = {}
+    for base in reversed(owner.__mro__):
+        module = (getattr(base, '__module__', '') or '').split('.')[0]
+        if module not in FIRST_PARTY_ROOTS:
+            continue
+        for name, value in vars(base).items():
+            if not name.startswith('_'):
+                found[name] = value
+    return found
 
 
 def _describe(obj: object) -> dict[str, object]:
@@ -85,10 +101,11 @@ def _describe(obj: object) -> dict[str, object]:
         # and records signatures owned by CPython, so the snapshot would
         # disagree with itself on a different interpreter for reasons that have
         # nothing to do with this library.
+        owned = _first_party_attributes(obj)
         described['public_methods'] = {
-            name: _signature(member)
-            for name, member in inspect.getmembers(obj, callable)
-            if not name.startswith('_') and _is_first_party(obj, name)
+            name: _signature(getattr(obj, name, value))
+            for name, value in sorted(owned.items())
+            if callable(value) or isinstance(value, (classmethod, staticmethod))
         }
         if issubclass(obj, enum.Enum):
             # For an enum the members *are* the contract; the methods are not.
@@ -97,10 +114,9 @@ def _describe(obj: object) -> dict[str, object]:
         # dataclass field has no entry above.
         described['public_attributes'] = sorted(
             name
-            for name, member in inspect.getmembers(obj)
-            if not name.startswith('_')
-            and not callable(member)
-            and _is_first_party(obj, name)
+            for name, value in owned.items()
+            if not callable(value)
+            and not isinstance(value, (classmethod, staticmethod))
         )
     elif callable(obj):
         described['kind'] = 'callable'

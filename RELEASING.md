@@ -55,6 +55,8 @@ continue unless **all five** are present and agree with the tag. That check is
 not ceremony: `sdm-client[relational]` pins the engine by exact version, so a
 release missing it publishes an extra nobody can install. It then generates the
 SBOM and uploads through PyPI Trusted Publishing with PEP 740 attestations.
+Finally it creates the GitHub Release for the tag and attaches the SBOM to it,
+so the dependency inventory outlives the ninety days an Actions artifact gets.
 
 **There is no PyPI token.** Publishing authenticates with the workflow's OIDC
 identity, which is why the `publish` job is the only one holding `id-token:
