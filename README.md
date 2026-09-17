@@ -64,10 +64,14 @@ Five distributions, released together on one version.
 | `sdm-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
 
 Only `sdm-relational-engine` is native. The other four are pure Python and
-install anywhere, on 3.10 through 3.14. The engine publishes wheels for Linux
-x86-64 on 3.10–3.13, so that is where `pip install sdm-client[relational]`
-resolves; it builds from source on other platforms given a compiler and CMake,
-which is what the development instructions below do.
+install anywhere, on 3.10 through 3.14.
+
+The engine publishes wheels for Linux x86-64 on 3.10–3.13 and **no source
+distribution**, so `pip install sdm-client[relational]` resolves there and
+nowhere else — on any other platform pip has nothing to fall back to and the
+extra does not install. It does build on other platforms from a checkout, given
+a compiler and CMake, which is what the development instructions below do; that
+is a path for contributors, not something `pip` can do for a user.
 
 ## Development
 

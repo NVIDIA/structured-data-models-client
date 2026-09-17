@@ -47,6 +47,8 @@ def _covered_by(rule: str, selectors: Sequence[str]) -> bool:
     them as the same family quietly dropped FIX002 out of the backlog this test
     is meant to be checking.
     """
+    if 'ALL' in selectors:
+        return True
     rule_linter, rule_number = _split_rule(rule)
     return any(
         selector_linter == rule_linter
@@ -226,6 +228,52 @@ class TestConfigurationTellsTheTruth:
             assert baseline <= narrowed or 'select' not in config.get(
                 'lint', {}
             ), f'{name} narrows the shared lint baseline to {narrowed}'
+
+    def test_the_ignore_list_sorts_itself_the_way_its_headings_say(self):
+        """The engine's ignore list is written in two labelled blocks.
+
+        One is rules the shared baseline really does select, so listing them
+        here silences something; the other is a record of rules nothing selects
+        anywhere. An earlier note called the whole list inert, which was wrong
+        about the four `B` rules -- the exact failure this class exists to
+        catch, committed inside the fix for it. So the headings are checked
+        against what ruff would actually do.
+        """
+        source = (
+            PACKAGES / 'sdm-relational-engine' / 'pyproject.toml'
+        ).read_text()
+        root = tomllib.loads((REPO / 'pyproject.toml').read_text())
+        selected = root['tool']['ruff']['lint']['select']
+        engine = _pyproject('sdm-relational-engine')['tool']['ruff']['lint']
+        # The engine adds to the baseline, and `D` is how the docstring rules
+        # become reachable in this tree at all.
+        effective = list(selected) + list(engine.get('extend-select', []))
+
+        active_block, _, backlog_block = source.partition(
+            '--- Recorded backlog'
+        )
+        _, _, active_block = active_block.partition('--- Active exemptions')
+        assert active_block and backlog_block, (
+            'the ignore list no longer carries both headings this test reads'
+        )
+
+        def listed(block: str) -> set[str]:
+            return {
+                rule
+                for rule in engine.get('ignore', [])
+                if f'"{rule}"' in block
+            }
+
+        for rule in listed(active_block):
+            assert _covered_by(rule, effective), (
+                f'{rule} sits under "Active exemptions" but nothing selects '
+                f'it, so ignoring it silences nothing'
+            )
+        for rule in listed(backlog_block):
+            assert not _covered_by(rule, selected), (
+                f'{rule} sits under "Recorded backlog", which says the shared '
+                f'baseline does not select it -- but {selected} does'
+            )
 
     def test_the_recorded_style_backlog_is_clean_where_the_note_says_it_is(
         self,
