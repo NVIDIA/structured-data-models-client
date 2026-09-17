@@ -682,7 +682,7 @@
           "close": "(self) -> 'None'",
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
-        "signature": "(client: 'SDMClient', adapter: 'ModelAdapter', session_id: 'str', outputs: 'tuple[str, ...]', pinned: 'dict[str, Any] | None' = None, named_outputs: 'Sequence[str] | None' = None, pinned_keys: 'frozenset[Any]' = frozenset(), pinned_over_a_window: 'bool' = False) -> 'None'"
+        "signature": "(client: 'SDMClient', adapter: 'ModelAdapter', session_id: 'str', outputs: 'tuple[str, ...]', pinned: 'dict[str, Any] | None' = None, named_outputs: 'Sequence[str] | None' = None, pinned_keys: 'frozenset[Any]' = frozenset(), pinned_over_a_window: 'bool' = False, held_back: 'int' = 0) -> 'None'"
       },
       "KumoRelational": {
         "bases": [
@@ -771,7 +771,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
-          "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, **options: 'Any') -> 'Request'"
+          "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, candidates: 'Sequence[Any] | None' = None, **options: 'Any') -> 'Request'"
         },
         "signature": "(query: 'str', data: 'Schema | Mapping[str, pd.DataFrame]') -> 'None'"
       },
@@ -786,10 +786,13 @@
         "bases": [],
         "kind": "class",
         "public_attributes": [
+          "asked",
           "context",
           "context_rows",
+          "decomposition",
           "is_relational",
           "nothing_to_score",
+          "parts",
           "payloads",
           "predict",
           "predict_rows",
@@ -820,7 +823,7 @@
         "public_methods": {
           "capabilities": "(self, model: 'str | Model') -> 'ModelCapabilities'",
           "close": "(self) -> 'None'",
-          "fit": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None) -> 'FittedModel'",
+          "fit": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None, holdout: 'Iterable[Any] | None' = None) -> 'FittedModel'",
           "health_ready": "(self) -> 'bool'",
           "models": "(self) -> 'list[str]'",
           "predict": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None) -> 'PredictionResult'"

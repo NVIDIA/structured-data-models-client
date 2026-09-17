@@ -72,6 +72,15 @@ exclude = [
 module = [
     "sdm_client.materializers.relational",   # 15
     "sdm_client.request",                    #  6
+    # --- arrived with the ranking/forecast decomposition, 2026-09-17 --------
+    # decompose.py's eight are all "Item None of X has no attribute Y" on
+    # `Aggregation | None` and `DateOffsetRange | None`. They may each be
+    # guarded by something mypy cannot see, but they are the shape a real
+    # AttributeError takes, and they are in new code -- worth reading before
+    # this entry is retired rather than after.
+    "sdm_client.decompose",                  #  8
+    "sdm_client.query",                      #  3
+    "sdm_client.wire.keys",                  #  1
     "sdm_client.wire.dtypes",                #  3
     "sdm_client.core.warnings",              #  1
     "sdm_client.adapters.relational",        #  1
