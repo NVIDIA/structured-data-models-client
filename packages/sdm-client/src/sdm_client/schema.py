@@ -1219,9 +1219,10 @@ def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
             f'one of them, so a query that crosses this pair is refused until '
             f'it is. They are all kept because they are all real, and which '
             f'one a question means is not something this can decide. To keep '
-            f'{kept!r}, drop the others: schema.relationships = [link for link '
-            f'in schema.relationships if link.source_column not in '
-            f'{sorted(rest)!r}].',
+            f'{kept!r}, drop the others: schema.relationships = [link for '
+            f'link in schema.relationships if not (link.source_table == '
+            f'{source!r} and link.target_table == {target!r} and '
+            f'link.source_column in {sorted(rest)!r})].',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )

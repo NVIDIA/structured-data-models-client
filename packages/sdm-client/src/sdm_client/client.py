@@ -349,6 +349,15 @@ class SDMClient:
         changed once it is pinned. Naming the population up front is what lets
         it be excluded while there is still a context to exclude it from.
 
+        A row is held back at every moment it appears. For a target that is a
+        window, the same entity at an *earlier* anchor is legitimate context
+        rather than a leak, so this gives up examples it did not have to. It
+        gives them up because a session cannot know which moments it will be
+        asked about: holding the entity back everywhere is the only choice
+        that cannot leak, and a leak here has no remedy afterwards. Score at
+        known moments with `predict()` if those examples are worth more than
+        the certainty.
+
         Args:
             request: The request whose context is pinned.
             model: Which model answers.
@@ -540,7 +549,10 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     """
     if holdout is None:
         return 0
-    keys = frozenset(_named_by([key]) for key in holdout)
+    keys = frozenset(
+        _named_by(key if isinstance(key, (tuple, list)) else [key])
+        for key in holdout
+    )
     if not keys:
         return 0
     removed = without_the_keys(payload, keys)

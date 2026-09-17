@@ -740,6 +740,11 @@ _ANCHOR = '__kumo_anchor_time'
 #: What the envelope calls the answer a context row carries.
 _TARGET = 'TARGET'
 
+#: Below this share of context rows able to find their answer, a ranking is
+#: over a pool that fails nearly everything, and one row that happens to
+#: succeed says nothing about the rest.
+_REACHABLE_ENOUGH = 0.05
+
 #: What ties a related row to the instance it hangs off.
 INSTANCE_ID = 'instance_id'
 
@@ -858,11 +863,12 @@ def _warn_no_answer_was_ever_offered(
         found, total = _how_often_the_answer_was_reachable(payload)
         reachable += found
         offered += total
-    if not offered or reachable:
+    if not offered or reachable > offered * _REACHABLE_ENOUGH:
         return
+    how_many = 'none' if not reachable else f'only {reachable}'
     warnings.warn(
-        f'none of the {offered} rows sampled as context had its answer among '
-        f'the candidates offered beside it. The candidates for a ranking are '
+        f'{how_many} of the {offered} rows sampled as context had its answer '
+        f'among the candidates offered beside it. The candidates for a '
         f'the rows neighbourhood sampling reached, which is what an entity '
         f'has already interacted with, so on data where an interaction does '
         f'not repeat the answer cannot be among them and the ranking is over '

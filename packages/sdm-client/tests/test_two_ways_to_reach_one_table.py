@@ -132,3 +132,108 @@ def test_following_the_advice_makes_the_query_resolve():
         )
 
     assert request.predict_rows == 2
+
+
+# --- the advice has to fix this pair, and only this pair -------------------
+
+
+def two_ambiguous_pairs() -> Schema:
+    customers = pd.DataFrame({'id': range(40), 'seg': RNG.choice([*'xy'], 40)})
+    users = pd.DataFrame({'uid': range(40), 'k': RNG.choice([*'xy'], 40)})
+    when = pd.to_datetime('2023-01-01') + pd.to_timedelta(
+        RNG.integers(0, 90, 200), 'D'
+    )
+    line = pd.DataFrame(
+        {
+            'lid': range(200),
+            'sold_to': RNG.integers(0, 40, 200),
+            'ship_to': RNG.integers(0, 40, 200),
+            'amt': RNG.gamma(2.0, 5.0, 200),
+            'ts': when,
+        }
+    )
+    message = pd.DataFrame(
+        {
+            'mid': range(200),
+            'sender_id': RNG.integers(0, 40, 200),
+            'recipient_id': RNG.integers(0, 40, 200),
+            'ts': when,
+        }
+    )
+    ticket = pd.DataFrame(
+        {'tid': range(50), 'ship_to': RNG.integers(0, 40, 50)}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {
+                'customers': customers,
+                'users': users,
+                'line': line,
+                'message': message,
+                'ticket': ticket,
+            },
+            primary_keys={
+                'customers': 'id',
+                'users': 'uid',
+                'line': 'lid',
+                'message': 'mid',
+                'ticket': 'tid',
+            },
+            time_columns={'line': 'ts', 'message': 'ts'},
+            relationships=[
+                Relationship('line', 'sold_to', 'customers', 'id'),
+                Relationship('line', 'ship_to', 'customers', 'id'),
+                Relationship('message', 'sender_id', 'users', 'uid'),
+                Relationship('message', 'recipient_id', 'users', 'uid'),
+                Relationship('ticket', 'ship_to', 'customers', 'id'),
+            ],
+        )
+
+
+def test_the_advice_names_the_pair_the_query_crossed():
+    """Two pairs are ambiguous. Advising the first one found sends a caller to
+    edit a relationship their query never touched."""
+    pytest.importorskip('sdm_relational_engine')
+
+    with pytest.raises(StructuredDataError) as refused:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            PredictiveQuery(
+                'PREDICT COUNT(message.*, 0, 30, days) FOR EACH users.uid',
+                two_ambiguous_pairs(),
+            ).materialize(indices=[1, 2], model=KumoRelational())
+
+    advice = str(refused.value)
+    advice = advice[advice.index('In this schema') :]
+    assert "'message' reaches 'users'" in advice
+    assert 'line' not in advice
+
+
+def test_following_the_advice_leaves_another_table_s_column_alone():
+    """`ticket` also has a `ship_to`. Dropping by column name everywhere would
+    take it as well, and nothing about the query asked for that."""
+    schema = two_ambiguous_pairs()
+
+    kept = [
+        link
+        for link in schema.relationships
+        if not (
+            link.source_table == 'line'
+            and link.target_table == 'customers'
+            and link.source_column in ['sold_to']
+        )
+    ]
+
+    assert any(link.source_table == 'ticket' for link in kept)
+    assert not any(
+        link.source_table == 'line' and link.source_column == 'sold_to'
+        for link in kept
+    )
+
+
+def test_the_remedy_is_written_scoped_to_the_pair():
+    said = said_building(['SOLDTOPARTY', 'SHIPTOPARTY'])
+
+    assert 'link.source_table ==' in said
+    assert 'link.target_table ==' in said

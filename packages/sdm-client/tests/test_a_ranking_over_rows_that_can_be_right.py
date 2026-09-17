@@ -157,3 +157,42 @@ def test_the_request_is_still_built():
         ).materialize(indices=list(range(20)), model=KumoRelational())
 
     assert request.predict_rows == 20
+
+
+def test_one_reachable_answer_does_not_speak_for_the_rest():
+    """A pool that fails almost everything is still a pool that fails almost
+    everything. Triggering only at exactly zero let a single interaction that
+    happened to repeat silence the whole reading."""
+    from sdm_client.materializers.relational import (
+        _warn_no_answer_was_ever_offered,
+    )
+
+    payload = {
+        'task': {
+            'kind': 'temporal_link_prediction',
+            'entity_table_names': ['users', 'items'],
+        },
+        'schema': {
+            'related_tables': {'items': {'primary_key': ['instance_id', 'iid']}}
+        },
+        'context': {
+            'instance_table': {
+                'columns': ['instance_id', 'TARGET'],
+                'rows': [[i, [str(i)]] for i in range(100)],
+            },
+            'related_tables': {
+                'items': {
+                    'columns': ['instance_id', 'iid'],
+                    # only instance 0 is offered the row it needs
+                    'rows': [[0, '0'], *[[i, '999'] for i in range(1, 100)]],
+                }
+            },
+        },
+    }
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _warn_no_answer_was_ever_offered((payload,))
+
+    said = ' '.join(str(w.message) for w in caught)
+    assert 'only 1 of the 100' in said

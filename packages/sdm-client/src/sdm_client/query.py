@@ -354,13 +354,27 @@ class PredictiveQuery:
         }
         if not ambiguous:
             return ''
-        (source, target), columns = sorted(ambiguous.items())[0]
+        # Which pair the query crossed is in the refusal and nowhere else, so
+        # the tables are read from it -- but only to choose among pairs the
+        # schema already knows about. Advising the first pair found sent a
+        # caller to edit a relationship their query never touched.
+        crossed = [
+            pair
+            for pair in ambiguous
+            if f'table {pair[0]} ' in reasons and f'table {pair[1]} ' in reasons
+        ]
+        if len(ambiguous) > 1 and not crossed:
+            return ''
+        (source, target), columns = sorted(
+            (pair, ambiguous[pair]) for pair in (crossed or ambiguous)
+        )[0]
         kept, *rest = columns
         return (
             f' In this schema {source!r} reaches {target!r} through '
             f'{", ".join(repr(name) for name in columns)}; to keep {kept!r}, '
             f'schema.relationships = [link for link in schema.relationships '
-            f'if link.source_column not in {rest!r}].'
+            f'if not (link.source_table == {source!r} and link.target_table '
+            f'== {target!r} and link.source_column in {rest!r})].'
         )
 
     def _why_the_target_is_text(self, reasons: str) -> str:
