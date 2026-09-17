@@ -24,6 +24,7 @@ from sdm_client.decompose import Decomposition
 
 
 def shop() -> Schema:
+    pytest.importorskip('sdm_relational_engine')
     rows = 300
     users = pd.DataFrame({'uid': [1, 2, 3], 'seg': list('abc')})
     items = pd.DataFrame({'iid': [10, 11, 12], 'kind': list('xyz')})
@@ -346,6 +347,8 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
     on the request proves nothing about which kind the merge then uses.
     """
     from sdm_api.generated.tfm_api import PredictionItem
+
+    pytest.importorskip('sdm_relational_engine')
 
     from sdm_client import SDMClient
     from sdm_client.result import PredictionResult
