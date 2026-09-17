@@ -17,7 +17,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -34,7 +34,12 @@ from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
-from sdm_client.wire.keys import keys_in, scored_keys
+from sdm_client.wire.keys import (
+    _named_by,
+    keys_in,
+    scored_keys,
+    without_the_keys,
+)
 
 # A NIM that does not serve the session routes at all, as opposed to one that
 # has merely forgotten this session.
@@ -85,6 +90,7 @@ class FittedModel:
         named_outputs: Sequence[str] | None = None,
         pinned_keys: frozenset[Any] = frozenset(),
         pinned_over_a_window: bool = False,
+        held_back: int = 0,
     ) -> None:
         self._client = client
         self._adapter = adapter
@@ -95,6 +101,7 @@ class FittedModel:
         )
         self._pinned_keys = pinned_keys
         self._pinned_over_a_window = pinned_over_a_window
+        self._held_back = held_back
         self._pinned = pinned or {}
         self._closed = False
 
@@ -326,6 +333,7 @@ class SDMClient:
         *,
         model: str | Model,
         outputs: Sequence[str] | None = None,
+        holdout: Iterable[Any] | None = None,
     ) -> FittedModel:
         r"""Pin ``request``'s context on the endpoint and return a handle.
 
@@ -333,11 +341,27 @@ class SDMClient:
         only the rows to score. Use this when asking several questions of the
         same context, which is what makes uploading it once worthwhile.
 
+        `holdout` names every row the session will go on to score. The context
+        is chosen once, here, and `request` only excludes the rows *it* names,
+        so every later call scores rows that are sitting in the pinned context
+        with their answers -- and unlike the one-shot path there is nothing the
+        caller can do about it afterwards, because the context cannot be
+        changed once it is pinned. Naming the population up front is what lets
+        it be excluded while there is still a context to exclude it from.
+
+        Args:
+            request: The request whose context is pinned.
+            model: Which model answers.
+            outputs: The fields to ask for.
+            holdout: Keys of every row this session may score. They are taken
+                out of the pinned context before it is sent.
+
         Raises:
             UnsupportedRequestError: If the endpoint does not serve sessions.
         """
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
+        held = _held_back(payload, holdout)
         try:
             try:
                 created = self._transport.create_session(payload)
@@ -373,6 +397,7 @@ class SDMClient:
             pinned_keys=keys_in(
                 payload, 'context', with_anchor=request.target_moves_with_time
             ),
+            held_back=held,
             pinned_over_a_window=request.target_moves_with_time,
         )
 
@@ -505,6 +530,30 @@ def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
     return PredictionResult(
         model=model, request_id='', items=(), outputs=tuple(outputs)
     )
+
+
+def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
+    r"""Take the rows a session will score out of the context it pins.
+
+    Says how many went, because a caller who names a population expects it
+    gone and a silent nothing would look the same as a silent everything.
+    """
+    if holdout is None:
+        return 0
+    keys = frozenset(_named_by([key]) for key in holdout)
+    if not keys:
+        return 0
+    removed = without_the_keys(payload, keys)
+    if removed:
+        warnings.warn(
+            f'{removed} of the rows named as holdout were in the context '
+            f'about to be pinned, carrying the answers this session will be '
+            f'asked for. They have been taken out of it, so the context is '
+            f'that many rows smaller than the request gathered.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    return removed
 
 
 def _warn_scoring_what_was_pinned(

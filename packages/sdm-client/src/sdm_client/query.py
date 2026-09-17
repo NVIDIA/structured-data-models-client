@@ -323,10 +323,45 @@ class PredictiveQuery:
             )
             raise StructuredDataError(
                 f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}',
+                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}'
+                f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
                 code='INVALID_REQUEST',
             )
         return resolved
+
+    def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
+        r"""Say how to resolve an ambiguous link, in the words of this object.
+
+        The language resolves a query against a graph and advises in the
+        vocabulary of one: `graph.unlink(...)`. A caller holding a `Schema`
+        has no such call, so the one instruction that would fix their query
+        names something they cannot do.
+
+        The reasons are read only to recognise the failure. What the competing
+        columns are is taken from the schema, which knows, rather than parsed
+        back out of a sentence that was written to be read.
+        """
+        if 'is not unique' not in reasons:
+            return ''
+        ways: dict[tuple[str, str], list[str]] = {}
+        for link in self.schema.relationships:
+            pair = (link.source_table, link.target_table)
+            ways.setdefault(pair, []).append(link.source_column)
+        ambiguous = {
+            pair: sorted(columns)
+            for pair, columns in ways.items()
+            if len(columns) > 1
+        }
+        if not ambiguous:
+            return ''
+        (source, target), columns = sorted(ambiguous.items())[0]
+        kept, *rest = columns
+        return (
+            f' In this schema {source!r} reaches {target!r} through '
+            f'{", ".join(repr(name) for name in columns)}; to keep {kept!r}, '
+            f'schema.relationships = [link for link in schema.relationships '
+            f'if link.source_column not in {rest!r}].'
+        )
 
     def _why_the_target_is_text(self, reasons: str) -> str:
         r"""Say why a target is `text`, when that is what refused the query.
