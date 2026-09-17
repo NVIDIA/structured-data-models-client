@@ -45,6 +45,17 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "AVG": "AVG",
+          "COUNT": "COUNT",
+          "COUNT_DISTINCT": "COUNT_DISTINCT",
+          "FIRST": "FIRST",
+          "LAST": "LAST",
+          "LIST_DISTINCT": "LIST_DISTINCT",
+          "MAX": "MAX",
+          "MIN": "MIN",
+          "SUM": "SUM"
+        },
         "public_attributes": [
           "AVG",
           "COUNT",
@@ -56,55 +67,7 @@
           "MIN",
           "SUM"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "Capabilities": {
@@ -160,9 +123,6 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
-          "reportAmbiguity": "(self, recognizer, dfa, startIndex, stopIndex, exact, ambigAlts, configs)",
-          "reportAttemptingFullContext": "(self, recognizer, dfa, startIndex, stopIndex, conflictingAlts, configs)",
-          "reportContextSensitivity": "(self, recognizer, dfa, startIndex, stopIndex, prediction, configs)",
           "syntaxError": "(self, recognizer: predictive_query.grammar.PQLGrammarParser.PQLGrammarParser | predictive_query.grammar.PQLGrammarLexer.PQLGrammarLexer, offendingSymbol: antlr4.Token.Token, line: int, column: int, msg: str, e: antlr4.error.Errors.RecognitionException) -> None"
         },
         "signature": "() -> None"
@@ -172,6 +132,26 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "binary": "binary",
+          "bool": "bool",
+          "byte": "byte",
+          "date": "date",
+          "float": "float",
+          "float32": "float32",
+          "float64": "float64",
+          "floatlist": "floatlist",
+          "int": "int",
+          "int16": "int16",
+          "int32": "int32",
+          "int64": "int64",
+          "intlist": "intlist",
+          "string": "string",
+          "stringlist": "stringlist",
+          "time": "time",
+          "timedelta": "timedelta",
+          "unsupported": "unsupported"
+        },
         "public_attributes": [
           "binary",
           "bool",
@@ -192,55 +172,7 @@
           "timedelta",
           "unsupported"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "Edge": {
@@ -268,59 +200,15 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "INFERENCE": "INFERENCE",
+          "TRAINING": "TRAINING"
+        },
         "public_attributes": [
           "INFERENCE",
           "TRAINING"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "PQLParser": {
@@ -385,60 +273,17 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "CLASSIFY": "CLASSIFY",
+          "FORECAST": "FORECAST",
+          "RANK": "RANK"
+        },
         "public_attributes": [
           "CLASSIFY",
           "FORECAST",
           "RANK"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "Profile": {
@@ -469,6 +314,17 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "ID": "ID",
+          "categorical": "categorical",
+          "image": "image",
+          "multicategorical": "multicategorical",
+          "numerical": "numerical",
+          "sequence": "sequence",
+          "text": "text",
+          "timestamp": "timestamp",
+          "unsupported": "unsupported"
+        },
         "public_attributes": [
           "ID",
           "categorical",
@@ -480,55 +336,7 @@
           "timestamp",
           "unsupported"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "TABULAR": {
@@ -555,6 +363,17 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "BINARY_CLASSIFICATION": "binary_classification",
+          "FORECASTING": "forecasting",
+          "LINK_PREDICTION": "link_prediction",
+          "MULTICLASS_CLASSIFICATION": "multiclass_classification",
+          "MULTILABEL_CLASSIFICATION": "multilabel_classification",
+          "MULTILABEL_RANKING": "multilabel_ranking",
+          "REGRESSION": "regression",
+          "STATIC_LINK_PREDICTION": "static_link_prediction",
+          "TEMPORAL_LINK_PREDICTION": "temporal_link_prediction"
+        },
         "public_attributes": [
           "BINARY_CLASSIFICATION",
           "FORECASTING",
@@ -566,55 +385,7 @@
           "STATIC_LINK_PREDICTION",
           "TEMPORAL_LINK_PREDICTION"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "TimeUnit": {
@@ -622,6 +393,14 @@
           "predictive_query.schema.common.StrEnum"
         ],
         "kind": "class",
+        "members": {
+          "DAYS": "days",
+          "HOURS": "hours",
+          "MINUTES": "minutes",
+          "MONTHS": "months",
+          "SECONDS": "seconds",
+          "WEEKS": "weeks"
+        },
         "public_attributes": [
           "DAYS",
           "HOURS",
@@ -630,55 +409,7 @@
           "SECONDS",
           "WEEKS"
         ],
-        "public_methods": {
-          "capitalize": "(self, /)",
-          "casefold": "(self, /)",
-          "center": "(self, width, fillchar=' ', /)",
-          "count": null,
-          "encode": "(self, /, encoding='utf-8', errors='strict')",
-          "endswith": null,
-          "expandtabs": "(self, /, tabsize=8)",
-          "find": null,
-          "format": null,
-          "format_map": null,
-          "index": null,
-          "isalnum": "(self, /)",
-          "isalpha": "(self, /)",
-          "isascii": "(self, /)",
-          "isdecimal": "(self, /)",
-          "isdigit": "(self, /)",
-          "isidentifier": "(self, /)",
-          "islower": "(self, /)",
-          "isnumeric": "(self, /)",
-          "isprintable": "(self, /)",
-          "isspace": "(self, /)",
-          "istitle": "(self, /)",
-          "isupper": "(self, /)",
-          "join": "(self, iterable, /)",
-          "ljust": "(self, width, fillchar=' ', /)",
-          "lower": "(self, /)",
-          "lstrip": "(self, chars=None, /)",
-          "maketrans": null,
-          "partition": "(self, sep, /)",
-          "removeprefix": "(self, prefix, /)",
-          "removesuffix": "(self, suffix, /)",
-          "replace": "(self, old, new, count=-1, /)",
-          "rfind": null,
-          "rindex": null,
-          "rjust": "(self, width, fillchar=' ', /)",
-          "rpartition": "(self, sep, /)",
-          "rsplit": "(self, /, sep=None, maxsplit=-1)",
-          "rstrip": "(self, chars=None, /)",
-          "split": "(self, /, sep=None, maxsplit=-1)",
-          "splitlines": "(self, /, keepends=False)",
-          "startswith": null,
-          "strip": "(self, chars=None, /)",
-          "swapcase": "(self, /)",
-          "title": "(self, /)",
-          "translate": "(self, table, /)",
-          "upper": "(self, /)",
-          "zfill": "(self, width, /)"
-        },
+        "public_methods": {},
         "signature": "(*values)"
       },
       "TimestampUnit": {
@@ -686,13 +417,17 @@
           "enum.Enum"
         ],
         "kind": "class",
+        "members": {
+          "MICROSECOND": "us",
+          "MILLISECOND": "ms",
+          "NANOSECOND": "ns",
+          "SECOND": "s"
+        },
         "public_attributes": [
           "MICROSECOND",
           "MILLISECOND",
           "NANOSECOND",
-          "SECOND",
-          "name",
-          "value"
+          "SECOND"
         ],
         "public_methods": {},
         "signature": "(*values)"
@@ -815,12 +550,15 @@
           "enum.Enum"
         ],
         "kind": "class",
+        "members": {
+          "DELETE": "DELETE",
+          "GET": "GET",
+          "POST": "POST"
+        },
         "public_attributes": [
           "DELETE",
           "GET",
-          "POST",
-          "name",
-          "value"
+          "POST"
         ],
         "public_methods": {},
         "signature": "(*values)"
@@ -951,13 +689,8 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(extra: 'str', package: 'str') -> 'None'"
       },
       "Model": {
@@ -992,13 +725,8 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(status_code: 'int', *, code: 'str | None', message: 'str', details: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "PredictionResult": {
@@ -1080,13 +808,8 @@
           "builtins.UserWarning"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": null
       },
       "Schema": {
@@ -1114,13 +837,8 @@
           "builtins.Exception"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(message: 'str', *, code: 'str | None' = None, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "Table": {
@@ -1158,13 +876,8 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(model: 'str', known: 'list[str]') -> 'None'"
       },
       "UnsupportedRequestError": {
@@ -1172,13 +885,8 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(message: 'str', *, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "__version__": {
@@ -1203,13 +911,8 @@
           "builtins.Exception"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(message: 'str', *, code: 'str | None' = None, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "MissingBackendError": {
@@ -1218,17 +921,8 @@
           "builtins.ModuleNotFoundError"
         ],
         "kind": "class",
-        "public_attributes": [
-          "args",
-          "msg",
-          "name",
-          "name_from",
-          "path"
-        ],
-        "public_methods": {
-          "add_note": null,
-          "with_traceback": null
-        },
+        "public_attributes": [],
+        "public_methods": {},
         "signature": "(backend: 'str', driver: 'str') -> 'None'"
       },
       "__version__": {

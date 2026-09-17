@@ -145,3 +145,28 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           attestations: true
+
+  # The SBOM is generated during the build and stripped from the upload,
+  # because PyPI takes distributions and nothing else. Without this job it
+  # lived only in the Actions artifact, which expires -- so the inventory a
+  # consumer needs to accept this into their own supply chain existed for
+  # ninety days and then did not. Attached to the release, where it lasts as
+  # long as the release does.
+  attach-sbom:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Attach the SBOM to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s dist/sbom.cyclonedx.json
+          gh release upload "$GITHUB_REF_NAME" dist/sbom.cyclonedx.json \
+            --repo "$GITHUB_REPOSITORY" --clobber

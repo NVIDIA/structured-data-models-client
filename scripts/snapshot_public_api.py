@@ -21,6 +21,7 @@ Run with ``--write`` to re-record after an intended change.
 from __future__ import annotations
 
 import argparse
+import enum
 import importlib
 import inspect
 import json
@@ -46,6 +47,25 @@ def _signature(obj: object) -> str | None:
         return None
 
 
+def _is_first_party(owner: type, name: str) -> bool:
+    """Whether ``name`` is defined by this project rather than inherited.
+
+    Walks the MRO to find which class actually provides the attribute, and
+    keeps it only when that class comes from a package this repository ships.
+    """
+    for base in owner.__mro__:
+        if name in vars(base):
+            module = getattr(base, '__module__', '') or ''
+            return module.split('.')[0] in {
+                'sdm_api',
+                'sdm_client',
+                'sdm_connectors',
+                'predictive_query',
+                'sdm_relational_engine',
+            }
+    return False
+
+
 def _describe(obj: object) -> dict[str, object]:
     described: dict[str, object] = {'kind': type(obj).__name__}
     if inspect.isclass(obj):
@@ -59,17 +79,28 @@ def _describe(obj: object) -> dict[str, object]:
         # Signatures, not just names. Recording only the names let
         # `SDMClient.predict` change shape without the snapshot noticing --
         # which is the method most callers touch first.
+        #
+        # Inherited builtins are excluded. A `StrEnum` otherwise contributes
+        # 47 `str` methods, which buries the members that actually matter --
+        # and records signatures owned by CPython, so the snapshot would
+        # disagree with itself on a different interpreter for reasons that have
+        # nothing to do with this library.
         described['public_methods'] = {
             name: _signature(member)
             for name, member in inspect.getmembers(obj, callable)
-            if not name.startswith('_')
+            if not name.startswith('_') and _is_first_party(obj, name)
         }
+        if issubclass(obj, enum.Enum):
+            # For an enum the members *are* the contract; the methods are not.
+            described['members'] = {member.name: member.value for member in obj}
         # Attributes a caller reads are part of the surface too, and a
         # dataclass field has no entry above.
         described['public_attributes'] = sorted(
             name
             for name, member in inspect.getmembers(obj)
-            if not name.startswith('_') and not callable(member)
+            if not name.startswith('_')
+            and not callable(member)
+            and _is_first_party(obj, name)
         )
     elif callable(obj):
         described['kind'] = 'callable'
