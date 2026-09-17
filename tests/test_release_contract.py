@@ -140,7 +140,14 @@ class TestErrorContract:
 class TestDistributionCoherence:
     """The five are released together, so they must agree."""
 
-    def test_every_distribution_declares_the_same_version(self):
+    @staticmethod
+    def _declared_version() -> str:
+        versions = TestDistributionCoherence._declared_versions()
+        assert len(set(versions.values())) == 1, versions
+        return next(iter(versions.values()))
+
+    @staticmethod
+    def _declared_versions() -> dict[str, str]:
         versions = {}
         for name in _distributions():
             project = _pyproject(name)['project']
@@ -153,8 +160,49 @@ class TestDistributionCoherence:
             source = PACKAGES / name / 'src' / module / '_version.py'
             text = source.read_text()
             versions[name] = text.split('=')[-1].strip().strip('\'"')
+        return versions
+
+    def test_every_distribution_declares_the_same_version(self):
+        versions = self._declared_versions()
         assert len(set(versions.values())) == 1, (
             f'distributions disagree on the version: {versions}'
+        )
+
+    def test_every_first_party_pin_names_the_version_being_released(self):
+        """The five pin each other by exact version, and those pins are literals.
+
+        `test_every_distribution_declares_the_same_version` proves the five
+        agree on what they *are*. It says nothing about what they *require*,
+        and those are thirteen separate hard-coded strings across two files.
+        Bump the five and forget the pins and every wheel is 1.1.0 while
+        sdm-client still requires sdm-api==1.0.0 -- which pip resolves happily
+        from the previous release, producing a mixed install that the publish
+        workflow's filename check cannot see.
+
+        RELEASING.md says "internal pins move with them". This is that
+        sentence, as something that fails.
+        """
+        declared = self._declared_version()
+        distributions = {name for name in _distributions()}
+
+        pattern = re.compile(
+            r'(?P<name>sdm-[a-z-]+)(?:\[[^\]]*\])?==(?P<version>[0-9][^\'"\s,]*)'
+        )
+        wrong = []
+        for source in sorted(PACKAGES.glob('*/pyproject.toml')) + sorted(
+            PACKAGES.glob('*/setup.py')
+        ):
+            for match in pattern.finditer(source.read_text()):
+                if match.group('name') not in distributions:
+                    continue
+                if match.group('version') != declared:
+                    wrong.append(
+                        f'{source.relative_to(REPO)}: '
+                        f'{match.group(0)} but the release is {declared}'
+                    )
+        assert not wrong, (
+            'a first-party pin names a version other than the one being '
+            'released:\n' + '\n'.join(wrong)
         )
 
     def test_every_distribution_declares_the_same_licence(self):
