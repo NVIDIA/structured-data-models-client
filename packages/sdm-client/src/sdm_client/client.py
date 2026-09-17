@@ -806,7 +806,15 @@ def _refuse_outputs_a_ranking_cannot_give(
     endpoint's; the merged answer's fields are this client's, and asking it
     for one it does not build would otherwise be answered with a result that
     names the field and does not carry it.
+
+    Naming none is refused the way every other request refuses it. A ranking
+    was the one shape that read an empty list as *give me the usual*, so the
+    one caller who had said what they wanted was the one who did not get it.
     """
+    if outputs is not None and not outputs:
+        raise StructuredDataError(
+            'outputs must name at least one field', code='INVALID_REQUEST'
+        )
     unknown = [name for name in outputs or () if name not in _RANKING_OUTPUTS]
     if unknown:
         raise StructuredDataError(

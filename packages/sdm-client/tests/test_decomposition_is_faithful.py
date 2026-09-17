@@ -731,3 +731,13 @@ def test_an_ordinary_request_still_reports_its_own_size():
     assert request.parts is None
     assert request.predict_rows == 3
     assert request.context_rows > 0
+
+
+def test_a_ranking_refuses_an_empty_set_of_fields_like_everything_else():
+    """`outputs=[]` says *no fields*, and every other shape refuses it. A
+    ranking read it as *the usual*, so the one caller who had said what they
+    wanted was the one who did not get it."""
+    from sdm_client.client import _refuse_outputs_a_ranking_cannot_give
+
+    with pytest.raises(StructuredDataError, match='at least one field'):
+        _refuse_outputs_a_ranking_cannot_give([])
