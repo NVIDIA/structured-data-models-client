@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
+from sdm_client.decompose import Decomposition, parts_of
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
@@ -79,6 +80,7 @@ class PredictiveQuery:
         predict: pd.DataFrame | None = None,
         num_context_samples: int | None = None,
         model: str | Model | None = None,
+        candidates: Sequence[Any] | None = None,
         **options: Any,
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
@@ -111,6 +113,9 @@ class PredictiveQuery:
             model: The model this request is being gathered for, as a handle
                 such as ``KumoRelational()`` or a model id. Defaults to the
                 schema's shape.
+            candidates: The rows a ranking is over. A ranking is answered as
+                one question per candidate, so the set has to be named rather
+                than assumed, and one call is made for each.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -141,22 +146,42 @@ class PredictiveQuery:
             options=options,
         )
 
+        # Resolved once, and against the profile this request is for, because
+        # whether it is asked as several questions is a property of the query
+        # and the profile answers what the query is allowed to be.
+        asked = self._resolve(RELATIONAL if relational else TABULAR)
+        rewritten = parts_of(
+            asked,
+            self.text,
+            list(candidates) if candidates is not None else None,
+            options,
+        )
+        if rewritten is not None:
+            return self._in_parts(
+                rewritten,
+                indices=indices,
+                predict=predict,
+                num_context_samples=num_context_samples,
+                model=model,
+                **options,
+            )
+
         if predict is not None:
             return self._tabular_materializer.table(
-                query=self._resolve(TABULAR),
+                query=asked,
                 predict=predict,
             )
 
         assert indices is not None
         if not relational:
             return self._tabular_materializer.indices(
-                query=self._resolve(TABULAR),
+                query=asked,
                 indices=indices,
                 num_context_samples=num_context_samples,
             )
 
         return self._relational_materializer.materialize(
-            query=self._resolve(RELATIONAL),
+            query=asked,
             indices=indices,
             num_context_samples=num_context_samples,
             options=options,
@@ -307,6 +332,33 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
 
+    def _in_parts(self, rewritten: Decomposition, **how: Any) -> Request:
+        r"""Gather the questions this one is asked as, and keep them together.
+
+        Each is gathered like any other query, because each needs the context
+        its own labels come from: what was true in the second window is not
+        what was true in the first, and whether an entity reached one
+        candidate is not whether it reached another.
+        """
+        import copy
+
+        how = {name: value for name, value in how.items() if value is not None}
+        # How many candidates to keep belongs to the whole ranking. Each part
+        # is one yes-or-no question, and a task that ranks nothing is refused
+        # by the endpoint for carrying an option it cannot act on.
+        how.pop('top_k', None)
+        gathered = [
+            PredictiveQuery(text, self.schema).materialize(**how)
+            for text, _ in rewritten.parts
+        ]
+        # A copy, because the carrier cannot be one of the things it carries:
+        # asking it would ask the first part, which would ask the first part.
+        whole = copy.copy(gathered[0])
+        whole._parts = tuple(gathered)
+        whole._decomposition = rewritten
+        whole._asked = self.text
+        return whole
+
     def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
         r"""Parse and validate the query."""
         from predictive_query import validate
@@ -323,10 +375,59 @@ class PredictiveQuery:
             )
             raise StructuredDataError(
                 f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}',
+                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}'
+                f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
                 code='INVALID_REQUEST',
             )
         return resolved
+
+    def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
+        r"""Say how to resolve an ambiguous link, in the words of this object.
+
+        The language resolves a query against a graph and advises in the
+        vocabulary of one: `graph.unlink(...)`. A caller holding a `Schema`
+        has no such call, so the one instruction that would fix their query
+        names something they cannot do.
+
+        The reasons are read only to recognise the failure. What the competing
+        columns are is taken from the schema, which knows, rather than parsed
+        back out of a sentence that was written to be read.
+        """
+        if 'is not unique' not in reasons:
+            return ''
+        ways: dict[tuple[str, str], list[str]] = {}
+        for link in self.schema.relationships:
+            pair = (link.source_table, link.target_table)
+            ways.setdefault(pair, []).append(link.source_column)
+        ambiguous = {
+            pair: sorted(columns)
+            for pair, columns in ways.items()
+            if len(columns) > 1
+        }
+        if not ambiguous:
+            return ''
+        # Which pair the query crossed is in the refusal and nowhere else, so
+        # the tables are read from it -- but only to choose among pairs the
+        # schema already knows about. Advising the first pair found sent a
+        # caller to edit a relationship their query never touched.
+        crossed = [
+            pair
+            for pair in ambiguous
+            if f'table {pair[0]} ' in reasons and f'table {pair[1]} ' in reasons
+        ]
+        if len(ambiguous) > 1 and not crossed:
+            return ''
+        (source, target), columns = sorted(
+            (pair, ambiguous[pair]) for pair in (crossed or ambiguous)
+        )[0]
+        kept, *rest = columns
+        return (
+            f' In this schema {source!r} reaches {target!r} through '
+            f'{", ".join(repr(name) for name in columns)}; to keep {kept!r}, '
+            f'schema.relationships = [link for link in schema.relationships '
+            f'if not (link.source_table == {source!r} and link.target_table '
+            f'== {target!r} and link.source_column in {rest!r})].'
+        )
 
     def _why_the_target_is_text(self, reasons: str) -> str:
         r"""Say why a target is `text`, when that is what refused the query.

@@ -25,6 +25,12 @@ if TYPE_CHECKING:
 #: is called that already.
 _ANCHOR = '__kumo_anchor_time'
 
+#: How a relational envelope names the entity a row is about.
+_ENTITY_REF = '__kumo_entity_ref'
+
+#: What ties a related row to the instance it hangs off.
+INSTANCE_ID = 'instance_id'
+
 
 def _anchor_column(payload: dict[str, Any] | None) -> str:
     r"""What this envelope calls the moment.
@@ -68,7 +74,7 @@ def keys_in(
     if not isinstance(columns, list) or not isinstance(rows, list):
         return frozenset()
     named: Any = next(
-        (name for name in columns if str(name).startswith('__kumo_entity_ref')),
+        (name for name in columns if str(name).startswith(_ENTITY_REF)),
         None,
     )
     if named is None:
@@ -135,3 +141,73 @@ def scored_keys(
         _named_by(values)
         for values in zip(*(frame[n] for n in names), strict=True)
     )
+
+
+def without_the_keys(payload: dict[str, Any], keys: frozenset[Any]) -> int:
+    r"""Take out of ``payload``'s context every row naming one of ``keys``.
+
+    Returns how many instance rows went. Related rows that hang off them go
+    too, by the ``instance_id`` they were tied with, because a related row
+    whose instance has gone describes nothing.
+
+    The key is found the way `keys_in` finds it, so what is removed here is
+    exactly what would have been reported as an overlap there.
+    """
+    context = payload.get('context')
+    if not isinstance(context, Mapping) or not keys:
+        return 0
+    table = context.get('instance_table')
+    columns = (table or {}).get('columns')
+    rows = (table or {}).get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return 0
+
+    named = next(
+        (name for name in columns if str(name).startswith(_ENTITY_REF)), None
+    )
+    if named is None:
+        named = ((payload.get('schema') or {}).get('instance_table') or {}).get(
+            'primary_key'
+        )
+    wanted = named if isinstance(named, list) else [named]
+    if named is None or any(name not in columns for name in wanted):
+        return 0
+
+    at = [columns.index(name) for name in wanted]
+    instance = columns.index(INSTANCE_ID) if INSTANCE_ID in columns else None
+    going, leaving = [], set()
+    for row in rows:
+        if not isinstance(row, list) or len(row) <= max(at):
+            going.append(row)
+            continue
+        if _named_by(row[position] for position in at) in keys:
+            if instance is not None and len(row) > instance:
+                leaving.add(row[instance])
+            continue
+        going.append(row)
+
+    removed = len(rows) - len(going)
+    if not removed:
+        return 0
+    table['rows'] = going
+    for related in (context.get('related_tables') or {}).values():
+        _drop_instances(related, leaving)
+    return removed
+
+
+def _drop_instances(table: Any, instances: set[Any]) -> None:
+    r"""Take out of a related table the rows tied to instances that have gone."""
+    columns = (table or {}).get('columns')
+    rows = (table or {}).get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return
+    if INSTANCE_ID not in columns or not instances:
+        return
+    at = columns.index(INSTANCE_ID)
+    table['rows'] = [
+        row
+        for row in rows
+        if not (
+            isinstance(row, list) and len(row) > at and row[at] in instances
+        )
+    ]

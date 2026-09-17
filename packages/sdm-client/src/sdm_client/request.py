@@ -36,6 +36,7 @@ from typing import Any
 
 import pandas as pd
 
+from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
@@ -420,6 +421,34 @@ class Request:
         )
 
     @property
+    def parts(self) -> tuple[Request, ...] | None:
+        r"""The requests this one is asked as, when it is asked as several.
+
+        A ranking and a forecast have no task on the endpoint, so each is
+        asked as a set of questions it does serve -- one per candidate, one
+        per step. They are kept together here because the answer that was
+        asked for is the one they make between them, not any one of them.
+        """
+        return getattr(self, '_parts', None)
+
+    @property
+    def decomposition(self) -> Decomposition | None:
+        r"""How this question was rewritten, if it had to be.
+
+        Holds the kind of question that was asked, what each part asks after
+        -- a candidate, or a step -- as the caller gave it, and how many
+        candidates a ranking keeps. Re-deriving any of this from the query
+        text would read a key as a string, and would call a forecast over a
+        table named ``rank_events`` a ranking.
+        """
+        return getattr(self, '_decomposition', None)
+
+    @property
+    def asked(self) -> str | None:
+        r"""The query a caller wrote, when this was gathered as several."""
+        return getattr(self, '_asked', None)
+
+    @property
     def target_moves_with_time(self) -> bool:
         r"""Whether the answer is a window rather than a standing value.
 
@@ -445,7 +474,18 @@ class Request:
         came from its frames while the adapters refused it for carrying
         envelopes.
         """
-        return getattr(self, '_payloads', None) or None
+        mine = getattr(self, '_payloads', None) or None
+        parts = self.parts
+        if parts is None:
+            return mine
+        # A question asked as several carries all of their envelopes: this is
+        # the object the caller holds, and its size is the size of what will
+        # be sent. Reporting one part's would undercount by as many parts as
+        # there are, which for a ranking is one per candidate.
+        gathered = tuple(
+            envelope for part in parts for envelope in part.payloads or ()
+        )
+        return gathered or mine
 
     @property
     def is_relational(self) -> bool:
