@@ -361,7 +361,7 @@ def test_a_key_the_engine_does_not_hold_is_still_reported_clearly():
     graph['people'].primary_key = 'pid'
     store = LocalGraphStore(graph, verbose=False)
 
-    with pytest.raises(Exception) as raised:
+    with pytest.raises(ValueError) as raised:
         store.get_node_id('people', pd.Series(['not a key']))
     assert 'pid' in str(raised.value) or 'not a key' in str(raised.value)
 
