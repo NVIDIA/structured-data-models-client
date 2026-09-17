@@ -197,9 +197,22 @@ def test_a_column_with_no_table_to_point_at_is_refused():
     ids=['ranked', 'plain'],
 )
 def test_a_foreign_key_list_distinct_still_works(query):
-    """Both forms resolve to link prediction, which the model does serve. The
-    refusal must not widen onto them."""
+    """Both forms resolve to link prediction, and the multilabel refusal must
+    not widen onto them.
+
+    A ranking has no task on the endpoint, so the ranked form is asked as one
+    question per candidate and needs them named. That it refuses for the want
+    of candidates is the refusal working: before, it built a request the
+    endpoint answered with `422 UNSUPPORTED_TASK`.
+    """
     pytest.importorskip('sdm_relational_engine')
+
+    if 'RANK' in query:
+        with pytest.raises(StructuredDataError) as refused:
+            answer(query, graph(timed=True), KumoRelational())
+        assert 'candidates' in str(refused.value)
+        assert 'multilabel' not in str(refused.value)
+        return
 
     assert answer(query, graph(timed=True), KumoRelational()) == (
         'temporal_link_prediction'

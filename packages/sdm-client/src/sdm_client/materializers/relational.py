@@ -90,7 +90,6 @@ class RelationalMaterializer:
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
         _drop_context_that_answers_the_question(payloads, windowed=windowed)
-        _warn_no_answer_was_ever_offered(payloads)
         return Request.materialized(
             payloads=payloads,
             windowed=windowed,
@@ -740,11 +739,6 @@ _ANCHOR = '__kumo_anchor_time'
 #: What the envelope calls the answer a context row carries.
 _TARGET = 'TARGET'
 
-#: Below this share of context rows able to find their answer, a ranking is
-#: over a pool that fails nearly everything, and one row that happens to
-#: succeed says nothing about the rest.
-_REACHABLE_ENOUGH = 0.05
-
 #: What ties a related row to the instance it hangs off.
 INSTANCE_ID = 'instance_id'
 
@@ -830,133 +824,6 @@ def _drop_context_that_answers_the_question(
         _remove_instances(context.get('instance_table'), answered)
         for related in (context.get('related_tables') or {}).values():
             _remove_instances(related, answered)
-
-
-def _warn_no_answer_was_ever_offered(
-    payloads: tuple[dict[str, Any], ...],
-) -> None:
-    r"""Say when a ranking is over rows that cannot contain the answer.
-
-    For link prediction the candidates are the rows neighbourhood sampling
-    reached, which is what the entity has already interacted with. On a
-    dataset where an interaction does not repeat -- where the pair is a key of
-    the fact table -- the rows that will be true are disjoint from that pool
-    by construction, so recall is zero however good the model is.
-
-    Nothing about that is visible from the answer. The query resolves, the
-    request is sent, and a ranking comes back with plausible scores in
-    descending order, because the model ranked exactly what it was given. The
-    scores describe an order over the wrong set.
-
-    Checked on the context half, where both halves of the question are
-    present: each row carries what was true for it, and the pool it was drawn
-    from is beside it. That makes this a reading of the context rather than a
-    proof about the rows being scored, which is why it is said and not
-    refused.
-    """
-    reachable = offered = 0
-    for payload in payloads:
-        if 'link_prediction' not in str(
-            (payload.get('task') or {}).get('kind', '')
-        ):
-            return
-        found, total = _how_often_the_answer_was_reachable(payload)
-        reachable += found
-        offered += total
-    if not offered or reachable > offered * _REACHABLE_ENOUGH:
-        return
-    how_many = 'none' if not reachable else f'only {reachable}'
-    warnings.warn(
-        f'{how_many} of the {offered} rows sampled as context had its answer '
-        f'among the candidates offered beside it. The candidates for a '
-        f'the rows neighbourhood sampling reached, which is what an entity '
-        f'has already interacted with, so on data where an interaction does '
-        f'not repeat the answer cannot be among them and the ranking is over '
-        f'rows that were never going to be right. The answer will still come '
-        f'back scored and ordered. If interactions in this data do repeat, '
-        f'this is a sampling reach worth widening; if they do not, a ranking '
-        f'over the sampled neighbourhood is not the question you want.',
-        category=SDMWarning,
-        stacklevel=caller_stacklevel(),
-    )
-
-
-def _how_often_the_answer_was_reachable(
-    payload: dict[str, Any],
-) -> tuple[int, int]:
-    r"""How many context rows had an answer the candidates beside them held.
-
-    The candidates are the rows of the table being ranked, which the task
-    names as the second of its entity tables, keyed by its own key. Reading
-    every value of every related row instead would let a timestamp or a
-    category stand in for a candidate, and a handful of those is enough to
-    report an answer as reachable when none of them were.
-    """
-    context = payload.get('context')
-    if not isinstance(context, Mapping):
-        return 0, 0
-    table = context.get('instance_table') or {}
-    columns, rows = table.get('columns'), table.get('rows')
-    if not isinstance(columns, list) or not isinstance(rows, list):
-        return 0, 0
-    if INSTANCE_ID not in columns or _TARGET not in columns:
-        return 0, 0
-
-    named = (payload.get('task') or {}).get('entity_table_names')
-    if not isinstance(named, (list, tuple)) or len(named) < 2:
-        return 0, 0
-    ranked = str(named[1])
-    pools = _candidates_offered(
-        (context.get('related_tables') or {}).get(ranked),
-        _key_of(payload, ranked),
-    )
-    if not pools:
-        return 0, 0
-
-    instance, target = columns.index(INSTANCE_ID), columns.index(_TARGET)
-    reachable = offered = 0
-    for row in rows:
-        if not isinstance(row, list) or len(row) <= max(instance, target):
-            continue
-        wanted = row[target]
-        if not isinstance(wanted, (list, tuple)) or not wanted:
-            continue
-        offered += 1
-        if {str(value) for value in wanted} & pools.get(row[instance], set()):
-            reachable += 1
-    return reachable, offered
-
-
-def _key_of(payload: dict[str, Any], table: str) -> str | None:
-    r"""What names a row of ``table``, as the envelope's schema records it."""
-    block = ((payload.get('schema') or {}).get('related_tables') or {}).get(
-        table
-    )
-    key = (block or {}).get('primary_key')
-    names = key if isinstance(key, list) else [key]
-    return next(
-        (str(name) for name in names if name and name != INSTANCE_ID), None
-    )
-
-
-def _candidates_offered(table: Any, key: str | None) -> dict[Any, set[str]]:
-    r"""Which rows of the ranked table were offered to each instance."""
-    columns, rows = (table or {}).get('columns'), (table or {}).get('rows')
-    if (
-        key is None
-        or not isinstance(columns, list)
-        or not isinstance(rows, list)
-    ):
-        return {}
-    if INSTANCE_ID not in columns or key not in columns:
-        return {}
-    at, named = columns.index(INSTANCE_ID), columns.index(key)
-    pools: dict[Any, set[str]] = {}
-    for row in rows:
-        if not isinstance(row, list) or len(row) <= max(at, named):
-            continue
-        pools.setdefault(row[at], set()).add(str(row[named]))
-    return pools
 
 
 def _positions(

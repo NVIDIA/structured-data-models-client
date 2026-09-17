@@ -420,6 +420,22 @@ class Request:
         )
 
     @property
+    def parts(self) -> tuple[Request, ...] | None:
+        r"""The requests this one is asked as, when it is asked as several.
+
+        A ranking and a forecast have no task on the endpoint, so each is
+        asked as a set of questions it does serve -- one per candidate, one
+        per step. They are kept together here because the answer that was
+        asked for is the one they make between them, not any one of them.
+        """
+        return getattr(self, '_parts', None)
+
+    @property
+    def asked(self) -> str | None:
+        r"""The query a caller wrote, when this was gathered as several."""
+        return getattr(self, '_asked', None)
+
+    @property
     def target_moves_with_time(self) -> bool:
         r"""Whether the answer is a window rather than a standing value.
 

@@ -295,6 +295,8 @@ class SDMClient:
                 Raised before anything is sent.
             NimRequestError: If the endpoint answered with an error.
         """
+        if request.parts is not None:
+            return self._answer_in_parts(request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
             return _empty_answer(adapter.spec.model_id, fields)
@@ -313,6 +315,34 @@ class SDMClient:
         return _report_absent(
             PredictionResult.merge(parts), outputs, adapter.spec.model_id
         )
+
+    def _answer_in_parts(
+        self,
+        request: Request,
+        model: str | Model,
+        outputs: Sequence[str] | None,
+    ) -> PredictionResult:
+        r"""Ask the questions this one is asked as, and give back one answer.
+
+        A ranking and a forecast have no task on the endpoint. Each is asked
+        as questions it does serve, and what comes back has to be put together
+        as the answer that was actually asked for -- an order over candidates,
+        or a value per step -- rather than handed back as the several answers
+        it took.
+        """
+        parts = request.parts or ()
+        asked = str(request.asked or '')
+        ranking = 'RANK' in asked.upper()
+        # A ranking needs how sure each answer was, which is what orders the
+        # candidates. A step of a forecast is a regression, and asking it for
+        # a probability is asking for something regression does not have.
+        wanted = _RANKING_PARTS if ranking else None
+        answers = [
+            self.predict(part, model=model, outputs=wanted) for part in parts
+        ]
+        if ranking:
+            return _ranked(answers, parts, asked, outputs)
+        return _by_step(answers, request)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -608,4 +638,101 @@ def _warn_scoring_what_was_pinned(
         f'scores from the context it sends.',
         category=SDMWarning,
         stacklevel=caller_stacklevel(),
+    )
+
+
+#: What a ranking's parts are asked for: how sure each answer was is what
+#: orders the candidates, not which side of the line it fell.
+_RANKING_PARTS = ('prediction', 'probabilities')
+
+
+def _candidate_of(query: str) -> Any:
+    r"""Which candidate a part was about, as its query names it."""
+    _, _, rest = query.partition('WHERE ')
+    named, _, _ = rest.partition(',')
+    _, _, value = named.partition('=')
+    return value.strip().strip('"')
+
+
+def _ranked(
+    answers: list[PredictionResult],
+    parts: tuple[Request, ...],
+    asked: str,
+    outputs: Sequence[str] | None,
+) -> PredictionResult:
+    r"""The candidates each entity reached, likeliest first.
+
+    Ordered by how sure the answer to that candidate's question was, which is
+    what a ranking is: the questions were asked separately and only their
+    order matters between them.
+    """
+
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    per_entity: dict[Any, list[tuple[float, Any]]] = {}
+    for answer, part in zip(answers, parts, strict=True):
+        candidate = _candidate_of(part.query or '')
+        for item in answer.items:
+            sure = (item.probabilities or {}).get('true')
+            if sure is None:
+                sure = (item.probabilities or {}).get('True', 0.0)
+            per_entity.setdefault(item.id, []).append((float(sure), candidate))
+
+    top = _top_k_of(asked)
+    items = []
+    for row, (entity, scored) in enumerate(per_entity.items()):
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        chosen = scored[:top] if top else scored
+        items.append(
+            PredictionItem(
+                row_index=row,
+                id=entity,
+                prediction=[candidate for _, candidate in chosen],
+                rankings=tuple(
+                    {'candidate': candidate, 'score': score}
+                    for score, candidate in chosen
+                ),
+            )
+        )
+    model = answers[0].model if answers else ''
+    return PredictionResult(
+        model=model,
+        request_id=answers[0].request_id if answers else '',
+        items=items,
+        outputs=tuple(outputs or ('prediction', 'rankings')),
+    )
+
+
+def _top_k_of(asked: str) -> int | None:
+    r"""How many a ranking asked for, as the query says."""
+    import re
+
+    found = re.search(r'\bRANK\s+TOP\s+(\d+)', asked, flags=re.IGNORECASE)
+    return int(found.group(1)) if found else None
+
+
+def _by_step(
+    answers: list[PredictionResult], request: Request
+) -> PredictionResult:
+    r"""What each step holds, in the order the steps come.
+
+    `forecast_step` is the field the contract already carries for this, so a
+    reader of the frame gets the series it asked for without knowing that it
+    arrived as several answers.
+    """
+    import dataclasses
+
+    items = []
+    row = 0
+    for step, answer in enumerate(answers):
+        for item in answer.items:
+            items.append(
+                dataclasses.replace(item, row_index=row, forecast_step=step)
+            )
+            row += 1
+    return PredictionResult(
+        model=answers[0].model if answers else '',
+        request_id=answers[0].request_id if answers else '',
+        items=items,
+        outputs=tuple(answers[0].outputs) if answers else (),
     )

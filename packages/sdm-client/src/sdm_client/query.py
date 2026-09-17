@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
+from sdm_client.decompose import parts_of
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
@@ -79,6 +80,7 @@ class PredictiveQuery:
         predict: pd.DataFrame | None = None,
         num_context_samples: int | None = None,
         model: str | Model | None = None,
+        candidates: Sequence[Any] | None = None,
         **options: Any,
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
@@ -111,6 +113,9 @@ class PredictiveQuery:
             model: The model this request is being gathered for, as a handle
                 such as ``KumoRelational()`` or a model id. Defaults to the
                 schema's shape.
+            candidates: The rows a ranking is over. A ranking is answered as
+                one question per candidate, so the set has to be named rather
+                than assumed, and one call is made for each.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -141,22 +146,41 @@ class PredictiveQuery:
             options=options,
         )
 
+        # Resolved once, and against the profile this request is for, because
+        # whether it is asked as several questions is a property of the query
+        # and the profile answers what the query is allowed to be.
+        asked = self._resolve(RELATIONAL if relational else TABULAR)
+        parts = parts_of(
+            asked,
+            self.text,
+            list(candidates) if candidates is not None else None,
+        )
+        if parts is not None:
+            return self._in_parts(
+                parts,
+                indices=indices,
+                predict=predict,
+                num_context_samples=num_context_samples,
+                model=model,
+                **options,
+            )
+
         if predict is not None:
             return self._tabular_materializer.table(
-                query=self._resolve(TABULAR),
+                query=asked,
                 predict=predict,
             )
 
         assert indices is not None
         if not relational:
             return self._tabular_materializer.indices(
-                query=self._resolve(TABULAR),
+                query=asked,
                 indices=indices,
                 num_context_samples=num_context_samples,
             )
 
         return self._relational_materializer.materialize(
-            query=self._resolve(RELATIONAL),
+            query=asked,
             indices=indices,
             num_context_samples=num_context_samples,
             options=options,
@@ -306,6 +330,28 @@ class PredictiveQuery:
                     f'leaves it none',
                     code='INVALID_REQUEST',
                 )
+
+    def _in_parts(self, parts: list[str], **how: Any) -> Request:
+        r"""Gather the questions this one is asked as, and keep them together.
+
+        Each is gathered like any other query, because each needs the context
+        its own labels come from: what was true in the second window is not
+        what was true in the first, and whether an entity reached one
+        candidate is not whether it reached another.
+        """
+        import copy
+
+        how = {name: value for name, value in how.items() if value is not None}
+        gathered = [
+            PredictiveQuery(part, self.schema).materialize(**how)
+            for part in parts
+        ]
+        # A copy, because the carrier cannot be one of the things it carries:
+        # asking it would ask the first part, which would ask the first part.
+        whole = copy.copy(gathered[0])
+        whole._parts = tuple(gathered)
+        whole._asked = self.text
+        return whole
 
     def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
         r"""Parse and validate the query."""
