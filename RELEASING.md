@@ -48,9 +48,13 @@ today's date.
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-That is the whole release. `.github/workflows/publish.yml` builds all five,
-refuses to continue if the tag and the built version disagree, generates the
-SBOM, and uploads through PyPI Trusted Publishing with PEP 740 attestations.
+That is the whole release. `.github/workflows/publish.yml` builds the four
+pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
+(cp310–cp313, manylinux x86-64, each smoke-imported), and then refuses to
+continue unless **all five** are present and agree with the tag. That check is
+not ceremony: `sdm-client[relational]` pins the engine by exact version, so a
+release missing it publishes an extra nobody can install. It then generates the
+SBOM and uploads through PyPI Trusted Publishing with PEP 740 attestations.
 
 **There is no PyPI token.** Publishing authenticates with the workflow's OIDC
 identity, which is why the `publish` job is the only one holding `id-token:

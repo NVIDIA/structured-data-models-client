@@ -56,10 +56,20 @@ def _describe(obj: object) -> dict[str, object]:
             if base is not object
         ]
         described['signature'] = _signature(obj)
-        described['public_methods'] = sorted(
-            name
-            for name, _ in inspect.getmembers(obj, callable)
+        # Signatures, not just names. Recording only the names let
+        # `SDMClient.predict` change shape without the snapshot noticing --
+        # which is the method most callers touch first.
+        described['public_methods'] = {
+            name: _signature(member)
+            for name, member in inspect.getmembers(obj, callable)
             if not name.startswith('_')
+        }
+        # Attributes a caller reads are part of the surface too, and a
+        # dataclass field has no entry above.
+        described['public_attributes'] = sorted(
+            name
+            for name, member in inspect.getmembers(obj)
+            if not name.startswith('_') and not callable(member)
         )
     elif callable(obj):
         described['kind'] = 'callable'

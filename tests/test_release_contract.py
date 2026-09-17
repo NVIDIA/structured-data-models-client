@@ -363,16 +363,30 @@ class TestInterpreterSupportIsStated:
     @classmethod
     def _admitted(cls, requires: str) -> list[str]:
         floor = ceiling = None
+        inclusive = False
         for clause in requires.split(','):
             clause = clause.strip()
             if clause.startswith('>='):
                 floor = cls._parts(clause[2:].strip())
+            elif clause.startswith('<='):
+                # Inclusive: `<=3.13` admits 3.13. Treating every ceiling as
+                # exclusive silently dropped the highest supported interpreter.
+                ceiling = cls._parts(clause[2:].strip())
+                inclusive = True
             elif clause.startswith('<'):
-                ceiling = cls._parts(clause.lstrip('<=').strip())
+                ceiling = cls._parts(clause[1:].strip())
         assert floor is not None, f'no lower bound in {requires!r}'
         admitted = [v for v in cls.KNOWN if cls._parts(v) >= floor]
         if ceiling is not None:
-            admitted = [v for v in admitted if cls._parts(v) < ceiling]
+            admitted = [
+                v
+                for v in admitted
+                if (
+                    cls._parts(v) <= ceiling
+                    if inclusive
+                    else cls._parts(v) < ceiling
+                )
+            ]
         return admitted
 
     def test_the_version_comparison_this_class_relies_on_is_numeric(self):
@@ -388,6 +402,12 @@ class TestInterpreterSupportIsStated:
             '3.13',
         ]
         assert self._admitted('>=3.12') == ['3.12', '3.13', '3.14']
+        assert self._admitted('>=3.10,<=3.13') == [
+            '3.10',
+            '3.11',
+            '3.12',
+            '3.13',
+        ]
 
     def test_every_admitted_interpreter_is_also_a_classifier(self):
         for name in _distributions():

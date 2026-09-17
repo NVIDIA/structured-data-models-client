@@ -45,7 +45,12 @@ typecheck:
   script:
     - pip install -q mypy
     - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
-    - mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/sdm-connectors/src
+    # The engine needs its runtime deps present to be checked at all, and a
+    # toolchain to install. It ships py.typed exactly like the other four,
+    # so leaving it out made the gate narrower than the promise.
+    - apt-get update -qq && apt-get install -y -qq build-essential cmake git
+    - pip install -q -e './packages/sdm-relational-engine'
+    - mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/sdm-connectors/src packages/sdm-relational-engine/src
 
 hygiene:
   stage: lint
@@ -63,7 +68,10 @@ test:
     # backend raises and every test that covers them skips, including the one
     # holding the partner attribution Databricks requires.
     - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
-    - pip install -q pytest-cov
+    # ruff is here for tests/, not for linting: the test that checks the
+    # engine's ignore-list note shells out to ruff and skips without it,
+    # which made the check vacuous in the only job that runs root tests/.
+    - pip install -q pytest-cov 'ruff==0.16.*'
     # `tests/` at the root holds what no single package can check: that the five
     # agree on a version and a licence, that the public surface and the wire
     # payloads still match what was recorded, and that the claims the config
@@ -101,7 +109,13 @@ engine:
     # next such test will not be named like the current ones.
     - cd "$CI_PROJECT_DIR"
     - pip install -q -e './packages/sdm-client[test]'
+    - pip install -q 'ruff==0.16.*'
     - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
+    # And root tests/ again, with the engine present. The `test` job runs them
+    # without one, and the wire-payload snapshot deliberately excludes the
+    # relational case when the engine cannot build it -- so that case was
+    # recorded and then compared nowhere. Here it is compared.
+    - python -m pytest tests -q
 
 # Each distribution is built the way an index would build it: in an isolated
 # environment holding only the build backend, with none of the runtime

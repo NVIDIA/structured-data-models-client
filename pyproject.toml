@@ -59,8 +59,15 @@ exclude = [
     "packages/sdm-pql/src/predictive_query/grammar/",
 ]
 
-# --- Baseline recorded 2026-09-17: 37 errors across 11 hand-written modules --
-# Retire an entry by fixing its module and deleting its line.
+# --- Baseline recorded 2026-09-17 -------------------------------------------
+# 37 errors across 11 hand-written modules in the four pure-python packages,
+# plus 62 across 21 in the relational engine. Retire an entry by fixing its
+# module and deleting its line.
+#
+# `ignore_errors` is blunt: it hides a *new* error in a listed module as well as
+# the recorded ones. That is the cost of adopting a checker on a tree this size
+# without rewriting it, and it is why the list is dated and counted rather than
+# open-ended -- the counts are what make a growing entry visible.
 [[tool.mypy.overrides]]
 module = [
     "sdm_client.materializers.relational",   # 15
@@ -76,6 +83,28 @@ module = [
     "sdm_connectors.backends.postgres",      #  1
     "sdm_connectors.backends.duckdb",        #  1
     "sdm_connectors.backends.databricks",    #  1
+    # --- relational engine: 62 errors across 21 modules --------------------
+    "sdm_relational_engine.rfm.base.table",          # 13
+    "sdm_relational_engine.rfm.graph",               # 10
+    "sdm_relational_engine.rfm.rfm",                 #  9
+    "sdm_relational_engine.api.data_source",         #  4
+    "sdm_relational_engine.rfm.relbench",            #  3
+    "sdm_relational_engine.rfm.backend.sqlite.sampler",     # 2
+    "sdm_relational_engine.rfm.backend.snow.sampler",       # 2
+    "sdm_relational_engine.rfm.backend.duckdb.table",       # 2
+    "sdm_relational_engine.rfm.backend.duckdb.sampler",     # 2
+    "sdm_relational_engine.rfm.backend.databricks.sampler", # 2
+    "sdm_relational_engine.rfm",                     #  2
+    "sdm_relational_engine.client.client",           #  2
+    "sdm_relational_engine",                         #  1
+    "sdm_relational_engine.client.rfm",              #  1
+    "sdm_relational_engine.rfm.task_table",          #  1
+    "sdm_relational_engine.rfm.payload",             #  1
+    "sdm_relational_engine.rfm.backend.sqlite.table",    # 1
+    "sdm_relational_engine.rfm.backend.snow.table",      # 1
+    "sdm_relational_engine.rfm.backend.local.table",     # 1
+    "sdm_relational_engine.rfm.backend.local.sampler",   # 1
+    "sdm_relational_engine.rfm.backend.databricks.table",# 1
 ]
 ignore_errors = true
 

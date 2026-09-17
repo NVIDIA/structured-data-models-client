@@ -31,12 +31,25 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Build every distribution
+      - name: Build the four pure-Python distributions
         run: |
           python -m pip install --upgrade pip build
           for package in sdm-api sdm-pql sdm-client sdm-connectors; do
             ( cd "packages/$package" && python -m build --outdir "$GITHUB_WORKSPACE/dist" . )
           done
+
+      # The engine is a native build and needs one wheel per interpreter and
+      # platform. It is not optional: sdm-client[relational] pins it by exact
+      # version, so publishing the other four without it makes that extra
+      # uninstallable for the release it names.
+      - name: Build the relational engine's wheels
+        uses: pypa/cibuildwheel@v2.21.3
+        with:
+          package-dir: packages/sdm-relational-engine
+          output-dir: dist
+        env:
+          CIBW_BUILD: cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64
+          CIBW_TEST_COMMAND: python -c "import sdm_relational_engine; print(sdm_relational_engine.__version__)"
 
       # The tag is the release. If it does not name the version the packages
       # carry, the wrong thing is about to be published under the right name.
@@ -47,14 +60,27 @@ jobs:
 
           tag = os.environ['GITHUB_REF_NAME'].lstrip('v')
           built = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
-          versions = {re.match(r'[^-]+-([^-]+)-', name).group(1) for name in built}
           print('\n'.join(built))
+
+          # All five, every time. The four pure-Python distributions and the
+          # engine are pinned to each other by exact version, so a release
+          # missing one is a release whose extras cannot resolve.
+          expected = {
+              'sdm_api', 'sdm_pql', 'sdm_client',
+              'sdm_connectors', 'sdm_relational_engine',
+          }
+          present = {name.split('-')[0] for name in built}
+          missing = expected - present
+          if missing:
+              sys.exit(f'refusing to publish without {sorted(missing)}')
+
+          versions = {re.match(r'[^-]+-([^-]+)-', name).group(1) for name in built}
           if len(versions) != 1:
               sys.exit(f'distributions disagree on the version: {sorted(versions)}')
           built_version = versions.pop()
           if built_version != tag:
               sys.exit(f'tag v{tag} does not match the built version {built_version}')
-          print(f'tag and distributions agree on {built_version}')
+          print(f'all five distributions built at {built_version}, matching the tag')
           EOF
 
       - name: Nothing malformed reaches the index
