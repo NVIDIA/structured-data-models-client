@@ -36,6 +36,7 @@ from typing import Any
 
 import pandas as pd
 
+from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
@@ -431,14 +432,16 @@ class Request:
         return getattr(self, '_parts', None)
 
     @property
-    def about(self) -> tuple[Any, ...] | None:
-        r"""What each part asks after: a candidate, or a step.
+    def decomposition(self) -> Decomposition | None:
+        r"""How this question was rewritten, if it had to be.
 
-        Kept as the caller gave it. The query a part was written as says the
-        same thing, but says it as text, and a candidate read back out of
-        text is a string where a key was meant.
+        Holds the kind of question that was asked, what each part asks after
+        -- a candidate, or a step -- as the caller gave it, and how many
+        candidates a ranking keeps. Re-deriving any of this from the query
+        text would read a key as a string, and would call a forecast over a
+        table named ``rank_events`` a ranking.
         """
-        return getattr(self, '_about', None)
+        return getattr(self, '_decomposition', None)
 
     @property
     def asked(self) -> str | None:

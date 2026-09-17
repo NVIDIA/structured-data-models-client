@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
-from sdm_client.decompose import parts_of
+from sdm_client.decompose import Decomposition, parts_of
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
@@ -150,14 +150,15 @@ class PredictiveQuery:
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
-        parts = parts_of(
+        rewritten = parts_of(
             asked,
             self.text,
             list(candidates) if candidates is not None else None,
+            options,
         )
-        if parts is not None:
+        if rewritten is not None:
             return self._in_parts(
-                parts,
+                rewritten,
                 indices=indices,
                 predict=predict,
                 num_context_samples=num_context_samples,
@@ -331,7 +332,7 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
 
-    def _in_parts(self, parts: list[tuple[str, Any]], **how: Any) -> Request:
+    def _in_parts(self, rewritten: Decomposition, **how: Any) -> Request:
         r"""Gather the questions this one is asked as, and keep them together.
 
         Each is gathered like any other query, because each needs the context
@@ -342,18 +343,19 @@ class PredictiveQuery:
         import copy
 
         how = {name: value for name, value in how.items() if value is not None}
+        # How many candidates to keep belongs to the whole ranking. Each part
+        # is one yes-or-no question, and a task that ranks nothing is refused
+        # by the endpoint for carrying an option it cannot act on.
+        how.pop('top_k', None)
         gathered = [
             PredictiveQuery(text, self.schema).materialize(**how)
-            for text, _ in parts
+            for text, _ in rewritten.parts
         ]
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])
         whole._parts = tuple(gathered)
-        # What each part asks after, as the caller gave it. Reading it back
-        # out of the query it was written into would give a string where they
-        # gave a key, and a ranking is meant to be joined back onto rows.
-        whole._about = tuple(about for _, about in parts)
+        whole._decomposition = rewritten
         whole._asked = self.text
         return whole
 

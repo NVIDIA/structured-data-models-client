@@ -30,6 +30,8 @@ That is the whole reason candidates must be named rather than assumed.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.errors import StructuredDataError
@@ -41,12 +43,30 @@ if TYPE_CHECKING:
 #: of it. A caller who means it can raise it; nobody discovers it by accident.
 MOST_PARTS = 200
 
+RANKING = 'ranking'
+FORECAST = 'forecast'
+
+
+@dataclass(frozen=True)
+class Decomposition:
+    r"""The questions one question was rewritten as, and what each is about.
+
+    Carried on the request rather than re-derived from its text: a query
+    naming a table ``rank_events`` is not a ranking, and a candidate read back
+    out of the text it was written into is a string where a key was given.
+    """
+
+    kind: str
+    parts: tuple[tuple[str, Any], ...]
+    top: int | None = None
+
 
 def parts_of(
     query: ValidatedPredictiveQuery,
     text: str,
     candidates: list[Any] | None,
-) -> list[tuple[str, Any]] | None:
+    options: Mapping[str, Any],
+) -> Decomposition | None:
     r"""The queries this one is asked as, or nothing if it is asked as itself.
 
     Returns query text paired with what the part is about -- the candidate it
@@ -57,11 +77,25 @@ def parts_of(
     Each part is gathered like any other query, which is what gives it the
     context its own labels need.
     """
+    # Imported here because how many candidates to rank is settled by the
+    # relational materializer, which is built on the request this returns.
+    from sdm_client.materializers.relational import _candidates_to_rank
+
     kind = str(getattr(query, 'problem_type', ''))
     if kind.endswith('RANK'):
-        return _per_candidate(query, candidates)
+        return Decomposition(
+            RANKING,
+            tuple(_per_candidate(query, candidates)),
+            _candidates_to_rank(query, options),
+        )
     if kind.endswith('FORECAST'):
-        return _per_step(query)
+        if 'top_k' in options:
+            raise StructuredDataError(
+                'top_k is how many candidates a ranking keeps, and a forecast '
+                'ranks nothing; it gives back one value per step',
+                code='INVALID_REQUEST',
+            )
+        return Decomposition(FORECAST, tuple(_per_step(query)))
     if candidates is not None:
         raise StructuredDataError(
             f'candidates are the rows a ranking is over, and {text!r} does '
@@ -70,6 +104,16 @@ def parts_of(
             code='INVALID_REQUEST',
         )
     return None
+
+
+def _for_each(query: ValidatedPredictiveQuery) -> str:
+    r"""The entity clause as it was written, filter and all.
+
+    An entity filter chooses which rows become labelled examples rather than
+    which rows are scored, so a part that drops it is answered from a
+    different population than the one asked about.
+    """
+    return f'{query.for_each} {query.entity_ast}'
 
 
 def _window(query: ValidatedPredictiveQuery) -> tuple[int, int, str]:
@@ -119,7 +163,7 @@ def _per_candidate(
     return [
         (
             f'PREDICT COUNT({table}.* WHERE {ranked}={_as_literal(value)}, '
-            f'{start}, {end}, {unit}) > 0 FOR EACH {query.entity_column}',
+            f'{start}, {end}, {unit}) > 0 {_for_each(query)}',
             value,
         )
         for value in unique
@@ -142,7 +186,7 @@ def _per_step(query: ValidatedPredictiveQuery) -> list[tuple[str, Any]]:
         (
             f'PREDICT {aggregation.aggr}({aggregation.target}, '
             f'{start + step * span}, {end + step * span}, {unit}) '
-            f'FOR EACH {query.entity_column}',
+            f'{_for_each(query)}',
             # The contract numbers steps from one.
             step + 1,
         )

@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client.decompose import Decomposition
 
 # --- the graph these questions are asked over ------------------------------
 
@@ -62,8 +63,9 @@ def test_a_candidate_is_carried_as_the_value_not_as_its_text():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12])
-    assert request.about == (10, 11, 12)
-    assert all(isinstance(value, int) for value in request.about)
+    about = [value for _, value in request.decomposition.parts]
+    assert about == [10, 11, 12]
+    assert all(isinstance(value, int) for value in about)
 
 
 def test_a_numpy_key_past_the_safe_range_is_written_exactly():
@@ -176,7 +178,7 @@ def test_forecast_steps_are_numbered_from_one():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3])
-    assert request.about == (1, 2, 3)
+    assert [step for _, step in request.decomposition.parts] == [1, 2, 3]
 
 
 def test_each_step_moves_the_window_by_its_own_span():
@@ -223,8 +225,7 @@ def test_a_ranking_answer_keeps_the_row_each_entity_was_asked_on():
 
     merged = _ranked(
         [answer([(1, 0.1), (2, 0.9)]), answer([(1, 0.8), (2, 0.2)])],
-        (10, 11),
-        'RANK TOP 1',
+        Decomposition('ranking', (('q10', 10), ('q11', 11)), top=1),
         None,
     )
     by_id = {item.id: item for item in merged.items}
@@ -258,7 +259,7 @@ def test_a_forecast_answer_keeps_the_row_and_adds_the_step():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3])
-    merged = _by_step([answer(1.0), answer(2.0)], request)
+    merged = _by_step([answer(1.0), answer(2.0)], request.decomposition)
     pairs = [(item.row_index, item.forecast_step) for item in merged.items]
     assert pairs == [(0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2)]
 
@@ -300,3 +301,288 @@ def test_a_repeated_candidate_is_asked_about_once():
         candidates=[10, 10, 11, 10],
     )
     assert len(parts) == 2
+
+
+# --- the population asked about is the population answered from ------------
+
+
+def test_an_entity_filter_survives_into_every_forecast_step():
+    """`FOR EACH users.uid WHERE users.seg="a"` chooses which rows become
+    labelled examples. A part that drops it is answered from a different
+    population than the one asked about, and says nothing about it."""
+    parts = parts_of_query(
+        'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
+        'FOR EACH users.uid WHERE users.seg="a"',
+        indices=[1, 2, 3],
+    )
+    assert len(parts) == 2
+    for part in parts:
+        assert 'users.seg = "a"' in (part.query or '')
+
+
+def test_an_entity_filter_survives_into_every_candidate():
+    parts = parts_of_query(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid WHERE users.seg="a"',
+        indices=[1, 2, 3],
+        candidates=[10, 11],
+    )
+    assert len(parts) == 2
+    for part in parts:
+        assert 'users.seg = "a"' in (part.query or '')
+
+
+# --- what kind of question it is, is not a substring of its text -----------
+
+
+def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
+    monkeypatch,
+):
+    """The kind was once read as `'RANK' in text.upper()`, so a table called
+    `rank_events` turned a forecast into a ranking: its regression parts were
+    asked for probabilities, and the answers were merged as an order.
+
+    The whole answering path is driven here, because recording the right kind
+    on the request proves nothing about which kind the merge then uses.
+    """
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client import SDMClient
+    from sdm_client.result import PredictionResult
+
+    events = pd.DataFrame(
+        {
+            'eid': list(range(300)),
+            'uid': [1, 2, 3] * 100,
+            'when': pd.to_datetime('2025-06-01')
+            + pd.to_timedelta(range(300), unit='D'),
+        }
+    )
+    schema = Schema.from_data(
+        {
+            'users': pd.DataFrame({'uid': [1, 2, 3], 'seg': list('abc')}),
+            'rank_events': events,
+        },
+        primary_keys={'users': 'uid', 'rank_events': 'eid'},
+        time_columns={'rank_events': 'when'},
+    )
+    request = PredictiveQuery(
+        'PREDICT COUNT(rank_events.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
+        'FOR EACH users.uid',
+        schema,
+    ).materialize(indices=[1, 2, 3])
+    assert request.decomposition.kind == 'forecast'
+
+    asked_for = []
+
+    def regression(self, part, *, model, outputs=None, **rest):
+        asked_for.append(outputs)
+        return PredictionResult(
+            model='kumo-relational',
+            request_id='r',
+            items=[
+                PredictionItem(row_index=row, id=row + 1, prediction=1.5)
+                for row in range(3)
+            ],
+            outputs=('prediction',),
+        )
+
+    monkeypatch.setattr(SDMClient, 'predict', regression)
+    client = SDMClient('http://127.0.0.1:9', api_key='none')
+    answer = client._answer_in_parts(request, 'kumo-relational', None)
+
+    assert asked_for == [None, None], (
+        'a regression part was asked for a probability, which is what the '
+        'ranking path does'
+    )
+    assert [item.forecast_step for item in answer.items] == [1, 1, 1, 2, 2, 2]
+    assert all(item.rankings is None for item in answer.items)
+
+
+# --- how many to keep is what the caller settled on ------------------------
+
+
+def test_the_top_k_option_overrides_the_number_written_in_the_query():
+    """`materialize(top_k=1)` on a query saying `RANK TOP 3` once gave three
+    candidates back, because the merge reparsed the original text."""
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 3 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12], top_k=1)
+    assert request.decomposition.top == 1
+
+
+def test_the_number_written_in_the_query_is_used_when_nothing_overrides_it():
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12])
+    assert request.decomposition.top == 2
+
+
+def test_a_forecast_refuses_top_k_rather_than_dropping_it():
+    """A forecast ranks nothing, so `top_k` describes nothing about it. It was
+    quietly discarded, which is how a caller ends up believing an option they
+    set had an effect."""
+    with pytest.raises(StructuredDataError, match='ranks nothing'):
+        PredictiveQuery(
+            'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
+            'FOR EACH users.uid',
+            shop(),
+        ).materialize(indices=[1, 2, 3], top_k=2)
+
+
+def test_a_part_carries_no_top_k_in_the_task_it_sends():
+    """Each part asks one yes-or-no question, and a task that ranks nothing is
+    refused by the endpoint for carrying an option it cannot act on:
+    `422 does not act on these task options: ['top_k']`. The merge is where
+    the number is used, so it must not travel."""
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 3 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 11], top_k=1)
+    assert request.decomposition.top == 1
+    for part in request.parts:
+        for envelope in part.payloads:
+            assert 'top_k' not in envelope['task']
+
+
+# --- a session pins one context, and this question has several -------------
+
+
+def test_a_session_refuses_a_rewritten_question(monkeypatch):
+    """`fit()` once pinned the first part and answered as though it were the
+    whole question: a ranking came back as one candidate's `'true'`."""
+    from sdm_client import SDMClient
+
+    client = SDMClient('http://127.0.0.1:9', api_key='none')
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 11])
+    with pytest.raises(StructuredDataError, match='asked as 2 questions'):
+        client.fit(request, model='kumo-relational')
+
+
+def test_a_session_still_takes_an_ordinary_question():
+    """The refusal must not reach past the case it is for. Nothing is sent
+    here: the refusal above happens before any call, so reaching the endpoint
+    at all is what tells the two apart."""
+    from sdm_client import SDMClient
+
+    client = SDMClient('http://127.0.0.1:9', api_key='none', max_retries=0)
+    request = PredictiveQuery(
+        'PREDICT COUNT(buys.*, 0, 7, days) > 0 FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3])
+    assert request.decomposition is None
+    with pytest.raises(StructuredDataError) as raised:
+        client.fit(request, model='kumo-relational')
+    assert 'asked as' not in str(raised.value)
+
+
+# --- the fields a rewritten answer carries are the ones it builds ----------
+
+
+def test_a_ranking_refuses_a_field_it_does_not_build():
+    """Asking for `quantiles` once gave back a result naming `quantiles` and
+    carrying `prediction` and `rankings`."""
+    from sdm_client import SDMClient
+
+    client = SDMClient('http://127.0.0.1:9', api_key='none')
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 11])
+    with pytest.raises(StructuredDataError, match='not among them'):
+        client.predict(request, model='kumo-relational', outputs=['quantiles'])
+
+
+def test_a_ranking_takes_the_fields_it_does_build():
+    from sdm_client.client import _refuse_outputs_a_ranking_cannot_give
+
+    for asked in (
+        None,
+        ['prediction'],
+        ['rankings'],
+        ['prediction', 'rankings'],
+    ):
+        _refuse_outputs_a_ranking_cannot_give(asked)
+
+
+# --- a ranking is the order, so a missing score cannot be read as zero -----
+
+
+def test_a_candidate_answered_without_a_probability_is_refused():
+    """Reading a missing score as 0.0 sorts a candidate the endpoint was
+    confident about to the bottom, and gives back an order that looks like an
+    answer."""
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.client import _how_sure
+
+    with pytest.raises(StructuredDataError, match='how sure'):
+        _how_sure(PredictionItem(row_index=0, id=1, probabilities={}), 10)
+    with pytest.raises(StructuredDataError, match='how sure'):
+        _how_sure(
+            PredictionItem(row_index=0, id=1, probabilities={'yes': 0.9}), 10
+        )
+
+
+@pytest.mark.parametrize('spelling', ['true', 'True', 'TRUE', '1'])
+def test_every_spelling_of_the_positive_class_is_read(spelling):
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.client import _how_sure
+
+    item = PredictionItem(row_index=0, id=1, probabilities={spelling: 0.75})
+    assert _how_sure(item, 10) == 0.75
+
+
+def test_a_forecast_asks_each_step_for_the_fields_the_caller_wanted(
+    monkeypatch,
+):
+    """A step is an ordinary regression, so `quantiles` is a field it has.
+
+    The fields were dropped on the way down, so a caller who asked for them
+    got a series back with only its predictions and no sign that the rest of
+    the request had been ignored.
+    """
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client import SDMClient
+    from sdm_client.result import PredictionResult
+
+    request = PredictiveQuery(
+        'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3])
+
+    asked_for = []
+
+    def regression(self, part, *, model, outputs=None, **rest):
+        asked_for.append(tuple(outputs) if outputs else None)
+        return PredictionResult(
+            model='kumo-relational',
+            request_id='r',
+            items=[PredictionItem(row_index=0, id=1, prediction=1.5)],
+            outputs=('prediction', 'quantiles'),
+        )
+
+    monkeypatch.setattr(SDMClient, 'predict', regression)
+    client = SDMClient('http://127.0.0.1:9', api_key='none')
+    answer = client._answer_in_parts(
+        request, 'kumo-relational', ['prediction', 'quantiles']
+    )
+
+    assert asked_for == [
+        ('prediction', 'quantiles'),
+        ('prediction', 'quantiles'),
+    ]
+    assert answer.outputs == ('prediction', 'quantiles')

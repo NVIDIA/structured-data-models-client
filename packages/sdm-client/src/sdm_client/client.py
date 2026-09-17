@@ -30,6 +30,7 @@ from sdm_client.base import (
 )
 from sdm_client.core.transport import Transport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
+from sdm_client.decompose import RANKING, Decomposition
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Request
@@ -330,19 +331,23 @@ class SDMClient:
         or a value per step -- rather than handed back as the several answers
         it took.
         """
-        parts = request.parts or ()
-        asked = str(request.asked or '')
-        ranking = 'RANK' in asked.upper()
+        rewritten = request.decomposition
+        assert rewritten is not None
+        ranking = rewritten.kind == RANKING
+        if ranking:
+            _refuse_outputs_a_ranking_cannot_give(outputs)
         # A ranking needs how sure each answer was, which is what orders the
-        # candidates. A step of a forecast is a regression, and asking it for
-        # a probability is asking for something regression does not have.
-        wanted = _RANKING_PARTS if ranking else None
+        # candidates, and the fields it gives back are the merge's own. A step
+        # of a forecast is an ordinary regression, so the caller's fields are
+        # what each part is asked for.
+        wanted = _RANKING_PARTS if ranking else outputs
         answers = [
-            self.predict(part, model=model, outputs=wanted) for part in parts
+            self.predict(part, model=model, outputs=wanted)
+            for part in request.parts or ()
         ]
         if ranking:
-            return _ranked(answers, request.about or (), asked, outputs)
-        return _by_step(answers, request)
+            return _ranked(answers, rewritten, outputs)
+        return _by_step(answers, rewritten)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -398,6 +403,7 @@ class SDMClient:
         Raises:
             UnsupportedRequestError: If the endpoint does not serve sessions.
         """
+        _refuse_to_pin_a_rewritten_question(request)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
         held = _held_back(payload, holdout)
@@ -644,12 +650,12 @@ def _warn_scoring_what_was_pinned(
 #: What a ranking's parts are asked for: how sure each answer was is what
 #: orders the candidates, not which side of the line it fell.
 _RANKING_PARTS = ('prediction', 'probabilities')
+_RANKING_OUTPUTS = ('prediction', 'rankings')
 
 
 def _ranked(
     answers: list[PredictionResult],
-    about: tuple[Any, ...],
-    asked: str,
+    rewritten: Decomposition,
     outputs: Sequence[str] | None,
 ) -> PredictionResult:
     r"""The candidates each entity reached, likeliest first.
@@ -667,15 +673,14 @@ def _ranked(
 
     scores: dict[Any, list[tuple[float, Any]]] = {}
     rows: dict[Any, int | None] = {}
-    for answer, candidate in zip(answers, about, strict=True):
+    for answer, (_, candidate) in zip(answers, rewritten.parts, strict=True):
         for item in answer.items:
-            sure = (item.probabilities or {}).get('true')
-            if sure is None:
-                sure = (item.probabilities or {}).get('True', 0.0)
-            scores.setdefault(item.id, []).append((float(sure), candidate))
+            scores.setdefault(item.id, []).append(
+                (_how_sure(item, candidate), candidate)
+            )
             rows.setdefault(item.id, item.row_index)
 
-    top = _top_k_of(asked)
+    top = rewritten.top
     items = []
     for position, (entity, scored) in enumerate(scores.items()):
         # Sort only on the score: candidates are of the caller's type and two
@@ -698,7 +703,28 @@ def _ranked(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
-        outputs=tuple(outputs or ('prediction', 'rankings')),
+        outputs=tuple(outputs or _RANKING_OUTPUTS),
+    )
+
+
+def _how_sure(item: Any, candidate: Any) -> float:
+    r"""How sure the endpoint was that this entity reaches this candidate.
+
+    A ranking is nothing but the order of these, so a missing one cannot be
+    read as zero: that would sort a candidate the endpoint was confident about
+    to the bottom and give back an order that looks like an answer.
+    """
+    given = item.probabilities or {}
+    for spelling in ('true', 'True', 'TRUE', '1'):
+        if spelling in given:
+            return float(given[spelling])
+    raise StructuredDataError(
+        f'the endpoint answered the question about candidate {candidate!r} '
+        f'without saying how sure it was, and a ranking is only the order of '
+        f'those. It gave back {sorted(given) or "no probabilities"}, and this '
+        f'client knows a positive class spelled "true", "True", "TRUE" or '
+        f'"1".',
+        code='INTERNAL_ERROR',
     )
 
 
@@ -711,7 +737,7 @@ def _top_k_of(asked: str) -> int | None:
 
 
 def _by_step(
-    answers: list[PredictionResult], request: Request
+    answers: list[PredictionResult], rewritten: Decomposition
 ) -> PredictionResult:
     r"""What each step holds, in the order the steps come.
 
@@ -723,10 +749,9 @@ def _by_step(
     """
     import dataclasses
 
-    steps = request.about or tuple(range(1, len(answers) + 1))
     items = [
         dataclasses.replace(item, forecast_step=step)
-        for step, answer in zip(steps, answers, strict=True)
+        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
     return PredictionResult(
@@ -735,3 +760,46 @@ def _by_step(
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
     )
+
+
+def _refuse_to_pin_a_rewritten_question(request: Request) -> None:
+    r"""A session pins one context, and a rewritten question has several.
+
+    A ranking's parts each carry their own labels -- whether an entity reached
+    *this* candidate -- and a forecast's parts each cover their own window. One
+    pinned context can only be one of them, so pinning would answer the first
+    part and give back something shaped like the whole question. Refusing says
+    what to do instead.
+    """
+    rewritten = request.decomposition
+    if rewritten is None:
+        return
+    raise StructuredDataError(
+        f'a {rewritten.kind} is asked as {len(rewritten.parts)} questions, '
+        f'each needing the context its own labels come from, and a session '
+        f'pins one context. Ask it with predict(), which sends each and puts '
+        f'the answers back together.',
+        code='INVALID_REQUEST',
+    )
+
+
+def _refuse_outputs_a_ranking_cannot_give(
+    outputs: Sequence[str] | None,
+) -> None:
+    r"""A ranking gives back an order, and the fields that describe one.
+
+    The parts it was asked as are classifications, so their fields are the
+    endpoint's; the merged answer's fields are this client's, and asking it
+    for one it does not build would otherwise be answered with a result that
+    names the field and does not carry it.
+    """
+    unknown = [name for name in outputs or () if name not in _RANKING_OUTPUTS]
+    if unknown:
+        raise StructuredDataError(
+            f'a ranking gives back {", ".join(_RANKING_OUTPUTS)}, and '
+            f'{", ".join(repr(name) for name in unknown)} '
+            f'{"are" if len(unknown) > 1 else "is"} not among them. The '
+            f'per-candidate questions it is asked as are classifications; ask '
+            f'one of those directly for the fields a classification gives.',
+            code='INVALID_REQUEST',
+        )
