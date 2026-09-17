@@ -289,3 +289,97 @@ def test_session_create_still_retries_a_connection_that_never_established():
     assert policy.connect == 3
     assert not policy._is_method_retryable('POST')
     assert policy._is_method_retryable('GET')
+
+
+_EMPTY_CONTEXT = (
+    '{"code": "INTERNAL_ERROR", "detail": "The kumo-relational prediction at '
+    'http://127.0.0.1:8000 failed unexpectedly with RuntimeError: Failed to '
+    'collect any context examples. Is your predictive query too restrictive?"}'
+)
+
+
+def test_a_500_naming_the_callers_mistake_is_reported_as_theirs():
+    """The status says server, the code says internal, and only the sentence
+    says otherwise. An orchestrator branching on the code retries a request
+    that can only fail the same way."""
+    with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
+        transport = Transport(url, max_retries=0, backoff_factor=0.0)
+        with pytest.raises(NimRequestError) as raised:
+            transport.predict({'model': 'kumo-relational'})
+    assert raised.value.code == 'INVALID_REQUEST'
+
+
+def test_the_python_exception_the_server_leaked_is_not_shown():
+    """``RuntimeError`` is a type from inside the endpoint. It names nothing
+    the caller can act on and reads as a crash, which is the impression this
+    whole path is being corrected for."""
+    with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
+        transport = Transport(url, max_retries=0, backoff_factor=0.0)
+        with pytest.raises(NimRequestError) as raised:
+            transport.predict({'model': 'kumo-relational'})
+    message = raised.value.message
+    assert 'RuntimeError' not in message
+    assert 'failed unexpectedly' not in message
+    assert message.startswith('Failed to collect any context examples')
+    assert 'too restrictive' in message
+
+
+def test_what_the_endpoint_called_it_is_kept_beside_the_correction():
+    with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
+        transport = Transport(url, max_retries=0, backoff_factor=0.0)
+        with pytest.raises(NimRequestError) as raised:
+            transport.predict({'model': 'kumo-relational'})
+    error = raised.value
+    assert error.status_code == 500
+    assert error.details['endpoint_code'] == 'INTERNAL_ERROR'
+    assert error.details['diagnosis'] == 'EMPTY_CONTEXT'
+
+
+def test_a_500_naming_nothing_is_reported_as_the_endpoints():
+    """The correction must not reach past the case it is for."""
+    body = '{"code": "INTERNAL_ERROR", "detail": "Unexpected server error."}'
+    with _serve(_Reply(status=500, body=body)) as (_, url):
+        transport = Transport(url, max_retries=0, backoff_factor=0.0)
+        with pytest.raises(NimRequestError) as raised:
+            transport.predict({'model': 'kumo-relational'})
+    assert raised.value.code == 'INTERNAL_ERROR'
+
+
+def test_a_4xx_naming_the_same_thing_is_left_alone():
+    """The correction is for a server reporting a caller's mistake as its own.
+    A 4xx already says whose it is."""
+    with _serve(_Reply(status=422, body=_EMPTY_CONTEXT)) as (_, url):
+        transport = Transport(url, max_retries=0, backoff_factor=0.0)
+        with pytest.raises(NimRequestError) as raised:
+            transport.predict({'model': 'kumo-relational'})
+    assert raised.value.code == 'INTERNAL_ERROR'
+
+
+def test_a_detail_that_is_not_text_names_no_diagnosis():
+    """An object under `detail` is not the shape the contract describes, and
+    rendering one to text could match this on a debug field the endpoint never
+    meant as its diagnosis."""
+    body = (
+        '{"code": "INTERNAL_ERROR", "detail": {"debug": "failed to collect '
+        'any context examples"}}'
+    )
+    with _serve(_Reply(status=500, body=body)) as (_, url):
+        transport = Transport(url, max_retries=0, backoff_factor=0.0)
+        with pytest.raises(NimRequestError) as raised:
+            transport.predict({'model': 'kumo-relational'})
+    assert raised.value.code == 'INTERNAL_ERROR'
+
+
+def test_the_retry_budget_is_what_it_was():
+    """This fix reads the body and changes nothing about how often a request
+    is sent, which is the one thing a correction to an error's classification
+    must not quietly alter."""
+    for status, sends in ((500, 4), (503, 4), (422, 1)):
+        with _serve(_Reply(status=status, body=_EMPTY_CONTEXT)) as (
+            server,
+            url,
+        ):
+            transport = Transport(url, max_retries=3, backoff_factor=0.0)
+            with pytest.raises(NimRequestError):
+                transport.predict({'model': 'kumo-relational'})
+        assert server.received == ['/v1/predictions'] * sends, status

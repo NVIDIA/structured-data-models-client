@@ -708,7 +708,63 @@ def _check_encodable(payload: Any) -> None:
             stack.append((item, depth + 1, nested))
 
 
+_THE_CALLERS_TO_FIX = (
+    ('failed to collect any context examples', 'EMPTY_CONTEXT'),
+)
+
+_LEAKED_EXCEPTION = re.compile(
+    r'\b(?:failed unexpectedly with\s+)?'
+    r'[A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)\s*:\s*'
+)
+
+
+def _diagnosis_in(reported: Any) -> tuple[str, str] | None:
+    r"""The wording and stable code of a failure the caller can act on.
+
+    ``_THE_CALLERS_TO_FIX`` holds the failures the endpoint reports as its own
+    that describe the request instead. Each is the caller's to fix, and an
+    orchestrator told a server faulted will retry one that can only fail the
+    same way.
+
+    They are matched on the endpoint's wording, which is the only signal the
+    response gives: the status says server, the code says internal, and only
+    the sentence says otherwise. A build that rewords one reverts to reporting
+    it the way the endpoint did, rather than misreporting anything.
+
+    Only a string is read. A body whose ``detail`` is an object is not the
+    shape the contract describes, and rendering one to text could match this
+    on a debug field the endpoint never meant as its diagnosis.
+    """
+    if not isinstance(reported, str):
+        return None
+    said = reported.casefold()
+    for wording, code in _THE_CALLERS_TO_FIX:
+        if wording in said:
+            return wording, code
+    return None
+
+
+def _the_diagnosis_alone(message: str, wording: str) -> str:
+    r"""The part of ``message`` that says what the caller got wrong.
+
+    What comes before it is the endpoint describing its own failure -- which
+    prediction, at which address, and the Python type that reached its
+    response, matched by ``_LEAKED_EXCEPTION``. None of that is the caller's
+    to act on, and a type from inside the server reads as a crash, which is
+    the impression being corrected.
+    """
+    found = message.casefold().find(wording)
+    kept = message[found:].strip() if found >= 0 else message
+    return _LEAKED_EXCEPTION.sub('', kept).strip() or message
+
+
 def _to_nim_error(status_code: int, content: bytes) -> NimRequestError:
+    r"""The error an endpoint's failed response means.
+
+    A failure the caller can act on is reported as theirs whatever status it
+    arrived under, with what the endpoint called it kept in ``details``: that
+    is worth knowing even where it was wrong.
+    """
     try:
         body = json.loads(content)
     except (ValueError, RecursionError):
@@ -735,6 +791,12 @@ def _to_nim_error(status_code: int, content: bytes) -> NimRequestError:
         for key, value in body.items()
         if key not in ('code', 'detail', 'title', 'type', 'status', 'instance')
     }
+    found = _diagnosis_in(reported) if status_code >= 500 else None
+    if found is not None:
+        wording, diagnosis = found
+        details = {**details, 'endpoint_code': code, 'diagnosis': diagnosis}
+        code = 'INVALID_REQUEST'
+        message = _the_diagnosis_alone(message, wording)
     return NimRequestError(
         status_code,
         code=code,
