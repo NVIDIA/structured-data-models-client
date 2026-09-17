@@ -173,11 +173,16 @@ ignore = [
     "D415",  # First line should end with a period
 
     # --- Style backlog -------------------------------------------------
-    # Everything below is on in sdm-client and sdm-connectors, which pass
-    # clean. This tree is an order of magnitude larger and predates the rule
-    # set, so each is listed with its count at the time of writing and is
-    # meant to be retired one rule at a time, not left indefinitely. None of
-    # them can be auto-fixed without changing behaviour.
+    # None of the rules below is selected by the shared baseline, so listing
+    # them here silences nothing today -- they are a recorded backlog, not an
+    # active exemption. An earlier note claimed they were "on in sdm-client and
+    # sdm-connectors, which pass clean"; neither half was true, and nothing
+    # read the comment to find out. What is true, and is now asserted by
+    # tests/test_release_contract.py, is that those two packages report zero
+    # findings under this exact list -- so the families can be promoted to the
+    # root `select` as soon as this tree and the test suites are clean too.
+    # Each is listed with its count in this tree at the time of writing. None
+    # of them can be auto-fixed without changing behaviour.
     "C408",    # 34x dict()/list() call instead of a literal
     "B028",    # 13x warnings.warn without stacklevel -- changes the reported
                #     call site, so it is a behaviour change for callers

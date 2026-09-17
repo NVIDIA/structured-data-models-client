@@ -20,6 +20,9 @@ and, separately, :mod:`predictive_query.rewriting` turns one validated query
 into another.
 """
 
+import logging
+
+from predictive_query._version import __version__
 from predictive_query.api import validate
 from predictive_query.parser import Delegate, PQLParser
 from predictive_query.profiles import (
@@ -60,14 +63,24 @@ from predictive_query.schema.typing import (
 )
 from predictive_query.validator import PredictiveQueryValidator
 
-__version__ = '1.0.0'
-
 #: The version of the *language*, as distinct from this package. MINOR goes up
 #: when the language accepts something it did not before, so every query valid
 #: under an earlier MINOR is still valid. MAJOR goes up only when a query stops
 #: being valid or changes meaning. Neither moves for a new capability or
 #: profile. See ``docs/stability.md``.
 LANGUAGE_VERSION = '1.1'
+
+# A library states what happened; the application decides where that goes. With
+# no handler anywhere, Python's last-resort handler prints a WARNING record to
+# stderr -- so a host application that never configured logging saw this
+# package's month-to-days and constant-precision warnings appear in its own
+# output, from a dependency it may not know it has.
+#
+# A NullHandler ends that without deciding anything on the application's behalf:
+# records still propagate, so an application that *has* configured logging
+# receives them exactly as before.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 
 __all__ = [
     'ANOMALY',

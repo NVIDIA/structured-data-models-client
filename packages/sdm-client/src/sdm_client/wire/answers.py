@@ -42,7 +42,7 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     if 'classification' not in str(task.get('kind', '')):
         return items
     dtype = task.get('target', {}).get('dtype')
-    if not dtype or not (dtype.startswith('int') or dtype.startswith('float')):
+    if not dtype or not dtype.startswith(('int', 'float')):
         return items
     read = []
     for item in items:

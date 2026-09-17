@@ -34,6 +34,67 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 [tool.ruff.format]
 quote-style = "single"
 
+# Static type checking. Every distribution ships `py.typed`, which is a promise
+# made to other people's type checkers -- so one has to run here, or the
+# promise is only as good as the last person who happened to check.
+#
+# It is introduced the way a checker can be introduced to an existing tree
+# without rewriting it: the whole repository is checked, and the modules that
+# do not pass yet are listed below with the count they carried on the day the
+# job was added. New code is checked from the first commit; the list is a
+# backlog to retire, not a permanent exemption, and it can only shrink because
+# `warn_unused_ignores` and this file's own test will report an entry that is
+# no longer needed.
+[tool.mypy]
+# Deliberately not pinned to the 3.10 floor: numpy's bundled stubs use 3.12
+# syntax, and a pinned older version makes mypy reject them before it reads a
+# line of this repository. The interpreter CI runs on decides instead.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+exclude = [
+    # ANTLR's output, regenerated from the grammar rather than edited. Excluded
+    # from ruff for the same reason; the two lists move together.
+    "packages/sdm-pql/src/predictive_query/grammar/",
+]
+
+# --- Baseline recorded 2026-09-17: 37 errors across 11 hand-written modules --
+# Retire an entry by fixing its module and deleting its line.
+[[tool.mypy.overrides]]
+module = [
+    "sdm_client.materializers.relational",   # 15
+    "sdm_client.request",                    #  6
+    "sdm_client.wire.dtypes",                #  3
+    "sdm_client.core.warnings",              #  1
+    "sdm_client.adapters.relational",        #  1
+    "predictive_query.validator.join_validator",  # 4
+    "sdm_connectors.sql",                    #  1
+    "sdm_connectors.reader",                 #  1
+    "sdm_connectors.backends.sqlite",        #  1
+    "sdm_connectors.backends.snowflake",     #  1
+    "sdm_connectors.backends.postgres",      #  1
+    "sdm_connectors.backends.duckdb",        #  1
+    "sdm_connectors.backends.databricks",    #  1
+]
+ignore_errors = true
+
+# `warn_unused_ignores` is on because a suppression that stopped being needed is
+# debt that hides the next real error. But "needed" depends on which version of
+# a dependency is installed: the ignores below cover a pydantic v1/v2 fallback
+# import and two third-party stubs, so they are unused under one resolution and
+# required under another. Silencing only `unused-ignore` here keeps every other
+# check running in these modules, rather than exempting them wholesale.
+[[tool.mypy.overrides]]
+module = [
+    "predictive_query.schema.typing",
+    "predictive_query.schema.json_serde",
+    "predictive_query.ast.date_offset_range",
+    "predictive_query.query",
+    "sdm_client.core.transport",
+]
+disable_error_code = ["unused-ignore"]
+
 # Registered here as well as per package, so that running the whole workspace
 # from the repository root neither warns about unknown marks nor silently
 # selects a test that opens a socket.

@@ -4,7 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdm-api"
-version = "1.0.0"
+# The version lives in exactly one place per distribution: `_version.py`, a
+# module holding a single literal and importing nothing. setuptools reads it
+# statically, so building the wheel never imports the package -- which matters
+# because importing these roots pulls pandas, and a build backend that has to
+# import pandas to learn a version number cannot produce a wheel at all.
+dynamic = ["version"]
 description = "Universal TFM API wire types for the NVIDIA Structured Data Models client"
 readme = "README.md"
 license = "Apache-2.0"
@@ -35,6 +40,9 @@ Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 
 [project.optional-dependencies]
 test = ["pytest", "pyyaml"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sdm_api._version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
