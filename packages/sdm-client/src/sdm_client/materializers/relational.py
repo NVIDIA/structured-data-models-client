@@ -736,6 +736,12 @@ _ENTITY_REF = '__kumo_entity_ref'
 #: And the moment it is asked about.
 _ANCHOR = '__kumo_anchor_time'
 
+#: What the envelope calls the answer a context row carries.
+_TARGET = 'TARGET'
+
+#: What ties a related row to the instance it hangs off.
+INSTANCE_ID = 'instance_id'
+
 
 def _drop_context_that_answers_the_question(
     payloads: tuple[dict[str, Any], ...], *, windowed: bool = True

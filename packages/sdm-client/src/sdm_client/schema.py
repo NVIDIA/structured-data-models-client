@@ -679,6 +679,7 @@ class Schema:
         if relationships is None:
             _warn_table_cannot_be_linked_to(built, dates)
         _warn_stype_was_decided_by_the_rows_read(built)
+        _warn_two_ways_to_reach_one_table(schema)
         return schema
 
     @property
@@ -1187,6 +1188,44 @@ def _unlinkable_table_reads(
         f'{"those tables are the ones that need" if shared_by_many else "that table is the one that needs"} '
         f'the key.'
     )
+
+
+def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
+    r"""Say when one table reaches another by more than one column.
+
+    Both are real relationships and keeping both is right: a sales line names
+    the customer it was sold to and the one it ships to, and they are
+    different facts. But an aggregation across a pair of tables has to be
+    resolved to one column, and a query that crosses an ambiguous pair is
+    refused -- at the moment it is asked, which reads as a problem with the
+    query rather than with the graph it was written against.
+
+    Said here so that it is read where the cause is. Nothing is dropped: which
+    of them a question means is the caller's to decide, and choosing for them
+    is choosing what their model sees.
+    """
+    ways: dict[tuple[str, str], list[str]] = {}
+    for link in schema.relationships:
+        pair = (link.source_table, link.target_table)
+        ways.setdefault(pair, []).append(link.source_column)
+
+    for (source, target), columns in sorted(ways.items()):
+        if len(columns) < 2:
+            continue
+        kept, *rest = sorted(columns)
+        warnings.warn(
+            f'{source!r} reaches {target!r} through {_and_list(sorted(columns))}'
+            f', and an aggregation across the two tables has to be resolved to '
+            f'one of them, so a query that crosses this pair is refused until '
+            f'it is. They are all kept because they are all real, and which '
+            f'one a question means is not something this can decide. To keep '
+            f'{kept!r}, drop the others: schema.relationships = [link for '
+            f'link in schema.relationships if not (link.source_table == '
+            f'{source!r} and link.target_table == {target!r} and '
+            f'link.source_column in {sorted(rest)!r})].',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
 
 
 def _could_identify_a_row(
