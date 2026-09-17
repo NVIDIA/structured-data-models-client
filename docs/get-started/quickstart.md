@@ -105,3 +105,47 @@ client.predict(request, model='kumo-relational')
 
 Gather and send for the same model. A request built for one is refused by the
 other, before anything is sent.
+
+## Ranking and forecasting
+
+The endpoint serves classification and regression. A ranking and a multi-step
+forecast are neither, so the client asks each as the questions it does serve
+and puts the answers back together.
+
+A ranking is asked once per candidate — *will this entity reach this one?* —
+and the candidates are ordered by how sure each answer was. The set is yours to
+name, because there is no ranking task to choose it for you:
+
+```python
+request = PredictiveQuery(
+    'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) RANK TOP 3 '
+    'FOR EACH users.user_id',
+    schema,
+).materialize(indices=[1, 2, 3], candidates=items['item_id'])
+
+result = client.predict(request, model=KumoRelational())
+result.to_pandas()   # row_index, id, prediction, rankings
+```
+
+`prediction` holds the top candidates in order, and `rankings` pairs each with
+its score. Ask for one of them by name to get only that one. The ranked column
+has to be a relationship into the table whose rows you want ordered; ranking an
+ordinary column is refused, because which labels a column takes is a different
+question.
+
+A forecast is asked once per step, each over the window moved along by its own
+span. Every entity comes back once per step, and `forecast_step` numbers them
+from one:
+
+```python
+request = PredictiveQuery(
+    'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 4 TIMEFRAMES '
+    'FOR EACH users.user_id',
+    schema,
+).materialize(indices=[1, 2, 3])
+```
+
+Both are sent as several calls, so they cost several calls: a ranking over
+fifty candidates is fifty. `request.context_rows` and `request.predict_rows`
+count what will actually be sent. Neither can be pinned with `fit()`, because
+each part needs the context its own labels come from and a session pins one.
