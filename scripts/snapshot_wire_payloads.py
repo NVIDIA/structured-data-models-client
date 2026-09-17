@@ -119,13 +119,18 @@ def _relational_cases() -> dict[str, list[dict[str, Any]]]:
     }
 
 
-def collect() -> dict[str, Any]:
-    recorded: dict[str, Any] = dict(_tabular_cases())
+def _relational_available() -> bool:
     try:
         import sdm_relational_engine  # noqa: F401
     except ImportError:  # pragma: no cover - the extra is not installed
-        return recorded
-    recorded.update(_relational_cases())
+        return False
+    return True
+
+
+def collect() -> dict[str, Any]:
+    recorded: dict[str, Any] = dict(_tabular_cases())
+    if _relational_available():
+        recorded.update(_relational_cases())
     return recorded
 
 
@@ -148,15 +153,39 @@ def main() -> int:
         return 1
 
     recorded = json.loads(SNAPSHOT.read_text())
-    # Only compare the cases this environment can build, so an install without
-    # the relational extra does not report a difference it cannot cause.
-    comparable = {name: recorded[name] for name in current if name in recorded}
-    if comparable == current and set(current) <= set(recorded):
+
+    # Which cases this environment is expected to produce. An install without
+    # the relational extra cannot build the relational ones and must not report
+    # a difference it could not have caused -- but every other recorded case is
+    # required, so deleting one from `collect()` fails here rather than quietly
+    # reducing what is covered.
+    expected = {
+        name
+        for name in recorded
+        if not name.startswith('relational/') or _relational_available()
+    }
+
+    if set(current) != expected:
+        for name in sorted(expected - set(current)):
+            print(f'case no longer produced: {name}', file=sys.stderr)
+        for name in sorted(set(current) - expected):
+            print(f'case not in the snapshot: {name}', file=sys.stderr)
+        print(
+            'the set of canonical requests changed; re-record with --write if '
+            'that was intended',
+            file=sys.stderr,
+        )
+        return 1
+
+    differing = [name for name in current if recorded[name] != current[name]]
+    if not differing:
         print(
             f'wire payloads match the recorded snapshot ({len(current)} cases)'
         )
         return 0
 
+    for name in differing:
+        print(f'payload changed: {name}', file=sys.stderr)
     print('wire payloads differ from the recorded snapshot', file=sys.stderr)
     return 1
 

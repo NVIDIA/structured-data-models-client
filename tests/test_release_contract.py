@@ -344,19 +344,50 @@ class TestInterpreterSupportIsStated:
     on an interpreter it runs on perfectly well.
     """
 
+    # Every interpreter this project could plausibly name. Extend it rather
+    # than deriving it: a list is checkable, and a range that quietly grows to
+    # include an unreleased Python is not.
+    KNOWN = ('3.10', '3.11', '3.12', '3.13', '3.14')
+
     @staticmethod
-    def _admitted(requires: str) -> list[str]:
-        floor = requires.split(',')[0].strip().lstrip('>=').strip()
-        ceiling = None
+    def _parts(version: str) -> tuple[int, ...]:
+        """Compare versions numerically.
+
+        `'3.10' >= '3.9'` is False as strings, because `'1' < '9'`. Nothing
+        here has a 3.9 floor today, so a lexical comparison happened to agree
+        -- and would have started disagreeing silently at 3.20, in a helper
+        whose whole job is to catch a metadata mistake.
+        """
+        return tuple(int(part) for part in version.split('.'))
+
+    @classmethod
+    def _admitted(cls, requires: str) -> list[str]:
+        floor = ceiling = None
         for clause in requires.split(','):
             clause = clause.strip()
-            if clause.startswith('<'):
-                ceiling = clause.lstrip('<=').strip()
-        known = ['3.10', '3.11', '3.12', '3.13', '3.14']
-        admitted = [v for v in known if v >= floor]
-        if ceiling:
-            admitted = [v for v in admitted if v < ceiling]
+            if clause.startswith('>='):
+                floor = cls._parts(clause[2:].strip())
+            elif clause.startswith('<'):
+                ceiling = cls._parts(clause.lstrip('<=').strip())
+        assert floor is not None, f'no lower bound in {requires!r}'
+        admitted = [v for v in cls.KNOWN if cls._parts(v) >= floor]
+        if ceiling is not None:
+            admitted = [v for v in admitted if cls._parts(v) < ceiling]
         return admitted
+
+    def test_the_version_comparison_this_class_relies_on_is_numeric(self):
+        """The helper above is the only thing standing between a metadata
+        mistake and a release, so it is tested rather than trusted."""
+        assert self._parts('3.10') > self._parts('3.9')
+        assert self._parts('3.9') < self._parts('3.14')
+        assert self._admitted('>=3.10') == list(self.KNOWN)
+        assert self._admitted('>=3.10,<3.14') == [
+            '3.10',
+            '3.11',
+            '3.12',
+            '3.13',
+        ]
+        assert self._admitted('>=3.12') == ['3.12', '3.13', '3.14']
 
     def test_every_admitted_interpreter_is_also_a_classifier(self):
         for name in _distributions():
