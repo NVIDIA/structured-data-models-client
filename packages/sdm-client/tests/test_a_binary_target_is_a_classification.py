@@ -238,7 +238,7 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
     """
 
     @staticmethod
-    def graph():
+    def graph(with_items: bool = False):
         users = pd.DataFrame(
             {'uid': range(20), 'age': [20.0 + i for i in range(20)]}
         )
@@ -246,11 +246,17 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
             {
                 'bid': range(400),
                 'uid': [i % 20 for i in range(400)],
+                'iid': [i % 6 for i in range(400)],
                 'amt': [1.0 + i for i in range(400)],
                 'ts': pd.date_range('2026-01-01', periods=400, freq='6h'),
             }
         )
-        return Schema.from_data({'users': users, 'buys': buys})
+        tables = {'users': users, 'buys': buys}
+        if with_items:
+            tables['items'] = pd.DataFrame(
+                {'iid': range(6), 'price': [5.0 + i for i in range(6)]}
+            )
+        return Schema.from_data(tables)
 
     @staticmethod
     def query(schema):
@@ -280,3 +286,35 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
         said = str(raised.value)
         assert 'classification' in said
         assert 'relational' in said
+
+    @pytest.mark.parametrize(
+        ('text', 'extra'),
+        [
+            (
+                'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+                'FOR EACH users.uid',
+                {'candidates': [0, 1, 2]},
+            ),
+            (
+                'PREDICT COUNT(buys.*, 0, 30, days) FORECAST 3 TIMEFRAMES '
+                'FOR EACH users.uid',
+                {},
+            ),
+        ],
+    )
+    def test_a_decomposed_question_refuses_it_too(self, text, extra):
+        """A ranking and a forecast leave through their own branch.
+
+        The first refusal sat beside the relational call, which those two never
+        reach -- so they went on accepting the argument and dropping it, the
+        very thing the refusal was added to stop.
+        """
+        pytest.importorskip('sdm_relational_engine')
+        schema = self.graph(with_items=True)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            with pytest.raises(StructuredDataError) as raised:
+                PredictiveQuery(text, schema).materialize(
+                    indices=[0], task='classification', **extra
+                )
+        assert 'decomposed' in str(raised.value)

@@ -164,6 +164,27 @@ class PredictiveQuery:
             list(candidates) if candidates is not None else None,
             options,
         )
+        if task is not None and (relational or rewritten is not None):
+            # Refused rather than ignored, and refused here rather than beside
+            # the relational call, because a ranking or a forecast leaves
+            # through the branch below and would have dropped it just as
+            # quietly. Neither route derives a kind for this to override: the
+            # engine resolves the query and states it in the payload, and a
+            # decomposed question is asked as the kind its parts are.
+            why = (
+                'a decomposed question'
+                if rewritten is not None
+                else 'a relational query'
+            )
+            raise StructuredDataError(
+                f'task={task!r} settles what a single-table question is '
+                f'asking, which is the only route that has to decide. '
+                f'{why.capitalize()} resolves to its own kind, so state it in '
+                f'the query rather than beside it',
+                code='INVALID_REQUEST',
+                details={'task': repr(task)},
+            )
+
         if rewritten is not None:
             return self._in_parts(
                 rewritten,
@@ -188,21 +209,6 @@ class PredictiveQuery:
                 indices=indices,
                 num_context_samples=num_context_samples,
                 task=task,
-            )
-
-        if task is not None:
-            # Refused rather than ignored. The relational path does not derive
-            # a task kind at all -- the engine resolves the query and states it
-            # in the payload -- so there is nothing here for an override to
-            # override, and accepting the argument to drop it would be worse
-            # than not accepting it.
-            raise StructuredDataError(
-                f'task={task!r} settles what a single-table question is '
-                f'asking, which only the tabular route has to decide. A '
-                f'relational query resolves to its own kind, so state it in '
-                f'the query rather than beside it',
-                code='INVALID_REQUEST',
-                details={'task': repr(task)},
             )
 
         return self._relational_materializer.materialize(
