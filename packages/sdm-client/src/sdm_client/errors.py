@@ -138,8 +138,15 @@ class NimRequestError(StructuredDataError):
     r"""The NIM answered, and the answer was an error.
 
     Distinguished from :class:`StructuredDataError` by carrying the HTTP
-    :attr:`status_code`, which is what tells a caller whether retrying can
-    help: 5xx and 429 are worth retrying, 4xx means the request has to change.
+    :attr:`status_code`, which is the endpoint's own answer, kept as it was.
+
+    Branch on :attr:`code`, not on the status. ``INVALID_REQUEST`` means the
+    request has to change and sending it again cannot help; ``429`` and the
+    remaining ``5xx`` codes are worth retrying. The two can disagree: the
+    endpoint reports some caller mistakes with a ``500`` and an internal code,
+    in a sentence that names exactly what the caller got wrong, and this client
+    reports those as the caller's. Where it does, the endpoint's own
+    classification is kept in :attr:`details` under ``endpoint_code``.
 
     Attributes:
         status_code: The HTTP status the NIM returned.
