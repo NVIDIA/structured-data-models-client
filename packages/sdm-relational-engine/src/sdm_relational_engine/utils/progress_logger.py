@@ -23,6 +23,11 @@ from rich.progress import (
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
+from sdm_relational_engine.utils.environment import (
+    in_notebook,
+    in_streamlit_notebook,
+    in_vnext_notebook,
+)
 from typing_extensions import Self
 
 
@@ -33,8 +38,6 @@ def _in_terminal() -> bool:
     cover a plain script whose stdout is a pipe or a file, where the escape
     codes end up in the captured output as literal bytes.
     """
-    from sdm_relational_engine import in_notebook
-
     if in_notebook():
         return False
     try:
@@ -70,11 +73,6 @@ class ProgressLogger(ABC):
     @classmethod
     def default(cls, msg: str, verbose: bool = True) -> 'ProgressLogger':
         r"""The default progress logger for the current environment."""
-        from sdm_relational_engine import (
-            in_streamlit_notebook,
-            in_vnext_notebook,
-        )
-
         if in_streamlit_notebook():
             return StreamlitProgressLogger(msg, verbose)
         if in_vnext_notebook():
@@ -170,16 +168,12 @@ class PlainProgressLogger(ProgressLogger):
     CYAN: str = '\x1b[36m'
 
     def on_enter(self) -> None:
-        from sdm_relational_engine import in_vnext_notebook
-
         msg = self.msg.replace('[bold]', self.BOLD)
         msg = msg.replace('[/bold]', self.RESET + self.CYAN)
         msg = self.CYAN + msg + self.RESET
         print(msg, end='\n' if in_vnext_notebook() else '', flush=True)
 
     def on_exit(self, error: bool) -> None:
-        from sdm_relational_engine import in_vnext_notebook
-
         if error:
             msg = f'❌ {self.RED}({self.duration:.2f}s){self.RESET}'
         else:
@@ -191,8 +185,6 @@ class PlainProgressLogger(ProgressLogger):
             print(f' {msg}', flush=True)
 
     def on_log(self, msg: str) -> None:
-        from sdm_relational_engine import in_vnext_notebook
-
         msg = f'{self.DIM}↳ {msg}{self.RESET}'
 
         if in_vnext_notebook():
@@ -201,8 +193,6 @@ class PlainProgressLogger(ProgressLogger):
             print(f'\n{msg}', end='', flush=True)
 
     def on_init_progress(self, msg: str, total: int) -> None:
-        from sdm_relational_engine import in_vnext_notebook
-
         msg = f'{self.DIM}↳ {msg}{self.RESET}'
 
         if in_vnext_notebook():
@@ -211,8 +201,6 @@ class PlainProgressLogger(ProgressLogger):
             print(f'\n{msg} {self.DIM}[{self.RESET}', end='', flush=True)
 
     def on_step(self, msg: str, current: int, total: int) -> None:
-        from sdm_relational_engine import in_vnext_notebook
-
         if in_vnext_notebook():
             return
 

@@ -11,8 +11,8 @@ from typing import Any, TypeAlias
 from predictive_query.schema.typing import Dtype, Stype
 from typing_extensions import Self
 
-from sdm_relational_engine.mixin import CastMixin
 from sdm_relational_engine.rfm.base import Expression
+from sdm_relational_engine.rfm.base.casting import CastMixin
 
 
 @dataclass(init=False, repr=False, eq=False)

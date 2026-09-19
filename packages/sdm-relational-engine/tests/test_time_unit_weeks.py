@@ -10,7 +10,7 @@ from predictive_query.ast.date_offset_range import (
 from predictive_query.schema.typing import TimeUnit
 from sdm_relational_engine.rfm import Graph
 from sdm_relational_engine.rfm.backend.local import LocalTable
-from sdm_relational_engine.rfm.query_parser import parse_query_locally
+from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
 
 @pytest.fixture

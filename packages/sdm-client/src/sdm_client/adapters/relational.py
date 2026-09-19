@@ -404,7 +404,9 @@ def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
     among them.
     """
     try:
-        from sdm_relational_engine.rfm.payload import high_cardinality_columns
+        from sdm_relational_engine.rfm.inference.payload import (
+            high_cardinality_columns,
+        )
     except ImportError:  # pragma: no cover - the extra is optional
         return []
     return [

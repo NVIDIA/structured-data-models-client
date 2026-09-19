@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from sdm_relational_engine.api.rfm.context import Subgraph
 from sdm_relational_engine.rfm.backend.local import LocalTable
 from sdm_relational_engine.rfm.base import Table
 from sdm_relational_engine.rfm.diagnostics import (
@@ -18,7 +17,8 @@ from sdm_relational_engine.rfm.diagnostics import (
     TableSanitizationReport,
     TaskReferenceError,
 )
-from sdm_relational_engine.utils import ProgressLogger
+from sdm_relational_engine.rfm.inference.context import SampledSubgraph
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph
@@ -347,7 +347,7 @@ class LocalGraphStore:
             colptr = np.empty(len(colcount) + 1, dtype=colcount.dtype)
             colptr[0] = 0
             np.cumsum(colcount, out=colptr[1:])
-            edge_type = Subgraph.rev_edge_type(edge_type)
+            edge_type = SampledSubgraph.rev_edge_type(edge_type)
             row_dict[edge_type] = row
             colptr_dict[edge_type] = colptr
 

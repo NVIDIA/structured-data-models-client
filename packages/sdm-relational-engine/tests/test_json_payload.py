@@ -19,11 +19,16 @@ from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import Stype
 from sdm_api.generated import tfm_api as tfm_api_module
-from sdm_relational_engine.api.rfm.context import Table
 from sdm_relational_engine.client import NimClient
 from sdm_relational_engine.client.rfm import RFMAPI
-from sdm_relational_engine.rfm import Graph, KumoRelational, TaskTable
-from sdm_relational_engine.rfm.payload import (
+from sdm_relational_engine.rfm import (
+    Explanation,
+    Graph,
+    KumoRelational,
+    TaskTable,
+)
+from sdm_relational_engine.rfm.inference.context import SampledTable
+from sdm_relational_engine.rfm.inference.payload import (
     ANCHOR_TIME_PREFIX,
     ENTITY_REFERENCE_PREFIX,
     INSTANCE_ID,
@@ -32,7 +37,6 @@ from sdm_relational_engine.rfm.payload import (
     _occurrence_dataframe,
     _target_json_value,
 )
-from sdm_relational_engine.rfm.rfm import Explanation
 
 # The Universal TFM OpenAPI contract is not vendored here, so the tests that
 # replay it skip unless a checkout is pointed at explicitly. The default is the
@@ -53,7 +57,7 @@ def test_keyless_table_synthetic_key_is_opaque_on_name_collision() -> None:
             'VALUE': [1.5, 2.5],
         }
     )
-    table = Table(
+    table = SampledTable(
         df=source,
         row=None,
         batch=np.array([0, 1]),
@@ -530,7 +534,7 @@ def test_explain_matches_live_nim_shape_with_no_summary(
     attribution only, no server summary. With ``skip_summary`` the client leaves
     ``summary`` empty and the rich details and typed accessors stay available.
     """
-    from sdm_relational_engine.rfm.rfm import ExplainConfig
+    from sdm_relational_engine.rfm import ExplainConfig
 
     live_explanation = {
         'format': 'kumo_rfm_v2_1',
@@ -721,7 +725,7 @@ def test_explain_skips_generation_when_skip_summary(
     mock_api: Any,
     monkeypatch: Any,
 ) -> None:
-    from sdm_relational_engine.rfm.rfm import ExplainConfig
+    from sdm_relational_engine.rfm import ExplainConfig
 
     called = False
 
@@ -991,7 +995,7 @@ def test_a_uint64_past_int64_is_refused_rather_than_sent_as_int64():
     was exact on one path and wrong on the other.
     """
     import numpy as np
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     with pytest.raises(ValueError) as error:
         _cell_json_value(np.uint64(2**64 - 1), 'int64')
@@ -1000,7 +1004,7 @@ def test_a_uint64_past_int64_is_refused_rather_than_sent_as_int64():
 
 
 def test_an_int64_within_range_still_travels():
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     # Inside the JS-safe range it stays a number; past it the contract's
     # base-10-string rule applies, and both are still within int64.
@@ -1015,7 +1019,7 @@ def test_a_decimal_too_wide_for_a_float_is_refused_not_sent_as_inf():
     """
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     with pytest.raises(ValueError) as error:
         _cell_json_value(Decimal('1e400'), 'float64')
@@ -1033,7 +1037,7 @@ def test_a_huge_fractional_decimal_is_refused_before_it_becomes_inf():
     """
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _json_value
+    from sdm_relational_engine.rfm.inference.payload import _json_value
 
     huge = Decimal('1' + '0' * 310 + '.1')
     assert huge.is_finite()
@@ -1045,14 +1049,14 @@ def test_a_huge_fractional_decimal_is_refused_before_it_becomes_inf():
 def test_an_ordinary_fractional_decimal_still_converts():
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _json_value
+    from sdm_relational_engine.rfm.inference.payload import _json_value
 
     assert _json_value(Decimal('1.5')) == 1.5
 
 
 def test_a_python_int_too_large_for_a_float_is_refused_not_raised_raw():
     """The Decimal path returns `inf`; the int path raises OverflowError."""
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     with pytest.raises(ValueError) as error:
         _cell_json_value(10**400, 'float64')
@@ -1070,7 +1074,7 @@ def test_an_integer_a_float_cannot_hold_is_refused_not_rounded():
     `test_wire_integer_exactness.py`; the two cannot be checked together
     because neither package's test job installs the other.
     """
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     with pytest.raises(ValueError):
         _cell_json_value(2**53 + 1, 'float64')
@@ -1082,7 +1086,7 @@ def test_a_wide_integral_decimal_travels_as_digits_here_too():
     """
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _json_value
+    from sdm_relational_engine.rfm.inference.payload import _json_value
 
     sent = _json_value(Decimal('1e400'))
     assert 'E' not in sent and 'e' not in sent
@@ -1099,7 +1103,7 @@ def test_a_wide_whole_decimal_in_a_float_column_is_not_silently_rounded():
     """
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     value = Decimal('9223372036854775809.00')
     with pytest.raises(ValueError) as error:
@@ -1110,7 +1114,7 @@ def test_a_wide_whole_decimal_in_a_float_column_is_not_silently_rounded():
 def test_an_ordinary_decimal_in_a_float_column_still_converts():
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     assert _cell_json_value(Decimal('1.5'), 'float64') == 1.5
     assert _cell_json_value(42, 'float64') == 42.0
@@ -1134,7 +1138,7 @@ def test_only_an_integer_a_float_cannot_hold_is_refused(value, survives):
     so a ceiling comparison refused a value that travels perfectly well, and
     disagreed with the tabular encoder about it.
     """
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     if survives:
         assert _cell_json_value(value, 'float64') == float(value)
@@ -1145,7 +1149,7 @@ def test_only_an_integer_a_float_cannot_hold_is_refused(value, survives):
 
 def test_a_numeric_string_a_float_cannot_hold_is_refused_here_too():
     """The tabular encoder refuses this, so this one must as well."""
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     with pytest.raises(ValueError):
         _cell_json_value('9223372036854775809', 'float64')
@@ -1159,7 +1163,7 @@ def test_decimal_inference_does_not_depend_on_row_order():
     """
     from decimal import Decimal
 
-    from sdm_relational_engine.rfm.payload import _decimal_dtype_name
+    from sdm_relational_engine.rfm.inference.payload import _decimal_dtype_name
 
     values = [Decimal('1.5'), Decimal('9223372036854775809.00')]
     forward = _decimal_dtype_name(pd.Series(values, dtype=object))
@@ -1179,7 +1183,7 @@ def test_decimal_inference_does_not_depend_on_row_order():
     ],
 )
 def test_a_decimal_column_is_named_by_everything_it_holds(values, expected):
-    from sdm_relational_engine.rfm.payload import _decimal_dtype_name
+    from sdm_relational_engine.rfm.inference.payload import _decimal_dtype_name
 
     assert _decimal_dtype_name(pd.Series(values, dtype=object)) == expected
     assert (
@@ -1196,7 +1200,7 @@ def test_a_string_decimal_column_keeps_every_value_exact() -> None:
     rounded through float and then stringified, so a column declared string to
     stay exact lost digits without saying so.
     """
-    from sdm_relational_engine.rfm.payload import (
+    from sdm_relational_engine.rfm.inference.payload import (
         _cell_json_value,
         _decimal_dtype_name,
     )
@@ -1225,7 +1229,7 @@ def test_a_string_decimal_column_keeps_every_value_exact() -> None:
 
 def test_a_narrow_decimal_column_is_unaffected() -> None:
     """Only a column wide enough to need `string` takes the exact-text path."""
-    from sdm_relational_engine.rfm.payload import (
+    from sdm_relational_engine.rfm.inference.payload import (
         _cell_json_value,
         _decimal_dtype_name,
     )
@@ -1245,7 +1249,7 @@ def test_a_string_target_keeps_every_value_exact() -> None:
     `string`, so the value contradicted its own declaration.
     """
     from predictive_query.schema.task import TaskType
-    from sdm_relational_engine.rfm.payload import (
+    from sdm_relational_engine.rfm.inference.payload import (
         _cell_json_value,
         _target_dtype,
         _target_json_value,
@@ -1273,7 +1277,7 @@ def test_a_string_target_keeps_every_value_exact() -> None:
 
 def test_a_link_prediction_stringlist_keeps_its_decimals_exact() -> None:
     from predictive_query.schema.task import TaskType
-    from sdm_relational_engine.rfm.payload import _target_json_value
+    from sdm_relational_engine.rfm.inference.payload import _target_json_value
 
     sent = _target_json_value(
         TaskType.TEMPORAL_LINK_PREDICTION,
@@ -1284,7 +1288,7 @@ def test_a_link_prediction_stringlist_keeps_its_decimals_exact() -> None:
 
 
 def test_a_class_label_keeps_its_decimal_exact() -> None:
-    from sdm_relational_engine.rfm.payload import _class_label
+    from sdm_relational_engine.rfm.inference.payload import _class_label
 
     assert (
         _class_label(Decimal('1.234567890123456789'), 'string')
@@ -1295,7 +1299,7 @@ def test_a_class_label_keeps_its_decimal_exact() -> None:
 def test_a_binary_target_is_still_checked() -> None:
     """The decimal path must not skip the validation beside it."""
     from predictive_query.schema.task import TaskType
-    from sdm_relational_engine.rfm.payload import _target_json_value
+    from sdm_relational_engine.rfm.inference.payload import _target_json_value
 
     assert _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('1'))
     assert not _target_json_value(TaskType.BINARY_CLASSIFICATION, Decimal('0'))
@@ -1310,7 +1314,7 @@ def test_a_stringlist_cell_keeps_its_decimals_exact() -> None:
     Its items are stringified too, and normalising the cell first stringifies
     a rounded float.
     """
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     sent = _cell_json_value(
         [Decimal('1.234567890123456789'), Decimal('2')], 'stringlist'
@@ -1323,7 +1327,7 @@ def test_a_stringlist_cell_of_arrays_keeps_its_decimals_exact() -> None:
     """A column of arrays reaches this the same way a column of lists does,
     and testing only for a list sent it back down the rounding path.
     """
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     sent = _cell_json_value(
         np.array([Decimal('1.234567890123456789'), Decimal('2')], dtype=object),
@@ -1334,7 +1338,7 @@ def test_a_stringlist_cell_of_arrays_keeps_its_decimals_exact() -> None:
 
 
 def test_a_stringlist_cell_is_otherwise_unchanged() -> None:
-    from sdm_relational_engine.rfm.payload import _cell_json_value
+    from sdm_relational_engine.rfm.inference.payload import _cell_json_value
 
     assert _cell_json_value(['a', 'b'], 'stringlist') == ['a', 'b']
     assert _cell_json_value([1, None, 2], 'stringlist') == ['1', None, '2']

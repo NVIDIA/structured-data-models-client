@@ -10,7 +10,11 @@ from typing import Any
 
 import pytest
 import sdm_relational_engine as kre
-from sdm_relational_engine import _configure_lock, global_state
+import sdm_relational_engine.client.engine_access as engine_access
+import sdm_relational_engine.client.initialization as initialization
+import sdm_relational_engine.client.state as state
+from sdm_relational_engine import global_state
+from sdm_relational_engine.client.initialization import _configure_lock
 
 DEPLOYMENTS = (('https://a.internal', 'key-a'), ('https://b.internal', 'key-b'))
 
@@ -49,7 +53,7 @@ def test_two_deployments_configured_at_once_are_never_mixed(
     land between them; that is a property of the caller's sampling, not of the
     state, and it has its own test below.
     """
-    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
     mixed: list[tuple[str, str]] = []
     samples = 0
     done = threading.Event()
@@ -89,7 +93,9 @@ def test_an_identical_deployment_is_authenticated_once(
 ) -> None:
     r"""Re-initializing with identical settings is documented as a no-op."""
     authentications: list[int] = []
-    monkeypatch.setattr(kre, 'NimClient', _slow_client(authentications))
+    monkeypatch.setattr(
+        initialization, 'NimClient', _slow_client(authentications)
+    )
 
     threads = [
         threading.Thread(
@@ -110,7 +116,7 @@ def test_a_thread_already_configuring_may_configure_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""The client property calls init(), and may be reached while one is running."""
-    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
 
     with _configure_lock:
         kre.init(url='https://a.internal', api_key='key-a')
@@ -127,7 +133,7 @@ def test_a_reader_never_sees_half_of_each_deployment(
     land between the two. Reading the whole deployment once is what closes it,
     so this samples what the client would actually be built from.
     """
-    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
     mixed: list[Any] = []
     samples = 0
     done = threading.Event()
@@ -183,10 +189,8 @@ def test_two_fields_changed_at_once_do_not_lose_each_other(
     enough that two threads hammering it will usually miss each other, and a
     test that only usually fails is one that will pass over a real regression.
     """
-    import sdm_relational_engine as engine
-
     global_state._publish(url='https://a.internal', api_key='key-a')
-    real_replace = engine.replace
+    real_replace = state.replace
     reading = threading.Event()
     may_write = threading.Event()
 
@@ -196,7 +200,7 @@ def test_two_fields_changed_at_once_do_not_lose_each_other(
             may_write.wait(5)
         return real_replace(deployment, **changes)
 
-    monkeypatch.setattr(engine, 'replace', slow_replace)
+    monkeypatch.setattr(state, 'replace', slow_replace)
 
     first = threading.Thread(
         target=global_state._publish, kwargs={'timeout': 30.0}
@@ -266,7 +270,7 @@ def test_a_reader_never_sees_an_uninitialized_deployment_mid_reinit(
     before it means a thread predicting at that moment is told the client
     failed to authenticate, for a deployment that is still perfectly good.
     """
-    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
     kre.init(url=DEPLOYMENTS[0][0], api_key=DEPLOYMENTS[0][1])
 
     seen: list[bool] = []
@@ -303,7 +307,7 @@ def test_reading_the_settings_one_at_a_time_can_still_straddle_a_change(
     the deployment value, and giving them a shared lock would not help, since
     the caller has already returned from the first one.
     """
-    monkeypatch.setattr(kre, 'NimClient', _slow_client([]))
+    monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
     torn = 0
     done = threading.Event()
 
@@ -327,3 +331,53 @@ def test_reading_the_settings_one_at_a_time_can_still_straddle_a_change(
     # Reading the whole value never tears, which is the point of the pairing.
     deployment = global_state._deployment
     assert deployment.url[len('https://')] == deployment.api_key[-1]
+
+
+def test_init_client_resolves_under_the_shared_initialization_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_type = _slow_client([])
+    monkeypatch.setattr(initialization, 'NimClient', client_type)
+    monkeypatch.setattr(state, 'NimClient', client_type)
+
+    configured = threading.Event()
+    release = threading.Event()
+    replacement_done = threading.Event()
+    real_init = initialization.init
+
+    def paused_init(**kwargs: Any) -> None:
+        real_init(**kwargs)
+        configured.set()
+        release.wait(5)
+
+    monkeypatch.setattr(initialization, 'init', paused_init)
+
+    returned: list[Any] = []
+    first = threading.Thread(
+        target=lambda: returned.append(
+            engine_access.init_client(
+                url=DEPLOYMENTS[0][0],
+                api_key=DEPLOYMENTS[0][1],
+                _token=engine_access._CLIENT_TOKEN,
+            )
+        )
+    )
+    first.start()
+    assert configured.wait(5)
+
+    def replace_deployment() -> None:
+        real_init(url=DEPLOYMENTS[1][0], api_key=DEPLOYMENTS[1][1])
+        replacement_done.set()
+
+    second = threading.Thread(target=replace_deployment)
+    second.start()
+    assert not replacement_done.wait(0.1)
+
+    release.set()
+    first.join(5)
+    second.join(5)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert returned[0]._url == DEPLOYMENTS[0][0]
+    assert replacement_done.is_set()

@@ -6,6 +6,7 @@ import io
 import sys
 
 import pytest
+import sdm_relational_engine.utils.progress_logger as progress_logger
 from sdm_relational_engine.utils.progress_logger import PlainProgressLogger
 
 # The ConEmu / Windows Terminal taskbar-progress OSC sequences.
@@ -34,12 +35,10 @@ def test_taskbar_escapes_only_reach_a_verbose_tty(
     verbose,
     expected,
 ) -> None:
-    import sdm_relational_engine
-
     # Pin the other half of the gate: `_in_terminal()` is
     # `not in_notebook() and stdout.isatty()`, and a notebook-flavoured test
     # runner would otherwise decide the outcome instead of the fixture.
-    monkeypatch.setattr(sdm_relational_engine, 'in_notebook', lambda: False)
+    monkeypatch.setattr(progress_logger, 'in_notebook', lambda: False)
     stdout = stdout_factory()
     monkeypatch.setattr(sys, 'stdout', stdout)
 
@@ -66,9 +65,6 @@ def test_in_terminal_survives_a_stdout_without_isatty(monkeypatch) -> None:
 
 
 def test_in_terminal_is_false_in_a_notebook(monkeypatch) -> None:
-    import sdm_relational_engine
-    from sdm_relational_engine.utils.progress_logger import _in_terminal
-
-    monkeypatch.setattr(sdm_relational_engine, 'in_notebook', lambda: True)
+    monkeypatch.setattr(progress_logger, 'in_notebook', lambda: True)
     monkeypatch.setattr(sys, 'stdout', _FakeTTY())
-    assert _in_terminal() is False
+    assert progress_logger._in_terminal() is False

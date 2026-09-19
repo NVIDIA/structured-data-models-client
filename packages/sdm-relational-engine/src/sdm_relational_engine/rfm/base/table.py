@@ -10,13 +10,14 @@ from importlib.util import find_spec
 
 import numpy as np
 import pandas as pd
+from predictive_query.schema.common import StrEnum
 from predictive_query.schema.table import Column as ColumnDefinition
 from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Dtype, Stype
+from sdm_connectors import quote_ident
 from typing_extensions import Self
 
-from sdm_relational_engine import in_tmux
-from sdm_relational_engine.api.source_table import UnavailableSourceTable
+import sdm_relational_engine.utils.display as display
 from sdm_relational_engine.rfm.base import (
     Column,
     ColumnSpec,
@@ -27,16 +28,25 @@ from sdm_relational_engine.rfm.base import (
     composite_key,
 )
 from sdm_relational_engine.rfm.base.utils import to_datetime
-from sdm_relational_engine.rfm.infer import (
+from sdm_relational_engine.rfm.metadata_inference import (
     infer_dtype,
     infer_primary_key,
     infer_stype,
     infer_time_column,
 )
-from sdm_relational_engine.runmode import MissingType
-from sdm_relational_engine.utils import display, quote_ident
+from sdm_relational_engine.utils.environment import in_tmux
 
 _DERIVED_KEY_PREFIX = composite_key.DERIVED_PREFIX
+
+
+class MissingType(StrEnum):
+    r"""Sentinel for a table attribute the caller did not supply.
+
+    Distinguishes "not given, so infer it" from an explicit ``None``, which
+    means "this table has no such column".
+    """
+
+    VALUE = '???'
 
 
 def _is_key_like(ser: pd.Series) -> bool:
@@ -826,7 +836,6 @@ class Table(ABC):
                 ColumnDefinition(col.name, col.stype, col.dtype)
                 for col in self.columns
             ],
-            source_table=UnavailableSourceTable(table=self.name),
             pkey=self._primary_key,
             time_col=self._time_column,
             end_time_col=self._end_time_column,

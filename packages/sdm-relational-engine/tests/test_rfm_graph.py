@@ -8,8 +8,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from predictive_query.schema.graph import ColumnKey, ColumnKeyGroup
-from sdm_relational_engine.graph import Edge
-from sdm_relational_engine.rfm import Graph, LocalTable
+from sdm_relational_engine.rfm import Edge, Graph, LocalTable
 from sdm_relational_engine.rfm.base import ColumnSpec
 
 

@@ -10,14 +10,14 @@ from antlr4 import CommonTokenStream, InputStream
 from antlr4.error.ErrorListener import ErrorListener
 from predictive_query.grammar.PQLGrammarLexer import PQLGrammarLexer
 from predictive_query.grammar.PQLGrammarParser import PQLGrammarParser
-from predictive_query.schema.typing import Stype
-from sdm_relational_engine._names import (
+from predictive_query.names import (
     canonical_fqn,
     fqn,
     quote_name,
     split_fqn,
 )
-from sdm_relational_engine.rfm.query_parser import parse_query_locally
+from predictive_query.schema.typing import Stype
+from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
 
 class _CollectErrors(ErrorListener):

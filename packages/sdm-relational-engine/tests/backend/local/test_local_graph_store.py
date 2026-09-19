@@ -6,10 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 from predictive_query.schema.typing import Stype
-from sdm_relational_engine.api.rfm.context import REV_REL
-from sdm_relational_engine.graph import Edge
-from sdm_relational_engine.rfm import Graph, TaskReferenceError
+from sdm_relational_engine.rfm import Edge, Graph, TaskReferenceError
 from sdm_relational_engine.rfm.backend.local import LocalGraphStore
+from sdm_relational_engine.rfm.inference.context import REVERSE_RELATION_PREFIX
 
 
 def test_local_graph_store() -> None:
@@ -128,11 +127,11 @@ def test_local_graph_store() -> None:
 
     expected_edge_types = [
         ('ORDERS', 'USER_ID', 'USERS'),
-        ('USERS', f'{REV_REL}USER_ID', 'ORDERS'),
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'ORDERS'),
         ('VIEWS', 'USER_ID', 'USERS'),
-        ('USERS', f'{REV_REL}USER_ID', 'VIEWS'),
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'VIEWS'),
         ('RETURNS', 'ORDER_ID', 'ORDERS'),
-        ('ORDERS', f'{REV_REL}ORDER_ID', 'RETURNS'),
+        ('ORDERS', f'{REVERSE_RELATION_PREFIX}ORDER_ID', 'RETURNS'),
     ]
 
     assert len(store.colptr_dict) == len(expected_edge_types)
@@ -147,8 +146,12 @@ def test_local_graph_store() -> None:
     assert np.array_equal(colptr, np.array([0, 1, 2, 2, 3, 3, 4, 4]))
     assert np.array_equal(row, np.array([0, 1, 3, 7]))
 
-    colptr = store.colptr_dict[('USERS', f'{REV_REL}USER_ID', 'ORDERS')]
-    row = store.row_dict[('USERS', f'{REV_REL}USER_ID', 'ORDERS')]
+    colptr = store.colptr_dict[
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'ORDERS')
+    ]
+    row = store.row_dict[
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'ORDERS')
+    ]
     #                                        0  1  -  2  -  -  -  3  -
     assert np.array_equal(colptr, np.array([0, 1, 2, 2, 3, 3, 3, 3, 4, 4]))
     assert np.array_equal(row, np.array([0, 1, 3, 5]))
@@ -159,8 +162,12 @@ def test_local_graph_store() -> None:
     assert np.array_equal(colptr, np.array([0, 1, 2, 2, 3, 3, 5, 5]))
     assert np.array_equal(row, np.array([0, 1, 3, 8, 7]))
 
-    colptr = store.colptr_dict[('USERS', f'{REV_REL}USER_ID', 'VIEWS')]
-    row = store.row_dict[('USERS', f'{REV_REL}USER_ID', 'VIEWS')]
+    colptr = store.colptr_dict[
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'VIEWS')
+    ]
+    row = store.row_dict[
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'VIEWS')
+    ]
     #                                        0  1  -  2  -  -  -  3  3
     assert np.array_equal(colptr, np.array([0, 1, 2, 2, 3, 3, 3, 3, 4, 5]))
     assert np.array_equal(row, np.array([0, 1, 3, 5, 5]))

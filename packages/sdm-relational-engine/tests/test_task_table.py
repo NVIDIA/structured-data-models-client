@@ -8,7 +8,7 @@ from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import Dtype, Stype
 from sdm_relational_engine.rfm import TaskTable
 from sdm_relational_engine.rfm.base import Column
-from sdm_relational_engine.rfm.task_table import _get_target_stype
+from sdm_relational_engine.rfm.inference.task import _get_target_stype
 
 
 @pytest.mark.parametrize(

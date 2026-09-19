@@ -54,9 +54,10 @@ pip install -e ".[test,databricks]"
 pytest tests -m "not live_nim"
 ```
 
-The live-NIM suite (`scripts/run_rfm_nim_live_tests.sh --full`) includes durable,
-ticket-free rejection regressions for fixed NIM defects; every rejection probe is
-followed by a known-good prediction to detect service degradation.
+For source checkouts, the live-NIM suite
+(`../../qa/run_rfm_nim_live_tests.sh --full`) includes durable, ticket-free
+rejection regressions for fixed NIM defects; every rejection probe is followed
+by a known-good prediction to detect service degradation.
 
 The native neighbor sampler (`sdm_relational_engine.relationallib`) is built from
 `src/sdm_relational_engine/csrc/neighbor_sampler.cpp` via CMake/scikit-build-core. Set

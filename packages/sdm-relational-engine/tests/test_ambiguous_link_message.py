@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from sdm_relational_engine.rfm import Graph
 from sdm_relational_engine.rfm.backend.local import LocalTable
-from sdm_relational_engine.rfm.query_parser import parse_query_locally
+from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
 
 @pytest.fixture

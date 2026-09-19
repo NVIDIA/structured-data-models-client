@@ -12,38 +12,42 @@ import pyarrow as pa
 import pytest
 from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import Stype
-from sdm_relational_engine.api.rfm import RFMPredictRequest
-from sdm_relational_engine.api.rfm.context import Context, Subgraph, Table
-from sdm_relational_engine.api.rfm.inference import (
+from sdm_relational_engine.rfm.inference.config import (
     ClassificationInferenceConfig,
+    RunMode,
 )
-from sdm_relational_engine.rfm.payload import (
+from sdm_relational_engine.rfm.inference.context import (
+    PredictionContext,
+    SampledSubgraph,
+    SampledTable,
+)
+from sdm_relational_engine.rfm.inference.payload import (
     _dtype_name,
     _instance_dataframe,
     payload_size_bytes,
     predict_request_to_json,
 )
-from sdm_relational_engine.runmode import RunMode
+from sdm_relational_engine.rfm.inference.requests import RFMPredictRequest
 
 
 def _binary_context(
     y_train: pd.Series,
     y_test: pd.Series | None,
-) -> Context:
+) -> PredictionContext:
     batch_size = len(y_train) + (len(y_test) if y_test is not None else 0)
     table_name = 'ENTITY'
     primary_key = 'ENTITY_ID'
-    return Context(
+    return PredictionContext(
         task_type=TaskType.BINARY_CLASSIFICATION,
         entity_table_names=(table_name,),
-        subgraph=Subgraph(
+        sampled_subgraph=SampledSubgraph(
             anchor_time=np.full(
                 batch_size,
                 pd.Timestamp.min.value,
                 dtype=np.int64,
             ),
-            table_dict={
-                table_name: Table(
+            tables={
+                table_name: SampledTable(
                     df=pd.DataFrame(
                         {
                             primary_key: np.arange(batch_size),
@@ -56,14 +60,14 @@ def _binary_context(
                     primary_key=primary_key,
                 ),
             },
-            link_dict={},
+            links={},
         ),
         y_train=y_train,
         y_test=y_test,
     )
 
 
-def _binary_payload(context: Context) -> dict[str, Any]:
+def _binary_payload(context: PredictionContext) -> dict[str, Any]:
     request = RFMPredictRequest(
         context=context,
         run_mode=RunMode.FAST,
@@ -234,7 +238,7 @@ def test_a_decimal_column_survives_the_whole_request() -> None:
         y_train=pd.Series([0, 1, 0], name='TARGET', dtype='int64'),
         y_test=pd.Series([1], name='TARGET', dtype='int64'),
     )
-    table = context.subgraph.table_dict['ENTITY'].df
+    table = context.sampled_subgraph.tables['ENTITY'].df
     table['ITEM_ID'] = pd.Series(
         [Decimal(f'90010001{i}') for i in range(4)], dtype=object
     )
