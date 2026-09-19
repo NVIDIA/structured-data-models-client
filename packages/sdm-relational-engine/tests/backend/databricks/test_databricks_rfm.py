@@ -39,10 +39,10 @@ def test_sample_subgraph(graph: Graph) -> None:
         num_neighbors=[16, 8],
     )
 
-    assert 'customers' in subgraph.table_dict
-    assert 'order_lines' in subgraph.table_dict
-    assert subgraph.table_dict['customers'].df.shape[0] == len(pkey)
-    assert ('order_lines', 'customer_id', 'customers') in subgraph.link_dict
+    assert 'customers' in subgraph.tables
+    assert 'order_lines' in subgraph.tables
+    assert subgraph.tables['customers'].df.shape[0] == len(pkey)
+    assert ('order_lines', 'customer_id', 'customers') in subgraph.links
 
 
 def test_sample_target(graph: Graph) -> None:

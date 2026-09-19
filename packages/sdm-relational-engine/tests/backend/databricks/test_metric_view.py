@@ -11,8 +11,7 @@ from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
 )
-from sdm_relational_engine.graph import Edge
-from sdm_relational_engine.rfm import Graph
+from sdm_relational_engine.rfm import Edge, Graph
 
 try:
     import pyarrow as pa

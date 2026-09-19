@@ -11,12 +11,13 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 from predictive_query.query import ValidatedPredictiveQuery
+from sdm_connectors import quote_ident
 
 from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable
 from sdm_relational_engine.rfm.base import DataBackend, SQLSampler, Table
 from sdm_relational_engine.rfm.base.utils import Timestamp
-from sdm_relational_engine.rfm.pquery import PQueryPandasExecutor
-from sdm_relational_engine.utils import ProgressLogger, quote_ident
+from sdm_relational_engine.rfm.query.pandas_executor import PQueryPandasExecutor
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph

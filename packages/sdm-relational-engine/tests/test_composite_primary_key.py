@@ -627,7 +627,7 @@ def test_the_derived_name_is_stable_and_ordered() -> None:
 
 def test_a_query_names_the_identity_by_any_of_its_columns(superstore) -> None:
     r"""A caller should not have to spell a column this client invented."""
-    from sdm_relational_engine.rfm.query_parser import parse_query_locally
+    from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
     people, orders = superstore
     graph = build_graph(people, orders)
@@ -648,7 +648,7 @@ def test_a_query_names_the_identity_by_any_of_its_columns(superstore) -> None:
 def test_a_column_outside_the_identity_still_cannot_be_the_entity(
     superstore,
 ) -> None:
-    from sdm_relational_engine.rfm.query_parser import parse_query_locally
+    from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
     people, orders = superstore
     graph = build_graph(people, orders)
@@ -672,7 +672,7 @@ def test_a_caller_holding_only_the_graph_definition_gets_the_same_rule(
     else. If the identity rule needed anything more, a query the service
     accepts would be refused locally and never sent.
     """
-    from sdm_relational_engine.rfm.query_parser import parse_query_locally
+    from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
     people, orders = superstore
     graph = build_graph(people, orders)
@@ -756,7 +756,7 @@ def test_an_identity_too_long_to_name_is_refused() -> None:
 
 def test_the_derived_column_can_be_named_without_backticks(superstore) -> None:
     r"""How anyone on 2.27.0 would have written it, since it was bare then."""
-    from sdm_relational_engine.rfm.query_parser import parse_query_locally
+    from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
     people, orders = superstore
     graph = build_graph(people, orders)
@@ -778,7 +778,7 @@ def test_a_dotted_key_column_does_not_break_the_derived_name() -> None:
     r"""A dot in a member name used to make the entity unsplittable."""
     import numpy as np
     import sdm_relational_engine.rfm as rfm
-    from sdm_relational_engine.rfm.query_parser import parse_query_locally
+    from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
     rng = np.random.default_rng(0)
     size = 40

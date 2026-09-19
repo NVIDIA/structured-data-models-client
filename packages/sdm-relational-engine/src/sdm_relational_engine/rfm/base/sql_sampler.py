@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import pandas as pd
 from predictive_query.schema.typing import Dtype
+from sdm_connectors import quote_ident
 
-from sdm_relational_engine.api.rfm.context import Subgraph
 from sdm_relational_engine.rfm.base import (
     LocalExpression,
     Sampler,
@@ -20,7 +20,8 @@ from sdm_relational_engine.rfm.base import (
     SourceColumn,
 )
 from sdm_relational_engine.rfm.base.mapper import Mapper
-from sdm_relational_engine.utils import ProgressLogger, quote_ident
+from sdm_relational_engine.rfm.inference.context import SampledSubgraph
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph
@@ -423,7 +424,7 @@ class SQLSampler(Sampler):
 
                     if len(col) > 0:
                         edge_type = (table, fkey, dst_table)
-                        edge_type = Subgraph.rev_edge_type(edge_type)
+                        edge_type = SampledSubgraph.rev_edge_type(edge_type)
                         rows_dict[edge_type].append(row)
                         cols_dict[edge_type].append(col)
                         num_sampled_edges_dict[edge_type][hop] = len(col)

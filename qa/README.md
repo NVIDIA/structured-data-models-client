@@ -47,6 +47,14 @@ python probe_cloud.py         # S3   (needs AWS credentials and /tmp/qa_bucket)
 python probe_warehouse.py     # Snowflake and Databricks (needs SNOWFLAKE_*, DATABRICKS_*)
 ```
 
+The relational live-NIM contract tests have a runner that creates its own
+environment and defaults to the smoke suite:
+
+```bash
+qa/run_rfm_nim_live_tests.sh --url http://localhost:8001
+qa/run_rfm_nim_live_tests.sh --url http://localhost:8001 --full
+```
+
 Each writes a JSON record to `~/sdm-qa/findings/` and prints a summary. A probe
 never stops the run: it records `PASS`, `FAIL` or `RAISED` and continues, so one
 broken thing does not hide the next.

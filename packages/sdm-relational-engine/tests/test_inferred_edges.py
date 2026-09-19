@@ -14,7 +14,7 @@ import itertools
 
 import pandas as pd
 import sdm_relational_engine.rfm as rfm
-from sdm_relational_engine.rfm.fingerprint import graph_fingerprint
+from sdm_relational_engine.rfm.graph_fingerprint import graph_fingerprint
 
 
 def _graph(edges: list | None = None) -> rfm.Graph:

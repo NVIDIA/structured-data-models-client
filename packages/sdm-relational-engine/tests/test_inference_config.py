@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 from predictive_query.schema.task import TaskType
 from pydantic import ValidationError
-from sdm_relational_engine.api.rfm.inference import (
+from sdm_relational_engine.rfm.inference.config import (
     ClassificationInferenceConfig,
     InferenceConfig,
     RegressionInferenceConfig,

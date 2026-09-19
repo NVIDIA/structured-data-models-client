@@ -9,6 +9,7 @@ from typing import cast
 
 import pandas as pd
 from predictive_query.schema.typing import Dtype
+from sdm_connectors import quote_ident
 
 from sdm_relational_engine.rfm.backend.databricks import Connection
 from sdm_relational_engine.rfm.base import (
@@ -20,8 +21,7 @@ from sdm_relational_engine.rfm.base import (
     SourceForeignKey,
     Table,
 )
-from sdm_relational_engine.runmode import MissingType
-from sdm_relational_engine.utils import quote_ident
+from sdm_relational_engine.rfm.base.table import MissingType
 
 # Databricks quotes SQL identifiers with backticks rather than double quotes:
 BACKTICK = '`'

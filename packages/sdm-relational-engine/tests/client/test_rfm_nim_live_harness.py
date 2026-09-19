@@ -99,13 +99,14 @@ def test_live_runner_rejects_sensitive_urls_without_logging_them(
     base_url: str,
     expected_error: str,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    engine_root = Path(__file__).resolve().parents[2]
+    workspace_root = Path(__file__).resolve().parents[4]
     env = os.environ.copy()
     env['RFM_NIM_PYTHON'] = sys.executable
 
     result = subprocess.run(
-        [repo_root / 'scripts/run_rfm_nim_live_tests.sh', '--url', base_url],
-        cwd=repo_root,
+        [workspace_root / 'qa/run_rfm_nim_live_tests.sh', '--url', base_url],
+        cwd=engine_root,
         env=env,
         capture_output=True,
         text=True,
@@ -119,11 +120,12 @@ def test_live_runner_rejects_sensitive_urls_without_logging_them(
 
 
 def test_live_runner_documents_full_mode() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    engine_root = Path(__file__).resolve().parents[2]
+    workspace_root = Path(__file__).resolve().parents[4]
 
     result = subprocess.run(
-        [repo_root / 'scripts/run_rfm_nim_live_tests.sh', '--help'],
-        cwd=repo_root,
+        [workspace_root / 'qa/run_rfm_nim_live_tests.sh', '--help'],
+        cwd=engine_root,
         capture_output=True,
         text=True,
         check=False,
@@ -135,7 +137,8 @@ def test_live_runner_documents_full_mode() -> None:
 
 
 def test_live_runner_accepts_no_pytest_args(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    engine_root = Path(__file__).resolve().parents[2]
+    workspace_root = Path(__file__).resolve().parents[4]
     invocation_log = tmp_path / 'python-invocations.log'
     fake_python = tmp_path / 'python'
     fake_python.write_text(
@@ -148,12 +151,12 @@ def test_live_runner_accepts_no_pytest_args(tmp_path: Path) -> None:
 
     result = subprocess.run(
         [
-            repo_root / 'scripts/run_rfm_nim_live_tests.sh',
+            workspace_root / 'qa/run_rfm_nim_live_tests.sh',
             '--url',
             'http://localhost:8000',
             '--full',
         ],
-        cwd=repo_root,
+        cwd=engine_root,
         env=env,
         capture_output=True,
         text=True,

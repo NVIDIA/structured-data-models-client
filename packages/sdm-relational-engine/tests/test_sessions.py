@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 from conftest import MOCK_URL
 from predictive_query.query import ValidatedPredictiveQuery
-from sdm_relational_engine.api.rfm import RFMPredictResponse
 from sdm_relational_engine.client import NimClient
 from sdm_relational_engine.client.rfm import RFMAPI
 from sdm_relational_engine.exceptions import (
@@ -15,11 +14,12 @@ from sdm_relational_engine.exceptions import (
     InvalidResponseError,
 )
 from sdm_relational_engine.rfm import Graph, KumoRelational
-from sdm_relational_engine.rfm.payload import (
+from sdm_relational_engine.rfm.inference.payload import (
     INSTANCE_ID,
     session_create_payload,
     session_predict_payload,
 )
+from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 from sdm_relational_engine.utils.progress_logger import PlainProgressLogger
 
 _FULL_PAYLOAD = {

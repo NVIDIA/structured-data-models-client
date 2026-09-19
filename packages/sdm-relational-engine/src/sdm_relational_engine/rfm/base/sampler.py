@@ -19,17 +19,17 @@ from predictive_query.query import (
 )
 from predictive_query.schema.typing import ProblemType, Stype
 
-from sdm_relational_engine.api.rfm.context import (
-    EdgeLayout,
-    Link,
-    Subgraph,
-    Table,
-)
 from sdm_relational_engine.rfm.base import DataBackend
 from sdm_relational_engine.rfm.base.utils import Timestamp, to_naive_utc
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
-from sdm_relational_engine.rfm.pquery import PQueryPandasExecutor
-from sdm_relational_engine.utils import ProgressLogger
+from sdm_relational_engine.rfm.inference.context import (
+    SampledEdgeLayout,
+    SampledLink,
+    SampledSubgraph,
+    SampledTable,
+)
+from sdm_relational_engine.rfm.query.pandas_executor import PQueryPandasExecutor
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph
@@ -74,7 +74,7 @@ class Sampler(ABC):
         for edge in graph.edges:
             edge_type = (edge.src_table, edge.fkey, edge.dst_table)
             self._edge_types.append(edge_type)
-            self._edge_types.append(Subgraph.rev_edge_type(edge_type))
+            self._edge_types.append(SampledSubgraph.rev_edge_type(edge_type))
 
         # Source Table -> [(Foreign Key, Destination Table)]
         self._foreign_key_dict: dict[str, list[tuple[str, str]]] = {}
@@ -225,7 +225,7 @@ class Sampler(ABC):
         num_neighbors: list[int],
         exclude_cols_dict: dict[str, list[str]] | None = None,
         random_seed: int | None = None,
-    ) -> Subgraph:
+    ) -> SampledSubgraph:
         r"""Samples distinct subgraphs for each entity primary key.
 
         Args:
@@ -290,11 +290,11 @@ class Sampler(ABC):
             random_seed=random_seed,
         )
 
-        # Parse `SubgraphOutput` into `Subgraph` structure:
-        subgraph = Subgraph(
+        # Parse `SamplerOutput` into a sampled subgraph:
+        subgraph = SampledSubgraph(
             anchor_time=out.anchor_time,
-            table_dict={},
-            link_dict={},
+            tables={},
+            links={},
         )
 
         for table_name, batch in out.batch_dict.items():
@@ -318,7 +318,7 @@ class Sampler(ABC):
                 if stype == Stype.text:
                     df[column_name] = _normalize_text(df[column_name])
 
-            subgraph.table_dict[table_name] = Table(
+            subgraph.tables[table_name] = SampledTable(
                 df=df,
                 row=out.inverse_dict.get(table_name),
                 batch=batch,
@@ -335,14 +335,14 @@ class Sampler(ABC):
                 continue
 
             # Do not store reverse edge type if it is an exact replica:
-            rev_edge_type = Subgraph.rev_edge_type(edge_type)
+            rev_edge_type = SampledSubgraph.rev_edge_type(edge_type)
             if (
-                rev_edge_type in subgraph.link_dict
+                rev_edge_type in subgraph.links
                 and np.array_equal(row, out.col_dict[rev_edge_type])
                 and np.array_equal(col, out.row_dict[rev_edge_type])
             ):
-                subgraph.link_dict[edge_type] = Link(
-                    layout=EdgeLayout.REV,
+                subgraph.links[edge_type] = SampledLink(
+                    layout=SampledEdgeLayout.REV,
                     row=None,
                     col=None,
                     num_sampled_edges=out.num_sampled_edges_dict[edge_type],
@@ -350,26 +350,26 @@ class Sampler(ABC):
                 continue
 
             # Do not store non-informative edges:
-            layout = EdgeLayout.COO
+            layout = SampledEdgeLayout.COO
             if np.array_equal(row, np.arange(len(row))):
                 row = None
             if np.array_equal(col, np.arange(len(col))):
                 col = None
 
             # Store in compressed representation if more efficient:
-            num_cols = subgraph.table_dict[edge_type[2]].num_rows
+            num_cols = subgraph.tables[edge_type[2]].num_rows
             if (
                 col is not None
                 and len(col) > num_cols + 1
                 and ((col[1:] - col[:-1]) >= 0).all()
             ):
-                layout = EdgeLayout.CSC
+                layout = SampledEdgeLayout.CSC
                 colcount = np.bincount(col, minlength=num_cols)
                 col = np.empty(num_cols + 1, dtype=col.dtype)
                 col[0] = 0
                 np.cumsum(colcount, out=col[1:])
 
-            subgraph.link_dict[edge_type] = Link(
+            subgraph.links[edge_type] = SampledLink(
                 layout=layout,
                 row=row,
                 col=col,

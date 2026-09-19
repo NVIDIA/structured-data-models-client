@@ -391,8 +391,7 @@ def test_semantic_view_drops_a_type_mismatched_relationship(
     own and cannot repair. The relationship is dropped and reported instead,
     like every other unconvertible element.
     """
-    from sdm_relational_engine.graph import Edge
-    from sdm_relational_engine.rfm import ViewConversionWarning
+    from sdm_relational_engine.rfm import Edge, ViewConversionWarning
 
     datacenters = _DATA['DATACENTERS'].copy()
     datacenters['DATACENTER_ID'] = range(len(datacenters))

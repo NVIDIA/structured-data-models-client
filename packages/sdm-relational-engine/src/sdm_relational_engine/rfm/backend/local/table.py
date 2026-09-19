@@ -16,7 +16,7 @@ from sdm_relational_engine.rfm.base import (
     Table,
     composite_key,
 )
-from sdm_relational_engine.runmode import MissingType
+from sdm_relational_engine.rfm.base.table import MissingType
 
 
 class LocalTable(Table):

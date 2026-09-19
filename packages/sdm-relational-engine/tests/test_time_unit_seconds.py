@@ -13,7 +13,7 @@ from sdm_relational_engine.rfm.backend.local import LocalTable
 from sdm_relational_engine.rfm.backend.local.sampler import (
     date_offset_to_seconds,
 )
-from sdm_relational_engine.rfm.query_parser import parse_query_locally
+from sdm_relational_engine.rfm.query.parser import parse_query_locally
 
 
 @pytest.fixture
