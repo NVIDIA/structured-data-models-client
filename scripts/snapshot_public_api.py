@@ -82,8 +82,23 @@ def _first_party_attributes(owner: type) -> dict[str, Any]:
     return found
 
 
+#: Types whose *value* is part of the contract, not just their presence.
+#: `__version__` was recorded as `{'kind': 'str'}`, so 1.0.0 becoming anything
+#: else moved nothing -- a snapshot of the public surface that could not see
+#: the version number in it.
+RECORDED_BY_VALUE = (str, int, float, bool, bytes, type(None))
+
+
 def _describe(obj: object) -> dict[str, object]:
     described: dict[str, object] = {'kind': type(obj).__name__}
+    if isinstance(obj, RECORDED_BY_VALUE):
+        described['value'] = obj if not isinstance(obj, bytes) else obj.hex()
+        return described
+    if isinstance(obj, (tuple, frozenset)) and all(
+        isinstance(item, RECORDED_BY_VALUE) for item in obj
+    ):
+        described['value'] = sorted(obj, key=repr)
+        return described
     if inspect.isclass(obj):
         described['kind'] = 'class'
         described['bases'] = [

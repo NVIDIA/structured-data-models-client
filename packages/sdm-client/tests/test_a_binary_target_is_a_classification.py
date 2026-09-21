@@ -318,3 +318,76 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
                     indices=[0], task='classification', **extra
                 )
         assert 'decomposed' in str(raised.value)
+
+
+class TestTheContextIsWhatDecides:
+    """The task is judged from the rows that are sent, not the rows that exist.
+
+    Both single-table routes filter the context: out go the rows being scored,
+    the rows with no answer, and anything above the endpoint's cap. Judging the
+    unfiltered column declared a classification over a context that could hold
+    a single class -- which the endpoint refuses with TASK_SCHEMA_MISMATCH,
+    after the whole thing has been encoded and sent.
+    """
+
+    @staticmethod
+    def sent_context_values(request, column='churn'):
+        payload = next(
+            iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+        )
+        table = payload['context']['instance_table']
+        index = table['columns'].index(column)
+        return sorted({row[index] for row in table['rows']})
+
+    @staticmethod
+    def one_sided():
+        """Every 1 is a row about to be scored, so the context keeps only 0s."""
+        return pd.DataFrame(
+            {
+                'person_id': range(8),
+                'age': [20.0 + i for i in range(8)],
+                'churn': [1, 1, 1, 0, 0, 0, 0, 0],
+            }
+        )
+
+    def test_a_context_that_lost_a_class_is_not_declared_a_classification(self):
+        data = self.one_sided()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            request = PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(3).drop(columns=['churn'])
+            )
+        assert self.sent_context_values(request) == [0], (
+            'fixture is not one-sided'
+        )
+        assert request.task.kind != 'classification', (
+            'declared a classification over a context carrying one class, '
+            'which the endpoint refuses as TASK_SCHEMA_MISMATCH'
+        )
+
+    def test_and_it_says_the_context_teaches_nothing(self):
+        data = self.one_sided()
+        with pytest.warns(SDMWarning, match='distinguishes one answer'):
+            PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(3).drop(columns=['churn'])
+            )
+
+    def test_the_indices_route_judges_its_context_too(self):
+        data = self.one_sided()
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            request = PredictiveQuery(QUERY, {'people': data}).materialize(
+                indices=[0, 1, 2]
+            )
+        assert self.sent_context_values(request) == [0]
+        assert request.task.kind != 'classification'
+
+    def test_a_context_that_keeps_both_classes_still_classifies(self):
+        data = frame([i % 2 for i in range(40)])
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            request = PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(2).drop(columns=['churn'])
+            )
+        assert self.sent_context_values(request) == [0, 1]
+        assert request.task.kind == 'classification'

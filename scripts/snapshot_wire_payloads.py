@@ -73,6 +73,27 @@ def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
     return recorded
 
 
+def _output_sets(
+    adapter: Any, request: Any
+) -> list[tuple[str, tuple[str, ...]]]:
+    r"""The output fields worth recording for one request.
+
+    Every case used to be recorded asking only for ``prediction``, which is not
+    what anybody gets: the adapter picks the fields when the caller names none,
+    and for a classification that is ``prediction`` *and* ``probabilities``. So
+    the columns a caller actually receives were pinned nowhere, and a change to
+    the defaults moved no golden file.
+
+    Recorded as two cases rather than one because the explicit narrow ask is
+    also a contract, and the two answer differently.
+    """
+    default = tuple(adapter.default_output(request))
+    sets = [('', ('prediction',))]
+    if default != ('prediction',):
+        sets.append(('#default-outputs', default))
+    return sets
+
+
 def _tabular_cases() -> dict[str, list[dict[str, Any]]]:
     people = _people()
     unlabelled = people.head(3).drop(columns=['churn'])
@@ -95,13 +116,14 @@ def _tabular_cases() -> dict[str, list[dict[str, Any]]]:
             {'people': people},
         ).materialize(predict=unlabelled),
     }
-    return {
-        name: [
-            _normalize(payload)
-            for payload in adapter.prediction_plan(request, ('prediction',))
-        ]
-        for name, request in cases.items()
-    }
+    recorded: dict[str, list[dict[str, Any]]] = {}
+    for name, request in cases.items():
+        for label, outputs in _output_sets(adapter, request):
+            recorded[f'{name}{label}'] = [
+                _normalize(payload)
+                for payload in adapter.prediction_plan(request, outputs)
+            ]
+    return recorded
 
 
 def _relational_cases() -> dict[str, list[dict[str, Any]]]:
@@ -111,12 +133,13 @@ def _relational_cases() -> dict[str, list[dict[str, Any]]]:
         schema,
     ).materialize(indices=[0, 1, 2])
     adapter = RelationalAdapter()
-    return {
-        'relational/pql-count-aggregation': [
+    recorded: dict[str, list[dict[str, Any]]] = {}
+    for label, outputs in _output_sets(adapter, request):
+        recorded[f'relational/pql-count-aggregation{label}'] = [
             _normalize(payload)
-            for payload in adapter.prediction_plan(request, ('prediction',))
+            for payload in adapter.prediction_plan(request, outputs)
         ]
-    }
+    return recorded
 
 
 def _relational_available() -> bool:

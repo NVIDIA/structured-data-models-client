@@ -190,7 +190,8 @@
         "kind": "Profile"
       },
       "LANGUAGE_VERSION": {
-        "kind": "str"
+        "kind": "str",
+        "value": "1.1"
       },
       "Mode": {
         "bases": [
@@ -532,7 +533,8 @@
         "signature": "(title: str, message: str, code: str = '', span: predictive_query.schema.common.Span | None = None) -> None"
       },
       "__version__": {
-        "kind": "str"
+        "kind": "str",
+        "value": "1.0.0"
       },
       "codes": {
         "kind": "module"
@@ -614,19 +616,43 @@
         "kind": "dict"
       },
       "TFM_MODEL_KUMO_RELATIONAL": {
-        "kind": "str"
+        "kind": "str",
+        "value": "kumo-relational"
       },
       "TFM_MODEL_KUMO_TABULAR": {
-        "kind": "str"
+        "kind": "str",
+        "value": "kumo-tabular"
       },
       "TFM_MODEL_VALUES": {
-        "kind": "tuple"
+        "kind": "tuple",
+        "value": [
+          "kumo-relational",
+          "kumo-tabular"
+        ]
       },
       "TFM_OUTPUT_FIELD_VALUES": {
-        "kind": "tuple"
+        "kind": "tuple",
+        "value": [
+          "embeddings",
+          "explanation",
+          "prediction",
+          "probabilities",
+          "quantiles",
+          "rankings",
+          "scores"
+        ]
       },
       "TFM_TASK_KIND_VALUES": {
-        "kind": "tuple"
+        "kind": "tuple",
+        "value": [
+          "binary_classification",
+          "classification",
+          "forecasting",
+          "multiclass_classification",
+          "ranking",
+          "regression",
+          "temporal_link_prediction"
+        ]
       }
     }
   },
@@ -917,7 +943,8 @@
         "signature": "(message: 'str', *, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "__version__": {
-        "kind": "str"
+        "kind": "str",
+        "value": "1.0.0"
       }
     }
   },
@@ -953,7 +980,8 @@
         "signature": "(backend: 'str', driver: 'str') -> 'None'"
       },
       "__version__": {
-        "kind": "str"
+        "kind": "str",
+        "value": "1.0.0"
       },
       "connect": {
         "kind": "callable",

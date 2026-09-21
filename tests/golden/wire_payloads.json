@@ -7806,6 +7806,164 @@
       }
     }
   ],
+  "tabular/direct-classification#default-outputs": [
+    {
+      "context": {
+        "instance_table": {
+          "columns": [
+            "user_id",
+            "age",
+            "segment",
+            "churn"
+          ],
+          "format": "arrays",
+          "rows": [
+            [
+              0,
+              20.0,
+              "south",
+              0
+            ],
+            [
+              1,
+              21.0,
+              "north",
+              1
+            ],
+            [
+              2,
+              22.0,
+              "north",
+              0
+            ],
+            [
+              3,
+              23.0,
+              "south",
+              1
+            ],
+            [
+              4,
+              24.0,
+              "north",
+              0
+            ],
+            [
+              5,
+              25.0,
+              "north",
+              1
+            ],
+            [
+              6,
+              26.0,
+              "south",
+              0
+            ],
+            [
+              7,
+              27.0,
+              "north",
+              1
+            ],
+            [
+              8,
+              28.0,
+              "north",
+              0
+            ],
+            [
+              9,
+              29.0,
+              "south",
+              1
+            ],
+            [
+              10,
+              30.0,
+              "north",
+              0
+            ],
+            [
+              11,
+              31.0,
+              "north",
+              1
+            ]
+          ]
+        }
+      },
+      "metadata": {
+        "request_id": "<request-id>"
+      },
+      "model": "kumo-tabular",
+      "output": {
+        "fields": [
+          "prediction",
+          "probabilities"
+        ]
+      },
+      "predict": {
+        "instance_table": {
+          "columns": [
+            "user_id",
+            "age",
+            "segment"
+          ],
+          "format": "arrays",
+          "rows": [
+            [
+              0,
+              20.0,
+              "south"
+            ],
+            [
+              1,
+              21.0,
+              "north"
+            ],
+            [
+              2,
+              22.0,
+              "north"
+            ]
+          ]
+        }
+      },
+      "schema": {
+        "instance_table": {
+          "columns": {
+            "age": {
+              "dtype": "float64",
+              "stype": "numerical"
+            },
+            "churn": {
+              "dtype": "int64",
+              "stype": "categorical"
+            },
+            "segment": {
+              "dtype": "string",
+              "stype": "categorical"
+            },
+            "user_id": {
+              "dtype": "int64",
+              "stype": "ID"
+            }
+          },
+          "primary_key": [
+            "user_id"
+          ]
+        }
+      },
+      "task": {
+        "kind": "classification",
+        "target": {
+          "column_name": "churn",
+          "dtype": "int64"
+        }
+      }
+    }
+  ],
   "tabular/direct-regression": [
     {
       "context": {
@@ -8039,6 +8197,146 @@
       "output": {
         "fields": [
           "prediction"
+        ]
+      },
+      "predict": {
+        "instance_table": {
+          "columns": [
+            "user_id",
+            "age",
+            "segment"
+          ],
+          "format": "arrays",
+          "rows": [
+            [
+              0,
+              20.0,
+              "south"
+            ],
+            [
+              1,
+              21.0,
+              "north"
+            ],
+            [
+              2,
+              22.0,
+              "north"
+            ]
+          ]
+        }
+      },
+      "schema": {
+        "instance_table": {
+          "columns": {
+            "age": {
+              "dtype": "float64",
+              "stype": "numerical"
+            },
+            "churn": {
+              "dtype": "int64",
+              "stype": "categorical"
+            },
+            "segment": {
+              "dtype": "string",
+              "stype": "categorical"
+            },
+            "user_id": {
+              "dtype": "int64",
+              "stype": "ID"
+            }
+          },
+          "primary_key": [
+            "user_id"
+          ]
+        }
+      },
+      "task": {
+        "kind": "classification",
+        "target": {
+          "column_name": "churn",
+          "dtype": "int64"
+        }
+      }
+    }
+  ],
+  "tabular/pql-predict-frame#default-outputs": [
+    {
+      "context": {
+        "instance_table": {
+          "columns": [
+            "user_id",
+            "age",
+            "segment",
+            "churn"
+          ],
+          "format": "arrays",
+          "rows": [
+            [
+              3,
+              23.0,
+              "south",
+              1
+            ],
+            [
+              4,
+              24.0,
+              "north",
+              0
+            ],
+            [
+              5,
+              25.0,
+              "north",
+              1
+            ],
+            [
+              6,
+              26.0,
+              "south",
+              0
+            ],
+            [
+              7,
+              27.0,
+              "north",
+              1
+            ],
+            [
+              8,
+              28.0,
+              "north",
+              0
+            ],
+            [
+              9,
+              29.0,
+              "south",
+              1
+            ],
+            [
+              10,
+              30.0,
+              "north",
+              0
+            ],
+            [
+              11,
+              31.0,
+              "north",
+              1
+            ]
+          ]
+        }
+      },
+      "metadata": {
+        "request_id": "<request-id>"
+      },
+      "model": "kumo-tabular",
+      "output": {
+        "fields": [
+          "prediction",
+          "probabilities"
         ]
       },
       "predict": {

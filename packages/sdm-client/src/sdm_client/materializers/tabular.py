@@ -59,6 +59,36 @@ def _is_whole(value: object) -> bool:
     return False
 
 
+def _warn_if_the_context_teaches_nothing(
+    column: str, target: pd.Series
+) -> None:
+    r"""Say when every context row carries the same answer.
+
+    This is reachable without doing anything obviously wrong: score all the
+    rows of one class and the context left behind holds only the other. The
+    endpoint refuses that as a classification -- ``TASK_SCHEMA_MISMATCH``, two
+    classes needed and one supplied -- and would take it as a regression over
+    a constant, which is worse, because it answers.
+
+    Said rather than refused: a caller who means it can be scoring a holdout
+    they know is one-sided, and the endpoint is entitled to the last word on
+    what it will accept.
+    """
+    distinct = target.dropna().nunique()
+    if distinct >= 2:
+        return
+    warnings.warn(
+        f'every context row has the same {column} '
+        f'({"no rows carry an answer at all" if distinct == 0 else "value"}), '
+        f'so nothing in the context distinguishes one answer from another. '
+        f'This usually means the rows being scored are all of one class and '
+        f'the rest were left behind. Score fewer of them, or build the schema '
+        f'from rows that keep both.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 def _holds_two_whole_numbers(target: pd.Series) -> bool:
     r"""Whether ``target`` is two distinct whole numbers and nothing else.
 
@@ -77,10 +107,6 @@ def _holds_two_whole_numbers(target: pd.Series) -> bool:
     if len(values) != 2:
         return False
     return all(_is_whole(value) for value in values)
-    try:
-        return all(float(value).is_integer() for value in values)
-    except (TypeError, ValueError):
-        return False
 
 
 class TabularMaterializer:
@@ -112,24 +138,24 @@ class TabularMaterializer:
         entity_col = col_name(query.entity_column)
         target_col = col_name(query.target_column)
 
-        return Request(
-            context=_context_within_limit(
-                _rows_that_carry_an_answer(
-                    _without_the_rows_being_scored(
-                        self.schema[entity_table_name].data, predict, entity_col
-                    ),
-                    target_col,
+        context = _context_within_limit(
+            _rows_that_carry_an_answer(
+                _without_the_rows_being_scored(
+                    self.schema[entity_table_name].data, predict, entity_col
                 ),
-                None,
-                entity_table_name,
-                'This route takes no num_context_samples, so choose the '
-                'context by building the schema from the rows you want.',
+                target_col,
             ),
+            None,
+            entity_table_name,
+            'This route takes no num_context_samples, so choose the '
+            'context by building the schema from the rows you want.',
+        )
+
+        return Request(
+            context=context,
             predict=predict,
             target=target_col,
-            task=self._task_kind(
-                query, self.schema[entity_table_name].data[target_col], task
-            ),
+            task=self._task_kind(query, context[target_col], task),
             schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
@@ -184,7 +210,7 @@ class TabularMaterializer:
             context=context,
             predict=predict,
             target=target_col,
-            task=self._task_kind(query, entity_table[target_col], task),
+            task=self._task_kind(query, context[target_col], task),
             schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
@@ -200,6 +226,14 @@ class TabularMaterializer:
         A stated kind is authoritative and nothing below runs. Otherwise the
         semantic type decides, except for the one case where it decided wrong
         often enough to matter: a target holding two whole numbers.
+
+        ``target`` is the context that will actually be sent, not the column it
+        was drawn from. Those differ -- the context leaves out the rows being
+        scored, the rows with no answer, and anything above the endpoint's cap
+        -- and judging the wider one declares a classification over a context
+        that may hold a single class, which the endpoint refuses with
+        ``TASK_SCHEMA_MISMATCH``. The rows that teach the model are the rows
+        that decide what it is being taught.
         """
         if query.target_stype not in {Stype.categorical, Stype.numerical}:
             raise StructuredDataError(
@@ -224,6 +258,7 @@ class TabularMaterializer:
                     },
                 )
             return stated
+        _warn_if_the_context_teaches_nothing(query.target_column, target)
         if query.target_stype == Stype.categorical:
             return 'classification'
         if _holds_two_whole_numbers(target):
