@@ -3,19 +3,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Record the public surface of every distribution, so a change to it is visible.
+"""Record the public surface of every distribution.
 
-What a user can observe is more than the code that produces it: the names a
-package exports, the signature of each one, the exception classes and the codes
-they carry, and the warning categories a caller can filter on. None of that is
-covered by a test that only asserts a prediction comes back, and all of it is
-what breaks a downstream caller.
-
-So it is written to ``tests/golden/public_api.json`` and compared on every run.
-A diff is not a failure to be silenced -- it is the question "did you mean to
-change the contract?", asked at the moment the answer is still cheap.
-
-Run with ``--write`` to re-record after an intended change.
+Exported names, their signatures, the values of constants, and enum members.
+Compared on every run; ``--write`` re-records after an intended change.
 """
 
 from __future__ import annotations
@@ -36,8 +27,6 @@ SNAPSHOT = (
     / 'public_api.json'
 )
 
-# Only the distributions a user imports directly. The relational engine is
-# behind an extra and is recorded when it is installed, never required.
 PACKAGES = ('sdm_api', 'sdm_client', 'sdm_connectors', 'predictive_query')
 
 
@@ -62,14 +51,8 @@ FIRST_PARTY_ROOTS = frozenset(
 def _first_party_attributes(owner: type) -> dict[str, Any]:
     """Every public attribute this project defines on ``owner`` or its bases.
 
-    Read from ``vars()`` along the MRO rather than through
-    :func:`inspect.getmembers`, which does not surface the methods defined on
-    an ``Enum`` subclass at all -- ``Dtype.is_int`` and the fourteen helpers
-    beside it were recorded nowhere while appearing to be covered.
-
-    Reading the class dictionary also keeps inherited builtins out without a
-    second filter: ``str.encode`` is in ``vars(str)``, and ``str`` is not one
-    of ours.
+    Read from ``vars()`` along the MRO: ``inspect.getmembers`` does not surface
+    the methods defined on an ``Enum`` subclass.
     """
     found: dict[str, Any] = {}
     for base in reversed(owner.__mro__):
@@ -82,10 +65,6 @@ def _first_party_attributes(owner: type) -> dict[str, Any]:
     return found
 
 
-#: Types whose *value* is part of the contract, not just their presence.
-#: `__version__` was recorded as `{'kind': 'str'}`, so 1.0.0 becoming anything
-#: else moved nothing -- a snapshot of the public surface that could not see
-#: the version number in it.
 RECORDED_BY_VALUE = (str, int, float, bool, bytes, type(None))
 
 
@@ -97,11 +76,6 @@ def _describe(obj: object) -> dict[str, object]:
     if isinstance(obj, (tuple, frozenset)) and all(
         isinstance(item, RECORDED_BY_VALUE) for item in obj
     ):
-        # A tuple's order is part of its value -- `TFM_MODEL_VALUES` is
-        # ('kumo-tabular', 'kumo-relational') and reordering it is a change to
-        # the public surface. Sorting everything recorded the sorted order
-        # instead, so a reorder moved nothing. Only a set, which has no order
-        # to lose, is sorted, and then only to make the record stable.
         described['value'] = (
             list(obj) if isinstance(obj, tuple) else sorted(obj, key=repr)
         )
@@ -114,15 +88,6 @@ def _describe(obj: object) -> dict[str, object]:
             if base is not object
         ]
         described['signature'] = _signature(obj)
-        # Signatures, not just names. Recording only the names let
-        # `SDMClient.predict` change shape without the snapshot noticing --
-        # which is the method most callers touch first.
-        #
-        # Inherited builtins are excluded. A `StrEnum` otherwise contributes
-        # 47 `str` methods, which buries the members that actually matter --
-        # and records signatures owned by CPython, so the snapshot would
-        # disagree with itself on a different interpreter for reasons that have
-        # nothing to do with this library.
         owned = _first_party_attributes(obj)
         described['public_methods'] = {
             name: _signature(getattr(obj, name, value))
@@ -130,10 +95,7 @@ def _describe(obj: object) -> dict[str, object]:
             if callable(value) or isinstance(value, (classmethod, staticmethod))
         }
         if issubclass(obj, enum.Enum):
-            # For an enum the members *are* the contract; the methods are not.
             described['members'] = {member.name: member.value for member in obj}
-        # Attributes a caller reads are part of the surface too, and a
-        # dataclass field has no entry above.
         described['public_attributes'] = sorted(
             name
             for name, value in owned.items()

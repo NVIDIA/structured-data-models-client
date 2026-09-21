@@ -3,18 +3,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Record the exact bytes each canonical request puts on the wire.
+"""Record what each canonical request puts on the wire.
 
-The public API snapshot records what a caller can *name*. This records what the
-endpoint actually receives, which is the other half of the contract and the half
-a refactor is far more likely to move without anyone noticing: a changed dtype
-string, a column encoded one way instead of another, a task kind derived rather
-than stated.
-
-``metadata.request_id`` is generated per call and is replaced with a fixed value
-so the snapshot compares. Nothing else is normalized -- the point is to notice.
-
-Run with ``--write`` to re-record after an intended change.
+``metadata.request_id`` is generated per call and normalized; nothing else is.
+``--write`` re-records after an intended change.
 """
 
 from __future__ import annotations
@@ -52,9 +44,6 @@ def _people(n: int = 12) -> pd.DataFrame:
 
 
 def _orders(n: int = 240) -> pd.DataFrame:
-    # Long enough that a 30-day forward aggregation has history behind every
-    # anchor the sampler picks; a short frame is refused by the engine, which
-    # is correct and is not what this snapshot is for.
     return pd.DataFrame(
         {
             'order_id': range(n),
@@ -78,14 +67,8 @@ def _output_sets(
 ) -> list[tuple[str, tuple[str, ...]]]:
     r"""The output fields worth recording for one request.
 
-    Every case used to be recorded asking only for ``prediction``, which is not
-    what anybody gets: the adapter picks the fields when the caller names none,
-    and for a classification that is ``prediction`` *and* ``probabilities``. So
-    the columns a caller actually receives were pinned nowhere, and a change to
-    the defaults moved no golden file.
-
-    Recorded as two cases rather than one because the explicit narrow ask is
-    also a contract, and the two answer differently.
+    Both the adapter's defaults and an explicit narrow ask, because the two
+    answer differently and only the first is what a caller receives.
     """
     default = tuple(adapter.default_output(request))
     sets = [('', ('prediction',))]
@@ -177,11 +160,6 @@ def main() -> int:
 
     recorded = json.loads(SNAPSHOT.read_text())
 
-    # Which cases this environment is expected to produce. An install without
-    # the relational extra cannot build the relational ones and must not report
-    # a difference it could not have caused -- but every other recorded case is
-    # required, so deleting one from `collect()` fails here rather than quietly
-    # reducing what is covered.
     expected = {
         name
         for name in recorded

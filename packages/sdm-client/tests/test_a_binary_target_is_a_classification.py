@@ -7,12 +7,6 @@
 `PREDICT users.churn FOR EACH users.user_id`, where churn is 0 or 1, was
 gathered as a regression: 0 and 1 are integers, integers are numerical, and a
 numerical target meant regression. The endpoint answered it -- with continuous
-values near 0.5, which read like probabilities and are not. Nothing warned.
-
-Zero-and-one is the most common way there is to write a binary label, so the
-derivation is corrected for exactly that case, and only that case. Everything
-wider stays a regression, because a target holding 0, 1 and 2 really might be
-a count. What settles those is the caller, and `task=` now exists to say so.
 """
 
 from __future__ import annotations
@@ -109,8 +103,6 @@ class TestTheDerivation:
         Tested on the predicate rather than end to end, because pandas refuses
         the column first: ``pd.DataFrame`` raises ``OverflowError: int too
         large to convert to float`` while building it, long before any of this
-        runs. The predicate is still written not to raise, so that what decides
-        is the column's shape and not an accident of arithmetic.
         """
         huge = pd.Series([10**400, 10**401], dtype=object)
         assert _holds_two_whole_numbers(huge) is True
@@ -234,7 +226,6 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
     A relational query does not have its kind derived here at all -- the engine
     resolves the query and states it in the payload. So there is nothing for an
     override to override, and the first version of this accepted the argument
-    and dropped it, which is worse than not accepting it.
     """
 
     @staticmethod
@@ -326,8 +317,6 @@ class TestTheContextIsWhatDecides:
     Both single-table routes filter the context: out go the rows being scored,
     the rows with no answer, and anything above the endpoint's cap. Judging the
     unfiltered column declared a classification over a context that could hold
-    a single class -- which the endpoint refuses with TASK_SCHEMA_MISMATCH,
-    after the whole thing has been encoded and sent.
     """
 
     @staticmethod
@@ -383,7 +372,6 @@ class TestTheContextIsWhatDecides:
         The same degeneracy used to have opposite outcomes: a 0/1 target fell
         back to regression and worked, while a categorical one -- or a stated
         classification -- built a request the endpoint would reject, and said
-        so only in a warning.
         """
         data = self.one_sided(**data_kwargs)
         with warnings.catch_warnings():
@@ -452,7 +440,6 @@ class TestTheContextIsWhatDecides:
         The task is decided while the request is still being assembled, so this
         warning ran before ``Request`` could refuse the empty context -- and
         "every context row has the same value" is a confusing thing to say
-        about no rows, placed in front of a sentence that says it plainly.
         """
         data = frame(target)
         predict = (

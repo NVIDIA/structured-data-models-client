@@ -29,22 +29,11 @@ _CONTEXT_SEED = 42
 _CONTEXT_ROWS_MAX = TABULAR_LIMITS['context_rows_max']
 
 
-#: What the tabular deployment answers. Stated here rather than read from a
-#: ``ModelSpec`` because a materializer builds a request before a model handle
-#: is necessarily in hand; ``models.py`` is the source of truth and a test in
-#: tests/ holds the two together.
 TABULAR_TASK_KINDS = frozenset({'classification', 'regression'})
 
 
 def _is_whole(value: object) -> bool:
-    r"""Whether ``value`` is a number with nothing after the decimal point.
-
-    Deliberately not ``float(value).is_integer()``. That silently answers yes
-    for ``Decimal('2.0000000000000000001')``, which rounds to 2.0 on the way
-    through a float, and raises ``OverflowError`` for an integer too large to
-    be one at all -- so a warehouse column of exact decimals or big integers
-    got the wrong answer or no answer.
-    """
+    r"""Whether ``value`` is a number with nothing after the decimal point."""
     if isinstance(value, bool):
         return True
     if isinstance(value, numbers.Integral):
@@ -85,23 +74,9 @@ def _judge_a_context_that_teaches_nothing(
 ) -> None:
     r"""Refuse, or remark on, a context whose every row says the same thing.
 
-    This is reachable without doing anything obviously wrong: score all the
-    rows of one class and the context left behind holds only the other.
-
-    What follows from it depends on the task, because the endpoint's answer
-    does. A classification over a single class is refused there --
-    ``TASK_SCHEMA_MISMATCH``, two classes needed and one supplied -- so it is
-    refused here, in the same words, before a table is encoded and sent. A
-    regression over a constant is accepted there, and answers, which is why it
-    is only remarked on: the request works, it just cannot mean much.
-
-    Before this, the same degeneracy had opposite outcomes. A 0/1 target fell
-    back to regression and went through; the identical situation with a
-    categorical target, or with ``task='classification'`` stated, built a
-    request the endpoint was certain to reject, and said so only in a warning.
-
-    A context with no answered rows at all is left alone: ``Request`` refuses
-    it a moment later in words that fit it better.
+    A classification over one class is refused by the endpoint, so it is
+    refused here. A regression over a constant is accepted there, so it is
+    only warned about. A context with no answered rows is left to ``Request``.
     """
     answered = target.dropna()
     if len(answered) == 0 or answered.nunique() >= 2:
@@ -131,16 +106,9 @@ def _judge_a_context_that_teaches_nothing(
 def _holds_two_whole_numbers(target: pd.Series) -> bool:
     r"""Whether ``target`` is two distinct whole numbers and nothing else.
 
-    Two is the whole rule, and it is about the values rather than how they are
-    stored: a 0/1 column with one missing value arrives from pandas as
-    ``float64``, and it is still a label. So ``2.0`` and ``3.0`` read the same
-    way as ``2`` and ``3`` -- treating those differently would be an accident
-    of storage, not a distinction anyone meant.
-
-    What is excluded is anything wider or fractional. Three whole numbers may
-    be a count -- 0, 1 and 2 items bought is a regression and reads
-    identically -- and 0.5 and 1.5 are two values of which neither is a label.
-    Both are left alone, and ``task=`` settles them.
+    The values decide, not their storage: a 0/1 column with a null arrives as
+    ``float64`` and is still a label. Anything wider or fractional is left to
+    ``task=``.
     """
     values = target.dropna().unique()
     if len(values) != 2:
@@ -262,23 +230,9 @@ class TabularMaterializer:
     ) -> str:
         r"""What is being asked of the target, and who decided it.
 
-        A stated kind is authoritative: it is checked against what this model
-        serves, and then returned. Otherwise the semantic type decides, except
-        for the one case where it decided wrong often enough to matter: a
-        target holding two whole numbers.
-
-        Either way the context is remarked on if it teaches nothing, because
-        that is a fact about the rows rather than about the task chosen for
-        them -- but only after a stated task has been accepted, so a caller's
-        mistake is never reported as a note about their data.
-
-        ``target`` is the context that will actually be sent, not the column it
-        was drawn from. Those differ -- the context leaves out the rows being
-        scored, the rows with no answer, and anything above the endpoint's cap
-        -- and judging the wider one declares a classification over a context
-        that may hold a single class, which the endpoint refuses with
-        ``TASK_SCHEMA_MISMATCH``. The rows that teach the model are the rows
-        that decide what it is being taught.
+        ``target`` is the context that will be sent, not the column it came
+        from; the two differ, and the narrower one is what the model learns
+        from.
         """
         if query.target_stype not in {Stype.categorical, Stype.numerical}:
             raise StructuredDataError(
@@ -287,11 +241,6 @@ class TabularMaterializer:
                 f'type {query.target_stype.value!r}',
                 code='UNSUPPORTED_REQUEST',
             )
-        # Validate, then warn, then decide. The warning used to come first,
-        # so `task='forecasting'` over a one-valued context raised the warning
-        # instead of the error about forecasting -- and for anyone running with
-        # SDMWarning as an error, the real complaint never surfaced at all. A
-        # caller's mistake is reported before a remark about their data.
         if stated is not None and (
             not isinstance(stated, str) or stated not in TABULAR_TASK_KINDS
         ):

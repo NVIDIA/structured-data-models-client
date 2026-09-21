@@ -70,15 +70,6 @@ from predictive_query.validator import PredictiveQueryValidator
 #: profile. See ``docs/stability.md``.
 LANGUAGE_VERSION = '1.1'
 
-# A library states what happened; the application decides where that goes. With
-# no handler anywhere, Python's last-resort handler prints a WARNING record to
-# stderr -- so a host application that never configured logging saw this
-# package's month-to-days and constant-precision warnings appear in its own
-# output, from a dependency it may not know it has.
-#
-# A NullHandler ends that without deciding anything on the application's behalf:
-# records still propagate, so an application that *has* configured logging
-# receives them exactly as before.
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 

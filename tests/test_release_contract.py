@@ -7,7 +7,6 @@
 Each package tests its own behaviour. Nothing tested that the five agree with
 each other, that what they export stays what they exported, or that the claims
 the configuration files make about themselves are true. Those are the failures
-a release notices and a unit test does not.
 """
 
 from __future__ import annotations
@@ -43,9 +42,6 @@ def _covered_by(rule: str, selectors: Sequence[str]) -> bool:
     Plain string prefixes are wrong here: `'FIX002'.startswith('F')` is True,
     but ruff's `F` is Pyflakes and `FIX` is flake8-fixme -- selecting one does
     not select the other, which is verifiable with
-    `ruff check --isolated --select F` against a file full of FIXMEs. Treating
-    them as the same family quietly dropped FIX002 out of the backlog this test
-    is meant to be checking.
     """
     if 'ALL' in selectors:
         return True
@@ -174,13 +170,6 @@ class TestDistributionCoherence:
         `test_every_distribution_declares_the_same_version` proves the five
         agree on what they *are*. It says nothing about what they *require*,
         and those are thirteen separate hard-coded strings across two files.
-        Bump the five and forget the pins and every wheel is 1.1.0 while
-        sdm-client still requires sdm-api==1.0.0 -- which pip resolves happily
-        from the previous release, producing a mixed install that the publish
-        workflow's filename check cannot see.
-
-        RELEASING.md says "internal pins move with them". This is that
-        sentence, as something that fails.
         """
         declared = self._declared_version()
         distributions = {name for name in _distributions()}
@@ -260,7 +249,6 @@ class TestConfigurationTellsTheTruth:
     The relational engine's lint configuration carried a note saying its ignored
     rules were enabled in two sibling packages. One of them was not: the rule
     belongs to a rule family the shared configuration never selected. Nothing
-    caught it because nothing reads a comment. This does.
     """
 
     def test_the_shared_lint_baseline_is_not_narrowed_by_any_package(self):
@@ -283,9 +271,6 @@ class TestConfigurationTellsTheTruth:
         One is rules the shared baseline really does select, so listing them
         here silences something; the other is a record of rules nothing selects
         anywhere. An earlier note called the whole list inert, which was wrong
-        about the four `B` rules -- the exact failure this class exists to
-        catch, committed inside the fix for it. So the headings are checked
-        against what ruff would actually do.
         """
         source = (
             PACKAGES / 'sdm-relational-engine' / 'pyproject.toml'
@@ -293,8 +278,6 @@ class TestConfigurationTellsTheTruth:
         root = tomllib.loads((REPO / 'pyproject.toml').read_text())
         selected = root['tool']['ruff']['lint']['select']
         engine = _pyproject('sdm-relational-engine')['tool']['ruff']['lint']
-        # The engine adds to the baseline, and `D` is how the docstring rules
-        # become reachable in this tree at all.
         effective = list(selected) + list(engine.get('extend-select', []))
 
         active_block, _, backlog_block = source.partition(
@@ -329,7 +312,6 @@ class TestConfigurationTellsTheTruth:
         The materializer refuses a stated `task=` the tabular deployment does
         not serve, and it has to do that before a model handle is necessarily
         in hand -- so the list is written twice. A comment claiming two things
-        agree is the kind this file exists to check.
         """
         from sdm_client.materializers.tabular import TABULAR_TASK_KINDS
         from sdm_client.models import spec_for
@@ -346,16 +328,6 @@ class TestConfigurationTellsTheTruth:
         Three times now this check has confused "absent" with something else,
         because it asked by importing. ``find_spec`` executes every parent
         ``__init__`` on the way down, so it reports a module as missing when a
-        package it imports is missing -- and the engine's snowflake backend
-        raises the project's own ``MissingBackendError``, not even
-        ``ModuleNotFoundError``, with ``.name`` unset. There is no exception to
-        read your way out of. So this reads the filesystem instead: locate the
-        top-level package, which executes nothing, then walk the dotted name as
-        directories.
-
-        Returns ``None`` when the distribution itself is not installed, which
-        is a different answer from "the module is gone" and is why the caller
-        cannot treat them alike.
         """
         import importlib.machinery
         import importlib.util
@@ -388,13 +360,6 @@ class TestConfigurationTellsTheTruth:
         The engine was restructured on main and three entries kept naming
         modules that no longer exist, while the errors they covered moved to
         new ones. Nothing complains about an override that matches nothing, so
-        the list reads as debt being held when it is really debt being lost.
-
-        What makes this awkward is that "missing" has three meanings and only
-        one of them is a defect: the distribution is not installed in this job,
-        the module needs an optional dependency this job does not have, or the
-        file is genuinely gone. Only the last is worth failing over, and asking
-        by import cannot tell them apart -- see ``_module_is_on_disk``.
         """
         root = tomllib.loads((REPO / 'pyproject.toml').read_text())
         named = [
@@ -478,7 +443,6 @@ class TestDocumentedExamples:
     Executing them needs a live NIM, so that belongs in the live suite. What can
     be checked with nothing running is still most of what goes wrong in a
     published example: it stopped being valid Python, or it names something the
-    library no longer exports.
     """
 
     @staticmethod
@@ -574,9 +538,6 @@ class TestInterpreterSupportIsStated:
     on an interpreter it runs on perfectly well.
     """
 
-    # Every interpreter this project could plausibly name. Extend it rather
-    # than deriving it: a list is checkable, and a range that quietly grows to
-    # include an unreleased Python is not.
     KNOWN = ('3.10', '3.11', '3.12', '3.13', '3.14')
 
     @staticmethod
@@ -586,7 +547,6 @@ class TestInterpreterSupportIsStated:
         `'3.10' >= '3.9'` is False as strings, because `'1' < '9'`. Nothing
         here has a 3.9 floor today, so a lexical comparison happened to agree
         -- and would have started disagreeing silently at 3.20, in a helper
-        whose whole job is to catch a metadata mistake.
         """
         return tuple(int(part) for part in version.split('.'))
 
@@ -599,8 +559,6 @@ class TestInterpreterSupportIsStated:
             if clause.startswith('>='):
                 floor = cls._parts(clause[2:].strip())
             elif clause.startswith('<='):
-                # Inclusive: `<=3.13` admits 3.13. Treating every ceiling as
-                # exclusive silently dropped the highest supported interpreter.
                 ceiling = cls._parts(clause[2:].strip())
                 inclusive = True
             elif clause.startswith('<'):
@@ -621,7 +579,8 @@ class TestInterpreterSupportIsStated:
 
     def test_the_version_comparison_this_class_relies_on_is_numeric(self):
         """The helper above is the only thing standing between a metadata
-        mistake and a release, so it is tested rather than trusted."""
+        mistake and a release, so it is tested rather than trusted.
+        """
         assert self._parts('3.10') > self._parts('3.9')
         assert self._parts('3.9') < self._parts('3.14')
         assert self._admitted('>=3.10') == list(self.KNOWN)

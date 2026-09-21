@@ -117,13 +117,9 @@ class PredictiveQuery:
             candidates: The rows a ranking is over. A ranking is answered as
                 one question per candidate, so the set has to be named rather
                 than assumed, and one call is made for each.
-            task: The kind of question this is, when the target does not settle
-                it. A query names a target, not what is being asked of it, and
-                a column of whole numbers reads as either a label or a
-                quantity. Stating it here is authoritative and silences the
-                warning that otherwise says which reading was taken. Single
-                table only: a relational query resolves to its own kind and
-                passing this with one is refused rather than ignored.
+            task: The kind of question this is, when the target does not
+                settle it. Authoritative, and single-table only: passing it
+                with a relational or decomposed query is refused.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -165,12 +161,6 @@ class PredictiveQuery:
             options,
         )
         if task is not None and (relational or rewritten is not None):
-            # Refused rather than ignored, and refused here rather than beside
-            # the relational call, because a ranking or a forecast leaves
-            # through the branch below and would have dropped it just as
-            # quietly. Neither route derives a kind for this to override: the
-            # engine resolves the query and states it in the payload, and a
-            # decomposed question is asked as the kind its parts are.
             why = (
                 'a decomposed question'
                 if rewritten is not None
