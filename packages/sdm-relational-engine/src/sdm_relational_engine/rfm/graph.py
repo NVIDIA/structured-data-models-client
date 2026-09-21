@@ -16,13 +16,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 import pandas as pd
-from predictive_query.schema.graph import (
+from predictive_query.schema.definition import (
     ColumnKey,
     ColumnKeyGroup,
-    GraphDefinition,
+    SchemaDefinition,
 )
-from predictive_query.schema.graph import (
-    Edge as PredictiveQueryEdge,
+from predictive_query.schema.definition import (
+    Relationship as PredictiveQueryEdge,
 )
 from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Stype
@@ -2811,7 +2811,7 @@ class Graph:
         )
         return (self._to_api_graph_definition(), counts)
 
-    def _to_api_graph_definition(self) -> GraphDefinition:
+    def _to_api_graph_definition(self) -> SchemaDefinition:
         tables: dict[str, TableDefinition] = {}
         col_groups: list[ColumnKeyGroup] = []
         for table_name, table in self.tables.items():
@@ -2828,7 +2828,7 @@ class Graph:
             )
             if len(keys) > 1:
                 col_groups.append(ColumnKeyGroup(tuple(keys)))
-        return GraphDefinition(tables, col_groups)
+        return SchemaDefinition(tables, col_groups)
 
     def update_connection(
         self,

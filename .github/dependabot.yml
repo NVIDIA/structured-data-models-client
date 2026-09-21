@@ -1,0 +1,14 @@
+# Actions are referenced by tag above rather than by commit digest, which is one
+# step short of what a supply-chain review wants. This keeps them current, and
+# `github-actions` updates arrive as reviewable pull requests; pinning to
+# digests is the follow-up, and dependabot rewrites digests too once they are.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /packages/sdm-client
+    schedule:
+      interval: weekly

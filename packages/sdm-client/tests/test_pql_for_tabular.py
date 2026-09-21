@@ -203,10 +203,10 @@ def test_a_query_predicting_a_column_that_is_not_there_is_refused():
 
 def test_a_schema_translates_into_the_language_once():
     """One translation, so a query and the engine cannot read it differently."""
-    from sdm_client.schema import Schema, to_graph_definition
+    from sdm_client.schema import Schema, to_schema_definition
 
     schema = Schema.from_data({'users': users()})
-    definition = to_graph_definition(schema)
+    definition = to_schema_definition(schema)
     assert 'users' in definition.tables
     assert definition.tables['users'].pkey == 'user_id'
     names = {column.name for column in definition.tables['users'].cols}

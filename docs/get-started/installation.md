@@ -3,7 +3,7 @@
 | Command | You get |
 |---|---|
 | `pip install sdm-client` | The client, the language, and the tabular model. Runs anywhere. |
-| `pip install sdm-client[relational]` | Adds the relational model, pulling in the native engine. |
+| `pip install sdm-client[relational]` | Adds the relational model, pulling in the native engine. **Python 3.10–3.13 only** — see [prerequisites](prerequisites.md). |
 | `pip install sdm-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[s3]`. |
 | `pip install sdm-client[all]` | The relational model and every warehouse backend. |
 

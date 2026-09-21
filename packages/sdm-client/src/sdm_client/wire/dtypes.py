@@ -472,9 +472,12 @@ def _integral_value(value: Any) -> int | None:
         return None
     if isinstance(value, Integral):
         return int(value)
-    if isinstance(value, Decimal):
-        if value.is_finite() and value == value.to_integral_value():
-            return int(value)
+    if (
+        isinstance(value, Decimal)
+        and value.is_finite()
+        and value == value.to_integral_value()
+    ):
+        return int(value)
     return None
 
 

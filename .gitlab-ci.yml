@@ -34,6 +34,24 @@ lint:
     - ruff check .
     - ruff format --check .
 
+# Blocking. Five distributions ship `py.typed`, which tells every downstream
+# user's type checker to trust these annotations. Nothing verified them, so the
+# promise was only as good as the last person who happened to look. The modules
+# that do not pass yet are listed in the root pyproject with the count they
+# carried the day this job was added; the list can only shrink.
+typecheck:
+  stage: lint
+  extends: .python
+  script:
+    - pip install -q mypy
+    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
+    # The engine needs its runtime deps present to be checked at all, and a
+    # toolchain to install. It ships py.typed exactly like the other four,
+    # so leaving it out made the gate narrower than the promise.
+    - apt-get update -qq && apt-get install -y -qq build-essential cmake git
+    - pip install -q -e './packages/sdm-relational-engine'
+    - mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/sdm-connectors/src packages/sdm-relational-engine/src
+
 hygiene:
   stage: lint
   extends: .python
@@ -50,9 +68,25 @@ test:
     # backend raises and every test that covers them skips, including the one
     # holding the partner attribution Databricks requires.
     - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
+    # ruff is here for tests/, not for linting: the test that checks the
+    # engine's ignore-list note shells out to ruff and skips without it,
+    # which made the check vacuous in the only job that runs root tests/.
+    - pip install -q pytest-cov 'ruff==0.16.*'
+    # `tests/` at the root holds what no single package can check: that the five
+    # agree on a version and a licence, that the public surface and the wire
+    # payloads still match what was recorded, and that the claims the config
+    # files make about themselves are true.
+    #
     # Live tests are deselected: this job reaches no NIM and no warehouse. The
     # relational engine is a native build and is tested in its own job.
-    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests packages/sdm-client/tests packages/sdm-connectors/tests -q -m 'not live_nim and not live_warehouse'
+    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests packages/sdm-client/tests packages/sdm-connectors/tests tests -q -m 'not live_nim and not live_warehouse' --cov --cov-report=term --cov-report=xml
+  coverage: '/^TOTAL.+?(\d+\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    expire_in: 1 week
 
 # The engine builds a C++ extension, so it needs a toolchain the pure-python
 # jobs do not. It is tested from its own directory because some of its tests
@@ -75,7 +109,13 @@ engine:
     # next such test will not be named like the current ones.
     - cd "$CI_PROJECT_DIR"
     - pip install -q -e './packages/sdm-client[test]'
+    - pip install -q 'ruff==0.16.*'
     - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
+    # And root tests/ again, with the engine present. The `test` job runs them
+    # without one, and the wire-payload snapshot deliberately excludes the
+    # relational case when the engine cannot build it -- so that case was
+    # recorded and then compared nowhere. Here it is compared.
+    - python -m pytest tests -q
 
 # Each distribution is built the way an index would build it: in an isolated
 # environment holding only the build backend, with none of the runtime
@@ -121,6 +161,74 @@ build:
     paths:
       - dist/
     expire_in: 1 week
+
+# The suite has only ever run against the source tree. What users install is a
+# wheel, and the difference is exactly where packaging bugs live: a module left
+# out of `packages.find`, a data file not declared, a `py.typed` that never
+# shipped. This runs the tests from a directory where the source tree is not
+# importable, so an import that only worked because of the checkout fails here.
+installed-wheel:
+  stage: test
+  extends: .python
+  needs: ["build"]
+  script:
+    - pip install -q pytest requests-mock pytest-cov
+    - VERSION=$(cat dist/VERSION)
+    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
+    # Prove the installed distribution, not the checkout, is what is imported,
+    # and that the typed marker survived the build. Written as one script that
+    # raises, rather than a chain ending in `|| true`: a check that cannot fail
+    # is worse than no check, because it reads like one that passed.
+    - cd /tmp
+    - |
+      python - <<'EOF'
+      import pathlib
+      import predictive_query, sdm_api, sdm_client, sdm_connectors
+
+      for module in (sdm_api, sdm_client, sdm_connectors, predictive_query):
+          location = pathlib.Path(module.__file__).resolve()
+          assert 'site-packages' in location.parts, (
+              f'{module.__name__} was imported from {location}, not from the '
+              f'installed wheel -- this job is testing the checkout again'
+          )
+          marker = location.parent / 'py.typed'
+          assert marker.is_file(), (
+              f'{module.__name__} ships no py.typed in the built wheel, so a '
+              f'downstream type checker ignores its annotations entirely'
+          )
+      print('four distributions imported from site-packages, all typed')
+      EOF
+    - python -m pytest "$CI_PROJECT_DIR/packages/sdm-client/tests" -q -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+
+# Advisory. A known vulnerability in a dependency is news the moment it is
+# published, not at the next release, but it is not a reason to fail a merge
+# request that did not cause it.
+audit:
+  stage: test
+  extends: .python
+  allow_failure: true
+  script:
+    - pip install -q pip-audit
+    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
+    - pip-audit --progress-spinner off
+
+# The dependency inventory a consumer needs to accept this into their own
+# supply chain, covering the base install and every extra that resolves without
+# a native toolchain. Attached to the build so a release always has one.
+sbom:
+  stage: test
+  extends: .python
+  needs: ["build"]
+  script:
+    - pip install -q cyclonedx-bom
+    - VERSION=$(cat dist/VERSION)
+    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
+    - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
+    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+  artifacts:
+    paths:
+      - dist/sbom.cyclonedx.json
+    expire_in: 1 month
 
 # Blocking. Fetches the contract at the revision recorded in PROVENANCE.json,
 # proves the recorded digest is that revision's actual bytes, and proves the

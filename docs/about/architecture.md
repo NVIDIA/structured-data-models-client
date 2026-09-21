@@ -141,7 +141,7 @@ produces. Putting the parser in either one would make the other depend on a driv
 has no use for.
 
 It carries the parser, the AST, the validators, **and** the schema types (`Dtype`, `Stype`,
-`GraphDefinition`, `TableDefinition`), so those types have exactly one owner and nothing has to
+`SchemaDefinition`, `TableDefinition`), so those types have exactly one owner and nothing has to
 translate between two spellings of the same enum.
 
 The tree is first-party source of this repository, maintained here under Apache-2.0. It was
@@ -155,7 +155,7 @@ one this layout would choose today.
 | Type | Owner | Why |
 |---|---|---|
 | `Dtype`, `Stype`, `TaskType`, `ProblemType` | `sdm-pql` | PQL speaks them and will be an external dependency. One owner, no translation layer. |
-| `GraphDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
+| `SchemaDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
 | `Profile`, `Capabilities` | `sdm-pql` | What a model may be asked, as data. §6. |
 | Wire request/response, `InferenceSpec`, `OutputSpec` | `sdm-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
 | The DataFrame→wire encoder (`wire/`) | `sdm-client` | **Corrected during phase 2.** §8 first put this in `sdm-api`, but `wire/dtypes.py` imports numpy and pandas, which would cost `sdm-api` its zero-dependency property — the reason the split exists. `sdm-api` keeps the vocabulary; encoding a frame is client-side work. |
@@ -237,11 +237,23 @@ categorical. What the two models actually accept settles it, and they differ:
 
 So there are two different answers, and neither is "guess from cardinality":
 
-- **Tabular has nothing to decide.** The NIM takes only the coarse `classification`, and the model
-  resolves binary vs multiclass itself. The client sends `classification` and never narrows it.
-  The blocker does not exist on this path.
-- **Relational takes the precise kind, and the caller may state it.** `task=` on the direct builder,
-  or `materialize(task=…)` on the PQL path, is authoritative and overrides everything below it.
+- **Tabular has nothing to decide *between* classifications.** The NIM takes only the coarse
+  `classification`, and the model resolves binary vs multiclass itself. The client sends
+  `classification` and never narrows it. The blocker does not exist on this path.
+- **It does have to decide classification against regression, and it got that wrong.** A query
+  names a target; it does not say what is being asked of it. The derivation read the target's
+  semantic type, integers are numerical, and so `PREDICT users.churn` over a 0/1 column was
+  gathered as a *regression* — answered with continuous values near 0.5 that read like
+  probabilities and are not. Zero-and-one is the most common way there is to write a binary
+  label, so that exact case now derives `classification` and says so. The values decide, not
+  their storage — a 0/1 column with one missing value arrives as `float64` and is still a label.
+  Only that case: three whole numbers may be a count, and a fractional pair is not a label, so
+  both are left as regressions.
+- **The caller has the last word where there is a decision to make.** `task=` on the direct
+  builder, or `materialize(task=…)` on the single-table PQL path, is authoritative and overrides
+  everything above it. Stating it also silences the warning, which is the point of the warning.
+  A relational query has no such decision — the engine resolves the query and states the kind in
+  the payload — so passing `task=` with one is refused rather than quietly dropped.
 
 PQL's own `TaskType` already has `BINARY_CLASSIFICATION` and `MULTICLASS_CLASSIFICATION`, but a query
 resolves only to the coarse `ProblemType` (`CLASSIFY`/`RANK`/`FORECAST`) — the narrowing happens
@@ -460,7 +472,7 @@ The client's four-tier `debug/fast/normal/best` ladder was a client-side fiction
 So the user sets the real numbers, and the client derives the wire value:
 
 ```python
-query.materialize(indices=[…], num_context_samples=500, num_neighbors=[8, 8])
+query.materialize(indices=[1, 2, 3], num_context_samples=500, num_neighbors=[8, 8])
 ```
 
 **And the number is honoured, not just used to pick a bucket.** The endpoint's

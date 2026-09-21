@@ -1395,8 +1395,8 @@ def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:
     return _KeyQuality(duplicates, nulls, example)
 
 
-def to_graph_definition(schema: Schema) -> Any:
-    r"""This schema as the language's own graph definition.
+def to_schema_definition(schema: Schema) -> Any:
+    r"""This schema as the language's own schema definition.
 
     The language resolves a query against names and types with no rows
     attached, which is what this hands it. Built here rather than in the query
@@ -1410,10 +1410,10 @@ def to_graph_definition(schema: Schema) -> Any:
     needs one is answered as though the table had none, which is why it is
     said rather than done quietly.
     """
-    from predictive_query.schema.graph import (
+    from predictive_query.schema.definition import (
         ColumnKey,
         ColumnKeyGroup,
-        GraphDefinition,
+        SchemaDefinition,
     )
     from predictive_query.schema.table import Column as PQLColumn
     from predictive_query.schema.table import TableDefinition
@@ -1468,7 +1468,7 @@ def to_graph_definition(schema: Schema) -> Any:
         )
         for link in schema.relationships
     ]
-    return GraphDefinition(tables=tables, col_groups=groups)
+    return SchemaDefinition(tables=tables, col_groups=groups)
 
 
 # The wire spells a few types differently from the language.

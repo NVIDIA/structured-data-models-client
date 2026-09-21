@@ -29,6 +29,7 @@ That is the whole reason candidates must be named rather than assumed.
 
 from __future__ import annotations
 
+import contextlib
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -215,10 +216,8 @@ def _as_literal(value: Any) -> str:
     # Candidates usually come out of a frame, where a whole number is a numpy
     # integer and not an ``int``, and the two have to be written alike.
     if hasattr(value, 'item'):
-        try:
+        with contextlib.suppress(AttributeError, ValueError):
             value = value.item()
-        except (AttributeError, ValueError):
-            pass
     if value is None:
         raise StructuredDataError(
             'a candidate names a row, and a missing value names none',

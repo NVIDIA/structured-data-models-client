@@ -20,6 +20,9 @@ and, separately, :mod:`predictive_query.rewriting` turns one validated query
 into another.
 """
 
+import logging
+
+from predictive_query._version import __version__
 from predictive_query.api import validate
 from predictive_query.parser import Delegate, PQLParser
 from predictive_query.profiles import (
@@ -43,11 +46,11 @@ from predictive_query.schema.common import (
     ValidationResponse,
     ValidationWarning,
 )
-from predictive_query.schema.graph import (
+from predictive_query.schema.definition import (
     ColumnKey,
     ColumnKeyGroup,
-    Edge,
-    GraphDefinition,
+    Relationship,
+    SchemaDefinition,
 )
 from predictive_query.schema.table import Column, TableDefinition, TimestampUnit
 from predictive_query.schema.task import TaskType
@@ -60,14 +63,15 @@ from predictive_query.schema.typing import (
 )
 from predictive_query.validator import PredictiveQueryValidator
 
-__version__ = '1.0.0'
-
 #: The version of the *language*, as distinct from this package. MINOR goes up
 #: when the language accepts something it did not before, so every query valid
 #: under an earlier MINOR is still valid. MAJOR goes up only when a query stops
 #: being valid or changes meaning. Neither moves for a new capability or
 #: profile. See ``docs/stability.md``.
 LANGUAGE_VERSION = '1.1'
+
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 
 __all__ = [
     'ANOMALY',
@@ -83,8 +87,8 @@ __all__ = [
     'ColumnKeyGroup',
     'Delegate',
     'Dtype',
-    'Edge',
-    'GraphDefinition',
+    'Relationship',
+    'SchemaDefinition',
     'Mode',
     'PQLParser',
     'ParsedPredictiveQuery',

@@ -7,4 +7,5 @@ One Python client for NVIDIA's structured-data foundation models.
 - **[Prerequisites](get-started/prerequisites.md)** and **[Installation](get-started/installation.md)**
 - **[Quickstart](get-started/quickstart.md)** — a prediction in ten lines
 - **[Prediction output](reference/prediction-output.md)** — what comes back, and how to join it
+- **[Stability](reference/stability.md)** — what is public, what a version bump means, and how deprecation works
 - **[Limits](reference/limits.md)** — what the endpoint refuses, and what this client refuses first

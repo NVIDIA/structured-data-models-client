@@ -8,7 +8,7 @@ from typing import Any
 from predictive_query import RELATIONAL, Profile
 from predictive_query.parser.parser import PQLParser
 from predictive_query.query import ValidatedPredictiveQuery
-from predictive_query.schema.graph import GraphDefinition
+from predictive_query.schema.definition import SchemaDefinition
 from predictive_query.validator.capability import check_capabilities
 from predictive_query.validator.predictive_query_validator import (
     PredictiveQueryValidator,
@@ -18,7 +18,7 @@ from sdm_relational_engine.rfm.base import composite_key
 
 def _name_the_identity(
     parsed_query: Any,
-    graph_definition: GraphDefinition,
+    graph_definition: SchemaDefinition,
 ) -> None:
     r"""Lets a query name a table whose identity spans several columns.
 
@@ -46,7 +46,7 @@ def _name_the_identity(
 
 def parse_query_locally(
     query: str,
-    graph_definition: GraphDefinition,
+    graph_definition: SchemaDefinition,
     profile: Profile = RELATIONAL,
 ) -> ValidatedPredictiveQuery:
     r"""Parse and validate ``query`` against ``graph_definition``.

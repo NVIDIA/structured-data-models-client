@@ -6,8 +6,10 @@ r"""Build single-table requests from rows supplied by the caller."""
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from collections.abc import Hashable, Sequence
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -27,6 +29,93 @@ _CONTEXT_SEED = 42
 _CONTEXT_ROWS_MAX = TABULAR_LIMITS['context_rows_max']
 
 
+TABULAR_TASK_KINDS = frozenset({'classification', 'regression'})
+
+
+def _is_whole(value: object) -> bool:
+    r"""Whether ``value`` is a number with nothing after the decimal point."""
+    if isinstance(value, bool):
+        return True
+    if isinstance(value, numbers.Integral):
+        return True
+    if isinstance(value, Decimal):
+        return value.is_finite() and value == value.to_integral_value()
+    if isinstance(value, numbers.Real):
+        try:
+            return float(value).is_integer()
+        except (OverflowError, TypeError, ValueError):
+            return False
+    return False
+
+
+def _derive_task_kind(
+    query: ValidatedPredictiveQuery, target: pd.Series
+) -> str:
+    r"""The task the target implies, when the caller named none."""
+    if query.target_stype == Stype.categorical:
+        return 'classification'
+    if _holds_two_whole_numbers(target):
+        warnings.warn(
+            f'{query.target_column} holds two whole numbers, which is how '
+            f'a binary label is usually written, so this is being asked as '
+            f'a classification. If they are quantities rather than labels, '
+            f'pass task="regression" to ask for one; pass '
+            f'task="classification" to say this was meant and silence '
+            f'this.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+        return 'classification'
+    return 'regression'
+
+
+def _judge_a_context_that_teaches_nothing(
+    column: str, target: pd.Series, kind: str
+) -> None:
+    r"""Refuse, or remark on, a context whose every row says the same thing.
+
+    A classification over one class is refused by the endpoint, so it is
+    refused here. A regression over a constant is accepted there, so it is
+    only warned about. A context with no answered rows is left to ``Request``.
+    """
+    answered = target.dropna()
+    if len(answered) == 0 or answered.nunique() >= 2:
+        return
+
+    if kind == 'classification':
+        raise StructuredDataError(
+            f'every context row has the same {column}, and a classification '
+            f'needs at least two classes to learn from. This usually means '
+            f'the rows being scored are all of one class and the rest were '
+            f'left behind. Score fewer of them, or build the schema from rows '
+            f'that keep both.',
+            code='INVALID_REQUEST',
+            details={'target': column, 'classes_in_context': 1},
+        )
+
+    warnings.warn(
+        f'every context row has the same {column}, so nothing in the context '
+        f'distinguishes one answer from another. The endpoint will answer, '
+        f'but the answer cannot say much. Build the schema from rows that '
+        f'vary, or score fewer of them.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+def _holds_two_whole_numbers(target: pd.Series) -> bool:
+    r"""Whether ``target`` is two distinct whole numbers and nothing else.
+
+    The values decide, not their storage: a 0/1 column with a null arrives as
+    ``float64`` and is still a label. Anything wider or fractional is left to
+    ``task=``.
+    """
+    values = target.dropna().unique()
+    if len(values) != 2:
+        return False
+    return all(_is_whole(value) for value in values)
+
+
 class TabularMaterializer:
     r"""Materialize resolved PQL against a single-table schema.
 
@@ -43,6 +132,7 @@ class TabularMaterializer:
         *,
         query: ValidatedPredictiveQuery,
         predict: pd.DataFrame,
+        task: str | None = None,
     ) -> Request:
         r"""Build a request from rows supplied separately by the caller.
 
@@ -55,22 +145,24 @@ class TabularMaterializer:
         entity_col = col_name(query.entity_column)
         target_col = col_name(query.target_column)
 
-        return Request(
-            context=_context_within_limit(
-                _rows_that_carry_an_answer(
-                    _without_the_rows_being_scored(
-                        self.schema[entity_table_name].data, predict, entity_col
-                    ),
-                    target_col,
+        context = _context_within_limit(
+            _rows_that_carry_an_answer(
+                _without_the_rows_being_scored(
+                    self.schema[entity_table_name].data, predict, entity_col
                 ),
-                None,
-                entity_table_name,
-                'This route takes no num_context_samples, so choose the '
-                'context by building the schema from the rows you want.',
+                target_col,
             ),
+            None,
+            entity_table_name,
+            'This route takes no num_context_samples, so choose the '
+            'context by building the schema from the rows you want.',
+        )
+
+        return Request(
+            context=context,
             predict=predict,
             target=target_col,
-            task=self._infer_task_type(query),
+            task=self._task_kind(query, context[target_col], task),
             schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
@@ -80,6 +172,7 @@ class TabularMaterializer:
         query: ValidatedPredictiveQuery,
         indices: Sequence[Any],
         num_context_samples: int | None,
+        task: str | None = None,
     ) -> Request:
         r"""Build a single-table request for rows the one table does contain."""
         entity_table_name = table_name(query.entity_column)
@@ -124,13 +217,23 @@ class TabularMaterializer:
             context=context,
             predict=predict,
             target=target_col,
-            task=self._infer_task_type(query),
+            task=self._task_kind(query, context[target_col], task),
             schema=self.schema.snapshot(),
             entity_table=entity_table_name,
         )
 
     @staticmethod
-    def _infer_task_type(query: ValidatedPredictiveQuery) -> str:
+    def _task_kind(
+        query: ValidatedPredictiveQuery,
+        target: pd.Series,
+        stated: str | None,
+    ) -> str:
+        r"""What is being asked of the target, and who decided it.
+
+        ``target`` is the context that will be sent, not the column it came
+        from; the two differ, and the narrower one is what the model learns
+        from.
+        """
         if query.target_stype not in {Stype.categorical, Stype.numerical}:
             raise StructuredDataError(
                 f'tabular materialization requires a categorical or '
@@ -138,9 +241,24 @@ class TabularMaterializer:
                 f'type {query.target_stype.value!r}',
                 code='UNSUPPORTED_REQUEST',
             )
-        if query.target_stype == Stype.categorical:
-            return 'classification'
-        return 'regression'
+        if stated is not None and (
+            not isinstance(stated, str) or stated not in TABULAR_TASK_KINDS
+        ):
+            raise StructuredDataError(
+                f'the tabular model does not serve the task kind '
+                f'{stated!r}; it serves {sorted(TABULAR_TASK_KINDS)}',
+                code='UNSUPPORTED_REQUEST',
+                details={
+                    'task': stated,
+                    'supported': sorted(TABULAR_TASK_KINDS),
+                },
+            )
+
+        kind = (
+            stated if stated is not None else _derive_task_kind(query, target)
+        )
+        _judge_a_context_that_teaches_nothing(query.target_column, target, kind)
+        return kind
 
 
 def _context_within_limit(

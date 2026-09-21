@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from predictive_query import RELATIONAL, GraphDefinition, TableDefinition
-from predictive_query.schema.graph import ColumnKey, ColumnKeyGroup
+from predictive_query import RELATIONAL, SchemaDefinition, TableDefinition
+from predictive_query.schema.definition import ColumnKey, ColumnKeyGroup
 from predictive_query.schema.table import Column
 from predictive_query.schema.typing import Dtype, Stype
 
@@ -18,7 +18,7 @@ def _column(name: str, stype: Stype, dtype: Dtype) -> Column:
     return Column(name=name, stype=stype, dtype=dtype)
 
 
-def _graph(*, second_path: bool) -> GraphDefinition:
+def _schema(*, second_path: bool) -> SchemaDefinition:
     """`users`, `events` and `att`, with `att` pointing straight at `users`.
 
     With `second_path`, `events` points at `users` as well. That edge says
@@ -74,7 +74,7 @@ def _graph(*, second_path: bool) -> GraphDefinition:
                 )
             )
         )
-    return GraphDefinition(tables=tables, col_groups=col_groups)
+    return SchemaDefinition(tables=tables, col_groups=col_groups)
 
 
 _AGGREGATE = 'PREDICT COUNT(att.*, 0, 7, days) > 0 FOR EACH users.user_id'
@@ -95,7 +95,7 @@ def test_a_second_path_to_the_entity_table_leaves_the_direct_key_alone(
     from predictive_query import validate
 
     resolved, response = validate(
-        _AGGREGATE, _graph(second_path=second_path), RELATIONAL
+        _AGGREGATE, _schema(second_path=second_path), RELATIONAL
     )
     assert response.ok, [error.message for error in response.errors]
     assert resolved is not None
@@ -105,9 +105,9 @@ def test_two_keys_to_the_same_table_are_still_ambiguous():
     """The guard the fix above must not trade away."""
     from predictive_query import validate
 
-    graph = _graph(second_path=False)
-    graph.tables['att'].cols.append(_column('owner_id', Stype.ID, Dtype.int))
-    graph.col_groups.append(
+    schema = _schema(second_path=False)
+    schema.tables['att'].cols.append(_column('owner_id', Stype.ID, Dtype.int))
+    schema.col_groups.append(
         ColumnKeyGroup(
             columns=(
                 ColumnKey('att', 'owner_id'),
@@ -115,7 +115,7 @@ def test_two_keys_to_the_same_table_are_still_ambiguous():
             )
         )
     )
-    _, response = validate(_AGGREGATE, graph, RELATIONAL)
+    _, response = validate(_AGGREGATE, schema, RELATIONAL)
     assert not response.ok
 
 
@@ -130,7 +130,7 @@ def test_is_in_is_refused_and_names_its_replacement():
     _, response = validate(
         'PREDICT COUNT(att.*, 0, 7, days) FOR EACH users.user_id '
         "WHERE users.country IS IN ('GB', 'DE')",
-        _graph(second_path=False),
+        _schema(second_path=False),
         RELATIONAL,
     )
     assert not response.ok
@@ -146,7 +146,7 @@ def test_in_is_accepted():
     _, response = validate(
         'PREDICT COUNT(att.*, 0, 7, days) FOR EACH users.user_id '
         "WHERE users.country IN ('GB', 'DE')",
-        _graph(second_path=False),
+        _schema(second_path=False),
         RELATIONAL,
     )
     assert response.ok, [error.message for error in response.errors]

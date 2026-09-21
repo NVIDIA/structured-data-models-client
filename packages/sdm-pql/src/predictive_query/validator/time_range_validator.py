@@ -18,7 +18,7 @@ from predictive_query.schema.common import (
     ValidationResponse,
     ValidationWarning,
 )
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 from predictive_query.schema.typing import AggregationType, ProblemType, Stype
 from predictive_query.schema.utils import validate_int
 from predictive_query.validator.utils import col_name, merge, table_name
@@ -28,7 +28,7 @@ class TimeRangeValidator:
     r"""Class with all the logic around :class:`ASTNode` time range validation.
 
     Args:
-        graph: Graph on which the query is defined.
+        schema: Schema on which the query is defined.
     """
 
     ENTITY = 'ENTITY'  # Validate entity definition
@@ -36,9 +36,9 @@ class TimeRangeValidator:
     ASSUMPTION = 'ASSUMPTION'  # Validate whatif definition
 
     def __init__(
-        self, graph: GraphDefinition, mode: Mode = Mode.TRAINING
+        self, schema: SchemaDefinition, mode: Mode = Mode.TRAINING
     ) -> None:
-        self.graph = graph
+        self.schema = schema
         self.mode = mode
 
     def _instead_of_aggregating(self, target_col_fqn: str) -> str:
@@ -261,7 +261,7 @@ class TimeRangeValidator:
                     span=Span.at(node.get_location()),
                 )
             )
-        if self.graph.tables[target_table_name].time_col is None:
+        if self.schema.tables[target_table_name].time_col is None:
             if node.aggr_time_range is not None:
                 response.errors.append(
                     ValidationError(
@@ -271,7 +271,7 @@ class TimeRangeValidator:
                         f'\'{target_table_name}\'. A "Create date" column is '
                         f'required to use a time range since it defines '
                         f'a temporal prediction. To fix this, you can '
-                        f'update your graph to include a "Create date" '
+                        f'update your schema to include a "Create date" '
                         f'column in {target_table_name}'
                         f'{self._instead_of_aggregating(target_col_fqn)}',
                         code=codes.TIME_TABLE_HAS_NO_TIME_COLUMN,
@@ -292,19 +292,19 @@ class TimeRangeValidator:
                 is_ranking = False
             else:
                 all_keys = []
-                for col_group in self.graph.col_groups:
+                for col_group in self.schema.col_groups:
                     all_keys.extend(list(col_group.columns))
                 target_is_fkey = (
                     ColumnKey(target_table_name, col_name(target_col_fqn))
                     in all_keys
                 )
-                if self.graph.tables[target_table_name].pkey == col_name(
+                if self.schema.tables[target_table_name].pkey == col_name(
                     target_col_fqn
                 ):
                     target_is_fkey = False
                 target_col = [
                     col
-                    for col in self.graph.tables[target_table_name].cols
+                    for col in self.schema.tables[target_table_name].cols
                     if col.name == col_name(target_col_fqn)
                 ][0]
                 target_is_categorical_col = (
@@ -425,7 +425,7 @@ class TimeRangeValidator:
                     span=Span.at(node.get_location()),
                 )
             )
-        time_col_name = self.graph.tables[target_table_name].time_col
+        time_col_name = self.schema.tables[target_table_name].time_col
         assert time_col_name is not None
         node.time_col = target_table_name + '.' + time_col_name
         return response
@@ -472,10 +472,10 @@ class TimeRangeValidator:
     ) -> ValidationResponse:
         response = ValidationResponse()
         entity_table_name = table_name(parsed_query.entity_column)
-        if self.graph.tables[entity_table_name].time_col is None:
+        if self.schema.tables[entity_table_name].time_col is None:
             cols_with_timestamp = []
             for col in parsed_query.all_query_columns:
-                if self.graph.tables[table_name(col)].time_col is not None:
+                if self.schema.tables[table_name(col)].time_col is not None:
                     cols_with_timestamp.append(col)
             if len(cols_with_timestamp) > 0:
                 message = parsed_query.entity_ast.get_location().message_start

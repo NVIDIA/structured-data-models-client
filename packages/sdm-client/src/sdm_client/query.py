@@ -81,6 +81,7 @@ class PredictiveQuery:
         num_context_samples: int | None = None,
         model: str | Model | None = None,
         candidates: Sequence[Any] | None = None,
+        task: str | None = None,
         **options: Any,
     ) -> Request:
         r"""Build a request with the data needed to answer this query.
@@ -116,6 +117,9 @@ class PredictiveQuery:
             candidates: The rows a ranking is over. A ranking is answered as
                 one question per candidate, so the set has to be named rather
                 than assumed, and one call is made for each.
+            task: The kind of question this is, when the target does not
+                settle it. Authoritative, and single-table only: passing it
+                with a relational or decomposed query is refused.
             **options: Relational sampling options, such as ``num_neighbors``
                 and ``anchor_time``.
 
@@ -156,6 +160,21 @@ class PredictiveQuery:
             list(candidates) if candidates is not None else None,
             options,
         )
+        if task is not None and (relational or rewritten is not None):
+            why = (
+                'a decomposed question'
+                if rewritten is not None
+                else 'a relational query'
+            )
+            raise StructuredDataError(
+                f'task={task!r} settles what a single-table question is '
+                f'asking, which is the only route that has to decide. '
+                f'{why.capitalize()} resolves to its own kind, so state it in '
+                f'the query rather than beside it',
+                code='INVALID_REQUEST',
+                details={'task': repr(task)},
+            )
+
         if rewritten is not None:
             return self._in_parts(
                 rewritten,
@@ -170,6 +189,7 @@ class PredictiveQuery:
             return self._tabular_materializer.table(
                 query=asked,
                 predict=predict,
+                task=task,
             )
 
         assert indices is not None
@@ -178,6 +198,7 @@ class PredictiveQuery:
                 query=asked,
                 indices=indices,
                 num_context_samples=num_context_samples,
+                task=task,
             )
 
         return self._relational_materializer.materialize(
@@ -363,10 +384,10 @@ class PredictiveQuery:
         r"""Parse and validate the query."""
         from predictive_query import validate
 
-        from sdm_client.schema import to_graph_definition
+        from sdm_client.schema import to_schema_definition
 
         resolved, response = validate(
-            self.text, to_graph_definition(self.schema), profile
+            self.text, to_schema_definition(self.schema), profile
         )
         if resolved is None or not response.ok:
             reasons = (
@@ -384,10 +405,10 @@ class PredictiveQuery:
     def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
         r"""Say how to resolve an ambiguous link, in the words of this object.
 
-        The language resolves a query against a graph and advises in the
-        vocabulary of one: `graph.unlink(...)`. A caller holding a `Schema`
-        has no such call, so the one instruction that would fix their query
-        names something they cannot do.
+        The language advises in its own vocabulary: `schema.unlink(...)`,
+        which is a call on its `SchemaDefinition` and not on the `Schema` a
+        caller holds. So the one instruction that would fix their query names
+        something they cannot do.
 
         The reasons are read only to recognise the failure. What the competing
         columns are is taken from the schema, which knows, rather than parsed

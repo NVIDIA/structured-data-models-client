@@ -4,7 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdm-client"
-version = "1.0.0"
+# The version lives in exactly one place per distribution: `_version.py`, a
+# module holding a single literal and importing nothing. setuptools reads it
+# statically, so building the wheel never imports the package -- which matters
+# because importing these roots pulls pandas, and a build backend that has to
+# import pandas to learn a version number cannot produce a wheel at all.
+dynamic = ["version"]
 description = "One Python client for NVIDIA's structured-data foundation model NIMs"
 readme = "README.md"
 license = "Apache-2.0"
@@ -21,6 +26,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
@@ -45,6 +51,13 @@ Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 [project.optional-dependencies]
 # A model that does heavy client-side work brings its own runtime; a warehouse
 # driver is opt-in the same way, through the shared connectors package.
+#
+# `relational` is deliberately narrower than this distribution: the engine is a
+# native build that publishes wheels for 3.10-3.13, so `sdm-client[relational]`
+# does not resolve on 3.14 while plain `sdm-client` does. pip reports that as
+# "No matching distribution found for sdm-relational-engine", which names the
+# symptom and not the reason, so it is written down here and in the
+# installation guide.
 relational = ["sdm-relational-engine==1.0.0"]
 sqlite = ["sdm-connectors[sqlite]==1.0.0"]
 duckdb = ["sdm-connectors[duckdb]==1.0.0"]
@@ -56,6 +69,9 @@ all = [
     "sdm-client[relational,sqlite,duckdb,postgres,snowflake,databricks,s3]",
 ]
 test = ["pytest", "requests-mock"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sdm_client._version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

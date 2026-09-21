@@ -9,7 +9,7 @@ from predictive_query.profiles import Profile
 from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema import codes
 from predictive_query.schema.common import ValidationError, ValidationResponse
-from predictive_query.schema.graph import GraphDefinition
+from predictive_query.schema.definition import SchemaDefinition
 from predictive_query.validator.capability import (
     check_capabilities,
     check_parsed_capabilities,
@@ -21,10 +21,10 @@ from predictive_query.validator.predictive_query_validator import (
 
 def validate(
     query: str,
-    graph: GraphDefinition,
+    schema: SchemaDefinition,
     profile: Profile,
 ) -> tuple[ValidatedPredictiveQuery | None, ValidationResponse]:
-    r"""Resolve *query* against *graph*, then ask whether *profile* can run it.
+    r"""Resolve *query* against *schema*, then ask whether *profile* can run it.
 
     The two are separate on purpose. Resolution decides whether this is a
     predictive query at all, and its answer does not depend on the model.
@@ -38,7 +38,7 @@ def validate(
 
     Args:
         query: The predictive query, as text.
-        graph: The schema to resolve names and types against. No rows.
+        schema: The schema to resolve names and types against. No rows.
         profile: What the query is for, and what the model can do.
 
     Returns:
@@ -76,12 +76,12 @@ def validate(
         return None, parsed_capability
 
     resolved, response = PredictiveQueryValidator(
-        graph, mode=profile.mode, can=profile.capabilities
+        schema, mode=profile.mode, can=profile.capabilities
     ).validate_predictive_query(parsed)
     if resolved is None or not response.ok:
         return None, response
 
-    capability = check_capabilities(resolved, graph, profile)
+    capability = check_capabilities(resolved, schema, profile)
     response.errors.extend(capability.errors)
     response.warnings.extend(capability.warnings)
     if not response.ok:

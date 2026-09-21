@@ -1,8 +1,83 @@
 # Changelog
 
+Kept in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) shape, and
+versioned by [semantic versioning](https://semver.org) as
+[`docs/reference/stability.md`](docs/reference/stability.md) defines it for
+these packages. All five distributions share one version and one entry.
+
 ## Unreleased
 
 The first release is being assembled. Nothing here has shipped yet.
+
+### Added
+
+- `docs/reference/stability.md`: the compatibility contract — what is public,
+  what a version bump means, and the deprecation path. Enforced rather than
+  stated: `tests/golden/` records the exported surface of every distribution and
+  the wire payloads of four canonical requests, and `tests/test_release_contract.py`
+  compares them on every run.
+- `RELEASING.md`, and a publish workflow using PyPI Trusted Publishing with PEP
+  740 attestations and a CycloneDX SBOM. No upload token exists.
+- A blocking `mypy` job. All five distributions ship `py.typed`; nothing checked
+  them until now.
+- Branch coverage, measured to be read rather than gated on a number.
+- CI jobs that run the suite against the *installed wheel*, audit dependencies,
+  and generate an SBOM.
+
+### Fixed
+
+- **A binary target asked through a predictive query is a classification.**
+  `PREDICT users.churn FOR EACH users.user_id`, over a column of 0 and 1, was
+  gathered as a regression: 0 and 1 are integers, integers are numerical, and a
+  numerical target meant regression. The endpoint answered it — with continuous
+  values near 0.5, which read like probabilities and are not. Nothing warned.
+
+  A target holding exactly two whole numbers is now asked as a classification,
+  and the client says so. It is the values that decide, not how pandas holds
+  them — a 0/1 column with one missing value arrives as `float64` and is still
+  a label. Only that case changes: three whole numbers may be a count, and a
+  fractional pair like 0.5/1.5 is not a label, so both remain regressions.
+
+  **This changes what goes over the wire** for such a request — `task.kind`
+  becomes `classification`, and the target column is declared `categorical`
+  rather than `numerical`, which is the correction the tabular adapter already
+  made for classification targets and could not make while the task was wrong.
+  If you were relying on the old reading, pass `task='regression'` to keep it.
+
+  **Say plainly what this costs:** the rule is two whole numbers, so a genuine
+  count that happens to hold two — `items_bought` in {0, 1}, `visits` in
+  {1, 2}, `rating` in {7, 9} — is now asked as a classification and its request
+  moves on the wire. That is a change of default rather than a repair: those
+  targets were being read correctly before. The warning names the other
+  reading and `task='regression'` restores it, and the judgement is that
+  reading every 0/1 label as a quantity was the more common and the more
+  damaging mistake.
+
+- **A context that cannot teach is refused where the endpoint would refuse it.**
+  Score every row of one class and the context left behind holds only the
+  other. A classification over that is rejected by the endpoint
+  (`TASK_SCHEMA_MISMATCH`), so it is now rejected locally in the same terms,
+  before a table is encoded and sent. A regression over a constant context is
+  accepted by the endpoint, so it is still only warned about. Previously the
+  same degeneracy produced a working request on one path and a guaranteed
+  server error on two others.
+- **`materialize()` takes `task=`.** A query names a target, not what is asked
+  of it, and the single-table path had no way to say. It is authoritative, and
+  stating it silences the warning above. A relational query resolves to its own
+  kind in the engine, so passing `task=` with one is refused rather than
+  silently ignored.
+- `predictive_query` attached no logging handler, so its warnings reached the
+  stderr of any application that had not configured logging. It now installs a
+  `NullHandler`; applications that *have* configured logging still receive the
+  records, unchanged.
+- `sdm-api`, `sdm-pql` and `sdm-client` each declared their version in two
+  places. There is now one literal per distribution, in `_version.py`, and a
+  test that the five agree.
+- The four pure-Python distributions admitted Python 3.14 through
+  `requires-python` but did not classify it. They now do — and the narrower
+  range of the `[relational]` extra, which is a native build, is documented
+  where users meet it rather than surfacing as an unexplained pip resolver
+  error.
 
 ### Behaviour worth knowing before you rely on it
 

@@ -26,7 +26,7 @@ from predictive_query.schema.common import (
     ValidationError,
     ValidationResponse,
 )
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 from predictive_query.schema.typing import AggregationType
 from predictive_query.validator.utils import col_name, table_name
 
@@ -70,14 +70,14 @@ def check_parsed_capabilities(
 
 def check_capabilities(
     query: ValidatedPredictiveQuery,
-    graph: GraphDefinition,
+    schema: SchemaDefinition,
     profile: Profile,
 ) -> ValidationResponse:
     r"""Diagnostics for what *profile* cannot answer about *query*.
 
     Args:
-        query: A query that has already resolved against *graph*.
-        graph: The schema it resolved against.
+        query: A query that has already resolved against *schema*.
+        schema: The schema it resolved against.
         profile: What the model on the other end can do.
 
     Returns:
@@ -193,7 +193,7 @@ def check_capabilities(
             )
         )
 
-    if not can.link_prediction and _ranks_a_foreign_key(query, graph):
+    if not can.link_prediction and _ranks_a_foreign_key(query, schema):
         response.errors.append(
             ValidationError(
                 title='Link prediction not supported',
@@ -247,7 +247,7 @@ def _joins(query: ValidatedPredictiveQuery) -> bool:
 
 
 def _ranks_a_foreign_key(
-    query: ValidatedPredictiveQuery, graph: GraphDefinition
+    query: ValidatedPredictiveQuery, schema: SchemaDefinition
 ) -> bool:
     r"""Whether the target is a LIST_DISTINCT over a foreign key column."""
     target = query.target_ast
@@ -262,10 +262,10 @@ def _ranks_a_foreign_key(
     else:
         fqn = target.target.fqn
     table, column = table_name(fqn), col_name(fqn)
-    if table not in graph.tables:
+    if table not in schema.tables:
         return False
-    if graph.tables[table].pkey == column:
+    if schema.tables[table].pkey == column:
         return False
     return any(
-        ColumnKey(table, column) in group.columns for group in graph.col_groups
+        ColumnKey(table, column) in group.columns for group in schema.col_groups
     )

@@ -20,7 +20,7 @@ from predictive_query.schema.common import (
     ValidationError,
     ValidationResponse,
 )
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 from predictive_query.validator.utils import col_name, merge, table_name
 
 
@@ -29,11 +29,11 @@ class JoinValidator:
     validation.
 
     Args:
-        graph: Graph on which the query is defined.
+        schema: Schema on which the query is defined.
     """
 
-    def __init__(self, graph: GraphDefinition) -> None:
-        self.graph = graph
+    def __init__(self, schema: SchemaDefinition) -> None:
+        self.schema = schema
         self.target_filter_example: str | None = None
         self.entity_filter_tables: set[str] = set()
         self.entity_filter_is_row_level = False
@@ -159,13 +159,13 @@ class JoinValidator:
         parent between them and so have no route through here.
         """
         points_at: dict[str, set[str]] = {}
-        for col_group in self.graph.col_groups:
+        for col_group in self.schema.col_groups:
             tables = {column.table_name for column in col_group.columns}
             parents = {
                 table
                 for table in tables
-                if self.graph.tables[table].pkey is not None
-                and ColumnKey(table, self.graph.tables[table].pkey)
+                if self.schema.tables[table].pkey is not None
+                and ColumnKey(table, self.schema.tables[table].pkey)
                 in col_group.columns
             }
             if len(parents) != 1:
@@ -225,12 +225,12 @@ class JoinValidator:
         response = ValidationResponse()
         keys = []
         reverse_keys = []
-        for col_group in self.graph.col_groups:
+        for col_group in self.schema.col_groups:
             is_keys_group = False
             is_rev_keys_group = False
             table_of_interest = None
-            pkey_of_pkey_table = self.graph.tables[pkey_table].pkey
-            pkey_of_fkey_table = self.graph.tables[fkey_table].pkey
+            pkey_of_pkey_table = self.schema.tables[pkey_table].pkey
+            pkey_of_fkey_table = self.schema.tables[fkey_table].pkey
             if (
                 pkey_of_pkey_table is not None
                 and ColumnKey(pkey_table, pkey_of_pkey_table)
@@ -250,7 +250,7 @@ class JoinValidator:
             assert isinstance(table_of_interest, str)
             # When fkey_table == pkey_table (self-referential), exclude the
             # pkey itself from the results - we only want actual foreign keys.
-            pkey_col = self.graph.tables[pkey_table].pkey
+            pkey_col = self.schema.tables[pkey_table].pkey
             curr_keys = [
                 f'{col.table_name}.{col.col_name}'
                 for col in col_group.columns
@@ -266,7 +266,7 @@ class JoinValidator:
                 )
 
         if isinstance(node, Aggregation):
-            pkey_name = self.graph.tables[pkey_table].pkey
+            pkey_name = self.schema.tables[pkey_table].pkey
             additional_explanation = (
                 f"To unambiguously link each row in '{fkey_table}' to a "
                 f"'{pkey_table}.{pkey_name}', exactly one foreign key should "
@@ -320,7 +320,7 @@ class JoinValidator:
                         and entity_filter_condition is not None
                         and self.entity_filter_is_row_level
                         and self.entity_filter_tables == {pkey_table}
-                        and self.graph.tables[pkey_table].time_col is not None
+                        and self.schema.tables[pkey_table].time_col is not None
                     ):
                         fixes.append(
                             'To select entities that have matching events, '
@@ -413,11 +413,11 @@ class JoinValidator:
             # Naming the call is the difference between a diagnosis and a
             # repair: the caller has to drop every foreign key but one, and
             # which one to keep is theirs to decide, not ours to guess.
-            # `keys` are qualified as '<table>.<column>' but `Graph.unlink`
+            # `keys` are qualified as '<table>.<column>' but `Schema.unlink`
             # takes the bare column, so a suggestion built from them verbatim
             # would not run.
             drops = '; '.join(
-                f"graph.unlink('{fkey_table}', "
+                f"schema.unlink('{fkey_table}', "
                 f"'{key.split('.')[-1]}', '{pkey_table}')"
                 for key in keys[1:]
             )
@@ -474,7 +474,7 @@ class JoinValidator:
                 )
                 if not response.ok:
                     return node, response
-                rhs_pkey = self.graph.tables[col_table].pkey
+                rhs_pkey = self.schema.tables[col_table].pkey
                 assert rhs_pkey is not None
                 return Join(
                     rhs_target=node,
@@ -497,7 +497,7 @@ class JoinValidator:
             if not response.ok:
                 return node, response
             node.group_by = keys[0]
-            lhs_pkey = self.graph.tables[source_table].pkey
+            lhs_pkey = self.schema.tables[source_table].pkey
             assert lhs_pkey is not None
             return Join(
                 rhs_target=node,

@@ -1,0 +1,190 @@
+# Publishing to PyPI, without a credential that can be stolen.
+#
+# There is no API token anywhere in this workflow or in the repository's
+# secrets. PyPI's Trusted Publishing exchanges this job's OIDC identity for a
+# short-lived, single-use upload token, and the same identity signs a PEP 740
+# attestation that a consumer can verify back to this workflow, this repository
+# and this tag. A token in a secret proves that whoever holds it can upload; an
+# attestation proves where the artifact came from.
+#
+# The release runs in two jobs on purpose. `build` has no privileges and no
+# id-token, so a compromised build dependency cannot reach the publishing
+# identity; `publish` has the identity and runs nothing but the upload action.
+name: publish
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+# Least privilege at the top: a job that needs more says so itself.
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # workflow_dispatch can be started from any ref, and everything below reads
+    # GITHUB_REF_NAME as if it were a tag. A branch called v1.2.0 would have
+    # satisfied the version check and published from it; --verify-tag only runs
+    # afterwards, in attach-sbom, which is too late to stop an upload. Refuse
+    # here, where nothing has been built yet.
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the four pure-Python distributions
+        run: |
+          python -m pip install --upgrade pip build
+          for package in sdm-api sdm-pql sdm-client sdm-connectors; do
+            ( cd "packages/$package" && python -m build --outdir "$GITHUB_WORKSPACE/dist" . )
+          done
+
+      # The engine pins its four siblings by exact version, and at this point in
+      # a release those versions exist only in dist/ -- they are not on PyPI
+      # yet, and will not be until the publish job runs. cibuildwheel's test
+      # environment resolves from PyPI unless told otherwise, so without this
+      # the smoke test fails with "No matching distribution found for
+      # sdm-api==<version>" and the release stops before it can publish
+      # anything. Staged inside the package directory because that is what
+      # cibuildwheel mounts into the build container, as /project.
+      - name: Stage the sibling wheels where the engine's test env can see them
+        run: |
+          mkdir -p packages/sdm-relational-engine/_sibling_wheels
+          cp dist/*.whl packages/sdm-relational-engine/_sibling_wheels/
+
+      # The engine is a native build and needs one wheel per interpreter and
+      # platform. It is not optional: sdm-client[relational] pins it by exact
+      # version, so publishing the other four without it makes that extra
+      # uninstallable for the release it names.
+      - name: Build the relational engine's wheels
+        uses: pypa/cibuildwheel@v2.21.3
+        with:
+          package-dir: packages/sdm-relational-engine
+          output-dir: dist
+        env:
+          CIBW_BUILD: cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64
+          CIBW_ENVIRONMENT: PIP_FIND_LINKS=/project/_sibling_wheels
+          CIBW_TEST_COMMAND: python -c "import sdm_relational_engine; print(sdm_relational_engine.__version__)"
+
+      - name: Unstage them, so nothing but distributions reaches the upload
+        if: always()
+        run: rm -rf packages/sdm-relational-engine/_sibling_wheels
+
+      # The tag is the release. If it does not name the version the packages
+      # carry, the wrong thing is about to be published under the right name.
+      - name: The tag must match what the distributions declare
+        run: |
+          python - <<'EOF'
+          import os, pathlib, re, sys
+
+          tag = os.environ['GITHUB_REF_NAME'].lstrip('v')
+          built = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+          print('\n'.join(built))
+
+          # All five, every time. The four pure-Python distributions and the
+          # engine are pinned to each other by exact version, so a release
+          # missing one is a release whose extras cannot resolve.
+          expected = {
+              'sdm_api', 'sdm_pql', 'sdm_client',
+              'sdm_connectors', 'sdm_relational_engine',
+          }
+          present = {name.split('-')[0] for name in built}
+          missing = expected - present
+          if missing:
+              sys.exit(f'refusing to publish without {sorted(missing)}')
+
+          versions = {re.match(r'[^-]+-([^-]+)-', name).group(1) for name in built}
+          if len(versions) != 1:
+              sys.exit(f'distributions disagree on the version: {sorted(versions)}')
+          built_version = versions.pop()
+          if built_version != tag:
+              sys.exit(f'tag v{tag} does not match the built version {built_version}')
+          print(f'all five distributions built at {built_version}, matching the tag')
+          EOF
+
+      - name: Nothing malformed reaches the index
+        run: |
+          python -m pip install --upgrade twine
+          twine check dist/*
+
+      # The dependency inventory a consumer needs before accepting this into
+      # their own supply chain. Attached to the release, not regenerated later
+      # from a tree that has moved on.
+      - name: Software bill of materials
+        run: |
+          python -m pip install --upgrade cyclonedx-bom
+          # --find-links dist for the same reason as the engine's test env: the
+          # exact sibling pins resolve to the wheels just built, not to whatever
+          # happens to be on PyPI. Without it this describes a previous release,
+          # or fails outright before the first one.
+          python -m pip install --find-links dist "./packages/sdm-client[sqlite,duckdb]"
+          cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi          # a protected environment, so a release is reviewable
+    permissions:
+      id-token: write          # the only privilege here, and the reason there is no token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      # The SBOM is a release asset, not something to upload to the index.
+      - name: Keep only the distributions
+        run: rm -f dist/sbom.cyclonedx.json
+
+      - name: Publish with Trusted Publishing and attest the artifacts
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+
+  # The SBOM is generated during the build and stripped from the upload,
+  # because PyPI takes distributions and nothing else. Without this job it
+  # lived only in the Actions artifact, which expires -- so the inventory a
+  # consumer needs to accept this into their own supply chain existed for
+  # ninety days and then did not. Attached to the release, where it lasts as
+  # long as the release does.
+  attach-sbom:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      # Pushing a tag creates a tag, not a Release -- and `gh release upload`
+      # needs the Release to exist. Creating it here rather than asking the
+      # releaser to do it by hand keeps RELEASING.md's promise that the tag is
+      # the only manual step. `--verify-tag` refuses to invent a release for a
+      # tag that is not really there.
+      - name: Attach the SBOM to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s dist/sbom.cyclonedx.json
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/sbom.cyclonedx.json \
+            --repo "$GITHUB_REPOSITORY" --clobber

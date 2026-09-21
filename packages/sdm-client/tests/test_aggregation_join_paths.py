@@ -191,11 +191,11 @@ def test_two_keys_in_separate_groups_are_both_seen():
             primary_keys={'users': 'user_id', 'messages': 'm_id'},
             time_columns={'messages': 'when'},
         )
-    from sdm_client.schema import to_graph_definition
+    from sdm_client.schema import to_schema_definition
 
     groups = [
         {(c.table_name, c.col_name) for c in group.columns}
-        for group in to_graph_definition(schema).col_groups
+        for group in to_schema_definition(schema).col_groups
     ]
     holding = [g for g in groups if ('users', 'user_id') in g]
     assert len(holding) == 2, groups
@@ -343,7 +343,7 @@ def test_two_children_of_one_parent_are_not_routed_through_it():
 
 def test_the_route_is_only_offered_upward():
     """Directly, on the helper, over the three shapes at once."""
-    from sdm_client.schema import to_graph_definition
+    from sdm_client.schema import to_schema_definition
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -356,7 +356,7 @@ def test_the_route_is_only_offered_upward():
 
     from predictive_query.validator.join_validator import JoinValidator
 
-    route = JoinValidator(to_graph_definition(schema))._route_between
+    route = JoinValidator(to_schema_definition(schema))._route_between
 
     assert route('C', 'A') == ['C', 'B', 'A']
     assert route('B', 'A') == ['B', 'A']
@@ -373,7 +373,7 @@ def test_a_one_to_one_link_names_no_direction():
     child's aggregation depend on declaration order."""
     from predictive_query.validator.join_validator import JoinValidator
 
-    from sdm_client.schema import to_graph_definition
+    from sdm_client.schema import to_schema_definition
 
     users = pd.DataFrame(
         {'user_id': range(100), 'seg': [i % 3 for i in range(100)]}
@@ -404,7 +404,7 @@ def test_a_one_to_one_link_names_no_direction():
             },
             time_columns={'events': 'when'},
         )
-    route = JoinValidator(to_graph_definition(schema))._route_between
+    route = JoinValidator(to_schema_definition(schema))._route_between
 
     assert route('profiles', 'users') == []
     assert route('users', 'profiles') == []

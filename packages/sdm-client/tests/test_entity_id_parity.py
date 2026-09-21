@@ -26,10 +26,13 @@ QUERY = 'PREDICT users.churn FOR EACH users.user_id'
 
 
 def schema_for(keys: list[int] | list[str]) -> Schema:
+    """A one-table schema whose target survives scoring alternate rows."""
     frame = pd.DataFrame(
         {
             'user_id': keys,
-            'churn': ['yes', 'no'] * (len(keys) // 2),
+            'churn': [
+                'no' if index % 3 == 0 else 'yes' for index in range(len(keys))
+            ],
             'tenure': [float(index) for index in range(len(keys))],
         }
     )

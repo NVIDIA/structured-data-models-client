@@ -25,7 +25,7 @@ from predictive_query.schema.common import (
     ValidationResponse,
     ValidationWarning,
 )
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 from predictive_query.schema.typing import (
     AggregationType,
     Dtype,
@@ -44,17 +44,17 @@ class NodeTypeInferrer:
     :class:`Dtype` and :class:`Stype` inferral.
 
     Args:
-        graph: Graph on which the inferrals are performed.
+        schema: Schema on which the inferrals are performed.
         allow_array_targets: Have LIST_DISTINCT generate an array instead of
             a "|"-separated string.
     """
 
     def __init__(
         self,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         allow_array_targets: bool = False,
     ) -> None:
-        self.graph = graph
+        self.schema = schema
         self.allow_array_targets = allow_array_targets
 
     @abstractmethod
@@ -65,7 +65,7 @@ class NodeTypeInferrer:
             node: the input AST node.
 
         Raises:
-            ValueError: If `self.graph` comes without data types .
+            ValueError: If `self.schema` comes without data types .
         """
         raise NotImplementedError
 
@@ -78,7 +78,7 @@ class NodeTypeInferrer:
             node: the input AST node.
 
         Raises:
-            ValueError: If `self.graph` comes without semantic types .
+            ValueError: If `self.schema` comes without semantic types .
         """
         raise NotImplementedError
 
@@ -171,7 +171,7 @@ class ColumnNodeTypeInferrer(NodeTypeInferrer):
             return
         target_col = [
             col
-            for col in self.graph.tables[table_name(node.fqn)].cols
+            for col in self.schema.tables[table_name(node.fqn)].cols
             if col.name == col_name(node.fqn)
         ][0]
         node.stype_maybe = target_col.stype
@@ -183,7 +183,7 @@ class ColumnNodeTypeInferrer(NodeTypeInferrer):
             return
         target_col = [
             col
-            for col in self.graph.tables[table_name(node.fqn)].cols
+            for col in self.schema.tables[table_name(node.fqn)].cols
             if col.name == col_name(node.fqn)
         ][0]
         target_col_dtype = target_col.dtype
@@ -269,7 +269,7 @@ class NodeTypeValidator:
     :class:`Dtype` and :class:`Stype` validation.
 
     Args:
-        graph: Graph on which the query is defined.
+        schema: Schema on which the query is defined.
         allow_array_targets: Have LIST_DISTINCT generate an array instead of
             a "|"-separated string.
         allow_timestamp_ararys: If :obj:`False`, block LIST_DISTINCT on time
@@ -279,11 +279,11 @@ class NodeTypeValidator:
 
     def __init__(
         self,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         allow_array_targets: bool = False,
         allow_timestamp_arrays: bool = True,
     ) -> None:
-        self.graph = graph
+        self.schema = schema
         self.allow_array_targets = allow_array_targets
         self.allow_timestamp_arrays = allow_timestamp_arrays
 
@@ -378,12 +378,12 @@ class AggrNodeTypeValidator(NodeTypeValidator):
         response = ValidationResponse()
         target_is_key = False
         target_fqn_name = node.get_target_column_name()
-        if self.graph.tables[table_name(target_fqn_name)].pkey == col_name(
+        if self.schema.tables[table_name(target_fqn_name)].pkey == col_name(
             target_fqn_name
         ):
             target_is_key = True
         all_keys = []
-        for col_group in self.graph.col_groups:
+        for col_group in self.schema.col_groups:
             all_keys.extend(list(col_group.columns))
         if (
             ColumnKey(table_name(target_fqn_name), col_name(target_fqn_name))
@@ -793,7 +793,7 @@ class TypeValidator:
     :class:`Stype` inferral and validation.
 
     Args:
-        graph: Graph on which the query is defined.
+        schema: Schema on which the query is defined.
         allow_array_targets: Have LIST_DISTINCT generate an array instead of
             a "|"-separated string.
         allow_timestamp_ararys: If :obj:`False`, block LIST_DISTINCT on time
@@ -803,67 +803,67 @@ class TypeValidator:
 
     def __init__(
         self,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         allow_array_targets: bool = False,
         allow_timestamp_arrays: bool = True,
     ) -> None:
-        self.graph = graph
+        self.schema = schema
         self.allow_array_targets = allow_array_targets
         self.allow_timestamp_arrays = allow_timestamp_arrays
         self.node_type_inferrer: dict[str, NodeTypeInferrer] = {
             'LogicalOperation': LogicalOperationNodeTypeInferrer(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
             ),
             'Condition': ConditionNodeTypeInferrer(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
             ),
             'Filter': FilterNodeTypeInferrer(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
             ),
             'Aggregation': AggrNodeTypeInferrer(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
             ),
             'Column': ColumnNodeTypeInferrer(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
             ),
             'Constant': ConstantNodeTypeInferrer(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
             ),
         }
         self.node_type_validator: dict[str, NodeTypeValidator] = {
             'LogicalOperation': LogicalOperationNodeTypeValidator(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
                 self.allow_timestamp_arrays,
             ),
             'Condition': ConditionNodeTypeValidator(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
                 self.allow_timestamp_arrays,
             ),
             'Filter': FilterNodeTypeValidator(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
                 self.allow_timestamp_arrays,
             ),
             'Aggregation': AggrNodeTypeValidator(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
                 self.allow_timestamp_arrays,
             ),
             'Column': ColumnNodeTypeValidator(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
                 self.allow_timestamp_arrays,
             ),
             'Constant': ConstantNodeTypeValidator(
-                self.graph,
+                self.schema,
                 self.allow_array_targets,
                 self.allow_timestamp_arrays,
             ),
@@ -887,7 +887,7 @@ class TypeValidator:
             parsed_query: the input parsed query.
 
         Raises:
-            ValueError: If `self.graph` comes without data types .
+            ValueError: If `self.schema` comes without data types .
         """
         self._infer_dtypes(parsed_query.entity_ast)
         self._infer_dtypes(parsed_query.target_ast)
@@ -904,7 +904,7 @@ class TypeValidator:
             parsed_query: the input parsed query.
 
         Raises:
-            ValueError: If `self.graph` comes without semantic types .
+            ValueError: If `self.schema` comes without semantic types .
         """
         self._infer_stypes(parsed_query.entity_ast)
         self._infer_stypes(parsed_query.target_ast)
