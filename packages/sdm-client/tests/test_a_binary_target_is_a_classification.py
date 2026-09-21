@@ -406,13 +406,38 @@ class TestTheContextIsWhatDecides:
                 task='regression',
             )
 
-    def test_an_empty_context_is_refused_before_any_of_this(self):
-        """Every row scored leaves nothing to learn from, and that is an error."""
-        data = frame([i % 2 for i in range(6)])
-        with pytest.raises(StructuredDataError, match='no rows'):
-            PredictiveQuery(QUERY, {'people': data}).materialize(
-                predict=data.drop(columns=['churn'])
-            )
+    @pytest.mark.parametrize(
+        ('name', 'target', 'scored_all'),
+        [
+            ('every row scored', [i % 2 for i in range(6)], True),
+            ('no row answered', [None] * 6, False),
+        ],
+    )
+    def test_an_empty_context_is_refused_and_says_only_that(
+        self, name, target, scored_all
+    ):
+        """One problem gets one message.
+
+        The task is decided while the request is still being assembled, so this
+        warning ran before ``Request`` could refuse the empty context -- and
+        "every context row has the same value" is a confusing thing to say
+        about no rows, placed in front of a sentence that says it plainly.
+        """
+        data = frame(target)
+        predict = (
+            data.drop(columns=['churn'])
+            if scored_all
+            else data.head(2).drop(columns=['churn'])
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always', SDMWarning)
+            with pytest.raises(StructuredDataError, match='no rows'):
+                PredictiveQuery(QUERY, {'people': data}).materialize(
+                    predict=predict
+                )
+        assert not [w for w in caught if issubclass(w.category, SDMWarning)], (
+            'an empty context warned before it was refused'
+        )
 
     def test_a_healthy_context_with_a_stated_task_warns_about_nothing(self):
         data = frame([i % 2 for i in range(40)])

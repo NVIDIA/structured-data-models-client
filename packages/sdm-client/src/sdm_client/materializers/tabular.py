@@ -73,17 +73,21 @@ def _warn_if_the_context_teaches_nothing(
     Said rather than refused: a caller who means it can be scoring a holdout
     they know is one-sided, and the endpoint is entitled to the last word on
     what it will accept.
+
+    A context with no rows at all is left alone. It is refused a moment later,
+    by ``Request``, in words that fit it -- and this runs first, because the
+    task is decided while the request is still being assembled, so saying
+    "every context row has the same value" about no rows would put a confusing
+    sentence in front of a clear one.
     """
-    distinct = target.dropna().nunique()
-    if distinct >= 2:
+    answered = target.dropna()
+    if len(answered) == 0 or answered.nunique() >= 2:
         return
     warnings.warn(
-        f'every context row has the same {column} '
-        f'({"no rows carry an answer at all" if distinct == 0 else "value"}), '
-        f'so nothing in the context distinguishes one answer from another. '
-        f'This usually means the rows being scored are all of one class and '
-        f'the rest were left behind. Score fewer of them, or build the schema '
-        f'from rows that keep both.',
+        f'every context row has the same {column}, so nothing in the context '
+        f'distinguishes one answer from another. This usually means the rows '
+        f'being scored are all of one class and the rest were left behind. '
+        f'Score fewer of them, or build the schema from rows that keep both.',
         category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )
