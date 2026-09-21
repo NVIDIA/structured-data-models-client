@@ -227,9 +227,15 @@ class TabularMaterializer:
     ) -> str:
         r"""What is being asked of the target, and who decided it.
 
-        A stated kind is authoritative and nothing below runs. Otherwise the
-        semantic type decides, except for the one case where it decided wrong
-        often enough to matter: a target holding two whole numbers.
+        A stated kind is authoritative: it is checked against what this model
+        serves, and then returned. Otherwise the semantic type decides, except
+        for the one case where it decided wrong often enough to matter: a
+        target holding two whole numbers.
+
+        Either way the context is remarked on if it teaches nothing, because
+        that is a fact about the rows rather than about the task chosen for
+        them -- but only after a stated task has been accepted, so a caller's
+        mistake is never reported as a note about their data.
 
         ``target`` is the context that will actually be sent, not the column it
         was drawn from. Those differ -- the context leaves out the rows being
