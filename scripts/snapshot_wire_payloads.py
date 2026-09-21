@@ -98,6 +98,14 @@ def _tabular_cases() -> dict[str, list[dict[str, Any]]]:
             'PREDICT people.churn FOR EACH people.user_id',
             {'people': people},
         ).materialize(predict=unlabelled),
+        # A query whose task is *derived* as a regression. Every other case
+        # either states the task or derives a classification, so the branch a
+        # continuous target takes was recorded nowhere: flipping its return
+        # value moved no golden file.
+        'tabular/pql-derived-regression': PredictiveQuery(
+            'PREDICT people.age FOR EACH people.user_id',
+            {'people': people},
+        ).materialize(predict=people.head(3).drop(columns=['age'])),
     }
     recorded: dict[str, list[dict[str, Any]]] = {}
     for name, request in cases.items():
