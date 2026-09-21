@@ -340,37 +340,68 @@ class TestTheContextIsWhatDecides:
         return sorted({row[index] for row in table['rows']})
 
     @staticmethod
-    def one_sided():
-        """Every 1 is a row about to be scored, so the context keeps only 0s."""
+    def one_sided(label=1, other=0):
+        """Every `label` row is about to be scored, so the context keeps only `other`."""
         return pd.DataFrame(
             {
                 'person_id': range(8),
                 'age': [20.0 + i for i in range(8)],
-                'churn': [1, 1, 1, 0, 0, 0, 0, 0],
+                'churn': [label] * 3 + [other] * 5,
             }
         )
 
-    def test_a_context_that_lost_a_class_is_not_declared_a_classification(self):
+    def test_a_numeric_context_that_lost_a_class_falls_back(self):
+        """Two whole numbers is no longer true of what is sent, so: regression."""
         data = self.one_sided()
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             request = PredictiveQuery(QUERY, {'people': data}).materialize(
                 predict=data.head(3).drop(columns=['churn'])
             )
-        assert self.sent_context_values(request) == [0], (
-            'fixture is not one-sided'
-        )
-        assert request.task.kind != 'classification', (
-            'declared a classification over a context carrying one class, '
-            'which the endpoint refuses as TASK_SCHEMA_MISMATCH'
-        )
+        assert self.sent_context_values(request) == [0]
+        assert request.task.kind == 'regression'
 
-    def test_and_it_says_the_context_teaches_nothing(self):
+    def test_and_it_says_the_answer_cannot_mean_much(self):
         data = self.one_sided()
-        with pytest.warns(SDMWarning, match='distinguishes one answer'):
+        with pytest.warns(SDMWarning, match='cannot say much'):
             PredictiveQuery(QUERY, {'people': data}).materialize(
                 predict=data.head(3).drop(columns=['churn'])
             )
+
+    @pytest.mark.parametrize(
+        ('name', 'data_kwargs', 'materialize_kwargs'),
+        [
+            ('categorical target', {'label': 'y', 'other': 'n'}, {}),
+            ('stated classification', {}, {'task': 'classification'}),
+        ],
+    )
+    def test_a_classification_over_one_class_is_refused_here(
+        self, name, data_kwargs, materialize_kwargs
+    ):
+        """The endpoint is certain to refuse it, so this refuses it first.
+
+        The same degeneracy used to have opposite outcomes: a 0/1 target fell
+        back to regression and worked, while a categorical one -- or a stated
+        classification -- built a request the endpoint would reject, and said
+        so only in a warning.
+        """
+        data = self.one_sided(**data_kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            with pytest.raises(StructuredDataError, match='two classes'):
+                PredictiveQuery(QUERY, {'people': data}).materialize(
+                    predict=data.head(3).drop(columns=['churn']),
+                    **materialize_kwargs,
+                )
+
+    def test_a_constant_regression_context_is_allowed_through(self):
+        """The endpoint answers this one, so it is a remark and not a refusal."""
+        data = frame([7.5] * 8)
+        with pytest.warns(SDMWarning, match='cannot say much'):
+            request = PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(2).drop(columns=['churn'])
+            )
+        assert request.task.kind == 'regression'
 
     def test_the_indices_route_judges_its_context_too(self):
         data = self.one_sided()
@@ -380,7 +411,7 @@ class TestTheContextIsWhatDecides:
                 indices=[0, 1, 2]
             )
         assert self.sent_context_values(request) == [0]
-        assert request.task.kind != 'classification'
+        assert request.task.kind == 'regression'
 
     def test_a_context_that_keeps_both_classes_still_classifies(self):
         data = frame([i % 2 for i in range(40)])
@@ -400,7 +431,7 @@ class TestTheContextIsWhatDecides:
         classification the endpoint would have refused.
         """
         data = self.one_sided()
-        with pytest.warns(SDMWarning, match='distinguishes one answer'):
+        with pytest.warns(SDMWarning, match='cannot say much'):
             PredictiveQuery(QUERY, {'people': data}).materialize(
                 predict=data.head(3).drop(columns=['churn']),
                 task='regression',

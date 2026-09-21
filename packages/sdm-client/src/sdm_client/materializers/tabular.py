@@ -59,35 +59,70 @@ def _is_whole(value: object) -> bool:
     return False
 
 
-def _warn_if_the_context_teaches_nothing(
-    column: str, target: pd.Series
+def _derive_task_kind(
+    query: ValidatedPredictiveQuery, target: pd.Series
+) -> str:
+    r"""The task the target implies, when the caller named none."""
+    if query.target_stype == Stype.categorical:
+        return 'classification'
+    if _holds_two_whole_numbers(target):
+        warnings.warn(
+            f'{query.target_column} holds two whole numbers, which is how '
+            f'a binary label is usually written, so this is being asked as '
+            f'a classification. If they are quantities rather than labels, '
+            f'pass task="regression" to ask for one; pass '
+            f'task="classification" to say this was meant and silence '
+            f'this.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+        return 'classification'
+    return 'regression'
+
+
+def _judge_a_context_that_teaches_nothing(
+    column: str, target: pd.Series, kind: str
 ) -> None:
-    r"""Say when every context row carries the same answer.
+    r"""Refuse, or remark on, a context whose every row says the same thing.
 
     This is reachable without doing anything obviously wrong: score all the
-    rows of one class and the context left behind holds only the other. The
-    endpoint refuses that as a classification -- ``TASK_SCHEMA_MISMATCH``, two
-    classes needed and one supplied -- and would take it as a regression over
-    a constant, which is worse, because it answers.
+    rows of one class and the context left behind holds only the other.
 
-    Said rather than refused: a caller who means it can be scoring a holdout
-    they know is one-sided, and the endpoint is entitled to the last word on
-    what it will accept.
+    What follows from it depends on the task, because the endpoint's answer
+    does. A classification over a single class is refused there --
+    ``TASK_SCHEMA_MISMATCH``, two classes needed and one supplied -- so it is
+    refused here, in the same words, before a table is encoded and sent. A
+    regression over a constant is accepted there, and answers, which is why it
+    is only remarked on: the request works, it just cannot mean much.
 
-    A context with no rows at all is left alone. It is refused a moment later,
-    by ``Request``, in words that fit it -- and this runs first, because the
-    task is decided while the request is still being assembled, so saying
-    "every context row has the same value" about no rows would put a confusing
-    sentence in front of a clear one.
+    Before this, the same degeneracy had opposite outcomes. A 0/1 target fell
+    back to regression and went through; the identical situation with a
+    categorical target, or with ``task='classification'`` stated, built a
+    request the endpoint was certain to reject, and said so only in a warning.
+
+    A context with no answered rows at all is left alone: ``Request`` refuses
+    it a moment later in words that fit it better.
     """
     answered = target.dropna()
     if len(answered) == 0 or answered.nunique() >= 2:
         return
+
+    if kind == 'classification':
+        raise StructuredDataError(
+            f'every context row has the same {column}, and a classification '
+            f'needs at least two classes to learn from. This usually means '
+            f'the rows being scored are all of one class and the rest were '
+            f'left behind. Score fewer of them, or build the schema from rows '
+            f'that keep both.',
+            code='INVALID_REQUEST',
+            details={'target': column, 'classes_in_context': 1},
+        )
+
     warnings.warn(
         f'every context row has the same {column}, so nothing in the context '
-        f'distinguishes one answer from another. This usually means the rows '
-        f'being scored are all of one class and the rest were left behind. '
-        f'Score fewer of them, or build the schema from rows that keep both.',
+        f'distinguishes one answer from another. The endpoint will answer, '
+        f'but the answer cannot say much. Build the schema from rows that '
+        f'vary, or score fewer of them.',
         category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )
@@ -270,28 +305,11 @@ class TabularMaterializer:
                 },
             )
 
-        # Said whichever way the task is settled: whether the context
-        # distinguishes one answer from another is a fact about the rows.
-        _warn_if_the_context_teaches_nothing(query.target_column, target)
-
-        if stated is not None:
-            return stated
-
-        if query.target_stype == Stype.categorical:
-            return 'classification'
-        if _holds_two_whole_numbers(target):
-            warnings.warn(
-                f'{query.target_column} holds two whole numbers, which is how '
-                f'a binary label is usually written, so this is being asked as '
-                f'a classification. If they are quantities rather than labels, '
-                f'pass task="regression" to ask for one; pass '
-                f'task="classification" to say this was meant and silence '
-                f'this.',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
-            )
-            return 'classification'
-        return 'regression'
+        kind = (
+            stated if stated is not None else _derive_task_kind(query, target)
+        )
+        _judge_a_context_that_teaches_nothing(query.target_column, target, kind)
+        return kind
 
 
 def _context_within_limit(

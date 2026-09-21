@@ -29,7 +29,13 @@ def schema_for(keys: list[int] | list[str]) -> Schema:
     frame = pd.DataFrame(
         {
             'user_id': keys,
-            'churn': ['yes', 'no'] * (len(keys) // 2),
+            # Not a strict alternation: these tests score alternate rows,
+            # and stripping every 'no' leaves a context of one class --
+            # which is refused now, for reasons that have nothing to do
+            # with the keys these tests are about.
+            'churn': [
+                'no' if index % 3 == 0 else 'yes' for index in range(len(keys))
+            ],
             'tenure': [float(index) for index in range(len(keys))],
         }
     )

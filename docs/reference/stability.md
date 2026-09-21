@@ -56,6 +56,20 @@ A fix that changes an observable behaviour — a wrong answer becoming a right
 one, a request that used to be sent now being refused — is a minor bump and is
 called out in the changelog, even though the API did not change shape.
 
+## When this starts
+
+**At the first published release.** Nothing in this repository has been
+published yet — no version of any of the five distributions exists on PyPI —
+so 1.0.0 is where the promises below begin, not something they already cover.
+
+That distinction is load-bearing rather than pedantic. The release this
+document ships in also renames two names out of `predictive_query.__all__`
+(`GraphDefinition` and `Edge`, now `SchemaDefinition` and `Relationship`) with
+no deprecation period, which the rule below would otherwise forbid. There is no
+period to serve: nobody can be holding the old names, and shipping aliases that
+warn from the first release would be deprecating something that was never
+available. Everything after 1.0.0 gets the full treatment.
+
 ## Deprecation
 
 Nothing public is removed without a release that warns about it first.

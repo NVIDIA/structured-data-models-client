@@ -43,6 +43,24 @@ The first release is being assembled. Nothing here has shipped yet.
   rather than `numerical`, which is the correction the tabular adapter already
   made for classification targets and could not make while the task was wrong.
   If you were relying on the old reading, pass `task='regression'` to keep it.
+
+  **Say plainly what this costs:** the rule is two whole numbers, so a genuine
+  count that happens to hold two — `items_bought` in {0, 1}, `visits` in
+  {1, 2}, `rating` in {7, 9} — is now asked as a classification and its request
+  moves on the wire. That is a change of default rather than a repair: those
+  targets were being read correctly before. The warning names the other
+  reading and `task='regression'` restores it, and the judgement is that
+  reading every 0/1 label as a quantity was the more common and the more
+  damaging mistake.
+
+- **A context that cannot teach is refused where the endpoint would refuse it.**
+  Score every row of one class and the context left behind holds only the
+  other. A classification over that is rejected by the endpoint
+  (`TASK_SCHEMA_MISMATCH`), so it is now rejected locally in the same terms,
+  before a table is encoded and sent. A regression over a constant context is
+  accepted by the endpoint, so it is still only warned about. Previously the
+  same degeneracy produced a working request on one path and a guaranteed
+  server error on two others.
 - **`materialize()` takes `task=`.** A query names a target, not what is asked
   of it, and the single-table path had no way to say. It is authoritative, and
   stating it silences the warning above. A relational query resolves to its own

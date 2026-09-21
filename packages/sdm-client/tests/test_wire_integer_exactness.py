@@ -395,7 +395,11 @@ def test_a_null_does_not_send_an_integer_key_through_a_float():
     from sdm_client.adapters.tabular import TabularAdapter
 
     frame = pd.DataFrame(
-        {'user_id': range(1, 21), 'tenure': [1.0] * 20, 'churn': ['a'] * 20}
+        {
+            'user_id': range(1, 21),
+            'tenure': [1.0] * 20,
+            'churn': ['a', 'b'] * 10,
+        }
     )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -425,7 +429,11 @@ def test_a_column_that_is_genuinely_float_stays_float():
     from sdm_client.adapters.tabular import TabularAdapter
 
     frame = pd.DataFrame(
-        {'user_id': range(1, 21), 'tenure': [1.5] * 20, 'churn': ['a'] * 20}
+        {
+            'user_id': range(1, 21),
+            'tenure': [1.5] * 20,
+            'churn': ['a', 'b'] * 10,
+        }
     )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
