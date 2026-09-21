@@ -339,6 +339,49 @@ class TestConfigurationTellsTheTruth:
             'tabular deployment serves'
         )
 
+    @staticmethod
+    def _module_is_on_disk(dotted: str) -> bool | None:
+        """Whether ``dotted`` exists as a file, without importing anything.
+
+        Three times now this check has confused "absent" with something else,
+        because it asked by importing. ``find_spec`` executes every parent
+        ``__init__`` on the way down, so it reports a module as missing when a
+        package it imports is missing -- and the engine's snowflake backend
+        raises the project's own ``MissingBackendError``, not even
+        ``ModuleNotFoundError``, with ``.name`` unset. There is no exception to
+        read your way out of. So this reads the filesystem instead: locate the
+        top-level package, which executes nothing, then walk the dotted name as
+        directories.
+
+        Returns ``None`` when the distribution itself is not installed, which
+        is a different answer from "the module is gone" and is why the caller
+        cannot treat them alike.
+        """
+        import importlib.machinery
+        import importlib.util
+
+        top, *rest = dotted.split('.')
+        try:
+            spec = importlib.util.find_spec(top)
+        except (ImportError, ValueError):  # pragma: no cover - not installed
+            return None
+        if spec is None:
+            return None
+        if not rest:
+            return True
+        roots = spec.submodule_search_locations or []
+        for root in roots:
+            base = pathlib.Path(root, *rest[:-1])
+            leaf = rest[-1]
+            if (base / leaf / '__init__.py').is_file():
+                return True
+            if any(
+                (base / f'{leaf}{suffix}').is_file()
+                for suffix in importlib.machinery.all_suffixes()
+            ):
+                return True
+        return False
+
     def test_every_module_the_type_baseline_names_still_exists(self):
         """A baseline entry for a module that is gone silences nothing.
 
@@ -347,17 +390,12 @@ class TestConfigurationTellsTheTruth:
         new ones. Nothing complains about an override that matches nothing, so
         the list reads as debt being held when it is really debt being lost.
 
-        Absent is not the same as uninstalled, and `find_spec` does not say so
-        evenly: for a top-level package that is not installed it returns
-        `None`, while for a submodule of one it raises `ModuleNotFoundError`.
-        Reading only the exception passed here -- where the relational engine
-        is installed -- and failed in CI's `test` job, which deliberately does
-        not install it, reporting an optional extra's absence as a stale entry.
-        So the distribution is checked first, and only a module whose package
-        is present can be called missing.
+        What makes this awkward is that "missing" has three meanings and only
+        one of them is a defect: the distribution is not installed in this job,
+        the module needs an optional dependency this job does not have, or the
+        file is genuinely gone. Only the last is worth failing over, and asking
+        by import cannot tell them apart -- see ``_module_is_on_disk``.
         """
-        import importlib.util
-
         root = tomllib.loads((REPO / 'pyproject.toml').read_text())
         named = [
             module
@@ -370,21 +408,13 @@ class TestConfigurationTellsTheTruth:
         ]
         assert named, 'the type-checking baseline vanished; update this test'
 
-        def installed(name: str) -> bool:
-            try:
-                return importlib.util.find_spec(name) is not None
-            except (
-                ImportError,
-                ValueError,
-            ):  # pragma: no cover - not installed
-                return False
-
         checked, missing = 0, []
         for module in named:
-            if not installed(module.split('.')[0]):
-                continue  # the whole distribution is absent from this job
+            present = self._module_is_on_disk(module)
+            if present is None:
+                continue  # the distribution is absent from this job
             checked += 1
-            if not installed(module):
+            if not present:
                 missing.append(module)
 
         assert checked, (
