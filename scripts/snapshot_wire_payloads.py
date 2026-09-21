@@ -106,6 +106,13 @@ def _tabular_cases() -> dict[str, list[dict[str, Any]]]:
             'PREDICT people.age FOR EACH people.user_id',
             {'people': people},
         ).materialize(predict=people.head(3).drop(columns=['age'])),
+        # The third derivation branch: a categorical target, classified
+        # without any of the two-whole-numbers reasoning. With the four above
+        # it, every path through _derive_task_kind is now on record.
+        'tabular/pql-derived-classification': PredictiveQuery(
+            'PREDICT people.segment FOR EACH people.user_id',
+            {'people': people},
+        ).materialize(predict=people.head(3).drop(columns=['segment'])),
     }
     recorded: dict[str, list[dict[str, Any]]] = {}
     for name, request in cases.items():

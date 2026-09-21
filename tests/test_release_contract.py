@@ -352,6 +352,11 @@ class TestConfigurationTellsTheTruth:
                 for suffix in importlib.machinery.all_suffixes()
             ):
                 return True
+            # A directory with no __init__.py is a namespace package and is
+            # importable all the same. This tree has thirteen of them, so
+            # requiring the file would call an existing package missing.
+            if (base / leaf).is_dir():
+                return True
         return False
 
     def test_every_module_the_type_baseline_names_still_exists(self):
