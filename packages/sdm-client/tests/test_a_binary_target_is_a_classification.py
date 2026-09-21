@@ -391,3 +391,34 @@ class TestTheContextIsWhatDecides:
             )
         assert self.sent_context_values(request) == [0, 1]
         assert request.task.kind == 'classification'
+
+    def test_stating_a_task_does_not_hide_a_context_that_teaches_nothing(self):
+        """The warning is about the rows, not about which task was asked.
+
+        It sat below the `stated` branch, so naming a task silenced it -- and a
+        regression over a constant column is exactly as meaningless as the
+        classification the endpoint would have refused.
+        """
+        data = self.one_sided()
+        with pytest.warns(SDMWarning, match='distinguishes one answer'):
+            PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(3).drop(columns=['churn']),
+                task='regression',
+            )
+
+    def test_an_empty_context_is_refused_before_any_of_this(self):
+        """Every row scored leaves nothing to learn from, and that is an error."""
+        data = frame([i % 2 for i in range(6)])
+        with pytest.raises(StructuredDataError, match='no rows'):
+            PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.drop(columns=['churn'])
+            )
+
+    def test_a_healthy_context_with_a_stated_task_warns_about_nothing(self):
+        data = frame([i % 2 for i in range(40)])
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', SDMWarning)
+            PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(2).drop(columns=['churn']),
+                task='classification',
+            )

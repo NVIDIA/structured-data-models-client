@@ -242,6 +242,11 @@ class TabularMaterializer:
                 f'type {query.target_stype.value!r}',
                 code='UNSUPPORTED_REQUEST',
             )
+        # Above the `stated` branch on purpose: a context that teaches nothing
+        # is a fact about the rows, not about which task was asked of them, and
+        # naming the task was silencing it.
+        _warn_if_the_context_teaches_nothing(query.target_column, target)
+
         if stated is not None:
             # Checked before the membership test: an unhashable value raises
             # TypeError out of `in frozenset`, which is not an error about
@@ -258,7 +263,6 @@ class TabularMaterializer:
                     },
                 )
             return stated
-        _warn_if_the_context_teaches_nothing(query.target_column, target)
         if query.target_stype == Stype.categorical:
             return 'classification'
         if _holds_two_whole_numbers(target):
