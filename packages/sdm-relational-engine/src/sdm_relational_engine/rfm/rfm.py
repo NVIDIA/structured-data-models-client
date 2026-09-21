@@ -38,30 +38,33 @@ from predictive_query.schema.typing import (
     Stype,
 )
 from requests.exceptions import RequestException, Timeout
-from rich.console import Console
-from rich.markdown import Markdown
 
-from sdm_relational_engine import in_notebook
 from sdm_relational_engine._version import __version__
-from sdm_relational_engine.api.explain import GraphGradientScore
-from sdm_relational_engine.api.rfm import (
-    ClassificationInferenceConfig,
-    InferenceConfig,
-    RegressionInferenceConfig,
-    RFMPredictRequest,
-)
-from sdm_relational_engine.api.rfm.context import Context, Table
 from sdm_relational_engine.client.client import NimClient
 from sdm_relational_engine.client.rfm import RFMAPI
 from sdm_relational_engine.exceptions import HTTPException, NimFailureError
-from sdm_relational_engine.mixin import CastMixin
 from sdm_relational_engine.rfm import Graph, TaskTable
 from sdm_relational_engine.rfm.base import DataBackend, Sampler, composite_key
 from sdm_relational_engine.rfm.base.utils import Timestamp, to_naive_utc
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
-from sdm_relational_engine.rfm.explain_summary import generate_summary
-from sdm_relational_engine.rfm.fingerprint import graph_fingerprint
-from sdm_relational_engine.rfm.payload import (
+from sdm_relational_engine.rfm.explain.result import (
+    ExplainConfig,
+    Explanation,
+    extract_explanation,
+)
+from sdm_relational_engine.rfm.explain.summary import generate_summary
+from sdm_relational_engine.rfm.graph_fingerprint import graph_fingerprint
+from sdm_relational_engine.rfm.inference.config import (
+    ClassificationInferenceConfig,
+    InferenceConfig,
+    RegressionInferenceConfig,
+    RunMode,
+)
+from sdm_relational_engine.rfm.inference.context import (
+    PredictionContext,
+    SampledTable,
+)
+from sdm_relational_engine.rfm.inference.payload import (
     INSTANCE_ID,
     context_size_stats,
     high_cardinality_columns,
@@ -71,15 +74,15 @@ from sdm_relational_engine.rfm.payload import (
     session_predict_payload,
     validate_payload_table_rows,
 )
-from sdm_relational_engine.rfm.query_parser import parse_query_locally
-from sdm_relational_engine.rfm.telemetry import (
+from sdm_relational_engine.rfm.inference.requests import RFMPredictRequest
+from sdm_relational_engine.rfm.inference.telemetry import (
     PredictionRecord,
     describing,
     pending,
     recorded,
 )
-from sdm_relational_engine.runmode import RunMode
-from sdm_relational_engine.utils import ProgressLogger, display
+from sdm_relational_engine.rfm.query.parser import parse_query_locally
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 _RANDOM_SEED = 42
 
@@ -187,168 +190,6 @@ class _SessionHandle:
     active: bool = True
 
 
-@dataclass(repr=False)
-class ExplainConfig(CastMixin):
-    r"""Configuration for explainability.
-
-    .. warning::
-
-        **The natural-language summary is generated off-machine.** With
-        ``skip_summary=False`` (the default), the ``openai`` package installed
-        (``pip install 'sdm-relational-engine[explain]'``) and an API key discoverable, the
-        client sends the predictive query, the returned predictions, the cohort
-        analysis and the subgraph attribution -- which contains the **raw
-        cell values** of the explained entity's subgraph -- to an
-        OpenAI-compatible chat-completions endpoint. Unless
-        ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` points somewhere else, that endpoint
-        is OpenAI's ``https://api.openai.com/v1/``, a non-NVIDIA service. The
-        key is read from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY`` only. Setting
-        that variable is what turns the call on; no other key enables it.
-
-        Pass ``skip_summary=True`` (e.g.
-        ``predict(..., explain=dict(skip_summary=True))``) to turn it off. The
-        structured explanation on ``.cohorts`` / ``.subgraphs`` is computed by
-        the NIM and is unaffected. Nothing leaves the machine when no API key
-        is discoverable or ``openai`` is not installed.
-
-    Args:
-        skip_summary: Whether to skip generating a human-readable summary of
-            the explanation. The summary's LLM endpoint is configured once via
-            the environment: the API key from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY``
-            ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` (for
-            any OpenAI-compatible endpoint, including a self-hosted one),
-            ``KUMO_RELATIONAL_EXPLAIN_LLM_MODEL`` (default ``gpt-4.1-mini-2025-04-14``) and
-            ``KUMO_RELATIONAL_EXPLAIN_LLM_TIMEOUT`` (default 20s).
-    """
-
-    skip_summary: bool = False
-
-
-@dataclass(repr=False)
-class Explanation:
-    prediction: pd.DataFrame
-    summary: str
-    details: Any
-    warning: str | None = None
-
-    def _structured_details(self) -> dict[str, Any]:
-        r"""Return the inner cohort/subgraph payload for a ``kumo_rfm_v2_1``
-        explanation, or an empty mapping for any other format.
-        """
-        if (
-            isinstance(self.details, dict)
-            and self.details.get('format') == 'kumo_rfm_v2_1'
-        ):
-            inner = self.details.get('details')
-            if isinstance(inner, dict):
-                return inner
-        return {}
-
-    @property
-    def cohorts(self) -> list[Any]:
-        r"""Column-level cohort analysis (global view), when available."""
-        value = self._structured_details().get('cohorts')
-        return list(value) if isinstance(value, list) else []
-
-    @property
-    def subgraphs(self) -> list[Any]:
-        r"""Cell-level subgraph attribution (local view), when available."""
-        value = self._structured_details().get('subgraphs')
-        return list(value) if isinstance(value, list) else []
-
-    @property
-    def feature_importance(self) -> GraphGradientScore:
-        r"""Gradient feature importance, as in the old client.
-
-        Sums the explained entity's per-cell subgraph attribution into
-        per-table, per-column scores and returns a :class:`GraphGradientScore`:
-        ``fi[table][column]`` -> score, ``fi[table].total_score``,
-        ``fi.print_summary(normalize=...)``, ``fi.normalize()``,
-        ``fi.to_pandas()``. Empty when no subgraph attribution is present.
-        """
-        scores = GraphGradientScore()
-        for table, column, cell in self._iter_cells():
-            value = cell.get('score')
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                continue
-            table_scores = scores[str(table)]
-            table_scores.columns[column] = table_scores.columns.get(
-                column, 0.0
-            ) + float(value)
-        return scores
-
-    def _iter_cells(
-        self,
-    ) -> Iterator[tuple[str, str, dict[str, Any]]]:
-        r"""Yield ``(table, column, cell)`` over every attributed cell.
-
-        The NIM returns each subgraph as ``{'tables': {table: {node_id:
-        {'cells': {column: {'value', 'score'}}}}}}``; the table name is the key
-        under ``tables`` and a table may span several nodes.
-        """
-        for entry in self.subgraphs:
-            if not isinstance(entry, dict):
-                continue
-            tables = entry.get('tables')
-            if not isinstance(tables, dict):
-                continue
-            for table, nodes in tables.items():
-                if not isinstance(nodes, dict):
-                    continue
-                for node in nodes.values():
-                    if not isinstance(node, dict):
-                        continue
-                    cells = node.get('cells')
-                    if not isinstance(cells, dict):
-                        continue
-                    for column, cell in cells.items():
-                        if isinstance(cell, dict):
-                            yield table, column, cell
-
-    @overload
-    def __getitem__(self, index: Literal[0]) -> pd.DataFrame:
-        pass
-
-    @overload
-    def __getitem__(self, index: Literal[1]) -> str:
-        pass
-
-    def __getitem__(self, index: int) -> pd.DataFrame | str:
-        if index == 0:
-            return self.prediction
-        if index == 1:
-            return self.summary
-        raise IndexError('Index out of range')
-
-    def __iter__(self) -> Iterator[pd.DataFrame | str]:
-        return iter((self.prediction, self.summary))
-
-    def __repr__(self) -> str:
-        return str((self.prediction, self.summary))
-
-    def __str__(self) -> str:
-        console = Console(soft_wrap=True)
-        with console.capture() as cap:
-            if self.warning is not None:
-                console.print(f'[bold yellow]Warning:[/] {self.warning}\n')
-            console.print(display.to_rich_table(self.prediction))
-            console.print(Markdown(self.summary))
-        return cap.get()[:-1]
-
-    def print(self) -> None:
-        r"""Prints the explanation."""
-        if in_notebook():
-            if self.warning is not None:
-                display.message(f'**Warning:** {self.warning}')
-            display.dataframe(self.prediction)
-            display.message(self.summary)
-        else:
-            print(self)
-
-    def _ipython_display_(self) -> None:
-        self.print()
-
-
 _NIM_UNAVAILABLE_STATUS = frozenset({408, 429, 500, 502, 503, 504})
 # Server-side ceilings, restated here so the request is refused locally with an
 # actionable message instead of as an opaque failure from the NIM.
@@ -402,7 +243,7 @@ def _first_uncastable(
     return None
 
 
-def _class_dtype(task: TaskTable, context: Context) -> Any:
+def _class_dtype(task: TaskTable, context: PredictionContext) -> Any:
     r"""The dtype the ``CLASS`` column of a prediction frame should carry.
 
     Class names and ranking ids are string-keyed on the wire, so ``CLASS``
@@ -410,7 +251,7 @@ def _class_dtype(task: TaskTable, context: Context) -> Any:
     it comparable and joinable, the way ``ENTITY`` already is.
     """
     if task.task_type.is_link_pred:
-        table = context.subgraph.table_dict[context.entity_table_names[-1]]
+        table = context.sampled_subgraph.tables[context.entity_table_names[-1]]
         if table.primary_key is None:
             return None
         return table.df[table.primary_key].dtype
@@ -609,49 +450,6 @@ def _check_anchor_time(value: Any, name: str) -> Any:
         f"'{name}' must be a pandas.Timestamp or the literal 'entity' (got "
         f'{type(value).__name__} {value!r}){hint}'
     )
-
-
-def _extract_explanation(
-    prediction: pd.DataFrame,
-    explain_config: ExplainConfig,
-) -> tuple[pd.DataFrame, str, dict[str, Any], str | None]:
-    # The SaaS backend returned ``summary``/``warning`` at the top level; the
-    # Universal TFM NIM wraps the native driver output as ``{format, details}``
-    # and, as of today, emits structured attribution only (``cohorts`` /
-    # ``subgraphs``) with no natural-language ``summary``. We read both shapes so
-    # ``summary`` is populated the moment the NIM starts producing one; until
-    # then ``summary`` is legitimately empty against a live NIM. Generating that
-    # text is a server-side change, tracked separately from this client.
-    if 'EXPLANATION' not in prediction or prediction.empty:
-        raise RuntimeError(
-            'Prediction response did not include requested explanation.'
-        )
-    raw_explanation = prediction['EXPLANATION'].iloc[0]
-    if isinstance(raw_explanation, dict):
-        details = dict(raw_explanation)
-    else:
-        details = {
-            'format': 'unknown',
-            'value': raw_explanation,
-        }
-
-    nested = details.get('details')
-    nested = nested if isinstance(nested, dict) else {}
-
-    summary = ''
-    if not explain_config.skip_summary:
-        maybe_summary = details.get('summary')
-        if not isinstance(maybe_summary, str):
-            maybe_summary = nested.get('summary')
-        if isinstance(maybe_summary, str):
-            summary = maybe_summary
-
-    warning = details.get('warning')
-    if warning is None:
-        warning = nested.get('warning')
-    if warning is not None:
-        warning = str(warning)
-    return prediction.drop(columns=['EXPLANATION']), summary, details, warning
 
 
 def _anchor_of(task: Any) -> str:
@@ -873,7 +671,7 @@ class KumoRelational:
         if self._client is not None:
             return self._client
 
-        from sdm_relational_engine.rfm import global_state
+        from sdm_relational_engine.client.engine_access import global_state
 
         self._client = RFMAPI(global_state.client)
         return self._client
@@ -1055,10 +853,10 @@ class KumoRelational:
         -----------------------
         The ``inference_config`` argument controls inference-time model
         behavior, including ensembling. Pass either a dictionary or a config
-        object from ``sdm_relational_engine.api.rfm``. Dictionary inputs are cast based on the
-        task type: classification tasks use ``ClassificationInferenceConfig``
-        and regression or forecasting tasks use
-        ``RegressionInferenceConfig``. If omitted, defaults are selected
+        object from ``sdm_relational_engine.rfm.inference.config``. Dictionary inputs
+        are cast based on the task type: classification tasks use
+        ``ClassificationInferenceConfig`` and regression or forecasting tasks
+        use ``RegressionInferenceConfig``. If omitted, defaults are selected
         automatically based on the task type.
 
         Common options:
@@ -1508,7 +1306,7 @@ class KumoRelational:
                         )
                     df = pd.DataFrame(**resp.prediction)
                     if explain_config is not None:
-                        df, summary, details, warning = _extract_explanation(
+                        df, summary, details, warning = extract_explanation(
                             df, explain_config
                         )
 
@@ -1690,7 +1488,7 @@ class KumoRelational:
                 prediction_stop=stop,
                 request_size_bytes=request_size,
             )
-            entity_table = context.subgraph.table_dict[
+            entity_table = context.sampled_subgraph.tables[
                 context.entity_table_names[0]
             ]
             predict_table = payload['predict']['instance_table']
@@ -2615,7 +2413,7 @@ class KumoRelational:
         top_k: int | None = None,
         random_seed: int | None = _RANDOM_SEED,
         _validate_references: bool = True,
-    ) -> Context:
+    ) -> PredictionContext:
 
         if num_neighbors is None:
             key = (
@@ -2680,11 +2478,11 @@ class KumoRelational:
             random_seed=random_seed,
         )
 
-        if len(subgraph.table_dict) > _MAX_SUBGRAPH_TABLES:
+        if len(subgraph.tables) > _MAX_SUBGRAPH_TABLES:
             raise ValueError(
                 f'Cannot query from a graph with more than '
                 f'{_MAX_SUBGRAPH_TABLES} '
-                f'tables (got {len(subgraph.table_dict)}). '
+                f'tables (got {len(subgraph.tables)}). '
                 f'Please create a feature request at '
                 f"'https://github.com/NVIDIA/structured-data-models-client' if you "
                 f'must go beyond this for your use-case.'
@@ -2692,7 +2490,7 @@ class KumoRelational:
 
         if (
             task.task_type.is_link_pred
-            and task.entity_table_names[-1] not in subgraph.table_dict
+            and task.entity_table_names[-1] not in subgraph.tables
         ):
             raise ValueError(
                 'Cannot perform link prediction on subgraphs '
@@ -2700,15 +2498,15 @@ class KumoRelational:
                 'increase the number of hops and try again.'
             )
 
-        return Context(
+        return PredictionContext(
             task_type=task.task_type,
             entity_table_names=task.entity_table_names,
-            subgraph=subgraph,
+            sampled_subgraph=subgraph,
             y_train=task._context_df[task.target_column.name],
             y_test=task._pred_df[task.target_column.name]
             if task.has_prediction_targets
             else None,
-            task_table=Table(
+            task_table=SampledTable(
                 df=pd.concat(
                     [
                         task._context_df[

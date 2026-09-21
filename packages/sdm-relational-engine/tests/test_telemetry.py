@@ -10,16 +10,16 @@ import logging
 import pandas as pd
 import pytest
 import sdm_relational_engine.rfm as rfm
-from sdm_relational_engine.rfm.rfm import KumoRelational
-from sdm_relational_engine.rfm.telemetry import (
+from sdm_relational_engine.rfm.inference.config import RunMode
+from sdm_relational_engine.rfm.inference.telemetry import (
     SCHEMA_VERSION,
     PredictionRecord,
     describe_error,
     emit,
     recorded,
 )
-from sdm_relational_engine.runmode import RunMode
-from sdm_relational_engine.utils import ProgressLogger
+from sdm_relational_engine.rfm.rfm import KumoRelational
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 QUERY = 'PREDICT COUNT(orders.*, 0, 30) FOR customers.customer_id IN (1, 2, 3)'
 
@@ -648,7 +648,7 @@ def test_the_quote_characters_are_still_all_of_them() -> None:
     """
     import unicodedata
 
-    from sdm_relational_engine.rfm.telemetry import _QUOTES
+    from sdm_relational_engine.rfm.inference.telemetry import _QUOTES
 
     derived = {"'", '`'}
     for point in range(0x110000):
@@ -662,7 +662,7 @@ def test_the_quote_characters_are_still_all_of_them() -> None:
 
 def test_no_bracket_is_treated_as_a_quote() -> None:
     """Reaching the low-9 forms by Unicode category would pull these in."""
-    from sdm_relational_engine.rfm.telemetry import _QUOTES
+    from sdm_relational_engine.rfm.inference.telemetry import _QUOTES
 
     assert not set('()[]{}<>').intersection(_QUOTES)
 

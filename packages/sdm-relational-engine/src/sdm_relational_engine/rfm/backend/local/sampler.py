@@ -11,8 +11,8 @@ from predictive_query.query import ValidatedPredictiveQuery
 from sdm_relational_engine.rfm.backend.local import LocalGraphStore
 from sdm_relational_engine.rfm.base import DataBackend, Sampler, SamplerOutput
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
-from sdm_relational_engine.rfm.pquery import PQueryPandasExecutor
-from sdm_relational_engine.utils import ProgressLogger
+from sdm_relational_engine.rfm.query.pandas_executor import PQueryPandasExecutor
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph

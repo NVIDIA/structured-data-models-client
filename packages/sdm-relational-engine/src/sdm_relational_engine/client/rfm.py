@@ -15,10 +15,10 @@ from sdm_api.generated.tfm_api import (
     TFMOperations,
 )
 
-from sdm_relational_engine.api.rfm import RFMPredictResponse
 from sdm_relational_engine.client.transport import RFMTransport
 from sdm_relational_engine.client.utils import raise_on_error
 from sdm_relational_engine.exceptions import InvalidResponseError
+from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 
 
 def _path_segment(value: str) -> str:

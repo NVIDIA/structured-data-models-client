@@ -16,8 +16,8 @@ from sdm_relational_engine.rfm.backend.databricks import DatabricksTable
 from sdm_relational_engine.rfm.backend.databricks.table import BACKTICK
 from sdm_relational_engine.rfm.base import DataBackend, SQLSampler, Table
 from sdm_relational_engine.rfm.base.utils import Timestamp
-from sdm_relational_engine.rfm.pquery import PQueryPandasExecutor
-from sdm_relational_engine.utils import ProgressLogger
+from sdm_relational_engine.rfm.query.pandas_executor import PQueryPandasExecutor
+from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph

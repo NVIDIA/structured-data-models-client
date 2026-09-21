@@ -9,8 +9,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-
-from sdm_relational_engine import (
+from sdm_relational_engine.utils.environment import (
     in_jupyter_notebook,
     in_notebook,
     in_streamlit_notebook,

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from sdm_relational_engine.rfm import explain_summary
-from sdm_relational_engine.rfm.explain_summary import (
+from sdm_relational_engine.rfm.explain import summary as explain_summary
+from sdm_relational_engine.rfm.explain.summary import (
     SUMMARY_ERROR_MESSAGE,
     SUMMARY_NEEDS_EXTRA_MESSAGE,
     SUMMARY_NEEDS_MODEL_MESSAGE,
@@ -308,7 +308,7 @@ def test_env_float_invalid_falls_back(monkeypatch: Any) -> None:
 
 def test_explanation_accessors_ignore_malformed_details() -> None:
     import pandas as pd
-    from sdm_relational_engine.rfm.rfm import Explanation
+    from sdm_relational_engine.rfm import Explanation
 
     empty = pd.DataFrame()
     for details in (
@@ -338,7 +338,7 @@ def test_explanation_accessors_ignore_malformed_details() -> None:
 
 def _explanation(subgraphs: Any) -> Any:
     import pandas as pd
-    from sdm_relational_engine.rfm.rfm import Explanation
+    from sdm_relational_engine.rfm import Explanation
 
     return Explanation(
         prediction=pd.DataFrame(),
@@ -363,7 +363,7 @@ def _subgraph(tables: dict[str, Any], **extra: Any) -> dict[str, Any]:
 
 
 def test_feature_importance_aggregates_scores_by_table_column() -> None:
-    from sdm_relational_engine.api.explain import GraphGradientScore
+    from sdm_relational_engine.rfm.explain.gradient import GraphGradientScore
 
     exp = _explanation(
         [
@@ -453,8 +453,8 @@ def test_feature_importance_ignores_context_examples_and_non_numeric() -> None:
 
 def test_feature_importance_empty_when_no_subgraphs() -> None:
     import pandas as pd
-    from sdm_relational_engine.api.explain import GraphGradientScore
-    from sdm_relational_engine.rfm.rfm import Explanation
+    from sdm_relational_engine.rfm import Explanation
+    from sdm_relational_engine.rfm.explain.gradient import GraphGradientScore
 
     exp = Explanation(prediction=pd.DataFrame(), summary='', details=None)
     fi = exp.feature_importance
@@ -701,7 +701,9 @@ def test_rejections_are_not_transient(status: int) -> None:
 
 
 def test_high_cardinality_columns_reports_worst_first_and_dedupes() -> None:
-    from sdm_relational_engine.rfm.payload import high_cardinality_columns
+    from sdm_relational_engine.rfm.inference.payload import (
+        high_cardinality_columns,
+    )
 
     payload = {
         'task': {'entity_table_names': ['USERS']},
@@ -733,7 +735,9 @@ def test_high_cardinality_columns_counts_tokenized_text_cells() -> None:
     r"""A 'text' column travels as one-element token lists, and the NIM counts
     those tokens, so the column has to be named there too.
     """
-    from sdm_relational_engine.rfm.payload import high_cardinality_columns
+    from sdm_relational_engine.rfm.inference.payload import (
+        high_cardinality_columns,
+    )
 
     payload = {
         'task': {'entity_table_names': ['USERS']},
@@ -757,7 +761,9 @@ def test_high_cardinality_columns_counts_tokenized_text_cells() -> None:
 
 
 def test_high_cardinality_columns_ignores_non_string_and_within_limit() -> None:
-    from sdm_relational_engine.rfm.payload import high_cardinality_columns
+    from sdm_relational_engine.rfm.inference.payload import (
+        high_cardinality_columns,
+    )
 
     payload = {
         'task': {'entity_table_names': ['USERS']},

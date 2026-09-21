@@ -9,7 +9,6 @@ import pandas as pd
 import pytest
 from predictive_query.schema.task import TaskType
 from pytest_mock import MockerFixture
-from sdm_relational_engine.api.rfm import RFMPredictResponse
 from sdm_relational_engine.rfm import (
     Explanation,
     Graph,
@@ -19,12 +18,13 @@ from sdm_relational_engine.rfm import (
     TaskReferenceError,
     TaskTable,
 )
-from sdm_relational_engine.rfm.payload import (
+from sdm_relational_engine.rfm.inference.payload import (
     ENTITY_REFERENCE_PREFIX,
     INSTANCE_ID,
     MAX_TABLE_ROWS,
     validate_payload_table_rows,
 )
+from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 
 
 class NoNetworkAPI:

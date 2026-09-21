@@ -339,6 +339,43 @@ class TestConfigurationTellsTheTruth:
             'tabular deployment serves'
         )
 
+    def test_every_module_the_type_baseline_names_still_exists(self):
+        """A baseline entry for a module that is gone silences nothing.
+
+        The engine was restructured on main and three entries kept naming
+        modules that no longer exist, while the errors they covered moved to
+        new ones. Nothing complains about an override that matches nothing, so
+        the list reads as debt being held when it is really debt being lost.
+        """
+        import importlib.util
+
+        root = tomllib.loads((REPO / 'pyproject.toml').read_text())
+        named = [
+            module
+            for override in root['tool']['mypy']['overrides']
+            for module in (
+                override['module']
+                if isinstance(override['module'], list)
+                else [override['module']]
+            )
+        ]
+        assert named, 'the type-checking baseline vanished; update this test'
+
+        missing = []
+        for module in named:
+            try:
+                if importlib.util.find_spec(module) is None:
+                    missing.append(module)
+            except (
+                ImportError,
+                ValueError,
+            ):  # pragma: no cover - not installed
+                continue
+        assert not missing, (
+            f'the mypy baseline names modules that do not exist: {missing}. '
+            f'Delete the entry, or point it at whatever the code became.'
+        )
+
     def test_the_recorded_style_backlog_is_clean_where_the_note_says_it_is(
         self,
     ):

@@ -9,11 +9,11 @@ import io
 import re
 import warnings
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import pandas as pd
 from predictive_query.schema.definition import (
@@ -21,21 +21,19 @@ from predictive_query.schema.definition import (
     ColumnKeyGroup,
     SchemaDefinition,
 )
+from predictive_query.schema.definition import (
+    Relationship as PredictiveQueryEdge,
+)
 from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Stype
+from sdm_connectors import quote_ident
 from typing_extensions import Self
 
-from sdm_relational_engine import (
-    in_jupyter_notebook,
-    in_streamlit_notebook,
-    in_tmux,
-)
+import sdm_relational_engine.utils.display as display
 from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
 )
-from sdm_relational_engine.graph.graph import Edge, EdgeLike
-from sdm_relational_engine.mixin import CastMixin
 from sdm_relational_engine.rfm.base import (
     Column,
     ColumnSpec,
@@ -43,15 +41,38 @@ from sdm_relational_engine.rfm.base import (
     Table,
     composite_key,
 )
+from sdm_relational_engine.rfm.base.casting import CastMixin
 from sdm_relational_engine.rfm.base.utils import Timedelta
-from sdm_relational_engine.rfm.infer import infer_time_column
-from sdm_relational_engine.utils import display, quote_ident
+from sdm_relational_engine.rfm.metadata_inference import infer_time_column
+from sdm_relational_engine.utils.environment import (
+    in_jupyter_notebook,
+    in_streamlit_notebook,
+    in_tmux,
+)
 
 if TYPE_CHECKING:
     from adbc_driver_sqlite.dbapi import AdbcSqliteConnection
     from databricks.sql.client import Connection as DatabricksConnection
     from duckdb import DuckDBPyConnection
     from snowflake.connector import SnowflakeConnection
+
+
+@dataclass(frozen=True, eq=True)
+class Edge(CastMixin, PredictiveQueryEdge):
+    r"""A relationship between two tables in an RFM graph."""
+
+    src_table: str
+    fkey: str
+    dst_table: str
+
+    def __iter__(self) -> Iterator[str]:
+        return iter((self.src_table, self.fkey, self.dst_table))
+
+    def __hash__(self) -> int:
+        return hash((self.src_table, self.fkey, self.dst_table))
+
+
+EdgeLike: TypeAlias = Edge | dict[str, str] | tuple[str, str, str]
 
 
 @dataclass
@@ -420,7 +441,7 @@ class Graph:
         Args:
             df_dict: A dictionary of data frames, where the keys are the names
                 of the tables and the values hold table data.
-            edges: An optional list of :class:`~sdm_relational_engine.graph.Edge` objects to
+            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
                 add to the graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``. An empty sequence is not the same
@@ -504,7 +525,7 @@ class Graph:
                 ``primary_key``, or ``time_column``. If ``None``, will add all
                 tables present in the database.
             edges: Optional edge-like objects to add to the graph. Each item
-                may be a :class:`~sdm_relational_engine.graph.Edge`, a dictionary, or a tuple
+                may be a :class:`~sdm_relational_engine.rfm.Edge`, a dictionary, or a tuple
                 such as ``(src_table, fkey, dst_table)``. If not provided
                 (:obj:`None`), edges will be automatically inferred from the
                 data in case ``infer_metadata=True``, and the foreign keys
@@ -597,7 +618,7 @@ class Graph:
             tables: Set of table names or :class:`DuckDBTable` keyword
                 arguments to include. If ``None``, will add all non-temporary
                 tables present in the database.
-            edges: An optional list of :class:`~sdm_relational_engine.graph.Edge` objects to
+            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
                 add to the graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``, and the foreign keys the source
@@ -733,7 +754,7 @@ class Graph:
                 current database and schema.
             database: The database.
             schema: The schema.
-            edges: An optional list of :class:`~sdm_relational_engine.graph.Edge` objects to
+            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
                 add to the graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``, and the foreign keys the source
@@ -882,7 +903,7 @@ class Graph:
                 in the current catalog and schema.
             catalog: The Unity Catalog catalog.
             schema: The schema.
-            edges: An optional list of :class:`~sdm_relational_engine.graph.Edge` objects to
+            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
                 add to the graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``, and the foreign keys the source
@@ -2201,7 +2222,7 @@ class Graph:
         fkey: str | Sequence[str],
         dst_table: str | Table,
     ) -> Self:
-        r"""Removes an :class:`~sdm_relational_engine.graph.Edge` from the graph.
+        r"""Removes an :class:`~sdm_relational_engine.rfm.Edge` from the graph.
 
         Args:
             src_table: The name of the source table of the edge.
@@ -2505,7 +2526,7 @@ class Graph:
         Concretely, validation ensures that edges properly link foreign keys to
         primary keys between valid tables.
         It additionally ensures that primary and foreign keys between tables
-        in an :class:`~sdm_relational_engine.graph.Edge` are of the same data type.
+        in an :class:`~sdm_relational_engine.rfm.Edge` are of the same data type.
 
         Raises:
             ValueError: if validation fails.
@@ -2695,7 +2716,7 @@ class Graph:
                 key(s), and time column of each table.
             height: The pixel height of the inline notebook rendering.
         """
-        from sdm_relational_engine.rfm import viz
+        from sdm_relational_engine.rfm import graph_visualization
 
         source = self._to_mermaid(show_columns)
 
@@ -2706,11 +2727,15 @@ class Graph:
             if suffix == '':
                 raise ValueError(f"Missing file extension in path '{path}'")
             if suffix == 'html':
-                path.write_text(viz.to_html(source), encoding='utf-8')
+                path.write_text(
+                    graph_visualization.to_html(source), encoding='utf-8'
+                )
             elif suffix == 'mmd':
                 path.write_text(source + '\n', encoding='utf-8')
             elif suffix in ('png', 'svg'):
-                path.write_bytes(viz.render_image(source, suffix))
+                path.write_bytes(
+                    graph_visualization.render_image(source, suffix)
+                )
             else:
                 raise ValueError(
                     f"File extension '{suffix}' not supported "
@@ -2719,14 +2744,14 @@ class Graph:
                 )
 
         elif isinstance(path, io.BytesIO):
-            path.write(viz.render_image(source, 'png'))
+            path.write(graph_visualization.render_image(source, 'png'))
 
         elif in_streamlit_notebook():
             import streamlit as st
 
             try:
                 st.components.v1.html(
-                    viz.to_html(source),
+                    graph_visualization.to_html(source),
                     height=height,
                     scrolling=True,
                 )
@@ -2737,7 +2762,9 @@ class Graph:
             from IPython.display import HTML
             from IPython.display import display as ipython_display
 
-            ipython_display(HTML(viz.to_iframe(source, height=height)))
+            ipython_display(
+                HTML(graph_visualization.to_iframe(source, height=height))
+            )
 
         else:
             warnings.warn(

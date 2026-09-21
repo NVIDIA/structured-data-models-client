@@ -13,16 +13,19 @@ from predictive_query.ast import Column, Condition, Constant
 from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import Dtype, Stype
-from sdm_relational_engine.api.rfm import RFMPredictResponse
-from sdm_relational_engine.api.rfm.context import REV_REL, EdgeLayout
 from sdm_relational_engine.rfm import (
+    Explanation,
     Graph,
     KumoRelational,
     LocalTable,
     TaskTable,
 )
 from sdm_relational_engine.rfm.base.utils import Timestamp
-from sdm_relational_engine.rfm.rfm import Explanation
+from sdm_relational_engine.rfm.inference.context import (
+    REVERSE_RELATION_PREFIX,
+    SampledEdgeLayout,
+)
+from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 from sdm_relational_engine.utils.progress_logger import PlainProgressLogger
 
 
@@ -110,16 +113,16 @@ def test_temporal_rfm(
     assert context.entity_table_names == ('USERS',)
 
     assert np.array_equal(
-        context.subgraph.anchor_time,
+        context.sampled_subgraph.anchor_time,
         np.array(
             [(anchor_time - pd.DateOffset(days=7)).value] * 4
             + [anchor_time.value] * 4
         ),
     )
 
-    assert set(context.subgraph.table_dict) == {'USERS', 'ORDERS', 'STORES'}
+    assert set(context.sampled_subgraph.tables) == {'USERS', 'ORDERS', 'STORES'}
 
-    table = context.subgraph.table_dict['USERS']
+    table = context.sampled_subgraph.tables['USERS']
     pd.testing.assert_frame_equal(
         table.df,
         pd.DataFrame(
@@ -146,7 +149,7 @@ def test_temporal_rfm(
     }
     assert table.primary_key == 'USER_ID'
 
-    table = context.subgraph.table_dict['ORDERS']
+    table = context.sampled_subgraph.tables['ORDERS']
     pd.testing.assert_frame_equal(
         table.df,
         pd.DataFrame(
@@ -179,7 +182,7 @@ def test_temporal_rfm(
     }
     assert table.primary_key is None
 
-    table = context.subgraph.table_dict['STORES']
+    table = context.sampled_subgraph.tables['STORES']
     pd.testing.assert_frame_equal(
         table.df,
         pd.DataFrame({'CAT': ['burger', 'pizza']}),
@@ -195,14 +198,14 @@ def test_temporal_rfm(
     assert table.stype_dict == {'CAT': Stype.categorical}
     assert table.primary_key is None
 
-    assert set(context.subgraph.link_dict) == {
+    assert set(context.sampled_subgraph.links) == {
         ('ORDERS', 'USER_ID', 'USERS'),
-        ('USERS', f'{REV_REL}USER_ID', 'ORDERS'),
-        ('STORES', f'{REV_REL}STORE_ID', 'ORDERS'),
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'ORDERS'),
+        ('STORES', f'{REVERSE_RELATION_PREFIX}STORE_ID', 'ORDERS'),
     }
 
-    link = context.subgraph.link_dict[('ORDERS', 'USER_ID', 'USERS')]
-    assert link.layout == EdgeLayout.COO
+    link = context.sampled_subgraph.links[('ORDERS', 'USER_ID', 'USERS')]
+    assert link.layout == SampledEdgeLayout.COO
     assert link.row is None
     assert link.col is not None
     if evaluate:
@@ -211,16 +214,18 @@ def test_temporal_rfm(
         assert np.array_equal(link.col, np.array([3, 4, 4, 7]))
     assert link.num_sampled_edges == [4, 0]
 
-    link = context.subgraph.link_dict[('USERS', f'{REV_REL}USER_ID', 'ORDERS')]
-    assert link.layout == EdgeLayout.REV
+    link = context.sampled_subgraph.links[
+        ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'ORDERS')
+    ]
+    assert link.layout == SampledEdgeLayout.REV
     assert link.row is None
     assert link.col is None
     assert link.num_sampled_edges == [0, 4]
 
-    link = context.subgraph.link_dict[
-        ('STORES', f'{REV_REL}STORE_ID', 'ORDERS')
+    link = context.sampled_subgraph.links[
+        ('STORES', f'{REVERSE_RELATION_PREFIX}STORE_ID', 'ORDERS')
     ]
-    assert link.layout == EdgeLayout.COO
+    assert link.layout == SampledEdgeLayout.COO
     assert link.row is None
     assert link.col is None
     assert link.num_sampled_edges == [0, 4]
@@ -274,14 +279,14 @@ def test_assuming(
     n_predict = 2 if evaluate else 4
     n_context = 2
     assert np.array_equal(
-        context.subgraph.anchor_time,
+        context.sampled_subgraph.anchor_time,
         np.array(
             [(anchor_time - pd.DateOffset(days=7)).value] * n_context
             + [anchor_time.value] * n_predict
         ),
     )
 
-    table = context.subgraph.table_dict['USERS']
+    table = context.sampled_subgraph.tables['USERS']
     expected_df = pd.DataFrame(
         {
             'USER_ID': [0, 1, 2, 3],
@@ -362,13 +367,13 @@ def test_static_rfm(
 
     size = 3 if evaluate else 5
     assert np.array_equal(
-        context.subgraph.anchor_time,
+        context.sampled_subgraph.anchor_time,
         np.array([Timestamp('2025-01-09').value] * size),
     )
 
-    assert set(context.subgraph.table_dict) == {'USERS', 'ORDERS', 'STORES'}
+    assert set(context.sampled_subgraph.tables) == {'USERS', 'ORDERS', 'STORES'}
 
-    table = context.subgraph.table_dict['USERS']
+    table = context.sampled_subgraph.tables['USERS']
     assert table.df.shape == (3 if evaluate else 4, 3)
     if evaluate:
         assert table.row is None
@@ -383,7 +388,7 @@ def test_static_rfm(
     assert table.primary_key == 'USER_ID'
 
     if not evaluate:
-        table = context.subgraph.table_dict['ORDERS']
+        table = context.sampled_subgraph.tables['ORDERS']
         assert table.df.shape == (13, 3)
         assert table.row is None
         assert table.num_sampled_nodes == [0, 13, 0]
@@ -394,7 +399,7 @@ def test_static_rfm(
         }
         assert table.primary_key is None
 
-        table = context.subgraph.table_dict['STORES']
+        table = context.sampled_subgraph.tables['STORES']
         assert table.df.shape == (3, 1)
         assert table.row is not None
         assert len(table.row) == 8
@@ -402,38 +407,38 @@ def test_static_rfm(
         assert table.stype_dict == {'CAT': Stype.categorical}
         assert table.primary_key is None
 
-        assert set(context.subgraph.link_dict) == {
+        assert set(context.sampled_subgraph.links) == {
             ('ORDERS', 'USER_ID', 'USERS'),
-            ('USERS', f'{REV_REL}USER_ID', 'ORDERS'),
-            ('STORES', f'{REV_REL}STORE_ID', 'ORDERS'),
+            ('USERS', f'{REVERSE_RELATION_PREFIX}USER_ID', 'ORDERS'),
+            ('STORES', f'{REVERSE_RELATION_PREFIX}STORE_ID', 'ORDERS'),
         }
 
-        link = context.subgraph.link_dict[('ORDERS', 'USER_ID', 'USERS')]
-        assert link.layout == EdgeLayout.CSC
+        link = context.sampled_subgraph.links[('ORDERS', 'USER_ID', 'USERS')]
+        assert link.layout == SampledEdgeLayout.CSC
         assert link.row is None
         assert link.col is not None
         assert link.num_sampled_edges == [13, 0]
 
-        link = context.subgraph.link_dict[
+        link = context.sampled_subgraph.links[
             (
                 'USERS',
-                f'{REV_REL}USER_ID',
+                f'{REVERSE_RELATION_PREFIX}USER_ID',
                 'ORDERS',
             )
         ]
-        assert link.layout == EdgeLayout.REV
+        assert link.layout == SampledEdgeLayout.REV
         assert link.row is None
         assert link.col is None
         assert link.num_sampled_edges == [0, 13]
 
-        link = context.subgraph.link_dict[
+        link = context.sampled_subgraph.links[
             (
                 'STORES',
-                f'{REV_REL}STORE_ID',
+                f'{REVERSE_RELATION_PREFIX}STORE_ID',
                 'ORDERS',
             )
         ]
-        assert link.layout == EdgeLayout.COO
+        assert link.layout == SampledEdgeLayout.COO
         assert link.row is not None
         assert link.col is None
         assert link.num_sampled_edges == [0, 13]
@@ -481,9 +486,9 @@ def test_entity_anchor_time(
     )
     context = model._get_context(task_table)
 
-    df = context.subgraph.table_dict['ORDERS'].df
-    df = df.iloc[context.subgraph.table_dict['ORDERS'].row]
-    df = df.iloc[: context.subgraph.batch_size]
+    df = context.sampled_subgraph.tables['ORDERS'].df
+    df = df.iloc[context.sampled_subgraph.tables['ORDERS'].row]
+    df = df.iloc[: context.sampled_subgraph.batch_size]
 
     df = pd.merge(
         df.drop(columns='TIME'),
@@ -493,7 +498,7 @@ def test_entity_anchor_time(
     )
     batch_time = pd.to_datetime(df['TIME']).astype('datetime64[ns]')
     batch_time = batch_time.astype(int).to_numpy()
-    anchor_time = context.subgraph.anchor_time
+    anchor_time = context.sampled_subgraph.anchor_time
     assert np.array_equal(anchor_time, batch_time)
 
 
@@ -552,8 +557,12 @@ def test_forecasting(
         assert context.y_test is not None
         assert context.y_test.dtype == np.float32
         assert len(context.y_test) == 4  # One per forecast step.
-        train_times = context.subgraph.anchor_time[: len(context.y_train)]
-        test_times = context.subgraph.anchor_time[len(context.y_train) :]
+        train_times = context.sampled_subgraph.anchor_time[
+            : len(context.y_train)
+        ]
+        test_times = context.sampled_subgraph.anchor_time[
+            len(context.y_train) :
+        ]
         assert len(np.intersect1d(train_times, test_times)) == 0
     else:
         pd.testing.assert_series_equal(
@@ -939,9 +948,9 @@ def test_end_time_column() -> None:
         exclude_cols_dict=query.get_exclude_cols_dict(),
     )
 
-    assert context.subgraph.table_dict['USERS'].num_rows == 3
-    assert context.subgraph.table_dict['USERS'].row is None
-    df = context.subgraph.table_dict['USERS'].df
+    assert context.sampled_subgraph.tables['USERS'].num_rows == 3
+    assert context.sampled_subgraph.tables['USERS'].row is None
+    df = context.sampled_subgraph.tables['USERS'].df
     df = df.sort_values('USER_ID').reset_index(drop=True)
     pd.testing.assert_frame_equal(
         df,
@@ -981,7 +990,7 @@ def test_query_start(
     earliest_timestamp = pd.to_datetime(
         cast(LocalTable, user_store_graph['ORDERS'])._data['TIME']
     ).min()
-    anchor_times = pd.to_datetime(context.subgraph.anchor_time)
+    anchor_times = pd.to_datetime(context.sampled_subgraph.anchor_time)
     context_anchor_times = anchor_times[: len(context.y_train)]
     unique_anchor_times = context_anchor_times.unique().sort_values()
     target_timeframe = ltv_offset.target_timeframe
@@ -1190,8 +1199,13 @@ def test_explanation_warning_display():
     assert 'Warning' not in str(no_warning)
 
     with (
-        patch('sdm_relational_engine.rfm.rfm.in_notebook', return_value=True),
-        patch('sdm_relational_engine.rfm.rfm.display') as mock_display,
+        patch(
+            'sdm_relational_engine.rfm.explain.result.in_notebook',
+            return_value=True,
+        ),
+        patch(
+            'sdm_relational_engine.rfm.explain.result.display'
+        ) as mock_display,
     ):
         with_warning.print()
         calls = [str(c) for c in mock_display.message.call_args_list]

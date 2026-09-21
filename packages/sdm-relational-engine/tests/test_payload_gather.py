@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
-from sdm_relational_engine.rfm.payload import _entity_values
+from sdm_relational_engine.rfm.inference.payload import _entity_values
 
 
 def _context(
@@ -24,13 +24,16 @@ def _context(
 ) -> SimpleNamespace:
     table = SimpleNamespace(df=df, batch=batch, row=row, primary_key='pk')
     return SimpleNamespace(
-        subgraph=SimpleNamespace(table_dict={'t': table}, batch_size=batch_size)
+        sampled_subgraph=SimpleNamespace(
+            tables={'t': table},
+            batch_size=batch_size,
+        )
     )
 
 
 def _reference(context, table_name: str):
     r"""The original row-at-a-time implementation, kept as the oracle."""
-    table = context.subgraph.table_dict.get(table_name)
+    table = context.sampled_subgraph.tables.get(table_name)
     if table is None or table.primary_key is None:
         return None
     if table.primary_key not in table.df:
@@ -39,7 +42,7 @@ def _reference(context, table_name: str):
     batch = np.asarray(table.batch)
     df = table.df.reset_index(drop=True)
     row = np.asarray(table.row) if table.row is not None else None
-    for instance_id in range(context.subgraph.batch_size):
+    for instance_id in range(context.sampled_subgraph.batch_size):
         rows = np.flatnonzero(batch == instance_id)
         if len(rows) == 0:
             values.append(None)

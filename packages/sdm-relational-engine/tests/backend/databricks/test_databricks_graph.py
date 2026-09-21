@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-from sdm_relational_engine.graph import Edge
-from sdm_relational_engine.rfm import Graph
+from sdm_relational_engine.rfm import Edge, Graph
 
 try:
     from sdm_relational_engine.rfm.backend.databricks import (

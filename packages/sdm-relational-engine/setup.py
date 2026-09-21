@@ -6,10 +6,10 @@ import os
 
 from setuptools import setup
 
-# The wire types and the query language are packages of this repository
-# (``sdm_relational_engine.api`` and ``predictive_query``), so the client carries
-# no external ``kumo-api`` dependency. ``pydantic`` used to arrive transitively
-# through it; it is now declared directly.
+# The retained wire types are first-party code and the query language comes
+# from ``predictive_query``, so the client carries no external ``kumo-api``
+# dependency. ``pydantic`` used to arrive transitively through it; it is now
+# declared directly.
 
 if bool(int(os.getenv('WITH_RELATIONALLIB', '1'))):
     kwargs = dict(cmake_source_dir='.')

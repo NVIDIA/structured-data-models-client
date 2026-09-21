@@ -96,7 +96,6 @@ module = [
     "sdm_relational_engine.rfm.base.table",          # 13
     "sdm_relational_engine.rfm.graph",               # 10
     "sdm_relational_engine.rfm.rfm",                 #  9
-    "sdm_relational_engine.api.data_source",         #  4
     "sdm_relational_engine.rfm.relbench",            #  3
     "sdm_relational_engine.rfm.backend.sqlite.sampler",     # 2
     "sdm_relational_engine.rfm.backend.snow.sampler",       # 2
@@ -107,13 +106,16 @@ module = [
     "sdm_relational_engine.client.client",           #  2
     "sdm_relational_engine",                         #  1
     "sdm_relational_engine.client.rfm",              #  1
-    "sdm_relational_engine.rfm.task_table",          #  1
-    "sdm_relational_engine.rfm.payload",             #  1
     "sdm_relational_engine.rfm.backend.sqlite.table",    # 1
     "sdm_relational_engine.rfm.backend.snow.table",      # 1
     "sdm_relational_engine.rfm.backend.local.table",     # 1
     "sdm_relational_engine.rfm.backend.local.sampler",   # 1
     "sdm_relational_engine.rfm.backend.databricks.table",# 1
+    # --- arrived with the engine cleanup on main, 2026-09-21 ----------
+    "sdm_relational_engine.client.engine_access",    #  2
+    "sdm_relational_engine.client.state",            #  1
+    "sdm_relational_engine.rfm.inference.payload",   #  1
+    "sdm_relational_engine.rfm.inference.task",      #  1
 ]
 ignore_errors = true
 

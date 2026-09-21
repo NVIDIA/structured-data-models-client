@@ -9,6 +9,7 @@ from typing import cast
 
 import pandas as pd
 from predictive_query.schema.typing import Dtype
+from sdm_connectors import quote_ident
 
 from sdm_relational_engine.rfm.backend.snow import Connection
 from sdm_relational_engine.rfm.backend.snow.binding import paramstyle
@@ -21,8 +22,7 @@ from sdm_relational_engine.rfm.base import (
     SourceForeignKey,
     Table,
 )
-from sdm_relational_engine.runmode import MissingType
-from sdm_relational_engine.utils import quote_ident
+from sdm_relational_engine.rfm.base.table import MissingType
 
 # Snowflake reports an object it cannot resolve as SQL compilation error
 # `002003`, which the connector surfaces as `errno=2003`:

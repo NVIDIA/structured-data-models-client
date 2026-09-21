@@ -26,7 +26,7 @@ _REQUIRED_ENV = [
 @pytest.fixture(scope='session')
 def connection() -> Generator['Connection', None, None]:
     databricks = pytest.importorskip(
-        'sdm_relational_engine.testing.databricks',
+        'sdm_relational_engine.rfm.backend.databricks',
         reason="'databricks' extension not installed",
     )
 
@@ -34,7 +34,13 @@ def connection() -> Generator['Connection', None, None]:
     if missing:
         pytest.skip(f'Missing Databricks credentials: {", ".join(missing)}')
 
-    connection = databricks.connect()
+    connection = databricks.connect(
+        server_hostname=os.environ['DATABRICKS_SERVER_HOSTNAME'],
+        http_path=os.environ['DATABRICKS_HTTP_PATH'],
+        access_token=os.environ['DATABRICKS_TOKEN'],
+        catalog=os.environ['DATABRICKS_CATALOG'],
+        schema=os.environ['DATABRICKS_SCHEMA'],
+    )
     yield connection
     connection.close()
 
