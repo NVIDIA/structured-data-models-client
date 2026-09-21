@@ -447,3 +447,21 @@ class TestTheContextIsWhatDecides:
                 predict=data.head(2).drop(columns=['churn']),
                 task='classification',
             )
+
+    def test_a_task_the_model_rejects_is_reported_before_a_remark_on_the_data(
+        self,
+    ):
+        """A caller's mistake outranks an observation about their rows.
+
+        The warning ran before `task=` was validated, so an unserved task over
+        a one-valued context raised the warning -- and for anyone running with
+        SDMWarning as an error, the real complaint never surfaced.
+        """
+        data = self.one_sided()
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', SDMWarning)
+            with pytest.raises(StructuredDataError, match='forecasting'):
+                PredictiveQuery(QUERY, {'people': data}).materialize(
+                    predict=data.head(3).drop(columns=['churn']),
+                    task='forecasting',
+                )

@@ -141,7 +141,7 @@ produces. Putting the parser in either one would make the other depend on a driv
 has no use for.
 
 It carries the parser, the AST, the validators, **and** the schema types (`Dtype`, `Stype`,
-`GraphDefinition`, `TableDefinition`), so those types have exactly one owner and nothing has to
+`SchemaDefinition`, `TableDefinition`), so those types have exactly one owner and nothing has to
 translate between two spellings of the same enum.
 
 The tree is first-party source of this repository, maintained here under Apache-2.0. It was
@@ -155,7 +155,7 @@ one this layout would choose today.
 | Type | Owner | Why |
 |---|---|---|
 | `Dtype`, `Stype`, `TaskType`, `ProblemType` | `sdm-pql` | PQL speaks them and will be an external dependency. One owner, no translation layer. |
-| `GraphDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
+| `SchemaDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
 | `Profile`, `Capabilities` | `sdm-pql` | What a model may be asked, as data. §6. |
 | Wire request/response, `InferenceSpec`, `OutputSpec` | `sdm-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
 | The DataFrame→wire encoder (`wire/`) | `sdm-client` | **Corrected during phase 2.** §8 first put this in `sdm-api`, but `wire/dtypes.py` imports numpy and pandas, which would cost `sdm-api` its zero-dependency property — the reason the split exists. `sdm-api` keeps the vocabulary; encoding a frame is client-side work. |

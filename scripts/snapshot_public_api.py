@@ -97,7 +97,14 @@ def _describe(obj: object) -> dict[str, object]:
     if isinstance(obj, (tuple, frozenset)) and all(
         isinstance(item, RECORDED_BY_VALUE) for item in obj
     ):
-        described['value'] = sorted(obj, key=repr)
+        # A tuple's order is part of its value -- `TFM_MODEL_VALUES` is
+        # ('kumo-tabular', 'kumo-relational') and reordering it is a change to
+        # the public surface. Sorting everything recorded the sorted order
+        # instead, so a reorder moved nothing. Only a set, which has no order
+        # to lose, is sorted, and then only to make the record stable.
+        described['value'] = (
+            list(obj) if isinstance(obj, tuple) else sorted(obj, key=repr)
+        )
         return described
     if inspect.isclass(obj):
         described['kind'] = 'class'

@@ -246,27 +246,31 @@ class TabularMaterializer:
                 f'type {query.target_stype.value!r}',
                 code='UNSUPPORTED_REQUEST',
             )
-        # Above the `stated` branch on purpose: a context that teaches nothing
-        # is a fact about the rows, not about which task was asked of them, and
-        # naming the task was silencing it.
+        # Validate, then warn, then decide. The warning used to come first,
+        # so `task='forecasting'` over a one-valued context raised the warning
+        # instead of the error about forecasting -- and for anyone running with
+        # SDMWarning as an error, the real complaint never surfaced at all. A
+        # caller's mistake is reported before a remark about their data.
+        if stated is not None and (
+            not isinstance(stated, str) or stated not in TABULAR_TASK_KINDS
+        ):
+            raise StructuredDataError(
+                f'the tabular model does not serve the task kind '
+                f'{stated!r}; it serves {sorted(TABULAR_TASK_KINDS)}',
+                code='UNSUPPORTED_REQUEST',
+                details={
+                    'task': stated,
+                    'supported': sorted(TABULAR_TASK_KINDS),
+                },
+            )
+
+        # Said whichever way the task is settled: whether the context
+        # distinguishes one answer from another is a fact about the rows.
         _warn_if_the_context_teaches_nothing(query.target_column, target)
 
         if stated is not None:
-            # Checked before the membership test: an unhashable value raises
-            # TypeError out of `in frozenset`, which is not an error about
-            # anything the caller did wrong.
-            if not isinstance(stated, str) or stated not in TABULAR_TASK_KINDS:
-                raise StructuredDataError(
-                    f'the tabular model does not serve the task kind '
-                    f'{stated!r}; it serves '
-                    f'{sorted(TABULAR_TASK_KINDS)}',
-                    code='UNSUPPORTED_REQUEST',
-                    details={
-                        'task': stated,
-                        'supported': sorted(TABULAR_TASK_KINDS),
-                    },
-                )
             return stated
+
         if query.target_stype == Stype.categorical:
             return 'classification'
         if _holds_two_whole_numbers(target):

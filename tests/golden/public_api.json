@@ -626,32 +626,32 @@
       "TFM_MODEL_VALUES": {
         "kind": "tuple",
         "value": [
-          "kumo-relational",
-          "kumo-tabular"
+          "kumo-tabular",
+          "kumo-relational"
         ]
       },
       "TFM_OUTPUT_FIELD_VALUES": {
         "kind": "tuple",
         "value": [
-          "embeddings",
-          "explanation",
           "prediction",
           "probabilities",
-          "quantiles",
+          "scores",
           "rankings",
-          "scores"
+          "embeddings",
+          "quantiles",
+          "explanation"
         ]
       },
       "TFM_TASK_KIND_VALUES": {
         "kind": "tuple",
         "value": [
-          "binary_classification",
           "classification",
-          "forecasting",
+          "binary_classification",
           "multiclass_classification",
-          "ranking",
           "regression",
-          "temporal_link_prediction"
+          "temporal_link_prediction",
+          "forecasting",
+          "ranking"
         ]
       }
     }
