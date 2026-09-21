@@ -22,7 +22,7 @@ from predictive_query.schema.common import (
     ValidationResponse,
     ValidationWarning,
 )
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import AggregationType, ProblemType
 from predictive_query.validator.join_validator import JoinValidator
@@ -48,7 +48,7 @@ class PredictiveQueryValidator:
     :class:`ValidatedPredictiveQuery`.
 
     Args:
-        graph: Graph on which the query is defined.
+        schema: Schema on which the query is defined.
         allow_array_targets: Have LIST_DISTINCT generate an array instead of
             a "|"-separated string.
         allow_timestamp_arrays: If :obj:`False`, block LIST_DISTINCT on time
@@ -59,13 +59,13 @@ class PredictiveQueryValidator:
 
     def __init__(
         self,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         allow_array_targets: bool = False,
         allow_timestamp_arrays: bool = True,
         mode: Mode = Mode.TRAINING,
         can: Capabilities | None = None,
     ) -> None:
-        self.graph = graph
+        self.schema = schema
         self.allow_array_targets = allow_array_targets
         self.allow_timestamp_arrays = allow_timestamp_arrays
         self.mode = mode
@@ -95,7 +95,7 @@ class PredictiveQueryValidator:
         # A stripped `EXPLAIN` or `EVALUATE` prefix moves every column, so
         # the locations shift with it or the messages point at the wrong
         # character.
-        self.model_validator = ModelValidator(self.graph, self.mode, self.can)
+        self.model_validator = ModelValidator(self.schema, self.mode, self.can)
         self.model_validator.update_location_interval(parsed_query)
 
         response = merge(response, self.validate_columns(parsed_query))
@@ -105,7 +105,7 @@ class PredictiveQueryValidator:
 
         # infer and validate types
         self.type_validator = TypeValidator(
-            self.graph,
+            self.schema,
             allow_array_targets=self.allow_array_targets,
             allow_timestamp_arrays=self.allow_timestamp_arrays,
         )
@@ -132,7 +132,7 @@ class PredictiveQueryValidator:
             return None, response
 
         # validate time ranges
-        self.time_range_validator = TimeRangeValidator(self.graph, self.mode)
+        self.time_range_validator = TimeRangeValidator(self.schema, self.mode)
         response = merge(
             response,
             self.time_range_validator.validate_time_ranges(parsed_query),
@@ -146,7 +146,7 @@ class PredictiveQueryValidator:
             return None, response
 
         # infer and validate joins
-        self.join_validator = JoinValidator(self.graph)
+        self.join_validator = JoinValidator(self.schema)
         response = merge(
             response, self.join_validator.infer_and_validate_joins(parsed_query)
         )
@@ -186,7 +186,7 @@ class PredictiveQueryValidator:
         self, parsed_query: ParsedPredictiveQuery
     ) -> ValidationResponse:
         r"""Validates that all tables and columns that appear in the query are
-        part of the graph.
+        part of the schema.
 
         Args:
             parsed_query (ParsedPredictiveQuery): the input parsed query.
@@ -206,12 +206,12 @@ class PredictiveQueryValidator:
             column = col_name(fully_qualified_name)
             table = table_name(fully_qualified_name)
 
-            if table not in self.graph.tables:
+            if table not in self.schema.tables:
                 unknown_tables.append((table, location))
                 continue
 
             if column != '*' and column not in [
-                c.name for c in self.graph.tables[table].cols
+                c.name for c in self.schema.tables[table].cols
             ]:
                 unknown_columns.append((table, column, location))
 
@@ -222,7 +222,7 @@ class PredictiveQueryValidator:
                         title='Unknown table name',
                         message=f"{location.message_start}: Table '{table}' "
                         f'does not exist in the '
-                        f'graph. Please be mindful of case sensitivity and '
+                        f'schema. Please be mindful of case sensitivity and '
                         f'ensure that the name is spelled correctly.',
                         code=codes.SCHEMA_UNKNOWN_TABLE,
                         span=Span.at(location),
@@ -247,7 +247,7 @@ class PredictiveQueryValidator:
         # due to unknown columns
         entity_table = table_name(parsed_query.entity_column)
         entity_pkey = col_name(parsed_query.entity_column)
-        if response.ok and self.graph.tables[entity_table].pkey != entity_pkey:
+        if response.ok and self.schema.tables[entity_table].pkey != entity_pkey:
             location = parsed_query.entity_column_obj.get_location()
             response.errors.append(
                 ValidationError(
@@ -436,7 +436,7 @@ class PredictiveQueryValidator:
             )
 
         if (
-            self.graph.tables[table_name(target_fqn)].pkey
+            self.schema.tables[table_name(target_fqn)].pkey
             == col_name(target_fqn)
             and target_ast.aggr == AggregationType.LIST_DISTINCT
         ):
@@ -452,7 +452,7 @@ class PredictiveQueryValidator:
             )
             return response
         all_keys = []
-        for col_group in self.graph.col_groups:
+        for col_group in self.schema.col_groups:
             all_keys.extend(list(col_group.columns))
         if (
             ColumnKey(table_name(target_fqn), col_name(target_fqn))
@@ -482,7 +482,7 @@ class PredictiveQueryValidator:
             valid_entities = []
             target_table = table_name(target_fqn)
             target_col = col_name(target_fqn)
-            for col_group in self.graph.col_groups:
+            for col_group in self.schema.col_groups:
                 target_col_key = ColumnKey(target_table, target_col)
                 # col_group must contain a different fkey from target table
                 if target_col_key in col_group.columns:
@@ -492,7 +492,7 @@ class PredictiveQueryValidator:
                 ]:
                     continue
                 for col in col_group.columns:
-                    if self.graph.tables[col.table_name].pkey != col.col_name:
+                    if self.schema.tables[col.table_name].pkey != col.col_name:
                         continue
                     valid_entities.append(
                         f'FOR EACH {col.table_name}.{col.col_name}'
@@ -543,8 +543,8 @@ class PredictiveQueryValidator:
         target_col_name = target_ast.get_target_column_name()
         target_table = table_name(target_col_name)
         if parsed_query.target_ast.date_offset_range is None:
-            if self.graph.tables[target_table].time_col is not None:
-                time_col_name = self.graph.tables[target_table].time_col
+            if self.schema.tables[target_table].time_col is not None:
+                time_col_name = self.schema.tables[target_table].time_col
                 location_msg = (
                     parsed_query.target_ast.get_location().message_start
                 )
@@ -568,7 +568,7 @@ class PredictiveQueryValidator:
 
             # Validate timestamps in non-target tables for static link pred
             fully_qualified_time_col_names = []
-            for t_name, table in self.graph.tables.items():
+            for t_name, table in self.schema.tables.items():
                 if t_name != target_table and table.time_col is not None:
                     time_col_name = table.time_col
                     assert time_col_name is not None
@@ -590,13 +590,13 @@ class PredictiveQueryValidator:
                             f'Cannot perform LIST_DISTINCT query without '
                             f'temporal aggregation when the following time '
                             f'columns {fully_qualified_time_cols_str} are '
-                            f'observed in graph. Since LIST_DISTINCT and the '
+                            f'observed in schema. Since LIST_DISTINCT and the '
                             f'columns do not contain any time information, '
                             f'this is likely to result in an incorrect data '
                             f'split and information leakage. To fix this, '
                             f'you can add the time interval in LIST_DISTINCT '
                             f'command or drop the columns '
-                            f'{fully_qualified_time_cols_str} from the graph.'
+                            f'{fully_qualified_time_cols_str} from the schema.'
                         ),
                         code=codes.TARGET_LIST_DISTINCT_TIME_COLUMNS,
                     )
@@ -699,7 +699,7 @@ class PredictiveQueryValidator:
         response = ValidationResponse()
         if not task_type.is_link_pred:
             return response
-        rhs_entity_table = get_rhs_lp_table(validated_query, self.graph)
+        rhs_entity_table = get_rhs_lp_table(validated_query, self.schema)
         aggr_node = validated_query.target_ast
         if isinstance(aggr_node, Join):
             aggr_node = aggr_node.rhs_target

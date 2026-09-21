@@ -22,7 +22,7 @@ from predictive_query.schema.common import (
     ValidationError,
     ValidationResponse,
 )
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 from predictive_query.schema.typing import (
     AggregationType,
     Dtype,
@@ -51,18 +51,18 @@ class ModelValidator:
     entity it asks about has to be one it can be asked about.
 
     Args:
-        graph: The graph that query is written for.
+        schema: The schema that query is written for.
         mode: Whether the query defines a task or asks a question.
         can: What the model and its deployment support.
     """
 
     def __init__(
         self,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         mode: Mode = Mode.TRAINING,
         can: Capabilities | None = None,
     ):
-        self.graph = graph
+        self.schema = schema
         self.mode = mode
         self.can = can if can is not None else Capabilities()
 
@@ -418,9 +418,9 @@ class ModelValidator:
     def _is_key_col(self, fqn: str) -> tuple[bool, bool]:
         r"""Returns (is_pkey, is_fkey) for the given column FQN."""
         col_key = ColumnKey(table_name(fqn), col_name(fqn))
-        is_pkey = self.graph.tables[table_name(fqn)].pkey == col_name(fqn)
+        is_pkey = self.schema.tables[table_name(fqn)].pkey == col_name(fqn)
         all_keys = []
-        for col_group in self.graph.col_groups:
+        for col_group in self.schema.col_groups:
             all_keys.extend(list(col_group.columns))
         is_fkey = col_key in all_keys and not is_pkey
         return is_pkey, is_fkey

@@ -37,7 +37,7 @@ from predictive_query.schema.utils import QueryType, maybe_bold
 @dataclass
 class ParsedPredictiveQuery:
     r"""A base class for a predictive query produced by a parser and
-    without any validation or metadata that depends on the graph, such as
+    without any validation or metadata that depends on the schema, such as
     types and join keys.
 
     Args:

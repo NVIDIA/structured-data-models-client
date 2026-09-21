@@ -46,11 +46,11 @@ from predictive_query.schema.common import (
     ValidationResponse,
     ValidationWarning,
 )
-from predictive_query.schema.graph import (
+from predictive_query.schema.definition import (
     ColumnKey,
     ColumnKeyGroup,
-    Edge,
-    GraphDefinition,
+    Relationship,
+    SchemaDefinition,
 )
 from predictive_query.schema.table import Column, TableDefinition, TimestampUnit
 from predictive_query.schema.task import TaskType
@@ -96,8 +96,8 @@ __all__ = [
     'ColumnKeyGroup',
     'Delegate',
     'Dtype',
-    'Edge',
-    'GraphDefinition',
+    'Relationship',
+    'SchemaDefinition',
     'Mode',
     'PQLParser',
     'ParsedPredictiveQuery',

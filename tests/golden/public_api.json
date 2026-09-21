@@ -9,9 +9,7 @@
       "ColumnKeyGroup",
       "Delegate",
       "Dtype",
-      "Edge",
       "FINE_TUNING",
-      "GraphDefinition",
       "LANGUAGE_VERSION",
       "Mode",
       "PQLParser",
@@ -20,6 +18,8 @@
       "ProblemType",
       "Profile",
       "RELATIONAL",
+      "Relationship",
+      "SchemaDefinition",
       "Span",
       "Stype",
       "TABULAR",
@@ -114,7 +114,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {},
-        "signature": "(columns: tuple[predictive_query.schema.graph.ColumnKey, ...]) -> None"
+        "signature": "(columns: tuple[predictive_query.schema.definition.ColumnKey, ...]) -> None"
       },
       "Delegate": {
         "bases": [
@@ -186,22 +186,8 @@
         },
         "signature": "(*values)"
       },
-      "Edge": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [],
-        "public_methods": {},
-        "signature": "(src_table: str, fkey: str, dst_table: str) -> None"
-      },
       "FINE_TUNING": {
         "kind": "Profile"
-      },
-      "GraphDefinition": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [],
-        "public_methods": {},
-        "signature": "(tables: dict[str, predictive_query.schema.table.TableDefinition], col_groups: list[predictive_query.schema.graph.ColumnKeyGroup]) -> None"
       },
       "LANGUAGE_VERSION": {
         "kind": "str"
@@ -277,7 +263,7 @@
           "validate_target_filters": "(self, parsed_query: predictive_query.query.ParsedPredictiveQuery) -> predictive_query.schema.common.ValidationResponse",
           "validate_wildcard": "(self, parsed_query: predictive_query.query.ParsedPredictiveQuery) -> predictive_query.schema.common.ValidationResponse"
         },
-        "signature": "(graph: predictive_query.schema.graph.GraphDefinition, allow_array_targets: bool = False, allow_timestamp_arrays: bool = True, mode: predictive_query.profiles.Mode = TRAINING, can: predictive_query.profiles.Capabilities | None = None) -> None"
+        "signature": "(schema: predictive_query.schema.definition.SchemaDefinition, allow_array_targets: bool = False, allow_timestamp_arrays: bool = True, mode: predictive_query.profiles.Mode = TRAINING, can: predictive_query.profiles.Capabilities | None = None) -> None"
       },
       "ProblemType": {
         "bases": [
@@ -310,6 +296,20 @@
       },
       "RELATIONAL": {
         "kind": "Profile"
+      },
+      "Relationship": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(src_table: str, fkey: str, dst_table: str) -> None"
+      },
+      "SchemaDefinition": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(tables: dict[str, predictive_query.schema.table.TableDefinition], col_groups: list[predictive_query.schema.definition.ColumnKeyGroup]) -> None"
       },
       "Span": {
         "bases": [],
@@ -539,7 +539,7 @@
       },
       "validate": {
         "kind": "callable",
-        "signature": "(query: str, graph: predictive_query.schema.graph.GraphDefinition, profile: predictive_query.profiles.Profile) -> tuple[predictive_query.query.ValidatedPredictiveQuery | None, predictive_query.schema.common.ValidationResponse]"
+        "signature": "(query: str, schema: predictive_query.schema.definition.SchemaDefinition, profile: predictive_query.profiles.Profile) -> tuple[predictive_query.query.ValidatedPredictiveQuery | None, predictive_query.schema.common.ValidationResponse]"
       }
     }
   },

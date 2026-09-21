@@ -5,7 +5,7 @@
 from predictive_query.ast import Aggregation
 from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema.common import ValidationResponse
-from predictive_query.schema.graph import ColumnKey, GraphDefinition
+from predictive_query.schema.definition import ColumnKey, SchemaDefinition
 
 
 def col_name(full_name: str) -> str:
@@ -71,26 +71,26 @@ def merge(r1: ValidationResponse, r2: ValidationResponse) -> ValidationResponse:
 
 def get_rhs_lp_table(
     query: ValidatedPredictiveQuery,
-    graph: GraphDefinition,
+    schema: SchemaDefinition,
 ) -> str:
     r"""Given a link prediction query, returns a fully qualified
     name `connector.table` for the RHS table.
 
     Args:
         query: The query.
-        graph: Graph on which the query is defiend.
+        schema: Schema on which the query is defiend.
     """
     aggr = query.get_final_target_aggregation()
     assert isinstance(aggr, Aggregation)
     aggregated_col_name = aggr.get_target_column_name()
     edge_table = table_name(aggregated_col_name)
     edge_col = col_name(aggregated_col_name)
-    for col_group in graph.col_groups:
+    for col_group in schema.col_groups:
         if ColumnKey(edge_table, edge_col) not in col_group.columns:
             continue
         # identify the primary key
         for col in col_group.columns:
-            if graph.tables[col.table_name].pkey == col.col_name:
+            if schema.tables[col.table_name].pkey == col.col_name:
                 return col.table_name
         raise AssertionError(f'col group {col_group} has no primary key')
     raise AssertionError(

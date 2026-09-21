@@ -488,7 +488,7 @@ def test_parse_string_entity_ids(
         ),
         pytest.param(
             'PREDICT SUM(ORDERS.AMOUNT, 0, 7, days) FOR USERSS.USER_ID = 0',
-            "Table 'USERSS' does not exist in the graph",
+            "Table 'USERSS' does not exist in the schema",
             id='unknown-table',
         ),
         pytest.param(

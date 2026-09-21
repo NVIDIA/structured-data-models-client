@@ -26,7 +26,7 @@ from predictive_query.schema.common import (
     ValidationResponse,
     ValidationWarning,
 )
-from predictive_query.schema.graph import GraphDefinition
+from predictive_query.schema.definition import SchemaDefinition
 from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import (
     AggregationType,
@@ -113,7 +113,7 @@ class BPFilterTransformer(FilterSplitter):
         self,
         query: ValidatedPredictiveQuery,
         task_type: TaskType,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
     ) -> ValidatedPredictiveQuery:
         r"""Given a `ValidatedPredictiveQuery` object, returns a new
         `ValidatedPredictiveQuery`, with fields correctly replaced for batch
@@ -122,7 +122,7 @@ class BPFilterTransformer(FilterSplitter):
         Args:
             query: Query to be transformed.
             task_type: Task type.
-            graph: Graph on which the query is performed.
+            schema: Schema on which the query is performed.
 
         Returns:
             A new query object, if transformations
@@ -136,7 +136,7 @@ class BPFilterTransformer(FilterSplitter):
         if not task_type.is_link_pred:
             return query
         lhs_table = table_name(query.entity_column)
-        rhs_table = get_rhs_lp_table(query, graph)
+        rhs_table = get_rhs_lp_table(query, schema)
 
         split_target_filter = self.split_target_filter(
             query.target_ast, lhs_table, rhs_table
@@ -304,7 +304,7 @@ class BPFilterTransformer(FilterSplitter):
         self,
         query: ValidatedPredictiveQuery,
         task_type: TaskType,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         original_query_text: str,
     ) -> EditableQuery:
         r"""Given a `ValidatedPredictiveQuery`, this method returns the
@@ -314,7 +314,7 @@ class BPFilterTransformer(FilterSplitter):
         Args:
             query: Query that the user may modify.
             task_type: Task type.
-            graph: Graph on which the query is performed.
+            schema: Schema on which the query is performed.
             original_query_text: Original, unprocessed query. Used to
                 correctly insert whitespace into the updated query.
 
@@ -338,7 +338,7 @@ class BPFilterTransformer(FilterSplitter):
         editable_fields = []
         response = ValidationResponse()
         if task_type.is_link_pred:
-            rhs_table = get_rhs_lp_table(query, graph)
+            rhs_table = get_rhs_lp_table(query, schema)
             split_target_filter = self.split_target_filter(
                 query.target_ast, lhs_table, rhs_table
             )
@@ -406,7 +406,7 @@ class BPFilterTransformer(FilterSplitter):
     def insert_filter_overrides(
         self,
         user_edits: EditableQueryResponse,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
         task_type: TaskType,
     ) -> tuple[EditableQuery, ValidatedPredictiveQuery | None]:
         r"""This query takes user edits of the filter and produces a new
@@ -421,7 +421,7 @@ class BPFilterTransformer(FilterSplitter):
 
         Args:
             user_edits: EditableQuery and user edits.
-            graph: The graph to use for validation.
+            schema: The schema to use for validation.
             task_type: Task type of the query.
 
         Returns:
@@ -524,7 +524,7 @@ class BPFilterTransformer(FilterSplitter):
         parsed_applicable_query = parser.to_parsed_predictive_query(
             applicable_text
         )
-        validator = PredictiveQueryValidator(graph)
+        validator = PredictiveQueryValidator(schema)
         _, response = validator.validate_predictive_query(parsed_query)
         editable_query.validation_response = merge(
             editable_query.validation_response, response
@@ -690,7 +690,7 @@ class BPFilterTransformer(FilterSplitter):
         training_query: ValidatedPredictiveQuery,
         prediction_query: ValidatedPredictiveQuery,
         task_type: TaskType,
-        graph: GraphDefinition,
+        schema: SchemaDefinition,
     ) -> ValidatedPredictiveQuery:
         r"""Combines the training query and the prediction query that
         maybe contains overrides into a single backtesting query.
@@ -711,7 +711,7 @@ class BPFilterTransformer(FilterSplitter):
             prediction_query: Query used during
                 batch prediction.
             task_type: Task type.
-            graph: Graph on which the query is performed.
+            schema: Schema on which the query is performed.
 
         Returns:
             The combined query. If no filter overrides were applied, this is
@@ -737,7 +737,7 @@ class BPFilterTransformer(FilterSplitter):
             )
         entity_table = table_name(training_query.entity_column)
         # given in "connector.table_name" format
-        rhs_table = get_rhs_lp_table(training_query, graph)
+        rhs_table = get_rhs_lp_table(training_query, schema)
         split_training_filter = self.split_target_filter(
             training_query.target_ast, entity_table, rhs_table
         )

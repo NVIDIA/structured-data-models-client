@@ -191,7 +191,7 @@ class PQLParser:
 
     def validate(self, query: str) -> ValidationResponse:
         r"""Validates syntactic correctness of the query. Does not check for
-        semantic correctness, types, or consistency with the graph.
+        semantic correctness, types, or consistency with the schema.
 
         Args:
             query: The input query.

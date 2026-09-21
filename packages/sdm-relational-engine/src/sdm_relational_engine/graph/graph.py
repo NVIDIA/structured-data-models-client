@@ -6,13 +6,13 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TypeAlias
 
-import predictive_query.schema.graph as api
+import predictive_query.schema.definition as api
 
 from sdm_relational_engine.mixin import CastMixin
 
 
 @dataclass(frozen=True, eq=True)
-class Edge(CastMixin, api.Edge):
+class Edge(CastMixin, api.Relationship):
     r"""An edge represents a relationship between two RFM tables."""
 
     src_table: str

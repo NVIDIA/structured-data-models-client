@@ -59,7 +59,7 @@ def canonical_fqn(full_name: str) -> str:
     r"""Renders *full_name* with every part unquoted.
 
     Called once, as a query is parsed, so that the AST and everything reading
-    it -- dataframe lookups, graph lookups, the sampler -- see the name the
+    it -- dataframe lookups, schema lookups, the sampler -- see the name the
     data uses rather than the way the query spelled it.
 
     A quoted part holding a dot is rejected. The parts are rejoined with dots,

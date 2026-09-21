@@ -12,7 +12,7 @@ TableName = str
 
 @dataclass(frozen=True)
 class ColumnKey:
-    r"""Reference to a column within a PQuery/Graph definition."""
+    r"""Reference to a column within a PQuery/Schema definition."""
 
     table_name: TableName
     col_name: str
@@ -20,13 +20,13 @@ class ColumnKey:
 
 @dataclass(frozen=True)
 class ColumnKeyGroup:
-    r"""Group of column keys to be linked together in a graph."""
+    r"""Group of column keys to be linked together in a schema."""
 
     columns: tuple[ColumnKey, ...]  # Always sorted and deduped, immutable
 
 
 @dataclass(frozen=True, eq=True)
-class Edge:
+class Relationship:
     r"""A representation of an edge between two tables."""
 
     src_table: str
@@ -35,8 +35,8 @@ class Edge:
 
 
 @dataclass
-class GraphDefinition:
-    r"""A graph: its tables, and the column groups that link them."""
+class SchemaDefinition:
+    r"""A schema: its tables, and the column groups that link them."""
 
     tables: dict[TableName, TableDefinition]
     col_groups: list[ColumnKeyGroup]

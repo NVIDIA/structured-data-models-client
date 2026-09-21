@@ -56,5 +56,5 @@ def test_the_ambiguous_link_error_names_the_call_that_fixes_it(
     assert 'not unique' in message
     # The keys are listed qualified as a diagnosis, which is useful, but the
     # call has to name the bare column or it will not run.
-    assert "graph.unlink('item', 'sold_to', 'customer')" in message
-    assert "graph.unlink('item', 'item." not in message
+    assert "schema.unlink('item', 'sold_to', 'customer')" in message
+    assert "schema.unlink('item', 'item." not in message

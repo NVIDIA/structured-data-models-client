@@ -16,7 +16,7 @@ PUBLIC = (
     'PQLParser',
     'PredictiveQueryValidator',
     'ValidatedPredictiveQuery',
-    'GraphDefinition',
+    'SchemaDefinition',
     'TableDefinition',
     'Dtype',
     'Stype',

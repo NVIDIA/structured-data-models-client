@@ -394,10 +394,10 @@ class PredictiveQuery:
         r"""Parse and validate the query."""
         from predictive_query import validate
 
-        from sdm_client.schema import to_graph_definition
+        from sdm_client.schema import to_schema_definition
 
         resolved, response = validate(
-            self.text, to_graph_definition(self.schema), profile
+            self.text, to_schema_definition(self.schema), profile
         )
         if resolved is None or not response.ok:
             reasons = (
@@ -415,10 +415,10 @@ class PredictiveQuery:
     def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
         r"""Say how to resolve an ambiguous link, in the words of this object.
 
-        The language resolves a query against a graph and advises in the
-        vocabulary of one: `graph.unlink(...)`. A caller holding a `Schema`
-        has no such call, so the one instruction that would fix their query
-        names something they cannot do.
+        The language advises in its own vocabulary: `schema.unlink(...)`,
+        which is a call on its `SchemaDefinition` and not on the `Schema` a
+        caller holds. So the one instruction that would fix their query names
+        something they cannot do.
 
         The reasons are read only to recognise the failure. What the competing
         columns are is taken from the schema, which knows, rather than parsed

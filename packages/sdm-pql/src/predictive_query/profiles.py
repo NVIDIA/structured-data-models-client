@@ -77,7 +77,7 @@ class Capabilities:
             refuses a static aggregation before any capability is consulted,
             so a model with ``static=True`` still takes only a static
             **column**. Read as a promise about static aggregations it is
-            wrong, and on a graph with no time column that is most of them.
+            wrong, and on a schema with no time column that is most of them.
         entity_filters: *Shape.* May the entity carry a ``WHERE`` filter?
         counterfactuals: *Shape.* May a query carry an ``ASSUMING`` clause?
         derived_targets: *Shape.* May the target be anything other than a
