@@ -346,6 +346,15 @@ class TestConfigurationTellsTheTruth:
         modules that no longer exist, while the errors they covered moved to
         new ones. Nothing complains about an override that matches nothing, so
         the list reads as debt being held when it is really debt being lost.
+
+        Absent is not the same as uninstalled, and `find_spec` does not say so
+        evenly: for a top-level package that is not installed it returns
+        `None`, while for a submodule of one it raises `ModuleNotFoundError`.
+        Reading only the exception passed here -- where the relational engine
+        is installed -- and failed in CI's `test` job, which deliberately does
+        not install it, reporting an optional extra's absence as a stale entry.
+        So the distribution is checked first, and only a module whose package
+        is present can be called missing.
         """
         import importlib.util
 
@@ -361,16 +370,27 @@ class TestConfigurationTellsTheTruth:
         ]
         assert named, 'the type-checking baseline vanished; update this test'
 
-        missing = []
-        for module in named:
+        def installed(name: str) -> bool:
             try:
-                if importlib.util.find_spec(module) is None:
-                    missing.append(module)
+                return importlib.util.find_spec(name) is not None
             except (
                 ImportError,
                 ValueError,
             ):  # pragma: no cover - not installed
-                continue
+                return False
+
+        checked, missing = 0, []
+        for module in named:
+            if not installed(module.split('.')[0]):
+                continue  # the whole distribution is absent from this job
+            checked += 1
+            if not installed(module):
+                missing.append(module)
+
+        assert checked, (
+            'no distribution the baseline names is installed here, so this '
+            'checked nothing'
+        )
         assert not missing, (
             f'the mypy baseline names modules that do not exist: {missing}. '
             f'Delete the entry, or point it at whatever the code became.'
