@@ -33,9 +33,13 @@ import contextlib
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
+
 from sdm_client.errors import StructuredDataError
+from sdm_client.wire.dtypes import _decimal_dtype, _is_missing
 
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
@@ -89,6 +93,13 @@ def parts_of(
             tuple(_per_candidate(query, candidates)),
             _candidates_to_rank(query, options),
         )
+    if candidates is not None:
+        raise StructuredDataError(
+            f'candidates are the rows a ranking is over, and {text!r} does '
+            f'not rank anything. Ask it without candidates, or rank with '
+            f'"RANK TOP k", which is the question they are for',
+            code='INVALID_REQUEST',
+        )
     if kind.endswith('FORECAST'):
         if 'top_k' in options:
             raise StructuredDataError(
@@ -97,13 +108,6 @@ def parts_of(
                 code='INVALID_REQUEST',
             )
         return Decomposition(FORECAST, tuple(_per_step(query)))
-    if candidates is not None:
-        raise StructuredDataError(
-            f'candidates are the rows a ranking is over, and {text!r} does '
-            f'not rank anything; it is a '
-            f'{kind.rsplit(".", 1)[-1].lower()} query',
-            code='INVALID_REQUEST',
-        )
     return None
 
 
@@ -218,7 +222,7 @@ def _as_literal(value: Any) -> str:
     if hasattr(value, 'item'):
         with contextlib.suppress(AttributeError, ValueError):
             value = value.item()
-    if value is None:
+    if _is_missing(value):
         raise StructuredDataError(
             'a candidate names a row, and a missing value names none',
             code='INVALID_REQUEST',
@@ -228,6 +232,8 @@ def _as_literal(value: Any) -> str:
             'a candidate names a row, and True and False do not',
             code='INVALID_REQUEST',
         )
+    if isinstance(value, Decimal):
+        value = _decimal_as_typed(value)
     if isinstance(value, int):
         return str(value)
     if isinstance(value, float):
@@ -246,3 +252,25 @@ def _as_literal(value: Any) -> str:
             code='INVALID_REQUEST',
         )
     return f'"{text}"'
+
+
+def _decimal_as_typed(value: Decimal) -> Any:
+    r"""``value`` as the Python type its column is typed as on the wire.
+
+    A warehouse ``DECIMAL`` reaches a caller as a :class:`~decimal.Decimal`,
+    and written as a string it asks after the row named ``"1"`` on a column of
+    integers -- a question the validator refuses and nobody wrote. Which type
+    that is does not follow from the Python type: :func:`_decimal_dtype` is
+    what decides whether such a column travels as an integer, a float, or its
+    digits, and a key has to be written as whatever it decided.
+
+    The digits are formatted rather than ``str``-ed, since ``str`` turns to
+    scientific notation past int64's width, which is the width that makes such
+    a column text in the first place.
+    """
+    dtype = _decimal_dtype(pd.Series([value], dtype=object))
+    if dtype == 'int64':
+        return int(value)
+    if dtype == 'float64':
+        return float(value)
+    return format(value, 'f')

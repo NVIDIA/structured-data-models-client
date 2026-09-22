@@ -13,6 +13,8 @@ pins one thing the rewrite could quietly drop.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -89,6 +91,51 @@ def test_a_candidate_that_would_not_read_as_a_key_is_refused(bad):
 
     with pytest.raises(StructuredDataError):
         _as_literal(bad)
+
+
+def test_a_decimal_candidate_is_written_as_the_number_its_column_is():
+    """A warehouse id arrives as a `Decimal`, and quoted it asks after a row
+    named `"1"` on a column of integers, which the validator refuses."""
+    from sdm_client.decompose import _as_literal
+
+    assert _as_literal(Decimal(10)) == '10'
+    assert _as_literal(Decimal('10.00')) == '10'
+
+
+def test_a_decimal_too_wide_for_int64_is_still_written_as_its_digits():
+    """The schema layer types such a column as text, so the key is text too,
+    and the digits have to survive `str`'s switch to scientific notation."""
+    from sdm_client.decompose import _as_literal
+
+    assert _as_literal(Decimal(10) ** 30) == '"1000000000000000000000000000000"'
+
+
+def test_a_ranking_over_decimal_candidates_materializes_like_an_int_one():
+    pytest.importorskip('sdm_relational_engine')
+    text = (
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid'
+    )
+    integers = PredictiveQuery(text, shop()).materialize(
+        indices=[1, 2, 3], candidates=[10, 11, 12]
+    )
+    decimals = PredictiveQuery(text, shop()).materialize(
+        indices=[1, 2, 3], candidates=[Decimal(10), Decimal(11), Decimal(12)]
+    )
+    assert [part for part, _ in decimals.decomposition.parts] == [
+        part for part, _ in integers.decomposition.parts
+    ]
+
+
+@pytest.mark.parametrize('missing', [None, float('nan'), pd.NA, pd.NaT])
+def test_a_missing_candidate_is_refused_however_it_is_spelled(missing):
+    """A nullable or Arrow-backed column yields `pd.NA` rather than `None`,
+    and one written into the query spends a call asking after a row named
+    `<NA>`."""
+    from sdm_client.decompose import _as_literal
+
+    with pytest.raises(StructuredDataError, match='missing value'):
+        _as_literal(missing)
 
 
 def test_a_quote_in_a_candidate_never_reaches_the_query():
@@ -297,6 +344,29 @@ def test_candidates_are_refused_on_a_question_that_ranks_nothing():
             'PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.uid',
             shop(),
         ).materialize(indices=[1], candidates=[10, 11])
+
+
+def test_candidates_are_refused_on_a_forecast_rather_than_discarded():
+    """A forecast ranks nothing, so candidates describe nothing about it. They
+    were accepted and dropped, while `top_k` -- the sibling ranking-only
+    option -- was refused."""
+    with pytest.raises(StructuredDataError, match='does not rank anything'):
+        PredictiveQuery(
+            'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '
+            'FOR EACH users.uid',
+            shop(),
+        ).materialize(indices=[1, 2, 3], candidates=['not', 'a', 'candidate'])
+
+
+def test_the_candidates_refusal_says_what_to_ask_instead_of_a_kind():
+    """It named the query's kind, which is unset for every query that reaches
+    the refusal, so it always ended "it is a none query"."""
+    with pytest.raises(StructuredDataError, match='RANK TOP k') as refusal:
+        PredictiveQuery(
+            'PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.uid',
+            shop(),
+        ).materialize(indices=[1], candidates=[10, 11])
+    assert 'none query' not in str(refusal.value)
 
 
 def test_a_repeated_candidate_is_asked_about_once():
