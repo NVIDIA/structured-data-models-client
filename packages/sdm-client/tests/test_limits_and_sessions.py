@@ -360,6 +360,7 @@ def test_a_session_refuses_a_request_that_asks_something_else():
     """Only the rows travel on a scoring call, so the pinned question is the one
     that would be answered. Two unrelated temporal queries compile to identical
     task and schema payloads, so nothing downstream can tell them apart."""
+    pytest.importorskip('sdm_relational_engine')
     import pandas as pd
 
     from sdm_client import PredictiveQuery, Schema
@@ -442,6 +443,7 @@ def test_a_session_scoring_call_carries_the_inference_block():
     """The contract's SessionPredictionRequest lists `inference`; dropping it
     made explanations unreachable through a session, because the endpoint only
     explains when inference.run_mode is 'fast'."""
+    pytest.importorskip('sdm_relational_engine')
     from sdm_client.adapters.relational import _SESSION_SCORING
 
     assert 'inference' in _SESSION_SCORING

@@ -27,6 +27,9 @@ The first release is being assembled. Nothing here has shipped yet.
   accepts and its model never reads. The relational model has no text
   processor, so a `text` column is carried, dropped at the model, and
   contributes nothing; naming the types makes that sayable rather than silent.
+- `FittedModel` carries the question its context was pinned for, so a session
+  can refuse a request that asks something else rather than answering the
+  pinned question in its place.
 
 ### Fixed
 

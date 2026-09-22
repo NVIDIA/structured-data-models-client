@@ -170,6 +170,8 @@ def test_a_conversion_writes_itself_as_the_call_it_is(conversion, written):
 
 
 def time_column(values):
+    pytest.importorskip('sdm_relational_engine')
+
     from sdm_client import PredictiveQuery, Schema
     from sdm_client.schema import Relationship
 
