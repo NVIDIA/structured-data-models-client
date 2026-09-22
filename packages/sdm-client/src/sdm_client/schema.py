@@ -696,7 +696,11 @@ class Schema:
             )
         if relationships is None:
             inferred = _infer_relationships(built)
+            unjoinable = [
+                link for link in inferred if not _is_joinable(built, link)
+            ]
             inferred = [link for link in inferred if _is_joinable(built, link)]
+            _warn_of_a_name_match_that_cannot_join(built, unjoinable)
         else:
             inferred = list(relationships)
             for link in inferred:
@@ -1536,6 +1540,30 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
                 )
             )
     return links
+
+
+def _warn_of_a_name_match_that_cannot_join(
+    tables: Mapping[str, Table], dropped: Sequence[Relationship]
+) -> None:
+    """Say when a column named for a key holds values that key cannot match.
+
+    Dropping it is right: joining `int64` to `string` matches nothing, and an
+    edge that matches nothing is worse than no edge. But it was dropped in
+    silence, and the table then either goes unsent or the query is refused for
+    a foreign key that looks as though it should exist.
+    """
+    for link in dropped:
+        source = tables[link.source_table].columns[link.source_column]
+        target = tables[link.target_table].columns[link.target_column]
+        warnings.warn(
+            f'{link.source_table}.{link.source_column} names the key of '
+            f'{link.target_table!r} and holds {source.dtype!r} where that key '
+            f'holds {target.dtype!r}, which cannot match, so no relationship '
+            f'was made from it. Store the two as one type if they are the same '
+            f'identifier.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
 
 
 def _require_joinable(tables: Mapping[str, Table], link: Relationship) -> None:
