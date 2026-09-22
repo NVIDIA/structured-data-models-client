@@ -19,7 +19,10 @@ import pytest
 
 from sdm_client import PredictiveQuery, Relationship, Schema
 from sdm_client.errors import StructuredDataError
-from sdm_client.materializers.relational import RelationalMaterializer
+from sdm_client.materializers.relational import (
+    RelationalMaterializer,
+    _warn_of_columns_the_model_does_not_read,
+)
 
 pytest.importorskip('sdm_relational_engine')
 
@@ -481,3 +484,47 @@ def test_every_unread_column_is_named():
 
 def test_a_column_the_model_reads_is_not_mentioned():
     assert unread_warnings(prose_schema(stype='categorical')) == []
+
+
+def unread_named(built: Schema, left_out: dict) -> list[str]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _warn_of_columns_the_model_does_not_read(built, left_out)
+    return [str(item.message) for item in caught]
+
+
+def test_a_column_already_left_out_is_not_reported_as_lost():
+    """It is not sent, so there is nothing to have lost. The target is left out
+    the same way, which is why matching it by name was never needed."""
+    built = prose_schema()
+
+    assert unread_named(built, {'papers': ['prose0']}) == []
+
+
+def test_a_column_left_out_of_another_table_does_not_silence_this_one():
+    built = prose_schema()
+
+    said = unread_named(built, {'cited': ['prose0']})
+
+    assert len(said) == 1
+    assert 'papers.prose0' in said[0]
+
+
+def test_an_excluded_column_is_not_named_through_materialize():
+    built = prose_schema()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT papers.target FOR EACH papers.paper_id', built
+        ).materialize(
+            indices=list(range(20)),
+            anchor_time=pd.Timestamp('2021-06-01'),
+            exclude_cols_dict={'papers': ['prose0']},
+        )
+
+    assert [
+        str(item.message)
+        for item in caught
+        if 'does not read' in str(item.message)
+    ] == []

@@ -86,7 +86,7 @@ class RelationalMaterializer:
 
         _warn_the_filter_chose_only_the_examples(query, indices)
         _warn_of_columns_the_model_does_not_read(
-            self.schema, query.target_column
+            self.schema, _columns_to_leave_out(query, options)
         )
         payloads = self._gather(query, indices, num_context_samples, options)
         windowed = (
@@ -915,7 +915,7 @@ def _remove_instances(table: Any, instances: set[Any]) -> None:
 
 
 def _warn_of_columns_the_model_does_not_read(
-    schema: Schema, target_column: str | None
+    schema: Schema, left_out: Mapping[str, Sequence[str]]
 ) -> None:
     r"""Say which feature columns reach the model and are dropped there.
 
@@ -925,6 +925,10 @@ def _warn_of_columns_the_model_does_not_read(
     to answer. That leaves the caller believing a column contributed when it
     did not, which is worth one line. Measured on one determining token, the
     same column scores 1.00 typed `categorical` and chance typed `text`.
+
+    Read against the columns the request actually carries. A column the query
+    or the caller already left out is not sent, so naming it would report a
+    loss that did not happen, the target among them.
     """
     unread = KUMO_RELATIONAL.runtime.unread_feature_stypes
     if not unread:
@@ -933,7 +937,8 @@ def _warn_of_columns_the_model_does_not_read(
         f'{table_name}.{column_name}'
         for table_name, table in schema.tables.items()
         for column_name, column in table.columns.items()
-        if column.stype in unread and column_name != target_column
+        if column.stype in unread
+        and column_name not in left_out.get(table_name, ())
     )
     if not ignored:
         return
