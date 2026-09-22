@@ -783,7 +783,7 @@ def test_high_cardinality_columns_ignores_non_string_and_within_limit() -> None:
     assert high_cardinality_columns(payload, limit=10) == []
 
 
-def test_a_server_failure_does_not_name_a_cause_the_client_cannot_know() -> None:
+def test_a_server_failure_names_no_cause_the_client_cannot_know() -> None:
     """The GPU was at one percent while this message blamed GPU memory
     pressure, so it is the server's detail that is quoted and nothing is
     diagnosed on its behalf.
