@@ -50,7 +50,7 @@ _DEFAULT_OUTPUTS = {
 }
 
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
-_SESSION_SCORING = ('predict', 'output', 'metadata')
+_SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
 
 
 def _request_id() -> str:

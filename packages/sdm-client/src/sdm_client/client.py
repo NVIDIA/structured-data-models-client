@@ -92,6 +92,7 @@ class FittedModel:
         pinned_keys: frozenset[Any] = frozenset(),
         pinned_over_a_window: bool = False,
         held_back: int = 0,
+        question: str | None = None,
     ) -> None:
         self._client = client
         self._adapter = adapter
@@ -104,6 +105,7 @@ class FittedModel:
         self._pinned_over_a_window = pinned_over_a_window
         self._held_back = held_back
         self._pinned = pinned or {}
+        self._question = question
         self._closed = False
 
     @property
@@ -132,6 +134,27 @@ class FittedModel:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
+            )
+        parts = getattr(request, 'parts', None)
+        if parts is not None:
+            raise StructuredDataError(
+                f'this request is asked as {len(parts)} questions and a session '
+                f'pins one context, so scoring it here would answer the pinned '
+                f'question that many times. Ask it with predict()',
+                code='UNSUPPORTED_REQUEST',
+            )
+        asked = getattr(request, 'query', None)
+        if (
+            self._question is not None
+            and asked is not None
+            and asked != self._question
+        ):
+            raise StructuredDataError(
+                f'this session pinned {self._question!r} and was handed '
+                f'{asked!r}. Only the rows travel on a scoring call, so '
+                f'the pinned question is the one that would be answered. Fit '
+                f'again to ask something else',
+                code='INVALID_REQUEST',
             )
         if request.nothing_to_score:
             return _empty_answer(self.model, self._outputs)
@@ -444,6 +467,7 @@ class SDMClient:
             ),
             held_back=held,
             pinned_over_a_window=request.target_moves_with_time,
+            question=getattr(request, 'query', None),
         )
 
     def _prepare(
