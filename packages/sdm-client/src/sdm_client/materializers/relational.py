@@ -577,7 +577,29 @@ def _as_typed(table: Table) -> pd.DataFrame:
             cast[name] = _to_time(frame[name], where)
         elif _holds_decimal(frame[name]):
             cast[name] = _to_declared(frame[name], column.dtype, where)
+        elif _holds_timestamps_loosely(frame[name], column.dtype):
+            cast[name] = pd.to_datetime(frame[name], utc=True)
     return frame.assign(**cast) if cast else frame
+
+
+def _holds_timestamps_loosely(values: pd.Series, declared: str | None) -> bool:
+    """Whether the schema read timestamps here that pandas is still holding loose.
+
+    An `object` column of `Timestamp` is typed `timestamp[us]` by the schema,
+    correctly, and handed to the engine unchanged it re-infers `string` and
+    then refuses mixed offsets as an internal error. Only mixed offsets fail,
+    which is what `from_records` and a warehouse read of a column spanning a
+    daylight-saving change both produce.
+    """
+    if declared is None or not declared.startswith('timestamp'):
+        return False
+    if not pd.api.types.is_object_dtype(values.dtype):
+        return False
+    return pd.api.types.infer_dtype(values, skipna=True) in {
+        'datetime',
+        'datetime64',
+        'date',
+    }
 
 
 def _holds_text(values: pd.Series) -> bool:

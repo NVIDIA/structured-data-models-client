@@ -784,6 +784,10 @@ def _by_step(
     arrived as several answers. An entity keeps its own row across the steps:
     the pair of row and step is what names a point in the series, which is how
     the contract reads it.
+
+    Each step is explained on its own, so the explanations are kept under the
+    step they belong to. Dropping them left the result saying it carried an
+    explanation while holding none.
     """
     import dataclasses
 
@@ -792,11 +796,17 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
+    by_step = {
+        step: answer.explanation
+        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
+        if answer.explanation is not None
+    }
     return PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
+        explanation={'by_forecast_step': by_step} if by_step else None,
     )
 
 

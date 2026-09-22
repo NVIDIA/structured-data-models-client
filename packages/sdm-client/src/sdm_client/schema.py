@@ -577,7 +577,7 @@ class Schema:
         relationships: Sequence[Relationship] = (),
     ) -> None:
         self._tables = dict(tables)
-        self.relationships = list(relationships)
+        self.relationships = _each_link_once(relationships)
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Hold an assigned relationship to the same standard as a passed one.
@@ -1308,7 +1308,7 @@ def _warn_one_key_name_keys_several_tables(
             f'named {key!r} identifies a row in each of them and names a '
             f'parent in none. No relationship is inferred through an '
             f'ambiguous name, so nothing can point at any of those tables and '
-            f'each of them reaches the model unjoined. Say what the graph is '
+            f'each of them is left out of the request. Say what the graph is '
             f'-- relationships=[Relationship(child, column, {shared[0]!r}, '
             f'{key!r}), ...] -- or give each table a key of its own name, so '
             f'that the column naming it can be matched to it.',
@@ -1353,6 +1353,60 @@ def _unlinkable_table_reads(
     )
 
 
+def _each_link_once(
+    links: Sequence[Relationship],
+) -> list[Relationship]:
+    """The same relationship given twice is one edge, in the order it was given.
+
+    The materializer already sends one edge for it, so keeping two here made
+    the two halves of the client disagree about what the graph is, and the
+    ambiguity warning read a repeat as a second way across the pair.
+    """
+    seen: set[tuple[str, str, str, str]] = set()
+    once = []
+    for link in links:
+        named = (
+            link.source_table,
+            link.source_column,
+            link.target_table,
+            link.target_column,
+        )
+        if named in seen:
+            continue
+        seen.add(named)
+        once.append(link)
+    return once
+
+
+def _warn_of_a_pair_joined_both_ways(schema: Schema) -> None:
+    """Say when two tables name each other, which reads as an ambiguous pair.
+
+    A parent naming one representative child is an ordinary shape and the
+    schema takes it. The sampler walks an edge in both directions, so a
+    declared reverse edge is a second way across the same pair, and every
+    aggregation between them is then refused for a foreign key it says it
+    cannot find uniquely -- when there is exactly one, and the reverse edge is
+    what made it two.
+    """
+    pairs = {
+        (link.source_table, link.target_table) for link in schema.relationships
+    }
+    said = set()
+    for source, target in sorted(pairs):
+        if (target, source) not in pairs or (target, source) in said:
+            continue
+        said.add((source, target))
+        warnings.warn(
+            f'{source!r} and {target!r} name each other, and a relationship is '
+            f'crossed in both directions, so this is two ways over one pair and '
+            f'an aggregation between them is refused for not having a single '
+            f'one. Declare whichever of the two a question is about and leave '
+            f'the other out.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+
+
 def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
     r"""Say when one table reaches another by more than one column.
 
@@ -1370,8 +1424,11 @@ def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
     ways: dict[tuple[str, str], list[str]] = {}
     for link in schema.relationships:
         pair = (link.source_table, link.target_table)
-        ways.setdefault(pair, []).append(link.source_column)
+        columns = ways.setdefault(pair, [])
+        if link.source_column not in columns:
+            columns.append(link.source_column)
 
+    _warn_of_a_pair_joined_both_ways(schema)
     for (source, target), columns in sorted(ways.items()):
         if len(columns) < 2:
             continue

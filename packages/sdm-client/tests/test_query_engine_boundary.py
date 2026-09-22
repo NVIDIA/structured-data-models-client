@@ -802,3 +802,63 @@ def test_an_argument_type_error_carries_no_dropped_rows_postscript():
     message = str(error.value)
     assert 'anchor_time' in message
     assert 'rows dropped' not in message
+
+
+# --- what the graph is, said once and said right ----------------------------
+
+
+def two_tables():
+    parent = pd.DataFrame({'pid': range(50), 'rep': [i * 3 for i in range(50)]})
+    child = pd.DataFrame(
+        {
+            'cid': range(150),
+            'pid': [i // 3 for i in range(150)],
+            'when': pd.date_range('2020-01-01', periods=150, freq='D'),
+        }
+    )
+    return parent, child
+
+
+def built_with(links):
+    parent, child = two_tables()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        built = Schema.from_data(
+            {'parent': parent, 'child': child},
+            primary_keys={'parent': 'pid', 'child': 'cid'},
+            time_columns={'child': 'when'},
+            relationships=links,
+        )
+    return built, [str(item.message) for item in caught]
+
+
+def test_the_same_relationship_given_twice_is_one_edge():
+    """The materializer sends one, so holding two here made the two halves of
+    the client disagree about what the graph is."""
+    link = Relationship('child', 'pid', 'parent', 'pid')
+
+    built, said = built_with([link, link])
+
+    assert len(built.relationships) == 1
+    assert said == []
+
+
+def test_two_tables_that_name_each_other_are_said_to_be_two_ways():
+    """The sampler crosses an edge both ways, so a declared reverse edge is a
+    second way over one pair, and every aggregation between them is refused for
+    a foreign key it says it cannot find uniquely."""
+    built, said = built_with(
+        [
+            Relationship('child', 'pid', 'parent', 'pid'),
+            Relationship('parent', 'rep', 'child', 'cid'),
+        ]
+    )
+
+    assert len(built.relationships) == 2
+    assert any('name each other' in message for message in said)
+
+
+def test_one_relationship_is_not_reported_as_two_ways():
+    _, said = built_with([Relationship('child', 'pid', 'parent', 'pid')])
+
+    assert said == []
