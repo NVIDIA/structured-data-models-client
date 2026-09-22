@@ -305,6 +305,19 @@ def test_a_zero_row_predict_is_answered_without_asking():
     assert list(built.columns) == ['row_index', 'prediction']
 
 
+def test_selecting_no_rows_by_key_is_the_same_no_op_as_an_empty_frame():
+    """The two selectors describe the same empty batch, so a filter that
+    matched nothing had to be handled one way as a frame and another as keys."""
+    frame = rows()
+    by_key = query(frame).materialize(indices=[])
+    by_frame = query(frame).materialize(
+        predict=frame.head(0).drop(columns=['amount'])
+    )
+
+    assert by_key.nothing_to_score is by_frame.nothing_to_score is True
+    assert by_key.predict_rows == by_frame.predict_rows == 0
+
+
 def test_the_empty_answer_carries_the_columns_that_were_asked_for():
     built = _empty_answer('kumo-tabular', ('prediction', 'scores')).to_pandas()
     assert set(built.columns) == {'row_index', 'prediction', 'scores'}

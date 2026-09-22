@@ -71,7 +71,7 @@ def test_unavailable_nim_is_retried(
     api = FailingAPI(503)
     message = _predict(_model(user_store_graph, api), ltv, num_retries=2)
     assert api.n_predict == 3
-    assert 'temporarily unavailable' in message
+    assert 'could not complete' in message
 
 
 def test_rate_limit_is_retried(
