@@ -63,6 +63,9 @@ class RuntimeContract:
         sessions: Whether the endpoint holds a pinned context.
         limits: Sizes the endpoint enforces, so the client can refuse locally
             rather than eat a 500.
+        unread_feature_stypes: Semantic types the endpoint accepts and the
+            model does not read. A column carrying one is answered around
+            rather than refused, so the caller is told it carried nothing.
     """
 
     tasks: frozenset[str]
@@ -74,6 +77,10 @@ class RuntimeContract:
     #: inference config at all. A driver built for a different backend may
     #: default to sending more than this, which the endpoint refuses.
     inference_options: frozenset[str] = frozenset()
+    #: Semantic types this deployment takes and the model never reads. The
+    #: request succeeds and the column contributes nothing, which is worth
+    #: saying out loud.
+    unread_feature_stypes: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

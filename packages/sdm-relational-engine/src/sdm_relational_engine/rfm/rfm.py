@@ -362,12 +362,15 @@ def _nim_failure_error(
 ) -> NimFailureError:
     r"""Build a clear, actionable error for a failed NIM prediction call.
 
-    A 5xx response or a dropped connection almost always means the NIM is
-    temporarily at capacity or recovering from GPU memory pressure (rather than
-    a client bug), so the caller is told to pace requests and retry instead of
-    receiving a raw traceback. Explanations are the most GPU-intensive request
-    (they hold the model's gradient graph on the device), so their message adds
-    a one-at-a-time hint.
+    A 5xx response or a dropped connection says the NIM did not complete the
+    request, and nothing more: the cause is the server's to report, so its own
+    detail is quoted rather than guessed at. Naming GPU memory pressure here
+    was a guess, and a measured counter-example had the GPU at one percent
+    while six identical retries failed and only a smaller neighbourhood sample
+    succeeded -- so both remedies are named, in the order that distinguishes
+    them. Explanations are the most GPU-intensive request (they hold the
+    model's gradient graph on the device), so their message adds a
+    one-at-a-time hint.
 
     A 4xx is by definition about the request the caller sent, so it is reported
     as such, quoting the NIM's per-field ``invalid_params`` diagnosis without
@@ -401,11 +404,19 @@ def _nim_failure_error(
             if explain
             else ''
         )
-        server = f' (server said: {detail})' if detail else ''
+        said = str(detail).rstrip('.') if detail else ''
+        server = f' The NIM said: {said}.' if said else ''
+        how = (
+            f' (HTTP {status})'
+            if status is not None
+            else ', and sent no response'
+        )
         return NimFailureError(
-            f'The KumoRelational NIM could not complete {subject}: it is temporarily '
-            f'unavailable, likely at capacity or recovering from GPU memory '
-            f'pressure. Wait a few moments and retry.{pacing}{server}',
+            f'The KumoRelational NIM could not complete {subject}{how}.{server} '
+            f'Retrying helps if the NIM was busy. If it fails the same way '
+            f'again the request is too large for it, and what changes that is '
+            f'a smaller one: fewer neighbours sampled (num_neighbors), fewer '
+            f'rows scored, or a smaller context.{pacing}',
             status_code=status,
             detail=detail,
             invalid_params=invalid_params,

@@ -22,7 +22,7 @@ from predictive_query.validator.utils import table_name
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.models import RELATIONAL_LIMITS
+from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 from sdm_client.request import Request
 from sdm_client.schema import Schema, Table, _as_key_tuple
 from sdm_client.wire.dtypes import arrow_decimal_type
@@ -85,6 +85,9 @@ class RelationalMaterializer:
             )
 
         _warn_the_filter_chose_only_the_examples(query, indices)
+        _warn_of_columns_the_model_does_not_read(
+            self.schema, _columns_to_leave_out(query, options)
+        )
         payloads = self._gather(query, indices, num_context_samples, options)
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
@@ -188,14 +191,17 @@ class RelationalMaterializer:
     def _build_graph(self) -> Graph:
         r"""Build exactly the graph described by the client schema.
 
-        A table without a primary key has that said rather than left unsaid.
-        The engine infers a key from a column *name* without checking that it
-        identifies a row, so a child's foreign key called `ID` holding
-        `[1, 1, 2, 2, 3]` becomes that table's key, and linking it is then
-        refused for being one. Passing `None` through is what lets a caller
-        undo that; leaving it out meant a correct schema over correct data
-        could not be materialized, and the refusal named a key the caller had
-        explicitly removed.
+        The engine is not asked to guess. Its inference reads column *names*
+        without checking what the column holds, so a child's foreign key called
+        `ID` holding `[1, 1, 2, 2, 3]` became that table's key and linking it
+        was then refused for being one, and a string column called `release`
+        became a time column whose values it could not parse. Both are guesses
+        about tables the schema already describes, and the second could fail
+        before the caller had any chance to undo it.
+
+        Every key, time column and semantic type is therefore written here from
+        the schema, which is the only thing that decides them. A table the
+        caller gave no key or no time column is given none.
         """
         from sdm_relational_engine.rfm import Graph
 
@@ -204,7 +210,9 @@ class RelationalMaterializer:
         frames = {
             name: _as_typed(table) for name, table in self.schema.tables.items()
         }
-        graph = Graph.from_data(frames, edges=[], verbose=False)
+        graph = Graph.from_data(
+            frames, edges=[], infer_metadata=False, verbose=False
+        )
 
         for name, table in self.schema.tables.items():
             engine_table = graph[name]
@@ -214,6 +222,8 @@ class RelationalMaterializer:
                 engine_table.primary_key = None
             if table.time_column is not None:
                 engine_table.time_column = table.time_column
+            else:
+                engine_table.time_column = None
             for column_name, column in table.columns.items():
                 if column_name in engine_table:
                     engine_table[column_name].stype = column.stype
@@ -902,6 +912,47 @@ def _remove_instances(table: Any, instances: set[Any]) -> None:
             isinstance(row, list) and len(row) > at and row[at] in instances
         )
     ]
+
+
+def _warn_of_columns_the_model_does_not_read(
+    schema: Schema, left_out: Mapping[str, Sequence[str]]
+) -> None:
+    r"""Say which feature columns reach the model and are dropped there.
+
+    The model's recipe carries no text processor, so a column typed `text` is
+    ignored wherever it reaches it. Refusing the request was considered and
+    rejected: a column the answer never depended on should not be a reason not
+    to answer. That leaves the caller believing a column contributed when it
+    did not, which is worth one line. Measured on one determining token, the
+    same column scores 1.00 typed `categorical` and chance typed `text`.
+
+    Read against the columns the request actually carries. A column the query
+    or the caller already left out is not sent, so naming it would report a
+    loss that did not happen, the target among them.
+    """
+    unread = KUMO_RELATIONAL.runtime.unread_feature_stypes
+    if not unread:
+        return
+    ignored = sorted(
+        f'{table_name}.{column_name}'
+        for table_name, table in schema.tables.items()
+        for column_name, column in table.columns.items()
+        if column.stype in unread
+        and column_name not in left_out.get(table_name, ())
+    )
+    if not ignored:
+        return
+    many = len(ignored) > 1
+    warnings.warn(
+        f'{", ".join(ignored)} {"are" if many else "is"} typed '
+        f'{" or ".join(sorted(unread))}, which this model does not read, so '
+        f'the request is answered without {"them" if many else "it"} and '
+        f'{"they contribute" if many else "it contributes"} nothing to the '
+        f'prediction. Type a column categorical if its values are labels '
+        f'rather than prose, or leave it out to say so.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
 
 
 def _warn_the_filter_chose_only_the_examples(

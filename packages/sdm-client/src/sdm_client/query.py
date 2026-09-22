@@ -316,11 +316,6 @@ class PredictiveQuery:
                     f'{type(indices).__name__}',
                     code='INVALID_REQUEST',
                 )
-            if len(indices) == 0:
-                raise StructuredDataError(
-                    'indices is empty, so there is nothing to score',
-                    code='INVALID_REQUEST',
-                )
             unusable = [value for value in indices if not _is_hashable(value)]
             if unusable:
                 kinds = sorted({type(v).__name__ for v in unusable})

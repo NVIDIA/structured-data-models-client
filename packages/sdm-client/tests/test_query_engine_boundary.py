@@ -11,6 +11,7 @@ exception types, its progress output, and a graph that was not the schema's.
 from __future__ import annotations
 
 import io
+import warnings
 from contextlib import redirect_stdout
 
 import pandas as pd
@@ -18,7 +19,10 @@ import pytest
 
 from sdm_client import PredictiveQuery, Relationship, Schema
 from sdm_client.errors import StructuredDataError
-from sdm_client.materializers.relational import RelationalMaterializer
+from sdm_client.materializers.relational import (
+    RelationalMaterializer,
+    _warn_of_columns_the_model_does_not_read,
+)
 
 pytest.importorskip('sdm_relational_engine')
 
@@ -341,3 +345,186 @@ def test_a_wrong_keyword_into_the_engine_is_reported_as_our_bug():
                 "_get_task_table() got an unexpected keyword argument 'verbose'"
             )
     assert error.value.code == 'INTERNAL_ERROR'
+
+
+# --- the schema decides the time column, and nothing else does --------------
+
+
+def catalogue() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            'item_id': range(1, 121),
+            'title': [f'title {index}' for index in range(1, 121)],
+            'release': ['01-Jan-1995'] * 120,
+        }
+    )
+
+
+def rated() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            'item_id': [(index % 120) + 1 for index in range(600)],
+            'user_id': [index % 40 for index in range(600)],
+            'when': pd.date_range('2000-01-01', periods=600, freq='D'),
+        }
+    )
+
+
+def catalogue_schema() -> Schema:
+    return Schema.from_data(
+        {'items': catalogue(), 'users': users(), 'ratings': rated()},
+        primary_keys={'items': 'item_id', 'users': 'user_id'},
+        time_columns={'ratings': 'when'},
+        relationships=[
+            Relationship('ratings', 'item_id', 'items', 'item_id'),
+            Relationship('ratings', 'user_id', 'users', 'user_id'),
+        ],
+    )
+
+
+def test_a_table_the_schema_gives_no_time_column_is_given_none():
+    built = catalogue_schema()
+    assert built['items'].time_column is None
+
+    graph = RelationalMaterializer(built)._build_graph()
+
+    assert graph['items'].time_column is None
+
+
+def test_a_time_column_the_schema_names_is_the_one_the_graph_gets():
+    graph = RelationalMaterializer(catalogue_schema())._build_graph()
+
+    assert graph['ratings'].time_column.name == 'when'
+
+
+def test_a_date_shaped_string_the_schema_ignores_does_not_stop_the_build():
+    """`release` reads as a date the engine cannot parse, and it used to try:
+    inference ran before the schema was applied, so the caller could not undo
+    a guess that failed while it was being made."""
+    built = catalogue_schema()
+
+    graph = RelationalMaterializer(built)._build_graph()
+
+    assert graph['items'].time_column is None
+    assert built['items']['release'].stype == 'categorical'
+
+
+def test_a_key_the_schema_withholds_is_not_taken_from_a_column_name():
+    frame = pd.DataFrame({'ID': [1, 1, 2, 2, 3], 'value': [1.0, 2, 3, 4, 5]})
+    built = Schema.from_data({'t': frame})
+    built['t'].primary_key = None
+
+    graph = RelationalMaterializer(built)._build_graph()
+
+    assert graph['t'].primary_key is None
+
+
+# --- a column the model will not read is said to be unread ------------------
+
+
+def prose_schema(columns: int = 1, stype: str = 'text') -> Schema:
+    frame = pd.DataFrame(
+        {
+            'paper_id': range(120),
+            'target': [index % 2 for index in range(120)],
+            **{f'prose{i}': ['words here'] * 120 for i in range(columns)},
+        }
+    )
+    cited = pd.DataFrame(
+        {
+            'paper_id': [index % 120 for index in range(400)],
+            'when': pd.date_range('2020-01-01', periods=400, freq='D'),
+        }
+    )
+    built = Schema.from_data(
+        {'papers': frame, 'cited': cited},
+        primary_keys={'papers': 'paper_id'},
+        time_columns={'cited': 'when'},
+        relationships=[Relationship('cited', 'paper_id', 'papers', 'paper_id')],
+    )
+    built['papers']['target'].stype = 'categorical'
+    for index in range(columns):
+        built['papers'][f'prose{index}'].stype = stype
+    return built
+
+
+def unread_warnings(built: Schema) -> list[str]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT papers.target FOR EACH papers.paper_id', built
+        ).materialize(
+            indices=list(range(20)),
+            anchor_time=pd.Timestamp('2021-06-01'),
+        )
+    return [
+        str(item.message)
+        for item in caught
+        if 'does not read' in str(item.message)
+    ]
+
+
+def test_a_text_column_is_said_to_contribute_nothing():
+    """It is accepted and dropped at the model, so the request succeeds and
+    the column that looked most informative carried nothing."""
+    said = unread_warnings(prose_schema())
+
+    assert len(said) == 1
+    assert 'papers.prose0' in said[0]
+    assert 'contributes nothing' in said[0]
+
+
+def test_every_unread_column_is_named():
+    said = unread_warnings(prose_schema(columns=2))
+
+    assert len(said) == 1
+    assert 'papers.prose0' in said[0]
+    assert 'papers.prose1' in said[0]
+
+
+def test_a_column_the_model_reads_is_not_mentioned():
+    assert unread_warnings(prose_schema(stype='categorical')) == []
+
+
+def unread_named(built: Schema, left_out: dict) -> list[str]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _warn_of_columns_the_model_does_not_read(built, left_out)
+    return [str(item.message) for item in caught]
+
+
+def test_a_column_already_left_out_is_not_reported_as_lost():
+    """It is not sent, so there is nothing to have lost. The target is left out
+    the same way, which is why matching it by name was never needed."""
+    built = prose_schema()
+
+    assert unread_named(built, {'papers': ['prose0']}) == []
+
+
+def test_a_column_left_out_of_another_table_does_not_silence_this_one():
+    built = prose_schema()
+
+    said = unread_named(built, {'cited': ['prose0']})
+
+    assert len(said) == 1
+    assert 'papers.prose0' in said[0]
+
+
+def test_an_excluded_column_is_not_named_through_materialize():
+    built = prose_schema()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT papers.target FOR EACH papers.paper_id', built
+        ).materialize(
+            indices=list(range(20)),
+            anchor_time=pd.Timestamp('2021-06-01'),
+            exclude_cols_dict={'papers': ['prose0']},
+        )
+
+    assert [
+        str(item.message)
+        for item in caught
+        if 'does not read' in str(item.message)
+    ] == []

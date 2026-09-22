@@ -835,10 +835,11 @@
         "public_attributes": [
           "explanation_formats",
           "inference_options",
-          "sessions"
+          "sessions",
+          "unread_feature_stypes"
         ],
         "public_methods": {},
-        "signature": "(tasks: 'frozenset[str]', outputs: 'frozenset[str]', explanation_formats: 'tuple[str, ...]' = (), sessions: 'bool' = True, limits: 'Mapping[str, int]' = <factory>, inference_options: 'frozenset[str]' = frozenset()) -> None"
+        "signature": "(tasks: 'frozenset[str]', outputs: 'frozenset[str]', explanation_formats: 'tuple[str, ...]' = (), sessions: 'bool' = True, limits: 'Mapping[str, int]' = <factory>, inference_options: 'frozenset[str]' = frozenset(), unread_feature_stypes: 'frozenset[str]' = frozenset()) -> None"
       },
       "SDMClient": {
         "bases": [],

@@ -463,7 +463,7 @@ def test_feature_importance_empty_when_no_subgraphs() -> None:
     assert fi.to_pandas().empty
 
 
-def test_nim_failure_error_explain_reports_gpu_pressure() -> None:
+def test_nim_failure_error_explain_names_both_remedies() -> None:
     from sdm_relational_engine.exceptions import HTTPException
     from sdm_relational_engine.rfm.rfm import _nim_failure_error
 
@@ -472,8 +472,8 @@ def test_nim_failure_error_explain_reports_gpu_pressure() -> None:
             HTTPException(503, 'Service Unavailable'), explain=True
         )
     )
-    assert 'temporarily unavailable' in msg
-    assert 'GPU memory pressure' in msg
+    assert 'Retrying helps if the NIM was busy' in msg
+    assert 'num_neighbors' in msg
     assert 'this explanation' in msg
     assert 'one at a time' in msg
 
@@ -484,11 +484,11 @@ def test_nim_failure_error_prediction_has_no_pacing_hint() -> None:
 
     msg = str(_nim_failure_error(HTTPException(500, 'boom'), explain=False))
     assert 'this prediction' in msg
-    assert 'GPU memory pressure' in msg
+    assert 'HTTP 500' in msg
     assert 'one at a time' not in msg
 
 
-def test_nim_failure_error_connection_drop_is_unavailable() -> None:
+def test_nim_failure_error_connection_drop_says_no_response_came() -> None:
     import requests
     from sdm_relational_engine.rfm.rfm import _nim_failure_error
 
@@ -498,7 +498,8 @@ def test_nim_failure_error_connection_drop_is_unavailable() -> None:
             explain=True,
         )
     )
-    assert 'temporarily unavailable' in msg
+    assert 'could not complete' in msg
+    assert 'no response' in msg
 
 
 def test_nim_failure_error_timeout_points_at_the_timeout_setting() -> None:
@@ -780,3 +781,22 @@ def test_high_cardinality_columns_ignores_non_string_and_within_limit() -> None:
         },
     }
     assert high_cardinality_columns(payload, limit=10) == []
+
+
+def test_a_server_failure_names_no_cause_the_client_cannot_know() -> None:
+    """The GPU was at one percent while this message blamed GPU memory
+    pressure, so it is the server's detail that is quoted and nothing is
+    diagnosed on its behalf.
+    """
+    from sdm_relational_engine.exceptions import HTTPException
+    from sdm_relational_engine.rfm.rfm import _nim_failure_error
+
+    msg = str(
+        _nim_failure_error(
+            HTTPException(500, '{"detail": "sampler ran out of room"}'),
+            explain=False,
+        )
+    )
+
+    assert 'GPU memory pressure' not in msg
+    assert 'sampler ran out of room' in msg

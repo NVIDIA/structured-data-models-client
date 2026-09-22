@@ -855,8 +855,8 @@ def test_explain_gpu_pressure_surfaces_clear_error(
     with pytest.raises(RuntimeError) as err:
         model.predict(ltv, indices=[0], explain=True, verbose=False)
     msg = str(err.value)
-    assert 'temporarily unavailable' in msg
-    assert 'GPU memory pressure' in msg
+    assert 'could not complete' in msg
+    assert 'num_neighbors' in msg
     assert 'one at a time' in msg
 
 
@@ -877,7 +877,7 @@ def test_prediction_connection_drop_surfaces_clear_error(
 
     with pytest.raises(RuntimeError) as err:
         model.predict(ltv, indices=[3], verbose=False)
-    assert 'temporarily unavailable' in str(err.value)
+    assert 'could not complete' in str(err.value)
 
 
 def _feature_payload(feature: Any) -> dict[str, Any]:

@@ -23,8 +23,38 @@ The first release is being assembled. Nothing here has shipped yet.
 - Branch coverage, measured to be read rather than gated on a number.
 - CI jobs that run the suite against the *installed wheel*, audit dependencies,
   and generate an SBOM.
+- `RuntimeContract.unread_feature_stypes`: the semantic types a deployment
+  accepts and its model never reads. The relational model has no text
+  processor, so a `text` column is carried, dropped at the model, and
+  contributes nothing; naming the types makes that sayable rather than silent.
 
 ### Fixed
+
+- **A column the model cannot read is named rather than silently dropped.**
+  A `text` feature column reaches the relational model and is ignored there.
+  Holding content fixed and varying only the semantic type, the same
+  determining column scores 1.00 as `categorical` and chance as `text`. The
+  request still succeeds, because a model that answers from graph structure
+  alone should not refuse over an unreadable attribute, but the columns that
+  carried nothing are now named.
+
+- **A time column the caller never named can no longer be acquired.** The
+  engine guessed keys and time columns from column *names*, and the guess could
+  fail while it was being made: a string column of dates called `release` was
+  parsed during graph construction and overflowed, before any schema could undo
+  it. Nothing is inferred now; the schema decides every key, time column and
+  semantic type.
+
+- **Selecting no rows is the same no-op however it is written.** `indices=[]`
+  was refused while an empty `predict` frame was answered with zero rows, so a
+  filter that matched nothing had to be handled two ways. Naming no candidates
+  to rank stays refused: that is a question with no answer, not an empty one.
+
+- **A failed request no longer names a cause the client cannot know.** Every
+  5xx and every dropped connection reported GPU memory pressure. Measured, the
+  GPU was at one percent while that appeared, six identical retries failed, and
+  only a smaller neighbourhood sample succeeded. The NIM's own detail is quoted
+  instead, and both remedies are named.
 
 - **A binary target asked through a predictive query is a classification.**
   `PREDICT users.churn FOR EACH users.user_id`, over a column of 0 and 1, was

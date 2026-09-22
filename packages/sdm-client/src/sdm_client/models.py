@@ -113,6 +113,7 @@ KUMO_RELATIONAL = ModelSpec(
         ),
         explanation_formats=('feature_importance', 'subgraph'),
         limits=RELATIONAL_LIMITS,
+        unread_feature_stypes=frozenset({'text'}),
         # What the deployment accepts. The engine was written against a
         # different backend and defaults to sending `output_type` and
         # `target_transforms` as well, which this one refuses outright.
