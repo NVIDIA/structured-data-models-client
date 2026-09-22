@@ -1077,12 +1077,13 @@ def _window_fits_after(
     the diagnosis cannot read keeps the anchor explanation rather than ruling
     it out on no evidence.
     """
-    ends = [
-        aggr.aggr_time_range.end_date_offset
-        for aggr in aggregations
-        if getattr(aggr, 'aggr_time_range', None) is not None
-    ]
-    if len(ends) == 0 or len(ends) != len(aggregations):
+    ends = []
+    for aggr in aggregations:
+        window = getattr(aggr, 'aggr_time_range', None)
+        if window is None:
+            return False
+        ends.append(window.end_date_offset)
+    if not ends:
         return False
     return anchor_time + max_date_offset(*ends) <= max_time
 
