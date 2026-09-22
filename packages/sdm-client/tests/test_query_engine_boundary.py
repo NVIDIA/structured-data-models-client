@@ -489,7 +489,9 @@ def test_a_column_the_model_reads_is_not_mentioned():
 def unread_named(built: Schema, left_out: dict) -> list[str]:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        _warn_of_columns_the_model_does_not_read(built, left_out)
+        _warn_of_columns_the_model_does_not_read(
+            built, left_out, frozenset(built.tables)
+        )
     return [str(item.message) for item in caught]
 
 
@@ -528,3 +530,275 @@ def test_an_excluded_column_is_not_named_through_materialize():
         for item in caught
         if 'does not read' in str(item.message)
     ] == []
+
+
+# --- the cap is on the subgraph gathered, not the schema declared -----------
+
+
+def star(satellites: int, joining: int) -> Schema:
+    """One entity table and `satellites` children, `joining` of which match.
+
+    A child whose foreign key names no entity is not gathered, so the schema
+    is wide and the subgraph is narrow -- the shape a warehouse catalogue has
+    and the one the declared-table check measured wrongly.
+    """
+    entities = [f'u{index}' for index in range(8)]
+    frames = {
+        'people': pd.DataFrame({'pid': entities, 'seg': list('abcdefgh')})
+    }
+    keys = {'people': 'pid'}
+    times = {}
+    links = []
+    for index in range(satellites):
+        name = f'ev{index}'
+        frames[name] = pd.DataFrame(
+            {
+                'eid': range(8),
+                'pid': entities
+                if index < joining
+                else [f'nobody{row}' for row in range(8)],
+                'v': [1.0 * row for row in range(8)],
+                'at': pd.date_range('2025-01-01', periods=8, freq='30D'),
+            }
+        )
+        keys[name] = 'eid'
+        times[name] = 'at'
+        links.append(Relationship(name, 'pid', 'people', 'pid'))
+    return Schema.from_data(
+        frames, primary_keys=keys, time_columns=times, relationships=links
+    )
+
+
+def gathered_from(built: Schema) -> set[str]:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(
+            'PREDICT COUNT(ev0.*, 0, 30, days) FOR EACH people.pid', built
+        ).materialize(
+            indices=[f'u{index}' for index in range(3)],
+            num_context_samples=8,
+            anchor_time=pd.Timestamp('2025-08-01'),
+        )
+    return set(request.payloads[0]['schema']['related_tables'])
+
+
+def test_a_schema_wider_than_the_cap_is_gathered_when_its_subgraph_is_not():
+    """21 declared tables, 6 gathered, and the endpoint reads 15."""
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    built = star(satellites=20, joining=5)
+    assert len(built) > RELATIONAL_LIMITS['tables_max']
+
+    assert len(gathered_from(built)) == 6
+
+
+def test_a_subgraph_wider_than_the_cap_is_still_refused():
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    with pytest.raises(StructuredDataError) as error:
+        gathered_from(star(satellites=20, joining=20))
+    assert str(RELATIONAL_LIMITS['tables_max']) in str(error.value)
+
+
+def test_the_table_cap_is_checked_against_the_payload_that_was_built():
+    """The client keeps its own check, on the quantity the request carries."""
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    class Part:
+        payload = {
+            'predict': {'instance_table': {'rows': [[1]]}},
+            'task': {'kind': 'binary_classification'},
+            'schema': {
+                'related_tables': {
+                    f't{index}': {}
+                    for index in range(RELATIONAL_LIMITS['tables_max'] + 1)
+                }
+            },
+        }
+
+    with pytest.raises(StructuredDataError) as error:
+        RelationalMaterializer._check_limits(Part(), RELATIONAL_LIMITS)
+    assert error.value.code == 'UNSUPPORTED_REQUEST'
+    assert 'carries 16 tables' in str(error.value)
+
+
+# --- a table the request leaves out is said to be left out ------------------
+
+
+def orphaned() -> Schema:
+    built = Schema.from_data(
+        {
+            'users': users(),
+            'orders': orders(),
+            'orphan': pd.DataFrame(
+                {'o_id': range(10), 'notes': ['some prose'] * 10}
+            ),
+        },
+        primary_keys={
+            'users': 'user_id',
+            'orders': 'order_id',
+            'orphan': 'o_id',
+        },
+        time_columns={'orders': 'placed'},
+    )
+    built['orphan']['notes'].stype = 'text'
+    return built
+
+
+def said_while_materializing(built: Schema) -> list[str]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', built
+        ).materialize(
+            indices=[1, 2, 3],
+            num_context_samples=20,
+            anchor_time=pd.Timestamp('2024-02-15'),
+        )
+    return [str(item.message) for item in caught]
+
+
+def test_a_table_nothing_links_is_said_to_be_missing_from_the_request():
+    said = [
+        line
+        for line in said_while_materializing(orphaned())
+        if 'orphan' in line
+    ]
+
+    assert len(said) == 1
+    assert "'orphan' is in the schema and not in this request" in said[0]
+    assert 'no relationship connects it' in said[0]
+
+
+def test_an_unread_column_of_a_table_never_sent_is_not_named():
+    """`orphan.notes` is typed text and does not reach the model to be
+    dropped there, so the loss the warning describes did not happen and its
+    remedy would change nothing."""
+    said = said_while_materializing(orphaned())
+
+    assert [line for line in said if 'does not read' in line] == []
+
+
+def test_a_table_the_request_carries_is_not_reported_as_left_out():
+    said = said_while_materializing(schema())
+
+    assert [line for line in said if 'not in this request' in line] == []
+
+
+# --- a relationship that joins no row is reported ---------------------------
+
+
+def disjoint(joining: bool = False) -> Schema:
+    parents = pd.DataFrame(
+        {'code': ['ATL', 'ORD', 'DFW'], 'city': ['a', 'b', 'c']}
+    )
+    children = pd.DataFrame(
+        {
+            'row_id': range(6),
+            'code': (['ATL', 'ORD'] * 3) if joining else (['AA', 'DL'] * 3),
+            'v': [1.0] * 6,
+        }
+    )
+    return Schema.from_data(
+        {'airports': parents, 'flights': children},
+        primary_keys={'airports': 'code', 'flights': 'row_id'},
+        relationships=[Relationship('flights', 'code', 'airports', 'code')],
+    )
+
+
+def joins_nothing_warnings(built: Schema) -> list[str]:
+    from sdm_client.materializers.relational import (
+        _warn_of_relationships_that_join_nothing,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _warn_of_relationships_that_join_nothing(built)
+    return [str(item.message) for item in caught]
+
+
+def test_a_relationship_whose_values_match_nothing_is_reported():
+    said = joins_nothing_warnings(disjoint())
+
+    assert len(said) == 1
+    assert 'joins none of the rows given' in said[0]
+    assert (
+        "Relationship('flights', <that column>, 'airports', 'code')" in said[0]
+    )
+
+
+def test_a_relationship_whose_values_match_is_not_reported():
+    assert joins_nothing_warnings(disjoint(joining=True)) == []
+
+
+def test_an_empty_child_is_not_reported_as_joining_nothing():
+    """A child with no rows yet joins nothing for a reason that is legal."""
+    built = disjoint()
+    built['flights'].data = built['flights'].data.iloc[:0]
+
+    assert joins_nothing_warnings(built) == []
+
+
+# --- sampling options refuse in this client's own voice ---------------------
+
+
+def test_an_empty_num_neighbors_is_refused_and_names_itself():
+    """`[]` is falsy, so it bypassed the hop check and reached the engine,
+    which took it literally and sampled no related table at all."""
+    with pytest.raises(StructuredDataError) as error:
+        query().materialize(
+            indices=[1, 2], num_context_samples=20, num_neighbors=[]
+        )
+    message = str(error.value)
+    assert error.value.code == 'INVALID_REQUEST'
+    assert 'num_neighbors is empty' in message
+    assert 'num_neighbors=[8, 8]' in message
+
+
+def test_a_negative_random_seed_names_the_option_and_the_rule():
+    """The engine's own refusal is 'expected non-negative integer', which
+    names neither."""
+    with pytest.raises(StructuredDataError) as error:
+        query().materialize(
+            indices=[1, 2], num_context_samples=20, random_seed=-1
+        )
+    message = str(error.value)
+    assert error.value.code == 'INVALID_REQUEST'
+    assert 'random_seed is -1' in message
+
+
+def test_a_random_seed_that_is_not_a_whole_number_says_so():
+    with pytest.raises(StructuredDataError) as error:
+        query().materialize(
+            indices=[1, 2], num_context_samples=20, random_seed=1.5
+        )
+    assert 'random_seed must be a whole number' in str(error.value)
+
+
+def test_the_seed_the_refusal_points_at_is_accepted():
+    assert (
+        query()
+        .materialize(indices=[1, 2], num_context_samples=20, random_seed=0)
+        .payloads
+    )
+
+
+# --- an argument error is not told the data is at fault too -----------------
+
+
+def test_an_argument_type_error_carries_no_dropped_rows_postscript():
+    """`anchor_time='2020-10-01'` came back with a count of rows the graph
+    dropped, which is about the data and not about the argument."""
+    frame = orders()
+    frame.loc[frame.index[:10], 'placed'] = pd.NaT
+    built = Schema.from_data({'users': users(), 'orders': frame})
+
+    with pytest.raises(StructuredDataError) as error:
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', built
+        ).materialize(
+            indices=[1, 2], num_context_samples=20, anchor_time='2024-06-01'
+        )
+    message = str(error.value)
+    assert 'anchor_time' in message
+    assert 'rows dropped' not in message

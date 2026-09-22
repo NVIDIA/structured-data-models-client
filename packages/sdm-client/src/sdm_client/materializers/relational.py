@@ -24,7 +24,7 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Schema, Table, _as_key_tuple
+from sdm_client.schema import Relationship, Schema, Table, _as_key_tuple
 from sdm_client.wire.dtypes import arrow_decimal_type
 
 if TYPE_CHECKING:
@@ -85,10 +85,15 @@ class RelationalMaterializer:
             )
 
         _warn_the_filter_chose_only_the_examples(query, indices)
-        _warn_of_columns_the_model_does_not_read(
-            self.schema, _columns_to_leave_out(query, options)
-        )
+        _warn_of_relationships_that_join_nothing(self.schema)
         payloads = self._gather(query, indices, num_context_samples, options)
+        sent = _tables_sent(payloads, self.schema)
+        _warn_of_tables_left_out(
+            self.schema, sent, table_name(query.entity_column)
+        )
+        _warn_of_columns_the_model_does_not_read(
+            self.schema, _columns_to_leave_out(query, options), sent
+        )
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
@@ -285,6 +290,13 @@ class RelationalMaterializer:
         above this guard -- so a caller who wrote the `except
         StructuredDataError` the reference tells them to write did not catch
         the whole construction phase.
+
+        What the graph dropped is appended to a complaint about the data and
+        not to one about an argument. A `TypeError` is raised over the type of
+        a value the caller passed, and `anchor_time='2020-10-01'` came back
+        with a postscript counting rows with no time, which reads as a second
+        fault and sends the caller to look at rows that were never the
+        problem.
         """
         try:
             from sdm_relational_engine import KumoRelationalError
@@ -317,8 +329,13 @@ class RelationalMaterializer:
                     f'client: {type(error).__name__}: {error}',
                     code='INTERNAL_ERROR',
                 ) from error
+            detail = (
+                ''
+                if isinstance(error, TypeError)
+                else self._sanitization_detail(model)
+            )
             raise StructuredDataError(
-                f'{error}{self._sanitization_detail(model)}',
+                f'{error}{detail}',
                 code='INVALID_REQUEST',
             ) from error
 
@@ -447,17 +464,30 @@ class RelationalMaterializer:
                 f'most {cap} for a {kind} task',
                 code='UNSUPPORTED_REQUEST',
             )
+        carried = payload.get('schema', {}).get('related_tables')
+        if isinstance(carried, dict) and len(carried) > limits['tables_max']:
+            raise StructuredDataError(
+                f'this request carries {len(carried)} tables and the endpoint '
+                f'reads at most {limits["tables_max"]}; sample fewer hops, or '
+                f'keep fewer relationships in the schema',
+                code='UNSUPPORTED_REQUEST',
+            )
 
     def _check_shape(
         self, options: Mapping[str, Any], limits: Mapping[str, int]
     ) -> None:
-        r"""Refuse a graph wider or deeper than the endpoint will read."""
-        if len(self.schema) > limits['tables_max']:
-            raise StructuredDataError(
-                f'this schema has {len(self.schema)} tables and the endpoint '
-                f'reads at most {limits["tables_max"]}',
-                code='UNSUPPORTED_REQUEST',
-            )
+        r"""Refuse sampling options the endpoint will not read.
+
+        How wide the graph is, is not among them. The cap is on the sampled
+        subgraph and the payload carries nothing else, so the declared table
+        count is the wrong quantity: a warehouse schema of 21 tables whose
+        query reaches 6 of them was refused here while the endpoint answered
+        it. Reachability from the entity table is the wrong quantity too, and
+        for the same reason -- it is an upper bound on what the sampler
+        gathers, and the 21-table graph above reaches all 21. Only the
+        gathered subgraph knows, which is why the check is in
+        `_check_limits`, against the payload that was actually built.
+        """
         neighbors = options.get('num_neighbors')
         if neighbors is not None and (
             not isinstance(neighbors, Sequence)
@@ -478,7 +508,33 @@ class RelationalMaterializer:
                 code='INVALID_REQUEST',
             )
 
-        hops = len(neighbors) if neighbors else num_hops
+        seed = options.get('random_seed')
+        if seed is not None and (
+            isinstance(seed, bool) or not isinstance(seed, Integral)
+        ):
+            raise StructuredDataError(
+                f'random_seed must be a whole number, got '
+                f'{type(seed).__name__} {seed!r}',
+                code='INVALID_REQUEST',
+            )
+        if seed is not None and int(seed) < 0:
+            raise StructuredDataError(
+                f'random_seed is {seed}, and a seed is not negative; pass a '
+                f'number from 0 upwards, or leave it out to let the sampler '
+                f'choose',
+                code='INVALID_REQUEST',
+            )
+
+        if neighbors is not None and not len(neighbors):
+            raise StructuredDataError(
+                'num_neighbors is empty, and it says how many neighbours to '
+                'take at each hop, so an empty one samples no hop at all and '
+                'leaves the entity table alone in the request. Give one size '
+                'per hop, such as num_neighbors=[8, 8], or leave it out',
+                code='INVALID_REQUEST',
+            )
+
+        hops = len(neighbors) if neighbors is not None else num_hops
         if hops is not None and hops > limits['hops_max']:
             raise StructuredDataError(
                 f'this request samples {hops} hops and the endpoint reads at most '
@@ -914,8 +970,173 @@ def _remove_instances(table: Any, instances: set[Any]) -> None:
     ]
 
 
+def _tables_sent(
+    payloads: Sequence[Mapping[str, Any]], schema: Schema
+) -> frozenset[str]:
+    r"""Which of the schema's tables the built payloads carry.
+
+    Read off the payload rather than worked out from the schema, because only
+    the sampler knows: a table the schema links and whose foreign key matches
+    no row is not in the request, and an answer derived from the schema would
+    say it was. A payload that names no related tables at all is a shape this
+    does not recognise, and there the schema is assumed sent, so nothing is
+    reported as lost on a guess.
+    """
+    carried: set[str] = set()
+    described = False
+    for payload in payloads:
+        related = (payload.get('schema') or {}).get('related_tables')
+        if isinstance(related, Mapping):
+            described = True
+            carried.update(related)
+    return frozenset(carried) if described else frozenset(schema.tables)
+
+
+def _tables_linked_to(schema: Schema, entity_table: str) -> frozenset[str]:
+    r"""The tables a relationship path connects to ``entity_table``.
+
+    Read in both directions, because the sampler traverses an edge either way:
+    a parent is reached from its child as readily as a child from its parent.
+    Used only to say why a table is missing, never to refuse one -- what is
+    reachable is an upper bound on what is gathered, and refusing on it denies
+    graphs the endpoint answers.
+    """
+    neighbours: dict[str, set[str]] = {}
+    for link in schema.relationships:
+        neighbours.setdefault(link.source_table, set()).add(link.target_table)
+        neighbours.setdefault(link.target_table, set()).add(link.source_table)
+    seen = {entity_table}
+    queue = [entity_table]
+    while queue:
+        for nearby in neighbours.get(queue.pop(), ()):
+            if nearby not in seen:
+                seen.add(nearby)
+                queue.append(nearby)
+    return frozenset(seen)
+
+
+def _warn_of_tables_left_out(
+    schema: Schema, sent: frozenset[str], entity_table: str
+) -> None:
+    r"""Say which of the schema's tables this request does not carry.
+
+    A table the sampler does not reach is removed from the payload, and the
+    removal was silent. Measured on a parent whose value is the mean of its
+    children's, leaving the one edge between them undeclared moved the error
+    from 0.008 to 0.134 -- sixteen times worse, with nothing said and a result
+    that looks entirely ordinary.
+
+    The two causes are said separately because they take different remedies.
+    Nothing links the first kind, and only a relationship puts it back. The
+    second is linked and was still not reached, which is either a hop budget
+    that stops short of it or a foreign key that matches no row.
+    """
+    missing = sorted(set(schema.tables) - sent)
+    if not missing:
+        return
+    linked = _tables_linked_to(schema, entity_table)
+    unlinked = [name for name in missing if name not in linked]
+    unreached = [name for name in missing if name in linked]
+    if unlinked:
+        many = len(unlinked) > 1
+        warnings.warn(
+            f'{", ".join(repr(name) for name in unlinked)} '
+            f'{"are" if many else "is"} in the schema and not in this '
+            f'request: no relationship connects {"them" if many else "it"} '
+            f'to {entity_table!r}, so the model answers without '
+            f'{"them" if many else "it"}. Say how '
+            f'{"they join" if many else "it joins"} -- '
+            f'schema.relationships.append(Relationship({unlinked[0]!r}, '
+            f'<foreign key>, <parent table>, <its primary key>)) -- or leave '
+            f'{"them" if many else "it"} out of the schema to say '
+            f'{"they are" if many else "it is"} not wanted.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    if unreached:
+        many = len(unreached) > 1
+        warnings.warn(
+            f'{", ".join(repr(name) for name in unreached)} '
+            f'{"are" if many else "is"} linked into the schema and not in '
+            f'this request: the sampler reached no row of '
+            f'{"them" if many else "it"} from the entities being scored, so '
+            f'the model answers without {"them" if many else "it"}. Raise '
+            f'num_hops if {"they lie" if many else "it lies"} further out '
+            f'than the hops sampled, and check the foreign key holds values '
+            f'the parent key actually has if '
+            f'{"they do" if many else "it does"} not.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+
+
+def _warn_of_relationships_that_join_nothing(schema: Schema) -> None:
+    r"""Say when a declared relationship matches no row on either side.
+
+    Nothing looks at what a foreign key holds. `_require_joinable` checks the
+    dtype and the shape of the parent key, and the sanitization report counts
+    null and repeated keys, so an edge between two disjoint namespaces of the
+    same dtype passes both. Declaring `flights.AIRLINE -> airports.IATA_CODE`
+    where `flights.ORIGIN_AIRPORT` was meant is one word, and the same query
+    on the same frames answered 159.7 with the right column and -0.006 with
+    the wrong one, in byte-identical silence.
+
+    Said rather than refused: a child with no rows yet is legal and joins
+    nothing for a reason that is not a mistake, which is why an empty frame on
+    either side is passed over rather than reported.
+    """
+    empty = [
+        link for link in schema.relationships if _joins_nothing(schema, link)
+    ]
+    if not empty:
+        return
+    first = empty[0]
+    many = len(empty) > 1
+    warnings.warn(
+        f'{", ".join(str(link) for link in empty)} '
+        f'{"join" if many else "joins"} none of the rows given: no value of '
+        f'the foreign key appears in the key it points at, so the tables are '
+        f'related in the schema and in no row of the data, and the question '
+        f'is answered as though {"they" if many else "it"} were not declared. '
+        f'Check that the foreign key is the column naming the parent row; one '
+        f'spelled differently from the key it points at has to be said '
+        f'outright, as relationships=[Relationship({first.source_table!r}, '
+        f'<that column>, {first.target_table!r}, {first.target_column!r})].',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+def _joins_nothing(schema: Schema, link: Relationship) -> bool:
+    r"""Whether no row of the child's key is a row of the parent's.
+
+    Every shape this cannot read is not one: a link naming a table or a column
+    the schema has not got is `check_consistent`'s to refuse, and answering it
+    here would report a missing table as a join that found nothing.
+    """
+    if (
+        link.source_table not in schema.tables
+        or link.target_table not in schema.tables
+    ):
+        return False
+    child = schema[link.source_table].data
+    parent = schema[link.target_table].data
+    if child is None or parent is None:
+        return False
+    if (
+        link.source_column not in child.columns
+        or link.target_column not in parent.columns
+    ):
+        return False
+    values = child[link.source_column].dropna().unique()
+    keys = parent[link.target_column].dropna().unique()
+    if not len(values) or not len(keys):
+        return False
+    return not bool(pd.Series(values).isin(keys).any())
+
+
 def _warn_of_columns_the_model_does_not_read(
-    schema: Schema, left_out: Mapping[str, Sequence[str]]
+    schema: Schema, left_out: Mapping[str, Sequence[str]], sent: frozenset[str]
 ) -> None:
     r"""Say which feature columns reach the model and are dropped there.
 
@@ -929,6 +1150,13 @@ def _warn_of_columns_the_model_does_not_read(
     Read against the columns the request actually carries. A column the query
     or the caller already left out is not sent, so naming it would report a
     loss that did not happen, the target among them.
+
+    `sent` is the same question asked of the table. A table nothing links, or
+    one further out than the hops sampled, is not in the payload either, and
+    naming its columns reported a loss that did not happen with a remedy --
+    type it categorical -- that under that hop budget changes nothing. Why
+    that table is missing is said by `_warn_of_tables_left_out`, which is the
+    line a caller can act on.
     """
     unread = KUMO_RELATIONAL.runtime.unread_feature_stypes
     if not unread:
@@ -936,6 +1164,7 @@ def _warn_of_columns_the_model_does_not_read(
     ignored = sorted(
         f'{table_name}.{column_name}'
         for table_name, table in schema.tables.items()
+        if table_name in sent
         for column_name, column in table.columns.items()
         if column.stype in unread
         and column_name not in left_out.get(table_name, ())
