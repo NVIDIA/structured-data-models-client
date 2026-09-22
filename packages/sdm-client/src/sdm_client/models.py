@@ -111,12 +111,22 @@ KUMO_RELATIONAL = ModelSpec(
                 'explanation',
             }
         ),
-        explanation_formats=('feature_importance', 'subgraph'),
+        # Empty, and not because the model does not explain. Nothing on this
+        # client takes a format argument, the contract's `OutputSpec` is only
+        # `{fields: [...]}`, and the endpoint stamps its own name on what it
+        # returns -- `kumo_rfm_v2_1` from the shipping build. Two names were
+        # declared here that appear in no response on any task or graph, which
+        # is a list of formats to ask for on a surface that has no such knob.
+        explanation_formats=(),
         limits=RELATIONAL_LIMITS,
         unread_feature_stypes=frozenset({'text'}),
-        # What the deployment accepts. The engine was written against a
+        # Inference-config keys this client forwards, rather than keys the
+        # deployment is known to serve: the engine was written against a
         # different backend and defaults to sending `output_type` and
-        # `target_transforms` as well, which this one refuses outright.
+        # `target_transforms` as well, which this one refuses outright. A
+        # deployment may still refuse a value given for a key that is
+        # forwarded, and the shipping one refuses every shuffle and every
+        # `num_estimators` but its own, so this list is not a menu.
         inference_options=frozenset(
             {
                 'kind',

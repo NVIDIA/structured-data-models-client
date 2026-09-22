@@ -274,3 +274,97 @@ def test_a_fit_time_output_list_is_not_read_again_later():
     )
     named.append('embeddings')
     assert fitted._named_outputs == ('prediction', 'quantiles')
+
+
+# --- what the relational endpoint enforces, read the way it reads it --------
+
+
+def gathered(*, context_rows: int, run_mode: str | None, target=None) -> object:
+    values = target if target is not None else list(range(context_rows))
+    payload = {
+        'task': {'kind': 'regression', 'target': {'column_name': 'TARGET'}},
+        'schema': {'instance_table': {'columns': {}}},
+        'context': {
+            'instance_table': {
+                'columns': ['TARGET'],
+                'rows': [[value] for value in values],
+            }
+        },
+        'predict': {'instance_table': {'columns': ['TARGET'], 'rows': [[0]]}},
+    }
+    if run_mode is not None:
+        payload['inference'] = {'run_mode': run_mode}
+
+    class Gathered:
+        payloads = (payload,)
+        requested_inference: dict = {}
+
+    return Gathered()
+
+
+def explanation_plan(request):
+    from sdm_client.adapters.relational import RelationalAdapter
+
+    return list(
+        RelationalAdapter().prediction_plan(
+            request, ('prediction', 'explanation')
+        )
+    )
+
+
+def test_an_explanation_is_refused_on_the_mode_the_endpoint_refuses_it_on():
+    """A graph that supplies 120 rows for a request of 1,500 still selects the
+    larger-context mode, and that is what the endpoint gates explaining on."""
+    with pytest.raises(StructuredDataError) as raised:
+        explanation_plan(gathered(context_rows=120, run_mode='best'))
+    assert 'num_context_samples' in str(raised.value)
+
+
+def test_a_small_context_asked_for_smally_still_explains():
+    assert explanation_plan(gathered(context_rows=120, run_mode='fast'))
+
+
+def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
+    """Nothing the engine gathers arrives without a run_mode, but a hand-built
+    payload can, and the rows are then all there is to read."""
+    assert explanation_plan(gathered(context_rows=120, run_mode=None))
+    with pytest.raises(StructuredDataError):
+        explanation_plan(gathered(context_rows=1_001, run_mode=None))
+
+
+# --- a context that teaches nothing, on both routes -------------------------
+
+
+def relational_constant(kind: str) -> object:
+    request = gathered(context_rows=50, run_mode='fast', target=[50] * 50)
+    request.payloads[0]['task']['kind'] = kind
+    return request
+
+
+def plan(request):
+    from sdm_client.adapters.relational import RelationalAdapter
+
+    return list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+
+
+def test_a_constant_classification_target_is_refused_relationally_too():
+    """The tabular route refused this locally and the relational one sent it,
+    so the same unlearnable question was answered by one model of the two."""
+    with pytest.raises(StructuredDataError) as raised:
+        plan(relational_constant('binary_classification'))
+    assert 'at least two classes' in str(raised.value)
+
+
+def test_a_constant_regression_target_is_remarked_on_and_still_sent():
+    built, said = warnings_from(
+        partial(plan, relational_constant('regression'))
+    )
+    assert built
+    assert any('every context row has the same TARGET' in s for s in said), said
+
+
+def test_a_target_that_varies_is_left_alone():
+    _, said = warnings_from(
+        partial(plan, gathered(context_rows=50, run_mode='fast'))
+    )
+    assert not any('every context row' in s for s in said)
