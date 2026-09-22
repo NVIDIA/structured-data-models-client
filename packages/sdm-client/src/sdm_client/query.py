@@ -386,7 +386,10 @@ class PredictiveQuery:
         )
         if resolved is None or not response.ok:
             reasons = (
-                '; '.join(error.message for error in response.errors)
+                '; '.join(
+                    _without_the_validator_trace(error.message)
+                    for error in response.errors
+                )
                 or 'the query did not resolve'
             )
             raise StructuredDataError(
@@ -505,6 +508,27 @@ class PredictiveQuery:
 _PREDICTED_COLUMN = re.compile(
     r'PREDICT\s+([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s', re.IGNORECASE
 )
+
+#: The English sentence inside a pydantic validation error, without the
+#: `[type=..., input_value=...]` tail the library appends to it.
+_VALIDATOR_SENTENCE = re.compile(r'Value error, (.+?)(?= \[type=)', re.DOTALL)
+
+
+def _without_the_validator_trace(message: str) -> str:
+    r"""The sentence a refusal is making, without the trace around it.
+
+    A few window errors -- a zero-width one, an inverted one -- are raised by
+    the grammar's own models rather than by its parser, so they arrive as a
+    pydantic trace: an error count, the internal type that raised, the repr of
+    the arguments it was given, and a link to pydantic's documentation. The
+    English inside is as actionable as the parser's own row-and-column
+    messages; nothing around it is, and none of it is this package's to show.
+
+    A message written any other way is left alone, so a validator that stops
+    wrapping its errors this way loses the scaffolding rather than the text.
+    """
+    said = _VALIDATOR_SENTENCE.findall(message)
+    return '; '.join(part.strip() for part in said) if said else message
 
 
 def _is_hashable(value: Any) -> bool:

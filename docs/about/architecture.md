@@ -211,17 +211,18 @@ Tabular is the case where `schema` has one table and no relationships. That is t
 `Request` is **singular**. A run that exceeds the server's per-call cap is split into several round
 trips by the adapter — batching is transport, and does not belong in a type the user reads.
 
-**The direct builder takes related tables too**, so it is not tabular-only:
+**The direct builder is the single-table one.** A relational request is
+gathered, not assembled from frames: the neighbourhood around each entity is
+sampled and folded onto the instance table, which is what `materialize()` does
+and what the relational model is sent. So `related_tables=` is refused there
+rather than building a request no path can send.
 
 ```python
 Request(context=ctx_df, predict=rows_df, target='churn', task='classification')
-Request(
-    context=ctx_df,
-    predict=rows_df,
-    target='churn',
-    task='classification',
-    related_tables={'orders': orders_df},
-)
+
+PredictiveQuery(
+    'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id', schema
+).materialize(indices=[1, 2, 3], model=KumoRelational())
 ```
 
 ### The task kind is stated, never guessed
@@ -332,8 +333,10 @@ Explanations are an **output field**, not a method. `explain=True` remains sugar
 
 The DataFrame's shape depends on the **task**, not the model. Verified against a live endpoint:
 classification and multiclass both give **one row per entity**, with multiclass carrying a
-probability per class as columns rather than a row per class. Ranking gives `k` rows per entity
-and forecasting one row per step. An earlier draft said multiclass gave a row per class; it does not.
+probability per class as columns rather than a row per class. Ranking also gives one row per
+entity, holding its `k` candidates as a list, because expanding them would leave `row_index` no
+longer identifying a row; forecasting gives one row per entity per step. An earlier draft said
+multiclass gave a row per class, and another said a ranking gave `k` rows; neither does.
 
 **Every row carries `row_index`. It also carries the entity key when the model has one** — tabular
 requests may have no key at all. Join on the key when present, otherwise on `row_index`.
@@ -494,10 +497,12 @@ a 500. Both endpoints cap a context; the rest of these are the relational one's.
 |---|---|
 | context rows | 10,000 |
 
-The tabular cap is enforced where the context is chosen. A number above it is
-refused with the limit named; omitting the number takes a sample of 10,000 and
-says so, because the alternative is encoding a table of any size and being
-refused at the far end.
+The tabular cap is enforced where the context is chosen, which is
+`materialize()`. A number above it is refused with the limit named; omitting the
+number takes a sample of 10,000 and says so, because the alternative is encoding
+a table of any size and being refused at the far end. `Request(context=...,
+predict=...)` is handed its context instead of choosing one, so it sends what it
+was given and the endpoint refuses an oversized one.
 
 | Structural limit (relational) | Value |
 |---|---|
