@@ -61,6 +61,8 @@ class RelationalMaterializer:
         self.schema = schema
         self._model: KumoRelational | None = None
 
+    _RESERVED = ('instance_id', '__kumo_anchor_time')
+
     def materialize(
         self,
         *,
@@ -84,6 +86,7 @@ class RelationalMaterializer:
                 code='INVALID_REQUEST',
             )
 
+        self._refuse_a_name_the_wire_reserves()
         _warn_the_filter_chose_only_the_examples(query, indices)
         _warn_of_relationships_that_join_nothing(self.schema)
         payloads = self._gather(query, indices, num_context_samples, options)
@@ -192,6 +195,30 @@ class RelationalMaterializer:
 
             self._model = KumoRelational(self._build_graph(), verbose=False)
         return self._model
+
+    def _refuse_a_name_the_wire_reserves(self) -> None:
+        """Refuse a column whose name the request itself needs.
+
+        The wire adds its own columns to every table it sends, and a caller
+        column of the same name collided with them inside pandas, which said
+        `cannot insert instance_id, already exists` and named no table, no
+        remedy, and nothing about the name being spoken for.
+        """
+        taken = sorted(
+            f'{name}.{column}'
+            for name, table in self.schema.tables.items()
+            for column in table.columns
+            if column in self._RESERVED
+        )
+        if not taken:
+            return
+        raise StructuredDataError(
+            f'{", ".join(taken)} uses a name this client needs for the '
+            f'request it builds, so it cannot also be a column of the data. '
+            f'Rename it, for instance to '
+            f'{taken[0].split(".")[-1].replace("instance_", "row_")!r}.',
+            code='INVALID_SCHEMA',
+        )
 
     def _build_graph(self) -> Graph:
         r"""Build exactly the graph described by the client schema.

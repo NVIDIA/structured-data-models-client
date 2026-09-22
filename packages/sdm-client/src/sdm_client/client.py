@@ -364,10 +364,14 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
-        answers = [
-            self.predict(part, model=model, outputs=wanted)
-            for part in request.parts or ()
-        ]
+        answers = []
+        for part, (_, about) in zip(
+            request.parts or (), rewritten.parts, strict=True
+        ):
+            try:
+                answers.append(self.predict(part, model=model, outputs=wanted))
+            except StructuredDataError as error:
+                raise _which_part_failed(error, rewritten, about) from error
         if ranking:
             return _ranked(answers, rewritten, outputs)
         return _by_step(answers, rewritten)
@@ -772,6 +776,29 @@ def _top_k_of(asked: str) -> int | None:
 
     found = re.search(r'\bRANK\s+TOP\s+(\d+)', asked, flags=re.IGNORECASE)
     return int(found.group(1)) if found else None
+
+
+def _which_part_failed(
+    error: StructuredDataError, rewritten: Decomposition, about: Any
+) -> StructuredDataError:
+    """Name the candidate or step whose question failed.
+
+    A ranking is asked as one yes-or-no question per candidate, so a candidate
+    nothing reached makes its own question single-class and the endpoint
+    refuses it for a task the caller never wrote. Which of them it was is
+    known here and was not being said, and the answers for the candidates that
+    did work are lost with it.
+    """
+    which = (
+        f'candidate {about!r}'
+        if rewritten.kind == RANKING
+        else f'part {about} of {len(rewritten.parts)}'
+    )
+    return StructuredDataError(
+        f'{error.args[0]} This is the question asked for {which}, one of '
+        f'{len(rewritten.parts)} this {rewritten.kind} is asked as.',
+        code=getattr(error, 'code', 'INVALID_REQUEST'),
+    )
 
 
 def _by_step(

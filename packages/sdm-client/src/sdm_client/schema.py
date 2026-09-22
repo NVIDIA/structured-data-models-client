@@ -724,6 +724,7 @@ class Schema:
             _warn_repeats_cost_the_table_its_key(built)
             _warn_one_key_name_keys_several_tables(built)
         _warn_stype_was_decided_by_the_rows_read(built)
+        _warn_several_columns_could_be_the_time_column(built)
         _warn_two_ways_to_reach_one_table(schema)
         return schema
 
@@ -1118,6 +1119,36 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
 def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
     stamps = [name for name, c in columns.items() if c.stype == 'timestamp']
     return stamps[0] if len(stamps) == 1 else None
+
+
+def _warn_several_columns_could_be_the_time_column(
+    tables: Mapping[str, Table],
+) -> None:
+    """Say when a table has more than one timestamp and so was given none.
+
+    Choosing between them would decide what the model is allowed to know at
+    the moment it answers, which is the caller's to decide. But saying nothing
+    left the table with no time column, and the refusal that follows asks for a
+    column the table already has several of.
+    """
+    for name, table in sorted(tables.items()):
+        if table.time_column is not None:
+            continue
+        stamps = sorted(
+            column
+            for column, held in table.columns.items()
+            if held.stype == 'timestamp'
+        )
+        if len(stamps) < 2:
+            continue
+        warnings.warn(
+            f'{name!r} has more than one column that could be its time '
+            f'column, {_and_list(stamps)}, so it was given none, and a query '
+            f'over a window of it is refused. Name the one that says when a '
+            f'row became true: time_columns={{{name!r}: {stamps[0]!r}}}.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
 
 
 def _warn_table_cannot_be_linked_to(

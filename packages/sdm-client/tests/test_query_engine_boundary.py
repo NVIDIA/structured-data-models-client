@@ -862,3 +862,44 @@ def test_one_relationship_is_not_reported_as_two_ways():
     _, said = built_with([Relationship('child', 'pid', 'parent', 'pid')])
 
     assert said == []
+
+
+def test_a_column_named_for_the_wire_is_refused_by_name():
+    """It collided inside pandas, which said `cannot insert instance_id,
+    already exists` and named no table and no remedy."""
+    built, _ = built_with([Relationship('child', 'pid', 'parent', 'pid')])
+    frame = built['parent'].data.assign(instance_id=range(50))
+    clashing = Schema.from_data(
+        {'parent': frame, 'child': built['child'].data},
+        primary_keys={'parent': 'pid', 'child': 'cid'},
+        time_columns={'child': 'when'},
+        relationships=[Relationship('child', 'pid', 'parent', 'pid')],
+    )
+
+    with pytest.raises(StructuredDataError, match='parent.instance_id'):
+        PredictiveQuery(
+            'PREDICT COUNT(child.*, 0, 30, days) > 0 FOR EACH parent.pid',
+            clashing,
+        ).materialize(indices=[1, 2], anchor_time=pd.Timestamp('2020-04-01'))
+
+
+def test_a_table_with_several_timestamps_is_told_it_was_given_none():
+    frame = pd.DataFrame(
+        {
+            'oid': range(80),
+            'created': pd.date_range('2020-01-01', periods=80, freq='D'),
+            'delivered': pd.date_range('2020-02-01', periods=80, freq='D'),
+        }
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        built = Schema.from_data(
+            {'orders': frame}, primary_keys={'orders': 'oid'}
+        )
+
+    assert built['orders'].time_column is None
+    assert any(
+        'more than one column that could be its time column'
+        in str(item.message)
+        for item in caught
+    )
