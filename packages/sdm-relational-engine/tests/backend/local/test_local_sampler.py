@@ -508,3 +508,163 @@ def test_a_context_shortfall_is_reported() -> None:
     assert len(shortfall) == 1
     assert '1,000 context examples' in shortfall[0]
     assert '10,000 candidates' in shortfall[0]
+
+
+_ORDINAL_ORIGIN = pd.Timestamp('2020-01-01')
+
+
+@pytest.fixture(scope='module')
+def daily_ordinal_sampler() -> LocalSampler:
+    r"""One fact row per calendar day, carrying its own day ordinal.
+
+    ``MIN`` and ``MAX`` over a window then read back the window's bounds
+    exactly, which is what makes an off-by-a-few-days boundary visible.
+    """
+    from sdm_relational_engine.rfm.backend.local import LocalTable
+
+    days = pd.date_range(_ORDINAL_ORIGIN, '2023-12-31', freq='D')
+    entities = LocalTable(
+        df=pd.DataFrame({'EID': [0, 1, 2]}),
+        name='ENT',
+        primary_key='EID',
+    )
+    facts = LocalTable(
+        df=pd.DataFrame(
+            {
+                'FID': range(3 * len(days)),
+                'EID': [eid for eid in range(3) for _ in days],
+                'ORD': [
+                    (day - _ORDINAL_ORIGIN).days
+                    for _ in range(3)
+                    for day in days
+                ],
+                'TIME': [day for _ in range(3) for day in days],
+            }
+        ),
+        name='FACT',
+        primary_key='FID',
+        time_column='TIME',
+    )
+    graph = Graph([entities, facts])
+    graph.link('FACT', 'EID', 'ENT')
+    return LocalSampler(graph, verbose=False)
+
+
+def _window_bound(
+    sampler: LocalSampler,
+    aggr: str,
+    start: int,
+    end: int,
+    unit: str,
+    anchor: pd.Timestamp,
+) -> int:
+    query = ValidatedPredictiveQuery(
+        target_ast=Aggregation(
+            aggr=aggr,
+            target=Column(fqn='FACT.ORD'),
+            aggr_time_range=DateOffsetRange(start, end, unit),
+        ),
+        entity_ast=Column(fqn='ENT.EID'),
+    )
+    train, _ = sampler.sample_target(
+        query,
+        num_train_examples=3,
+        train_anchor_time=Timestamp(anchor),
+        num_train_trials=5,
+        num_test_examples=0,
+        test_anchor_time=Timestamp(anchor),
+        num_test_trials=5,
+    )
+    bounds = set(train.target.tolist())
+    assert len(bounds) == 1
+    return int(bounds.pop())
+
+
+def _ordinal_after(anchor: pd.Timestamp, offset: pd.DateOffset) -> int:
+    return (anchor + offset - _ORDINAL_ORIGIN).days + 1
+
+
+@pytest.mark.parametrize(
+    ('start', 'anchor'),
+    [
+        (1, '2022-11-01'),
+        (2, '2022-10-01'),
+        (3, '2022-09-01'),
+        (3, '2023-01-01'),
+    ],
+)
+def test_a_month_window_starts_on_calendar_arithmetic(
+    daily_ordinal_sampler, start, anchor
+) -> None:
+    r"""The window's start used 31 days a month while its end used the real
+    calendar, so a window was short at the front by up to three days and the
+    rows in that gap never reached label computation.
+    """
+    anchor = pd.Timestamp(anchor)
+    first = _window_bound(
+        daily_ordinal_sampler, 'MIN', start, start + 1, 'months', anchor
+    )
+
+    assert first == _ordinal_after(anchor, pd.DateOffset(months=start))
+
+
+@pytest.mark.parametrize('start', [0, 1, 2])
+def test_consecutive_month_windows_tile_without_a_gap(
+    daily_ordinal_sampler, start
+) -> None:
+    r"""`FORECAST n TIMEFRAMES` walks a window forward one step at a time, so
+    a step that starts late leaves days belonging to no step at all.
+    """
+    anchor = pd.Timestamp('2023-01-01')
+
+    last = _window_bound(
+        daily_ordinal_sampler, 'MAX', start, start + 1, 'months', anchor
+    )
+    first_of_next = _window_bound(
+        daily_ordinal_sampler, 'MIN', start + 1, start + 2, 'months', anchor
+    )
+
+    assert first_of_next == last + 1
+
+
+@pytest.mark.parametrize(('start', 'unit'), [(30, 'days'), (4, 'weeks')])
+def test_a_fixed_length_window_starts_where_it_always_did(
+    daily_ordinal_sampler, start, unit
+) -> None:
+    anchor = pd.Timestamp('2023-01-01')
+    first = _window_bound(
+        daily_ordinal_sampler, 'MIN', start, start + 1, unit, anchor
+    )
+
+    assert first == _ordinal_after(anchor, pd.DateOffset(**{unit: start}))
+
+
+@pytest.mark.parametrize(
+    ('offset', 'earliest_days', 'latest_days'),
+    [
+        (pd.DateOffset(months=3), 3 * 28, 3 * 31),
+        (pd.DateOffset(months=-3), -3 * 31, -3 * 28),
+        (pd.DateOffset(years=1), 365, 366),
+        (pd.DateOffset(years=-1), -366, -365),
+        (pd.DateOffset(days=5), 5, 5),
+    ],
+)
+def test_a_seconds_bound_brackets_the_calendar_offset(
+    offset, earliest_days, latest_days
+) -> None:
+    r"""A negative offset reaches further back the longer its unit is, so the
+    sign flips which of the two month lengths is the earlier instant.
+    """
+    from sdm_relational_engine.rfm.backend.local.sampler import (
+        _SECONDS_IN_DAY,
+        date_offset_to_seconds,
+    )
+
+    assert (
+        date_offset_to_seconds(offset, 'earliest')
+        == earliest_days * _SECONDS_IN_DAY
+    )
+    assert (
+        date_offset_to_seconds(offset, 'latest')
+        == latest_days * _SECONDS_IN_DAY
+    )

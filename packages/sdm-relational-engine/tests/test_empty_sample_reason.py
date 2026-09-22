@@ -3,23 +3,51 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pandas as pd
+from predictive_query.ast import Column, Condition, Constant, Filter
+from predictive_query.schema.typing import Dtype, RelOp
 from sdm_relational_engine.rfm.base.sampler import Sampler
+
+_WINDOW_PAST_THE_DATA = pd.DateOffset(years=5)
+
+
+class _TimeRange:
+    def __init__(self, end: pd.DateOffset) -> None:
+        self.end_date_offset = end
 
 
 class _Aggregation:
-    def __init__(self, column: str) -> None:
+    def __init__(self, column: str, window: pd.DateOffset) -> None:
         self._column = column
+        self.aggr_time_range = _TimeRange(window)
 
     def get_target_column_name(self) -> str:
         return self._column
 
 
 class _Query:
-    def __init__(self, *columns: str) -> None:
+    def __init__(
+        self,
+        *columns: str,
+        window: pd.DateOffset = _WINDOW_PAST_THE_DATA,
+        entity_ast: object = None,
+    ) -> None:
         self._columns = columns
+        self._window = window
+        self.entity_ast = entity_ast
 
     def get_all_target_aggregations(self) -> list[_Aggregation]:
-        return [_Aggregation(column) for column in self._columns]
+        return [_Aggregation(column, self._window) for column in self._columns]
+
+
+def _filter_on(value: str) -> Filter:
+    return Filter(
+        target=Column(fqn='movies.mid'),
+        condition=Condition(
+            target=Column(fqn='movies.genres'),
+            op=RelOp.EQ,
+            value=Constant(value=f"'{value}'", dtype_maybe=Dtype.string),
+        ),
+    )
 
 
 class _Sampler:
@@ -84,3 +112,132 @@ def test_an_unresolvable_time_range_keeps_the_generic_question() -> None:
     )
 
     assert reason == ' Is your predictive query too restrictive?'
+
+
+def test_an_anchor_with_room_after_it_is_not_blamed() -> None:
+    r"""A window that still ends inside the data rules the anchor out, so the
+    filter that selected nothing is named instead of a time the caller cannot
+    usefully move.
+    """
+    reason = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query(
+            'results.points',
+            window=pd.DateOffset(days=7),
+            entity_ast=_filter_on('comedy'),
+        ),
+        pd.Timestamp('2020-01-01'),
+    )
+
+    assert 'most likely the reason' not in reason
+    assert 'not the reason' in reason
+    assert "movies.genres = 'comedy'" in reason
+    assert 'anchor_time' not in reason
+
+
+def test_no_filter_and_no_anchor_to_blame_asks_the_question() -> None:
+    reason = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query('results.points', window=pd.DateOffset(days=7)),
+        pd.Timestamp('2020-01-01'),
+    )
+
+    assert reason == ' Is your predictive query too restrictive?'
+
+
+def test_one_table_holds_its_data() -> None:
+    reason = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query('results.points'), LAST_ROW
+    )
+
+    assert "'results' holds data" in reason
+
+
+def test_several_tables_hold_their_data() -> None:
+    reason = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query('results.points', 'laps.time'), LAST_ROW
+    )
+
+    assert "'laps', 'results' hold data" in reason
+
+
+def test_the_anchor_remedy_narrows_the_window() -> None:
+    r"""Widening the window asks for more data after the anchor, which is what
+    was missing: only a shorter window fits.
+    """
+    reason = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query('results.points'), LAST_ROW
+    )
+
+    assert 'shorten the window' in reason
+    assert 'widen the window' not in reason
+
+
+def _movie_sampler():
+    from sdm_relational_engine.rfm import Graph
+    from sdm_relational_engine.rfm.backend.local import LocalSampler, LocalTable
+
+    movies = LocalTable(
+        df=pd.DataFrame({'MID': range(10), 'GENRES': ['Comedy'] * 10}),
+        name='MOVIES',
+        primary_key='MID',
+    )
+    ratings = LocalTable(
+        df=pd.DataFrame(
+            {
+                'RID': range(40),
+                'MID': [mid % 10 for mid in range(40)],
+                'STARS': [1.0] * 40,
+                'TIME': pd.date_range('2020-01-01', periods=40, freq='D'),
+            }
+        ),
+        name='RATING',
+        primary_key='RID',
+        time_column='TIME',
+    )
+    graph = Graph([movies, ratings])
+    graph.link('RATING', 'MID', 'MOVIES')
+    return LocalSampler(graph, verbose=False), graph._to_api_graph_definition()
+
+
+def _sample_with_filter(value: str, num_train_trials: int = 10) -> str:
+    from sdm_relational_engine.rfm.query.parser import parse_query_locally
+
+    sampler, definition = _movie_sampler()
+    query = parse_query_locally(
+        f'PREDICT COUNT(RATING.STARS, 0, 7, days) FOR EACH MOVIES.MID '
+        f"WHERE MOVIES.GENRES = '{value}'",
+        definition,
+    )
+    try:
+        sampler.sample_target(
+            query,
+            num_train_examples=5,
+            train_anchor_time=pd.Timestamp('2020-01-10'),
+            num_train_trials=num_train_trials,
+            num_test_examples=0,
+            test_anchor_time=pd.Timestamp('2020-01-10'),
+            num_test_trials=0,
+        )
+    except ValueError as error:
+        return str(error)
+    return ''
+
+
+def test_a_filter_matching_nothing_is_named_rather_than_the_anchor() -> None:
+    r"""One character of case is the only difference between these two, and
+    the anchor the failing one used to blame is the one the other succeeds on.
+    """
+    assert _sample_with_filter('Comedy') == ''
+
+    reason = _sample_with_filter('comedy')
+
+    assert "MOVIES.GENRES = 'comedy'" in reason
+    assert 'most likely the reason' not in reason
+
+
+def test_the_anchor_reported_is_the_one_the_caller_passed() -> None:
+    r"""A temporal query walks its anchor backwards to find candidates, and a
+    message quoting where it stopped shows a time the caller never chose.
+    """
+    reason = _sample_with_filter('comedy', num_train_trials=50)
+
+    assert '2020-01-10' in reason
