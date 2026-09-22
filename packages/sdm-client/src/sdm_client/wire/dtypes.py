@@ -583,6 +583,31 @@ def serialize_column(series: pd.Series, dtype: str) -> list[Any]:
     return [serialize_cell(value, dtype) for value in series.tolist()]
 
 
+_TRUE = frozenset({'true', 't', '1'})
+_FALSE = frozenset({'false', 'f', '0'})
+
+
+def _as_bool(value: Any) -> Any:
+    """A declared bool read back from what the wire spells it as.
+
+    `bool('false')` is True, so a string is matched against the spellings
+    rather than cast. Anything else is returned untouched, as everywhere else
+    here.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE:
+            return True
+        if text in _FALSE:
+            return False
+        return value
+    if isinstance(value, Integral) and value in (0, 1):
+        return bool(value)
+    return value
+
+
 def as_declared(value: Any, dtype: str | None) -> Any:
     r"""``value`` read back as ``dtype``, or unchanged if it cannot be.
 
@@ -597,13 +622,20 @@ def as_declared(value: Any, dtype: str | None) -> Any:
     exactly is returned untouched rather than guessed at.
 
     A bool is an int in Python and is not a number the caller wrote, so it is
-    excluded. From text, `int` accepts only an exact integer literal, so
-    reaching the conversion means it was one. From a number, `int(1.9)` does
-    not raise and a value that is not whole is not this integer under another
-    name, which is true of a float, a numpy float and a `Decimal` alike and so
-    is asked of the value rather than of its type.
+    excluded from the numeric branches. From text, `int` accepts only an exact
+    integer literal, so reaching the conversion means it was one. From a number,
+    `int(1.9)` does not raise and a value that is not whole is not this integer
+    under another name, which is true of a float, a numpy float and a `Decimal`
+    alike and so is asked of the value rather than of its type.
+
+    A declared `bool` is read from the spellings the wire actually uses, because
+    `bool('false')` is True and would invert the answer.
     """
-    if value is None or dtype is None or isinstance(value, bool):
+    if value is None or dtype is None:
+        return value
+    if dtype.startswith('bool'):
+        return _as_bool(value)
+    if isinstance(value, bool):
         return value
     try:
         if dtype.startswith('int'):

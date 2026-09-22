@@ -32,8 +32,9 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     class never occurs". The target's dtype is on the wire, so it is read back
     with it.
 
-    Class labels only. They are values the column held, so giving them back as
-    the column's own type is restoring something. A regression's answer is a
+    Class labels only, and a `> 0` target's labels are a bool, which one
+    endpoint spells `'false'`. They are values the column held, so giving them
+    back as the column's own type is restoring something. A regression's answer is a
     number the model computed, and rounding that to the target's dtype would be
     this client deciding how precise the answer is.
     """
@@ -42,7 +43,7 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     if 'classification' not in str(task.get('kind', '')):
         return items
     dtype = task.get('target', {}).get('dtype')
-    if not dtype or not dtype.startswith(('int', 'float')):
+    if not dtype or not dtype.startswith(('int', 'float', 'bool')):
         return items
     read = []
     for item in items:
