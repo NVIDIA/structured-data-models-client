@@ -33,7 +33,7 @@ import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client.decompose import Decomposition, parts_of
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
 from sdm_client.request import Request
@@ -390,6 +390,8 @@ class PredictiveQuery:
                 gathered.append(
                     PredictiveQuery(text, self.schema).materialize(**how)
                 )
+            except MissingExtraError:
+                raise
             except StructuredDataError as error:
                 raise _which_part_could_not_be_gathered(
                     error, rewritten, step

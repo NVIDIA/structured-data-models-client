@@ -406,6 +406,8 @@ def test_a_session_refuses_a_request_that_asks_something_else():
 
 
 def test_a_session_refuses_a_request_asked_as_several_questions():
+    pytest.importorskip('sdm_relational_engine')
+
     import pandas as pd
 
     from sdm_client import PredictiveQuery, Schema
