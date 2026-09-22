@@ -73,6 +73,12 @@ _MAX_CATEGORICAL_CARDINALITY = 64
 # in an extract and still the column the user means.
 _KEY_UNIQUENESS = 0.99
 
+# And below this, the repeats are the ordinary many-to-one shape rather than a
+# fault in a key: a fact table's foreign key repeats on the order of its row
+# count, while a key with a bad extract behind it repeats a handful of times.
+# Between the two is where a column was meant to be the key and missed.
+_NEARLY_A_KEY = 0.9
+
 _KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
 
 
@@ -320,6 +326,14 @@ class Table:
         makes the warning actionable; saying only that the rows are
         indistinguishable describes the symptom. A column that cannot be a key
         at all has already been refused by `_check_key`.
+
+        Which is why only a column `_check_key` would take is offered. The
+        search filtered nothing, and the column that distinguishes two rows of
+        the same entity is very often the time column -- the ordinary "two
+        snapshots of one account" shape -- so the composite key the warning
+        recommended was the one the next line refuses. Where the only
+        disambiguating column is one a key cannot hold, that is said instead
+        of recommending it.
         """
         names = _as_key_tuple(value)
         for name in names:
@@ -330,20 +344,37 @@ class Table:
         quality = _key_quality(frame, names)
         object.__setattr__(self, 'duplicate_keys', quality.duplicates)
         if quality.duplicates:
-            together = ', '.join(
-                repr(other)
+            distinguishing = [
+                other
                 for other in self.columns
                 if other not in names
                 and _key_quality(frame, (*names, other)).duplicates == 0
-            )
-            remedy = (
-                f' {".".join(names)!r} is unique together with {together}, '
-                f'which is what a composite key looks like; pass that as the '
-                f'primary key if so.'
-                if together
-                else ' Name a different primary key if this column is a '
-                'foreign key rather than an identifier.'
-            )
+            ]
+            usable = [
+                other
+                for other in distinguishing
+                if self._could_hold_a_key(other)
+            ]
+            if usable:
+                remedy = (
+                    f' {".".join(names)!r} is unique together with '
+                    f'{", ".join(repr(other) for other in usable)}, which is '
+                    f'what a composite key looks like; pass that as the '
+                    f'primary key if so.'
+                )
+            elif distinguishing:
+                remedy = (
+                    f' They differ only by '
+                    f'{_and_list(distinguishing)}, which a primary key '
+                    f'cannot be made of, so there is no composite key to name '
+                    f'here: keep one row per {".".join(names)!r} if the model '
+                    f'should see one, or name a different primary key.'
+                )
+            else:
+                remedy = (
+                    ' Name a different primary key if this column is a '
+                    'foreign key rather than an identifier.'
+                )
             warnings.warn(
                 f'{self.name}.{".".join(names)} identifies a row '
                 f'{quality.duplicates} time(s) it has already been used, '
@@ -352,6 +383,18 @@ class Table:
                 category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
+
+    def _could_hold_a_key(self, name: str) -> bool:
+        r"""Whether `_check_key` would take this column as part of a key.
+
+        The two conditions it refuses on that a column carries on its own: a
+        dtype no identifier can be made of, and being the table's time column.
+        Asked here so that what is recommended is what is accepted.
+        """
+        column = self.columns.get(name)
+        if column is None or name == getattr(self, 'time_column', None):
+            return False
+        return supports_dtype('ID', column.dtype)
 
     def _check_name(self, name: str) -> None:
         if not isinstance(name, str) or not name:
@@ -678,6 +721,8 @@ class Schema:
         }
         if relationships is None:
             _warn_table_cannot_be_linked_to(built, dates)
+            _warn_repeats_cost_the_table_its_key(built)
+            _warn_one_key_name_keys_several_tables(built)
         _warn_stype_was_decided_by_the_rows_read(built)
         _warn_two_ways_to_reach_one_table(schema)
         return schema
@@ -1117,13 +1162,12 @@ def _warn_table_cannot_be_linked_to(
     shared with one table, and one column with several. Agreeing either by the
     other made the sentence disagree with the graph it describes.
     """
-    named_elsewhere: dict[str, set[str]] = {}
-    keyed_by = set()
-    for name, table in tables.items():
-        for column in table.columns:
-            named_elsewhere.setdefault(column, set()).add(name)
-        if isinstance(table.primary_key, str):
-            keyed_by.add(table.primary_key)
+    named_elsewhere = _tables_naming_each_column(tables)
+    keyed_by = {
+        table.primary_key
+        for table in tables.values()
+        if isinstance(table.primary_key, str)
+    }
 
     for name, table in tables.items():
         if table.primary_key is not None:
@@ -1149,6 +1193,125 @@ def _warn_table_cannot_be_linked_to(
         }
         warnings.warn(
             _unlinkable_table_reads(name, candidates, len(elsewhere)),
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+
+
+def _tables_naming_each_column(
+    tables: Mapping[str, Table],
+) -> dict[str, set[str]]:
+    r"""Which tables hold a column of each name.
+
+    A name shared by two tables is what an inferred edge is made of, so it is
+    also what every question about a missing edge is asked against.
+    """
+    named: dict[str, set[str]] = {}
+    for name, table in tables.items():
+        for column in table.columns:
+            named.setdefault(column, set()).add(name)
+    return named
+
+
+def _warn_repeats_cost_the_table_its_key(tables: Mapping[str, Table]) -> None:
+    r"""Say when a key-shaped column was declined for its repeats.
+
+    `_infer_primary_key` wants `_KEY_UNIQUENESS` of the values distinct, and
+    tolerating a little short of total uniqueness is right: one duplicated row
+    is common in an extract and still the column the caller means. But the
+    tolerance has an edge, and the behaviour either side of it is the wrong way
+    round. One duplicated row nominates the key and warns; two nominate
+    nothing, and a table with no key is not a candidate target for any edge, so
+    every relationship pointing at it disappears -- with nothing said, at
+    inference or at materialization. The louder outcome is the smaller
+    problem.
+
+    `_warn_table_cannot_be_linked_to` is the warning for a table nothing can
+    point at, and it cannot see this one: it asks for columns that identify a
+    row perfectly, and the column that caused the loss is by definition not
+    one of them. So it is asked about here instead, where the repeats are the
+    subject rather than the disqualification.
+
+    Only a column another table names is worth a word, on the same reasoning:
+    a key nothing points at loses no edge by being absent.
+
+    `_NEARLY_A_KEY` is what separates a key with a fault in it from an
+    ordinary foreign key, which repeats on the order of the row count rather
+    than a handful of times. Without it every fact table would be told its
+    foreign key nearly identified a row.
+    """
+    named_elsewhere = _tables_naming_each_column(tables)
+    for name, table in tables.items():
+        if table.primary_key is not None:
+            continue
+        frame = table.data
+        if frame is None or frame.empty:
+            continue
+        for column, meta in table.columns.items():
+            if not column.lower().endswith(_KEY_SUFFIXES):
+                continue
+            if not supports_dtype('ID', meta.dtype):
+                continue
+            if not named_elsewhere.get(column, set()) - {name}:
+                continue
+            if frame[column].nunique(dropna=True) < len(frame) * _NEARLY_A_KEY:
+                continue
+            quality = _key_quality(frame, (column,))
+            if not quality.duplicates:
+                continue
+            warnings.warn(
+                f'{name}.{column} is named like a key and another table names '
+                f'it too, but {quality.duplicates} of {len(frame)} rows '
+                f'repeat a value already used, e.g. {quality.example!r}, so '
+                f'it does not identify a row and {name!r} gets no primary '
+                f'key. Nothing can link to a table without one: every '
+                f'relationship pointing at {name!r} is dropped and it reaches '
+                f'the model unjoined. Keep one row per {column!r} -- '
+                f'frame = frame.drop_duplicates({column!r}) -- and infer '
+                f'again, or name a column that does identify a row with '
+                f'primary_keys={{{name!r}: ...}}.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
+            break
+
+
+def _warn_one_key_name_keys_several_tables(
+    tables: Mapping[str, Table],
+) -> None:
+    r"""Say when a key name is shared, so no edge can be inferred through it.
+
+    `_infer_relationships` declines every edge naming a key that more than one
+    table is keyed by, and rightly: `id` on four tables identifies a row in
+    each of them and names a parent in none, so choosing one would be a guess.
+    What was missing is that the declining was silent -- four frames infer to
+    four tables and no relationships at all, and the only thing on screen is
+    whatever unrelated notice some column happened to earn, which then reads
+    as the whole account of what inference did.
+
+    Said per shared name rather than per lost edge. A table keyed by an
+    ambiguous name can never be the target of an inferred relationship, so the
+    loss is the name's, and listing candidate edges that were never built
+    would be inventing a graph to describe.
+    """
+    keyed_by: dict[str, list[str]] = {}
+    for name, table in tables.items():
+        if isinstance(table.primary_key, str):
+            keyed_by.setdefault(table.primary_key, []).append(name)
+
+    for key, names in sorted(keyed_by.items()):
+        if len(names) < 2:
+            continue
+        shared = sorted(names)
+        warnings.warn(
+            f'{key!r} is the primary key of {_and_list(shared)}, so a column '
+            f'named {key!r} identifies a row in each of them and names a '
+            f'parent in none. No relationship is inferred through an '
+            f'ambiguous name, so nothing can point at any of those tables and '
+            f'each of them reaches the model unjoined. Say what the graph is '
+            f'-- relationships=[Relationship(child, column, {shared[0]!r}, '
+            f'{key!r}), ...] -- or give each table a key of its own name, so '
+            f'that the column naming it can be matched to it.',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )

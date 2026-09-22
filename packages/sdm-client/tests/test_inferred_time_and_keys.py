@@ -21,7 +21,7 @@ from functools import partial
 import pandas as pd
 import pytest
 
-from sdm_client import Schema
+from sdm_client import Relationship, Schema
 from sdm_client.schema import Column, Table
 
 
@@ -522,3 +522,189 @@ def test_the_two_warnings_never_name_the_same_column():
 
     assert any('calendar.day holds dates' in s for s in said)
     assert not any('nothing can link to a table' in s for s in said)
+
+
+# --- a key lost to its repeats says what it cost ---------------------------
+
+
+def account_and_trans(duplicates: int) -> dict[str, pd.DataFrame]:
+    rows = 152
+    ids = list(range(rows - duplicates)) + [0] * duplicates
+    return {
+        'account': pd.DataFrame(
+            {'ACCOUNT_ID': ids, 'district': [i % 5 for i in range(rows)]}
+        ),
+        'trans': pd.DataFrame(
+            {
+                'ACCOUNT_ID': [i % (rows - duplicates) for i in range(600)],
+                'amount': [1.0 + i % 7 for i in range(600)],
+            }
+        ),
+    }
+
+
+def test_a_key_with_repeats_past_the_tolerance_says_the_edges_it_cost():
+    """One duplicated row nominates the key and warns; two nominated nothing,
+    which drops every relationship into the table -- the worse outcome was the
+    quieter one."""
+    schema, said = warnings_from(
+        lambda: Schema.from_data(account_and_trans(duplicates=2))
+    )
+
+    assert schema['account'].primary_key is None
+    assert schema.relationships == []
+    complaint = [s for s in said if 'account.ACCOUNT_ID is named like' in s]
+    assert complaint, said
+    assert '2 of 152 rows' in complaint[0]
+    assert "every relationship pointing at 'account' is dropped" in complaint[0]
+
+
+def test_the_remedy_for_a_repeated_key_builds_the_graph():
+    """The one thing that makes the warning worth emitting."""
+    frames = account_and_trans(duplicates=2)
+    frames['account'] = frames['account'].drop_duplicates('ACCOUNT_ID')
+
+    schema, _ = warnings_from(lambda: Schema.from_data(frames))
+
+    assert schema['account'].primary_key == 'ACCOUNT_ID'
+    assert [(r.source_table, r.target_table) for r in schema.relationships] == [
+        ('trans', 'account')
+    ]
+
+
+def test_a_foreign_key_is_not_reported_as_a_key_that_failed():
+    """`trans.ACCOUNT_ID` repeats 450 times in 600 rows because it is the many
+    side of a join. A column that far from unique was never the key."""
+    _, said = warnings_from(
+        lambda: Schema.from_data(account_and_trans(duplicates=2))
+    )
+    assert not any('trans.ACCOUNT_ID is named like' in s for s in said)
+
+
+def test_a_repeated_key_no_other_table_names_costs_no_edge():
+    _, said = warnings_from(
+        lambda: Schema.from_data(
+            {'account': account_and_trans(duplicates=2)['account']}
+        )
+    )
+    assert not any('is named like' in s for s in said)
+
+
+def test_declaring_the_relationships_means_no_repeated_key_cost_an_edge():
+    frames = account_and_trans(duplicates=2)
+    _, said = warnings_from(partial(Schema.from_data, frames, relationships=[]))
+    assert not any('is named like' in s for s in said)
+
+
+# --- one key name on several tables says so --------------------------------
+
+
+def four_tables_keyed_id() -> dict[str, pd.DataFrame]:
+    return {
+        'user': pd.DataFrame({'id': range(20), 'age': range(20)}),
+        'movie': pd.DataFrame({'id': range(30), 'year': range(30)}),
+        'rating': pd.DataFrame(
+            {
+                'id': range(50),
+                'user_id': [i % 20 for i in range(50)],
+                'movie_id': [i % 30 for i in range(50)],
+            }
+        ),
+        'tag': pd.DataFrame({'id': range(40), 'weight': [1.0] * 40}),
+    }
+
+
+def test_a_key_name_on_several_tables_says_nothing_can_point_at_them():
+    """Four frames infer to four tables and no relationships at all, and the
+    only thing on screen was whatever unrelated notice a column had earned,
+    which then read as the whole account of what inference did."""
+    schema, said = warnings_from(
+        lambda: Schema.from_data(four_tables_keyed_id())
+    )
+
+    assert schema.relationships == []
+    complaint = [s for s in said if "'id' is the primary key of" in s]
+    assert complaint, said
+    assert "'movie', 'rating', 'tag' and 'user'" in complaint[0]
+
+
+def test_the_remedy_for_a_shared_key_name_builds_the_graph():
+    """The one thing that makes the warning worth emitting."""
+    frames = four_tables_keyed_id()
+    declared = [
+        Relationship('rating', 'user_id', 'user', 'id'),
+        Relationship('rating', 'movie_id', 'movie', 'id'),
+    ]
+    schema, said = warnings_from(
+        partial(Schema.from_data, frames, relationships=declared)
+    )
+
+    assert schema.relationships == declared
+    assert not any('is the primary key of' in s for s in said)
+
+
+def test_a_key_name_only_one_table_is_keyed_by_is_not_mentioned():
+    _, said = warnings_from(
+        lambda: Schema.from_data(
+            {
+                'orders': pd.DataFrame(
+                    {'order_id': [1, 2], 'total': [1.0, 2.0]}
+                ),
+                'lines': pd.DataFrame({'line_id': [1, 2], 'order_id': [1, 2]}),
+            }
+        )
+    )
+    assert not any('is the primary key of' in s for s in said)
+
+
+# --- the composite key a warning names is one the client takes -------------
+
+
+def snapshots(*, distinguished_by_value: bool) -> pd.DataFrame:
+    rows = 300
+    ids = list(range(rows - 2)) + [0, 1]
+    balances = [float(i) for i in range(rows)]
+    if not distinguished_by_value:
+        balances = [float(i) for i in range(rows - 2)] + [0.0, 1.0]
+    return pd.DataFrame(
+        {
+            'ACCOUNT_ID': ids,
+            'DATE': pd.Timestamp('2020-01-01')
+            + pd.to_timedelta(range(rows), unit='D'),
+            'BALANCE': balances,
+        }
+    )
+
+
+def test_the_composite_key_the_warning_names_is_one_the_client_takes():
+    """The search filtered nothing, so it recommended the time column -- and
+    a timestamp cannot identify a row, so `_check_key` refused the very key
+    `_adopt_key` had just asked for."""
+    schema, said = warnings_from(
+        lambda: Schema.from_data(
+            {'acct': snapshots(distinguished_by_value=True)}
+        )
+    )
+    named = [s for s in said if 'unique together with' in s]
+    assert named, said
+
+    recommended = named[0].split('unique together with ')[1]
+    columns = [
+        part.strip().strip("'")
+        for part in recommended.split(', which is')[0].split(',')
+    ]
+    schema['acct'].primary_key = ['ACCOUNT_ID', *columns]
+
+
+def test_a_key_the_time_column_alone_distinguishes_is_not_told_to_use_it():
+    """Two snapshots of one account is the ordinary shape, and there the only
+    disambiguating column is one no key can be made of."""
+    _, said = warnings_from(
+        lambda: Schema.from_data(
+            {'acct': snapshots(distinguished_by_value=False)}
+        )
+    )
+    named = [s for s in said if 'indistinguishable to the model' in s]
+    assert named, said
+    assert 'unique together with' not in named[0]
+    assert "differ only by 'DATE'" in named[0]
