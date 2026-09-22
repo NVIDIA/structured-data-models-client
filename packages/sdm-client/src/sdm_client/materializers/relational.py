@@ -596,6 +596,54 @@ def _holds_text(values: pd.Series) -> bool:
     return pd.api.types.infer_dtype(values, skipna=True) == 'string'
 
 
+def _only_junk_is_unread(present: pd.Series) -> bool:
+    """Whether what the column cannot read is junk rather than another format.
+
+    A value the column reads past can be either. `02/01/2020` among year-first
+    dates is a date written the other way, and that is the ambiguity the
+    message below is for. A value that is not a date on its own terms is not,
+    and saying it is ambiguous sends the caller to a remedy that cannot work.
+    """
+    read = pd.to_datetime(present, errors='coerce')
+    unread = present[read.isna()]
+    if unread.empty:
+        return False
+    if len(unread) == len(present):
+        return dates.looks_unambiguous(present)
+    if not dates.looks_unambiguous(present[read.notna()]):
+        return False
+    alone = pd.to_datetime(
+        pd.Series(list(unread)), errors='coerce', format='mixed'
+    )
+    return bool(alone.isna().all())
+
+
+def _refuse_values_that_do_not_read(present: pd.Series, where: str) -> None:
+    """Refuse a column that says what its dates are and still will not read.
+
+    The ambiguity message below is true only of a column that says two things.
+    A column that says one thing and carries a value that is not a date is a
+    different mistake, and telling that caller their dates are ambiguous sends
+    them to a remedy that cannot work: `dayfirst=True` on a year-first column
+    either raises or reads every date it can as a different one.
+
+    One unreadable value is enough to make the whole column fail the shape
+    test, so what the readable values say is asked separately.
+    """
+    column = where.split('.')[-1]
+    unread = present[pd.to_datetime(present, errors='coerce').isna()]
+    example = unread.iloc[0] if len(unread) else present.iloc[0]
+    raise StructuredDataError(
+        f'{where} is the time column and {len(unread)} of {len(present)} of its '
+        f'values do not read as a date, such as {example!r}. Fix or drop those '
+        f'values, or read the column yourself and let them become NaT -- '
+        f'frame[{column!r}] = pd.to_datetime(frame[{column!r}], '
+        f"errors='coerce') -- which this client accepts, saying how many rows "
+        f'the model will not see',
+        code='INVALID_REQUEST',
+    )
+
+
 def _to_time(values: pd.Series, where: str) -> pd.Series:
     r"""A string time column read as dates, or refused for saying two things.
 
@@ -628,6 +676,8 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
         how = dates.conversion_that_works(present, only_plausible_years=False)
         if how is not None:
             return dates.read(values, how)
+    if _only_junk_is_unread(present):
+        return _refuse_values_that_do_not_read(present, where)
     example = next(
         (value for value in present if isinstance(value, str)), present.iloc[0]
     )
