@@ -368,3 +368,50 @@ def test_a_target_that_varies_is_left_alone():
         partial(plan, gathered(context_rows=50, run_mode='fast'))
     )
     assert not any('every context row' in s for s in said)
+
+
+def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
+    """The client's own preamble says it refuses first where it can tell, and
+    the model is known by the time this check runs, so sending 12,500 rows to
+    be told the limit at the far end was work nobody needed to do."""
+    import numpy as np
+    import pandas as pd
+
+    from sdm_client import KumoTabular, Request, UnsupportedRequestError
+    from sdm_client.base import check_request_against_model
+
+    rng = np.random.default_rng(0)
+    rows = 12_500
+    context = pd.DataFrame({'k': range(rows), 'x': rng.normal(size=rows)})
+    context['y'] = (context['x'] > 0).astype(int)
+    request = Request(
+        context=context,
+        predict=context.drop(columns=['y']).head(3),
+        target='y',
+        task='classification',
+    )
+
+    with pytest.raises(UnsupportedRequestError, match='12,500'):
+        check_request_against_model(
+            request, KumoTabular().spec, ('prediction',)
+        )
+
+
+def test_a_context_within_the_cap_is_not_refused():
+    import numpy as np
+    import pandas as pd
+
+    from sdm_client import KumoTabular, Request
+    from sdm_client.base import check_request_against_model
+
+    rng = np.random.default_rng(0)
+    context = pd.DataFrame({'k': range(500), 'x': rng.normal(size=500)})
+    context['y'] = (context['x'] > 0).astype(int)
+    request = Request(
+        context=context,
+        predict=context.drop(columns=['y']).head(3),
+        target='y',
+        task='classification',
+    )
+
+    check_request_against_model(request, KumoTabular().spec, ('prediction',))

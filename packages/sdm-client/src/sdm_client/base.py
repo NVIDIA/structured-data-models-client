@@ -254,6 +254,22 @@ def check_request_against_model(
             },
         )
 
+    cap = spec.runtime.limits.get('context_rows_max')
+    rows = request.context_rows
+    if cap is not None and rows is not None and rows > cap:
+        raise UnsupportedRequestError(
+            f'this request carries {rows:,} context rows and {spec.model_id} '
+            f'reads at most {cap:,}. A request gathered by materialize() is '
+            f'sampled to that and says so; one built directly is sent as it '
+            f'was given, so choose the rows you want as context, or gather it '
+            f'with materialize()',
+            details={
+                'model': spec.model_id,
+                'context_rows': rows,
+                'context_rows_max': cap,
+            },
+        )
+
 
 def describe(spec: ModelSpec) -> ModelCapabilities:
     r"""The public description of a model, for ``capabilities()``."""

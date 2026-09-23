@@ -5,11 +5,11 @@ before anything is sent, and refuses or samples while naming the limit — a
 rejected request otherwise comes back as a 500 or a 422 that names neither the
 limit nor how to get under it.
 
-`Request(context=..., predict=...)` is the exception, and deliberately. It is
-handed the frames to use, and neither trims them nor refuses them for their
-size: a context of 12,500 rows is sent and the endpoint answers
-`422 UNSUPPORTED_SHAPE N_train 12500 exceeds limit 10000`. Discarding rows that
-were named row by row would be the worse of the two answers.
+`Request(context=..., predict=...)` differs in one way: it is handed the frames
+to use and does not trim them. Discarding rows that were named row by row would
+be the worse of the two answers, so a context past the model's cap is refused
+rather than sampled, naming the count and the cap. `materialize()` samples to
+the cap instead and says how many rows it took.
 
 ## Sizes
 
