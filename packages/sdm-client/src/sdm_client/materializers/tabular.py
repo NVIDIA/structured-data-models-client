@@ -116,6 +116,19 @@ def _holds_two_whole_numbers(target: pd.Series) -> bool:
     return all(_is_whole(value) for value in values)
 
 
+def _asking(request: Request, query: Any) -> Request:
+    """Record the question a request was built from.
+
+    A session pins one question and only the rows travel on a scoring call, so
+    the question is what tells one request from another. The relational route
+    records it when it gathers; this route builds the request directly and did
+    not, which left a tabular session unable to tell that it had been handed
+    something else.
+    """
+    request.query = query.to_string()
+    return request
+
+
 class TabularMaterializer:
     r"""Materialize resolved PQL against a single-table schema.
 
@@ -158,13 +171,16 @@ class TabularMaterializer:
             'context by building the schema from the rows you want.',
         )
 
-        return Request(
-            context=context,
-            predict=predict,
-            target=target_col,
-            task=self._task_kind(query, context[target_col], task),
-            schema=self.schema.snapshot(),
-            entity_table=entity_table_name,
+        return _asking(
+            Request(
+                context=context,
+                predict=predict,
+                target=target_col,
+                task=self._task_kind(query, context[target_col], task),
+                schema=self.schema.snapshot(),
+                entity_table=entity_table_name,
+            ),
+            query,
         )
 
     def indices(
@@ -213,13 +229,16 @@ class TabularMaterializer:
             'yourself.',
         )
 
-        return Request(
-            context=context,
-            predict=predict,
-            target=target_col,
-            task=self._task_kind(query, context[target_col], task),
-            schema=self.schema.snapshot(),
-            entity_table=entity_table_name,
+        return _asking(
+            Request(
+                context=context,
+                predict=predict,
+                target=target_col,
+                task=self._task_kind(query, context[target_col], task),
+                schema=self.schema.snapshot(),
+                entity_table=entity_table_name,
+            ),
+            query,
         )
 
     @staticmethod

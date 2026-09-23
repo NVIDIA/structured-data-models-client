@@ -449,3 +449,24 @@ def test_a_session_scoring_call_carries_the_inference_block():
     from sdm_client.adapters.relational import _SESSION_SCORING
 
     assert 'inference' in _SESSION_SCORING
+
+
+def test_a_tabular_request_records_the_question_it_was_built_from():
+    """The session guard tells requests apart by their question, and this route
+    builds the request directly rather than gathering it, so it recorded none
+    and the guard could never fire."""
+    import numpy as np
+    import pandas as pd
+
+    from sdm_client import KumoTabular, PredictiveQuery, Schema
+
+    rows = pd.DataFrame({'k': range(300), 'x': np.arange(300) - 150.0})
+    rows['a'] = (rows['x'] > 0).astype(int)
+    schema = Schema.from_data({'t': rows}, primary_keys={'t': 'k'})
+    schema['t']['a'].stype = 'categorical'
+
+    request = PredictiveQuery('PREDICT t.a FOR EACH t.k', schema).materialize(
+        indices=[1, 2], model=KumoTabular()
+    )
+
+    assert request.query == 'PREDICT t.a FOR EACH t.k'
