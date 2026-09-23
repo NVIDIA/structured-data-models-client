@@ -269,3 +269,72 @@ def test_merging_parts_that_wanted_different_outputs_is_refused():
     """They would not be slices of one request."""
     with pytest.raises(StructuredDataError, match='different outputs'):
         PredictionResult.merge([empty('a'), empty('b', ('scores',))])
+
+
+# --- the inference config the caller handed over ----------------------------
+
+
+def gathered_with(config, sent=None) -> _Gathered:
+    payload = relational_payload(classes=3, kind='regression')
+    payload['inference'] = {
+        'run_mode': 'fast',
+        'inference_config': dict(
+            sent if sent is not None else {'num_estimators': 1}
+        ),
+    }
+    request = _Gathered(payload)
+    request.requested_inference = {'inference_config': config}
+    return request
+
+
+def regression_config(**fields):
+    return pytest.importorskip(
+        'sdm_relational_engine.rfm.inference.config'
+    ).RegressionInferenceConfig(**fields)
+
+
+def sent_inference(request) -> dict:
+    plan = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    return plan[0]['inference']
+
+
+def test_an_inference_config_dataclass_sends_what_the_dict_form_sends():
+    """The engine takes `InferenceConfig | dict | None` and gathers the same
+    payload from either, so only the warning bookkeeping saw the difference."""
+    assert sent_inference(gathered_with(regression_config())) == (
+        sent_inference(gathered_with({}))
+    )
+
+
+def test_a_dataclass_field_the_caller_set_is_still_named_when_it_is_dropped():
+    request = gathered_with(
+        regression_config(output_type='mean'),
+        sent={'num_estimators': 1, 'output_type': 'mean'},
+    )
+    with pytest.raises(UnsupportedRequestError) as error:
+        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    assert 'output_type' in str(error.value)
+
+
+def test_a_defaulted_dataclass_field_is_dropped_without_a_refusal():
+    """A bare config asks for exactly what passing none asks for, and the
+    engine fills the rest in whether or not the caller wanted it."""
+    request = gathered_with(
+        regression_config(),
+        sent={'num_estimators': 1, 'output_type': 'median'},
+    )
+    assert sent_inference(request)['inference_config'] == {'num_estimators': 1}
+
+
+def test_a_dropped_option_is_refused_with_a_remedy_that_works():
+    """The refusal used to print the forwarded keys as what the deployment
+    accepts, and every one of them is refused by the shipping build."""
+    request = gathered_with(
+        {'output_type': 'mean'},
+        sent={'num_estimators': 1, 'output_type': 'mean'},
+    )
+    with pytest.raises(UnsupportedRequestError) as error:
+        list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    message = str(error.value)
+    assert 'drop them from inference_config' in message
+    assert 'accepts' not in message

@@ -18,14 +18,17 @@ engine.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import uuid
+import warnings
 from collections.abc import Iterator, Mapping
 from typing import Any
 
 from sdm_api.generated.tfm_api import PredictionResponse, ResponseContractError
 
 from sdm_client.base import ModelSpec
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import (
     NimRequestError,
     StructuredDataError,
@@ -50,11 +53,41 @@ _DEFAULT_OUTPUTS = {
 }
 
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
-_SESSION_SCORING = ('predict', 'output', 'metadata')
+_SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
 
 
 def _request_id() -> str:
     return f'sdm-{uuid.uuid4().hex[:12]}'
+
+
+def _keys_the_caller_set(requested: Any) -> set[str]:
+    r"""The inference-config keys that were asked for rather than defaulted.
+
+    The engine takes ``InferenceConfig | dict | None`` and this client
+    publishes nothing narrower, so a caller may hand over the dataclass. It is
+    not iterable, and reading it as a set of keys destroyed a request whose
+    payload was already gathered and correct.
+
+    A dataclass carries every field whether or not it was set, so only the
+    ones differing from their default are a request for anything. Counting the
+    rest would refuse a bare ``RegressionInferenceConfig()``, which asks for
+    exactly what passing no config at all asks for.
+    """
+    if isinstance(requested, Mapping):
+        return set(requested)
+    if dataclasses.is_dataclass(requested) and not isinstance(requested, type):
+        return {
+            field.name
+            for field in dataclasses.fields(requested)
+            if getattr(requested, field.name) != _default_of(field)
+        }
+    return set()
+
+
+def _default_of(field: dataclasses.Field) -> Any:
+    if field.default_factory is not dataclasses.MISSING:
+        return field.default_factory()
+    return field.default
 
 
 class RelationalAdapter:
@@ -85,7 +118,7 @@ class RelationalAdapter:
     def _inference(
         self, inference: Any, request: Request
     ) -> dict[str, Any] | None:
-        """Send only the inference options this deployment accepts.
+        """Send only the inference options this model reads.
 
         The engine was written against a different backend and fills in an
         inference config on every request, including keys this one refuses
@@ -93,6 +126,10 @@ class RelationalAdapter:
         rather than anything asked for -- but if the *caller* asked for one, it
         is named rather than silently discarded, because a dropped request for
         four estimators is a different prediction than the one that was wanted.
+
+        Forwarding a key is not a promise that the endpoint serves it. This is
+        a name-level filter over what the engine sends; whether a deployment
+        accepts the *value* is its own answer, and it may still refuse.
         """
         if not isinstance(inference, dict):
             return None
@@ -100,16 +137,19 @@ class RelationalAdapter:
         if not isinstance(config, dict):
             return dict(inference)
 
-        accepted = self.spec.runtime.inference_options
-        unsupported = sorted(set(config) - accepted)
-        asked_for = set(
-            request.requested_inference.get('inference_config') or ()
+        forwarded = self.spec.runtime.inference_options
+        unsupported = sorted(set(config) - forwarded)
+        asked_for = _keys_the_caller_set(
+            request.requested_inference.get('inference_config')
         )
         refused = sorted(set(unsupported) & asked_for)
         if refused:
             raise UnsupportedRequestError(
-                f'{self.spec.model_id} does not accept inference option(s) '
-                f'{refused}; it accepts {sorted(accepted)}',
+                f'{self.spec.model_id} does not read inference option(s) '
+                f'{refused}; drop them from inference_config to send the '
+                f'request without them. The keys this client forwards are '
+                f'{sorted(forwarded)}, and the endpoint decides for itself '
+                f'whether it serves the value given for one',
                 details={
                     'model': self.spec.model_id,
                     'unsupported': refused,
@@ -118,7 +158,7 @@ class RelationalAdapter:
 
         trimmed = dict(inference)
         trimmed['inference_config'] = {
-            key: value for key, value in config.items() if key in accepted
+            key: value for key, value in config.items() if key in forwarded
         }
         return trimmed
 
@@ -254,11 +294,12 @@ class RelationalAdapter:
         """Refuse what the endpoint enforces, before spending the round trip.
 
         An explanation is the narrow case: the model explains one entity at a
-        time, and only within the smaller context budget. Sending more gets a
-        500 that names neither limit, so both are checked here.
+        time, and only in the mode the smaller context budget selects. Sending
+        more gets a 500 that names neither limit, so both are checked here.
         """
         limits = self.spec.runtime.limits
         self._check_class_count(payloads, limits)
+        self._check_target_varies(payloads)
         if 'explanation' not in outputs:
             return
 
@@ -278,21 +319,17 @@ class RelationalAdapter:
                 details={'model': self.spec.model_id, 'scored': scored},
             )
 
-        context = sum(
-            len(
-                payload.get('context', {})
-                .get('instance_table', {})
-                .get('rows', [])
-            )
-            for payload in payloads
-        )
         cap = limits['context_rows_fast']
-        if context > cap:
+        if _asks_for_the_larger_context(payloads, cap):
             raise UnsupportedRequestError(
-                f'an explanation is only produced within the smaller context '
-                f'budget of {cap:,} rows, and this request gathered {context:,}. '
-                f'Re-materialize with num_context_samples={cap} or fewer',
-                details={'model': self.spec.model_id, 'context_rows': context},
+                f'an explanation is only produced in the mode the smaller '
+                f'context budget selects, and this request was gathered with '
+                f'num_context_samples above {cap:,}. Re-materialize with '
+                f'num_context_samples={cap} or fewer',
+                details={
+                    'model': self.spec.model_id,
+                    'context_rows_fast': cap,
+                },
             )
 
     def _check_class_count(
@@ -328,6 +365,55 @@ class RelationalAdapter:
                         'limit': ceiling,
                     },
                 )
+
+    def _check_target_varies(
+        self, payloads: tuple[dict[str, Any], ...]
+    ) -> None:
+        r"""Refuse, or remark on, a context whose every row says the same thing.
+
+        The tabular route judges this before it sends and the relational one
+        said nothing, so the same unlearnable question was refused by one model
+        and answered by the other. The gathered payload carries the evidence
+        either way: the target column of the context it is about to send.
+
+        A classification over one class is refused by the endpoint, so it is
+        refused here. A regression over a constant is accepted there, so it is
+        only warned about. A forecast and a link prediction are neither: their
+        targets are a horizon and a candidate list, and one value in the column
+        does not mean the same thing.
+        """
+        for payload in payloads:
+            kind = str(payload.get('task', {}).get('kind', ''))
+            if 'classification' not in kind and kind != 'regression':
+                continue
+            column = (
+                payload.get('task', {}).get('target', {}).get('column_name')
+            )
+            values = _answered_target_values(payload, column)
+            if values is None or len(values) != 1:
+                continue
+            if 'classification' in kind:
+                raise UnsupportedRequestError(
+                    f'every context row has the same {column}, and a '
+                    f'classification needs at least two classes to learn '
+                    f'from. Gather a wider context with num_context_samples, '
+                    f'or ask about entities whose answers differ',
+                    details={
+                        'model': self.spec.model_id,
+                        'target': column,
+                        'classes_in_context': 1,
+                    },
+                )
+            warnings.warn(
+                f'every context row has the same {column}, so nothing in the '
+                f'context distinguishes one answer from another. The endpoint '
+                f'will answer, but the answer cannot say much. Gather a wider '
+                f'context with num_context_samples, or ask about entities '
+                f'whose answers differ.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
+            return
 
     @staticmethod
     def _payloads(request: Request) -> tuple[dict[str, Any], ...]:
@@ -417,6 +503,63 @@ def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
     ]
 
 
+def _asks_for_the_larger_context(
+    payloads: tuple[dict[str, Any], ...], cap: int
+) -> bool:
+    r"""Whether this request selected the mode that will not explain.
+
+    The endpoint gates explaining on ``inference.run_mode``, which the client
+    derives from the *requested* ``num_context_samples``. Counting the gathered
+    rows instead misses every graph that supplies less context than was asked
+    for: 120 rows gathered under a request for 1,500 passed this guard and the
+    endpoint's refusal escaped, naming a knob the caller never set.
+
+    A payload the engine did not gather carries no ``run_mode``, and for that
+    one the rows are all there is to read.
+    """
+    modes = {
+        str(payload['inference']['run_mode'])
+        for payload in payloads
+        if isinstance(payload.get('inference'), Mapping)
+        and payload['inference'].get('run_mode') is not None
+    }
+    if modes:
+        return modes != {'fast'}
+    return (
+        sum(
+            len(
+                payload.get('context', {})
+                .get('instance_table', {})
+                .get('rows', [])
+            )
+            for payload in payloads
+        )
+        > cap
+    )
+
+
+def _answered_target_values(
+    payload: Mapping[str, Any], column: Any
+) -> set[Any] | None:
+    r"""The distinct answers the context holds for ``column``, nulls aside.
+
+    ``None`` when the context does not carry the target at all, or carries no
+    answered row: neither is a context that teaches one thing.
+    """
+    table = payload.get('context', {}).get('instance_table', {})
+    columns = table.get('columns') or []
+    rows = table.get('rows') or []
+    if not columns or not rows or column not in columns:
+        return None
+    position = columns.index(column)
+    answered = {
+        row[position]
+        for row in rows
+        if len(row) > position and row[position] is not None
+    }
+    return answered or None
+
+
 def _distinct_labels(payload: Mapping[str, Any], column: Any) -> int | None:
     r"""How many distinct values the context holds for ``column``."""
     table = payload.get('context', {}).get('instance_table', {})
@@ -472,8 +615,6 @@ def _named_entities(
     Forecasting is the one task that answers a row more than once, and only
     then: a row may repeat across steps, but not within one.
     """
-    import dataclasses
-
     if payload is None:
         return list(items)
     table = payload.get('predict', {}).get('instance_table', {})

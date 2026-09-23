@@ -211,17 +211,18 @@ Tabular is the case where `schema` has one table and no relationships. That is t
 `Request` is **singular**. A run that exceeds the server's per-call cap is split into several round
 trips by the adapter — batching is transport, and does not belong in a type the user reads.
 
-**The direct builder takes related tables too**, so it is not tabular-only:
+**The direct builder is the single-table one.** A relational request is
+gathered, not assembled from frames: the neighbourhood around each entity is
+sampled and folded onto the instance table, which is what `materialize()` does
+and what the relational model is sent. So `related_tables=` is refused there
+rather than building a request no path can send.
 
 ```python
 Request(context=ctx_df, predict=rows_df, target='churn', task='classification')
-Request(
-    context=ctx_df,
-    predict=rows_df,
-    target='churn',
-    task='classification',
-    related_tables={'orders': orders_df},
-)
+
+PredictiveQuery(
+    'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id', schema
+).materialize(indices=[1, 2, 3], model=KumoRelational())
 ```
 
 ### The task kind is stated, never guessed
@@ -332,8 +333,10 @@ Explanations are an **output field**, not a method. `explain=True` remains sugar
 
 The DataFrame's shape depends on the **task**, not the model. Verified against a live endpoint:
 classification and multiclass both give **one row per entity**, with multiclass carrying a
-probability per class as columns rather than a row per class. Ranking gives `k` rows per entity
-and forecasting one row per step. An earlier draft said multiclass gave a row per class; it does not.
+probability per class as columns rather than a row per class. Ranking also gives one row per
+entity, holding its `k` candidates as a list, because expanding them would leave `row_index` no
+longer identifying a row; forecasting gives one row per entity per step. An earlier draft said
+multiclass gave a row per class, and another said a ranking gave `k` rows; neither does.
 
 **Every row carries `row_index`. It also carries the entity key when the model has one** — tabular
 requests may have no key at all. Join on the key when present, otherwise on `row_index`.
@@ -466,8 +469,9 @@ it degrades to a clear error rather than a wrong answer.
 
 `run_mode` was a preset over two numbers, and it leaked a server detail into the user's hands.
 
-We checked the server. It only distinguishes `fast` (1,000 context rows) from anything else (10,000).
-The client's four-tier `debug/fast/normal/best` ladder was a client-side fiction.
+We checked the server. It distinguishes only two context budgets, the smaller one
+reached by `fast`; the client's four-tier `debug/fast/normal/best` ladder was a
+client-side fiction. Both numbers are in [limits](../reference/limits.md).
 
 So the user sets the real numbers, and the client derives the wire value:
 
@@ -482,30 +486,12 @@ nothing, which is the defect this replaced. The count narrows the gathered
 examples where they are built, before anything is encoded.
 
 The client **pre-flights the server's limits before sending**, so you get a readable error instead of
-a 500. Both endpoints cap a context; the rest of these are the relational one's.
+a 500, naming the limit and how to get under it.
 
-| Size limit (relational) | Value |
-|---|---|
-| context rows | 1,000 with an explanation, else 10,000 |
-| predict rows | 1,000, or 200 for link prediction |
-| explanation | exactly 1 entity, and forces the `fast` budget |
-
-| Size limit (tabular) | Value |
-|---|---|
-| context rows | 10,000 |
-
-The tabular cap is enforced where the context is chosen. A number above it is
-refused with the limit named; omitting the number takes a sample of 10,000 and
-says so, because the alternative is encoding a table of any size and being
-refused at the far end.
-
-| Structural limit (relational) | Value |
-|---|---|
-| hops | 6 |
-| tables | 15 |
-| forecasting | one predict entity; `num_forecasts ≤ num_train`; anchor times sorted and distinct |
-
-One request is now impossible and says so clearly: an explanation with more than 1,000 context rows.
+Every value and where each is checked lives in
+[limits](../reference/limits.md), and only there. This page had its own copy of
+those tables and they went stale twice: a limit that moved was corrected in the
+reference and not here, so the two pages disagreed about what the client does.
 
 ---
 

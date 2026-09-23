@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import numpy as np
 import pandas as pd
-from predictive_query.ast import Aggregation, ASTNode
+from predictive_query.ast import Aggregation, ASTNode, Filter
 from predictive_query.query import (
     QueryType,
     ValidatedPredictiveQuery,
@@ -461,17 +461,20 @@ class Sampler(ABC):
 
         Asking whether the query is too restrictive sends the caller to rewrite
         something that was never wrong, so state the anchor and the range it
-        sits against and let them judge. The question is kept as the fallback,
-        for when the anchor cannot be the explanation.
+        sits against and let them judge. An anchor with room after it for the
+        whole window cannot be the explanation, though, and a caller sent to
+        move it has been handed a remedy that cannot work: there the entity
+        filter is what selected nothing.
         """
         generic = ' Is your predictive query too restrictive?'
         if not isinstance(anchor_time, pd.Timestamp):
             return generic
         try:
+            aggregations = query.get_all_target_aggregations()
             table_names = sorted(
                 {
                     aggr.get_target_column_name().split('.')[0]
-                    for aggr in query.get_all_target_aggregations()
+                    for aggr in aggregations
                 }
             )
             if not table_names:
@@ -482,15 +485,32 @@ class Sampler(ABC):
             return generic
         if max_time is None:
             return generic
+
         listed = ', '.join(repr(name) for name in table_names)
+        holds = 'holds' if len(table_names) == 1 else 'hold'
+        facts = (
+            f'it is {anchor_time}, and {listed} {holds} data from '
+            f'{min_time} to {max_time}'
+        )
+
+        if _window_fits_after(aggregations, anchor_time, max_time):
+            condition = _entity_filter_condition(query)
+            if condition is None:
+                return generic
+            return (
+                f' The anchor time is not the reason: {facts}, which leaves '
+                f"room after it for the query's whole window. No entity "
+                f'passed {condition!r}, so there was nothing to sample: check '
+                f'that the values it compares against occur in the data, '
+                f'including their case.'
+            )
+
         return (
-            f' The anchor time is most likely the reason: it is '
-            f'{anchor_time}, and {listed} hold data from '
-            f'{min_time} to {max_time}. Context examples come from before the '
-            f"anchor and each needs the query's full window of data after "
-            f'it, so an anchor at or near the end of the range leaves none to '
-            f'draw from. Pass an earlier anchor_time, or widen the window the '
-            f'query asks about.'
+            f' The anchor time is most likely the reason: {facts}. Context '
+            f'examples come from before the anchor and each needs the '
+            f"query's full window of data after it, so an anchor at or near "
+            f'the end of the range leaves none to draw from. Pass an earlier '
+            f'anchor_time, or shorten the window the query asks about.'
         )
 
     def sample_target(
@@ -607,6 +627,10 @@ class Sampler(ABC):
             return index
 
         # 3. Build training and test candidates ###############################
+        # A temporal query walks `train_anchor_time` backwards below, so the
+        # anchor a diagnosis quotes has to be kept aside here: the caller can
+        # only act on the one they passed.
+        requested_train_anchor_time = train_anchor_time
         train_index = test_index = np.array([], dtype=np.int64)
         train_time = test_time = pd.Series([], dtype='datetime64[ns]')
 
@@ -792,7 +816,7 @@ class Sampler(ABC):
         if num_train_examples > 0 and len(train_y) == 0:
             raise ValueError(
                 'Failed to collect any context examples.'
-                + self._empty_sample_reason(query, train_anchor_time)
+                + self._empty_sample_reason(query, requested_train_anchor_time)
             )
 
         if num_test_examples > 0 and len(test_y) == 0:
@@ -1040,6 +1064,34 @@ def _normalize_text(
     ser = ser.map(normalize_fn)
 
     return ser
+
+
+def _window_fits_after(
+    aggregations: list[Aggregation],
+    anchor_time: pd.Timestamp,
+    max_time: pd.Timestamp,
+) -> bool:
+    r"""Whether the data still reaches past every aggregation's window.
+
+    An aggregation whose window is unknown counts as not fitting, so a query
+    the diagnosis cannot read keeps the anchor explanation rather than ruling
+    it out on no evidence.
+    """
+    ends = []
+    for aggr in aggregations:
+        window = getattr(aggr, 'aggr_time_range', None)
+        if window is None:
+            return False
+        ends.append(window.end_date_offset)
+    if not ends:
+        return False
+    return anchor_time + max_date_offset(*ends) <= max_time
+
+
+def _entity_filter_condition(query: ValidatedPredictiveQuery) -> str | None:
+    if not isinstance(query.entity_ast, Filter):
+        return None
+    return query.entity_ast.condition.to_string()
 
 
 def min_date_offset(*args: pd.DateOffset | None) -> pd.DateOffset | None:

@@ -351,3 +351,122 @@ def test_a_forecast_row_without_a_step_is_refused():
             correlated_payload(rows=1, kind='forecasting'),
         )
     assert 'names no step' in str(error.value)
+
+
+# --- a session answers the question it pinned -------------------------------
+
+
+def test_a_session_refuses_a_request_that_asks_something_else():
+    """Only the rows travel on a scoring call, so the pinned question is the one
+    that would be answered. Two unrelated temporal queries compile to identical
+    task and schema payloads, so nothing downstream can tell them apart."""
+    pytest.importorskip('sdm_relational_engine')
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client.client import FittedModel
+    from sdm_client.schema import Relationship
+
+    users = pd.DataFrame({'uid': range(40)})
+    a = pd.DataFrame(
+        {
+            'uid': [i % 40 for i in range(400)],
+            'when': pd.date_range('2020-01-01', periods=400, freq='D'),
+        }
+    )
+    b = pd.DataFrame(
+        {
+            'uid': [i % 40 for i in range(400)],
+            'when': pd.date_range('2020-01-01', periods=400, freq='D'),
+        }
+    )
+    schema = Schema.from_data(
+        {'users': users, 'a': a, 'b': b},
+        primary_keys={'users': 'uid'},
+        time_columns={'a': 'when', 'b': 'when'},
+        relationships=[
+            Relationship('a', 'uid', 'users', 'uid'),
+            Relationship('b', 'uid', 'users', 'uid'),
+        ],
+    )
+    kw = dict(indices=[1, 2], anchor_time=pd.Timestamp('2021-01-01'))
+    pinned = PredictiveQuery(
+        'PREDICT COUNT(a.*, 0, 30, days) > 0 FOR EACH users.uid', schema
+    ).materialize(**kw)
+    other = PredictiveQuery(
+        'PREDICT COUNT(b.*, 0, 30, days) > 0 FOR EACH users.uid', schema
+    ).materialize(**kw)
+
+    handle = FittedModel(
+        None, None, 'sid', ('prediction',), question=pinned.query
+    )
+
+    with pytest.raises(StructuredDataError, match='pinned'):
+        handle.predict(other)
+
+
+def test_a_session_refuses_a_request_asked_as_several_questions():
+    pytest.importorskip('sdm_relational_engine')
+
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client.client import FittedModel
+    from sdm_client.schema import Relationship
+
+    users = pd.DataFrame({'uid': range(40)})
+    ev = pd.DataFrame(
+        {
+            'uid': [i % 40 for i in range(400)],
+            'value': [1.0 + i % 5 for i in range(400)],
+            'when': pd.date_range('2020-01-01', periods=400, freq='D'),
+        }
+    )
+    schema = Schema.from_data(
+        {'users': users, 'ev': ev},
+        primary_keys={'users': 'uid'},
+        time_columns={'ev': 'when'},
+        relationships=[Relationship('ev', 'uid', 'users', 'uid')],
+    )
+    forecast = PredictiveQuery(
+        'PREDICT SUM(ev.value, 0, 30, days) FORECAST 3 TIMEFRAMES FOR EACH users.uid',
+        schema,
+    ).materialize(indices=[1, 2], anchor_time=pd.Timestamp('2021-01-01'))
+
+    handle = FittedModel(
+        None, None, 'sid', ('prediction',), question=forecast.query
+    )
+
+    with pytest.raises(StructuredDataError, match='3 questions'):
+        handle.predict(forecast)
+
+
+def test_a_session_scoring_call_carries_the_inference_block():
+    """The contract's SessionPredictionRequest lists `inference`; dropping it
+    made explanations unreachable through a session, because the endpoint only
+    explains when inference.run_mode is 'fast'."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client.adapters.relational import _SESSION_SCORING
+
+    assert 'inference' in _SESSION_SCORING
+
+
+def test_a_tabular_request_records_the_question_it_was_built_from():
+    """The session guard tells requests apart by their question, and this route
+    builds the request directly rather than gathering it, so it recorded none
+    and the guard could never fire."""
+    import numpy as np
+    import pandas as pd
+
+    from sdm_client import KumoTabular, PredictiveQuery, Schema
+
+    rows = pd.DataFrame({'k': range(300), 'x': np.arange(300) - 150.0})
+    rows['a'] = (rows['x'] > 0).astype(int)
+    schema = Schema.from_data({'t': rows}, primary_keys={'t': 'k'})
+    schema['t']['a'].stype = 'categorical'
+
+    request = PredictiveQuery('PREDICT t.a FOR EACH t.k', schema).materialize(
+        indices=[1, 2], model=KumoTabular()
+    )
+
+    assert request.query == 'PREDICT t.a FOR EACH t.k'

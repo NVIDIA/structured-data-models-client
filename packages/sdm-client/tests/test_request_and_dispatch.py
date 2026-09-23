@@ -10,13 +10,17 @@ that happens before anything is sent, which is where a mistake should be caught.
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
 from sdm_client import (
     KumoRelational,
     KumoTabular,
+    Relationship,
     Request,
+    Schema,
     SDMClient,
     UnknownModelError,
     UnsupportedRequestError,
@@ -108,10 +112,27 @@ def test_a_dict_instead_of_a_frame_names_the_argument_and_the_fix():
     assert 'pd.DataFrame' in message
 
 
-def test_related_tables_make_a_request_relational():
+def a_relational_request() -> Request:
+    """A request that is relational the way a caller makes one.
+
+    `related_tables=` is refused where it is offered, because nothing could
+    send what it built, so the schema is what says a request crosses tables.
+    """
     orders = pd.DataFrame({'order_id': [1, 2], 'row_id': [0, 1]})
-    request = simple_request(related_tables={'orders': orders})
-    assert request.is_relational
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context(), 'orders': orders},
+            primary_keys={'instance': 'row_id', 'orders': 'order_id'},
+            relationships=[
+                Relationship('orders', 'row_id', 'instance', 'row_id')
+            ],
+        )
+    return simple_request(schema=schema)
+
+
+def test_related_tables_make_a_request_relational():
+    assert a_relational_request().is_relational
 
 
 def test_required_capabilities_are_switched_on_only_by_what_is_needed():
@@ -123,8 +144,7 @@ def test_required_capabilities_are_switched_on_only_by_what_is_needed():
 
 
 def test_tabular_refuses_a_relational_request_before_sending_it():
-    orders = pd.DataFrame({'order_id': [1, 2], 'row_id': [0, 1]})
-    request = simple_request(related_tables={'orders': orders})
+    request = a_relational_request()
     with pytest.raises(UnsupportedRequestError) as error:
         check_request_against_model(
             request, KumoTabular().spec, ('prediction',)
@@ -135,9 +155,18 @@ def test_tabular_refuses_a_relational_request_before_sending_it():
 
 
 def test_relational_accepts_the_same_relational_request():
+    check_request_against_model(
+        a_relational_request(), KumoRelational().spec, ('prediction',)
+    )
+
+
+def test_related_frames_are_refused_where_they_are_offered():
+    """Nothing could send what they built: the relational adapter wants a
+    gathered request and the tabular one cannot take a second table."""
     orders = pd.DataFrame({'order_id': [1, 2], 'row_id': [0, 1]})
-    request = simple_request(related_tables={'orders': orders})
-    check_request_against_model(request, KumoRelational().spec, ('prediction',))
+
+    with pytest.raises(UnsupportedRequestError, match='orders'):
+        simple_request(related_tables={'orders': orders})
 
 
 def test_a_task_kind_the_model_does_not_serve_is_refused():

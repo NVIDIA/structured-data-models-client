@@ -62,7 +62,7 @@ _DEFAULT_OUTPUTS = {
 # travel with each later call. ``metadata`` rides along on both halves because
 # its request id is what correlates the call with the endpoint's logs.
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
-_SESSION_SCORING = ('predict', 'output', 'metadata')
+_SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
 
 # What the contract allows a `PredictionItem.id` to be.
 _MAX_ID_LENGTH = 1024

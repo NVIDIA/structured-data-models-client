@@ -33,7 +33,7 @@ import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client.decompose import Decomposition, parts_of
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
 from sdm_client.request import Request
@@ -42,6 +42,27 @@ from sdm_client.schema import Schema
 
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
+
+
+def _which_part_could_not_be_gathered(
+    error: StructuredDataError, rewritten: Decomposition, step: Any
+) -> StructuredDataError:
+    """Say which of the rewritten questions failed, and that there were several.
+
+    A question asked as several is gathered one at a time, and a failure in one
+    of them was relayed as though the caller had written it. A horizon that
+    outruns the data then read as a complaint about the caller's aggregation
+    window, which is the one thing it is not: the window in the message belongs
+    to a rewrite they never saw, and the same message came back for a genuinely
+    over-long window, so the two mistakes could not be told apart.
+    """
+    how_many = len(rewritten.parts)
+    return StructuredDataError(
+        f'{error.args[0]} This is {rewritten.kind} part {step} of {how_many}: '
+        f'the window named above is that part{chr(39)}s, not the one written, so '
+        f'ask for fewer than {how_many} if the data does not reach that far.',
+        code=getattr(error, 'code', 'INVALID_REQUEST'),
+    )
 
 
 class PredictiveQuery:
@@ -363,10 +384,18 @@ class PredictiveQuery:
         # is one yes-or-no question, and a task that ranks nothing is refused
         # by the endpoint for carrying an option it cannot act on.
         how.pop('top_k', None)
-        gathered = [
-            PredictiveQuery(text, self.schema).materialize(**how)
-            for text, _ in rewritten.parts
-        ]
+        gathered = []
+        for text, step in rewritten.parts:
+            try:
+                gathered.append(
+                    PredictiveQuery(text, self.schema).materialize(**how)
+                )
+            except MissingExtraError:
+                raise
+            except StructuredDataError as error:
+                raise _which_part_could_not_be_gathered(
+                    error, rewritten, step
+                ) from error
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])
@@ -386,7 +415,10 @@ class PredictiveQuery:
         )
         if resolved is None or not response.ok:
             reasons = (
-                '; '.join(error.message for error in response.errors)
+                '; '.join(
+                    _without_the_validator_trace(error.message)
+                    for error in response.errors
+                )
                 or 'the query did not resolve'
             )
             raise StructuredDataError(
@@ -505,6 +537,27 @@ class PredictiveQuery:
 _PREDICTED_COLUMN = re.compile(
     r'PREDICT\s+([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s', re.IGNORECASE
 )
+
+#: The English sentence inside a pydantic validation error, without the
+#: `[type=..., input_value=...]` tail the library appends to it.
+_VALIDATOR_SENTENCE = re.compile(r'Value error, (.+?)(?= \[type=)', re.DOTALL)
+
+
+def _without_the_validator_trace(message: str) -> str:
+    r"""The sentence a refusal is making, without the trace around it.
+
+    A few window errors -- a zero-width one, an inverted one -- are raised by
+    the grammar's own models rather than by its parser, so they arrive as a
+    pydantic trace: an error count, the internal type that raised, the repr of
+    the arguments it was given, and a link to pydantic's documentation. The
+    English inside is as actionable as the parser's own row-and-column
+    messages; nothing around it is, and none of it is this package's to show.
+
+    A message written any other way is left alone, so a validator that stops
+    wrapping its errors this way loses the scaffolding rather than the text.
+    """
+    said = _VALIDATOR_SENTENCE.findall(message)
+    return '; '.join(part.strip() for part in said) if said else message
 
 
 def _is_hashable(value: Any) -> bool:

@@ -27,10 +27,13 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
+from sdm_api.generated.tfm_api import PredictionItem
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
+from sdm_client.wire.answers import as_declared_target
+from sdm_client.wire.dtypes import as_declared
 
 D = decimal.Decimal
 
@@ -584,3 +587,47 @@ def test_a_zero_row_batch_carrying_no_type_is_not_refused():
         entity_table='t',
     )
     assert request.predict_rows == 0
+
+
+# --- a declared bool is read back as one --------------------------------
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    [
+        ('false', False),
+        ('true', True),
+        ('False', False),
+        (0, False),
+        (1, True),
+        (True, True),
+        ('maybe', 'maybe'),
+        (2, 2),
+    ],
+)
+def test_a_declared_bool_is_read_from_what_the_wire_spells(value, expected):
+    """`bool('false')` is True, which would invert the answer, so the spellings
+    are matched rather than cast. Anything else is returned untouched."""
+    read = as_declared(value, 'bool')
+
+    assert read == expected
+    assert type(read) is type(expected)
+
+
+def test_a_bool_target_is_restored_like_an_int_one():
+    """A `> 0` query declares a bool target and one endpoint spells it
+    'false', so `prediction == False` counted none of them."""
+    items = [
+        PredictionItem(row_index=0, prediction='false'),
+        PredictionItem(row_index=1, prediction='true'),
+    ]
+    payload = {
+        'task': {
+            'kind': 'binary_classification',
+            'target': {'column_name': 'TARGET', 'dtype': 'bool'},
+        }
+    }
+
+    read = as_declared_target(items, payload)
+
+    assert [item.prediction for item in read] == [False, True]

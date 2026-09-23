@@ -208,3 +208,39 @@ def test_a_repeated_key_with_no_composite_says_so_instead(recwarn):
     said = ' '.join(str(w.message) for w in recwarn)
     assert 'unique together with' not in said
     assert 'foreign key rather than an identifier' in said
+
+
+def test_a_name_match_that_cannot_join_says_why_it_was_dropped():
+    """Dropping it is right, because joining int64 to string matches nothing.
+    Doing it silently left the query refused for a foreign key that looks as
+    though it should exist."""
+    import warnings
+
+    import pandas as pd
+
+    from sdm_client import Schema
+
+    movies = pd.DataFrame(
+        {
+            'movieID': [str(i) for i in range(60)],
+            'title': [f't{i}' for i in range(60)],
+        }
+    )
+    ratings = pd.DataFrame(
+        {
+            'ratingID': range(400),
+            'movieID': [i % 60 for i in range(400)],
+            'when': pd.date_range('2020-01-01', periods=400, freq='D'),
+        }
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        built = Schema.from_data(
+            {'movies': movies, 'ratings': ratings},
+            primary_keys={'movies': 'movieID', 'ratings': 'ratingID'},
+            time_columns={'ratings': 'when'},
+        )
+
+    assert built.relationships == []
+    assert any('cannot match' in str(item.message) for item in caught)

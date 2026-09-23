@@ -92,6 +92,7 @@ class FittedModel:
         pinned_keys: frozenset[Any] = frozenset(),
         pinned_over_a_window: bool = False,
         held_back: int = 0,
+        question: str | None = None,
     ) -> None:
         self._client = client
         self._adapter = adapter
@@ -104,6 +105,7 @@ class FittedModel:
         self._pinned_over_a_window = pinned_over_a_window
         self._held_back = held_back
         self._pinned = pinned or {}
+        self._question = question
         self._closed = False
 
     @property
@@ -132,6 +134,27 @@ class FittedModel:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
                 code='INVALID_CONFIGURATION',
+            )
+        parts = getattr(request, 'parts', None)
+        if parts is not None:
+            raise StructuredDataError(
+                f'this request is asked as {len(parts)} questions and a session '
+                f'pins one context, so scoring it here would answer the pinned '
+                f'question that many times. Ask it with predict()',
+                code='UNSUPPORTED_REQUEST',
+            )
+        asked = getattr(request, 'query', None)
+        if (
+            self._question is not None
+            and asked is not None
+            and asked != self._question
+        ):
+            raise StructuredDataError(
+                f'this session pinned {self._question!r} and was handed '
+                f'{asked!r}. Only the rows travel on a scoring call, so '
+                f'the pinned question is the one that would be answered. Fit '
+                f'again to ask something else',
+                code='INVALID_REQUEST',
             )
         if request.nothing_to_score:
             return _empty_answer(self.model, self._outputs)
@@ -341,13 +364,21 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
-        answers = [
-            self.predict(part, model=model, outputs=wanted)
-            for part in request.parts or ()
-        ]
+        answers = []
+        for part, (_, about) in zip(
+            request.parts or (), rewritten.parts, strict=True
+        ):
+            try:
+                answers.append(self.predict(part, model=model, outputs=wanted))
+            except StructuredDataError as error:
+                raise _which_part_failed(error, rewritten, about) from error
         if ranking:
             return _ranked(answers, rewritten, outputs)
-        return _by_step(answers, rewritten)
+        merged = _by_step(answers, rewritten)
+        _warn_of_steps_that_carry_no_explanation(
+            answers, rewritten, outputs, spec_for(model).model_id
+        )
+        return _report_absent(merged, outputs, spec_for(model).model_id)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -444,6 +475,7 @@ class SDMClient:
             ),
             held_back=held,
             pinned_over_a_window=request.target_moves_with_time,
+            question=getattr(request, 'query', None),
         )
 
     def _prepare(
@@ -750,6 +782,61 @@ def _top_k_of(asked: str) -> int | None:
     return int(found.group(1)) if found else None
 
 
+def _which_part_failed(
+    error: StructuredDataError, rewritten: Decomposition, about: Any
+) -> StructuredDataError:
+    """Name the candidate or step whose question failed.
+
+    A ranking is asked as one yes-or-no question per candidate, so a candidate
+    nothing reached makes its own question single-class and the endpoint
+    refuses it for a task the caller never wrote. Which of them it was is
+    known here and was not being said, and the answers for the candidates that
+    did work are lost with it.
+    """
+    which = (
+        f'candidate {about!r}'
+        if rewritten.kind == RANKING
+        else f'part {about} of {len(rewritten.parts)}'
+    )
+    return StructuredDataError(
+        f'{error.args[0]} This is the question asked for {which}, one of '
+        f'{len(rewritten.parts)} this {rewritten.kind} is asked as.',
+        code=getattr(error, 'code', 'INVALID_REQUEST'),
+    )
+
+
+def _warn_of_steps_that_carry_no_explanation(
+    answers: list[PredictionResult],
+    rewritten: Decomposition,
+    requested: Sequence[str] | None,
+    model: str,
+) -> None:
+    """Say which steps of a forecast came back without an explanation.
+
+    Each step is explained on its own, so some can carry one and others not.
+    The merged answer holds whatever came back, and a check that asks only
+    whether the whole result carries an explanation sees the ones that did and
+    says nothing about the ones that did not.
+    """
+    if not requested or 'explanation' not in requested:
+        return
+    missing = [
+        step
+        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
+        if answer.explanation is None
+    ]
+    if not missing or len(missing) == len(answers):
+        return
+    warnings.warn(
+        f'{model} explained {len(answers) - len(missing)} of '
+        f'{len(answers)} forecast steps, and step '
+        f'{", ".join(str(step) for step in missing)} carries none, so '
+        f'the explanation this request asked for is not there for every step.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 def _by_step(
     answers: list[PredictionResult], rewritten: Decomposition
 ) -> PredictionResult:
@@ -760,6 +847,10 @@ def _by_step(
     arrived as several answers. An entity keeps its own row across the steps:
     the pair of row and step is what names a point in the series, which is how
     the contract reads it.
+
+    Each step is explained on its own, so the explanations are kept under the
+    step they belong to. Dropping them left the result saying it carried an
+    explanation while holding none.
     """
     import dataclasses
 
@@ -768,11 +859,17 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         for item in answer.items
     ]
+    by_step = {
+        step: answer.explanation
+        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
+        if answer.explanation is not None
+    }
     return PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
+        explanation={'by_forecast_step': by_step} if by_step else None,
     )
 
 

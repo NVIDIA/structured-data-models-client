@@ -365,3 +365,20 @@ def test_a_frame_on_a_self_referencing_schema_is_told_what_would_work():
     message = str(error.value)
     assert 'indices=[...]' in message
     assert 'drop the relationship' in message
+
+
+# --- capabilities only names what a caller can reach -------------------------
+
+
+def test_no_explanation_format_is_advertised_that_cannot_be_asked_for():
+    """Two were, and neither appears in any response: nothing on this client
+    takes a format argument, and the endpoint names its own."""
+    from sdm_client import KumoRelational
+
+    assert KumoRelational().spec.runtime.explanation_formats == ()
+
+
+def test_the_model_that_explains_still_says_so_through_its_outputs():
+    from sdm_client import KumoRelational
+
+    assert 'explanation' in KumoRelational().spec.runtime.outputs

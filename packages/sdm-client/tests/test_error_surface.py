@@ -30,11 +30,16 @@ import pytest
 from sdm_client import (
     KumoRelational,
     PredictiveQuery,
+    Request,
     Schema,
 )
 from sdm_client.client import FittedModel, _empty_answer
 from sdm_client.core.transport import _build_retry
-from sdm_client.errors import NimRequestError, StructuredDataError
+from sdm_client.errors import (
+    NimRequestError,
+    StructuredDataError,
+    UnsupportedRequestError,
+)
 from sdm_client.schema import Relationship
 
 
@@ -517,3 +522,73 @@ def test_rows_that_are_a_list_are_counted(rows):
 
     payload = {'predict': {'instance_table': {'rows': rows}}}
     assert _envelope_rows(payload, 'predict') == len(rows)
+
+
+# --- refusals that show their own machinery ---------------------------------
+
+
+def windowed_schema() -> Schema:
+    parent = pd.DataFrame({'ID': range(20)})
+    child = pd.DataFrame(
+        {
+            'cid': range(60),
+            'ID': [i % 20 for i in range(60)],
+            'ts': pd.to_datetime(
+                pd.date_range('2024-01-01', periods=60, freq='D')
+            ),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {'parent': parent, 'child': child},
+            primary_keys={'parent': 'ID', 'child': 'cid'},
+            time_columns={'child': 'ts'},
+            relationships=[Relationship('child', 'ID', 'parent', 'ID')],
+        )
+
+
+@pytest.mark.parametrize('window', ['0, 0, days', '30, 0, days'])
+def test_a_window_the_grammar_validates_is_refused_in_words(window):
+    """A zero-width window and an inverted one are caught by the grammar's own
+    models rather than its parser, so the refusal arrived as a pydantic trace
+    around the sentence rather than as the sentence."""
+    with pytest.raises(StructuredDataError) as raised:
+        PredictiveQuery(
+            f'PREDICT COUNT(child.*, {window}) FOR EACH parent.ID',
+            windowed_schema(),
+        ).materialize(indices=[1], model=KumoRelational())
+    message = str(raised.value)
+    assert 'needs to be smaller than the end date offset' in message
+    assert 'validation error' not in message
+    assert 'pydantic' not in message
+    assert 'input_value' not in message
+
+
+def test_a_window_the_parser_refuses_keeps_its_own_words():
+    with pytest.raises(StructuredDataError) as raised:
+        PredictiveQuery(
+            'PREDICT COUNT(child.*, -5, 30, days) FOR EACH parent.ID',
+            windowed_schema(),
+        ).materialize(indices=[1], model=KumoRelational())
+    assert 'aggregation in the past' in str(raised.value)
+
+
+# --- a request no path can send --------------------------------------------
+
+
+def test_related_frames_are_refused_where_they_are_offered():
+    """Neither model can be sent a request built this way, so the argument
+    that builds one is refused rather than answered one call later."""
+    context = pd.DataFrame({'ID': [1, 2, 3], 'label': [0, 1, 0]})
+    with pytest.raises(UnsupportedRequestError) as raised:
+        Request(
+            context=context,
+            predict=pd.DataFrame({'ID': [4]}),
+            target='label',
+            task='classification',
+            related_tables={'child': pd.DataFrame({'ID': [1], 'v': [1.0]})},
+        )
+    message = str(raised.value)
+    assert 'child' in message
+    assert 'materialize' in message

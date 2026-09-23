@@ -37,7 +37,7 @@ from typing import Any
 import pandas as pd
 
 from sdm_client.decompose import Decomposition
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
 
@@ -119,7 +119,12 @@ class Request:
         inference: Gathering knobs, e.g. ``num_context_samples``. The adapter
             turns these into whatever the endpoint expects; ``run_mode`` is
             derived there rather than being something you set.
+        query: The predictive query this was built from, when it was built from
+            one. A session pins one question and only the rows travel on a
+            scoring call, so this is what tells one request from another.
     """
+
+    query: str | None = None
 
     def __init__(
         self,
@@ -145,9 +150,9 @@ class Request:
             task: One of :data:`TASK_KINDS`. Stated, never inferred from the
                 target's cardinality -- guessing there is what turns a
                 two-class target into a multiclass one.
-            related_tables: Tables the instance rows join to. Supplying these
-                makes the request relational, so a single-table model will
-                refuse it.
+            related_tables: Refused. A relational request is gathered by
+                ``PredictiveQuery(...).materialize(...)``; no model can be
+                sent one built from frames here.
             schema: Override the inferred schema. Rarely needed.
             entity_table: The name the instance table is known by. Only visible
                 in errors and in a query, so the default is fine.
@@ -159,6 +164,7 @@ class Request:
             StructuredDataError: If a frame is not a DataFrame, ``task`` is not
                 a known kind, ``context`` has no rows, ``target`` is missing
                 from ``context``, or ``predict`` carries the target column.
+            UnsupportedRequestError: If ``related_tables`` is given.
         """
         context = _require_frame(context, 'context')
         predict = _require_frame(predict, 'predict')
@@ -166,6 +172,7 @@ class Request:
             name: _require_frame(frame, f'related_tables[{name!r}]')
             for name, frame in (related_tables or {}).items()
         }
+        _refuse_tables_no_model_can_be_given(related)
 
         if task not in TASK_KINDS:
             raise StructuredDataError(
@@ -588,6 +595,35 @@ def _require_frame(value: Any, name: str) -> pd.DataFrame:
             code='INVALID_REQUEST',
         )
     return value
+
+
+def _refuse_tables_no_model_can_be_given(
+    related: Mapping[str, pd.DataFrame],
+) -> None:
+    r"""Refuse related tables handed to the builder that cannot carry them.
+
+    Neither model can be sent a request built this way. The relational one is
+    sent gathered envelopes -- neighbourhoods sampled around each entity, with
+    the columns folded onto the instance table -- and refuses frames; the
+    tabular one reads one table and would drop these without saying so. So the
+    argument took frames, built an object, and every path that could have sent
+    it said no, one call later than the mistake.
+
+    Said here, where the tables are offered, and naming the builder that does
+    gather them.
+    """
+    if not related:
+        return
+    raise UnsupportedRequestError(
+        f'related_tables {sorted(related)} makes this a relational request, '
+        f'and no model can be sent one built from frames: the relational '
+        f'model is sent tables gathered around each entity, and the tabular '
+        f'model reads a single table. Gather it with '
+        f'PredictiveQuery(...).materialize(indices=[...], '
+        f"model='kumo-relational'), whose schema holds the related tables and "
+        f'the relationships that reach them.',
+        details={'related_tables': sorted(related)},
+    )
 
 
 def _entity_table_in(payloads: Sequence[Mapping[str, Any]]) -> str:

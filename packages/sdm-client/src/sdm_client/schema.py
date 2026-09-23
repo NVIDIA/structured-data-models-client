@@ -73,6 +73,12 @@ _MAX_CATEGORICAL_CARDINALITY = 64
 # in an extract and still the column the user means.
 _KEY_UNIQUENESS = 0.99
 
+# And below this, the repeats are the ordinary many-to-one shape rather than a
+# fault in a key: a fact table's foreign key repeats on the order of its row
+# count, while a key with a bad extract behind it repeats a handful of times.
+# Between the two is where a column was meant to be the key and missed.
+_NEARLY_A_KEY = 0.9
+
 _KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
 
 
@@ -320,6 +326,14 @@ class Table:
         makes the warning actionable; saying only that the rows are
         indistinguishable describes the symptom. A column that cannot be a key
         at all has already been refused by `_check_key`.
+
+        Which is why only a column `_check_key` would take is offered. The
+        search filtered nothing, and the column that distinguishes two rows of
+        the same entity is very often the time column -- the ordinary "two
+        snapshots of one account" shape -- so the composite key the warning
+        recommended was the one the next line refuses. Where the only
+        disambiguating column is one a key cannot hold, that is said instead
+        of recommending it.
         """
         names = _as_key_tuple(value)
         for name in names:
@@ -330,20 +344,37 @@ class Table:
         quality = _key_quality(frame, names)
         object.__setattr__(self, 'duplicate_keys', quality.duplicates)
         if quality.duplicates:
-            together = ', '.join(
-                repr(other)
+            distinguishing = [
+                other
                 for other in self.columns
                 if other not in names
                 and _key_quality(frame, (*names, other)).duplicates == 0
-            )
-            remedy = (
-                f' {".".join(names)!r} is unique together with {together}, '
-                f'which is what a composite key looks like; pass that as the '
-                f'primary key if so.'
-                if together
-                else ' Name a different primary key if this column is a '
-                'foreign key rather than an identifier.'
-            )
+            ]
+            usable = [
+                other
+                for other in distinguishing
+                if self._could_hold_a_key(other)
+            ]
+            if usable:
+                remedy = (
+                    f' {".".join(names)!r} is unique together with '
+                    f'{", ".join(repr(other) for other in usable)}, which is '
+                    f'what a composite key looks like; pass that as the '
+                    f'primary key if so.'
+                )
+            elif distinguishing:
+                remedy = (
+                    f' They differ only by '
+                    f'{_and_list(distinguishing)}, which a primary key '
+                    f'cannot be made of, so there is no composite key to name '
+                    f'here: keep one row per {".".join(names)!r} if the model '
+                    f'should see one, or name a different primary key.'
+                )
+            else:
+                remedy = (
+                    ' Name a different primary key if this column is a '
+                    'foreign key rather than an identifier.'
+                )
             warnings.warn(
                 f'{self.name}.{".".join(names)} identifies a row '
                 f'{quality.duplicates} time(s) it has already been used, '
@@ -352,6 +383,18 @@ class Table:
                 category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
+
+    def _could_hold_a_key(self, name: str) -> bool:
+        r"""Whether `_check_key` would take this column as part of a key.
+
+        The two conditions it refuses on that a column carries on its own: a
+        dtype no identifier can be made of, and being the table's time column.
+        Asked here so that what is recommended is what is accepted.
+        """
+        column = self.columns.get(name)
+        if column is None or name == getattr(self, 'time_column', None):
+            return False
+        return supports_dtype('ID', column.dtype)
 
     def _check_name(self, name: str) -> None:
         if not isinstance(name, str) or not name:
@@ -534,7 +577,7 @@ class Schema:
         relationships: Sequence[Relationship] = (),
     ) -> None:
         self._tables = dict(tables)
-        self.relationships = list(relationships)
+        self.relationships = _each_link_once(relationships)
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Hold an assigned relationship to the same standard as a passed one.
@@ -653,7 +696,11 @@ class Schema:
             )
         if relationships is None:
             inferred = _infer_relationships(built)
+            unjoinable = [
+                link for link in inferred if not _is_joinable(built, link)
+            ]
             inferred = [link for link in inferred if _is_joinable(built, link)]
+            _warn_of_a_name_match_that_cannot_join(built, unjoinable)
         else:
             inferred = list(relationships)
             for link in inferred:
@@ -678,7 +725,10 @@ class Schema:
         }
         if relationships is None:
             _warn_table_cannot_be_linked_to(built, dates)
+            _warn_repeats_cost_the_table_its_key(built)
+            _warn_one_key_name_keys_several_tables(built)
         _warn_stype_was_decided_by_the_rows_read(built)
+        _warn_several_columns_could_be_the_time_column(built)
         _warn_two_ways_to_reach_one_table(schema)
         return schema
 
@@ -1075,6 +1125,36 @@ def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
     return stamps[0] if len(stamps) == 1 else None
 
 
+def _warn_several_columns_could_be_the_time_column(
+    tables: Mapping[str, Table],
+) -> None:
+    """Say when a table has more than one timestamp and so was given none.
+
+    Choosing between them would decide what the model is allowed to know at
+    the moment it answers, which is the caller's to decide. But saying nothing
+    left the table with no time column, and the refusal that follows asks for a
+    column the table already has several of.
+    """
+    for name, table in sorted(tables.items()):
+        if table.time_column is not None:
+            continue
+        stamps = sorted(
+            column
+            for column, held in table.columns.items()
+            if held.stype == 'timestamp'
+        )
+        if len(stamps) < 2:
+            continue
+        warnings.warn(
+            f'{name!r} has more than one column that could be its time '
+            f'column, {_and_list(stamps)}, so it was given none, and a query '
+            f'over a window of it is refused. Name the one that says when a '
+            f'row became true: time_columns={{{name!r}: {stamps[0]!r}}}.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+
+
 def _warn_table_cannot_be_linked_to(
     tables: Mapping[str, Table], dates: Mapping[str, str]
 ) -> None:
@@ -1117,13 +1197,12 @@ def _warn_table_cannot_be_linked_to(
     shared with one table, and one column with several. Agreeing either by the
     other made the sentence disagree with the graph it describes.
     """
-    named_elsewhere: dict[str, set[str]] = {}
-    keyed_by = set()
-    for name, table in tables.items():
-        for column in table.columns:
-            named_elsewhere.setdefault(column, set()).add(name)
-        if isinstance(table.primary_key, str):
-            keyed_by.add(table.primary_key)
+    named_elsewhere = _tables_naming_each_column(tables)
+    keyed_by = {
+        table.primary_key
+        for table in tables.values()
+        if isinstance(table.primary_key, str)
+    }
 
     for name, table in tables.items():
         if table.primary_key is not None:
@@ -1149,6 +1228,125 @@ def _warn_table_cannot_be_linked_to(
         }
         warnings.warn(
             _unlinkable_table_reads(name, candidates, len(elsewhere)),
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+
+
+def _tables_naming_each_column(
+    tables: Mapping[str, Table],
+) -> dict[str, set[str]]:
+    r"""Which tables hold a column of each name.
+
+    A name shared by two tables is what an inferred edge is made of, so it is
+    also what every question about a missing edge is asked against.
+    """
+    named: dict[str, set[str]] = {}
+    for name, table in tables.items():
+        for column in table.columns:
+            named.setdefault(column, set()).add(name)
+    return named
+
+
+def _warn_repeats_cost_the_table_its_key(tables: Mapping[str, Table]) -> None:
+    r"""Say when a key-shaped column was declined for its repeats.
+
+    `_infer_primary_key` wants `_KEY_UNIQUENESS` of the values distinct, and
+    tolerating a little short of total uniqueness is right: one duplicated row
+    is common in an extract and still the column the caller means. But the
+    tolerance has an edge, and the behaviour either side of it is the wrong way
+    round. One duplicated row nominates the key and warns; two nominate
+    nothing, and a table with no key is not a candidate target for any edge, so
+    every relationship pointing at it disappears -- with nothing said, at
+    inference or at materialization. The louder outcome is the smaller
+    problem.
+
+    `_warn_table_cannot_be_linked_to` is the warning for a table nothing can
+    point at, and it cannot see this one: it asks for columns that identify a
+    row perfectly, and the column that caused the loss is by definition not
+    one of them. So it is asked about here instead, where the repeats are the
+    subject rather than the disqualification.
+
+    Only a column another table names is worth a word, on the same reasoning:
+    a key nothing points at loses no edge by being absent.
+
+    `_NEARLY_A_KEY` is what separates a key with a fault in it from an
+    ordinary foreign key, which repeats on the order of the row count rather
+    than a handful of times. Without it every fact table would be told its
+    foreign key nearly identified a row.
+    """
+    named_elsewhere = _tables_naming_each_column(tables)
+    for name, table in tables.items():
+        if table.primary_key is not None:
+            continue
+        frame = table.data
+        if frame is None or frame.empty:
+            continue
+        for column, meta in table.columns.items():
+            if not column.lower().endswith(_KEY_SUFFIXES):
+                continue
+            if not supports_dtype('ID', meta.dtype):
+                continue
+            if not named_elsewhere.get(column, set()) - {name}:
+                continue
+            if frame[column].nunique(dropna=True) < len(frame) * _NEARLY_A_KEY:
+                continue
+            quality = _key_quality(frame, (column,))
+            if not quality.duplicates:
+                continue
+            warnings.warn(
+                f'{name}.{column} is named like a key and another table names '
+                f'it too, but {quality.duplicates} of {len(frame)} rows '
+                f'repeat a value already used, e.g. {quality.example!r}, so '
+                f'it does not identify a row and {name!r} gets no primary '
+                f'key. Nothing can link to a table without one: every '
+                f'relationship pointing at {name!r} is dropped and it reaches '
+                f'the model unjoined. Keep one row per {column!r} -- '
+                f'frame = frame.drop_duplicates({column!r}) -- and infer '
+                f'again, or name a column that does identify a row with '
+                f'primary_keys={{{name!r}: ...}}.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
+            break
+
+
+def _warn_one_key_name_keys_several_tables(
+    tables: Mapping[str, Table],
+) -> None:
+    r"""Say when a key name is shared, so no edge can be inferred through it.
+
+    `_infer_relationships` declines every edge naming a key that more than one
+    table is keyed by, and rightly: `id` on four tables identifies a row in
+    each of them and names a parent in none, so choosing one would be a guess.
+    What was missing is that the declining was silent -- four frames infer to
+    four tables and no relationships at all, and the only thing on screen is
+    whatever unrelated notice some column happened to earn, which then reads
+    as the whole account of what inference did.
+
+    Said per shared name rather than per lost edge. A table keyed by an
+    ambiguous name can never be the target of an inferred relationship, so the
+    loss is the name's, and listing candidate edges that were never built
+    would be inventing a graph to describe.
+    """
+    keyed_by: dict[str, list[str]] = {}
+    for name, table in tables.items():
+        if isinstance(table.primary_key, str):
+            keyed_by.setdefault(table.primary_key, []).append(name)
+
+    for key, names in sorted(keyed_by.items()):
+        if len(names) < 2:
+            continue
+        shared = sorted(names)
+        warnings.warn(
+            f'{key!r} is the primary key of {_and_list(shared)}, so a column '
+            f'named {key!r} identifies a row in each of them and names a '
+            f'parent in none. No relationship is inferred through an '
+            f'ambiguous name, so nothing can point at any of those tables and '
+            f'each of them is left out of the request. Say what the graph is '
+            f'-- relationships=[Relationship(child, column, {shared[0]!r}, '
+            f'{key!r}), ...] -- or give each table a key of its own name, so '
+            f'that the column naming it can be matched to it.',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
@@ -1190,6 +1388,60 @@ def _unlinkable_table_reads(
     )
 
 
+def _each_link_once(
+    links: Sequence[Relationship],
+) -> list[Relationship]:
+    """The same relationship given twice is one edge, in the order it was given.
+
+    The materializer already sends one edge for it, so keeping two here made
+    the two halves of the client disagree about what the graph is, and the
+    ambiguity warning read a repeat as a second way across the pair.
+    """
+    seen: set[tuple[str, str, str, str]] = set()
+    once = []
+    for link in links:
+        named = (
+            link.source_table,
+            link.source_column,
+            link.target_table,
+            link.target_column,
+        )
+        if named in seen:
+            continue
+        seen.add(named)
+        once.append(link)
+    return once
+
+
+def _warn_of_a_pair_joined_both_ways(schema: Schema) -> None:
+    """Say when two tables name each other, which reads as an ambiguous pair.
+
+    A parent naming one representative child is an ordinary shape and the
+    schema takes it. The sampler walks an edge in both directions, so a
+    declared reverse edge is a second way across the same pair, and every
+    aggregation between them is then refused for a foreign key it says it
+    cannot find uniquely -- when there is exactly one, and the reverse edge is
+    what made it two.
+    """
+    pairs = {
+        (link.source_table, link.target_table) for link in schema.relationships
+    }
+    said = set()
+    for source, target in sorted(pairs):
+        if (target, source) not in pairs or (target, source) in said:
+            continue
+        said.add((source, target))
+        warnings.warn(
+            f'{source!r} and {target!r} name each other, and a relationship is '
+            f'crossed in both directions, so this is two ways over one pair and '
+            f'an aggregation between them is refused for not having a single '
+            f'one. Declare whichever of the two a question is about and leave '
+            f'the other out.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+
+
 def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
     r"""Say when one table reaches another by more than one column.
 
@@ -1207,8 +1459,11 @@ def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
     ways: dict[tuple[str, str], list[str]] = {}
     for link in schema.relationships:
         pair = (link.source_table, link.target_table)
-        ways.setdefault(pair, []).append(link.source_column)
+        columns = ways.setdefault(pair, [])
+        if link.source_column not in columns:
+            columns.append(link.source_column)
 
+    _warn_of_a_pair_joined_both_ways(schema)
     for (source, target), columns in sorted(ways.items()):
         if len(columns) < 2:
             continue
@@ -1285,6 +1540,30 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
                 )
             )
     return links
+
+
+def _warn_of_a_name_match_that_cannot_join(
+    tables: Mapping[str, Table], dropped: Sequence[Relationship]
+) -> None:
+    """Say when a column named for a key holds values that key cannot match.
+
+    Dropping it is right: joining `int64` to `string` matches nothing, and an
+    edge that matches nothing is worse than no edge. But it was dropped in
+    silence, and the table then either goes unsent or the query is refused for
+    a foreign key that looks as though it should exist.
+    """
+    for link in dropped:
+        source = tables[link.source_table].columns[link.source_column]
+        target = tables[link.target_table].columns[link.target_column]
+        warnings.warn(
+            f'{link.source_table}.{link.source_column} names the key of '
+            f'{link.target_table!r} and holds {source.dtype!r} where that key '
+            f'holds {target.dtype!r}, which cannot match, so no relationship '
+            f'was made from it. Store the two as one type if they are the same '
+            f'identifier.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
 
 
 def _require_joinable(tables: Mapping[str, Table], link: Relationship) -> None:

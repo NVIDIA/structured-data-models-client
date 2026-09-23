@@ -13,10 +13,13 @@ convert data that needed no converting.
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
 from sdm_client.core import dates
+from sdm_client.errors import StructuredDataError
 
 
 @pytest.mark.parametrize(
@@ -160,4 +163,81 @@ def test_a_conversion_writes_itself_as_the_call_it_is(conversion, written):
     assert str(conversion) == written
     assert list(conversion.arguments) == (
         [k.split('=')[0].strip() for k in written.split(', ') if k]
+    )
+
+
+# --- a column that says one thing is not called ambiguous -------------------
+
+
+def time_column(values):
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client.schema import Relationship
+
+    users = pd.DataFrame({'uid': range(40)})
+    events = pd.DataFrame(
+        {'uid': [i % 40 for i in range(len(values))], 'when': values}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'events': events},
+            primary_keys={'users': 'uid'},
+            time_columns={'events': 'when'},
+            relationships=[Relationship('events', 'uid', 'users', 'uid')],
+        )
+        return PredictiveQuery(
+            'PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.uid',
+            schema,
+        ).materialize(indices=[1, 2], anchor_time=pd.Timestamp('2021-06-01'))
+
+
+def test_a_year_first_column_with_a_named_zone_is_read():
+    """The shape test took `Z` and `+00:00` and not `UTC`, so a column that
+    says exactly what its dates are was refused for saying two things."""
+    assert (
+        time_column(
+            [f'2021-02-{(i % 28) + 1:02d} 13:24:26 UTC' for i in range(120)]
+        )
+        is not None
+    )
+
+
+@pytest.mark.parametrize(
+    'values',
+    [
+        [f'2021-02-{(i % 28) + 1:02d} 13:24:26 CST' for i in range(120)],
+        [f'2021-02-{(i % 28) + 1:02d}' for i in range(119)] + ['not a date'],
+    ],
+    ids=['an ambiguous zone', 'one value that is not a date'],
+)
+def test_a_column_that_will_not_read_is_not_called_ambiguous(values):
+    """`dayfirst=True`, what the ambiguity message prescribes, either raises on
+    these or reads every date it can as a different one."""
+    with pytest.raises(StructuredDataError) as raised:
+        time_column(values)
+
+    said = str(raised.value)
+    assert 'do not read as a date' in said
+    assert 'dayfirst' not in said
+
+
+def test_a_date_written_the_other_way_is_still_called_ambiguous():
+    """One value in another format is the ambiguity the message is for, and it
+    has to stay told apart from a value that is not a date at all."""
+    values = [f'2020-01-{1 + i % 28:02d}' for i in range(1500)] + ['02/01/2020']
+
+    with pytest.raises(StructuredDataError, match='day-first'):
+        time_column(values)
+
+
+def test_the_remedy_for_a_column_that_will_not_read_works():
+    values = [f'2021-02-{(i % 28) + 1:02d}' for i in range(119)] + [
+        'not a date'
+    ]
+
+    assert (
+        time_column(pd.to_datetime(pd.Series(values), errors='coerce'))
+        is not None
     )

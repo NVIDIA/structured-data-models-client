@@ -26,7 +26,8 @@ import pandas as pd
 #: decided, if at all, by `day_comes_first`.
 YEAR_FIRST = re.compile(
     r'\d{4}[-/]\d{2}[-/]\d{2}'
-    r'([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?'
+    r'([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?'
+    r'(Z|[+-]\d{2}:?\d{2}| [A-Za-z][A-Za-z0-9_+/-]*)?)?'
 )
 
 #: Enough rows to be sure the whole column has one shape, few enough that

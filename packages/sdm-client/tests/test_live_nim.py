@@ -171,17 +171,18 @@ def test_a_single_row_scores(client):
 
 @requires_tabular
 def test_a_relational_request_is_refused_without_reaching_the_endpoint(client):
-    """The profile rejects it, so no request is sent at all."""
+    """Refused where the tables are offered, which is earlier than the profile
+    check that used to catch it, so no request is built and none is sent."""
     orders = pd.DataFrame({'order_id': [1, 2], 'row_id': [0, 1]})
-    request = Request(
-        context=labelled(),
-        predict=unlabelled(),
-        target='churn',
-        task='classification',
-        related_tables={'orders': orders},
-    )
+
     with pytest.raises(UnsupportedRequestError):
-        client.predict(request, model=KumoTabular())
+        Request(
+            context=labelled(),
+            predict=unlabelled(),
+            target='churn',
+            task='classification',
+            related_tables={'orders': orders},
+        )
 
 
 @requires_tabular
