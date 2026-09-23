@@ -903,3 +903,24 @@ def test_a_table_with_several_timestamps_is_told_it_was_given_none():
         in str(item.message)
         for item in caught
     )
+
+
+@pytest.mark.parametrize(
+    ('option', 'names'),
+    [({'num_neighbors': []}, 'num_neighbors'), ({'num_hops': 0}, 'num_hops')],
+    ids=['an empty num_neighbors', 'num_hops of zero'],
+)
+def test_both_spellings_of_no_hop_are_refused_alike(option, names):
+    """They are one request written two ways, and the endpoint reads between 1
+    and 6 hops, so one slipping through to be taken literally was the defect."""
+    built = catalogue_schema()
+
+    with pytest.raises(StructuredDataError, match='no hop at all') as raised:
+        PredictiveQuery(
+            'PREDICT COUNT(ratings.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            built,
+        ).materialize(
+            indices=[1, 2], anchor_time=pd.Timestamp('2001-01-01'), **option
+        )
+
+    assert names in str(raised.value)

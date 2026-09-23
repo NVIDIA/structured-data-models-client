@@ -552,16 +552,20 @@ class RelationalMaterializer:
                 code='INVALID_REQUEST',
             )
 
-        if neighbors is not None and not len(neighbors):
+        hops = len(neighbors) if neighbors is not None else num_hops
+        if hops is not None and hops < 1:
+            spelled = (
+                'num_neighbors is empty'
+                if neighbors is not None
+                else f'num_hops is {hops}'
+            )
             raise StructuredDataError(
-                'num_neighbors is empty, and it says how many neighbours to '
-                'take at each hop, so an empty one samples no hop at all and '
-                'leaves the entity table alone in the request. Give one size '
-                'per hop, such as num_neighbors=[8, 8], or leave it out',
+                f'{spelled}, which asks for no hop at all, and the endpoint '
+                f'reads between 1 and {limits["hops_max"]}. A request that '
+                f'crosses no relationship is a single-table one: give a hop, '
+                f'such as num_neighbors=[8, 8], or ask it of kumo-tabular',
                 code='INVALID_REQUEST',
             )
-
-        hops = len(neighbors) if neighbors is not None else num_hops
         if hops is not None and hops > limits['hops_max']:
             raise StructuredDataError(
                 f'this request samples {hops} hops and the endpoint reads at most '
