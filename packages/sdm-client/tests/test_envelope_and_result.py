@@ -267,34 +267,78 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
         )
 
 
-def test_a_forecast_that_carries_no_explanation_says_so():
-    """The single-request path reports a field the answer did not carry, and
-    the decomposed path returned its merge without passing through it, so a
-    forecast asked for an explanation and given none said nothing."""
+def forecast_through_the_client(explanations, requested):
+    """Drive the decomposed route itself, so what is proved is the wiring."""
     import warnings
+    from types import SimpleNamespace
 
     from sdm_api.generated.tfm_api import PredictionItem
 
-    from sdm_client.client import _by_step, _report_absent
+    from sdm_client.client import SDMClient
     from sdm_client.decompose import Decomposition
     from sdm_client.result import PredictionResult
 
+    rewritten = Decomposition(
+        'forecast', tuple((f'q{i}', i) for i in range(1, len(explanations) + 1))
+    )
+    request = SimpleNamespace(
+        decomposition=rewritten,
+        parts=tuple(object() for _ in explanations),
+    )
     answers = [
         PredictionResult(
             model='kumo-relational',
             request_id='r',
-            items=[PredictionItem(row_index=0, prediction=1.0)],
-            outputs=('prediction', 'explanation'),
-            explanation=None,
+            items=[
+                PredictionItem(row_index=0, prediction=1.0, forecast_step=None)
+            ],
+            outputs=tuple(requested),
+            explanation=held,
         )
-        for _ in range(2)
+        for held in explanations
     ]
-    merged = _by_step(
-        answers, Decomposition('forecast', (('q1', 1), ('q2', 2)))
-    )
+    client = SDMClient.__new__(SDMClient)
+    handed = iter(answers)
+    client.predict = lambda part, model, outputs: next(handed)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        _report_absent(merged, ['prediction', 'explanation'], 'kumo-relational')
+        SDMClient._answer_in_parts(
+            client, request, 'kumo-relational', list(requested)
+        )
+    return [str(item.message) for item in caught]
 
-    assert any('explanation' in str(item.message) for item in caught)
+
+def test_a_forecast_step_that_carries_no_explanation_is_named():
+    """Each step is explained on its own, so asking only whether the merged
+    answer carries an explanation sees the step that did and says nothing
+    about the one that did not."""
+    said = forecast_through_the_client(
+        [{'cohorts': ['a']}, None], ['prediction', 'explanation']
+    )
+
+    assert any('step 2 carries none' in message for message in said)
+
+
+def test_a_forecast_whose_steps_all_explain_is_not_reported():
+    said = forecast_through_the_client(
+        [{'cohorts': ['a']}, {'cohorts': ['b']}], ['prediction', 'explanation']
+    )
+
+    assert not any('carries none' in message for message in said)
+
+
+def test_a_forecast_that_was_not_asked_for_an_explanation_is_not_reported():
+    said = forecast_through_the_client(
+        [{'cohorts': ['a']}, None], ['prediction']
+    )
+
+    assert said == []
+
+
+def test_a_forecast_carrying_no_explanation_at_all_still_says_so():
+    said = forecast_through_the_client(
+        [None, None], ['prediction', 'explanation']
+    )
+
+    assert any('explanation' in message for message in said)

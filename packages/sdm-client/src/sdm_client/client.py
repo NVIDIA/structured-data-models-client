@@ -374,9 +374,11 @@ class SDMClient:
                 raise _which_part_failed(error, rewritten, about) from error
         if ranking:
             return _ranked(answers, rewritten, outputs)
-        return _report_absent(
-            _by_step(answers, rewritten), outputs, spec_for(model).model_id
+        merged = _by_step(answers, rewritten)
+        _warn_of_steps_that_carry_no_explanation(
+            answers, rewritten, outputs, spec_for(model).model_id
         )
+        return _report_absent(merged, outputs, spec_for(model).model_id)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -800,6 +802,38 @@ def _which_part_failed(
         f'{error.args[0]} This is the question asked for {which}, one of '
         f'{len(rewritten.parts)} this {rewritten.kind} is asked as.',
         code=getattr(error, 'code', 'INVALID_REQUEST'),
+    )
+
+
+def _warn_of_steps_that_carry_no_explanation(
+    answers: list[PredictionResult],
+    rewritten: Decomposition,
+    requested: Sequence[str] | None,
+    model: str,
+) -> None:
+    """Say which steps of a forecast came back without an explanation.
+
+    Each step is explained on its own, so some can carry one and others not.
+    The merged answer holds whatever came back, and a check that asks only
+    whether the whole result carries an explanation sees the ones that did and
+    says nothing about the ones that did not.
+    """
+    if not requested or 'explanation' not in requested:
+        return
+    missing = [
+        step
+        for (_, step), answer in zip(rewritten.parts, answers, strict=True)
+        if answer.explanation is None
+    ]
+    if not missing or len(missing) == len(answers):
+        return
+    warnings.warn(
+        f'{model} explained {len(answers) - len(missing)} of '
+        f'{len(answers)} forecast steps, and step '
+        f'{", ".join(str(step) for step in missing)} carries none, so '
+        f'the explanation this request asked for is not there for every step.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
     )
 
 
