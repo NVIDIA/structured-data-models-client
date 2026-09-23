@@ -469,8 +469,9 @@ it degrades to a clear error rather than a wrong answer.
 
 `run_mode` was a preset over two numbers, and it leaked a server detail into the user's hands.
 
-We checked the server. It only distinguishes `fast` (1,000 context rows) from anything else (10,000).
-The client's four-tier `debug/fast/normal/best` ladder was a client-side fiction.
+We checked the server. It distinguishes only two context budgets, the smaller one
+reached by `fast`; the client's four-tier `debug/fast/normal/best` ladder was a
+client-side fiction. Both numbers are in [limits](../reference/limits.md).
 
 So the user sets the real numbers, and the client derives the wire value:
 
