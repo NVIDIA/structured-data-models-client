@@ -374,7 +374,9 @@ class SDMClient:
                 raise _which_part_failed(error, rewritten, about) from error
         if ranking:
             return _ranked(answers, rewritten, outputs)
-        return _by_step(answers, rewritten)
+        return _report_absent(
+            _by_step(answers, rewritten), outputs, spec_for(model).model_id
+        )
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""

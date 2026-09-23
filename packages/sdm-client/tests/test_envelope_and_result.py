@@ -265,3 +265,36 @@ def test_a_malformed_two_hundred_stays_inside_the_client_error_contract():
             },
             ('prediction',),
         )
+
+
+def test_a_forecast_that_carries_no_explanation_says_so():
+    """The single-request path reports a field the answer did not carry, and
+    the decomposed path returned its merge without passing through it, so a
+    forecast asked for an explanation and given none said nothing."""
+    import warnings
+
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.client import _by_step, _report_absent
+    from sdm_client.decompose import Decomposition
+    from sdm_client.result import PredictionResult
+
+    answers = [
+        PredictionResult(
+            model='kumo-relational',
+            request_id='r',
+            items=[PredictionItem(row_index=0, prediction=1.0)],
+            outputs=('prediction', 'explanation'),
+            explanation=None,
+        )
+        for _ in range(2)
+    ]
+    merged = _by_step(
+        answers, Decomposition('forecast', (('q1', 1), ('q2', 2)))
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        _report_absent(merged, ['prediction', 'explanation'], 'kumo-relational')
+
+    assert any('explanation' in str(item.message) for item in caught)
