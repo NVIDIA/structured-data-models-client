@@ -485,33 +485,12 @@ nothing, which is the defect this replaced. The count narrows the gathered
 examples where they are built, before anything is encoded.
 
 The client **pre-flights the server's limits before sending**, so you get a readable error instead of
-a 500. Both endpoints cap a context; the rest of these are the relational one's.
+a 500, naming the limit and how to get under it.
 
-| Size limit (relational) | Value |
-|---|---|
-| context rows | 1,000 with an explanation, else 10,000 |
-| predict rows | 1,000, or 200 for link prediction |
-| explanation | exactly 1 entity, and forces the `fast` budget |
-
-| Size limit (tabular) | Value |
-|---|---|
-| context rows | 10,000 |
-
-The tabular cap is enforced where the context is chosen, which is
-`materialize()`. A number above it is refused with the limit named; omitting the
-number takes a sample of 10,000 and says so, because the alternative is encoding
-a table of any size and being refused at the far end. `Request(context=...,
-predict=...)` is handed its context instead of choosing one, so it neither
-samples nor trims it, and one past the cap is refused here rather than at the
-far end.
-
-| Structural limit (relational) | Value |
-|---|---|
-| hops | 6 |
-| tables | 15 |
-| forecasting | one predict entity; `num_forecasts ≤ num_train`; anchor times sorted and distinct |
-
-One request is now impossible and says so clearly: an explanation with more than 1,000 context rows.
+Every value and where each is checked lives in
+[limits](../reference/limits.md), and only there. This page had its own copy of
+those tables and they went stale twice: a limit that moved was corrected in the
+reference and not here, so the two pages disagreed about what the client does.
 
 ---
 
