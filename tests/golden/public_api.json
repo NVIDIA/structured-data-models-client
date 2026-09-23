@@ -822,6 +822,7 @@
           "payloads",
           "predict",
           "predict_rows",
+          "query",
           "target_moves_with_time"
         ],
         "public_methods": {

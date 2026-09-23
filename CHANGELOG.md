@@ -30,6 +30,9 @@ The first release is being assembled. Nothing here has shipped yet.
 - `FittedModel` carries the question its context was pinned for, so a session
   can refuse a request that asks something else rather than answering the
   pinned question in its place.
+- `Request.query`: the predictive query a request was built from, when it was
+  built from one. It is what tells one request from another on a scoring call,
+  where only the rows travel.
 
 ### Fixed
 

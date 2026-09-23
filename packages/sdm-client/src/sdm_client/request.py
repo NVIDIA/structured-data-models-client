@@ -119,7 +119,12 @@ class Request:
         inference: Gathering knobs, e.g. ``num_context_samples``. The adapter
             turns these into whatever the endpoint expects; ``run_mode`` is
             derived there rather than being something you set.
+        query: The predictive query this was built from, when it was built from
+            one. A session pins one question and only the rows travel on a
+            scoring call, so this is what tells one request from another.
     """
+
+    query: str | None = None
 
     def __init__(
         self,
