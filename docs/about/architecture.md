@@ -501,8 +501,9 @@ The tabular cap is enforced where the context is chosen, which is
 `materialize()`. A number above it is refused with the limit named; omitting the
 number takes a sample of 10,000 and says so, because the alternative is encoding
 a table of any size and being refused at the far end. `Request(context=...,
-predict=...)` is handed its context instead of choosing one, so it sends what it
-was given and the endpoint refuses an oversized one.
+predict=...)` is handed its context instead of choosing one, so it neither
+samples nor trims it, and one past the cap is refused here rather than at the
+far end.
 
 | Structural limit (relational) | Value |
 |---|---|
