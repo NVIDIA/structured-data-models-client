@@ -96,12 +96,21 @@ engine:
   extends: .python
   script:
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
-    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb]'
+    # The Databricks and Snowflake drivers are here for the offline tests of
+    # those backends, which import the driver and skipped whole modules without
+    # it -- eleven of them, fakes included, ran nowhere. Taken through
+    # sdm-connectors rather than the engine's `snowflake` extra, which pins
+    # numpy<2 and would move every other test here onto numpy 1. pyyaml is what
+    # the semantic-view tests read their fixtures with.
+    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake]' pyyaml
     # The test extra, not a hand-written list beside it: naming these twice
     # is how the documented install came to be missing pytest-mock while this
-    # job had it.
-    - pip install -q -e './packages/sdm-relational-engine[test]'
-    - cd packages/sdm-relational-engine && python -m pytest tests -q
+    # job had it. `databricks-serving` and `explain` carry the SDKs that the
+    # serving and explanation tests fake around; without them those skipped too.
+    - pip install -q -e './packages/sdm-relational-engine[test,databricks-serving,explain]'
+    # Deselected by name, so a skip left in this job's report is a test that
+    # meant to run here and could not.
+    - cd packages/sdm-relational-engine && python -m pytest tests -q -m 'not live_warehouse'
     # The client's suite again, with an engine present. The `test` job does
     # not install one, so every client test that needs the engine skips there
     # and runs nowhere; a change to how a request is routed then breaks them
@@ -161,6 +170,76 @@ build:
     paths:
       - dist/
     expire_in: 1 week
+
+# The engine's Linux wheels, every interpreter and architecture it claims, from
+# the same `[tool.cibuildwheel]` table the release workflow reads. The `build`
+# job's single wheel proves the five install together; it is tagged for the
+# runner that built it and installs nowhere else, and Databricks serverless
+# runs on aarch64 as often as on x86-64.
+#
+# No arm64 runner serves this project, so aarch64 is built under QEMU. That is
+# slow, so this runs where the wheels are needed rather than on every push.
+wheels:
+  stage: test
+  extends: .python
+  services:
+    - name: docker:29.0.0-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  timeout: 2h
+  rules:
+    - if: $CI_COMMIT_TAG || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - packages/sdm-relational-engine/**/*
+        - .gitlab-ci.yml
+    - when: manual
+      allow_failure: true
+  script:
+    - apt-get update -qq && apt-get install -y -qq docker.io
+    - for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
+    - docker info --format '{{.Architecture}} {{.ServerVersion}}'
+    - docker run --rm --privileged tonistiigi/binfmt --install arm64
+    - pip install -q build 'cibuildwheel==4.2.1'
+    # The engine's smoke test installs it against these, which exist nowhere
+    # but here until a release; `[tool.cibuildwheel.linux]` points pip at them.
+    - |
+      for package in sdm-api sdm-pql sdm-client sdm-connectors; do
+        ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/_sibling_wheels" . )
+      done
+    - cibuildwheel --platform linux packages/sdm-relational-engine --output-dir dist
+    - cp _sibling_wheels/*.whl dist/
+    - |
+      python - <<'EOF'
+      import pathlib, re, sys
+      names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+      print('\n'.join(names))
+      engine = re.compile(
+          r'sdm_relational_engine-[^-]+-(cp3\d+)-cp3\d+-.*_(x86_64|aarch64)\.whl$'
+      )
+      built = set()
+      for name in names:
+          match = engine.match(name)
+          if match:
+              built.add(match.groups())
+      expected = {
+          (f'cp3{minor}', arch)
+          for minor in (10, 11, 12, 13)
+          for arch in ('x86_64', 'aarch64')
+      }
+      if built != expected:
+          sys.exit(f'engine wheels missing: {sorted(expected - built)}')
+      if len(names) != len(built) + 4:
+          sys.exit('expected exactly the four pure-Python wheels beside the engine')
+      versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
+      if len(versions) != 1:
+          sys.exit(f'distributions disagree on the version: {sorted(versions)}')
+      EOF
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 month
 
 # The suite has only ever run against the source tree. What users install is a
 # wheel, and the difference is exactly where packaging bugs live: a module left

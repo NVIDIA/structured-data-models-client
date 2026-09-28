@@ -48,32 +48,36 @@ jobs:
       # a release those versions exist only in dist/ -- they are not on PyPI
       # yet, and will not be until the publish job runs. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
-      # the smoke test fails with "No matching distribution found for
-      # sdm-api==<version>" and the release stops before it can publish
-      # anything. Staged inside the package directory because that is what
-      # cibuildwheel mounts into the build container, as /project.
+      # the smoke test fails with "sdm-api was not found" and the release stops
+      # before it can publish anything. cibuildwheel copies the directory it
+      # runs from -- the repository root -- into the container as /project, and
+      # the engine's `[tool.cibuildwheel.linux]` points pip at
+      # /project/_sibling_wheels.
       - name: Stage the sibling wheels where the engine's test env can see them
         run: |
-          mkdir -p packages/sdm-relational-engine/_sibling_wheels
-          cp dist/*.whl packages/sdm-relational-engine/_sibling_wheels/
+          mkdir -p _sibling_wheels
+          cp dist/*.whl _sibling_wheels/
+
+      # aarch64 is built under emulation on the x86-64 runner, the same way the
+      # GitLab `wheels` job builds it, so the two cannot disagree on the set.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       # The engine is a native build and needs one wheel per interpreter and
       # platform. It is not optional: sdm-client[relational] pins it by exact
       # version, so publishing the other four without it makes that extra
-      # uninstallable for the release it names.
+      # uninstallable for the release it names. What is built, and the smoke
+      # test each wheel must pass, is the engine's `[tool.cibuildwheel]`.
       - name: Build the relational engine's wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v4.2.1
         with:
           package-dir: packages/sdm-relational-engine
           output-dir: dist
-        env:
-          CIBW_BUILD: cp310-manylinux_x86_64 cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64
-          CIBW_ENVIRONMENT: PIP_FIND_LINKS=/project/_sibling_wheels
-          CIBW_TEST_COMMAND: python -c "import sdm_relational_engine; print(sdm_relational_engine.__version__)"
 
       - name: Unstage them, so nothing but distributions reaches the upload
         if: always()
-        run: rm -rf packages/sdm-relational-engine/_sibling_wheels
+        run: rm -rf _sibling_wheels
 
       # The tag is the release. If it does not name the version the packages
       # carry, the wrong thing is about to be published under the right name.

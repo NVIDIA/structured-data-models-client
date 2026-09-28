@@ -50,7 +50,8 @@ git tag v1.2.0 && git push origin v1.2.0
 
 That is the whole release. `.github/workflows/publish.yml` builds the four
 pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
-(cp310–cp313, manylinux x86-64, each smoke-imported), and then refuses to
+(cp310–cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
+the engine's `[tool.cibuildwheel]`), and then refuses to
 continue unless **all five** are present and agree with the tag. That check is
 not ceremony: `sdm-client[relational]` pins the engine by exact version, so a
 release missing it publishes an extra nobody can install. It then generates the

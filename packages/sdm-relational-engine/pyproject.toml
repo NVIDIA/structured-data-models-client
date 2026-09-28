@@ -12,9 +12,8 @@ readme="README.md"
 # must fail resolution rather than fail to find a distribution. The bound and
 # the classifiers below name the same interpreters and move together.
 #
-# CI builds one wheel, for the interpreter the job runs on, to prove the five
-# distributions build and install together. Nothing builds the matrix these
-# classifiers name, and nothing publishes any of them, so the bound states
+# The GitLab `wheels` job builds the Linux matrix these classifiers name, from
+# `[tool.cibuildwheel]` below. Nothing publishes it yet, so the bound states
 # what the extension supports rather than what has been released.
 requires-python=">=3.10,<3.14"
 keywords=[
@@ -110,9 +109,35 @@ version = {attr = "sdm_relational_engine._version.__version__"}
 cmake.build-type = "Release"
 editable.verbose=false
 
-# https://cibuildwheel.pypa.io/en/stableoptions/
+# https://cibuildwheel.pypa.io/en/stable/options/
+# The GitLab `wheels` job and the release workflow both drive cibuildwheel from
+# here, so the wheel set CI proves is the one a tag uploads.
 [tool.cibuildwheel]
-build-frontend = "build[uv]"
+# The default `build` frontend, not `build[uv]`: the smoke test below installs
+# this wheel against sibling wheels that exist only on disk, found through
+# PIP_FIND_LINKS. uv reads no PIP_* variable, and the uv the manylinux images
+# shipped had no environment form of --find-links at all, so under `build[uv]`
+# the smoke test could never resolve sdm-api.
+build = "cp310-* cp311-* cp312-* cp313-*"
+# musllinux is not a libc this project has ever built or tested against, and
+# leaving it on would silently double the Linux wheel count.
+skip = "*-musllinux_*"
+# Proof per wheel, on the machine that built it: the compiled sampler loads and
+# the public graph surface imports.
+test-command = "python -c \"from sdm_relational_engine.rfm import Graph, KumoRelational; import sdm_relational_engine.relationallib as relationallib; assert hasattr(relationallib.NeighborSampler, 'seed')\""
+
+[tool.cibuildwheel.linux]
+# Databricks classic clusters on Graviton and serverless compute on either
+# architecture both install this wheel, so aarch64 is not optional. The glibc
+# 2.28 baseline is pinned here rather than left to cibuildwheel's default.
+archs = ["x86_64", "aarch64"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# The engine pins its siblings by exact version, and before a release they exist
+# only as wheels on disk. cibuildwheel copies the directory it is run from into
+# the container as /project, and both CI definitions run it from the repository
+# root, so this is `_sibling_wheels/` at that root.
+environment = { PIP_FIND_LINKS = "/project/_sibling_wheels" }
 
 [tool.pytest.ini_options]
 xfail_strict = true
@@ -139,6 +164,7 @@ markers = [
     "live_nim: opt-in live KumoRelational NIM tests using RFM_NIM_BASE_URL",
     "live_nim_smoke: fast public client and NIM boundary validation",
     "live_nim_full: extended task, validation, recovery, and session coverage",
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
 ]
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules

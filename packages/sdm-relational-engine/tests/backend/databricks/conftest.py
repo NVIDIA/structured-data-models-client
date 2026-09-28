@@ -4,6 +4,7 @@
 
 import os
 from collections.abc import Generator
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,6 +22,20 @@ _REQUIRED_ENV = [
     'DATABRICKS_CATALOG',
     'DATABRICKS_SCHEMA',
 ]
+
+
+_HERE = Path(__file__).parent
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    # Marked from the fixture closure rather than by hand, so a new test that
+    # reaches the warehouse cannot be left unmarked. This hook sees every item
+    # in the session, hence the directory check.
+    for item in items:
+        if item.path.is_relative_to(_HERE) and 'connection' in getattr(
+            item, 'fixturenames', ()
+        ):
+            item.add_marker(pytest.mark.live_warehouse)
 
 
 @pytest.fixture(scope='session')

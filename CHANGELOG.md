@@ -33,8 +33,25 @@ The first release is being assembled. Nothing here has shipped yet.
 - `Request.query`: the predictive query a request was built from, when it was
   built from one. It is what tells one request from another on a scoring call,
   where only the rows travel.
+- Linux aarch64 wheels for the relational engine, beside x86-64, on a
+  manylinux_2_28 baseline. Databricks serverless runs on either architecture
+  and classic clusters on Graviton, so an x86-64-only wheel left
+  `sdm-client[relational]` uninstallable there. A GitLab `wheels` job builds the
+  full cp310–cp313 matrix from the same `[tool.cibuildwheel]` table the release
+  reads.
 
 ### Fixed
+
+- **The release could not have smoke-tested the engine.** The sibling wheels
+  its exact pins resolve against were staged where the build container never
+  looked, and the uv frontend ignored the variable pointing at them, so the
+  first tag would have stopped at "sdm-api was not found". Reproduced with the
+  pinned cibuildwheel, and fixed in both places.
+- **Eleven engine test modules never ran in CI**, fakes included, because the
+  Databricks and Snowflake drivers they import were not installed; twenty more
+  tests skipped for want of `databricks-sdk` and `openai`. The engine job now
+  installs them, and the tests that need a real warehouse are marked
+  `live_warehouse` and deselected by name instead of skipping.
 
 - **A column the model cannot read is named rather than silently dropped.**
   A `text` feature column reaches the relational model and is ignored there.
