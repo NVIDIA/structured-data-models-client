@@ -191,6 +191,88 @@ columns are refused, because a join must agree exactly on both sides. Precisely:
 becomes scalar after folding — the wire's `TableSchema.primary_key` is still an array where a related
 table's occurrence identity needs one, e.g. `[instance_id, order_id]`.
 
+### Schemas over tables that stay where they are
+
+A schema can describe tables that stay in the warehouse.
+
+`Schema.from_data` needs every table in memory, which caps the client at what one process can hold.
+The engine has always sampled Databricks, Snowflake, DuckDB and SQLite tables with SQL, fetching only the rows a prediction needs, and the predecessor client exposed that through `Graph.from_databricks` and its siblings.
+Nothing on `Schema` reached it, so every warehouse table had to be read whole into pandas first.
+`Schema.from_source` restores it.
+
+```python
+from sdm_client import Schema
+from sdm_connectors import Source, connect
+
+adventureworks = Source(spark, catalog='main', schema='sales')  # in a Databricks notebook
+schema = Schema.from_source(
+    adventureworks,
+    tables={'customers': 'adventureworks_customers', 'orders': 'adventureworks_orders'},
+    time_columns={'orders': 'order_date'},
+)
+request = PredictiveQuery(query, schema).materialize(indices=[...])
+```
+
+`tables` maps the names a query uses to the names in the source.
+`primary_keys`, `time_columns` and `relationships` mean what they mean on `from_data`.
+
+A `Source` is where the tables are and how to reach them, and it is the only thing that differs between backends:
+
+| Source | Built from | Names | Notes |
+|---|---|---|---|
+| Databricks SQL warehouse | `connect('databricks', ...)` | `catalog`, `schema` | Any runtime; needs a warehouse |
+| Databricks notebook | the notebook's `spark` | `catalog`, `schema` | No warehouse; the notebook's own compute and identity. DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()` |
+| Snowflake | `connect('snowflake', ...)`, or a Snowpark `session.connection` | `database`, `schema` | Snowpark's connection is the connector's own type, so a Snowflake notebook passes it as it is |
+| PostgreSQL, Lakebase | `connect('postgres', ...)`, or a Lakebase endpoint | `schema` | Lakebase authenticates with a short-lived OAuth token; the source mints a fresh one when the last has expired |
+| DuckDB, SQLite | a connection or a path | — | What lets CI run the whole path, SQL sampling included, with no credentials |
+
+`from_data` does not change: a mapping of frames is still read into memory and sampled there.
+
+| | `from_data` | `from_source` |
+|---|---|---|
+| Table type | `Table`, holding `data: pd.DataFrame` | `SourceTable`: a source name and column metadata, no rows |
+| Keys and relationships | given, else inferred from values and names | given, else the catalog's constraints, else inferred from names |
+| Semantic types | inferred from the rows | inferred from a 1,000-row preview, the engine's rule |
+| Sampling at `materialize()` | the engine's `LocalSampler`, in memory | the engine's SQL sampler for that backend |
+| What leaves the source | every row | the sampled rows |
+| Request on the wire | sampled rows, embedded | the same |
+
+**One source per schema, by construction.**
+Sampling is a conversation, not a query.
+The SQL sampler fetches the entities, then each target's history inside its window, then walks the graph a hop at a time: for every table reached, one query per relationship, each sending the ids it has so far and joining them to exactly one table.
+The ids come back to the client between every query, so routing each table's queries to a different source is mechanically possible, and deliberately not done.
+Ids and timestamps would have to compare identically across engines, time bounds would have to be merged across them, seeded sampling would stop being reproducible, and tables read from sources at different moments can leak or drop labels while the result looks entirely ordinary.
+The in-memory sampler is a different algorithm again, a C++ neighbour sampler over the whole graph at once, so frames and warehouse tables cannot share one either.
+Where tables really do live in two systems, the platforms already join them: Unity Catalog registers a Lakebase database as a catalog and federates Snowflake and PostgreSQL, so one Databricks source sees all of them.
+Taking the source once, as an argument, makes a mixed schema impossible to write rather than an error to explain.
+The small in-memory data that does belong beside a warehouse, which entities to score and which candidates to rank, is already an argument to `materialize()`, not a table.
+
+**A second table type, not an optional `data`.**
+`Table.data` stays a DataFrame, so no existing caller meets a `None`.
+Code that needs rows takes a `Table`, and a `SourceTable` reaching it is refused with a message naming the table, rather than failing on an attribute.
+
+**The caller owns the connection.**
+The source holds it and never closes it.
+A warehouse connection is the object `sdm_connectors.connect` returns, which is the driver's own type and the one the engine already accepts, so there is no second connection type to convert between.
+A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
+A schema over a source does not pickle.
+
+**Keys are checked, not trusted.**
+Unity Catalog and Snowflake constraints are informational: nothing stops a declared key from repeating.
+The first `materialize()` checks each key for nulls and duplicates with one SQL aggregate, and caches the answer, which is what `from_data` checks over the rows it holds.
+
+**Whole-table checks move.**
+Each check `from_data` runs over every row does one of three things for a source table: it reads metadata (dtypes, constraints, row counts), runs on the sampled rows (value casts, and whether scored rows mean what the schema says), or runs as one SQL aggregate (key quality, and whether a relationship joins anything).
+The heuristic that searches column combinations for a composite key is not run: against a warehouse it scans the table once per candidate column.
+
+**Metadata still costs something.**
+The Databricks backend counts each table's rows, and the SQL samplers read each time column's minimum and maximum.
+Both are whole-table aggregates, run once per schema and cached.
+On clustered or partitioned tables they are cheap; elsewhere they are the first cost a user notices.
+
+**Postgres needs the engine first.**
+The engine was carried across before the predecessor gained a Postgres backend, so the Postgres source brings that backend over too: the table, the `JOIN LATERAL` sampler, and key discovery from `pg_catalog`.
+
 ---
 
 ## 4. `Request` — one type
@@ -611,9 +693,12 @@ a form-filling exercise rather than an audit.
 | Thing | Why | What would change it |
 |---|---|---|
 | Timeseries, anomaly, Tesseract models | Not asked for yet | A NIM serves one — profiles already exist, plus a contract MR (§6) |
-| Warehouse push-down | The wire requires embedded data | The contract gains source references |
+| The model reading the warehouse itself | The wire requires embedded data | The contract gains source references |
 | Public OSS release | Internal first, written OSS-clean from commit 1 (§10) | A release decision; the retrofit is form-filling, not an audit |
 | Arrow IPC | The wire is JSON-arrays-only everywhere | The contract activates it |
+
+Sampling inside the warehouse is not on this list.
+The deferred row is the model reading tables by reference; the client sampling them with SQL and embedding what it fetched fits the wire as it is (§3, schemas over tables that stay where they are).
 
 ---
 
