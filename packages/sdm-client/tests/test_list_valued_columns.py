@@ -26,6 +26,7 @@ import pytest
 from sdm_client import Request, Schema
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
+from sdm_client.wire.dtypes import require_scalar_cells
 
 TAGS = [['a', 'b'], ['b'], ['a'], ['a', 'b'], ['b'], ['a']]
 
@@ -637,3 +638,27 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
     assert not offenders
     # A sweep that reaches nothing would pass just as quietly.
     assert examined >= 25, f'the sweep only examined {examined} types'
+
+
+# --- bytes is refused for a reason of its own ------------------------------
+
+
+@pytest.mark.parametrize('value', [b'4', bytearray(b'4'), memoryview(b'4')])
+def test_a_binary_column_is_not_diagnosed_as_a_nested_one(value):
+    """A warehouse `binary` column arrives as one `bytes` per row. It is not
+    nested, not a target, not multi-label, and already one value per row, so
+    the only instruction it used to be given was one already followed."""
+    with pytest.raises(StructuredDataError) as raised:
+        require_scalar_cells(pd.Series([value, value], dtype=object), 'x.BIN')
+
+    message = str(raised.value)
+    assert 'raw bytes' in message
+    assert 'nested' not in message
+    assert 'multi-label' not in message
+    assert 'decode' in message
+
+
+def test_a_list_column_is_still_diagnosed_as_a_nested_one():
+    with pytest.raises(StructuredDataError) as raised:
+        require_scalar_cells(pd.Series([[1, 2]], dtype=object), 'x.TAGS')
+    assert 'nested column' in str(raised.value)

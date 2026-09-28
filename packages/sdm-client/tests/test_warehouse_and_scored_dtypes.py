@@ -631,3 +631,63 @@ def test_a_bool_target_is_restored_like_an_int_one():
     read = as_declared_target(items, payload)
 
     assert [item.prediction for item in read] == [False, True]
+
+
+@pytest.mark.parametrize(
+    'spelled',
+    [{'false': 0.6, 'true': 0.4}, {'False': 0.6, 'True': 0.4}],
+    ids=['as one endpoint spells it', 'as the other does'],
+)
+def test_a_bool_target_names_its_probability_columns_the_same_either_way(
+    spelled,
+):
+    """`frame['probability_True']` worked on one model and raised on the other
+    for the same declared column, which is what restoring `prediction` alone
+    left behind."""
+    payload = {
+        'task': {
+            'kind': 'binary_classification',
+            'target': {'column_name': 'TARGET', 'dtype': 'bool'},
+        }
+    }
+    items = [
+        PredictionItem(row_index=0, prediction='false', probabilities=spelled)
+    ]
+
+    read = as_declared_target(items, payload)
+
+    assert read[0].probabilities == {'False': 0.6, 'True': 0.4}
+
+
+def test_an_integer_target_keeps_the_probability_keys_it_was_given():
+    payload = {
+        'task': {
+            'kind': 'binary_classification',
+            'target': {'column_name': 'TARGET', 'dtype': 'int64'},
+        }
+    }
+    items = [
+        PredictionItem(
+            row_index=0, prediction='1', probabilities={'0': 0.2, '1': 0.8}
+        )
+    ]
+
+    assert as_declared_target(items, payload)[0].probabilities == {
+        '0': 0.2,
+        '1': 0.8,
+    }
+
+
+def test_probabilities_that_would_collapse_are_left_as_they_came():
+    payload = {
+        'task': {
+            'kind': 'binary_classification',
+            'target': {'column_name': 'TARGET', 'dtype': 'bool'},
+        }
+    }
+    given = {'true': 0.4, 'True': 0.6}
+    items = [
+        PredictionItem(row_index=0, prediction='true', probabilities=given)
+    ]
+
+    assert as_declared_target(items, payload)[0].probabilities == given

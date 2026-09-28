@@ -259,10 +259,10 @@ def check_request_against_model(
     if cap is not None and rows is not None and rows > cap:
         raise UnsupportedRequestError(
             f'this request carries {rows:,} context rows and {spec.model_id} '
-            f'reads at most {cap:,}. A request gathered by materialize() is '
-            f'sampled to that and says so; one built directly is sent as it '
+            f'reads at most {cap:,}. A request built directly is sent as it '
             f'was given, so choose the rows you want as context, or gather it '
-            f'with materialize()',
+            f'with materialize(), which keeps the context under the cap and '
+            f'says how',
             details={
                 'model': spec.model_id,
                 'context_rows': rows,

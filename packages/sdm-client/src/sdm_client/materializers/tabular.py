@@ -69,40 +69,6 @@ def _derive_task_kind(
     return 'regression'
 
 
-def _judge_a_context_that_teaches_nothing(
-    column: str, target: pd.Series, kind: str
-) -> None:
-    r"""Refuse, or remark on, a context whose every row says the same thing.
-
-    A classification over one class is refused by the endpoint, so it is
-    refused here. A regression over a constant is accepted there, so it is
-    only warned about. A context with no answered rows is left to ``Request``.
-    """
-    answered = target.dropna()
-    if len(answered) == 0 or answered.nunique() >= 2:
-        return
-
-    if kind == 'classification':
-        raise StructuredDataError(
-            f'every context row has the same {column}, and a classification '
-            f'needs at least two classes to learn from. This usually means '
-            f'the rows being scored are all of one class and the rest were '
-            f'left behind. Score fewer of them, or build the schema from rows '
-            f'that keep both.',
-            code='INVALID_REQUEST',
-            details={'target': column, 'classes_in_context': 1},
-        )
-
-    warnings.warn(
-        f'every context row has the same {column}, so nothing in the context '
-        f'distinguishes one answer from another. The endpoint will answer, '
-        f'but the answer cannot say much. Build the schema from rows that '
-        f'vary, or score fewer of them.',
-        category=SDMWarning,
-        stacklevel=caller_stacklevel(),
-    )
-
-
 def _holds_two_whole_numbers(target: pd.Series) -> bool:
     r"""Whether ``target`` is two distinct whole numbers and nothing else.
 
@@ -273,11 +239,9 @@ class TabularMaterializer:
                 },
             )
 
-        kind = (
+        return (
             stated if stated is not None else _derive_task_kind(query, target)
         )
-        _judge_a_context_that_teaches_nothing(query.target_column, target, kind)
-        return kind
 
 
 def _context_within_limit(

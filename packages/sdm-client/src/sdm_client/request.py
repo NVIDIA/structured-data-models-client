@@ -29,13 +29,17 @@ and does not belong in a type you read.
 
 from __future__ import annotations
 
+import json
 import math
+import re
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
 
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
@@ -95,6 +99,101 @@ class Task:
         return self.kind in _CLASSIFICATION_KINDS
 
 
+_A_QUOTED_LITERAL = re.compile(r""""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""")
+
+
+def _one_spelling_of_each_literal(text: str) -> str:
+    r"""Rewrite a query's string literals to one spelling of the quote.
+
+    ``channel="web"`` and ``channel='web'`` are one question.
+    """
+
+    def canonical(match: re.Match[str]) -> str:
+        literal = match.group(0)
+        inner = literal[1:-1]
+        if literal[0] == "'":
+            inner = inner.replace("\\'", "'").replace('"', '\\"')
+        try:
+            return json.dumps(json.loads(f'"{inner}"'))
+        except json.JSONDecodeError:
+            return literal
+
+    return _A_QUOTED_LITERAL.sub(canonical, text)
+
+
+def _what_the_context_holds(context: Split | None) -> int | None:
+    r"""A value standing for the labelled rows, or ``None`` for gathered ones.
+
+    Frames carry their own labels, so two requests over different ones ask
+    different questions. A gathered context is sampled from the schema, so two
+    materializations of one query differ in rows and not in question.
+    """
+    if context is None:
+        return None
+    frames = [context.instance_table, *context.related_tables.values()]
+    total = hash(tuple(tuple(map(str, frame.columns)) for frame in frames))
+    for frame in frames:
+        try:
+            total ^= int(pd.util.hash_pandas_object(frame, index=False).sum())
+        except TypeError:
+            total ^= hash((len(frame), len(frame.columns)))
+    return total
+
+
+@dataclass(frozen=True)
+class Question:
+    r"""What a request asks, apart from the rows it asks about.
+
+    Assembled from the request rather than recorded by one constructor, so a
+    request built from frames carries one too.
+    """
+
+    query: str | None
+    kind: str
+    target: str
+    dtype: str
+    entity_table: str | None
+    context: int | None
+
+
+def _judge_a_context_that_teaches_nothing(
+    column: str, target: pd.Series, kind: str
+) -> None:
+    r"""Remark on a context whose every row says the same thing.
+
+    Said rather than refused: this endpoint answers a single-class
+    classification, returning that class at probability 1.0, so refusing it
+    here turned a route that gathers into one that rejects what the route that
+    does not gather is answered for. A context with no answered rows is left to
+    ``Request``.
+
+    Only of the two kinds one value in a column means something for. A
+    forecast's target is a horizon and a ranking's is a candidate list, and one
+    value there does not mean what it means here.
+    """
+    answered = target.dropna()
+    if len(answered) == 0 or answered.nunique() >= 2:
+        return
+    if kind not in _CLASSIFICATION_KINDS and kind != 'regression':
+        return
+
+    said = (
+        'a classification needs at least two classes to learn from, and the '
+        'answer will be that one class at probability 1.0'
+        if kind in _CLASSIFICATION_KINDS
+        else 'nothing in the context distinguishes one answer from another, '
+        'so the answer cannot say much'
+    )
+    warnings.warn(
+        f'every context row has the same {column}, so {said}. If the rows '
+        f'being scored are the ones that differ, score fewer of them; if '
+        f'{column} is constant in the whole table, there is no context that '
+        f'answers this question.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 @dataclass(frozen=True)
 class Split:
     r"""One half of a request: the instance rows, plus any related tables.
@@ -119,9 +218,8 @@ class Request:
         inference: Gathering knobs, e.g. ``num_context_samples``. The adapter
             turns these into whatever the endpoint expects; ``run_mode`` is
             derived there rather than being something you set.
-        query: The predictive query this was built from, when it was built from
-            one. A session pins one question and only the rows travel on a
-            scoring call, so this is what tells one request from another.
+        query: The predictive query this was built from, when it was built
+            from one, and ``None`` when it was built from frames.
     """
 
     query: str | None = None
@@ -264,6 +362,8 @@ class Request:
                 code='INVALID_REQUEST',
             )
 
+        _judge_a_context_that_teaches_nothing(target, context[target], task)
+
         self.schema = schema
         self.task = Task(
             kind=task,
@@ -341,6 +441,22 @@ class Request:
         # drop something that was asked for.
         request.requested_inference = dict(requested_inference or {})
         return request
+
+    @property
+    def _question(self) -> Question:
+        r"""What this request asks. See :class:`Question`."""
+        target = self.task.target
+        query = self.query
+        return Question(
+            query=None
+            if query is None
+            else _one_spelling_of_each_literal(query),
+            kind=self.task.kind,
+            target=target.column_name,
+            dtype=target.dtype,
+            entity_table=self.entity_table,
+            context=_what_the_context_holds(self._context),
+        )
 
     @property
     def context(self) -> Split:

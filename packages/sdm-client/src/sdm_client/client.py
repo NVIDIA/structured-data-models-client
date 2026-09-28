@@ -30,10 +30,10 @@ from sdm_client.base import (
 )
 from sdm_client.core.transport import Transport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
-from sdm_client.decompose import RANKING, Decomposition
+from sdm_client.decompose import RANKING, Decomposition, about_the_part
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
-from sdm_client.request import Request
+from sdm_client.request import Question, Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire.keys import (
     _named_by,
@@ -92,7 +92,7 @@ class FittedModel:
         pinned_keys: frozenset[Any] = frozenset(),
         pinned_over_a_window: bool = False,
         held_back: int = 0,
-        question: str | None = None,
+        question: Question | None = None,
     ) -> None:
         self._client = client
         self._adapter = adapter
@@ -143,19 +143,9 @@ class FittedModel:
                 f'question that many times. Ask it with predict()',
                 code='UNSUPPORTED_REQUEST',
             )
-        asked = getattr(request, 'query', None)
-        if (
-            self._question is not None
-            and asked is not None
-            and asked != self._question
-        ):
-            raise StructuredDataError(
-                f'this session pinned {self._question!r} and was handed '
-                f'{asked!r}. Only the rows travel on a scoring call, so '
-                f'the pinned question is the one that would be answered. Fit '
-                f'again to ask something else',
-                code='INVALID_REQUEST',
-            )
+        asked = getattr(request, '_question', None)
+        if self._question is not None and asked is not None:
+            _refuse_a_question_the_session_did_not_pin(self._question, asked)
         if request.nothing_to_score:
             return _empty_answer(self.model, self._outputs)
         _warn_scoring_what_was_pinned(
@@ -254,9 +244,11 @@ class SDMClient:
             timeout: Seconds to wait for each individual attempt, not for the
                 call as a whole.
             max_retries: Transport-level retries of a transient failure (429,
-                500, 502, 503, 504, or a dropped connection) with exponential
-                backoff. ``POST /v1/sessions`` is excluded: a re-sent create
-                would orphan a pinned context on the endpoint.
+                502, 503, 504, or a dropped connection) with exponential
+                backoff. A 500 is not retried: the payload and the model are
+                the same on every attempt. ``POST /v1/sessions`` is excluded:
+                a re-sent create would orphan a pinned context on the
+                endpoint.
         """
         self._transport = Transport(
             url,
@@ -371,7 +363,7 @@ class SDMClient:
             try:
                 answers.append(self.predict(part, model=model, outputs=wanted))
             except StructuredDataError as error:
-                raise _which_part_failed(error, rewritten, about) from error
+                raise about_the_part(error, rewritten, about) from error
         if ranking:
             return _ranked(answers, rewritten, outputs)
         merged = _by_step(answers, rewritten)
@@ -475,7 +467,7 @@ class SDMClient:
             ),
             held_back=held,
             pinned_over_a_window=request.target_moves_with_time,
-            question=getattr(request, 'query', None),
+            question=request._question,
         )
 
     def _prepare(
@@ -782,29 +774,6 @@ def _top_k_of(asked: str) -> int | None:
     return int(found.group(1)) if found else None
 
 
-def _which_part_failed(
-    error: StructuredDataError, rewritten: Decomposition, about: Any
-) -> StructuredDataError:
-    """Name the candidate or step whose question failed.
-
-    A ranking is asked as one yes-or-no question per candidate, so a candidate
-    nothing reached makes its own question single-class and the endpoint
-    refuses it for a task the caller never wrote. Which of them it was is
-    known here and was not being said, and the answers for the candidates that
-    did work are lost with it.
-    """
-    which = (
-        f'candidate {about!r}'
-        if rewritten.kind == RANKING
-        else f'part {about} of {len(rewritten.parts)}'
-    )
-    return StructuredDataError(
-        f'{error.args[0]} This is the question asked for {which}, one of '
-        f'{len(rewritten.parts)} this {rewritten.kind} is asked as.',
-        code=getattr(error, 'code', 'INVALID_REQUEST'),
-    )
-
-
 def _warn_of_steps_that_carry_no_explanation(
     answers: list[PredictionResult],
     rewritten: Decomposition,
@@ -870,6 +839,44 @@ def _by_step(
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
         explanation={'by_forecast_step': by_step} if by_step else None,
+    )
+
+
+_WHAT_DIFFERS = (
+    ('query', 'the query'),
+    ('kind', 'the task kind'),
+    ('target', 'the target column'),
+    ('dtype', "the target column's dtype"),
+    ('entity_table', 'the entity table'),
+)
+
+
+def _refuse_a_question_the_session_did_not_pin(
+    pinned: Question, asked: Question
+) -> None:
+    r"""Only rows travel on a scoring call, so the question has to be the pinned one.
+
+    Said field by field: the rest of the request is identical, so printing both
+    whole does not show which one differs.
+    """
+    if pinned == asked:
+        return
+    for field_name, described in _WHAT_DIFFERS:
+        mine = getattr(pinned, field_name)
+        theirs = getattr(asked, field_name)
+        if mine != theirs:
+            said = f'{described} pinned is {mine!r} and this asks {theirs!r}'
+            break
+    else:
+        said = (
+            'the context pinned is not the one this request carries, and the '
+            'context is what the answer is learnt from'
+        )
+    raise StructuredDataError(
+        f'this session pinned a different question: {said}. Only the rows '
+        f'travel on a scoring call, so the pinned question is the one that '
+        f'would be answered. Fit again to ask something else',
+        code='INVALID_REQUEST',
     )
 
 

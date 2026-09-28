@@ -37,6 +37,8 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
     back as the column's own type is restoring something. A regression's answer is a
     number the model computed, and rounding that to the target's dtype would be
     this client deciding how precise the answer is.
+
+    The same labels key `probabilities` and are restored there too.
     """
 
     task = (payload or {}).get('task', {})
@@ -47,11 +49,32 @@ def as_declared_target(items: list[Any], payload: dict[str, Any] | None):
         return items
     read = []
     for item in items:
+        changed: dict[str, Any] = {}
         value = getattr(item, 'prediction', None)
         restored = as_declared(value, dtype)
-        read.append(
-            item
-            if restored is value
-            else dataclasses.replace(item, prediction=restored)
-        )
+        if restored is not value:
+            changed['prediction'] = restored
+        given = getattr(item, 'probabilities', None)
+        if given:
+            keyed = _as_the_column_spells_them(given, dtype)
+            if keyed != given:
+                changed['probabilities'] = keyed
+        read.append(dataclasses.replace(item, **changed) if changed else item)
     return read
+
+
+def _as_the_column_spells_them(
+    probabilities: dict[str, Any], dtype: str
+) -> dict[str, Any]:
+    r"""The probability mapping, keyed by each class as the column spells it.
+
+    One endpoint keys a bool target `'false'` and the other `'False'`, so
+    `frame['probability_true']` raises depending on which answered.
+
+    Left alone where restoring would collapse two classes into one.
+    """
+    renamed = {}
+    for key, value in probabilities.items():
+        restored = as_declared(key, dtype)
+        renamed[key if restored is key else str(restored)] = value
+    return renamed if len(renamed) == len(probabilities) else probabilities

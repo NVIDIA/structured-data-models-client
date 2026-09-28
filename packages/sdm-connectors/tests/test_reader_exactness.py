@@ -11,6 +11,7 @@ can take, and the two that used to round.
 
 from __future__ import annotations
 
+import sqlite3
 from decimal import Decimal
 
 import pandas as pd
@@ -398,3 +399,49 @@ def test_ordinary_columns_are_not_turned_into_objects():
         str(read('local', data={'id': [9007199254740993, None]})['id'].dtype)
         == 'Int64'
     )
+
+
+# --- a value keeps the column it was in ------------------------------------
+
+
+def joined_tables() -> sqlite3.Connection:
+    connection = sqlite3.connect(':memory:')
+    connection.execute('create table users (id integer, name text)')
+    connection.execute(
+        'create table orders (id integer, user_id integer, item text)'
+    )
+    connection.executemany(
+        'insert into users values (?,?)', [(1, 'ann'), (2, 'bob')]
+    )
+    connection.executemany(
+        'insert into orders values (?,?,?)',
+        [(7, 1, 'widget'), (8, 2, 'gizmo')],
+    )
+    return connection
+
+
+def test_two_result_columns_of_one_name_keep_their_own_values():
+    """Keyed by name the last one wins, the repeated name is given back, and
+    every earlier column of it holds the last one's values -- same shape, same
+    names, different data, nothing said."""
+    connection = joined_tables()
+    sql = 'select * from users join orders on users.id = orders.user_id'
+
+    truth = connection.execute(sql).fetchall()
+    read = read_table(connection, query=sql)
+
+    assert list(read.columns) == ['id', 'name', 'id', 'user_id', 'item']
+    assert [tuple(row) for row in read.to_numpy()] == truth
+
+
+def test_distinct_names_are_unaffected():
+    connection = joined_tables()
+    read = read_table(connection, table='users')
+    assert read.to_dict('list') == {'id': [1, 2], 'name': ['ann', 'bob']}
+
+
+def test_no_rows_still_gives_the_columns():
+    connection = joined_tables()
+    read = read_table(connection, query='select * from users where id > 99')
+    assert list(read.columns) == ['id', 'name']
+    assert len(read) == 0

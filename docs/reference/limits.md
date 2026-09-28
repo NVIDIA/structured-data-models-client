@@ -8,8 +8,13 @@ limit nor how to get under it.
 `Request(context=..., predict=...)` differs in one way: it is handed the frames
 to use and does not trim them. Discarding rows that were named row by row would
 be the worse of the two answers, so a context past the model's cap is refused
-rather than sampled, naming the count and the cap. `materialize()` samples to
-the cap instead and says how many rows it took.
+rather than sampled, naming the count and the cap.
+
+`materialize()` keeps the context under the cap, by a different route on each
+model. On `kumo-tabular` it samples to the cap and says how many rows it took.
+On `kumo-relational` the context is gathered rather than handed over, so
+`num_context_samples` past the cap is refused outright and asking for none
+gathers the 1,000-row budget; it never samples down to 10,000.
 
 ## Sizes
 

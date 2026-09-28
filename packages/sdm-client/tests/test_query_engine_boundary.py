@@ -883,25 +883,53 @@ def test_a_column_named_for_the_wire_is_refused_by_name():
         ).materialize(indices=[1, 2], anchor_time=pd.Timestamp('2020-04-01'))
 
 
-def test_a_table_with_several_timestamps_is_told_it_was_given_none():
-    frame = pd.DataFrame(
+def two_timestamps() -> pd.DataFrame:
+    return pd.DataFrame(
         {
             'oid': range(80),
+            'uid': [i % 20 for i in range(80)],
             'created': pd.date_range('2020-01-01', periods=80, freq='D'),
             'delivered': pd.date_range('2020-02-01', periods=80, freq='D'),
         }
     )
+
+
+def timestamp_warnings(tables, **how) -> list[str]:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        built = Schema.from_data(
-            {'orders': frame}, primary_keys={'orders': 'oid'}
-        )
-
-    assert built['orders'].time_column is None
-    assert any(
-        'more than one column that could be its time column'
-        in str(item.message)
+        built = Schema.from_data(tables, **how)
+    assert built[next(iter(tables))].time_column is None
+    return [
+        str(item.message)
         for item in caught
+        if 'more than one column that could be its time column'
+        in str(item.message)
+    ]
+
+
+def test_a_table_with_several_timestamps_is_told_it_was_given_none():
+    said = timestamp_warnings(
+        {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
+        primary_keys={'orders': 'oid', 'users': 'uid'},
+    )
+    assert said
+
+
+def test_the_column_the_remedy_shows_is_shown_as_an_example():
+    """It is the first alphabetically, and reading it as the choice this made
+    would be reading a decision that was deliberately not taken."""
+    said = timestamp_warnings(
+        {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
+        primary_keys={'orders': 'oid', 'users': 'uid'},
+    )
+    assert 'only the first of them alphabetically' in said[0]
+
+
+def test_a_lone_table_is_not_told_a_window_over_it_is_refused():
+    """Nothing windows a single-table schema, so there is no refusal ahead
+    and the notice is about nothing."""
+    assert not timestamp_warnings(
+        {'orders': two_timestamps()}, primary_keys={'orders': 'oid'}
     )
 
 
@@ -924,3 +952,39 @@ def test_both_spellings_of_no_hop_are_refused_alike(option, names):
         )
 
     assert names in str(raised.value)
+
+
+@pytest.mark.parametrize('reserved', ['instance_id', '__kumo_anchor_time'])
+def test_a_reserved_name_is_not_told_to_rename_itself_to_itself(reserved):
+    """The suggestion substituted a word only one of the two names contains,
+    so the other was told to rename itself to the name just refused."""
+    frame = orders()
+    frame[reserved] = 1.0
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        built = Schema.from_data({'users': users(), 'orders': frame})
+
+    with pytest.raises(StructuredDataError) as raised:
+        RelationalMaterializer(built)._refuse_a_name_the_wire_reserves()
+
+    message = str(raised.value)
+    assert f'orders.{reserved}' in message
+    assert f'to {reserved!r}' not in message
+    assert 'uses a name' in message
+
+
+def test_two_reserved_names_are_each_given_their_own_rename():
+    frame = orders()
+    frame['instance_id'] = 1.0
+    frame['__kumo_anchor_time'] = 1.0
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        built = Schema.from_data({'users': users(), 'orders': frame})
+
+    with pytest.raises(StructuredDataError) as raised:
+        RelationalMaterializer(built)._refuse_a_name_the_wire_reserves()
+
+    message = str(raised.value)
+    assert 'use names' in message
+    assert "'instance_id' to " in message
+    assert "'__kumo_anchor_time' to " in message

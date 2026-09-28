@@ -16,6 +16,8 @@ rows the table already held in the context, with their answers, where the
 
 from __future__ import annotations
 
+import copy
+import pickle
 import warnings
 
 import numpy as np
@@ -454,16 +456,47 @@ def test_a_snapshot_re_points_its_columns_at_itself():
 # --- the question a caller asks is the one that answers --------------------
 
 
-def test_appending_a_bad_link_is_caught_by_check_consistent():
-    """`relationships` is an ordinary list, so `append` reaches it without
-    passing the setter -- and this is the call a caller makes to find out
-    whether their schema holds together."""
+@pytest.mark.parametrize(
+    'add',
+    [
+        lambda links, link: links.append(link),
+        lambda links, link: links.extend([link]),
+        lambda links, link: links.insert(0, link),
+        lambda links, link: links.__iadd__([link]),
+    ],
+    ids=['append', 'extend', 'insert', 'in-place add'],
+)
+def test_a_bad_link_is_caught_however_it_is_added(add):
+    """`append` is the route this client's own advice prints, and it used to
+    be the one that reached the list without passing any check."""
     schema, link = mismatched()
-    schema.relationships.append(link)
 
     with pytest.raises(StructuredDataError) as raised:
-        schema.check_consistent()
+        add(schema.relationships, link)
     assert 'joins' in str(raised.value)
+    assert link not in schema.relationships
+
+
+def test_a_good_link_still_appends():
+    schema = graph()
+    kept = list(schema.relationships)
+    schema.relationships = []
+    schema.relationships.append(kept[0])
+
+    assert list(schema.relationships) == [kept[0]]
+    schema.check_consistent()
+
+
+def test_appending_the_same_link_twice_leaves_one_edge():
+    """The materializer sends one edge for it, so holding two here made the
+    two halves of the client disagree about what the graph is."""
+    schema = graph()
+    kept = list(schema.relationships)
+    schema.relationships = []
+    schema.relationships.append(kept[0])
+    schema.relationships.append(kept[0])
+
+    assert list(schema.relationships) == [kept[0]]
 
 
 def test_check_consistent_still_passes_a_good_schema():
@@ -541,3 +574,73 @@ def test_materialized_without_an_entity_table_reads_the_query_not_the_dict():
     )
 
     assert without.entity_table == 'users'
+
+
+@pytest.mark.parametrize(
+    'duplicate',
+    [copy.deepcopy, lambda s: pickle.loads(pickle.dumps(s))],
+    ids=['deepcopy', 'pickle'],
+)
+def test_a_copied_schema_still_checks_what_is_added_to_it(duplicate):
+    """Both put the attributes back without going through `__setattr__`, so a
+    copy would hold a plain list and quietly stop checking."""
+    original = graph()
+    copied = duplicate(original)
+
+    assert [
+        (link.source_table, link.source_column, link.target_table)
+        for link in copied.relationships
+    ] == [
+        (link.source_table, link.source_column, link.target_table)
+        for link in original.relationships
+    ]
+
+    kept = list(copied.relationships)
+    copied.relationships.append(kept[0])
+    assert list(copied.relationships) == kept
+    assert len(original.relationships) == len(kept)
+
+
+def test_a_copied_schema_refuses_a_link_that_cannot_join():
+    mismatched_schema, link = mismatched()
+    copied = copy.deepcopy(mismatched_schema)
+
+    with pytest.raises(StructuredDataError, match='joins'):
+        copied.relationships.append(link)
+
+
+def ambiguous_pair() -> Schema:
+    """A schema whose construction says something, so a copy can be silent."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {
+                'u': pd.DataFrame({'uid': range(20)}),
+                'o': pd.DataFrame(
+                    {'oid': range(20), 'a': range(20), 'b': range(20)}
+                ),
+            },
+            primary_keys={'u': 'uid', 'o': 'oid'},
+            relationships=[
+                Relationship('o', 'a', 'u', 'uid'),
+                Relationship('o', 'b', 'u', 'uid'),
+            ],
+        )
+
+
+@pytest.mark.parametrize(
+    'duplicate',
+    [copy.deepcopy, lambda s: pickle.loads(pickle.dumps(s))],
+    ids=['deepcopy', 'pickle'],
+)
+def test_copying_a_schema_does_not_say_again_what_building_it_said(duplicate):
+    """A copy is not a new declaration, and the notices were given when the
+    schema it was copied from was built."""
+    original = ambiguous_pair()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        copied = duplicate(original)
+
+    assert [str(item.message) for item in caught] == []
+    assert len(copied.relationships) == 2

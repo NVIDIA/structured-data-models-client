@@ -708,7 +708,7 @@
           "close": "(self) -> 'None'",
           "predict": "(self, request: 'Request') -> 'PredictionResult'"
         },
-        "signature": "(client: 'SDMClient', adapter: 'ModelAdapter', session_id: 'str', outputs: 'tuple[str, ...]', pinned: 'dict[str, Any] | None' = None, named_outputs: 'Sequence[str] | None' = None, pinned_keys: 'frozenset[Any]' = frozenset(), pinned_over_a_window: 'bool' = False, held_back: 'int' = 0, question: 'str | None' = None) -> 'None'"
+        "signature": "(client: 'SDMClient', adapter: 'ModelAdapter', session_id: 'str', outputs: 'tuple[str, ...]', pinned: 'dict[str, Any] | None' = None, named_outputs: 'Sequence[str] | None' = None, pinned_keys: 'frozenset[Any]' = frozenset(), pinned_over_a_window: 'bool' = False, held_back: 'int' = 0, question: 'Question | None' = None) -> 'None'"
       },
       "KumoRelational": {
         "bases": [

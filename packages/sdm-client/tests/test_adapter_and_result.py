@@ -187,6 +187,8 @@ def relational_payload(*, classes: int, kind: str = 'classification') -> dict:
 
 
 class _Gathered:
+    query: str | None = None
+
     def __init__(self, *payloads: dict) -> None:
         self.payloads = tuple(payloads)
         self.requested_inference: dict = {}
