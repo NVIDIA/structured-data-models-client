@@ -65,6 +65,12 @@ snowflake = ["sdm-connectors[snowflake]==1.0.0"]
 databricks = ["sdm-connectors[databricks]==1.0.0"]
 postgres = ["sdm-connectors[postgres]==1.0.0"]
 s3 = ["sdm-connectors[s3]==1.0.0"]
+# Reaching a model served on Databricks Model Serving. The one extra that names
+# a third-party package directly: the transport that imports it lives in this
+# distribution, not in the engine or the connectors. It is a way to reach a
+# model rather than a backend to read, so `all` does not carry it; ask for it by
+# name, as with the engine's extra of the same name.
+databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
 all = [
     "sdm-client[relational,sqlite,duckdb,postgres,snowflake,databricks,s3]",
 ]

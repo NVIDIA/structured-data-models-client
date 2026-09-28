@@ -8,7 +8,7 @@ import json
 import math
 import re
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
 import requests
@@ -388,6 +388,37 @@ def _build_session(
     return session
 
 
+class WireTransport(Protocol):
+    r"""What a client needs from whatever carries its requests.
+
+    A NIM reached over HTTP is one; a Databricks Model Serving endpoint is
+    another. The client asks only this of either.
+    """
+
+    #: Whether the endpoint can pin a context. A client refuses ``fit()`` up
+    #: front when it cannot, rather than preparing a session to be told so.
+    serves_sessions: bool
+
+    @property
+    def url(self) -> str: ...
+
+    def close(self) -> None: ...
+
+    def health_ready(self) -> bool: ...
+
+    def list_models(self) -> list[str]: ...
+
+    def predict(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def create_session(self, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def session_predict(
+        self, session_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
+    def delete_session(self, session_id: str) -> None: ...
+
+
 class Transport:
     r"""The HTTP wire layer to one Universal TFM NIM.
 
@@ -399,6 +430,8 @@ class Transport:
     request that exhausts ``max_retries`` can take up to
     ``(max_retries + 1) * timeout`` plus backoff.
     """
+
+    serves_sessions = True
 
     def __init__(
         self,

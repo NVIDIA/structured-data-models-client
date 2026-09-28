@@ -852,6 +852,7 @@
           "capabilities": "(self, model: 'str | Model') -> 'ModelCapabilities'",
           "close": "(self) -> 'None'",
           "fit": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None, holdout: 'Iterable[Any] | None' = None) -> 'FittedModel'",
+          "for_databricks_serving": "(endpoint: 'str', *, workspace_client: 'Any | None' = None, timeout: 'float' = 300.0) -> 'SDMClient'",
           "health_ready": "(self) -> 'bool'",
           "models": "(self) -> 'list[str]'",
           "predict": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None) -> 'PredictionResult'"

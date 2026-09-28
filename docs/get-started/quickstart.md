@@ -73,6 +73,23 @@ with client.fit(request, model=KumoRelational()) as fitted:
     second = fitted.predict(other_request)
 ```
 
+## A model served on Databricks
+
+A model deployed to Databricks Model Serving is reached by the endpoint's name.
+In a notebook the call authenticates as the notebook, so there is no URL or key
+to supply.
+
+```python
+from sdm_client import KumoRelational, SDMClient
+
+with SDMClient.for_databricks_serving('kumo-relational') as client:
+    result = client.predict(request, model=KumoRelational())
+```
+
+This needs `pip install sdm-client[databricks-serving]`. A serving endpoint
+answers one request at a time, so `fit()` is refused there; `predict()` sends
+the context with every call.
+
 ## Which rows get scored
 
 A query says *what* to predict. It never says *which rows*.

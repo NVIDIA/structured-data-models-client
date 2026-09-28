@@ -52,6 +52,13 @@ The first release is being assembled. Nothing here has shipped yet.
   notebook's user, with no warehouse to name. Needs `DataFrame.toArrow()`, so
   Databricks Runtime 17.3 LTS or serverless environment 4 and later; an older
   session is refused with the warehouse route named instead.
+- `SDMClient.for_databricks_serving(endpoint)`: a client for a model served on
+  Databricks Model Serving, reached by the endpoint's name with the
+  workspace's own identity, so a notebook supplies no URL or key. `predict()`
+  works as it does against a NIM; `fit()` is refused, since a serving endpoint
+  has no sessions. Needs the new `databricks-serving` extra. The envelope it
+  sends is the one the relational engine sends, now defined once in
+  `sdm_api.databricks_serving` so the two cannot drift apart.
 
 ### Fixed
 

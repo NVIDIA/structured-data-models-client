@@ -28,7 +28,7 @@ from sdm_client.base import (
     check_request_against_model,
     describe,
 )
-from sdm_client.core.transport import Transport, redact_url
+from sdm_client.core.transport import Transport, WireTransport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import RANKING, Decomposition
 from sdm_client.errors import StructuredDataError, UnknownModelError
@@ -258,7 +258,7 @@ class SDMClient:
                 backoff. ``POST /v1/sessions`` is excluded: a re-sent create
                 would orphan a pinned context on the endpoint.
         """
-        self._transport = Transport(
+        self._transport: WireTransport = Transport(
             url,
             api_key,
             verify_ssl=verify_ssl,
@@ -267,9 +267,59 @@ class SDMClient:
         )
         self._adapters: dict[str, ModelAdapter] = {}
 
+    @classmethod
+    def for_databricks_serving(
+        cls,
+        endpoint: str,
+        *,
+        workspace_client: Any | None = None,
+        timeout: float = 300.0,
+    ) -> SDMClient:
+        r"""Open a client against a Databricks Model Serving endpoint.
+
+        The model is served by name inside a workspace, so there is no URL and
+        no key: calls go through the Databricks SDK with the workspace's own
+        identity, which in a notebook is the notebook's.
+
+        >>> with SDMClient.for_databricks_serving('kumo-relational') as client:
+        ...     result = client.predict(request, model=KumoRelational())
+
+        A serving endpoint answers one request at a time, so :meth:`predict`
+        works and :meth:`fit` is refused: it has no sessions to pin a context
+        in.
+
+        Args:
+            endpoint: The serving endpoint's name, not its URL. A URL is
+                refused without being repeated, since one can carry a token.
+            workspace_client: A ``databricks.sdk.WorkspaceClient`` to call
+                through, for a workspace or credential other than the ambient
+                one. Build it with the ``Config`` you need.
+            timeout: Seconds to wait for one call. Far above a NIM's default,
+                because a serving endpoint that has scaled to zero takes minutes
+                to start. Applies only when ``workspace_client`` is not given.
+
+        Raises:
+            MissingExtraError: If ``databricks-sdk`` is not installed; install
+                ``sdm-client[databricks-serving]``.
+        """
+        from sdm_client.core.databricks_serving import (
+            DatabricksServingTransport,
+        )
+
+        client = cls.__new__(cls)
+        client._transport = DatabricksServingTransport(
+            endpoint, workspace_client, timeout=timeout
+        )
+        client._adapters = {}
+        return client
+
     @property
     def url(self) -> str:
-        r"""The NIM base URL this client was opened against."""
+        r"""Where this client sends requests.
+
+        A NIM's base URL, or ``'databricks-serving:<name>'`` for a client
+        opened with :meth:`for_databricks_serving`.
+        """
         return self._transport.url
 
     def models(self) -> list[str]:
@@ -434,6 +484,13 @@ class SDMClient:
         Raises:
             UnsupportedRequestError: If the endpoint does not serve sessions.
         """
+        if not getattr(self._transport, 'serves_sessions', True):
+            raise StructuredDataError(
+                f'{self._transport.url} cannot pin a context: it answers one '
+                f'request at a time. Use predict(), which sends the context '
+                f'with every call',
+                code='SESSIONS_UNSUPPORTED',
+            )
         _refuse_to_pin_a_rewritten_question(request)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)

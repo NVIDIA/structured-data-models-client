@@ -6,6 +6,7 @@
 | `pip install sdm-client[relational]` | Adds the relational model, pulling in the native engine. **Python 3.10–3.13 only** — see [prerequisites](prerequisites.md). |
 | `pip install sdm-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[s3]`. |
 | `pip install sdm-client[all]` | The relational model and every warehouse backend. |
+| `pip install sdm-client[databricks-serving]` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
 
 What ships in the base wheel is decided by **dependency weight, not
 preference**. A model that does heavy client-side work — the relational one,
