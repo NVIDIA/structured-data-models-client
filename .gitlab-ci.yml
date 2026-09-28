@@ -188,21 +188,15 @@ build:
 # runner that built it and installs nowhere else, and Databricks serverless
 # runs on aarch64 as often as on x86-64.
 #
-# No arm64 runner serves this project, so aarch64 is built under QEMU. That is
-# slow, so this runs where the wheels are needed rather than on every push.
-wheels:
-  stage: test
-  extends: .python
-  services:
-    - name: docker:29.0.0-dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  timeout: 2h
+# No arm64 runner serves this project, so aarch64 is built under QEMU, at four
+# to five minutes a wheel. One of the two runners stops any job at 13m20s
+# whatever the job asks for, and all four aarch64 wheels in one job passed or
+# failed by which runner took it. Each aarch64 interpreter is its own job, so
+# every job fits under that ceiling on either runner.
+.wheel-rules: &wheel-rules
   # Branch pipelines only, like every other job here. Without the first rule,
-  # `changes` also matches in merge-request pipelines, which then run this job
-  # alone beside the branch pipeline and build the whole matrix twice.
+  # `changes` also matches in merge-request pipelines, which then run these
+  # jobs alone beside the branch pipeline and build the whole matrix twice.
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: never
@@ -212,11 +206,28 @@ wheels:
         - .gitlab-ci.yml
     - when: manual
       allow_failure: true
+
+wheels:
+  stage: test
+  extends: .python
+  <<: *wheel-rules
+  services:
+    - name: docker:29.0.0-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  parallel:
+    matrix:
+      - CIBW_ARCHS_LINUX: x86_64
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+      - CIBW_ARCHS_LINUX: aarch64
+        CIBW_BUILD: [cp310-*, cp311-*, cp312-*, cp313-*]
   script:
     - apt-get update -qq && apt-get install -y -qq docker.io
     - for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
     - docker info --format '{{.Architecture}} {{.ServerVersion}}'
-    - docker run --rm --privileged tonistiigi/binfmt --install arm64
+    - if [ "$CIBW_ARCHS_LINUX" = aarch64 ]; then docker run --rm --privileged tonistiigi/binfmt --install arm64; fi
     - pip install -q build 'cibuildwheel==4.2.1'
     # The engine's smoke test installs it against these, which exist nowhere
     # but here until a release; `[tool.cibuildwheel.linux]` points pip at them.
@@ -226,6 +237,20 @@ wheels:
       done
     - cibuildwheel --platform linux packages/sdm-relational-engine --output-dir dist
     - cp _sibling_wheels/*.whl dist/
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 month
+
+# Every wheel the jobs above built, gathered, and held to the set the engine
+# claims: a job that built nothing, or the wrong interpreter, fails here rather
+# than reaching an install as a missing wheel.
+wheels-check:
+  stage: test
+  extends: .python
+  <<: *wheel-rules
+  needs: [wheels]
+  script:
     - |
       python - <<'EOF'
       import pathlib, re, sys
