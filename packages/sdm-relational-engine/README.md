@@ -29,7 +29,7 @@ pip install "sdm-relational-engine[relbench]"    # Graph.from_relbench() dataset
 ```
 
 Release wheels are built for CPython 3.10, 3.11, 3.12 and 3.13
-(`manylinux_2_28` x86-64); no source distribution is published.
+(`manylinux_2_28` x86-64 and aarch64); no source distribution is published.
 
 Application code should import the client's neutral surface, not this package
 directly:

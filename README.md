@@ -66,7 +66,7 @@ Five distributions, released together on one version.
 Only `sdm-relational-engine` is native. The other four are pure Python and
 install anywhere, on 3.10 through 3.14.
 
-The engine publishes wheels for Linux x86-64 on 3.10–3.13 and **no source
+The engine publishes wheels for Linux x86-64 and aarch64 on 3.10–3.13 and **no source
 distribution**, so `pip install sdm-client[relational]` resolves there and
 nowhere else — on any other platform pip has nothing to fall back to and the
 extra does not install. It does build on other platforms from a checkout, given

@@ -121,7 +121,7 @@ sdm-pql  ◄── sdm-api  ◄── sdm-client ──► sdm-connectors
 ```
 
 **Only `sdm-relational-engine` is native.** Everything else installs anywhere, so `kumo-tabular`
-works on a Mac; `kumo-relational` needs Linux x86-64.
+works on a Mac; `kumo-relational` needs Linux (x86-64 or aarch64).
 
 ```bash
 pip install sdm-client                 # tabular, PQL, transport — everywhere
