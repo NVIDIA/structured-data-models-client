@@ -378,3 +378,25 @@ def test_the_cap_alone_is_still_reported_alone():
     )
     assert 'exceeds maximum' in message
     assert 'without a time range' not in message
+
+
+@pytest.mark.parametrize(
+    'said', ['a classification needs two classes', 'it was refused.']
+)
+def test_the_failed_part_is_named_in_its_own_sentence(said):
+    """The part's name follows the refusal as a second sentence, whether or
+    not the refusal ended with a full stop."""
+    from types import SimpleNamespace
+
+    from sdm_client.client import _which_part_failed
+    from sdm_client.decompose import RANKING
+
+    message = (
+        _which_part_failed(
+            StructuredDataError(said, code='UNSUPPORTED_REQUEST'),
+            SimpleNamespace(kind=RANKING, parts=[1, 2, 3]),
+            864,
+        )
+    ).args[0]
+    assert message.startswith(said.rstrip('.') + '. This is the question')
+    assert 'candidate 864, one of 3' in message

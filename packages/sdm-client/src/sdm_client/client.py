@@ -855,8 +855,11 @@ def _which_part_failed(
         if rewritten.kind == RANKING
         else f'part {about} of {len(rewritten.parts)}'
     )
+    said = str(error.args[0]).rstrip()
+    if not said.endswith(('.', '!', '?')):
+        said += '.'
     return StructuredDataError(
-        f'{error.args[0]} This is the question asked for {which}, one of '
+        f'{said} This is the question asked for {which}, one of '
         f'{len(rewritten.parts)} this {rewritten.kind} is asked as.',
         code=getattr(error, 'code', 'INVALID_REQUEST'),
     )
