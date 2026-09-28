@@ -134,14 +134,16 @@ def connect(
     r"""Connect to a PostgreSQL database.
 
     Standard ``PG*`` environment variables are used when their corresponding
-    keyword arguments are absent. A PostgreSQL URI or libpq conninfo string can
-    be supplied as ``conninfo``.
+    keyword arguments are absent. Passing one explicitly as ``None`` says to
+    leave it to the server rather than to the shell. A PostgreSQL URI or libpq
+    conninfo string can be supplied as ``conninfo``.
     """
     check_connect_args('postgres', kwargs, _CONNECT_ARGS)
+    given = set(kwargs)
     kwargs = merge_driver_options('postgres', kwargs, driver_options)
     if not conninfo:
         for arg, env in _ENV_BY_ARG.items():
-            if kwargs.get(arg) is None:
+            if arg not in given and arg not in kwargs:
                 kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
     if conninfo:

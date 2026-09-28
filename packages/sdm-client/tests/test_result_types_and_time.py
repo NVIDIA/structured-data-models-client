@@ -285,7 +285,7 @@ def test_a_code_that_merely_opens_with_a_date_is_not_read_as_one():
         on_the_wire(graph(codes))
 
 
-def test_an_ambiguous_value_past_the_sample_is_still_found():
+def test_a_value_past_the_sample_that_is_written_another_way_is_still_found():
     """Reading a sample would let the last row be the one that says something
     else, and a column read two ways is the whole defect."""
     pytest.importorskip('sdm_relational_engine')
@@ -295,7 +295,7 @@ def test_an_ambiguous_value_past_the_sample_is_still_found():
     )
     with pytest.raises(StructuredDataError) as raised:
         on_the_wire(graph(values))
-    assert 'day-first' in str(raised.value)
+    assert 'written two ways' in str(raised.value)
 
 
 # --- exact means exact, whatever kind of number it is ----------------------

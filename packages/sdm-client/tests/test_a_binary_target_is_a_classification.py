@@ -364,23 +364,33 @@ class TestTheContextIsWhatDecides:
             ('stated classification', {}, {'task': 'classification'}),
         ],
     )
-    def test_a_classification_over_one_class_is_refused_here(
+    def test_a_classification_over_one_class_is_said_and_not_refused(
         self, name, data_kwargs, materialize_kwargs
     ):
-        """The endpoint is certain to refuse it, so this refuses it first.
-
-        The same degeneracy used to have opposite outcomes: a 0/1 target fell
-        back to regression and worked, while a categorical one -- or a stated
-        classification -- built a request the endpoint would reject, and said
-        """
+        """The endpoint answers this, returning the one class at probability
+        1.0, so refusing it here made the route that gathers reject what the
+        route that does not gather is answered for."""
         data = self.one_sided(**data_kwargs)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', SDMWarning)
-            with pytest.raises(StructuredDataError, match='two classes'):
-                PredictiveQuery(QUERY, {'people': data}).materialize(
-                    predict=data.head(3).drop(columns=['churn']),
-                    **materialize_kwargs,
-                )
+        with pytest.warns(SDMWarning, match='probability 1.0'):
+            request = PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(3).drop(columns=['churn']),
+                **materialize_kwargs,
+            )
+        assert request.task.kind == 'classification'
+
+    def test_the_remedy_does_not_promise_rows_a_constant_column_has_not_got(
+        self,
+    ):
+        """Scoring fewer rows cannot help where the column is constant in the
+        whole table, and the message used to name that as the fix."""
+        data = frame(['n'] * 8)
+        with pytest.warns(SDMWarning) as caught:
+            PredictiveQuery(QUERY, {'people': data}).materialize(
+                predict=data.head(2).drop(columns=['churn']),
+                task='classification',
+            )
+        said = ' '.join(str(item.message) for item in caught)
+        assert 'constant in the whole table' in said
 
     def test_a_constant_regression_context_is_allowed_through(self):
         """The endpoint answers this one, so it is a remark and not a refusal."""
@@ -483,3 +493,147 @@ class TestTheContextIsWhatDecides:
                     predict=data.head(3).drop(columns=['churn']),
                     task='forecasting',
                 )
+
+
+class TestBothRoutesSayWhatTheyDecided:
+    """The rule is about the column, so both routes have to speak of it.
+
+    One recognised two whole numbers as a label and said so; the other asked
+    the same column of the same schema as a regression and said nothing -- and
+    `task=`, the remedy the first names, is refused on the second.
+    """
+
+    @staticmethod
+    def graph():
+        pytest.importorskip('sdm_relational_engine')
+        frame = pd.DataFrame(
+            {
+                'mid': range(60),
+                'toxic': [i % 2 for i in range(60)],
+                'x': [float(i) for i in range(60)],
+            }
+        )
+        return Schema.from_data(
+            {'molecule': frame}, primary_keys={'molecule': 'mid'}
+        )
+
+    @staticmethod
+    def said(schema, model):
+        from sdm_client import KumoRelational
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            request = PredictiveQuery(
+                'PREDICT molecule.toxic FOR EACH molecule.mid', schema
+            ).materialize(indices=[1, 2], model=model or KumoRelational())
+        return request, [
+            str(item.message)
+            for item in caught
+            if 'whole numbers' in str(item.message)
+        ]
+
+    def test_the_relational_route_says_it_is_asking_for_a_quantity(self):
+        request, said = self.said(self.graph(), None)
+        assert request.task.kind == 'regression'
+        assert said
+        assert 'asked as a regression' in said[0]
+
+    def test_and_names_the_remedy_that_works_on_that_route(self):
+        """`task=` is refused with a relational query, so the warning the other
+        route prints names a knob this one has not got."""
+        schema = self.graph()
+        _, said = self.said(schema, None)
+        assert "stype = 'categorical'" in said[0]
+        assert 'task=' not in said[0]
+
+        schema['molecule']['toxic'].stype = 'categorical'
+        request, after = self.said(schema, None)
+        assert request.task.kind == 'multiclass_classification'
+        assert not after
+
+    def test_a_target_that_is_not_two_whole_numbers_is_not_remarked_on(self):
+        schema = self.graph()
+        schema['molecule'].data['toxic'] = [float(i) for i in range(60)]
+        schema = Schema.from_data(
+            {'molecule': schema['molecule'].data},
+            primary_keys={'molecule': 'mid'},
+        )
+        assert not self.said(schema, None)[1]
+
+
+def test_a_constant_target_is_remarked_on_however_the_request_was_built():
+    """The notice sat in the materializer, so a request built from frames --
+    the route with no gathering to warn during -- was answered in silence."""
+    from sdm_client import Request
+
+    def said(build):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always', SDMWarning)
+            build()
+        return [
+            str(item.message)
+            for item in caught
+            if 'every context row' in str(item.message)
+        ]
+
+    def built(labels):
+        return Request(
+            context=pd.DataFrame({'x': [1, 2, 3], 'y': labels}),
+            predict=pd.DataFrame({'x': [4]}),
+            target='y',
+            task='classification',
+        )
+
+    told = said(lambda: built([0, 0, 0]))
+    assert len(told) == 1, told
+    assert 'probability 1.0' in told[0]
+
+    data = frame(['n'] * 8)
+    gathered = said(
+        lambda: PredictiveQuery(QUERY, {'people': data}).materialize(
+            predict=data.head(2).drop(columns=['churn']),
+            task='classification',
+        )
+    )
+    assert len(gathered) == 1, gathered
+
+    assert not said(lambda: built([0, 1, 0]))
+
+
+@pytest.mark.parametrize(
+    ('kind', 'expected'),
+    [
+        ('classification', 'probability 1.0'),
+        ('binary_classification', 'probability 1.0'),
+        ('multiclass_classification', 'probability 1.0'),
+        ('regression', 'cannot say much'),
+        ('forecasting', None),
+        ('temporal_link_prediction', None),
+        ('ranking', None),
+    ],
+)
+def test_a_constant_target_is_judged_by_what_the_kind_is(kind, expected):
+    """The notice moved here from a route that only ever produced the coarse
+    `classification`, and a caller may name any of the kinds. A forecast's
+    target is a horizon and a ranking's is a candidate list; one value there
+    does not mean what it means for a classification."""
+    from sdm_client import Request
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always', SDMWarning)
+        Request(
+            context=pd.DataFrame({'x': [1, 2, 3], 'y': [0, 0, 0]}),
+            predict=pd.DataFrame({'x': [4]}),
+            target='y',
+            task=kind,
+        )
+
+    said = [
+        str(item.message)
+        for item in caught
+        if 'every context row' in str(item.message)
+    ]
+    if expected is None:
+        assert said == []
+    else:
+        assert len(said) == 1 and expected in said[0], said

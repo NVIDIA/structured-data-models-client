@@ -36,6 +36,56 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **A session tells one question from another by what it asks.** The guard
+  compared the query text, which a request built from frames has not got, which
+  `task=` does not change, and which two spellings of one string literal write
+  differently. A frame-built request scored against a session answered the
+  pinned question. The question is now assembled from the request. The only
+  visible change is the annotation of `FittedModel.__init__`'s `question`
+  parameter, on a type `fit()` returns and nobody constructs.
+- **A ranking candidate is written as its column travels**, not as its own
+  value, so a small key drawn from a column whose values straddle int64 is
+  still written as that column's text rather than as a number it does not hold.
+- **A year-first date is recognised by its shape**, including the
+  space-separated numeric offset a warehouse writes by default. A column
+  written in no date shape, and one written in two, are each told apart from
+  one that is ambiguous; all three used to get the ambiguity message, whose
+  remedy re-dates half the column.
+- **A bool target's probability keys** are restored the way its prediction is,
+  so `probability_True` reads on both models rather than on whichever answered.
+- **Nine notices about a schema** said things that were not true of it: the
+  repeated-key notice fired on an ordinary foreign key with a remedy that
+  deletes the working edge; two notices about one keyless table contradicted
+  each other; a keyless table was said to reach the model unjoined; the table a
+  question is about was said to be left out; a table pointing at itself was
+  called an ambiguous pair; a lone table was told a window over it is refused.
+  Every route that adds a relationship, `append` included, now goes through one
+  place and is checked and de-duplicated alike.
+- **A failure in one part of a ranking or a forecast** is described as that
+  part. The wording was written for a forecast and every clause of it was false
+  of a ranking; a forecast named the total rather than the failing step; and
+  both dropped the exception type, losing a status and details on the one path
+  every ranking and every forecast takes.
+- **A window pooled from two of different units is bracketed.** Ranking two
+  offsets by adding them to one fixed date orders them the wrong way round at
+  every other anchor, and a bound inside the calendar window loses rows.
+- **The transport reads a body, and reports a failure, one way.** A 200 carrying
+  a JSON array escaped `models()` as a bare `AttributeError`; a session id of
+  `..` turned a scoring call against a pinned context into a one-shot
+  prediction elsewhere; a read timeout was reported as exceeded retries to a
+  caller who had asked for none; and a 500 on the prediction path is no longer
+  retried, since the payload and the model are the same on every attempt.
+- **A connector keeps a value in the column it was read from.** The row-based
+  fetch, which is the only path the postgres backend has, collapsed two result
+  columns of one name. Connection defaults are taken from the environment only
+  where the caller named none.
+- **A request is described as what the model does with it.** A 0/1 integer
+  target is spoken of on both routes, with the remedy that works on each; a
+  single-class classification is remarked on rather than refused, because the
+  tabular endpoint answers it; a relational context this client emptied is
+  refused rather than sent; and a column of raw bytes is not called nested and
+  multi-label.
+
 - **A column the model cannot read is named rather than silently dropped.**
   A `text` feature column reaches the relational model and is ignored there.
   Holding content fixed and varying only the semantic type, the same

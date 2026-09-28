@@ -30,6 +30,7 @@ from sdm_api.generated.tfm_api import PredictionResponse, ResponseContractError
 from sdm_client.base import ModelSpec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import (
+    WIDEN_THE_CONTEXT,
     NimRequestError,
     StructuredDataError,
     UnsupportedRequestError,
@@ -102,7 +103,7 @@ class RelationalAdapter:
         self, request: Request, outputs: tuple[str, ...]
     ) -> Iterator[dict[str, Any]]:
         payloads = self._payloads(request)
-        self._preflight(payloads, outputs)
+        self._preflight(payloads, outputs, request.query)
         for payload in payloads:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
@@ -289,7 +290,10 @@ class RelationalAdapter:
         whatever it opened, and sending goes through the client's transport."""
 
     def _preflight(
-        self, payloads: tuple[dict[str, Any], ...], outputs: tuple[str, ...]
+        self,
+        payloads: tuple[dict[str, Any], ...],
+        outputs: tuple[str, ...],
+        asked: str | None = None,
     ) -> None:
         """Refuse what the endpoint enforces, before spending the round trip.
 
@@ -298,8 +302,9 @@ class RelationalAdapter:
         more gets a 500 that names neither limit, so both are checked here.
         """
         limits = self.spec.runtime.limits
+        self._check_context_is_not_empty(payloads)
         self._check_class_count(payloads, limits)
-        self._check_target_varies(payloads)
+        self._check_target_varies(payloads, asked)
         if 'explanation' not in outputs:
             return
 
@@ -366,8 +371,29 @@ class RelationalAdapter:
                     },
                 )
 
-    def _check_target_varies(
+    def _check_context_is_not_empty(
         self, payloads: tuple[dict[str, Any], ...]
+    ) -> None:
+        r"""Refuse a context this client emptied, rather than sending it.
+
+        Scoring every row of the entity table takes every row out of the
+        context. One row left is refused; none fell through the same check,
+        because zero distinct answers is not one.
+        """
+        for payload in payloads:
+            table = payload.get('context', {}).get('instance_table')
+            if not isinstance(table, dict) or table.get('rows'):
+                continue
+            raise UnsupportedRequestError(
+                'no context rows are left: every row that could be context is '
+                'also being scored, and a row carrying the answer being asked '
+                'for is not sent as context. Score fewer rows, so that the '
+                'rest are there to learn from',
+                details={'model': self.spec.model_id, 'context_rows': 0},
+            )
+
+    def _check_target_varies(
+        self, payloads: tuple[dict[str, Any], ...], asked: str | None = None
     ) -> None:
         r"""Refuse, or remark on, a context whose every row says the same thing.
 
@@ -381,6 +407,12 @@ class RelationalAdapter:
         only warned about. A forecast and a link prediction are neither: their
         targets are a horizon and a candidate list, and one value in the column
         does not mean the same thing.
+
+        The wire calls this column `TARGET` whatever the question was, and a
+        message naming it describes something the caller never wrote. Where
+        the target is a column of theirs the query says so and it is named;
+        where it is an aggregation or a predicate there is no column to name,
+        and the question is quoted instead.
         """
         for payload in payloads:
             kind = str(payload.get('task', {}).get('kind', ''))
@@ -392,12 +424,12 @@ class RelationalAdapter:
             values = _answered_target_values(payload, column)
             if values is None or len(values) != 1:
                 continue
+            said = _how_to_name_the_target(column, asked)
             if 'classification' in kind:
                 raise UnsupportedRequestError(
-                    f'every context row has the same {column}, and a '
+                    f'every context row has the same {said}, and a '
                     f'classification needs at least two classes to learn '
-                    f'from. Gather a wider context with num_context_samples, '
-                    f'or ask about entities whose answers differ',
+                    f'from. {WIDEN_THE_CONTEXT}',
                     details={
                         'model': self.spec.model_id,
                         'target': column,
@@ -405,7 +437,7 @@ class RelationalAdapter:
                     },
                 )
             warnings.warn(
-                f'every context row has the same {column}, so nothing in the '
+                f'every context row has the same {said}, so nothing in the '
                 f'context distinguishes one answer from another. The endpoint '
                 f'will answer, but the answer cannot say much. Gather a wider '
                 f'context with num_context_samples, or ask about entities '
@@ -536,6 +568,26 @@ def _asks_for_the_larger_context(
         )
         > cap
     )
+
+
+_WIRE_TARGET = 'TARGET'
+_A_PREDICTED_COLUMN = re.compile(
+    r'^\s*PREDICT\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s', re.IGNORECASE
+)
+
+
+def _how_to_name_the_target(column: str | None, asked: str | None) -> str:
+    """What to call the thing every context row agrees about.
+
+    `TARGET` is the name the relational wire gives the label column whatever
+    the question was, so printing it describes a column of nobody's data.
+    """
+    if column != _WIRE_TARGET:
+        return str(column)
+    named = _A_PREDICTED_COLUMN.match(asked or '')
+    if named is not None:
+        return named.group(1)
+    return f'answer to {asked!r}' if asked else 'answer'
 
 
 def _answered_target_values(

@@ -298,6 +298,7 @@ def gathered(*, context_rows: int, run_mode: str | None, target=None) -> object:
     class Gathered:
         payloads = (payload,)
         requested_inference: dict = {}
+        query = None
 
     return Gathered()
 
@@ -335,9 +336,10 @@ def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
 # --- a context that teaches nothing, on both routes -------------------------
 
 
-def relational_constant(kind: str) -> object:
+def relational_constant(kind: str, asked: str | None = None) -> object:
     request = gathered(context_rows=50, run_mode='fast', target=[50] * 50)
     request.payloads[0]['task']['kind'] = kind
+    request.query = asked
     return request
 
 
@@ -360,7 +362,31 @@ def test_a_constant_regression_target_is_remarked_on_and_still_sent():
         partial(plan, relational_constant('regression'))
     )
     assert built
-    assert any('every context row has the same TARGET' in s for s in said), said
+    assert any('every context row has the same' in s for s in said), said
+
+
+@pytest.mark.parametrize(
+    ('asked', 'named'),
+    [
+        ('PREDICT users.label FOR EACH users.uid', 'users.label'),
+        (
+            'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid',
+            "answer to 'PREDICT SUM(orders.price, 0, 30, days) "
+            "FOR EACH users.uid'",
+        ),
+    ],
+    ids=['a column the caller wrote', 'an aggregation with no column'],
+)
+def test_the_constant_target_is_named_as_the_caller_wrote_it(asked, named):
+    """`TARGET` is what the wire calls the label column whatever was asked,
+    so printing it describes a column of nobody's data."""
+    _, said = warnings_from(
+        partial(plan, relational_constant('regression', asked))
+    )
+    assert any(f'every context row has the same {named}' in s for s in said), (
+        said
+    )
+    assert not any('TARGET' in s for s in said), said
 
 
 def test_a_target_that_varies_is_left_alone():
@@ -415,3 +441,80 @@ def test_a_context_within_the_cap_is_not_refused():
     )
 
     check_request_against_model(request, KumoTabular().spec, ('prediction',))
+
+
+# --- a context this client emptied is not sent -----------------------------
+
+
+def entity_table(rows: int = 60) -> Schema:
+    pytest.importorskip('sdm_relational_engine')
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {'mid': range(rows), 'label': rng.choice(list('abc'), rows)}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {'molecule': frame}, primary_keys={'molecule': 'mid'}
+        )
+
+
+def gathered_scoring(count: int):
+    from sdm_client import KumoRelational, PredictiveQuery
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return PredictiveQuery(
+            'PREDICT molecule.label FOR EACH molecule.mid', entity_table()
+        ).materialize(indices=list(range(count)), model=KumoRelational())
+
+
+def sent(request):
+    from sdm_client.adapters.relational import RelationalAdapter
+
+    return list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+
+
+def test_scoring_every_entity_is_refused_rather_than_sent_with_no_context():
+    """A row carrying the answer is kept out of the context, so scoring every
+    row takes every row out of it -- and zero distinct answers is not one, so
+    the guard for a context of one row did not see this."""
+    request = gathered_scoring(60)
+    assert request.context_rows == 0
+
+    with pytest.raises(StructuredDataError) as raised:
+        sent(request)
+    assert 'no context rows are left' in str(raised.value)
+
+
+def test_a_context_of_two_rows_is_still_sent():
+    request = gathered_scoring(58)
+    assert request.context_rows == 2
+    assert sent(request)
+
+
+def test_the_cap_refusal_does_not_promise_a_sampling_the_model_does_not_do():
+    """`materialize()` never samples a relational context down to the cap: it
+    refuses `num_context_samples` past it and otherwise gathers the smaller
+    budget."""
+    from sdm_client import KumoRelational, Request
+    from sdm_client.base import check_request_against_model
+    from sdm_client.models import spec_for
+
+    context = pd.DataFrame(
+        {'x': range(12_500), 'y': [i % 2 for i in range(12_500)]}
+    )
+    request = Request(
+        context=context,
+        predict=pd.DataFrame({'x': [1, 2]}),
+        target='y',
+        task='classification',
+    )
+    with pytest.raises(StructuredDataError) as raised:
+        check_request_against_model(
+            request, spec_for(KumoRelational()), ('prediction',)
+        )
+    message = str(raised.value)
+    assert 'reads at most 10,000' in message
+    assert 'sampled to that' not in message
+    assert 'gather it with materialize()' in message

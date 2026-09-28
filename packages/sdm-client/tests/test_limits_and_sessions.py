@@ -36,6 +36,8 @@ def payload(*, predict_rows: int, context_rows: int) -> dict:
 class _Gathered:
     """The shape a materialized request presents to an adapter."""
 
+    query: str | None = None
+
     def __init__(self, *payloads: dict) -> None:
         self.payloads = tuple(payloads)
         self.requested_inference: dict = {}
@@ -398,7 +400,7 @@ def test_a_session_refuses_a_request_that_asks_something_else():
     ).materialize(**kw)
 
     handle = FittedModel(
-        None, None, 'sid', ('prediction',), question=pinned.query
+        None, None, 'sid', ('prediction',), question=pinned._question
     )
 
     with pytest.raises(StructuredDataError, match='pinned'):
@@ -470,3 +472,81 @@ def test_a_tabular_request_records_the_question_it_was_built_from():
     )
 
     assert request.query == 'PREDICT t.a FOR EACH t.k'
+
+
+def _pinned(request):
+    from sdm_client.client import FittedModel
+
+    return FittedModel(
+        None, None, 'sid', ('prediction',), question=request._question
+    )
+
+
+def test_a_session_refuses_a_frame_built_request_with_another_context():
+    """A request built from frames is as much a question as a gathered one.
+
+    Nothing about the two below differs except the labels, which is what the
+    model learns from and what a scoring call does not carry.
+    """
+    import pandas as pd
+
+    from sdm_client import Request
+
+    def asked(labels):
+        return Request(
+            context=pd.DataFrame({'x': [1, 2, 3, 4], 'y': labels}),
+            predict=pd.DataFrame({'x': [5, 6]}),
+            target='y',
+            task='classification',
+        )
+
+    with pytest.raises(StructuredDataError, match='context pinned'):
+        _pinned(asked([1, 0, 1, 0])).predict(asked([0, 1, 0, 1]))
+
+
+def test_a_session_accepts_the_same_frames_built_twice():
+    import pandas as pd
+
+    from sdm_client import Request
+
+    def asked():
+        return Request(
+            context=pd.DataFrame({'x': [1, 2, 3, 4], 'y': [1, 0, 1, 0]}),
+            predict=pd.DataFrame({'x': [5, 6]}),
+            target='y',
+            task='classification',
+        )
+
+    assert asked()._question == asked()._question
+
+
+def test_a_session_refuses_the_same_query_asked_as_another_kind():
+    """`task=` changes the question without changing a character of its text."""
+    import pandas as pd
+
+    from sdm_client import PredictiveQuery, Schema
+
+    frame = pd.DataFrame({'id': range(40), 'y': [i % 5 for i in range(40)]})
+    schema = Schema.from_data({'t': frame}, primary_keys={'t': 'id'})
+    query = PredictiveQuery('PREDICT t.y FOR EACH t.id', schema)
+    regression = query.materialize(indices=[1, 2], task='regression')
+    classification = query.materialize(indices=[1, 2], task='classification')
+
+    assert regression.query == classification.query
+    with pytest.raises(StructuredDataError, match='task kind'):
+        _pinned(regression).predict(classification)
+
+
+def test_a_session_accepts_a_literal_written_with_the_other_quote():
+    """Two spellings of one literal are one question."""
+    from sdm_client.request import _one_spelling_of_each_literal as spelled
+
+    double = (
+        'PREDICT COUNT(o.* WHERE o.channel="web", 0, 30, days) FOR EACH u.id'
+    )
+    single = (
+        "PREDICT COUNT(o.* WHERE o.channel='web', 0, 30, days) FOR EACH u.id"
+    )
+    assert spelled(double) == spelled(single)
+    assert spelled('o.a="x" AND o.b=\'y\'') == spelled('o.a=\'x\' AND o.b="y"')
+    assert spelled('o.a="x"') != spelled('o.a="z"')

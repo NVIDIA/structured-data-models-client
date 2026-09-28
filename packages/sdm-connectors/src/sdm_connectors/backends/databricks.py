@@ -98,10 +98,19 @@ def connect(
     driver_options: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> Connection:
+    r"""Connect to a Databricks SQL warehouse.
+
+    ``DATABRICKS_*`` environment variables are used when their corresponding
+    keyword arguments are absent -- including ``DATABRICKS_CATALOG`` and
+    ``DATABRICKS_SCHEMA``, which decide which table a bare name resolves to.
+    Passing one explicitly as ``None`` says to leave it to the workspace
+    rather than to the shell.
+    """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
+    given = set(kwargs)
     kwargs = merge_driver_options('databricks', kwargs, driver_options)
     for arg, env in _ENV_BY_ARG.items():
-        if kwargs.get(arg) is None:
+        if arg not in given and arg not in kwargs:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
     # Databricks requires a partner product to identify every connection it

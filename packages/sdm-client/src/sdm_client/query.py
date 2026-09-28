@@ -32,7 +32,11 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
-from sdm_client.decompose import Decomposition, parts_of
+from sdm_client.decompose import (
+    Decomposition,
+    about_the_part,
+    parts_of,
+)
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.models import Model, spec_for
@@ -42,27 +46,6 @@ from sdm_client.schema import Schema
 
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
-
-
-def _which_part_could_not_be_gathered(
-    error: StructuredDataError, rewritten: Decomposition, step: Any
-) -> StructuredDataError:
-    """Say which of the rewritten questions failed, and that there were several.
-
-    A question asked as several is gathered one at a time, and a failure in one
-    of them was relayed as though the caller had written it. A horizon that
-    outruns the data then read as a complaint about the caller's aggregation
-    window, which is the one thing it is not: the window in the message belongs
-    to a rewrite they never saw, and the same message came back for a genuinely
-    over-long window, so the two mistakes could not be told apart.
-    """
-    how_many = len(rewritten.parts)
-    return StructuredDataError(
-        f'{error.args[0]} This is {rewritten.kind} part {step} of {how_many}: '
-        f'the window named above is that part{chr(39)}s, not the one written, so '
-        f'ask for fewer than {how_many} if the data does not reach that far.',
-        code=getattr(error, 'code', 'INVALID_REQUEST'),
-    )
 
 
 class PredictiveQuery:
@@ -180,6 +163,7 @@ class PredictiveQuery:
             self.text,
             list(candidates) if candidates is not None else None,
             options,
+            self.schema,
         )
         if task is not None and (relational or rewritten is not None):
             why = (
@@ -393,9 +377,7 @@ class PredictiveQuery:
             except MissingExtraError:
                 raise
             except StructuredDataError as error:
-                raise _which_part_could_not_be_gathered(
-                    error, rewritten, step
-                ) from error
+                raise about_the_part(error, rewritten, step) from error
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])

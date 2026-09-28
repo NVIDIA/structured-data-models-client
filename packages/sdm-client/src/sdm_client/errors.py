@@ -17,6 +17,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+#: What to do about a context that teaches nothing. Named here because a
+#: question asked as several has to take it back: a candidate nothing in the
+#: data reaches has no example to learn from at any context size.
+WIDEN_THE_CONTEXT = (
+    'Gather a wider context with num_context_samples, or ask about entities '
+    'whose answers differ'
+)
+
 #: Entries rendered from an RFC-9457 ``invalid_params`` list before the rest
 #: are summarised as a count. A rejected batch can name thousands of rows.
 MAX_INVALID_PARAMS = 5
@@ -141,8 +149,8 @@ class NimRequestError(StructuredDataError):
     :attr:`status_code`, which is the endpoint's own answer, kept as it was.
 
     Branch on :attr:`code`, not on the status. ``INVALID_REQUEST`` means the
-    request has to change and sending it again cannot help; ``429`` and the
-    remaining ``5xx`` codes are worth retrying. The two can disagree: the
+    request has to change and sending it again cannot help; ``429``, ``502``,
+    ``503`` and ``504`` are worth retrying, and this client retries them. The two can disagree: the
     endpoint reports some caller mistakes with a ``500`` and an internal code,
     in a sentence that names exactly what the caller got wrong, and this client
     reports those as the caller's. Where it does, the endpoint's own

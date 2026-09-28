@@ -67,6 +67,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         self._reply()
 
+    def do_DELETE(self) -> None:
+        self._reply()
+
     def log_message(self, *args: object) -> None:
         pass
 
@@ -370,11 +373,20 @@ def test_a_detail_that_is_not_text_names_no_diagnosis():
     assert raised.value.code == 'INTERNAL_ERROR'
 
 
-def test_the_retry_budget_is_what_it_was():
-    """This fix reads the body and changes nothing about how often a request
-    is sent, which is the one thing a correction to an error's classification
-    must not quietly alter."""
-    for status, sends in ((500, 4), (503, 4), (422, 1)):
+def test_a_request_is_sent_again_only_for_what_sending_it_again_can_fix():
+    """A 500 is not retried. The payload and the model are the same on every
+    attempt, so a server fault reproduces, and the caller mistakes this
+    endpoint reports as a 500 are reclassified from the body as the caller's
+    -- after three more uploads of the whole gathered context. Overload,
+    gateway and timeout are the transient ones and are still retried."""
+    for status, sends in (
+        (500, 1),
+        (429, 4),
+        (502, 4),
+        (503, 4),
+        (504, 4),
+        (422, 1),
+    ):
         with _serve(_Reply(status=status, body=_EMPTY_CONTEXT)) as (
             server,
             url,
@@ -383,3 +395,107 @@ def test_the_retry_budget_is_what_it_was():
             with pytest.raises(NimRequestError):
                 transport.predict({'model': 'kumo-relational'})
         assert server.received == ['/v1/predictions'] * sends, status
+
+
+# --- one account of a body, and of a failure, on every route ---------------
+
+
+@pytest.mark.parametrize(
+    'body',
+    ['[{"id": "kumo-tabular"}]', '"nope"', 'null', '3'],
+    ids=['an array', 'a string', 'null', 'a number'],
+)
+def test_a_models_body_that_is_not_an_object_stays_inside_the_error_contract(
+    body,
+):
+    """`except StructuredDataError` is documented as enough to catch anything
+    this client reports, and this escaped as a bare AttributeError."""
+    with _serve(_Reply(body=body)) as (_, url):
+        transport = Transport(url, max_retries=0)
+        with pytest.raises(StructuredDataError) as raised:
+            transport.list_models()
+    assert raised.value.code == 'TRANSPORT_ERROR'
+    assert 'JSON object' in str(raised.value)
+
+
+def test_a_models_body_that_is_an_object_still_reads():
+    with _serve(_Reply(body='{"data": [{"id": "kumo-tabular"}]}')) as (_, url):
+        assert Transport(url, max_retries=0).list_models() == ['kumo-tabular']
+
+
+@pytest.mark.parametrize('timeout', [0, -5, float('nan'), 'abc'])
+def test_an_unusable_timeout_is_named_on_every_route_that_takes_one(timeout):
+    """`health_ready` validated its per-call timeout and `list_models` did
+    not, so the same value was a named refusal on one and a raw driver
+    exception on the other."""
+    transport = Transport(_REFUSED_URL, max_retries=0)
+    for call in (transport.list_models, transport.health_ready):
+        with pytest.raises(StructuredDataError) as raised:
+            call(timeout=timeout)
+        assert raised.value.code == 'INVALID_CONFIGURATION'
+
+
+def test_a_server_that_stalls_is_reported_as_a_timeout_not_as_retries():
+    """urllib3 wraps a read timeout in MaxRetryError, which requests surfaces
+    as ConnectionError, so the branch naming the knob never ran -- and the
+    message said retries were exceeded when none had been asked for."""
+    with _serve(_Reply(delay=5.0)) as (_, url):
+        transport = Transport(url, timeout=0.5, max_retries=0)
+        with pytest.raises(StructuredDataError) as raised:
+            transport.health_ready()
+    message = str(raised.value)
+    assert 'timed out after 0.5 seconds' in message
+    assert 'Max retries exceeded' not in message
+
+
+def test_a_stalled_prediction_is_reported_as_a_timeout_too():
+    with _serve(_Reply(delay=5.0)) as (_, url):
+        transport = Transport(url, timeout=0.5, max_retries=0)
+        with pytest.raises(StructuredDataError) as raised:
+            transport.predict({'model': 'kumo-tabular'})
+    assert 'timed out after 0.5 seconds' in str(raised.value)
+
+
+@pytest.mark.parametrize('session_id', ['..', '.', '...', ''])
+def test_a_session_id_that_is_not_a_segment_is_refused(session_id):
+    """`..` turned a scoring call against a pinned context into a one-shot
+    prediction on another route, carrying no context at all."""
+    from sdm_client.core.transport import _path_segment
+
+    with pytest.raises(StructuredDataError) as raised:
+        _path_segment(session_id)
+    assert 'not a session id' in str(raised.value)
+
+
+@pytest.mark.parametrize('session_id', ['a/../b', 'sess.1', '%2e%2e', 'abc'])
+def test_an_ordinary_session_id_is_escaped_and_kept(session_id):
+    from sdm_client.core.transport import _path_segment
+
+    escaped = _path_segment(session_id)
+    assert '/' not in escaped
+    assert escaped.strip('.') != ''
+
+
+def test_a_dot_segment_never_reaches_the_wire():
+    with _serve(_Reply()) as (server, url):
+        transport = Transport(url, max_retries=0)
+        with pytest.raises(StructuredDataError):
+            transport.session_predict('..', {'predict': {}})
+        with pytest.raises(StructuredDataError):
+            transport.delete_session('..')
+    assert server.received == []
+
+
+def test_a_stalled_delete_reports_the_timeout_it_was_given(monkeypatch):
+    """Releasing a session is held to a shorter timeout than the rest of the
+    client, and the failure named the longer one it did not use."""
+    import sdm_client.core.transport as transport_module
+
+    monkeypatch.setattr(transport_module, '_DELETE_TIMEOUT_SECONDS', 0.5)
+    with _serve(_Reply(delay=5.0)) as (_, url):
+        transport = Transport(url, timeout=60.0, max_retries=0)
+        with pytest.raises(StructuredDataError) as raised:
+            transport.delete_session('abc')
+
+    assert 'timed out after 0.5 seconds' in str(raised.value)
+    assert raised.value.details['timeout'] == 0.5

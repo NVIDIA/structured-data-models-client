@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from numbers import Integral
 from pathlib import PurePosixPath
@@ -200,19 +200,7 @@ def read_table(
                 return cursor.fetchdf()
             rows = cursor.fetchall()
             columns = [description[0] for description in cursor.description]
-            # Built a column at a time. Handing `pd.DataFrame` the rows lets it
-            # promote an integer column holding a null to float64 as it builds,
-            # which rounds every value past 2**53 before the frame exists --
-            # the same loss the Arrow path above is taken to avoid.
-            return pd.DataFrame(
-                _integer_columns_exactly(
-                    {
-                        name: [row[position] for row in rows]
-                        for position, name in enumerate(columns)
-                    }
-                ),
-                columns=columns,
-            )
+            return _frame_by_position(rows, columns)
         finally:
             if owned:
                 with suppress(Exception):
@@ -477,6 +465,30 @@ def _narrow_nullable_dtypes(frame: pd.DataFrame) -> pd.DataFrame:
             frame.isetitem(position, column.astype(_PLAIN_STRING_DTYPE))
         elif isinstance(dtype, pd.BooleanDtype):
             frame.isetitem(position, column.astype(bool))
+    return frame
+
+
+def _frame_by_position(
+    rows: Sequence[Sequence[Any]], columns: Sequence[str]
+) -> pd.DataFrame:
+    r"""The rows as a frame, keyed by where a value sits rather than by its name.
+
+    A join returns two columns of one name, and keying by name collapses them:
+    same shape, same names, the last one's values, nothing said.
+
+    Built a column at a time for the reason :func:`_integer_columns_exactly`
+    exists: pandas promotes a null-bearing integer column as it builds.
+    """
+    if not columns:
+        return pd.DataFrame()
+    built = _integer_columns_exactly(
+        {
+            position: [row[position] for row in rows]
+            for position in range(len(columns))
+        }
+    )
+    frame = pd.DataFrame(built, columns=list(range(len(columns))))
+    frame.columns = pd.Index(columns)
     return frame
 
 

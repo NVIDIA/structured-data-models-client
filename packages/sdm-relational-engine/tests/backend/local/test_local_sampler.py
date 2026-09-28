@@ -655,7 +655,7 @@ def test_a_seconds_bound_brackets_the_calendar_offset(
     r"""A negative offset reaches further back the longer its unit is, so the
     sign flips which of the two month lengths is the earlier instant.
     """
-    from sdm_relational_engine.rfm.backend.local.sampler import (
+    from sdm_relational_engine.rfm.base.utils import (
         _SECONDS_IN_DAY,
         date_offset_to_seconds,
     )
