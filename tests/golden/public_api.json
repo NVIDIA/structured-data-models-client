@@ -675,6 +675,7 @@
       "SDMClient",
       "SDMWarning",
       "Schema",
+      "SourceTable",
       "Split",
       "StructuredDataError",
       "Table",
@@ -872,14 +873,29 @@
         "bases": [],
         "kind": "class",
         "public_attributes": [
+          "source",
           "tables"
         ],
         "public_methods": {
           "check_consistent": "(self) -> 'None'",
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
+          "from_source": "(source: 'Source', tables: 'Mapping[str, str]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
           "snapshot": "(self) -> 'Schema'"
         },
-        "signature": "(tables: 'Mapping[str, Table]', relationships: 'Sequence[Relationship]' = ()) -> 'None'"
+        "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"
+      },
+      "SourceTable": {
+        "bases": [
+          "sdm_client.schema._TableShape"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "duplicate_keys",
+          "primary_key",
+          "time_column"
+        ],
+        "public_methods": {},
+        "signature": "(name: 'str', source_name: 'str', columns: 'dict[str, Column]', primary_key: 'str | Sequence[str] | None' = None, time_column: 'str | None' = None) -> None"
       },
       "Split": {
         "bases": [],
@@ -898,7 +914,9 @@
         "signature": "(message: 'str', *, code: 'str | None' = None, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
       "Table": {
-        "bases": [],
+        "bases": [
+          "sdm_client.schema._TableShape"
+        ],
         "kind": "class",
         "public_attributes": [
           "duplicate_keys",
@@ -955,6 +973,7 @@
     "__all__": [
       "ConnectorError",
       "MissingBackendError",
+      "Source",
       "__version__",
       "connect",
       "quote_ident",
@@ -981,6 +1000,17 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(backend: 'str', driver: 'str') -> 'None'"
+      },
+      "Source": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {},
+        "signature": "(connection: 'Any', *, catalog: 'str | None' = None, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
       },
       "__version__": {
         "kind": "str",

@@ -62,6 +62,30 @@ days later does not. It is worth knowing if you are computing the same
 aggregate yourself to check a model against a baseline, because taking either
 edge the other way moves every number.
 
+## Tables that stay in the warehouse
+
+Tables too large to read into memory stay where they are.
+Describe them with `Schema.from_source`, and `materialize()` samples them there with SQL: only the rows a prediction needs leave the warehouse.
+
+```python
+from sdm_client import PredictiveQuery, Schema
+from sdm_connectors import Source, connect
+
+source = Source(connect('databricks', server_hostname=..., http_path=...), catalog='main', schema='sales')
+schema = Schema.from_source(
+    source,
+    {'users': 'crm_users', 'orders': 'shop_orders'},
+    time_columns={'orders': 'ordered_at'},
+)
+request = PredictiveQuery(
+    'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', schema
+).materialize(indices=[7, 12, 3])
+```
+
+In a Databricks notebook, `Source(spark, catalog=..., schema=...)` samples through the notebook's own session instead of a SQL warehouse (Databricks Runtime 17.3 LTS or serverless environment 4 and later).
+A Snowflake, PostgreSQL (including Lakebase), DuckDB or SQLite connection works the same way.
+A schema's tables all come from one source.
+
 ## Asking the same context several questions
 
 Uploading a context once and scoring against it repeatedly is what `fit` is

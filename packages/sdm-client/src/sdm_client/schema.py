@@ -36,7 +36,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
 
@@ -48,6 +48,9 @@ from sdm_client.wire import (
     infer_tfm_dtype,
     require_scalar_cells,
 )
+
+if TYPE_CHECKING:
+    from sdm_connectors import Source
 
 # Semantic types this client can declare. These are the contract's, and match
 # ``predictive_query.Stype`` one for one.
@@ -80,6 +83,8 @@ _KEY_UNIQUENESS = 0.99
 _NEARLY_A_KEY = 0.9
 
 _KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
+
+_T = TypeVar('_T', bound='_TableShape')
 
 
 @dataclass
@@ -226,49 +231,20 @@ class Column:
         )
 
 
-@dataclass
-class Table:
-    r"""One table: its rows, its columns, and which column identifies a row.
+class _TableShape:
+    r"""What a table says about itself, whether or not it holds the rows.
 
-    Attributes:
-        name: The name the schema knows this table by. A query names columns
-            through it, so it is part of the interface rather than a label.
-        data: The rows.
-        columns: Column metadata, keyed by column name.
-        primary_key: The column identifying a row, or ``None``. A single-table
-            request needs none; a relational one needs one per table, and it is
-            inferred, so you rarely set it.
-        time_column: The column ordering rows in time, or ``None``. Only a
-            temporal question needs one.
+    Keys, the time column and what each column means are declared the same
+    way on a table of rows and on one that stays in its source; only the
+    checks that read rows differ, and those ask for the rows rather than
+    assume them.
     """
 
     name: str
-    data: pd.DataFrame
     columns: dict[str, Column]
-    primary_key: str | Sequence[str] | None = None
-    time_column: str | None = None
-    #: How many rows repeat a primary key value another row already used.
-    #: Inference tolerates a few, deliberately; this is what it tolerated.
-    #: Not an init argument: the generated ``__init__`` assigns fields in
-    #: order, so a settable one would overwrite what assigning the key just
-    #: computed, and every explicitly-built table would report zero.
-    duplicate_keys: int = field(init=False, default=0)
-
-    def __post_init__(self) -> None:
-        r"""Check the names and the cells, and take ownership of the columns.
-
-        `Schema.from_data` checks the cells while inferring, but a hand-built
-        `Table` reached the adapters unchecked, where a list cell surfaced
-        much later as `TypeError: unhashable type: 'list'` raised from label
-        collection, naming nothing the caller had written.
-        """
-        self._check_name(self.name)
-        frame = getattr(self, 'data', None)
-        if frame is not None:
-            for column in frame.columns:
-                self._check_name(column)
-                require_scalar_cells(frame[column], f'{self.name}.{column}')
-        self._own_columns()
+    primary_key: str | Sequence[str] | None
+    time_column: str | None
+    duplicate_keys: int
 
     def _own_columns(self) -> None:
         r"""Point every column at this table, and take a copy of any that is
@@ -503,6 +479,51 @@ class Table:
     def __len__(self) -> int:
         return len(self.columns)
 
+
+@dataclass
+class Table(_TableShape):
+    r"""One table: its rows, its columns, and which column identifies a row.
+
+    Attributes:
+        name: The name the schema knows this table by. A query names columns
+            through it, so it is part of the interface rather than a label.
+        data: The rows.
+        columns: Column metadata, keyed by column name.
+        primary_key: The column identifying a row, or ``None``. A single-table
+            request needs none; a relational one needs one per table, and it is
+            inferred, so you rarely set it.
+        time_column: The column ordering rows in time, or ``None``. Only a
+            temporal question needs one.
+    """
+
+    name: str
+    data: pd.DataFrame
+    columns: dict[str, Column]
+    primary_key: str | Sequence[str] | None = None
+    time_column: str | None = None
+    #: How many rows repeat a primary key value another row already used.
+    #: Inference tolerates a few, deliberately; this is what it tolerated.
+    #: Not an init argument: the generated ``__init__`` assigns fields in
+    #: order, so a settable one would overwrite what assigning the key just
+    #: computed, and every explicitly-built table would report zero.
+    duplicate_keys: int = field(init=False, default=0)
+
+    def __post_init__(self) -> None:
+        r"""Check the names and the cells, and take ownership of the columns.
+
+        `Schema.from_data` checks the cells while inferring, but a hand-built
+        `Table` reached the adapters unchecked, where a list cell surfaced
+        much later as `TypeError: unhashable type: 'list'` raised from label
+        collection, naming nothing the caller had written.
+        """
+        self._check_name(self.name)
+        frame = getattr(self, 'data', None)
+        if frame is not None:
+            for column in frame.columns:
+                self._check_name(column)
+                require_scalar_cells(frame[column], f'{self.name}.{column}')
+        self._own_columns()
+
     def __repr__(self) -> str:
         key = f', primary_key={self.primary_key!r}' if self.primary_key else ''
         time = f', time_column={self.time_column!r}' if self.time_column else ''
@@ -514,6 +535,53 @@ class Table:
         return (
             f'Table({self.name!r}, {len(self.data)} rows, '
             f'{len(self.columns)} columns{key}{time}{repeats})'
+        )
+
+
+@dataclass
+class SourceTable(_TableShape):
+    r"""One table that stays in its source: its columns, and its keys.
+
+    Built by :meth:`Schema.from_source`. It holds no rows: sampling reads them
+    from the source, a hop at a time, when a query is materialized. Keys, time
+    columns and semantic types are corrected exactly as on a :class:`Table`.
+
+    Attributes:
+        name: The name the schema knows this table by. A query names columns
+            through it.
+        source_name: The table's name in the source.
+        columns: Column metadata, keyed by column name.
+        primary_key: The column identifying a row, or ``None``.
+        time_column: The column ordering rows in time, or ``None``.
+    """
+
+    name: str
+    source_name: str
+    columns: dict[str, Column]
+    primary_key: str | Sequence[str] | None = None
+    time_column: str | None = None
+    #: Always zero: the rows are not here to count. Declared keys are checked
+    #: against the source when a query is first materialized.
+    duplicate_keys: int = field(init=False, default=0)
+
+    def __post_init__(self) -> None:
+        self._check_name(self.name)
+        if not isinstance(self.source_name, str) or not self.source_name:
+            raise StructuredDataError(
+                f'table {self.name!r} needs the name it has in its source, '
+                f'got {self.source_name!r}',
+                code='INVALID_REQUEST',
+            )
+        for column in self.columns:
+            self._check_name(column)
+        self._own_columns()
+
+    def __repr__(self) -> str:
+        key = f', primary_key={self.primary_key!r}' if self.primary_key else ''
+        time = f', time_column={self.time_column!r}' if self.time_column else ''
+        return (
+            f'SourceTable({self.name!r}, from {self.source_name!r}, '
+            f'{len(self.columns)} columns{key}{time})'
         )
 
 
@@ -573,11 +641,24 @@ class Schema:
 
     def __init__(
         self,
-        tables: Mapping[str, Table],
+        tables: Mapping[str, Table | SourceTable],
         relationships: Sequence[Relationship] = (),
+        *,
+        source: Source | None = None,
     ) -> None:
+        _require_one_kind_of_table(tables, source)
+        self._source = source
         self._tables = dict(tables)
         self.relationships = _each_link_once(relationships)
+
+    @property
+    def source(self) -> Source | None:
+        r"""Where the tables are, for a schema built with :meth:`from_source`.
+
+        ``None`` for a schema of frames. A schema has one source or none,
+        because sampling runs against one: see :meth:`from_source`.
+        """
+        return self._source
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Hold an assigned relationship to the same standard as a passed one.
@@ -624,6 +705,7 @@ class Schema:
         return Schema(
             {name: _copy_table(table) for name, table in self._tables.items()},
             list(self.relationships),
+            source=self._source,
         )
 
     @classmethod
@@ -685,36 +767,13 @@ class Schema:
                 )
             built[name] = _infer_table(name, frame)
 
-        for name, key in (primary_keys or {}).items():
-            table = _require_table(built, name)
-            for column in _as_key_tuple(key):
-                _require_column(built, name, column)
-            table.primary_key = key
-        for name, column in (time_columns or {}).items():
-            _require_table(built, name).time_column = _require_column(
-                built, name, column
-            )
+        _apply_keys_and_times(built, primary_keys, time_columns)
         if relationships is None:
-            inferred = _infer_relationships(built)
-            unjoinable = [
-                link for link in inferred if not _is_joinable(built, link)
-            ]
-            inferred = [link for link in inferred if _is_joinable(built, link)]
-            _warn_of_a_name_match_that_cannot_join(built, unjoinable)
+            inferred = _joinable_inferred_links(
+                built, _infer_relationships(built)
+            )
         else:
-            inferred = list(relationships)
-            for link in inferred:
-                if not isinstance(link, Relationship):
-                    raise StructuredDataError(
-                        f'a relationship must be a Relationship, got '
-                        f'{type(link).__name__}: {link!r}. Build one with '
-                        f'Relationship(source_table, source_column, '
-                        f'target_table, target_column)',
-                        code='INVALID_REQUEST',
-                    )
-                _require_column(built, link.source_table, link.source_column)
-                _require_column(built, link.target_table, link.target_column)
-                _require_joinable(built, link)
+            inferred = _checked_links(built, relationships)
 
         schema = cls(built, inferred)
         schema._mark_key_columns()
@@ -732,12 +791,112 @@ class Schema:
         _warn_two_ways_to_reach_one_table(schema)
         return schema
 
+    @classmethod
+    def from_source(
+        cls,
+        source: Source,
+        tables: Mapping[str, str],
+        *,
+        primary_keys: Mapping[str, str | Sequence[str]] | None = None,
+        time_columns: Mapping[str, str] | None = None,
+        relationships: Sequence[Relationship] | None = None,
+    ) -> Schema:
+        r"""Describe tables that stay in their source.
+
+        >>> source = Source(spark, catalog='main', schema='sales')
+        >>> schema = Schema.from_source(
+        ...     source,
+        ...     {'customers': 'adventureworks_customers',
+        ...      'orders': 'adventureworks_orders'},
+        ...     time_columns={'orders': 'order_date'},
+        ... )
+
+        Nothing is read into memory. Column types come from the source's
+        catalog and semantic types from a preview of at most 1,000 rows. Keys
+        and relationships come from the constraints the catalog declares, and
+        where it declares none, from names, by the same rule as
+        :meth:`from_data`. When a query is materialized, the engine samples
+        the tables with SQL, a hop at a time, and only the rows it samples
+        leave the source.
+
+        A schema has exactly one source. Sampling sends the ids each hop found
+        to the next query, so it runs against one engine; tables in two
+        systems are joined by the platform, not here.
+
+        Args:
+            source: Where the tables are, as an ``sdm_connectors.Source``.
+            tables: For each name a query will use, the table's name in the
+                source.
+            primary_keys: Overrides for a table's key.
+            time_columns: Overrides for a table's time column.
+            relationships: Overrides for the relationships. Pass an empty
+                sequence to assert there are none.
+
+        Returns:
+            A schema of :class:`SourceTable`, bound to ``source``.
+
+        Raises:
+            StructuredDataError: If ``tables`` is empty, a name is not a
+                string, or an override names something that does not exist.
+            MissingExtraError: If the relational engine, which reads the
+                source, is not installed.
+        """
+        _require_a_source(source)
+        if not tables:
+            raise StructuredDataError(
+                'a schema needs at least one table', code='INVALID_REQUEST'
+            )
+        for name, source_name in tables.items():
+            if not isinstance(name, str) or not name:
+                raise StructuredDataError(
+                    f'table names must be non-empty strings; got {name!r}',
+                    code='INVALID_REQUEST',
+                )
+            if not isinstance(source_name, str) or not source_name:
+                raise StructuredDataError(
+                    f'table {name!r} must map to its name in the source, a '
+                    f'non-empty string; got {source_name!r}',
+                    code='INVALID_REQUEST',
+                )
+
+        from sdm_client.materializers.sources import engine_graph
+
+        graph = engine_graph(
+            source,
+            {name: (source_name, None) for name, source_name in tables.items()},
+            infer_metadata=True,
+        )
+        built = {
+            name: _describe_source_table(graph[name], source_name)
+            for name, source_name in tables.items()
+        }
+        _apply_keys_and_times(built, primary_keys, time_columns)
+        if relationships is None:
+            declared = _declared_links(graph, tables, built)
+            covered = {
+                (link.source_table, link.source_column) for link in declared
+            }
+            by_name = [
+                link
+                for link in _infer_relationships(built)
+                if (link.source_table, link.source_column) not in covered
+            ]
+            links = _joinable_inferred_links(built, declared + by_name)
+        else:
+            links = _checked_links(built, relationships)
+
+        schema = cls(built, links, source=source)
+        schema._mark_key_columns()
+        _warn_several_columns_could_be_the_time_column(built)
+        _warn_two_ways_to_reach_one_table(schema)
+        return schema
+
     @property
-    def tables(self) -> dict[str, Table]:
+    def tables(self) -> dict[str, Table | SourceTable]:
         r"""The tables, by name."""
         return self._tables
 
-    def __getitem__(self, table: str) -> Table:
+    def __getitem__(self, table: str) -> Table | SourceTable:
         try:
             return self._tables[table]
         except KeyError:
@@ -779,7 +938,7 @@ class Schema:
         )
 
 
-def _require_table(tables: Mapping[str, Table], name: str) -> Table:
+def _require_table(tables: Mapping[str, _T], name: str) -> _T:
     if name not in tables:
         raise StructuredDataError(
             f'no table {name!r} in this schema; it has {sorted(tables)}',
@@ -788,8 +947,182 @@ def _require_table(tables: Mapping[str, Table], name: str) -> Table:
     return tables[name]
 
 
+def _apply_keys_and_times(
+    built: Mapping[str, _TableShape],
+    primary_keys: Mapping[str, str | Sequence[str]] | None,
+    time_columns: Mapping[str, str] | None,
+) -> None:
+    for name, key in (primary_keys or {}).items():
+        table = _require_table(built, name)
+        for column in _as_key_tuple(key):
+            _require_column(built, name, column)
+        table.primary_key = key
+    for name, column in (time_columns or {}).items():
+        _require_table(built, name).time_column = _require_column(
+            built, name, column
+        )
+
+
+def _joinable_inferred_links(
+    built: Mapping[str, _TableShape], inferred: Sequence[Relationship]
+) -> list[Relationship]:
+    r"""The inferred links that can join, having said which could not.
+
+    An inferred relationship is held to the same contract as an explicit one,
+    and dropped rather than refused when it fails: a caller who never asked
+    for it is not refused for a guess made on their behalf.
+    """
+    unjoinable = [link for link in inferred if not _is_joinable(built, link)]
+    _warn_of_a_name_match_that_cannot_join(built, unjoinable)
+    return [link for link in inferred if _is_joinable(built, link)]
+
+
+def _checked_links(
+    built: Mapping[str, _TableShape], relationships: Sequence[Relationship]
+) -> list[Relationship]:
+    links = list(relationships)
+    for link in links:
+        if not isinstance(link, Relationship):
+            raise StructuredDataError(
+                f'a relationship must be a Relationship, got '
+                f'{type(link).__name__}: {link!r}. Build one with '
+                f'Relationship(source_table, source_column, '
+                f'target_table, target_column)',
+                code='INVALID_REQUEST',
+            )
+        _require_column(built, link.source_table, link.source_column)
+        _require_column(built, link.target_table, link.target_column)
+        _require_joinable(built, link)
+    return links
+
+
+def _require_a_source(source: object) -> None:
+    try:
+        from sdm_connectors import Source
+    except ImportError:  # pragma: no cover - nothing could have built one
+        Source = None  # type: ignore[assignment,misc]
+    if Source is None or not isinstance(source, Source):
+        raise StructuredDataError(
+            f'a schema over tables in place needs an sdm_connectors.Source, '
+            f'got {type(source).__name__}. Build one from a connection: '
+            f"Source(connect('databricks', ...), catalog=..., schema=...), "
+            f'or Source(spark, ...) in a notebook',
+            code='INVALID_REQUEST',
+        )
+
+
+def _require_one_kind_of_table(
+    tables: Mapping[str, Table | SourceTable], source: object
+) -> None:
+    r"""Refuse a schema that mixes frames with tables in place, or tables in
+    place without the source they are in.
+
+    The engine samples one graph with one sampler: an in-memory one over
+    frames, or SQL against one source. A mixture has no sampler to run it.
+    """
+    in_place = sorted(
+        name for name, table in tables.items() if isinstance(table, SourceTable)
+    )
+    in_memory = sorted(
+        name
+        for name, table in tables.items()
+        if not isinstance(table, SourceTable)
+    )
+    if in_place and in_memory:
+        raise StructuredDataError(
+            f'{in_place} stay in their source and {in_memory} are frames; a '
+            f'schema samples one or the other, so read the first into frames '
+            f'or put the second in the source',
+            code='INVALID_REQUEST',
+        )
+    if in_place and source is None:
+        raise StructuredDataError(
+            f'{in_place} stay in their source, so the schema needs that '
+            f'source; build it with Schema.from_source',
+            code='INVALID_REQUEST',
+        )
+    if in_memory and source is not None:
+        raise StructuredDataError(
+            f'{in_memory} are frames, which a source does not hold; drop '
+            f'source= or build the schema with Schema.from_source',
+            code='INVALID_REQUEST',
+        )
+    if source is not None:
+        _require_a_source(source)
+
+
+def _describe_source_table(engine_table: Any, source_name: str) -> SourceTable:
+    r"""A table in place, described from what the engine read of it.
+
+    A column whose values have no scalar form on the wire -- a list, binary, a
+    duration -- is left out and named, rather than refusing the whole table:
+    the caller cannot change a warehouse table's columns to suit a request, and
+    the engine then leaves it unread as well.
+    """
+    from sdm_client.materializers.sources import wire_dtype
+
+    columns: dict[str, Column] = {}
+    unreadable: list[str] = []
+    for engine_column in engine_table.columns:
+        dtype = wire_dtype(engine_column.dtype)
+        stype = str(getattr(engine_column.stype, 'value', engine_column.stype))
+        if dtype is None or stype not in SEMANTIC_TYPES:
+            unreadable.append(f'{engine_column.name} ({engine_column.dtype})')
+            continue
+        columns[engine_column.name] = Column(engine_column.name, dtype, stype)
+    if unreadable:
+        warnings.warn(
+            f'{engine_table.name} leaves out {", ".join(unreadable)}: a '
+            f'request carries one scalar value per cell, and these hold none',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    table = SourceTable(
+        name=engine_table.name, source_name=source_name, columns=columns
+    )
+    keys = tuple(engine_table.primary_key_columns or ())
+    if keys and all(key in columns for key in keys):
+        table.primary_key = keys[0] if len(keys) == 1 else keys
+    time = engine_table.time_column
+    if time is not None and time.name in columns and time.name not in keys:
+        table.time_column = time.name
+    return table
+
+
+def _declared_links(
+    graph: Any, tables: Mapping[str, str], built: Mapping[str, SourceTable]
+) -> list[Relationship]:
+    r"""The foreign keys the source's catalog declares between these tables.
+
+    A constraint naming a table outside the schema links nothing here, and
+    one naming a column the schema left out is skipped with it.
+    """
+    by_source_name = {
+        source_name.lower(): name for name, source_name in tables.items()
+    }
+    links = []
+    for name in tables:
+        for key in graph[name]._source_foreign_key_dict.values():
+            target = by_source_name.get(key.dst_table.lower())
+            if target is None:
+                continue
+            if key.name not in built[name].columns:
+                continue
+            if key.primary_key not in built[target].columns:
+                continue
+            links.append(
+                Relationship(
+                    source_table=name,
+                    source_column=key.name,
+                    target_table=target,
+                    target_column=key.primary_key,
+                )
+            )
+    return links
+
+
 def _require_column(
-    tables: Mapping[str, Table], table: str, column: str
+    tables: Mapping[str, _TableShape], table: str, column: str
 ) -> str:
     if column not in _require_table(tables, table).columns:
         raise StructuredDataError(
@@ -867,7 +1200,7 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
     return table
 
 
-def _copy_table(table: Table) -> Table:
+def _copy_table(table: _T) -> _T:
     r"""The same table again, field for field, judging nothing.
 
     Built without the constructor and without the checked setters, for two
@@ -878,9 +1211,11 @@ def _copy_table(table: Table) -> Table:
     And `Table.__post_init__` walks every cell of every column, which on a
     warehouse extract is a second full scan added to every single request.
     """
-    copied = Table.__new__(Table)
+    copied = type(table).__new__(type(table))
     object.__setattr__(copied, 'name', table.name)
-    object.__setattr__(copied, 'data', table.data)
+    for held in ('data', 'source_name'):
+        if hasattr(table, held):
+            object.__setattr__(copied, held, getattr(table, held))
     object.__setattr__(
         copied,
         'columns',
@@ -1126,7 +1461,7 @@ def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
 
 
 def _warn_several_columns_could_be_the_time_column(
-    tables: Mapping[str, Table],
+    tables: Mapping[str, _TableShape],
 ) -> None:
     """Say when a table has more than one timestamp and so was given none.
 
@@ -1502,7 +1837,9 @@ def _and_list(names: Sequence[str]) -> str:
     return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
 
 
-def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
+def _infer_relationships(
+    tables: Mapping[str, _TableShape],
+) -> list[Relationship]:
     r"""Link a column to another table's primary key of the same name.
 
     Deliberately conservative: only an exact name match against a declared
@@ -1543,7 +1880,7 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
 
 
 def _warn_of_a_name_match_that_cannot_join(
-    tables: Mapping[str, Table], dropped: Sequence[Relationship]
+    tables: Mapping[str, _TableShape], dropped: Sequence[Relationship]
 ) -> None:
     """Say when a column named for a key holds values that key cannot match.
 
@@ -1566,7 +1903,9 @@ def _warn_of_a_name_match_that_cannot_join(
         )
 
 
-def _require_joinable(tables: Mapping[str, Table], link: Relationship) -> None:
+def _require_joinable(
+    tables: Mapping[str, _TableShape], link: Relationship
+) -> None:
     r"""A relationship has to be one the engine can actually build.
 
     An edge joins a foreign key to the *primary key* of the table it points at
@@ -1643,7 +1982,7 @@ class _KeyQuality(NamedTuple):
     example: Any
 
 
-def _is_joinable(tables: Mapping[str, Table], link: Relationship) -> bool:
+def _is_joinable(tables: Mapping[str, _TableShape], link: Relationship) -> bool:
     try:
         _require_joinable(tables, link)
     except StructuredDataError:

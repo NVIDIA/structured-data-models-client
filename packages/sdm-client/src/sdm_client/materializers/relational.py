@@ -22,9 +22,16 @@ from predictive_query.validator.utils import table_name
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
+from sdm_client.materializers.sources import engine_graph
 from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Relationship, Schema, Table, _as_key_tuple
+from sdm_client.schema import (
+    Relationship,
+    Schema,
+    SourceTable,
+    Table,
+    _as_key_tuple,
+)
 from sdm_client.wire.dtypes import arrow_decimal_type
 
 if TYPE_CHECKING:
@@ -239,12 +246,27 @@ class RelationalMaterializer:
 
         self.schema.check_consistent()
 
-        frames = {
-            name: _as_typed(table) for name, table in self.schema.tables.items()
-        }
-        graph = Graph.from_data(
-            frames, edges=[], infer_metadata=False, verbose=False
-        )
+        if self.schema.source is not None:
+            # Read in place: the engine picks the SQL sampler for this source,
+            # and only the columns the schema describes are read, so a column
+            # it left out as unsendable is never sampled either.
+            graph = engine_graph(
+                self.schema.source,
+                {
+                    name: (table.source_name, list(table.columns))
+                    for name, table in self.schema.tables.items()
+                    if isinstance(table, SourceTable)
+                },
+                infer_metadata=False,
+            )
+        else:
+            frames = {
+                name: _as_typed(table)
+                for name, table in self.schema.tables.items()
+            }
+            graph = Graph.from_data(
+                frames, edges=[], infer_metadata=False, verbose=False
+            )
 
         for name, table in self.schema.tables.items():
             engine_table = graph[name]
@@ -1222,8 +1244,8 @@ def _joins_nothing(schema: Schema, link: Relationship) -> bool:
         or link.target_table not in schema.tables
     ):
         return False
-    child = schema[link.source_table].data
-    parent = schema[link.target_table].data
+    child = getattr(schema[link.source_table], 'data', None)
+    parent = getattr(schema[link.target_table], 'data', None)
     if child is None or parent is None:
         return False
     if (

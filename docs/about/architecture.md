@@ -223,7 +223,7 @@ A `Source` is where the tables are and how to reach them, and it is the only thi
 | Databricks SQL warehouse | `connect('databricks', ...)` | `catalog`, `schema` | Any runtime; needs a warehouse |
 | Databricks notebook | the notebook's `spark` | `catalog`, `schema` | No warehouse; the notebook's own compute and identity. DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()` |
 | Snowflake | `connect('snowflake', ...)`, or a Snowpark `session.connection` | `database`, `schema` | Snowpark's connection is the connector's own type, so a Snowflake notebook passes it as it is |
-| PostgreSQL, Lakebase | `connect('postgres', ...)`, or a Lakebase endpoint | `schema` | Lakebase authenticates with a short-lived OAuth token; the source mints a fresh one when the last has expired |
+| PostgreSQL, Lakebase | `connect('postgres', ...)` | `schema` | Lakebase authenticates with a short-lived OAuth token as the password, minted with the Databricks SDK; the connection outlives the token once it is open |
 | DuckDB, SQLite | a connection or a path | — | What lets CI run the whole path, SQL sampling included, with no credentials |
 
 `from_data` does not change: a mapping of frames is still read into memory and sampled there.
@@ -257,12 +257,14 @@ A warehouse connection is the object `sdm_connectors.connect` returns, which is 
 A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
 A schema over a source does not pickle.
 
-**Keys are checked, not trusted.**
+**Keys are taken as stated.**
 Unity Catalog and Snowflake constraints are informational: nothing stops a declared key from repeating.
-The first `materialize()` checks each key for nulls and duplicates with one SQL aggregate, and caches the answer, which is what `from_data` checks over the rows it holds.
+`from_data` checks a key for nulls and duplicates over the rows it holds; against a source that is a whole-table aggregate per key, and it is not run yet.
+Where it matters, check the key in the source before relying on it.
 
 **Whole-table checks move.**
-Each check `from_data` runs over every row does one of three things for a source table: it reads metadata (dtypes, constraints, row counts), runs on the sampled rows (value casts, and whether scored rows mean what the schema says), or runs as one SQL aggregate (key quality, and whether a relationship joins anything).
+Each check `from_data` runs over every row either reads metadata for a source table (dtypes, constraints, row counts) or runs on the sampled rows (value casts, and whether scored rows mean what the schema says).
+The two that would need a whole-table aggregate, key quality and whether a relationship joins anything, are skipped.
 The heuristic that searches column combinations for a composite key is not run: against a warehouse it scans the table once per candidate column.
 
 **Metadata still costs something.**

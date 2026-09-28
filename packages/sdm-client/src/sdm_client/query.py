@@ -155,11 +155,23 @@ class PredictiveQuery:
                 ``model`` cannot answer a schema of this shape.
         """
         spec = spec_for(model) if model is not None else None
+        in_place = self.schema.source is not None
         relational = (
             spec.profile == RELATIONAL
             if spec is not None
-            else len(self.schema) > 1 or bool(self.schema.relationships)
+            else in_place
+            or len(self.schema) > 1
+            or bool(self.schema.relationships)
         )
+        if in_place and (not relational or predict is not None):
+            raise StructuredDataError(
+                'a schema over tables in their source is sampled with SQL, '
+                'which only the relational model reads; the tabular model '
+                'takes rows in memory. Use model=KumoRelational() with '
+                'indices=, or build the schema with Schema.from_data from the '
+                'rows you want',
+                code='INVALID_REQUEST',
+            )
         self._validate_materialize_args(
             relational=relational,
             model_id=spec.model_id if spec is not None else None,
@@ -505,9 +517,14 @@ class PredictiveQuery:
         column = self.schema[table].columns.get(name)
         if column is None or column.stype != 'text' or column.stype_declared:
             return ''
-        distinct = self.schema[table].data[name].nunique()
+        frame = getattr(self.schema[table], 'data', None)
+        holds = (
+            f'holds {frame[name].nunique():,} distinct values'
+            if frame is not None
+            else 'was read as prose'
+        )
         return (
-            f'. {table}.{name} holds {distinct:,} distinct values, and a '
+            f'. {table}.{name} {holds}, and a '
             f'string column with more than {_MAX_CATEGORICAL} is typed text '
             f'rather than categorical -- a fair rule for a feature and a poor '
             f'one for a label. If it is a label, say so with '

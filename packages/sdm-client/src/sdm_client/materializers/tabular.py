@@ -20,7 +20,7 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import StructuredDataError
 from sdm_client.models import TABULAR_LIMITS
 from sdm_client.request import Request
-from sdm_client.schema import Schema
+from sdm_client.schema import Schema, SourceTable, Table
 
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
@@ -161,7 +161,7 @@ class TabularMaterializer:
         context = _context_within_limit(
             _rows_that_carry_an_answer(
                 _without_the_rows_being_scored(
-                    self.schema[entity_table_name].data, predict, entity_col
+                    _rows(self.schema[entity_table_name]), predict, entity_col
                 ),
                 target_col,
             ),
@@ -192,7 +192,7 @@ class TabularMaterializer:
     ) -> Request:
         r"""Build a single-table request for rows the one table does contain."""
         entity_table_name = table_name(query.entity_column)
-        entity_table = self.schema[entity_table_name].data
+        entity_table = _rows(self.schema[entity_table_name])
         entity_col = col_name(query.entity_column)
         target_col = col_name(query.target_column)
 
@@ -357,3 +357,18 @@ def _without_the_rows_being_scored(
     if not scored:
         return table
     return table[~table[entity_col].isin(scored)]
+
+
+def _rows(table: Table | SourceTable) -> pd.DataFrame:
+    r"""The rows of a table the tabular model reads, which it holds in memory.
+
+    `PredictiveQuery.materialize` sends a schema over tables in their source to
+    the relational model, so only a hand-built route reaches here with one.
+    """
+    if isinstance(table, SourceTable):
+        raise StructuredDataError(
+            f'{table.name!r} stays in its source, and the tabular model reads '
+            f'rows in memory; build the schema with Schema.from_data',
+            code='INVALID_REQUEST',
+        )
+    return table.data

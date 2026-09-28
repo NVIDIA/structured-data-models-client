@@ -60,6 +60,15 @@ The first release is being assembled. Nothing here has shipped yet.
   sends is the one the relational engine sends, now defined once in
   `sdm_api.databricks_serving` so the two cannot drift apart.
 
+- `Schema.from_source` and `sdm_connectors.Source`: a schema over tables that
+  stay in their source, sampled there with SQL, so only the rows a prediction
+  needs are read. A source is a Databricks SQL warehouse or a notebook's own
+  `spark`, Snowflake or a Snowpark session, PostgreSQL or Lakebase, DuckDB or
+  SQLite. The engine could always do this; nothing on `Schema` reached it, so a
+  warehouse table had to be read whole into pandas first. One source per
+  schema, and `Table.data` stays a DataFrame: tables in place are a
+  `SourceTable`, which holds none.
+
 ### Fixed
 
 - **SQLite windows lost or gained rows on their edges when timestamps kept

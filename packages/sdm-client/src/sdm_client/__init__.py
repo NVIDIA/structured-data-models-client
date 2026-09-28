@@ -34,7 +34,13 @@ from sdm_client.models import KumoRelational, KumoTabular, Model
 from sdm_client.query import PredictiveQuery
 from sdm_client.request import Request, Split, Target, Task
 from sdm_client.result import PredictionResult
-from sdm_client.schema import Column, Relationship, Schema, Table
+from sdm_client.schema import (
+    Column,
+    Relationship,
+    Schema,
+    SourceTable,
+    Table,
+)
 
 __all__ = [
     'SDMWarning',
@@ -55,6 +61,7 @@ __all__ = [
     'Schema',
     'Split',
     'SDMClient',
+    'SourceTable',
     'StructuredDataError',
     'Table',
     'Target',
