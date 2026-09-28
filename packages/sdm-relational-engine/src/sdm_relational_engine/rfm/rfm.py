@@ -1964,12 +1964,12 @@ class KumoRelational:
             self._sampler._connection = connection
         if self._sampler.backend == DataBackend.DATABRICKS:
             from sdm_relational_engine.rfm.backend.databricks import (
-                Connection,
+                CONNECTION_TYPES,
                 DatabricksSampler,
             )
 
             assert isinstance(self._sampler, DatabricksSampler)
-            assert isinstance(connection, Connection)
+            assert isinstance(connection, CONNECTION_TYPES)
             self._sampler._connection = connection
         if self._sampler.backend == DataBackend.POSTGRES:
             from sdm_relational_engine.rfm.backend.postgres import (

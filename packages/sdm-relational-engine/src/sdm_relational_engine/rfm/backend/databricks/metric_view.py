@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from sdm_relational_engine.exceptions import KumoRelationalError
 
 if TYPE_CHECKING:
-    from sdm_relational_engine.rfm.backend.databricks import Connection
+    from sdm_relational_engine.rfm.backend.databricks import AnyConnection
 
 SOURCE_ALIAS = 'source'
 
@@ -452,7 +452,7 @@ def resolve_join_keys(
 
 
 def read_metric_view_definition(
-    connection: Connection,
+    connection: AnyConnection,
     quoted_name: str,
 ) -> tuple[str, dict[str, str], str | None, str | None]:
     r"""Reads a metric view definition from a Databricks SQL warehouse.

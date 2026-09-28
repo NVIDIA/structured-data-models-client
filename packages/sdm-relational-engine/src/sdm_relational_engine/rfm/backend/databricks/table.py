@@ -11,7 +11,7 @@ import pandas as pd
 from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
-from sdm_relational_engine.rfm.backend.databricks import Connection
+from sdm_relational_engine.rfm.backend.databricks import AnyConnection
 from sdm_relational_engine.rfm.base import (
     Column,
     ColumnSpec,
@@ -51,7 +51,7 @@ class DatabricksTable(Table):
 
     def __init__(
         self,
-        connection: Connection,
+        connection: AnyConnection,
         name: str,
         source_name: str | None = None,
         catalog: str | None = None,

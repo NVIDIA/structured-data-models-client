@@ -46,6 +46,12 @@ The first release is being assembled. Nothing here has shipped yet.
   catalog, and a sampler that fetches only the rows a prediction needs. Its
   tests run in the `engine` job against a real `postgres:17`, and fail rather
   than skip there if the server or the driver is missing.
+- `sdm_connectors.backends.spark.SparkConnection`: a Databricks notebook's own
+  `spark` session, accepted wherever the engine's Databricks backend took a SQL
+  warehouse connection. Sampling then runs on the notebook's compute, as the
+  notebook's user, with no warehouse to name. Needs `DataFrame.toArrow()`, so
+  Databricks Runtime 17.3 LTS or serverless environment 4 and later; an older
+  session is refused with the warehouse route named instead.
 
 ### Fixed
 

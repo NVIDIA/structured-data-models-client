@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from databricks.sql.client import Connection as DatabricksConnection
     from duckdb import DuckDBPyConnection
     from psycopg import Connection as PostgresConnection
+    from sdm_connectors.backends.spark import SparkConnection
     from snowflake.connector import SnowflakeConnection
 
 
@@ -376,6 +377,7 @@ class Graph:
             | SnowflakeConnection
             | DatabricksConnection
             | PostgresConnection
+            | SparkConnection
             | None
         ) = None
 
@@ -855,7 +857,10 @@ class Graph:
     @classmethod
     def from_databricks(
         cls,
-        connection: DatabricksConnection | dict[str, Any] | None = None,
+        connection: DatabricksConnection
+        | SparkConnection
+        | dict[str, Any]
+        | None = None,
         tables: Sequence[str | dict[str, Any]] | None = None,
         catalog: str | None = None,
         schema: str | None = None,
@@ -897,7 +902,9 @@ class Graph:
 
         Args:
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect` or the
+                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect`,
+                a notebook's Spark session wrapped in
+                :class:`~sdm_connectors.backends.spark.SparkConnection`, or the
                 :class:`databricks.sql` connector keyword arguments to open a
                 new connection. If ``None``, will open a connection from
                 credentials stored in environment variables.
@@ -918,16 +925,16 @@ class Graph:
             verbose: Whether to print verbose output.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
-            Connection,
+            CONNECTION_TYPES,
             DatabricksTable,
             connect,
         )
 
         internal_connection = False
-        if not isinstance(connection, Connection):
+        if not isinstance(connection, CONNECTION_TYPES):
             connection = connect(**(connection or {}))
             internal_connection = True
-        assert isinstance(connection, Connection)
+        assert isinstance(connection, CONNECTION_TYPES)
 
         try:
             if catalog is None or schema is None:
@@ -1123,7 +1130,10 @@ class Graph:
     def from_databricks_metric_view(
         cls,
         metric_view_name: str,
-        connection: DatabricksConnection | dict[str, Any] | None = None,
+        connection: DatabricksConnection
+        | SparkConnection
+        | dict[str, Any]
+        | None = None,
         catalog: str | None = None,
         schema: str | None = None,
         verbose: bool = True,
@@ -1177,7 +1187,7 @@ class Graph:
             verbose: Whether to print verbose output.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
-            Connection,
+            CONNECTION_TYPES,
             DatabricksTable,
             connect,
         )
@@ -1192,10 +1202,10 @@ class Graph:
         )
 
         internal_connection = False
-        if not isinstance(connection, Connection):
+        if not isinstance(connection, CONNECTION_TYPES):
             connection = connect(**(connection or {}))
             internal_connection = True
-        assert isinstance(connection, Connection)
+        assert isinstance(connection, CONNECTION_TYPES)
 
         try:
             name_parts = parse_table_reference(metric_view_name)
@@ -2960,6 +2970,7 @@ class Graph:
             | SnowflakeConnection
             | DatabricksConnection
             | PostgresConnection
+            | SparkConnection
         ),
     ) -> None:
         r"""Updates the connection to a database."""
@@ -2999,12 +3010,12 @@ class Graph:
 
             if table.backend == DataBackend.DATABRICKS:
                 from sdm_relational_engine.rfm.backend.databricks import (
-                    Connection,
+                    CONNECTION_TYPES,
                     DatabricksTable,
                 )
 
                 assert isinstance(table, DatabricksTable)
-                assert isinstance(connection, Connection)
+                assert isinstance(connection, CONNECTION_TYPES)
                 table._connection = connection
 
             if table.backend == DataBackend.POSTGRES:
