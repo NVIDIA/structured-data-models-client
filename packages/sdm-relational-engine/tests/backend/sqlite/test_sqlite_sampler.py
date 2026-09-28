@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
+import pandas as pd
 import pytest
 
 pytest.importorskip(
@@ -38,7 +39,7 @@ class _Connection:
 
 
 class _StubSampler(SQLiteSampler):
-    r"""Overrides the three lookups ``_time_separator`` reads."""
+    r"""Overrides the three lookups ``_time_spelling`` reads."""
 
     @property
     def time_column_dict(self) -> dict[str, str]:
@@ -56,11 +57,11 @@ class _StubSampler(SQLiteSampler):
 def _sampler(row: Any, fail: bool = False) -> SQLiteSampler:
     r"""A sampler wired to a stub connection, with no driver involved.
 
-    ``_time_separator`` reads one stored value and decides how to spell a
+    ``_time_spelling`` reads one stored value and decides how to spell a
     window bound. Driving it through a real ADBC connection would test that
     driver's initialisation order rather than the decision, so the connection
     is stubbed and only the decision is asserted. The end-to-end behaviour is
-    covered by the live suites.
+    covered by the client's tests over a real SQLite file.
     """
     sampler = _StubSampler.__new__(_StubSampler)
     sampler._connection = _Connection(row, fail)
@@ -68,31 +69,43 @@ def _sampler(row: Any, fail: bool = False) -> SQLiteSampler:
     # supplied here. It is per-instance rather than a `functools.cache` on the
     # method, which would key on `self` and keep every sampler -- and its
     # graph and its open connection -- alive for the life of the process.
-    sampler._time_separator_dict = {}
+    sampler._time_spelling_dict = {}
     return sampler
 
 
+_INSTANT = pd.Series(pd.to_datetime(['2024-12-30 14:00:00.250000']))
+
+
 @pytest.mark.parametrize(
-    ('stored', 'expected'),
+    ('stored', 'spelled'),
     [
-        ('2024-05-01 00:00:00', ' '),
-        ('2024-05-01T00:00:00', 'T'),
-        ('2024-05-01T00:00:00.123456', 'T'),
+        ('2024-05-01 00:00:00', '2024-12-30 14:00:00'),
+        ('2024-05-01T00:00:00', '2024-12-30T14:00:00'),
+        ('2024-05-01T00:00:00.000000', '2024-12-30T14:00:00.250000'),
+        ('2024-05-01 00:00:00.000', '2024-12-30 14:00:00.250'),
+        ('2024-05-01T00:00:00.000000000', '2024-12-30T14:00:00.250000000'),
+        ('2024-05-01T00:00:00Z', '2024-12-30T14:00:00Z'),
+        ('2024-05-01T00:00:00.000+00:00', '2024-12-30T14:00:00.250+00:00'),
+        ('2024-05-01T00:00:00+05:30', '2024-12-30T14:00:00'),
     ],
 )
 def test_a_window_bound_is_spelled_the_way_the_column_is(
-    stored: str, expected: str
+    stored: str, spelled: str
 ) -> None:
-    r"""An ISO-8601 timestamp column must not lose its window-edge rows.
+    r"""A window edge must compare equal to a stored value at that instant.
 
-    SQLite has no datetime type, so a window bound is compared as text. Both
-    bounds were written ``YYYY-MM-DD HH:MM:SS`` unconditionally, and
-    ``'...T00:00:00' <= '... 00:00:00'`` is false for the same instant because
-    ``T`` sorts after a space. A column written by an ISO-8601 writer therefore
-    dropped every row landing exactly on a window edge -- no error, just a
-    quietly smaller answer.
+    SQLite has no datetime type, so a window bound is compared as text. The
+    bounds were written ``YYYY-MM-DD HH:MM:SS`` whatever the column held, and
+    ``'...T00:00:00' <= '... 00:00:00'`` is false for the same instant, as is
+    ``'...14:00:00.000000' <= '...14:00:00'``: a shorter string with the same
+    prefix sorts first. A column written by an ISO-8601 writer, or by pandas
+    through ADBC, therefore dropped every row landing exactly on a window's
+    end and counted every row landing exactly on its anchor -- no error, just
+    a different answer. A non-UTC offset spells another instant, so it is not
+    copied onto a UTC bound.
     """
-    assert _sampler((stored,))._time_separator('t') == expected
+    got = _sampler((stored,))._time_spelling('t').spell(_INSTANT)
+    assert got.tolist() == [spelled]
 
 
 @pytest.mark.parametrize(
@@ -102,14 +115,17 @@ def test_a_window_bound_is_spelled_the_way_the_column_is(
 )
 def test_an_unreadable_value_falls_back_to_the_space_form(row: Any) -> None:
     r"""Anything undecidable keeps the spelling this code always assumed."""
-    assert _sampler(row)._time_separator('t') == ' '
+    assert _sampler(row)._time_spelling('t').spell(_INSTANT).tolist() == [
+        '2024-12-30 14:00:00'
+    ]
 
 
 def test_a_failing_probe_falls_back_to_the_space_form() -> None:
     r"""A probe that cannot run must not take the prediction down with it."""
     sampler = _sampler(('2024-05-01T00:00:00',), fail=True)
-    assert sampler._time_separator('t') == ' '
+    assert sampler._time_spelling('t').separator == ' '
 
 
 def test_a_table_without_a_time_column_falls_back() -> None:
-    assert _sampler(('2024-05-01T00:00:00',))._time_separator('other') == ' '
+    spelling = _sampler(('2024-05-01T00:00:00',))._time_spelling('other')
+    assert spelling.separator == ' ' and spelling.digits == 0

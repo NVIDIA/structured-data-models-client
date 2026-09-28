@@ -55,6 +55,14 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **SQLite windows lost or gained rows on their edges when timestamps kept
+  fractional seconds.** SQLite compares a window bound with the stored text,
+  and the bound was written without the `.000000` pandas writes through ADBC,
+  so an order exactly on the end of a 30-day window was left out of the label
+  and one exactly on the anchor was counted. Found by checking every sampled
+  label against the same sum in pandas: one in six hundred was wrong. The bound
+  is now spelled exactly as the column stores it, fraction and UTC suffix
+  included.
 - **The release could not have smoke-tested the engine.** The sibling wheels
   its exact pins resolve against were staged where the build container never
   looked, and the uv frontend ignored the variable pointing at them, so the

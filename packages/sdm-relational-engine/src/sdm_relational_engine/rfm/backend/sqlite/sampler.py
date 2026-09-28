@@ -2,9 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import re
 import warnings
 from collections import defaultdict
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,37 @@ if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph
 
 
+class _TimeSpelling(NamedTuple):
+    r"""How one table writes its timestamps as text.
+
+    SQLite has no datetime type, so a window bound is compared with the stored
+    values as text, and has to be written exactly the way they are: the same
+    separator, the same number of fractional digits, the same zone suffix. A
+    shorter string with the same prefix sorts first, so a bound missing the
+    stored ``.000000`` is *before* a value at the same instant.
+    """
+
+    separator: str = ' '
+    digits: int = 0
+    suffix: str = ''
+
+    def spell(self, times: pd.Series) -> pd.Series:
+        spelled = times.dt.strftime(f'%Y-%m-%d{self.separator}%H:%M:%S')
+        if self.digits:
+            fraction = times.dt.strftime('%f').str.ljust(self.digits, '0')
+            spelled = spelled + '.' + fraction.str[: self.digits]
+        return spelled + self.suffix
+
+
+# A timestamp as SQLite text: date, separator, time, optional fraction, and
+# whatever follows. Only a UTC suffix is kept, because the bounds are UTC; any
+# other offset spells a different instant and is left as it was.
+_STORED_TIME = re.compile(
+    r'^\d{4}-\d{2}-\d{2}([T ])\d{2}:\d{2}:\d{2}(?:\.(\d+))?(.*)$'
+)
+_UTC_SUFFIXES = frozenset({'', 'Z', '+00:00', '+0000'})
+
+
 class SQLiteSampler(SQLSampler):
     def __init__(
         self,
@@ -35,11 +67,11 @@ class SQLiteSampler(SQLSampler):
             assert isinstance(table, SQLiteTable)
             self._connection = table._connection
 
-        # Per table, decided once on first use by `_time_separator`. Held on
+        # Per table, decided once on first use by `_time_spelling`. Held on
         # the instance rather than in a `functools.cache`, which would key on
         # `self` and so keep every sampler -- and its graph and its open
         # connection -- alive for the life of the process.
-        self._time_separator_dict: dict[str, str] = {}
+        self._time_spelling_dict: dict[str, _TimeSpelling] = {}
 
         if optimize:
             with self._connection.cursor() as cursor:
@@ -141,39 +173,39 @@ class SQLiteSampler(SQLSampler):
     def backend(self) -> DataBackend:
         return cast(DataBackend, DataBackend.SQLITE)
 
-    def _time_separator(self, table_name: str) -> str:
-        r"""The separator the stored timestamps of ``table_name`` actually use.
+    def _time_spelling(self, table_name: str) -> _TimeSpelling:
+        r"""How the stored timestamps of ``table_name`` are written.
 
         SQLite has no datetime type, so a window bound is compared as text and
         has to be spelled the way the column is. ``datetime()`` and
         ``pandas.to_sql`` write ``YYYY-MM-DD HH:MM:SS``, but an ISO-8601 writer
         emits a ``T``, and ``'...T00:00:00' <= '... 00:00:00'`` is false for
-        the same instant because ``T`` sorts after a space -- silently dropping
-        every row that lands on a window edge.
+        the same instant because ``T`` sorts after a space. A writer that keeps
+        fractional seconds -- pandas through ADBC writes ``.000000`` -- breaks
+        it the same way: ``'...T14:00:00.000000' <= '...T14:00:00'`` is false,
+        so a row on the end of a window was dropped and a row on the anchor
+        was counted. Either way, silently: no error, just a different answer.
 
         One stored value decides it, and the answer is remembered per table.
-        Anything unreadable falls back to the space form, which is what this
-        code assumed unconditionally before, so a column that is not written
-        the ISO way behaves exactly as it did.
+        Anything unreadable falls back to ``YYYY-MM-DD HH:MM:SS``, which is
+        what this code assumed unconditionally before, so a column that is not
+        written some other way behaves exactly as it did.
 
-        A column that mixes both spellings is the one case this cannot get
-        right: whichever spelling the probe reads, rows written the other way
-        are misplaced by one boundary instant. Widening the window to admit
-        both -- a space lower bound and a ``T`` upper bound -- is worse, since
-        it also admits every space-written row on the whole of the end date.
-        Store one spelling per column.
+        A column that mixes spellings is the one case this cannot get right:
+        whichever the probe reads, rows written the other way are misplaced by
+        one boundary instant. Store one spelling per column.
         """
-        separator = self._time_separator_dict.get(table_name)
-        if separator is None:
-            separator = self._probe_time_separator(table_name)
-            self._time_separator_dict[table_name] = separator
-        return separator
+        spelling = self._time_spelling_dict.get(table_name)
+        if spelling is None:
+            spelling = self._probe_time_spelling(table_name)
+            self._time_spelling_dict[table_name] = spelling
+        return spelling
 
-    def _probe_time_separator(self, table_name: str) -> str:
-        r"""Read one stored timestamp and report which separator it uses."""
+    def _probe_time_spelling(self, table_name: str) -> _TimeSpelling:
+        r"""Read one stored timestamp and report how it is written."""
         column = self.time_column_dict.get(table_name)
         if column is None:
-            return ' '
+            return _TimeSpelling()
         column_ref = self.table_column_ref_dict[table_name][column]
         sql = (
             f'SELECT {column_ref} FROM {self.source_name_dict[table_name]} '
@@ -184,10 +216,18 @@ class SQLiteSampler(SQLSampler):
                 cursor.execute(sql)
                 row = cursor.fetchone()
         except Exception:
-            return ' '
-        if not row or not isinstance(row[0], str) or len(row[0]) < 11:
-            return ' '
-        return 'T' if row[0][10] == 'T' else ' '
+            return _TimeSpelling()
+        if not row or not isinstance(row[0], str):
+            return _TimeSpelling()
+        match = _STORED_TIME.match(row[0])
+        if match is None:
+            return _TimeSpelling()
+        separator, fraction, suffix = match.groups()
+        return _TimeSpelling(
+            separator=separator,
+            digits=len(fraction or ''),
+            suffix=suffix if suffix in _UTC_SUFFIXES else '',
+        )
 
     def _get_min_max_time_dict(
         self,
@@ -380,18 +420,11 @@ class SQLiteSampler(SQLSampler):
     ) -> tuple[pd.DataFrame, np.ndarray]:
         time_column = self.time_column_dict.get(table_name)
 
-        # NOTE SQLite has no native datetime type. The bounds below are
-        # compared as text, so they have to be spelled the way the column is:
-        # `TEXT` in SQLite's own `YYYY-MM-DD HH:MM:SS` UTC form, which is what
-        # `datetime()` returns and what `pandas.to_sql` writes. A column stored
-        # with the ISO-8601 `T` separator instead does NOT compare correctly on
-        # the boundary -- `'...T00:00:00' <= '... 00:00:00'` is false for the
-        # same instant, because `T` sorts after a space -- so rows landing
-        # exactly on a window edge are dropped.
+        # SQLite compares these bounds with the stored text, so they are
+        # spelled exactly as the column is; see `_time_spelling`.
         tmp = pa.table([pa.array(index)], names=['__kumo_id__'])
         if time_column is not None and anchor_time is not None:
-            _sep = self._time_separator(table_name)
-            anchor_time = anchor_time.dt.strftime(f'%Y-%m-%d{_sep}%H:%M:%S')
+            anchor_time = self._time_spelling(table_name).spell(anchor_time)
             tmp = tmp.append_column('__kumo_time__', pa.array(anchor_time))
         tmp_name = f'tmp_{table_name}_{foreign_key}_{id(tmp)}'
 
@@ -452,22 +485,14 @@ class SQLiteSampler(SQLSampler):
     ) -> tuple[pd.DataFrame, np.ndarray]:
         time_column = self.time_column_dict[table_name]
 
-        # NOTE SQLite has no native datetime type. The bounds below are
-        # compared as text, so they have to be spelled the way the column is:
-        # `TEXT` in SQLite's own `YYYY-MM-DD HH:MM:SS` UTC form, which is what
-        # `datetime()` returns and what `pandas.to_sql` writes. A column stored
-        # with the ISO-8601 `T` separator instead does NOT compare correctly on
-        # the boundary -- `'...T00:00:00' <= '... 00:00:00'` is false for the
-        # same instant, because `T` sorts after a space -- so rows landing
-        # exactly on a window edge are dropped.
+        # SQLite compares these bounds with the stored text, so they are
+        # spelled exactly as the column is; see `_time_spelling`.
         tmp = pa.table([pa.array(index)], names=['__kumo_id__'])
-        _sep = self._time_separator(table_name)
-        end_time = anchor_time + max_offset
-        end_time = end_time.dt.strftime(f'%Y-%m-%d{_sep}%H:%M:%S')
+        spelling = self._time_spelling(table_name)
+        end_time = spelling.spell(anchor_time + max_offset)
         tmp = tmp.append_column('__kumo_end__', pa.array(end_time))
         if min_offset is not None:
-            start_time = anchor_time + min_offset
-            start_time = start_time.dt.strftime(f'%Y-%m-%d{_sep}%H:%M:%S')
+            start_time = spelling.spell(anchor_time + min_offset)
             tmp = tmp.append_column('__kumo_start__', pa.array(start_time))
         tmp_name = f'tmp_{table_name}_{foreign_key}_{id(tmp)}'
 
