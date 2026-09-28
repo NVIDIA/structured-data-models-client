@@ -576,6 +576,32 @@ class SourceTable(_TableShape):
             self._check_name(column)
         self._own_columns()
 
+    def __delitem__(self, column: str) -> None:
+        r"""Leave a column out: it is neither read from the source nor sent.
+
+        >>> del schema['orders']['rowguid']
+
+        A table in its source cannot be edited to suit a request, and some
+        columns only mislead a model -- a per-row UUID identifies a row and
+        says nothing about it. A table of frames drops a column from its frame
+        before :meth:`Schema.from_data` instead.
+        """
+        self._check_column(column)
+        role = (
+            'primary key'
+            if column in _as_key_tuple(self.primary_key)
+            else 'time column'
+            if column == self.time_column
+            else None
+        )
+        if role is not None:
+            raise StructuredDataError(
+                f"{self.name}.{column} is the table's {role}; set that to "
+                f'something else, or None, before leaving the column out',
+                code='INVALID_REQUEST',
+            )
+        del self.columns[column]
+
     def __repr__(self) -> str:
         key = f', primary_key={self.primary_key!r}' if self.primary_key else ''
         time = f', time_column={self.time_column!r}' if self.time_column else ''

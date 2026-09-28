@@ -67,7 +67,12 @@ The first release is being assembled. Nothing here has shipped yet.
   SQLite. The engine could always do this; nothing on `Schema` reached it, so a
   warehouse table had to be read whole into pandas first. One source per
   schema, and `Table.data` stays a DataFrame: tables in place are a
-  `SourceTable`, which holds none.
+  `SourceTable`, which holds none. `del schema['t']['column']` leaves a column
+  of a table in place out of both the read and the request.
+- `examples/databricks/`: AdventureWorks over Unity Catalog and over Lakebase,
+  sampled in place and answered by a Model Serving endpoint. Checked against
+  the public API by `test_databricks_notebooks.py`; they run only in a
+  workspace.
 
 ### Fixed
 

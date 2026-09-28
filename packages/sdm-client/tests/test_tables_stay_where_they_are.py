@@ -239,6 +239,27 @@ def test_a_column_with_no_scalar_form_is_left_out_and_named() -> None:
     assert list(schema['t'].columns) == ['id', 'x']
 
 
+def test_a_column_left_out_is_neither_read_nor_sent(duckdb_source: Any) -> None:
+    schema = _schema(duckdb_source)
+    del schema['users']['country']
+
+    assert 'country' not in schema['users']
+    graph = RelationalMaterializer(schema)._build_graph()
+    assert 'country' not in graph['users']
+    payload = _payload(schema)
+    assert (
+        'country'
+        not in payload['context']['related_tables']['users']['columns']
+    )
+
+    with pytest.raises(StructuredDataError, match='primary key; set that'):
+        del schema['users']['user_id']
+    with pytest.raises(StructuredDataError, match='time column; set that'):
+        del schema['orders']['ts']
+    with pytest.raises(StructuredDataError, match="has no column 'nope'"):
+        del schema['users']['nope']
+
+
 def test_the_tabular_model_is_refused_rather_than_fed_nothing(
     duckdb_source: Any,
 ) -> None:
