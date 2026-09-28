@@ -7,6 +7,7 @@ text.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -97,7 +98,63 @@ def duckdb_sampler(
     connection.close()
 
 
-@pytest.fixture(params=['sqlite', 'duckdb'])
+@pytest.fixture(scope='module')
+def postgres_sampler(postgres_dsn: str) -> Iterator[Any]:
+    dsn = postgres_dsn
+    import psycopg
+    import sdm_relational_engine.rfm as rfm
+    from sdm_relational_engine.rfm.backend.postgres import PostgresSampler
+
+    schema = f'sdm_ids_{uuid.uuid4().hex}'
+    connection = psycopg.connect(dsn)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f'CREATE SCHEMA "{schema}"')
+            cursor.execute(
+                f'CREATE TABLE "{schema}".users ('
+                'user_id TEXT PRIMARY KEY, ts TIMESTAMP NOT NULL)'
+            )
+            cursor.executemany(
+                f'INSERT INTO "{schema}".users VALUES (%s, %s)',
+                [
+                    (key, f'2024-01-0{index + 1}')
+                    for index, key in enumerate(_ROWS)
+                ],
+            )
+            cursor.execute(
+                f'CREATE TABLE "{schema}".secrets (user_id TEXT, ts TIMESTAMP)'
+            )
+            cursor.execute(
+                f'INSERT INTO "{schema}".secrets VALUES '
+                "('TOPSECRET', '2099-01-01')"
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+    graph = rfm.Graph.from_postgres(
+        dsn,
+        schema=schema,
+        tables=[dict(name='users', primary_key='user_id', time_column='ts')],
+        verbose=False,
+    )
+    graph.validate()
+    try:
+        yield PostgresSampler(graph, verbose=False)
+    finally:
+        assert graph._connection is not None
+        graph._connection.close()
+        graph._connection = None
+        connection = psycopg.connect(dsn)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(f'DROP SCHEMA "{schema}" CASCADE')
+            connection.commit()
+        finally:
+            connection.close()
+
+
+@pytest.fixture(params=['sqlite', 'duckdb', 'postgres'])
 def sampler(request: pytest.FixtureRequest) -> Any:
     return request.getfixturevalue(f'{request.param}_sampler')
 

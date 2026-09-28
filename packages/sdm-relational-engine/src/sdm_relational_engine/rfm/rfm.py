@@ -657,6 +657,12 @@ class KumoRelational:
             )
 
             self._sampler = DatabricksSampler(graph, verbose)
+        elif graph.backend == DataBackend.POSTGRES:
+            from sdm_relational_engine.rfm.backend.postgres import (
+                PostgresSampler,
+            )
+
+            self._sampler = PostgresSampler(graph, verbose)
         else:
             raise NotImplementedError
 
@@ -1963,6 +1969,15 @@ class KumoRelational:
             )
 
             assert isinstance(self._sampler, DatabricksSampler)
+            assert isinstance(connection, Connection)
+            self._sampler._connection = connection
+        if self._sampler.backend == DataBackend.POSTGRES:
+            from sdm_relational_engine.rfm.backend.postgres import (
+                Connection,
+                PostgresSampler,
+            )
+
+            assert isinstance(self._sampler, PostgresSampler)
             assert isinstance(connection, Connection)
             self._sampler._connection = connection
 

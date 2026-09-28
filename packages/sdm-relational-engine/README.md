@@ -5,7 +5,7 @@ The Kumo Relational driver for the [`sdm-client`](../sdm-client/README.md) clien
 This distribution provides the heavy, client-side machinery a Kumo Relational prediction
 needs before a request reaches a NIM: the relational `Graph`/`Table` abstractions,
 the neighbor samplers (local native `relationallib`, plus DuckDB / SQLite / Snowflake /
-Databricks backends), the PQL parser, and the HTTP client that talks to a Universal
+Databricks / PostgreSQL backends), the PQL parser, and the HTTP client that talks to a Universal
 TFM NIM.
 
 It is imported as `sdm_relational_engine` and is normally installed transitively via the client's
@@ -22,7 +22,7 @@ call, so a prediction has to go through `sdm-client`.
 ```bash
 pip install sdm-relational-engine
 # optional data backends:
-pip install "sdm-relational-engine[duckdb]"      # or [sqlite] / [snowflake] / [databricks]
+pip install "sdm-relational-engine[duckdb]"      # or [sqlite] / [snowflake] / [databricks] / [postgres]
 # optional features:
 pip install "sdm-relational-engine[explain]"     # natural-language explanation summaries
 pip install "sdm-relational-engine[relbench]"    # Graph.from_relbench() dataset loading

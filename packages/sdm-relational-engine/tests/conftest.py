@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 from typing import TYPE_CHECKING
 
@@ -56,6 +57,25 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if 'integration' not in item.keywords:
                 item.add_marker(skip_integ)
+
+
+@pytest.fixture(scope='session')
+def postgres_dsn() -> str:
+    r"""The PostgreSQL server the Postgres backend's tests run against.
+
+    Skipped where none is configured, which is a laptop without one. CI sets
+    ``SDM_REQUIRE_POSTGRES`` beside the DSN, and there a missing DSN fails
+    instead: a job that means to test the backend and quietly skips it reads
+    exactly like one that tested it.
+    """
+    dsn = os.getenv('SDM_POSTGRES_TEST_DSN')
+    if dsn:
+        return dsn
+    if os.getenv('SDM_REQUIRE_POSTGRES'):
+        pytest.fail(
+            'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+        )
+    pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
 
 
 @pytest.fixture(scope='class')

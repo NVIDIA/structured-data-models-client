@@ -39,6 +39,13 @@ The first release is being assembled. Nothing here has shipped yet.
   `sdm-client[relational]` uninstallable there. A GitLab `wheels` job builds the
   full cp310–cp313 matrix from the same `[tool.cibuildwheel]` table the release
   reads.
+- A PostgreSQL backend for the relational engine, so Lakebase and any other
+  PostgreSQL can be sampled where the tables live. It came across after the
+  rest of the engine had, so only the connector's reader had arrived:
+  `Graph.from_postgres`, with columns, keys and foreign keys read from the
+  catalog, and a sampler that fetches only the rows a prediction needs. Its
+  tests run in the `engine` job against a real `postgres:17`, and fail rather
+  than skip there if the server or the driver is missing.
 
 ### Fixed
 

@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from adbc_driver_sqlite.dbapi import AdbcSqliteConnection
     from databricks.sql.client import Connection as DatabricksConnection
     from duckdb import DuckDBPyConnection
+    from psycopg import Connection as PostgresConnection
     from snowflake.connector import SnowflakeConnection
 
 
@@ -346,7 +347,8 @@ class Graph:
     A graph can also be built directly from a data source rather than from
     :class:`Table` objects, via :meth:`from_data`, :meth:`from_snowflake`,
     :meth:`from_snowflake_semantic_view`, :meth:`from_databricks`,
-    :meth:`from_databricks_metric_view` and :meth:`from_relbench`.
+    :meth:`from_databricks_metric_view`, :meth:`from_postgres` and
+    :meth:`from_relbench`.
     """
 
     # Constructors ############################################################
@@ -373,6 +375,7 @@ class Graph:
             | DuckDBPyConnection
             | SnowflakeConnection
             | DatabricksConnection
+            | PostgresConnection
             | None
         ) = None
 
@@ -988,6 +991,125 @@ class Graph:
         if infer_metadata:
             graph.infer_metadata(verbose=False)
 
+            if edges is None:
+                graph.infer_links(verbose=False)
+
+        if verbose:
+            graph.print_metadata()
+            graph.print_links()
+
+        return graph
+
+    @classmethod
+    def from_postgres(
+        cls,
+        connection: PostgresConnection | str | dict[str, Any] | None = None,
+        tables: Sequence[str | dict[str, Any]] | None = None,
+        schema: str | None = None,
+        edges: Sequence[EdgeLike] | None = None,
+        infer_metadata: bool = True,
+        verbose: bool = True,
+    ) -> Self:
+        r"""Creates a graph from a PostgreSQL database.
+
+        .. code-block:: python
+
+            >>> # doctest: +SKIP
+            >>> import sdm_relational_engine.rfm as rfm
+            >>> graph = rfm.Graph.from_postgres(
+            ...     connection={
+            ...         'host': 'postgres.example.com',
+            ...         'dbname': 'analytics',
+            ...         'user': 'analyst',
+            ...         'password': '<password>',
+            ...     },
+            ...     schema='public',
+            ... )
+
+        Args:
+            connection: An open psycopg connection, PostgreSQL URI/libpq
+                conninfo string, or psycopg connection keyword arguments. If
+                ``None``, PostgreSQL ``PG*`` environment variables are used.
+            tables: Table names or :class:`PostgresTable` keyword arguments.
+                If ``None``, all base tables in ``schema`` are included.
+            schema: PostgreSQL schema. Defaults to ``current_schema()``.
+            edges: Optional explicit graph edges. If ``None``, edges are
+                inferred when ``infer_metadata=True``, and the foreign keys
+                PostgreSQL declares are added as well. An empty sequence is not
+                the same thing: it means "these edges and no others",
+                suppressing both.
+            infer_metadata: Whether to infer metadata for every table.
+            verbose: Whether to print inferred metadata and links.
+        """
+        from sdm_relational_engine.rfm.backend.postgres import (
+            Connection,
+            PostgresTable,
+            connect,
+        )
+
+        internal_connection = False
+        if not isinstance(connection, Connection):
+            if isinstance(connection, str):
+                connection = connect(connection)
+            else:
+                connection = connect(**(connection or {}))
+            internal_connection = True
+        assert isinstance(connection, Connection)
+
+        try:
+            if schema is None:
+                with connection.cursor() as cursor:
+                    cursor.execute('SELECT current_schema()')
+                    result = cursor.fetchone()
+                    assert result is not None
+                    schema = result[0]
+
+            if schema is None:
+                raise ValueError(
+                    "No current 'schema' set. Please specify the PostgreSQL "
+                    'schema manually'
+                )
+
+            if tables is None:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        'SELECT table_name\n'
+                        'FROM information_schema.tables\n'
+                        'WHERE table_schema = %s\n'
+                        "  AND table_type = 'BASE TABLE'\n"
+                        'ORDER BY table_name',
+                        (schema,),
+                    )
+                    tables = [row[0] for row in cursor.fetchall()]
+                _require_discovered_tables(tables, f"schema '{schema}'")
+
+            table_kwargs: list[dict[str, Any]] = []
+            for table in tables:
+                if isinstance(table, str):
+                    kwargs = dict(name=table, schema=schema)
+                else:
+                    kwargs = copy.copy(table)
+                    kwargs.setdefault('schema', schema)
+                table_kwargs.append(kwargs)
+
+            graph = cls(
+                tables=[
+                    PostgresTable(connection=connection, **kwargs)
+                    for kwargs in table_kwargs
+                ],
+                edges=edges,
+            )
+        except BaseException as error:
+            if internal_connection:
+                connection.close()
+            _reraise_as_graph_error(error, 'PostgreSQL')
+            raise
+
+        if internal_connection:
+            graph._connection = connection
+
+        if infer_metadata:
+            graph.infer_metadata(verbose=False)
             if edges is None:
                 graph.infer_links(verbose=False)
 
@@ -2837,6 +2959,7 @@ class Graph:
             | DuckDBPyConnection
             | SnowflakeConnection
             | DatabricksConnection
+            | PostgresConnection
         ),
     ) -> None:
         r"""Updates the connection to a database."""
@@ -2881,6 +3004,16 @@ class Graph:
                 )
 
                 assert isinstance(table, DatabricksTable)
+                assert isinstance(connection, Connection)
+                table._connection = connection
+
+            if table.backend == DataBackend.POSTGRES:
+                from sdm_relational_engine.rfm.backend.postgres import (
+                    Connection,
+                    PostgresTable,
+                )
+
+                assert isinstance(table, PostgresTable)
                 assert isinstance(connection, Connection)
                 table._connection = connection
 

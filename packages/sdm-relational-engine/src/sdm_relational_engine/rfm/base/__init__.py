@@ -11,6 +11,7 @@ class DataBackend(StrEnum):
     DUCKDB = 'duckdb'
     SNOWFLAKE = 'snowflake'
     DATABRICKS = 'databricks'
+    POSTGRES = 'postgres'
 
 
 from .source import SourceColumn, SourceForeignKey  # noqa: E402

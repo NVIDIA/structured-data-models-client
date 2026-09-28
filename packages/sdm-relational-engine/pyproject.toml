@@ -82,6 +82,9 @@ databricks=[
     "sdm-connectors[databricks]",
     "pyyaml",
 ]
+postgres=[
+    "sdm-connectors[postgres]",
+]
 
 [build-system]
 requires = [

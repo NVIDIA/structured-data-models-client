@@ -94,6 +94,17 @@ test:
 engine:
   stage: test
   extends: .python
+  # A real server for the PostgreSQL backend, whose sampler is SQL that only a
+  # PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a missing DSN or
+  # driver into a failure here, where a skip would read as a pass.
+  services:
+    - name: postgres:17
+      alias: postgres
+  variables:
+    POSTGRES_DB: sdm_test
+    POSTGRES_PASSWORD: postgres
+    SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@postgres:5432/sdm_test
+    SDM_REQUIRE_POSTGRES: "1"
   script:
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
     # The Databricks and Snowflake drivers are here for the offline tests of
@@ -102,7 +113,7 @@ engine:
     # sdm-connectors rather than the engine's `snowflake` extra, which pins
     # numpy<2 and would move every other test here onto numpy 1. pyyaml is what
     # the semantic-view tests read their fixtures with.
-    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake]' pyyaml
+    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' pyyaml
     # The test extra, not a hand-written list beside it: naming these twice
     # is how the documented install came to be missing pytest-mock while this
     # job had it. `databricks-serving` and `explain` carry the SDKs that the
