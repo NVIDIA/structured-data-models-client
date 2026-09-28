@@ -7,7 +7,8 @@
 They run only inside a workspace, against a serving endpoint and a catalog,
 so this does not execute them. It holds them to the public surface, which is
 what rots: the predecessor's notebooks were deleted because they had drifted
-onto interfaces this client never had.
+onto interfaces this client never had. Those interfaces are scanned for across
+every shipped file, notebooks included, by `scripts/check_repo_hygiene.py`.
 """
 
 from __future__ import annotations
@@ -21,13 +22,6 @@ import pytest
 
 EXAMPLES = Path(__file__).parents[3] / 'examples' / 'databricks'
 NOTEBOOKS = sorted(EXAMPLES.glob('*.ipynb'))
-
-RETIRED = (
-    'RelationalClient',
-    'client.relational(',
-    'run_mode=',
-    'Graph.from_databricks',
-)
 
 
 def _cells(notebook: Path, kind: str) -> list[str]:
@@ -88,10 +82,3 @@ def test_the_tables_are_sampled_in_place(notebook: Path) -> None:
     assert 'Schema.from_data(' not in body
     assert 'SDMClient.for_databricks_serving(' in body
     assert 'model=KumoRelational()' in body
-
-
-@pytest.mark.parametrize('notebook', NOTEBOOKS, ids=lambda path: path.stem)
-@pytest.mark.parametrize('retired', RETIRED)
-def test_no_interface_this_client_retired(notebook: Path, retired: str) -> None:
-    body = '\n'.join(_cells(notebook, 'code') + _cells(notebook, 'markdown'))
-    assert retired not in body
