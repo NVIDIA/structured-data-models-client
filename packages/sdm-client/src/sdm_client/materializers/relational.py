@@ -23,6 +23,7 @@ from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers.sources import engine_graph
+from sdm_client.materializers.tabular import _holds_two_whole_numbers
 from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 from sdm_client.request import Request
 from sdm_client.schema import (
@@ -30,6 +31,7 @@ from sdm_client.schema import (
     Schema,
     SourceTable,
     Table,
+    _and_list,
     _as_key_tuple,
 )
 from sdm_client.wire.dtypes import arrow_decimal_type
@@ -94,6 +96,7 @@ class RelationalMaterializer:
             )
 
         self._refuse_a_name_the_wire_reserves()
+        self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
         _warn_the_filter_chose_only_the_examples(query, indices)
         _warn_of_relationships_that_join_nothing(self.schema)
         payloads = self._gather(query, indices, num_context_samples, options)
@@ -210,21 +213,73 @@ class RelationalMaterializer:
         column of the same name collided with them inside pandas, which said
         `cannot insert instance_id, already exists` and named no table, no
         remedy, and nothing about the name being spoken for.
+
+        The suggestion is made per column, and by suffixing rather than by
+        substituting a word only one of the two names contains -- which left
+        `__kumo_anchor_time` told to rename itself to `__kumo_anchor_time`.
         """
         taken = sorted(
-            f'{name}.{column}'
+            (name, column)
             for name, table in self.schema.tables.items()
             for column in table.columns
             if column in self._RESERVED
         )
         if not taken:
             return
+        named = _and_list([f'{name}.{column}' for name, column in taken])
+        if len(taken) == 1:
+            column = taken[0][1]
+            renamed = f'to {self._unreserved(column)!r}'
+        else:
+            renamed = ', '.join(
+                f'{column!r} to {self._unreserved(column)!r}'
+                for _, column in taken
+            )
+        many = len(taken) > 1
         raise StructuredDataError(
-            f'{", ".join(taken)} uses a name this client needs for the '
-            f'request it builds, so it cannot also be a column of the data. '
-            f'Rename it, for instance to '
-            f'{taken[0].split(".")[-1].replace("instance_", "row_")!r}.',
+            f'{named} {"use names" if many else "uses a name"} this client '
+            f'needs for the request it builds, so '
+            f'{"they cannot also be columns" if many else "it cannot also be a column"} '
+            f'of the data. Rename {"them" if many else "it"}, for instance '
+            f'{renamed}.',
             code='INVALID_SCHEMA',
+        )
+
+    def _unreserved(self, column: str) -> str:
+        """A name like ``column`` that this client does not need for itself."""
+        suggestion = f'{column.lstrip("_")}_from_the_data'
+        return suggestion if suggestion not in self._RESERVED else column + '_'
+
+    def _warn_two_whole_numbers_are_being_asked_as_quantities(
+        self, query: ValidatedPredictiveQuery
+    ) -> None:
+        """Say when a 0/1 column is being asked as a regression.
+
+        The other route recognises two whole numbers as a label and says so.
+        Here the task follows the column's stype, so the same question over
+        the same column is asked as a regression and nothing is said -- and
+        `task=` is refused on this route, so the warning's own remedy does not
+        apply either.
+        """
+        named = str(getattr(query, 'target_column', '') or '')
+        table, _, column = named.partition('.')
+        if table not in self.schema or column not in self.schema[table]:
+            return
+        if self.schema[table][column].stype != 'numerical':
+            return
+        # A table in its source has no rows here to look at; the check reads
+        # the whole column, which against a warehouse is a scan per request.
+        frame = getattr(self.schema[table], 'data', None)
+        if frame is None or not _holds_two_whole_numbers(frame[column]):
+            return
+        warnings.warn(
+            f'{named} holds two whole numbers, which is how a binary label is '
+            f'usually written, and this is being asked as a regression '
+            f'because that is what the column says it holds. If they are '
+            f'labels, say so on the column: '
+            f"schema[{table!r}][{column!r}].stype = 'categorical'.",
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
         )
 
     def _build_graph(self) -> Graph:
@@ -679,19 +734,19 @@ def _only_junk_is_unread(present: pd.Series) -> bool:
     dates is a date written the other way, and that is the ambiguity the
     message below is for. A value that is not a date on its own terms is not,
     and saying it is ambiguous sends the caller to a remedy that cannot work.
+
+    Asked of each value, by the one function that answers that question. It
+    was asked here with the default reading, which leaves most of a day-first
+    column unread, so the single value that is genuinely not a date was
+    reported as ambiguity -- while the same column written year-first was
+    reported correctly.
     """
-    read = pd.to_datetime(present, errors='coerce')
-    unread = present[read.isna()]
-    if unread.empty:
+    read = dates.reads_as_a_date(present)
+    if read.all():
         return False
-    if len(unread) == len(present):
+    if not read.any():
         return dates.looks_unambiguous(present)
-    if not dates.looks_unambiguous(present[read.notna()]):
-        return False
-    alone = pd.to_datetime(
-        pd.Series(list(unread)), errors='coerce', format='mixed'
-    )
-    return bool(alone.isna().all())
+    return bool(dates.looks_unambiguous(present[read]))
 
 
 def _refuse_values_that_do_not_read(present: pd.Series, where: str) -> None:
@@ -705,10 +760,25 @@ def _refuse_values_that_do_not_read(present: pd.Series, where: str) -> None:
 
     One unreadable value is enough to make the whole column fail the shape
     test, so what the readable values say is asked separately.
+
+    Coercing is offered only where something would survive it: where no value
+    reads it leaves a column of NaT, which this client refuses in turn.
+
+    What does not read is counted by the one function that answers that, or
+    the count names as unread the dates the column reads perfectly well.
     """
     column = where.split('.')[-1]
-    unread = present[pd.to_datetime(present, errors='coerce').isna()]
+    unread = present[~dates.reads_as_a_date(present)]
     example = unread.iloc[0] if len(unread) else present.iloc[0]
+    if len(unread) == len(present):
+        raise StructuredDataError(
+            f'{where} is the time column and none of its {len(present)} '
+            f'values read as a date, such as {example!r}. A table is windowed '
+            f'by its time column, so this one has no time axis: give it a '
+            f'column that holds dates, or leave it without one and ask a '
+            f'question that does not window it',
+            code='INVALID_REQUEST',
+        )
     raise StructuredDataError(
         f'{where} is the time column and {len(unread)} of {len(present)} of its '
         f'values do not read as a date, such as {example!r}. Fix or drop those '
@@ -716,6 +786,40 @@ def _refuse_values_that_do_not_read(present: pd.Series, where: str) -> None:
         f'frame[{column!r}] = pd.to_datetime(frame[{column!r}], '
         f"errors='coerce') -- which this client accepts, saying how many rows "
         f'the model will not see',
+        code='INVALID_REQUEST',
+    )
+
+
+def _refuse_a_column_written_two_ways(
+    shapes: dict[str, str], where: str, unread: int = 0
+) -> None:
+    """Refuse a column whose rows are written in more than one shape.
+
+    Every row says exactly what it is, so it is not ambiguous. What it has no
+    answer to is which single call reads it: the one that reads `13/02/2021`
+    reads `2021-02-04` as the second of April.
+
+    Said before the values that do not read, where a column has both, and
+    saying so. Coercing is what the other message offers, and coercing a
+    column written two ways throws away every row of the shape it does not
+    settle on -- so the caller has to know about the shapes first.
+    """
+    year_first = shapes['year-first']
+    other = shapes['day-or-month-first']
+    column = where.split('.')[-1]
+    also = (
+        f' {unread} of its values do not read as a date either, and are a '
+        f'separate thing to fix.'
+        if unread
+        else ''
+    )
+    raise StructuredDataError(
+        f'{where} is the time column and is written two ways: {year_first!r} '
+        f'leads with its year and {other!r} leads with its day or its month. '
+        f'No one reading covers both -- the call that reads {other!r} reads '
+        f'{year_first!r} as a different date -- so read the halves apart and '
+        f'put them back as one column, or store frame[{column!r}] in one '
+        f'shape before naming it as the time column.{also}',
         code='INVALID_REQUEST',
     )
 
@@ -744,15 +848,33 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
     The shape check reads a sample and is only a pre-filter; the conversion
     below reads every value, so a column that changes shape in its last row is
     caught there rather than here.
+
+    Ambiguity is considered last. A column written in no date shape, and one
+    written in two, are each a different mistake with a different remedy.
+
+    Reading each value on its own terms is the last reading tried, and only
+    once the column is known to be one shape: it will also read a column
+    written two ways, by re-dating the half it does not settle on.
     """
     present = values.dropna()
     if present.empty:
         return values
-    if dates.looks_unambiguous(present):
+    reads = dates.looks_unambiguous(present)
+    if reads:
         how = dates.conversion_that_works(present, only_plausible_years=False)
         if how is not None:
             return dates.read(values, how)
-    if _only_junk_is_unread(present):
+    shapes = dates.shapes_written(present)
+    if len(shapes) > 1:
+        unread = int((~dates.reads_as_a_date(present)).sum())
+        return _refuse_a_column_written_two_ways(shapes, where, unread)
+    if reads:
+        how = dates.conversion_that_works(
+            present, only_plausible_years=False, per_row=True
+        )
+        if how is not None:
+            return dates.read(values, how)
+    if not shapes or _only_junk_is_unread(present):
         return _refuse_values_that_do_not_read(present, where)
     example = next(
         (value for value in present if isinstance(value, str)), present.iloc[0]

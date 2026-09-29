@@ -244,3 +244,103 @@ def test_a_name_match_that_cannot_join_says_why_it_was_dropped():
 
     assert built.relationships == []
     assert any('cannot match' in str(item.message) for item in caught)
+
+
+def a_child_of_a_declared_parent() -> dict[str, pd.DataFrame]:
+    """A fact table whose foreign key is nearly unique, as a sample makes it."""
+    orders = pd.DataFrame({'order_id': range(200), 'total': [1.0] * 200})
+    line_items = pd.DataFrame(
+        {
+            'order_id': [*range(192), *range(8)],
+            'qty': [1] * 200,
+        }
+    )
+    return {'orders': orders, 'line_items': line_items}
+
+
+def test_a_child_of_a_declared_parent_is_not_told_its_key_repeats(recwarn):
+    """The repeats are what a foreign key is, the edge through it works, and
+    the printed remedy deletes it."""
+    schema = Schema.from_data(a_child_of_a_declared_parent())
+
+    assert schema['line_items'].primary_key is None
+    assert edges(schema) == {('line_items', 'order_id', 'orders', 'order_id')}
+    said = ' '.join(str(w.message) for w in recwarn)
+    assert 'does not identify a row' not in said
+
+
+def test_the_remedy_that_was_printed_here_costs_the_edge():
+    """Why the warning above must not fire: de-duplicating makes the foreign
+    key unique, which makes it this table's key too, which makes the name
+    ambiguous, which deletes the edge that was working."""
+    tables = a_child_of_a_declared_parent()
+    thinned = {
+        'orders': tables['orders'],
+        'line_items': tables['line_items'].drop_duplicates('order_id'),
+    }
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        followed = Schema.from_data(thinned)
+
+    assert len(thinned['line_items']) == 192
+    assert edges(followed) == set()
+
+
+def test_no_table_is_told_both_that_it_has_a_key_shaped_column_and_that_it_has_none(
+    recwarn,
+):
+    """One call printed both, with remedies that cannot both be followed."""
+    account = pd.DataFrame(
+        {
+            'ACCOUNT_ID': [*range(190), *range(10)],
+            'balance': [1.0] * 200,
+            'code': [f'c{i}' for i in range(200)],
+        }
+    )
+    entries = pd.DataFrame(
+        {
+            'ENTRY_ID': range(400),
+            'ACCOUNT_ID': [i % 190 for i in range(400)],
+            'code': [f'c{i % 200}' for i in range(400)],
+        }
+    )
+    schema = Schema.from_data({'account': account, 'entries': entries})
+
+    assert schema['account'].primary_key is None
+    said = [str(w.message) for w in recwarn if 'account' in str(w.message)]
+    assert any('is named like a key' in line for line in said), said
+    assert not any('has no primary key' in line for line in said), said
+
+
+def test_no_warning_says_a_keyless_table_reaches_the_model_unjoined(recwarn):
+    """It does not reach the model at all through an edge, and where it names
+    another table it is sent as that table's child."""
+    Schema.from_data(
+        {
+            'account': pd.DataFrame(
+                {'code': [f'c{i}' for i in range(200)], 'v': [1.0] * 200}
+            ),
+            'entries': pd.DataFrame(
+                {'eid': range(200), 'code': [f'c{i}' for i in range(200)]}
+            ),
+        }
+    )
+    assert 'unjoined' not in ' '.join(str(w.message) for w in recwarn)
+
+
+def test_the_shared_key_name_warning_does_not_leave_out_the_entity_table(
+    recwarn,
+):
+    """The table a question is about is always in the request."""
+    Schema.from_data(
+        {
+            'alpha': pd.DataFrame({'ID': range(20), 'a': [1.0] * 20}),
+            'beta': pd.DataFrame({'ID': range(20), 'b': [1.0] * 20}),
+        },
+        primary_keys={'alpha': 'ID', 'beta': 'ID'},
+    )
+    said = ' '.join(str(w.message) for w in recwarn)
+    assert 'each of them is left out of the request' not in said
+    assert 'answered from that table alone' in said

@@ -102,3 +102,120 @@ def test_every_unit_the_grammar_accepts_converts_to_seconds() -> None:
     for unit in TimeUnit:
         offset = DateOffsetRange._to_date_offset(unit, 3)
         assert date_offset_to_seconds(offset) > 0, unit
+
+
+# --- pooling two windows of different units --------------------------------
+
+
+ANCHORS = [
+    '2025-01-31',
+    '2025-02-04',
+    '2025-02-28',
+    '2025-03-04',
+    '2024-02-29',
+    '2025-12-15',
+    '2025-11-30',
+    '2026-01-31',
+    '2025-06-30',
+]
+
+PAIRS = [
+    (pd.DateOffset(months=1), pd.DateOffset(months=1)),
+    (pd.DateOffset(days=30), pd.DateOffset(days=30)),
+    (pd.DateOffset(days=28), pd.DateOffset(months=1)),
+    (pd.DateOffset(days=30), pd.DateOffset(months=1)),
+    (pd.DateOffset(days=-30), pd.DateOffset(months=-1)),
+    (pd.DateOffset(days=365), pd.DateOffset(years=1)),
+    (pd.DateOffset(days=7), pd.DateOffset(days=30)),
+    (pd.DateOffset(months=1), pd.DateOffset(months=3)),
+    (pd.DateOffset(days=-30), pd.DateOffset(months=1)),
+    (pd.DateOffset(hours=36), pd.DateOffset(days=2)),
+]
+
+
+@pytest.mark.parametrize('pair', PAIRS, ids=lambda p: str(p))
+@pytest.mark.parametrize('anchor', ANCHORS)
+def test_a_pooled_bound_brackets_at_every_anchor(pair, anchor):
+    """No single anchor orders a month against thirty days.
+
+    At the 4th of February a month lands earlier than thirty days and at the
+    15th of December it lands later, so a bound picked by adding both to one
+    fixed date is the wrong way round at every anchor that date does not
+    describe -- and a bound inside the calendar window drops rows no later
+    step can recover.
+    """
+    from sdm_relational_engine.rfm.base.sampler import (
+        max_date_offset,
+        min_date_offset,
+    )
+
+    first, second = pair
+    at = pd.Timestamp(anchor)
+
+    assert at + min_date_offset(first, second) <= min(at + first, at + second)
+    assert at + max_date_offset(first, second) >= max(at + first, at + second)
+
+
+@pytest.mark.parametrize('pair', PAIRS, ids=lambda p: str(p))
+def test_a_pooled_bound_brackets_in_seconds_too(pair):
+    """The sampler converts it rather than adding it, so both readings hold."""
+    from sdm_relational_engine.rfm.base.sampler import (
+        max_date_offset,
+        min_date_offset,
+    )
+    from sdm_relational_engine.rfm.base.utils import date_offset_to_seconds
+
+    first, second = pair
+    assert date_offset_to_seconds(
+        min_date_offset(first, second), 'earliest'
+    ) <= min(
+        date_offset_to_seconds(first, 'earliest'),
+        date_offset_to_seconds(second, 'earliest'),
+    )
+    assert date_offset_to_seconds(
+        max_date_offset(first, second), 'latest'
+    ) >= max(
+        date_offset_to_seconds(first, 'latest'),
+        date_offset_to_seconds(second, 'latest'),
+    )
+
+
+def test_a_calendar_window_pooled_with_itself_stays_exact():
+    """Two aggregations over the same edge write the same window twice, and an
+    offset does not bound an equal one by the seconds test: the most a month
+    can span is longer than the least a month can span, so neither was found
+    to bound the other and a calendar month pooled into a rigid 31 days.
+    """
+    from sdm_relational_engine.rfm.base.sampler import (
+        max_date_offset,
+        min_date_offset,
+    )
+
+    one, also_one = pd.DateOffset(months=1), pd.DateOffset(months=1)
+    assert one is not also_one and one == also_one
+
+    february = pd.Timestamp('2025-02-01')
+    assert february + max_date_offset(one, also_one) == february + one
+    assert february + min_date_offset(one, also_one) == february + one
+
+
+def test_a_calendar_bound_stays_a_calendar_bound_where_one_of_them_bounds():
+    """Only the pair no single offset bounds is turned into a rigid span."""
+    from sdm_relational_engine.rfm.base.sampler import (
+        max_date_offset,
+        min_date_offset,
+    )
+
+    one, three = pd.DateOffset(months=1), pd.DateOffset(months=3)
+    assert min_date_offset(one, three) is one
+    assert max_date_offset(one, three) is three
+
+    seven, thirty = pd.DateOffset(days=7), pd.DateOffset(days=30)
+    assert min_date_offset(seven, thirty) is seven
+    assert max_date_offset(seven, thirty) is thirty
+
+
+def test_a_missing_bound_pools_to_nothing():
+    from sdm_relational_engine.rfm.base.sampler import min_date_offset
+
+    assert min_date_offset(None, pd.DateOffset(days=7)) is None

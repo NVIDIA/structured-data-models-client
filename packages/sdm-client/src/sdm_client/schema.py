@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
@@ -676,7 +677,7 @@ class Schema:
         self._source = source
         self._metric_view: str | None = None
         self._tables = dict(tables)
-        self.relationships = _each_link_once(relationships)
+        self.relationships = relationships
 
     @property
     def source(self) -> Source | None:
@@ -697,9 +698,34 @@ class Schema:
         ask exactly this, passed it.
         """
         if key == 'relationships' and hasattr(self, '_tables'):
-            value = list(value)
-            self._check_relationships(value)
+            value = _Links(self._settle(value), self)
         object.__setattr__(self, key, value)
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        r"""Restore a copied or unpickled schema with its links still checked.
+
+        Pickle and `deepcopy` put the attributes back without going through
+        `__setattr__`, so the copy would hold a plain list and quietly stop
+        checking what is added to it. Said nothing while it does: a copy is
+        not a new declaration, and the notices were given when the schema it
+        was copied from was built.
+        """
+        object.__setattr__(self, '__dict__', dict(state))
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            self.relationships = list(state.get('relationships') or ())
+
+    def _settle(self, links: Sequence[Relationship]) -> list[Relationship]:
+        r"""The relationships as this schema will hold them, having said so.
+
+        One place, so that what is checked, de-duplicated and warned about does
+        not depend on how the link was added.
+        """
+        given = list(links)
+        self._check_relationships(given)
+        settled = _each_link_once(given)
+        _warn_two_ways_to_reach_one_table(self._tables, settled)
+        return settled
 
     def _check_relationships(self, links: Sequence[Relationship]) -> None:
         for link in links:
@@ -804,7 +830,9 @@ class Schema:
         else:
             inferred = _checked_links(built, relationships)
 
-        schema = cls(built, inferred)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            schema = cls(built, inferred)
         schema._mark_key_columns()
         dates = {
             name: named
@@ -812,12 +840,12 @@ class Schema:
             if (named := _warn_dates_stored_as_text(table)) is not None
         }
         if relationships is None:
-            _warn_table_cannot_be_linked_to(built, dates)
-            _warn_repeats_cost_the_table_its_key(built)
+            spoken_for = _warn_repeats_cost_the_table_its_key(built)
+            _warn_table_cannot_be_linked_to(built, dates, spoken_for)
             _warn_one_key_name_keys_several_tables(built)
         _warn_stype_was_decided_by_the_rows_read(built)
-        _warn_several_columns_could_be_the_time_column(built)
-        _warn_two_ways_to_reach_one_table(schema)
+        _warn_several_columns_could_be_the_time_column(schema)
+        _warn_two_ways_to_reach_one_table(built, schema.relationships)
         return schema
 
     @classmethod
@@ -945,10 +973,12 @@ class Schema:
         else:
             links = _checked_links(built, relationships)
 
-        schema = cls(built, links, source=source)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            schema = cls(built, links, source=source)
         schema._mark_key_columns()
-        _warn_several_columns_could_be_the_time_column(built)
-        _warn_two_ways_to_reach_one_table(schema)
+        _warn_several_columns_could_be_the_time_column(schema)
+        _warn_two_ways_to_reach_one_table(built, schema.relationships)
         return schema
 
     @classmethod
@@ -990,11 +1020,13 @@ class Schema:
         else:
             links = _checked_links(built, relationships)
 
-        schema = cls(built, links, source=source)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', SDMWarning)
+            schema = cls(built, links, source=source)
         schema._metric_view = metric_view
         schema._mark_key_columns()
-        _warn_several_columns_could_be_the_time_column(built)
-        _warn_two_ways_to_reach_one_table(schema)
+        _warn_several_columns_could_be_the_time_column(schema)
+        _warn_two_ways_to_reach_one_table(built, schema.relationships)
         return schema
 
     @property
@@ -1599,16 +1631,22 @@ def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
     return stamps[0] if len(stamps) == 1 else None
 
 
-def _warn_several_columns_could_be_the_time_column(
-    tables: Mapping[str, _TableShape],
-) -> None:
+def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
     """Say when a table has more than one timestamp and so was given none.
 
     Choosing between them would decide what the model is allowed to know at
     the moment it answers, which is the caller's to decide. But saying nothing
     left the table with no time column, and the refusal that follows asks for a
     column the table already has several of.
+
+    Only where something could be windowed: a lone table is asked single-table
+    questions, which have no window, so there is no refusal ahead to warn of.
+    The column in the remedy is an example -- the first alphabetically -- and
+    not a nomination.
     """
+    tables = schema.tables
+    if len(tables) < 2 and not schema.relationships:
+        return
     for name, table in sorted(tables.items()):
         if table.time_column is not None:
             continue
@@ -1623,14 +1661,18 @@ def _warn_several_columns_could_be_the_time_column(
             f'{name!r} has more than one column that could be its time '
             f'column, {_and_list(stamps)}, so it was given none, and a query '
             f'over a window of it is refused. Name the one that says when a '
-            f'row became true: time_columns={{{name!r}: {stamps[0]!r}}}.',
+            f'row became true -- time_columns={{{name!r}: {stamps[0]!r}}} '
+            f'names {stamps[0]!r}, which is only the first of them '
+            f'alphabetically.',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
 
 
 def _warn_table_cannot_be_linked_to(
-    tables: Mapping[str, Table], dates: Mapping[str, str]
+    tables: Mapping[str, Table],
+    dates: Mapping[str, str],
+    already_said: AbstractSet[str] = frozenset(),
 ) -> None:
     r"""Say when a table has no key and something wanted to point at it.
 
@@ -1661,6 +1703,10 @@ def _warn_table_cannot_be_linked_to(
     deletes the edges that were working. A warning that talks a caller into
     the failure it was written to prevent is worse than silence.
 
+    `already_said` names the tables the repeated-key warning has spoken about.
+    Said of one table the two contradict, with remedies that cannot both be
+    followed.
+
     `dates` names, per table, a column already reported as a date stored as
     text. A column cannot be both the time column and the primary key, so
     asking for it here would contradict the other warning, and a caller who
@@ -1679,7 +1725,7 @@ def _warn_table_cannot_be_linked_to(
     }
 
     for name, table in tables.items():
-        if table.primary_key is not None:
+        if table.primary_key is not None or name in already_said:
             continue
         frame = table.data
         if frame is None or frame.empty:
@@ -1722,7 +1768,9 @@ def _tables_naming_each_column(
     return named
 
 
-def _warn_repeats_cost_the_table_its_key(tables: Mapping[str, Table]) -> None:
+def _warn_repeats_cost_the_table_its_key(
+    tables: Mapping[str, Table],
+) -> set[str]:
     r"""Say when a key-shaped column was declined for its repeats.
 
     `_infer_primary_key` wants `_KEY_UNIQUENESS` of the values distinct, and
@@ -1746,10 +1794,20 @@ def _warn_repeats_cost_the_table_its_key(tables: Mapping[str, Table]) -> None:
 
     `_NEARLY_A_KEY` is what separates a key with a fault in it from an
     ordinary foreign key, which repeats on the order of the row count rather
-    than a handful of times. Without it every fact table would be told its
-    foreign key nearly identified a row.
+    than a handful of times. A sampled extract makes an ordinary foreign key
+    nearly unique too, so a column another table is already keyed by is left
+    alone: the edge through it works, and the remedy printed here deletes it.
+
+    Returns the tables it spoke about, so the keyless-table warning does not
+    follow it with a contradicting account of the same one.
     """
     named_elsewhere = _tables_naming_each_column(tables)
+    keyed_by = {
+        table.primary_key
+        for table in tables.values()
+        if isinstance(table.primary_key, str)
+    }
+    spoken_for = set()
     for name, table in tables.items():
         if table.primary_key is not None:
             continue
@@ -1760,6 +1818,8 @@ def _warn_repeats_cost_the_table_its_key(tables: Mapping[str, Table]) -> None:
             if not column.lower().endswith(_KEY_SUFFIXES):
                 continue
             if not supports_dtype('ID', meta.dtype):
+                continue
+            if column in keyed_by:
                 continue
             if not named_elsewhere.get(column, set()) - {name}:
                 continue
@@ -1774,15 +1834,19 @@ def _warn_repeats_cost_the_table_its_key(tables: Mapping[str, Table]) -> None:
                 f'repeat a value already used, e.g. {quality.example!r}, so '
                 f'it does not identify a row and {name!r} gets no primary '
                 f'key. Nothing can link to a table without one: every '
-                f'relationship pointing at {name!r} is dropped and it reaches '
-                f'the model unjoined. Keep one row per {column!r} -- '
+                f'relationship pointing at {name!r} is dropped, so nothing is '
+                f'gathered through it, and a question about another table '
+                f'reaches it only where {name!r} names that table itself. '
+                f'Keep one row per {column!r} -- '
                 f'frame = frame.drop_duplicates({column!r}) -- and infer '
                 f'again, or name a column that does identify a row with '
                 f'primary_keys={{{name!r}: ...}}.',
                 category=SDMWarning,
                 stacklevel=caller_stacklevel(),
             )
+            spoken_for.add(name)
             break
+    return spoken_for
 
 
 def _warn_one_key_name_keys_several_tables(
@@ -1816,8 +1880,10 @@ def _warn_one_key_name_keys_several_tables(
             f'{key!r} is the primary key of {_and_list(shared)}, so a column '
             f'named {key!r} identifies a row in each of them and names a '
             f'parent in none. No relationship is inferred through an '
-            f'ambiguous name, so nothing can point at any of those tables and '
-            f'each of them is left out of the request. Say what the graph is '
+            f'ambiguous name, so nothing can point at any of those tables: '
+            f"none of them is gathered as another table's related rows, and "
+            f'a question about one of them is answered from that table alone. '
+            f'Say what the graph is '
             f'-- relationships=[Relationship(child, column, {shared[0]!r}, '
             f'{key!r}), ...] -- or give each table a key of its own name, so '
             f'that the column naming it can be matched to it.',
@@ -1842,10 +1908,10 @@ def _unlinkable_table_reads(
     subject, verb = ('they', 'are') if many else ('it', 'is')
     tables = 'tables' if shared_by_many else 'table'
     return (
-        f'No column of {name!r} is named like a key, so it has no primary '
-        f'key, and nothing can link to a table without one: every '
-        f'relationship pointing at {name!r} is dropped and it reaches the '
-        f'model unjoined. '
+        f'{name!r} has no primary key, and nothing can link to a table '
+        f'without one: every relationship pointing at {name!r} is dropped, so '
+        f'nothing is gathered through it, and a question about another table '
+        f'reaches it only where {name!r} names that table itself. '
         f'{_and_list(candidates)} {"identify" if many else "identifies"} '
         f'every row of {name!r} and {verb} named by '
         f'{"other tables" if shared_by_many else "another table"} too, which '
@@ -1887,7 +1953,7 @@ def _each_link_once(
     return once
 
 
-def _warn_of_a_pair_joined_both_ways(schema: Schema) -> None:
+def _warn_of_a_pair_joined_both_ways(links: Sequence[Relationship]) -> None:
     """Say when two tables name each other, which reads as an ambiguous pair.
 
     A parent naming one representative child is an ordinary shape and the
@@ -1896,12 +1962,15 @@ def _warn_of_a_pair_joined_both_ways(schema: Schema) -> None:
     aggregation between them is then refused for a foreign key it says it
     cannot find uniquely -- when there is exactly one, and the reverse edge is
     what made it two.
+
+    A table pointing at itself is one link, not two: the test for a reverse
+    edge is otherwise satisfied by the edge itself.
     """
-    pairs = {
-        (link.source_table, link.target_table) for link in schema.relationships
-    }
+    pairs = {(link.source_table, link.target_table) for link in links}
     said = set()
     for source, target in sorted(pairs):
+        if source == target:
+            continue
         if (target, source) not in pairs or (target, source) in said:
             continue
         said.add((source, target))
@@ -1916,7 +1985,62 @@ def _warn_of_a_pair_joined_both_ways(schema: Schema) -> None:
         )
 
 
-def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
+class _Links(list):
+    _schema: Schema
+
+    r"""The relationships of one schema, checked however they are added.
+
+    `append` is the route this client's own advice prints, and a check on
+    assignment alone left it unchecked.
+    """
+
+    def __init__(self, links: Sequence[Relationship], schema: Schema) -> None:
+        super().__init__(links)
+        object.__setattr__(self, '_schema', schema)
+
+    def _resettle(self, links: list[Relationship]) -> None:
+        settled = self._schema._settle(links)
+        super().clear()
+        super().extend(settled)
+
+    def append(self, link: Relationship) -> None:
+        self._resettle([*self, link])
+
+    def extend(self, links: Any) -> None:
+        self._resettle([*self, *links])
+
+    def insert(self, index: Any, link: Any) -> None:
+        kept = list(self)
+        kept.insert(index, link)
+        self._resettle(kept)
+
+    def __iadd__(self, links: Any) -> _Links:  # type: ignore[misc]
+        self._resettle([*self, *links])
+        return self
+
+    def __imul__(self, count: Any) -> _Links:  # type: ignore[misc]
+        self._resettle(list(self) * count)
+        return self
+
+    def __setitem__(self, index: Any, link: Any) -> None:
+        kept = list(self)
+        kept[index] = link
+        self._resettle(kept)
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        r"""Copied and pickled as a plain list, and re-checked on arrival.
+
+        The schema this belongs to is held here, so copying the list the
+        ordinary way copies the schema, whose state is restored after its
+        own `__setattr__` would have run. `Schema.__setstate__` puts the list
+        back under this type once the copy has its tables.
+        """
+        return (list, (list(self),))
+
+
+def _warn_two_ways_to_reach_one_table(
+    tables: Mapping[str, _TableShape], links: Sequence[Relationship]
+) -> None:
     r"""Say when one table reaches another by more than one column.
 
     Both are real relationships and keeping both is right: a sales line names
@@ -1931,13 +2055,13 @@ def _warn_two_ways_to_reach_one_table(schema: Schema) -> None:
     is choosing what their model sees.
     """
     ways: dict[tuple[str, str], list[str]] = {}
-    for link in schema.relationships:
+    for link in links:
         pair = (link.source_table, link.target_table)
         columns = ways.setdefault(pair, [])
         if link.source_column not in columns:
             columns.append(link.source_column)
 
-    _warn_of_a_pair_joined_both_ways(schema)
+    _warn_of_a_pair_joined_both_ways(links)
     for (source, target), columns in sorted(ways.items()):
         if len(columns) < 2:
             continue

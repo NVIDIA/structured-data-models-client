@@ -831,3 +831,194 @@ def test_a_ranking_refuses_an_empty_set_of_fields_like_everything_else():
 
     with pytest.raises(StructuredDataError, match='at least one field'):
         _refuse_outputs_a_ranking_cannot_give([])
+
+
+def wide_keys() -> Schema:
+    """A shop whose item key straddles int64, so the column travels as text."""
+    rows = 300
+    keys = [Decimal(2**64 + i) for i in range(3)]
+    users = pd.DataFrame({'uid': [1, 2, 3], 'seg': list('abc')})
+    items = pd.DataFrame(
+        {
+            'iid': pd.Series([*keys, Decimal(0)], dtype=object),
+            'kind': list('xyzw'),
+        }
+    )
+    buys = pd.DataFrame(
+        {
+            'bid': list(range(rows)),
+            'uid': [1, 2, 3] * (rows // 3),
+            'iid': pd.Series([*keys] * (rows // 3), dtype=object),
+            'when': pd.to_datetime('2025-06-01')
+            + pd.to_timedelta(range(rows), unit='D'),
+        }
+    )
+    return Schema.from_data(
+        {'users': users, 'items': items, 'buys': buys},
+        primary_keys={'users': 'uid', 'items': 'iid', 'buys': 'bid'},
+        time_columns={'buys': 'when'},
+    )
+
+
+def test_a_candidate_is_written_as_its_column_travels_not_as_its_value():
+    """A small key out of a column of wide ones is still a key of that column.
+
+    The column travels as text because its values straddle int64, so a
+    candidate written as a bare number asks after something the column does
+    not hold, and the query the client wrote is refused by the client.
+    """
+    pytest.importorskip('sdm_relational_engine')
+    schema = wide_keys()
+    parts = (
+        PredictiveQuery(
+            'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+            'FOR EACH users.uid',
+            schema,
+        )
+        .materialize(indices=[1, 2], candidates=[Decimal(2**64), Decimal(0)])
+        .parts
+    )
+    written = [(part.query or '').replace(' ', '') for part in parts]
+    assert all('buys.iid="' in text for text in written), written
+
+
+def test_a_candidate_that_cannot_be_written_without_naming_another_row_is_refused():
+    from sdm_client.decompose import _as_literal
+
+    with pytest.raises(StructuredDataError, match='different row'):
+        _as_literal(Decimal('1.0000000000000000000001'), 'float64')
+    assert _as_literal(Decimal(7), 'int64') == '7'
+    assert _as_literal(Decimal(7), 'string') == '"7"'
+    assert _as_literal(7, 'string') == '"7"'
+
+
+# --- a failure in one part says which, and stays what it was ---------------
+
+
+def parts(kind, many):
+    from sdm_client.decompose import Decomposition
+
+    about = list(range(1, many + 1)) if kind == 'forecast' else [10, 11, 12]
+    return Decomposition(kind, tuple(('q', one) for one in about[:many]))
+
+
+def test_a_part_failure_keeps_the_exception_it_was():
+    """`predict` documents these types, and wrapping every failure in the base
+    class dropped the status and the details a caller branches on."""
+    from sdm_client.decompose import about_the_part
+    from sdm_client.errors import NimRequestError
+
+    raised = NimRequestError(
+        503, code='SERVICE_UNAVAILABLE', message='busy.', details={'k': 'v'}
+    )
+    said = about_the_part(raised, parts('ranking', 3), 11)
+
+    assert isinstance(said, NimRequestError)
+    assert said.status_code == 503
+    assert said.details == {'k': 'v'}
+    assert said.code == 'SERVICE_UNAVAILABLE'
+    assert 'busy.' in str(said)
+
+
+def test_a_ranking_part_is_not_described_as_a_forecast_step():
+    """Its number is a candidate and not an ordinal, its window is the one
+    written, and asking for fewer candidates cannot shorten a window."""
+    from sdm_client.decompose import about_the_part
+
+    said = str(
+        about_the_part(
+            StructuredDataError('no.', code='INVALID_REQUEST'),
+            parts('ranking', 3),
+            11,
+        )
+    )
+    assert 'candidate 11' in said
+    assert 'window' not in said
+    assert 'step' not in said
+
+
+def test_a_forecast_part_names_the_step_that_failed():
+    """Asking for fewer than the total fails in the same place; the failing
+    step is the first number that does not."""
+    from sdm_client.decompose import about_the_part
+
+    said = str(
+        about_the_part(
+            StructuredDataError('too far.', code='INVALID_REQUEST'),
+            parts('forecast', 40),
+            16,
+        )
+    )
+    assert 'step 16 of 40' in said
+    assert 'fewer than 16 steps' in said
+    assert 'fewer than 40' not in said
+
+
+def test_a_cold_candidate_is_not_told_to_widen_a_context_that_cannot_help():
+    from sdm_client.decompose import about_the_part
+    from sdm_client.errors import WIDEN_THE_CONTEXT, UnsupportedRequestError
+
+    cold = UnsupportedRequestError(
+        f'every context row has the same answer, and a classification needs '
+        f'at least two classes to learn from. {WIDEN_THE_CONTEXT}',
+        details={'classes_in_context': 1},
+    )
+    said = str(about_the_part(cold, parts('ranking', 3), 11))
+
+    assert 'ask without it rather than for a wider context' in said
+    assert WIDEN_THE_CONTEXT not in said
+    assert 'num_context_samples' not in said
+
+
+def test_any_other_ranking_failure_keeps_the_remedy_it_was_given():
+    from sdm_client.decompose import about_the_part
+    from sdm_client.errors import WIDEN_THE_CONTEXT, UnsupportedRequestError
+
+    raised = UnsupportedRequestError(
+        f'every context row has the same answer, and a classification needs '
+        f'at least two classes to learn from. {WIDEN_THE_CONTEXT}'
+    )
+    said = str(about_the_part(raised, parts('ranking', 3), 11))
+
+    assert WIDEN_THE_CONTEXT in said
+    assert 'ask without it' not in said
+
+
+def test_an_ordinary_ranking_failure_is_not_told_to_drop_the_candidate():
+    from sdm_client.decompose import about_the_part
+    from sdm_client.errors import NimRequestError
+
+    said = str(
+        about_the_part(
+            NimRequestError(503, code='SERVICE_UNAVAILABLE', message='busy.'),
+            parts('ranking', 3),
+            11,
+        )
+    )
+    assert 'ask without it' not in said
+
+
+@pytest.mark.parametrize(
+    ('message', 'joined'),
+    [
+        ('no room for the window', 'no room for the window. This is'),
+        ('no room for the window.', 'no room for the window. This is'),
+        ('is there room?', 'is there room? This is'),
+    ],
+    ids=['no full stop', 'a full stop', 'a question mark'],
+)
+def test_what_is_appended_to_a_part_failure_reads_as_a_sentence(
+    message, joined
+):
+    """Not every message this wraps ends in one, and two of them ran together
+    without it."""
+    from sdm_client.decompose import about_the_part
+
+    said = str(
+        about_the_part(
+            StructuredDataError(message, code='INVALID_REQUEST'),
+            parts('ranking', 3),
+            11,
+        )
+    )
+    assert joined in said

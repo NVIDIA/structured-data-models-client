@@ -237,3 +237,103 @@ def test_the_remedy_is_written_scoped_to_the_pair():
 
     assert 'link.source_table ==' in said
     assert 'link.target_table ==' in said
+
+
+def caught(build) -> list[str]:
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter('always')
+        build()
+    return [str(item.message) for item in record]
+
+
+def test_a_table_that_points_at_itself_is_one_link_and_not_a_pair():
+    """A manager, a parent comment, a parent category: an ordinary shape, and
+    the test for a reverse edge is satisfied by the edge itself."""
+    users = pd.DataFrame(
+        {'uid': range(20), 'manager_id': [max(0, i - 1) for i in range(20)]}
+    )
+    said = caught(
+        lambda: Schema.from_data(
+            {'users': users},
+            primary_keys={'users': 'uid'},
+            relationships=[Relationship('users', 'manager_id', 'users', 'uid')],
+        )
+    )
+    assert not [line for line in said if 'name each other' in line]
+
+
+def test_two_tables_that_name_each_other_are_still_reported():
+    users = pd.DataFrame({'uid': range(20), 'top_order': range(20)})
+    orders = pd.DataFrame({'oid': range(20), 'uid': range(20)})
+    said = caught(
+        lambda: Schema.from_data(
+            {'users': users, 'orders': orders},
+            primary_keys={'users': 'uid', 'orders': 'oid'},
+            relationships=[
+                Relationship('orders', 'uid', 'users', 'uid'),
+                Relationship('users', 'top_order', 'orders', 'oid'),
+            ],
+        )
+    )
+    assert [line for line in said if 'name each other' in line]
+
+
+def test_appending_the_reverse_edge_is_reported_too():
+    """The route the client's own advice prints ran no check at all."""
+    users = pd.DataFrame({'uid': range(20), 'top_order': range(20)})
+    orders = pd.DataFrame({'oid': range(20), 'uid': range(20)})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'orders': orders},
+            primary_keys={'users': 'uid', 'orders': 'oid'},
+            relationships=[Relationship('orders', 'uid', 'users', 'uid')],
+        )
+
+    said = caught(
+        lambda: schema.relationships.append(
+            Relationship('users', 'top_order', 'orders', 'oid')
+        )
+    )
+    assert [line for line in said if 'name each other' in line]
+
+
+@pytest.mark.parametrize(
+    'add',
+    [
+        lambda links, link: links.append(link),
+        lambda links, link: links.extend([link]),
+        lambda links, link: links.insert(0, link),
+        lambda links, link: links.__iadd__([link]),
+        lambda links, link: links.__setitem__(slice(0, 0), [link]),
+    ],
+    ids=['append', 'extend', 'insert', 'in-place add', 'slice assignment'],
+)
+def test_a_duplicate_link_is_dropped_however_it_is_added(add):
+    users = pd.DataFrame({'uid': range(20)})
+    orders = pd.DataFrame({'oid': range(20), 'uid': range(20)})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'orders': orders},
+            primary_keys={'users': 'uid', 'orders': 'oid'},
+            relationships=[Relationship('orders', 'uid', 'users', 'uid')],
+        )
+
+    add(schema.relationships, Relationship('orders', 'uid', 'users', 'uid'))
+    assert len(schema.relationships) == 1
+
+
+def test_repeating_the_list_in_place_does_not_repeat_the_edge():
+    users = pd.DataFrame({'uid': range(20)})
+    orders = pd.DataFrame({'oid': range(20), 'uid': range(20)})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'orders': orders},
+            primary_keys={'users': 'uid', 'orders': 'oid'},
+            relationships=[Relationship('orders', 'uid', 'users', 'uid')],
+        )
+
+    schema.relationships.__imul__(2)
+    assert len(schema.relationships) == 1

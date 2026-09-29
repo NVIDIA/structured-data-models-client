@@ -143,6 +143,10 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     Raised here rather than only where a schema is built, because a value can
     reach the wire without one: the rows being scored are not part of the
     schema, and a caller may supply a schema of their own.
+
+    A warehouse `binary` column arrives as one `bytes` per row. It is refused
+    for having no cell form on the wire, which is not the mistake a nested
+    column is, so it is told apart.
     """
     # Skipped only for a dtype that cannot hold a sequence, which is most of
     # them on the hot path for every table in every request. Asked the other way
@@ -152,15 +156,25 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
     if _holds_only_scalars(series.dtype):
         return
     for value in series:
-        if is_container(value):
-            shape = 'a mapping' if isinstance(value, Mapping) else 'a container'
+        if not is_container(value):
+            continue
+        if isinstance(value, (bytes, bytearray, memoryview)):
             raise StructuredDataError(
-                f'{described} holds {shape} ({type(value).__name__}), and a '
-                f'nested column is not something this client can send. '
-                f'Multi-label targets are not supported by these models; for a '
-                f'feature, give one value per row',
+                f'{described} holds raw bytes ({type(value).__name__}), and '
+                f'the contract has no cell that carries them. It is already '
+                f'one value per row, so what it needs is a reading rather '
+                f'than a flattening: decode the column to text, or leave it '
+                f'out of the schema',
                 code='UNSUPPORTED_REQUEST',
             )
+        shape = 'a mapping' if isinstance(value, Mapping) else 'a container'
+        raise StructuredDataError(
+            f'{described} holds {shape} ({type(value).__name__}), and a '
+            f'nested column is not something this client can send. '
+            f'Multi-label targets are not supported by these models; for a '
+            f'feature, give one value per row',
+            code='UNSUPPORTED_REQUEST',
+        )
 
 
 def is_container(value: Any) -> bool:

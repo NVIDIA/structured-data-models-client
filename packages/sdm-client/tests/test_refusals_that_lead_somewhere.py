@@ -388,11 +388,10 @@ def test_the_failed_part_is_named_in_its_own_sentence(said):
     not the refusal ended with a full stop."""
     from types import SimpleNamespace
 
-    from sdm_client.client import _which_part_failed
-    from sdm_client.decompose import RANKING
+    from sdm_client.decompose import RANKING, about_the_part
 
     message = (
-        _which_part_failed(
+        about_the_part(
             StructuredDataError(said, code='UNSUPPORTED_REQUEST'),
             SimpleNamespace(kind=RANKING, parts=[1, 2, 3]),
             864,

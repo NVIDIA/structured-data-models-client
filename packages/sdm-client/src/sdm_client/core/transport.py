@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 
 import requests
+import urllib3.exceptions
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -30,7 +31,11 @@ _MODELS_PATH = '/v1/models'
 _DEFAULT_TIMEOUT_SECONDS = 60.0
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_BACKOFF_FACTOR = 0.5
-_RETRY_STATUS = (429, 500, 502, 503, 504)
+#: The transient ones. A 500 is not among them: the payload and the model are
+#: the same on every attempt, so a server fault reproduces, and the caller
+#: mistakes this endpoint reports as a 500 are reclassified from the body as
+#: the caller's -- after three more uploads of the whole gathered context.
+_RETRY_STATUS = (429, 502, 503, 504)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512
 _LOCAL_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
@@ -312,6 +317,71 @@ def _build_retry(
         return Retry(**options)
 
 
+def _timed_out(error: BaseException | None) -> bool:
+    r"""Whether a request failure is a timeout, however it reached us.
+
+    urllib3 wraps a read timeout in ``MaxRetryError``, which ``requests``
+    surfaces as ``ConnectionError`` rather than ``Timeout``.
+    """
+    seen: set[int] = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(
+            error, (requests.Timeout, urllib3.exceptions.TimeoutError)
+        ):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
+
+
+def _failed_to_reach(
+    error: Exception, url: str, timeout: float | None
+) -> StructuredDataError:
+    r"""One account of a failed request, for every route that can fail.
+
+    A timeout names the knob and the value rather than urllib3's "Max retries
+    exceeded", which says the opposite of the truth when none were asked for.
+    """
+    if _timed_out(error) and timeout is not None:
+        return StructuredDataError(
+            f'Request to {redact_url(url)} timed out after {timeout:g} '
+            f'seconds, which is the timeout this client was given',
+            code='TRANSPORT_ERROR',
+            details={'timeout': timeout, 'url': redact_url(url)},
+        )
+    return StructuredDataError(
+        f'Request to {redact_url(url)} failed: {scrub_userinfo(str(error))}',
+        code='TRANSPORT_ERROR',
+        details={'url': redact_url(url)},
+    )
+
+
+def _decoded_object(content: bytes, url: str) -> dict[str, Any]:
+    r"""``content`` as the JSON object it is supposed to be.
+
+    In one place because it was in two, and one checked only that it was JSON:
+    a 200 carrying an array escaped `models()` as a bare ``AttributeError``.
+    A deeply nested body raises `RecursionError`, a `RuntimeError`, which would
+    otherwise escape the contract these errors state.
+    """
+    try:
+        body = json.loads(content or b'{}')
+    except (ValueError, RecursionError) as error:
+        raise StructuredDataError(
+            f'{redact_url(url)} did not return JSON',
+            code='TRANSPORT_ERROR',
+            details={'url': redact_url(url)},
+        ) from error
+    if not isinstance(body, dict):
+        raise StructuredDataError(
+            f'Expected a JSON object from {redact_url(url)}, got '
+            f'{type(body).__name__}',
+            code='TRANSPORT_ERROR',
+            details={'url': redact_url(url)},
+        )
+    return body
+
+
 def _snippet(text: str) -> str:
     r"""A one-line, length-capped view of a response body, so a multi-megabyte
     HTML error page cannot become a multi-megabyte exception message.
@@ -345,7 +415,18 @@ def _path_segment(value: str) -> str:
     r"""Escapes a server-chosen id before it is spliced into a URL path, so a
     hostile or malformed ``session_id`` cannot redirect the call to another
     route.
+
+    ``quote`` leaves a dot alone, and a segment of nothing but dots is what a
+    URL resolver removes, so ``..`` turned a scoring call against a pinned
+    context into a one-shot prediction elsewhere. Such an id names no session.
     """
+    if not value or set(value) == {'.'}:
+        raise StructuredDataError(
+            f'{value!r} is not a session id: a path segment of dots is '
+            f'removed when the URL is resolved, so the call would be made '
+            f'against a different route than the one it names',
+            code='INVALID_RESPONSE',
+        )
     return quote(value, safe='')
 
 
@@ -422,9 +503,9 @@ class WireTransport(Protocol):
 class Transport:
     r"""The HTTP wire layer to one Universal TFM NIM.
 
-    Owns a pooled ``requests.Session`` with retry/backoff on transient
-    failures (429/5xx). Not part of the public API surface; a ``SDMClient``
-    holds one of these.
+    Owns a pooled ``requests.Session`` with retry/backoff on the transient
+    failures :data:`_RETRY_STATUS` names. Not part of the public API surface;
+    a ``SDMClient`` holds one of these.
 
     ``timeout`` bounds each individual attempt, not the call as a whole: a
     request that exhausts ``max_retries`` can take up to
@@ -529,23 +610,18 @@ class Transport:
                         },
                     )
                 return response.status_code == 200
-        except requests.Timeout as error:
-            raise StructuredDataError(
-                f'Readiness check at {redact_url(url)} timed out after '
-                f'{request_timeout:g} seconds',
-                code='TRANSPORT_ERROR',
-                details={
-                    'timeout': request_timeout,
-                    'url': redact_url(url),
-                },
-            ) from error
         except requests.RequestException as error:
-            raise StructuredDataError(
-                f'Request to {redact_url(url)} failed: '
-                f'{scrub_userinfo(str(error))}',
-                code='TRANSPORT_ERROR',
-                details={'url': redact_url(url)},
-            ) from error
+            if _timed_out(error):
+                raise StructuredDataError(
+                    f'Readiness check at {redact_url(url)} timed out after '
+                    f'{request_timeout:g} seconds',
+                    code='TRANSPORT_ERROR',
+                    details={
+                        'timeout': request_timeout,
+                        'url': redact_url(url),
+                    },
+                ) from error
+            raise _failed_to_reach(error, url, None) from error
         finally:
             if session is not self._session:
                 session.close()
@@ -562,6 +638,7 @@ class Transport:
         """
         self._require_open()
         request_timeout = self._timeout if timeout is None else timeout
+        _validate_limits(request_timeout, 0)
         url = self._url + _MODELS_PATH
         try:
             with self._session.get(
@@ -573,22 +650,10 @@ class Transport:
                 content = _read_capped(response, url)
                 if response.status_code != 200:
                     raise _to_nim_error(response.status_code, content)
-                payload = json.loads(content or b'{}')
         except requests.RequestException as error:
-            raise StructuredDataError(
-                f'Request to {redact_url(url)} failed: '
-                f'{scrub_userinfo(str(error))}',
-                code='TRANSPORT_ERROR',
-                details={'url': redact_url(url)},
-            ) from error
-        except json.JSONDecodeError as error:
-            raise StructuredDataError(
-                f'{redact_url(url)} did not return JSON',
-                code='TRANSPORT_ERROR',
-                details={'url': redact_url(url)},
-            ) from error
+            raise _failed_to_reach(error, url, request_timeout) from error
 
-        entries = payload.get('data') or []
+        entries = _decoded_object(content, url).get('data') or []
         return [
             str(entry['id'])
             for entry in entries
@@ -622,21 +687,18 @@ class Transport:
         """
         self._require_open()
         url = f'{self._url}{_SESSIONS_PATH}/{_path_segment(session_id)}'
+        request_timeout = min(self._timeout, _DELETE_TIMEOUT_SECONDS)
         try:
             with self._session.delete(
                 url,
-                timeout=min(self._timeout, _DELETE_TIMEOUT_SECONDS),
+                timeout=request_timeout,
                 verify=self._verify_ssl,
                 stream=True,
             ) as response:
                 status_code = response.status_code
                 content = _read_capped(response, url)
         except requests.RequestException as error:
-            raise StructuredDataError(
-                f'Request to {redact_url(url)} failed: '
-                f'{scrub_userinfo(str(error))}',
-                code='TRANSPORT_ERROR',
-            ) from error
+            raise _failed_to_reach(error, url, request_timeout) from error
         if status_code >= 400:
             raise _to_nim_error(status_code, content)
 
@@ -676,29 +738,10 @@ class Transport:
                 status_code = response.status_code
                 content = _read_capped(response, url)
         except requests.RequestException as error:
-            raise StructuredDataError(
-                f'Request to {redact_url(url)} failed: '
-                f'{scrub_userinfo(str(error))}',
-                code='TRANSPORT_ERROR',
-            ) from error
+            raise _failed_to_reach(error, url, self._timeout) from error
         if status_code >= 400:
             raise _to_nim_error(status_code, content)
-        try:
-            # A deeply nested body raises RecursionError, which is a
-            # RuntimeError and would otherwise escape the StructuredDataError contract.
-            body = json.loads(content)
-        except (ValueError, RecursionError) as error:
-            raise StructuredDataError(
-                f'Invalid JSON response from {redact_url(url)}',
-                code='TRANSPORT_ERROR',
-            ) from error
-        if not isinstance(body, dict):
-            raise StructuredDataError(
-                f'Expected a JSON object from {redact_url(url)}, got '
-                f'{type(body).__name__}',
-                code='TRANSPORT_ERROR',
-            )
-        return body
+        return _decoded_object(content, url)
 
 
 #: Deeper than any real request and far below the interpreter's own limit,

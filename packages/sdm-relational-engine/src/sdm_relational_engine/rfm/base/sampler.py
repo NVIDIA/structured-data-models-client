@@ -7,6 +7,7 @@ import re
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
@@ -20,7 +21,11 @@ from predictive_query.query import (
 from predictive_query.schema.typing import ProblemType, Stype
 
 from sdm_relational_engine.rfm.base import DataBackend
-from sdm_relational_engine.rfm.base.utils import Timestamp, to_naive_utc
+from sdm_relational_engine.rfm.base.utils import (
+    TimeBound,
+    date_offset_to_seconds,
+    to_naive_utc,
+)
 from sdm_relational_engine.rfm.diagnostics import GraphSanitizationReport
 from sdm_relational_engine.rfm.inference.context import (
     SampledEdgeLayout,
@@ -1094,25 +1099,55 @@ def _entity_filter_condition(query: ValidatedPredictiveQuery) -> str | None:
     return query.entity_ast.condition.to_string()
 
 
+def _pooled_offset(
+    offsets: Sequence[pd.DateOffset], *, earliest: bool
+) -> pd.DateOffset:
+    r"""An offset that bounds every one of ``offsets`` at every anchor.
+
+    One of them is returned where one of them bounds the rest: adding it to any
+    timestamp lands on the right side of adding any other, which is true when
+    the most it can span still falls short of the least any other can. An
+    offset equal to the candidate is one of them and is skipped, or two
+    written the same way would be found to bound each other in neither
+    direction and a calendar window would pool with itself into a rigid one.
+
+    Otherwise none of them does, and the bound is built. A month is shorter
+    than thirty days from some anchors and longer from others, so neither is a
+    bound for the pair; what bounds both is the extreme of what either can
+    span. That is a rigid span, so it is returned as one -- correct both for
+    the caller that converts it to seconds and the caller that adds it to a
+    timestamp.
+    """
+    assert len(offsets) > 0
+    bound: TimeBound = 'earliest' if earliest else 'latest'
+    opposite: TimeBound = 'latest' if earliest else 'earliest'
+    for candidate in offsets:
+        mine = date_offset_to_seconds(candidate, opposite)
+        if all(
+            mine <= date_offset_to_seconds(other, bound)
+            if earliest
+            else mine >= date_offset_to_seconds(other, bound)
+            for other in offsets
+            if other != candidate
+        ):
+            return candidate
+    spans = [date_offset_to_seconds(offset, bound) for offset in offsets]
+    return pd.DateOffset(seconds=min(spans) if earliest else max(spans))
+
+
 def min_date_offset(*args: pd.DateOffset | None) -> pd.DateOffset | None:
+    r"""The offset that reaches furthest back, whatever the anchor turns out to be."""
     offsets = [arg for arg in args if arg is not None]
 
     if len(offsets) != len(args):
         return None
 
-    anchor = Timestamp('2000-01-01')
-    timestamps = [anchor + offset for offset in offsets]
-    assert len(timestamps) > 0
-    argmin = min(range(len(timestamps)), key=lambda i: timestamps[i])
-    return offsets[argmin]
+    return _pooled_offset(offsets, earliest=True)
 
 
 def max_date_offset(*args: pd.DateOffset) -> pd.DateOffset:
-    anchor = Timestamp('2000-01-01')
-    timestamps = [anchor + arg for arg in args]
-    assert len(timestamps) > 0
-    argmax = max(range(len(timestamps)), key=lambda i: timestamps[i])
-    return args[argmax]
+    r"""The offset that reaches furthest forward, whatever the anchor turns out to be."""
+    return _pooled_offset(list(args), earliest=False)
 
 
 def to_ser(value: Any, size: int) -> pd.Series:

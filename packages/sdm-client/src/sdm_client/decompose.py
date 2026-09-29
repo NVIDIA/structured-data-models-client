@@ -38,11 +38,13 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import WIDEN_THE_CONTEXT, StructuredDataError
 from sdm_client.wire.dtypes import _decimal_dtype, _is_missing
 
 if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
+
+    from sdm_client.schema import Schema
 
 #: More parts than this and the fan-out is the cost of the call, not a detail
 #: of it. A caller who means it can raise it; nobody discovers it by accident.
@@ -71,6 +73,7 @@ def parts_of(
     text: str,
     candidates: list[Any] | None,
     options: Mapping[str, Any],
+    schema: Schema | None = None,
 ) -> Decomposition | None:
     r"""The queries this one is asked as, or nothing if it is asked as itself.
 
@@ -90,7 +93,7 @@ def parts_of(
     if kind.endswith('RANK'):
         return Decomposition(
             RANKING,
-            tuple(_per_candidate(query, candidates)),
+            tuple(_per_candidate(query, candidates, schema)),
             _candidates_to_rank(query, options),
         )
     if candidates is not None:
@@ -111,6 +114,62 @@ def parts_of(
     return None
 
 
+def _ended(message: Any) -> str:
+    """``message`` with a full stop, so what is appended reads as a sentence.
+
+    Not every message this wraps ends in one, and two of them run together
+    without it.
+    """
+    text = str(message).rstrip()
+    return text if not text or text[-1] in '.!?' else f'{text}.'
+
+
+def about_the_part(
+    error: StructuredDataError, rewritten: Decomposition, about: Any
+) -> StructuredDataError:
+    r"""``error``, said of the part it happened in, and still its own type.
+
+    A ranking's part is about one candidate, which can be dropped; a forecast's
+    covers a window further out than the one written, which is asked for by
+    asking for fewer steps. One wording served both and was false of the first.
+
+    The step named is the one that failed: anything at or above it fails alike.
+    The type is kept, because it is what `predict` documents.
+
+    A remedy this is about to contradict is taken out rather than left to be
+    read first: no context size reaches a candidate the data does not.
+    """
+    how_many = len(rewritten.parts)
+    first = _ended(error.args[0])
+    if rewritten.kind == RANKING:
+        said = (
+            f'This is the question asked for candidate {about!r}, one of '
+            f'{how_many} this ranking is asked as.'
+        )
+        if (getattr(error, 'details', None) or {}).get(
+            'classes_in_context'
+        ) == 1:
+            first = first.replace(f' {WIDEN_THE_CONTEXT}.', '')
+            said += (
+                ' Nothing in the data reaches that candidate, so no context '
+                'holds an example of an entity that did, at any size; ask '
+                'without it rather than for a wider context.'
+            )
+    else:
+        said = (
+            f'This is forecast step {about} of {how_many}, and the window '
+            f"named above is that step's rather than the one written; ask "
+            f'for fewer than {about} steps if the data does not reach that '
+            f'far.'
+        )
+    said = f'{first} {said}'
+    carried = error.__class__.__new__(error.__class__)
+    carried.__dict__.update(error.__dict__)
+    carried.args = (said, *error.args[1:])
+    carried.message = said
+    return carried
+
+
 def _for_each(query: ValidatedPredictiveQuery) -> str:
     r"""The entity clause as it was written, filter and all.
 
@@ -129,6 +188,7 @@ def _window(query: ValidatedPredictiveQuery) -> tuple[int, int, str]:
 def _per_candidate(
     query: ValidatedPredictiveQuery,
     candidates: list[Any] | None,
+    schema: Schema | None = None,
 ) -> list[tuple[str, Any]]:
     r"""One binary question per candidate, ordered by how sure the answer is.
 
@@ -164,10 +224,12 @@ def _per_candidate(
             code='INVALID_REQUEST',
         )
     _refuse_too_many(len(unique), 'candidates')
+    dtype = _how_the_column_travels(schema, table, column)
     start, end, unit = _window(query)
     return [
         (
-            f'PREDICT COUNT({table}.* WHERE {ranked}={_as_literal(value)}, '
+            f'PREDICT COUNT({table}.* WHERE {ranked}='
+            f'{_as_literal(value, dtype)}, '
             f'{start}, {end}, {unit}) > 0 {_for_each(query)}',
             value,
         )
@@ -211,7 +273,23 @@ def _refuse_too_many(many: int, what: str) -> None:
     )
 
 
-def _as_literal(value: Any) -> str:
+def _how_the_column_travels(
+    schema: Schema | None, table: str, column: str
+) -> str | None:
+    r"""The dtype the schema computed for the column being ranked.
+
+    How a candidate is written is the column's question, not the value's: a key
+    column straddling int64 travels as text, and so must a small key from it.
+    """
+    if schema is None or table not in schema:
+        return None
+    described = schema[table]
+    if column not in described:
+        return None
+    return str(described[column].dtype)
+
+
+def _as_literal(value: Any, dtype: str | None = None) -> str:
     r"""``value`` as the query language writes it.
 
     A candidate is a key, and a key that cannot be written as one is refused
@@ -233,7 +311,22 @@ def _as_literal(value: Any) -> str:
             code='INVALID_REQUEST',
         )
     if isinstance(value, Decimal):
-        value = _decimal_as_typed(value)
+        written = _decimal_as_typed(value, dtype)
+        if isinstance(written, (int, float)) and Decimal(written) != value:
+            raise StructuredDataError(
+                f'the candidate {value} names no row of a column of '
+                f'{dtype or "numbers"}: written as one it becomes {written}, '
+                f'which is a different row',
+                code='INVALID_REQUEST',
+            )
+        value = written
+    if dtype == 'string' and isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise StructuredDataError(
+                f'{value!r} cannot name a row to rank',
+                code='INVALID_REQUEST',
+            )
+        value = format(Decimal(str(value)), 'f')
     if isinstance(value, int):
         return str(value)
     if isinstance(value, float):
@@ -254,7 +347,7 @@ def _as_literal(value: Any) -> str:
     return f'"{text}"'
 
 
-def _decimal_as_typed(value: Decimal) -> Any:
+def _decimal_as_typed(value: Decimal, dtype: str | None = None) -> Any:
     r"""``value`` as the Python type its column is typed as on the wire.
 
     A warehouse ``DECIMAL`` reaches a caller as a :class:`~decimal.Decimal`,
@@ -262,13 +355,15 @@ def _decimal_as_typed(value: Decimal) -> Any:
     integers -- a question the validator refuses and nobody wrote. Which type
     that is does not follow from the Python type: :func:`_decimal_dtype` is
     what decides whether such a column travels as an integer, a float, or its
-    digits, and a key has to be written as whatever it decided.
+    digits. ``dtype`` carries the column's; the value alone is used only where
+    the column is not known.
 
     The digits are formatted rather than ``str``-ed, since ``str`` turns to
     scientific notation past int64's width, which is the width that makes such
     a column text in the first place.
     """
-    dtype = _decimal_dtype(pd.Series([value], dtype=object))
+    if dtype is None:
+        dtype = _decimal_dtype(pd.Series([value], dtype=object))
     if dtype == 'int64':
         return int(value)
     if dtype == 'float64':
