@@ -545,3 +545,39 @@ def test_the_mtls_key_names_are_the_ones_the_driver_reads(
     else:
         with pytest.raises(ConnectorError):
             connect()
+
+
+@pytest.mark.parametrize(
+    ('given', 'reaches_the_driver'),
+    [
+        ({'auth_type': 'databricks-oauth'}, True),
+        ({'auth_type': 'azure-oauth'}, True),
+        ({'auth_type': 'not-a-driver-auth-type'}, False),
+        ({'auth_type': 'typo', 'access_token': 't'}, True),
+        ({'auth_type': 'typo', 'use_kernel': True}, True),
+    ],
+)
+def test_only_an_auth_type_the_driver_knows_counts_as_one(
+    monkeypatch, given: dict, reaches_the_driver: bool
+) -> None:
+    """The driver dispatches on three values and falls through to the browser
+    for anything else, so accepting `auth_type` on sight let a typo produce
+    exactly the wait this guard exists to prevent."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    monkeypatch.setattr(
+        backend.databricks_sql, 'connect', lambda **kwargs: object()
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    assert backend._KNOWN_AUTH_TYPES == frozenset(
+        {'databricks-oauth', 'azure-oauth', 'azure-sp-m2m'}
+    )
+
+    if reaches_the_driver:
+        backend.connect(server_hostname='h', http_path='p', **given)
+    else:
+        with pytest.raises(ConnectorError):
+            backend.connect(server_hostname='h', http_path='p', **given)

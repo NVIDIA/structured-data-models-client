@@ -44,7 +44,7 @@ from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
-from sdm_client.wire.keys import keys_from_a_frame
+from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -249,21 +249,23 @@ def _warn_of_rows_scored_from_their_own_answers(
     answered = context[context[target].notna()]
     if answered.empty:
         return
-    # Compared as the wire spells them, through the encoder that writes them.
-    # A key column whose two halves hold different python types -- 1 in the
-    # context and '1' in the rows being scored -- is one column written one
-    # way, so values that differ here are the same value by the time the model
-    # reads them. The column's dtype is settled from both halves together, for
-    # the same reason.
+    # Compared as the wire spells them, through the encoder that writes them:
+    # a key column whose two halves hold different python types is one column
+    # written one way, so values that differ here are the same value by the
+    # time the model reads them. One dtype for the whole request, not one per
+    # half -- settled per half, the same entity came out `1.0` on the side
+    # read from the context and `1` on the side being scored, and the
+    # comparison reported overlaps the encoded request does not have.
     table = schema[entity_table]
-    answers = set(keys_from_a_frame(answered, key, table))
+    dtypes = key_dtypes(table, key, predict)
+    answers = set(keys_from_a_frame(answered, key, dtypes))
     if not answers:
         return
     # Rows, not keys: the sentence counts rows being scored, and two rows
     # asking about one entity are two rows whose answer is being shown.
     shown = sum(
         1
-        for named in keys_from_a_frame(predict, key, table)
+        for named in keys_from_a_frame(predict, key, dtypes)
         if named in answers
     )
     if not shown:

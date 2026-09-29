@@ -113,11 +113,31 @@ _WAYS_THE_THRIFT_ROUTE_AUTHENTICATES = (
 )
 
 
+def _an_auth_type_the_driver_knows() -> frozenset[str]:
+    r"""The flows the installed driver dispatches ``auth_type`` on.
+
+    Read from the driver. Any other value falls through to the browser, so
+    accepting `auth_type` on sight let a typo produce exactly the wait this
+    guard exists to prevent.
+    """
+    try:
+        from databricks.sql.auth.auth import AuthType
+
+        return frozenset(member.value for member in AuthType)
+    except Exception:  # noqa: BLE001 - an unknown driver is not a credential
+        return frozenset()
+
+
+_KNOWN_AUTH_TYPES = _an_auth_type_the_driver_knows()
+
+
 def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
     r"""Whether this call can reach the driver's browser flow."""
     named = {name for name, value in given.items() if value}
     if 'use_kernel' in named:
         return True
+    if 'auth_type' in named and given['auth_type'] not in _KNOWN_AUTH_TYPES:
+        named = named - {'auth_type'}
     return any(way <= named for way in _WAYS_THE_THRIFT_ROUTE_AUTHENTICATES)
 
 

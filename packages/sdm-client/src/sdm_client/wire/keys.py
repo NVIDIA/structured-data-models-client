@@ -14,6 +14,8 @@ client, which should have to ask only whether two sets of rows overlap.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from decimal import Decimal
+from numbers import Real
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.schema import _as_key_tuple
@@ -133,13 +135,63 @@ def _named_by(values: Iterable[Any]) -> str:
 
 
 def _one_spelling(value: Any) -> str:
-    r"""A value as the name of an entity, not as the type that carried it."""
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return str(value)
+    r"""A value as the name of an entity, not as the type that carried it.
+
+    Every real number is read as the number it is, rather than a list of the
+    types that can hold one: ``1``, ``1.0``, a numpy float of any width and
+    ``Decimal("1.00")`` all name entity 1, and ``Decimal("1.50")`` names the
+    same entity as ``1.5``. Written by type instead, a holdout given as a
+    ``float32`` removed nothing and a trailing zero made two names for one row.
+
+    Anything that is not a number is left as it is written. A key column of
+    text has ``"1.50"`` and ``"1.5"`` as two different entities, and reading
+    them as numbers would merge two rows the schema says are distinct.
+    """
+    if isinstance(value, bool) or not isinstance(value, (Real, Decimal)):
+        return str(value)
+    try:
+        exact = Decimal(str(value))
+    except (ArithmeticError, ValueError):
+        return str(value)
+    if exact == exact.to_integral_value():
+        return str(int(exact))
+    return str(exact.normalize())
 
 
-def keys_from_a_frame(frame: Any, key: Sequence[str], table: Any) -> list[Any]:
+def key_dtypes(
+    table: Any, key: Sequence[str], widened_by: Any = None
+) -> dict[str, str] | None:
+    r"""One wire dtype per key column, settled the way the adapter settles it.
+
+    One per column, not one per half. Settled separately for each frame, the
+    same entity came out ``1.0`` on the side read from the context and ``1``
+    on the side read from the rows being scored, and the comparison between
+    them reported overlaps the encoded request does not have.
+
+    ``None`` where no dtype can be settled. Every caller is a warning, and a
+    warning is never worth a failure.
+    """
+    from sdm_client.adapters.tabular import _raw_dtype_of
+    from sdm_client.wire import UNTYPED, widen_tfm_dtype
+
+    try:
+        dtypes = {}
+        for name in key:
+            column = table.columns[name]
+            dtype = UNTYPED if column.untyped else column.dtype
+            if widened_by is not None and name in widened_by.columns:
+                dtype = widen_tfm_dtype(
+                    (dtype, _raw_dtype_of(widened_by[name], dtype))
+                )
+            dtypes[name] = dtype or 'string'
+        return dtypes
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return None
+
+
+def keys_from_a_frame(
+    frame: Any, key: Sequence[str], dtypes: Mapping[str, str] | None
+) -> list[Any]:
     r"""``frame``'s keys, written the way the wire will write them.
 
     The other side of every comparison here is read from an encoded envelope,
@@ -147,33 +199,38 @@ def keys_from_a_frame(frame: Any, key: Sequence[str], table: Any) -> list[Any]:
     is ``1`` on the wire, and the two would never match -- which is how a
     session came to score rows its pinned context answers without saying so.
 
-    Through the encoder that writes the request, with the dtype the adapter
-    settles, rather than an imitation of either. Empty where no dtype can be
-    settled or the encoding fails: every caller is a warning, and a warning is
-    never worth a failure.
+    Through the encoder that writes the request, given the dtypes
+    :func:`key_dtypes` settled for the request as a whole. Empty where there
+    are none or the encoding fails: every caller is a warning, and a warning
+    is never worth a failure.
     """
-    from sdm_client.adapters.tabular import _raw_dtype_of
-    from sdm_client.wire import UNTYPED, widen_tfm_dtype
     from sdm_client.wire.tables import encode_table
 
+    if dtypes is None:
+        return []
     try:
-        dtypes = {}
-        for name in key:
-            column = table.columns[name]
-            dtype = UNTYPED if column.untyped else column.dtype
-            dtype = widen_tfm_dtype((dtype, _raw_dtype_of(frame[name], dtype)))
-            dtypes[name] = dtype or 'string'
-        encoded = encode_table(frame[list(key)], dtypes)
+        encoded = encode_table(
+            frame[list(key)], {name: dtypes[name] for name in key}
+        )
     except Exception:  # noqa: BLE001 - a warning is never worth a failure
         return []
     return [_named_by(row) for row in encoded['rows']]
 
 
-def scored_rows(request: Request, *, with_anchor: bool = False) -> list[Any]:
+def scored_rows(
+    request: Request,
+    *,
+    with_anchor: bool = False,
+    dtypes: Mapping[str, str] | None = None,
+) -> list[Any]:
     r"""The key of every row a request asks about, one per row.
 
     A sentence that counts rows has to be given rows: two rows asking about
     one entity are two rows, and a set of keys had already lost one of them.
+
+    ``dtypes`` are the ones the other side of the comparison was written with
+    -- a session's pinned schema. Settled here instead, the same entity has
+    one name on each side and neither meets the other.
     """
     if request.payloads:
         return [
@@ -186,7 +243,9 @@ def scored_rows(request: Request, *, with_anchor: bool = False) -> list[Any]:
     names = _as_key_tuple(getattr(table, 'primary_key', None))
     if frame is None or not names or any(n not in frame for n in names):
         return []
-    return keys_from_a_frame(frame, names, table)
+    if dtypes is None:
+        dtypes = key_dtypes(table, names, frame)
+    return keys_from_a_frame(frame, names, dtypes)
 
 
 def scored_keys(

@@ -533,3 +533,96 @@ def test_the_warning_uses_the_adapter_s_own_widening_rule() -> None:
 
     assert halves['context'] & halves['predict']
     assert any('rows being scored' in str(one.message) for one in heard)
+
+
+@pytest.mark.parametrize(
+    ('context_keys', 'predict_keys'),
+    [
+        ([Decimal('1.50'), Decimal('2'), Decimal('3')], [Decimal('1.50')]),
+        ([1.0, 2.0, 3.0], ['1']),
+        ([1, 2, 3], [1.0]),
+        ([1, 2, 3], [9]),
+        (['a', 'b', 'c'], ['a']),
+        (['1.50', '2', '3'], ['1.5']),
+        ([1, 2, 3], ['1']),
+        ([2**60 + 1, 2, 3], [2**60 + 1]),
+        ([1.5, 2.5, 3.5], [1.5]),
+        ([1, 2, 3], [np.float32(1.0)]),
+    ],
+)
+def test_one_dtype_for_the_request_not_one_for_each_half(
+    context_keys: list, predict_keys: list
+) -> None:
+    """Settled per half, the same entity came out `1.0` on the side read from
+    the context and `1` on the side being scored, so the warning both missed
+    real overlaps and reported ones the encoded request does not have."""
+    from sdm_client.adapters.tabular import TabularAdapter
+    from sdm_client.request import (
+        warn_of_rows_scored_from_their_own_answers,
+    )
+
+    context = pd.DataFrame(
+        {'id': context_keys, 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
+    )
+    predict = pd.DataFrame({'id': predict_keys, 'x': [0.9]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'id'}
+        )
+        request = Request(
+            context=context,
+            predict=predict,
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    with warnings.catch_warnings(record=True) as heard:
+        warnings.simplefilter('always')
+        warn_of_rows_scored_from_their_own_answers(request)
+    warned = any('rows being scored' in str(one.message) for one in heard)
+
+    envelope = next(
+        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+    )
+    halves = {}
+    for half in ('context', 'predict'):
+        table = envelope[half]['instance_table']
+        at = table['columns'].index('id')
+        halves[half] = {row[at] for row in table['rows']}
+
+    assert warned is bool(halves['context'] & halves['predict'])
+
+
+@pytest.mark.parametrize(
+    'named',
+    [1, 1.0, np.float32(1.0), np.float64(1.0), Decimal('1'), Decimal('1.00')],
+)
+def test_a_holdout_names_its_row_however_the_number_is_carried(named) -> None:
+    """Written by type rather than read as a number, a holdout given as a
+    `float32` removed nothing and a trailing zero made two names for one
+    row."""
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'context': {
+            'instance_table': {
+                'columns': ['id', 'y'],
+                'rows': [[1.0, 0], [2.0, 1]],
+            }
+        },
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        assert _held_back(payload, [named]) == 1
+    assert payload['context']['instance_table']['rows'] == [[2.0, 1]]
+
+
+def test_a_text_key_is_not_read_as_a_number() -> None:
+    """A key column of text has '1.50' and '1.5' as two entities, and reading
+    them as numbers would merge two rows the schema says are distinct."""
+    from sdm_client.wire.keys import _one_spelling
+
+    assert _one_spelling('1.50') != _one_spelling('1.5')
+    assert _one_spelling(Decimal('1.50')) == _one_spelling(1.5)
+    assert _one_spelling(True) == 'True'

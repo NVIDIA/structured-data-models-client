@@ -17,7 +17,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -150,7 +150,10 @@ class FittedModel:
         if request.nothing_to_score:
             return _empty_answer(self.model, self._outputs, request)
         _warn_scoring_what_was_pinned(
-            request, self._pinned_keys, self._pinned_over_a_window
+            request,
+            self._pinned_keys,
+            self._pinned_over_a_window,
+            _pinned_dtypes(self._pinned),
         )
         parts = [
             self._adapter.normalize(
@@ -698,8 +701,29 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     return removed
 
 
+def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
+    r"""The dtypes a session pinned, read back off the envelope it sent.
+
+    The pinned keys were written with these, so the scored ones have to be
+    read with them or the same entity has two names.
+    """
+    columns = ((pinned.get('schema') or {}).get('instance_table') or {}).get(
+        'columns'
+    )
+    if not isinstance(columns, Mapping):
+        return None
+    return {
+        name: str(described['dtype'])
+        for name, described in columns.items()
+        if isinstance(described, Mapping) and described.get('dtype')
+    }
+
+
 def _warn_scoring_what_was_pinned(
-    request: Request, pinned: frozenset[Any], over_a_window: bool = False
+    request: Request,
+    pinned: frozenset[Any],
+    over_a_window: bool = False,
+    dtypes: Mapping[str, str] | None = None,
 ) -> None:
     r"""Say when a call scores rows the pinned context already answers.
 
@@ -727,7 +751,7 @@ def _warn_scoring_what_was_pinned(
     # Rows, not the keys among them: two rows asking about one entity are two
     # rows being scored, and a set had already lost one of them before either
     # number was taken.
-    scored = scored_rows(request, with_anchor=over_a_window)
+    scored = scored_rows(request, with_anchor=over_a_window, dtypes=dtypes)
     shown = sum(1 for named in scored if named in pinned)
     if not shown:
         return
