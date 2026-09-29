@@ -226,3 +226,48 @@ def test_the_postgres_docstring_says_what_passing_none_does() -> None:
     said = ' '.join((postgres.connect.__doc__ or '').split())
     assert 'leave it to the server' not in said
     assert 'libpq then reads the same variable itself' in said
+
+
+def test_a_connection_that_cannot_give_a_cursor_is_still_a_connector_error() -> (
+    None
+):
+    """Splitting the guard so a fetch failure stops being called an execution
+    failure left the cursor acquisition outside both halves, and a closed
+    connection raised the driver's own exception through."""
+    from sdm_connectors.reader import read_table
+    from sdm_connectors.sql import ConnectorError
+
+    class Closed:
+        def cursor(self) -> object:
+            raise RuntimeError('connection is closed')
+
+    with pytest.raises(ConnectorError) as raised:
+        read_table(Closed(), query='select 1')
+
+    assert raised.value.code == 'QUERY_FAILED'
+    assert 'connection is closed' in str(raised.value)
+
+
+def test_a_cursor_this_package_opened_is_closed_on_every_path() -> None:
+    from sdm_connectors.reader import read_table
+    from sdm_connectors.sql import ConnectorError
+
+    closed: list[str] = []
+
+    class Cursor(_Cursor):
+        def close(self) -> None:
+            closed.append('closed')
+
+    class Connection:
+        def __init__(self, fail_on: str) -> None:
+            self._fail_on = fail_on
+
+        def cursor(self) -> Cursor:
+            return Cursor(self._fail_on)
+
+    read_table(Connection('neither'), query='select 1')
+    for fail_on in ('execute', 'fetch'):
+        with pytest.raises(ConnectorError):
+            read_table(Connection(fail_on), query='select 1')
+
+    assert len(closed) == 3

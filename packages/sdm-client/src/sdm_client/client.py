@@ -125,11 +125,7 @@ class FittedModel:
         adapter is handed the whole request while the wire gets only the half
         the contract allows on a scoring call.
         """
-        if not isinstance(request, Request):
-            raise StructuredDataError(
-                f'request must be a Request, got {type(request).__name__}',
-                code='INVALID_REQUEST',
-            )
+        _require_a_request(request)
         if self._closed:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
