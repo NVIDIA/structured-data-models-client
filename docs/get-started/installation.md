@@ -18,16 +18,18 @@ extra. Warehouse drivers are opt-in the same way.
 Install into the notebook with `%pip`, then restart Python:
 
 ```text
-%pip install --only-binary=:all: "sdm-client[relational,databricks,databricks-serving]" numpy~=1.0
+import numpy
+keep_numpy = f'numpy=={numpy.__version__}'
+%pip install --only-binary=:all: "sdm-client[relational,databricks,databricks-serving]" $keep_numpy
 dbutils.library.restartPython()
 ```
 
 Four things differ from a laptop, each found by running on every LTS runtime and serverless environment:
 
-- **Keep NumPy 1 where the runtime has it.**
-  Databricks Runtime 14.3, 15.4 and 16.4 LTS, and serverless environments 1 to 3, build their own packages against NumPy 1.
-  Installing can pull NumPy 2 in beneath them, and the Python process then cannot start.
-  Add `numpy~=1.0` on those runtimes, and leave it off where the runtime already has NumPy 2.
+- **Keep the runtime's own NumPy.**
+  Databricks builds its preinstalled packages against the NumPy it ships.
+  Installing can upgrade pandas and, through it, NumPy beneath them, after which the Python process cannot start.
+  Pinning NumPy to the version already there leaves pip to choose a pandas that fits it.
 - **Write version bounds with `~=`, not `<` or `>`.**
   A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
 - **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**
