@@ -92,10 +92,15 @@ _DOCUMENTED_KWARGS = frozenset(
 
 # What counts as having said how to authenticate, read from the branches the
 # installed driver dispatches on rather than from documentation. Each entry is
-# a set of names that have to be present together: the driver reads a client
-# secret only beside its client id, and a certificate only beside the flag that
-# turns certificate authentication on, so counting either half on its own let a
-# call through that the driver then resolves to its browser flow.
+# a set of names that have to be present together, because the driver reads
+# each of them only in the company of the others: a client secret beside its
+# client id and on the kernel route, a certificate beside the flag that turns
+# certificate authentication on. Any of them alone, or a machine-to-machine
+# pair on the thrift route, is resolved to the browser flow -- which is the
+# thing this guard exists to keep a script out of.
+#
+# Azure service-principal credentials are read on either route when
+# `auth_type='azure-sp-m2m'` names the flow, and `auth_type` counts on its own.
 #
 # `tls_client_cert_file` is deliberately absent. The driver reads the
 # underscored spelling for certificate authentication and the public one only
@@ -107,10 +112,14 @@ _WAYS_TO_AUTHENTICATE = (
     frozenset({'access_token'}),
     frozenset({'credentials_provider'}),
     frozenset({'auth_type'}),
-    frozenset({'azure_client_id', 'azure_client_secret'}),
-    frozenset({'oauth_client_id', 'oauth_client_secret'}),
-    frozenset({'oauth_client_id', 'oauth_jwt_key_file'}),
     frozenset({'_use_cert_as_auth', '_tls_client_cert_file'}),
+    # Machine-to-machine credentials are read on the kernel route. On the
+    # thrift one the driver never looks at them: it falls through to the
+    # browser flow, which is what this guard exists to keep a script out of.
+    # So the route is part of the credential.
+    frozenset({'use_kernel', 'oauth_client_id', 'oauth_client_secret'}),
+    frozenset({'use_kernel', 'oauth_client_id', 'oauth_jwt_key_file'}),
+    frozenset({'use_kernel', 'azure_client_id', 'azure_client_secret'}),
     # The driver refuses these itself, clearly and immediately, which is a
     # better message than this one; they are here so it gets to give it.
     frozenset({'username'}),

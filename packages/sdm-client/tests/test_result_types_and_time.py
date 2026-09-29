@@ -203,7 +203,7 @@ def test_the_composite_key_still_reaches_the_request():
             'PREDICT users.age FOR EACH users.user_id', schema
         ).materialize(indices=[1, 2], model=KumoRelational())
     assert request.predict_rows == 2
-    assert schema['events'].primary_key == ['user_id', 'eid']
+    assert schema['events'].primary_key == ('user_id', 'eid')
 
 
 def test_a_single_column_key_is_not_mentioned():

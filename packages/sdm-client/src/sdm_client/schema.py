@@ -370,10 +370,16 @@ class Table:
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
-            # Read before anything is assigned. A key spelled in a way this
-            # cannot read used to be rejected only after the table had taken
-            # it, leaving a table that could not be copied or sent.
-            _as_key_tuple(value)
+            # Read once, here, and what was read is what is kept. A key is
+            # consulted many times afterwards -- to check it, to type its
+            # columns, to copy the table -- and an iterable that empties on
+            # the first read arrived as "was given an empty primary key"
+            # about a key that named two columns. Reading it before anything
+            # is assigned also stops a key this cannot read from being taken
+            # and leaving a table that can be neither copied nor sent.
+            names = _as_key_tuple(value)
+            if value is not None and not isinstance(value, str):
+                value = names
             if value is None:
                 object.__setattr__(self, 'duplicate_keys', 0)
                 object.__setattr__(self, key, None)
@@ -989,23 +995,12 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
     `collections.abc.Sequence`, so asking that question rejected it.
 
     A set is not one of them. A composite key's columns are in an order, and
-    a set has none, so the key it named would differ between runs. Nor is a
-    generator: the key is read more than once -- to check it, to type its
-    columns, to copy the table -- and a generator is empty after the first,
-    which arrived as "was given an empty primary key" about a key that named
-    two columns.
+    a set has none, so the key it named would differ between runs.
     """
     if key is None:
         return ()
     if isinstance(key, str):
         return (key,)
-    if isinstance(key, Iterator):
-        raise StructuredDataError(
-            f'a primary key is read more than once, so it cannot be a '
-            f'{type(key).__name__}, which is empty after the first; pass '
-            f'list(...) of the names',
-            code='INVALID_REQUEST',
-        )
     if isinstance(key, (bytes, Mapping, AbstractSet)) or not isinstance(
         key, Iterable
     ):

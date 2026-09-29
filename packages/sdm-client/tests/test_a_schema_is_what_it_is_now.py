@@ -375,17 +375,43 @@ def test_a_shallow_copy_of_a_table_is_a_table_of_its_own_columns() -> None:
     assert schema['orders']['alt_id'].stype == 'numerical'
 
 
-def test_a_primary_key_cannot_be_a_generator() -> None:
-    """The key is read more than once -- to check it, to type its columns, to
-    copy the table -- and a generator is empty after the first, which arrived
-    as "was given an empty primary key" about a key that named two columns."""
+class _ReadableOnce:
+    """An iterable whose second read is empty, as a generator's is."""
+
+    def __init__(self, names):
+        self._names = iter(names)
+
+    def __iter__(self):
+        return self._names
+
+
+@pytest.mark.parametrize(
+    'named',
+    [
+        lambda: (name for name in ['order_id', 'alt_id']),
+        lambda: _ReadableOnce(['order_id', 'alt_id']),
+    ],
+    ids=['generator', 'one-shot-iterable'],
+)
+def test_a_key_is_read_once_and_what_was_read_is_kept(named) -> None:
+    """A key is consulted many times after it is set -- to check it, to type
+    its columns, to copy the table -- and an iterable that empties on the
+    first read arrived as "was given an empty primary key" about a key that
+    named two columns."""
     schema = with_alt([])
 
-    with pytest.raises(StructuredDataError) as raised:
-        schema['orders'].primary_key = (name for name in ['order_id', 'alt_id'])
+    schema['orders'].primary_key = named()
 
-    assert 'read more than once' in str(raised.value)
-    assert schema['orders'].primary_key == 'order_id'
+    assert schema['orders'].primary_key == ('order_id', 'alt_id')
+    assert schema['orders']['order_id'].stype == 'ID'
+    assert schema['orders']['alt_id'].stype == 'ID'
+    assert schema.snapshot()['orders'].primary_key == ('order_id', 'alt_id')
+
+
+def test_a_single_name_is_kept_as_the_name_it_is() -> None:
+    schema = with_alt([])
+    schema['orders'].primary_key = 'alt_id'
+    assert schema['orders'].primary_key == 'alt_id'
 
 
 @pytest.mark.parametrize(

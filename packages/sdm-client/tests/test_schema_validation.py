@@ -177,7 +177,7 @@ def test_a_composite_key_is_checked_across_its_columns():
     )
     built = Schema.from_data({'t': frame}, relationships=[])
     built['t'].primary_key = ['a', 'b']
-    assert built['t'].primary_key == ['a', 'b']
+    assert built['t'].primary_key == ('a', 'b')
     with pytest.raises(StructuredDataError):
         built['t'].primary_key = ['a']
 
@@ -284,7 +284,7 @@ def test_the_constructor_takes_a_composite_key_as_the_setter_does():
     built = Schema.from_data(
         {'t': frame}, primary_keys={'t': ['a', 'b']}, relationships=[]
     )
-    assert built['t'].primary_key == ['a', 'b']
+    assert built['t'].primary_key == ('a', 'b')
 
 
 def test_a_composite_key_naming_a_missing_column_is_refused():

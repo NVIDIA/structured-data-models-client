@@ -35,6 +35,7 @@ from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Question, Request
 from sdm_client.result import PredictionResult
+from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
     keys_in,
@@ -597,16 +598,21 @@ def _report_absent(
 def _names_its_rows(request: Request) -> bool:
     r"""Whether answers to this request will say which row each one is about.
 
-    An ``id`` is the entity a row names, so it is there when the request names
-    one. A single-table request over a frame with no key has none, and an
-    empty answer that carried the column anyway would be the same defect
-    inverted: a shape no other answer to that request has.
+    An ``id`` is the entity a row names, so it is there when the rows being
+    scored carry one -- which needs both a key in the schema and every one of
+    its columns in the half being sent. Asking only the schema gave an empty
+    answer an ``id`` where a full one had none, which is the defect this
+    exists to prevent, inverted.
     """
     table = request.entity_table
     if table is None:
         return False
     try:
-        return request.schema[table].primary_key is not None
+        key = _as_key_tuple(request.schema[table].primary_key)
+        if not key:
+            return False
+        scored = request.predict.instance_table.columns
+        return all(name in scored for name in key)
     except Exception:  # noqa: BLE001 - a schema too partial to ask is a no
         return False
 

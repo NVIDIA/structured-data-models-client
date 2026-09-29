@@ -205,15 +205,19 @@ def _key_dtypes(
 ) -> dict[str, str] | None:
     r"""The wire dtype of each key column, the way the adapter settles it.
 
-    The schema's own answer, widened by what the rows being scored hold, which
-    is the rule the adapter applies before encoding. Deriving one here instead
-    made this disagree with the encoder -- and made a *diagnostic* able to
-    refuse a request the adapter would have sent, by raising on a value the
-    dtype it chose could not hold.
+    The schema's own answer, widened by what the rows being scored hold,
+    through the adapter's own widening rule rather than a second one written
+    here. Two rules disagreed: a float column that is float only because
+    pandas has no integer holding a null is the integer it was declared to be,
+    which the adapter knows and a fresh inference does not -- so this chose
+    `float64` where the adapter chose `int64`, could not encode a wide value
+    the adapter encodes fine, and reported no leak where there was one.
 
     ``None`` where no dtype can be settled. Nothing is said in that case: this
     exists to warn about a leak, and a warning is never worth a failure.
     """
+    from sdm_client.adapters.tabular import _raw_dtype_of
+
     try:
         dtypes = {}
         for name in key:
@@ -221,7 +225,7 @@ def _key_dtypes(
             dtype = UNTYPED if column.untyped else column.dtype
             if name in predict.columns:
                 dtype = widen_tfm_dtype(
-                    (dtype, str(infer_tfm_dtype(predict[name])))
+                    (dtype, _raw_dtype_of(predict[name], dtype))
                 )
             dtypes[name] = dtype or 'string'
         return dtypes

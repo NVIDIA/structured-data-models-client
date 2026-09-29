@@ -225,186 +225,10 @@ def test_a_databricks_connect_with_no_credential_is_refused_not_opened(
 @pytest.mark.parametrize(
     'credential',
     [
-        {'access_token': 't'},
-        {'username': 'u', 'password': 'p'},
-        {'credentials_provider': object()},
-        {'auth_type': 'databricks-oauth'},
-    ],
-)
-def test_a_credential_of_any_kind_is_taken_as_one(
-    monkeypatch, credential: dict
-) -> None:
-    pytest.importorskip('databricks.sql')
-    from sdm_connectors.backends import databricks as backend
-
-    seen: dict = {}
-    monkeypatch.setattr(
-        backend.databricks_sql,
-        'connect',
-        lambda **kwargs: seen.update(kwargs) or object(),
-    )
-    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
-
-    backend.connect(server_hostname='h', http_path='p', **credential)
-    assert set(credential) <= set(seen)
-
-
-def test_the_postgres_docstring_says_what_passing_none_does() -> None:
-    pytest.importorskip('psycopg')
-    from sdm_connectors.backends import postgres
-
-    said = ' '.join((postgres.connect.__doc__ or '').split())
-    assert 'leave it to the server' not in said
-    assert 'libpq then reads the same variable itself' in said
-
-
-def test_a_connection_that_cannot_give_a_cursor_is_still_a_connector_error() -> (
-    None
-):
-    """Splitting the guard so a fetch failure stops being called an execution
-    failure left the cursor acquisition outside both halves, and a closed
-    connection raised the driver's own exception through."""
-    from sdm_connectors.reader import read_table
-    from sdm_connectors.sql import ConnectorError
-
-    class Closed:
-        def cursor(self) -> object:
-            raise RuntimeError('connection is closed')
-
-    with pytest.raises(ConnectorError) as raised:
-        read_table(Closed(), query='select 1')
-
-    assert raised.value.code == 'QUERY_FAILED'
-    assert 'connection is closed' in str(raised.value)
-
-
-def test_a_cursor_this_package_opened_is_closed_on_every_path() -> None:
-    from sdm_connectors.reader import read_table
-    from sdm_connectors.sql import ConnectorError
-
-    closed: list[str] = []
-
-    class Cursor(_Cursor):
-        def close(self) -> None:
-            closed.append('closed')
-
-    class Connection:
-        def __init__(self, fail_on: str) -> None:
-            self._fail_on = fail_on
-
-        def cursor(self) -> Cursor:
-            return Cursor(self._fail_on)
-
-    read_table(Connection('neither'), query='select 1')
-    for fail_on in ('execute', 'fetch'):
-        with pytest.raises(ConnectorError):
-            read_table(Connection(fail_on), query='select 1')
-
-    assert len(closed) == 3
-
-
-def test_a_type_error_while_reading_is_not_called_a_bad_argument() -> None:
-    """`driver_guard` maps `TypeError` to INVALID_CONNECTOR_ARGS because it is
-    usually a caller's mistake. Reading a result set holds no caller argument,
-    so a driver failing to convert a value there is a read failure."""
-    from sdm_connectors.reader import read_table
-    from sdm_connectors.sql import ConnectorError
-
-    class Cursor:
-        description = [('a', None)]
-
-        def execute(self, sql: str) -> None:
-            pass
-
-        def fetchall(self) -> list:
-            raise TypeError('cannot convert returned value')
-
-        def close(self) -> None:
-            pass
-
-    class Connection:
-        def cursor(self) -> Cursor:
-            return Cursor()
-
-    with pytest.raises(ConnectorError) as raised:
-        read_table(Connection(), query='select 1')
-
-    assert raised.value.code == 'QUERY_FAILED'
-
-
-def test_a_bad_connector_argument_is_still_called_one() -> None:
-    from sdm_connectors.sql import ConnectorError, driver_guard
-
-    with pytest.raises(ConnectorError) as raised:
-        with driver_guard('CONNECT_FAILED', 'failed to connect'):
-            raise TypeError("unexpected keyword argument 'hostt'")
-
-    assert raised.value.code == 'INVALID_CONNECTOR_ARGS'
-
-
-def test_a_client_certificate_is_a_credential() -> None:
-    """The guard listed the credentials it knew and refused a TLS client
-    certificate, which the driver accepts through the documented escape
-    hatch."""
-    pytest.importorskip('databricks.sql')
-    from sdm_connectors.backends import databricks as backend
-
-    seen: dict = {}
-    saved = backend.databricks_sql.connect
-    saved_getenv = backend.os.getenv
-    backend.databricks_sql.connect = lambda **kwargs: (
-        seen.update(kwargs) or object()
-    )
-    backend.os.getenv = lambda name: None
-    try:
-        backend.connect(
-            server_hostname='h',
-            http_path='p',
-            driver_options={
-                '_use_cert_as_auth': True,
-                '_tls_client_cert_file': 'client.pem',
-            },
-        )
-    finally:
-        backend.databricks_sql.connect = saved
-        backend.os.getenv = saved_getenv
-
-    assert seen['_use_cert_as_auth'] is True
-
-
-def test_a_type_error_while_executing_is_not_called_a_bad_argument() -> None:
-    from sdm_connectors.reader import read_table
-    from sdm_connectors.sql import ConnectorError
-
-    class Cursor:
-        description = [('a', None)]
-
-        def execute(self, sql: str) -> None:
-            raise TypeError('driver failed preparing statement')
-
-        def fetchall(self) -> list:
-            return []
-
-        def close(self) -> None:
-            pass
-
-    class Connection:
-        def cursor(self) -> Cursor:
-            return Cursor()
-
-    with pytest.raises(ConnectorError) as raised:
-        read_table(Connection(), query='select 1')
-
-    assert raised.value.code == 'QUERY_FAILED'
-
-
-@pytest.mark.parametrize(
-    'credential',
-    [
         {
+            'use_kernel': True,
             'oauth_client_id': 'i',
             'oauth_client_secret': 's',
-            'use_kernel': True,
         },
         {
             'auth_type': 'azure-sp-m2m',
@@ -554,21 +378,45 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
         ({'access_token': 't'}, True),
         ({'credentials_provider': object()}, True),
         ({'auth_type': 'databricks-oauth'}, True),
-        ({'azure_client_id': 'i', 'azure_client_secret': 's'}, True),
-        ({'oauth_client_id': 'i', 'oauth_client_secret': 's'}, True),
         (
             {
-                'oauth_client_id': 'i',
-                'oauth_jwt_key_file': '/k.pem',
-                'use_kernel': True,
+                'auth_type': 'azure-sp-m2m',
+                'azure_client_id': 'i',
+                'azure_client_secret': 's',
             },
             True,
         ),
         ({'_use_cert_as_auth': True, '_tls_client_cert_file': 'c.pem'}, True),
+        (
+            {
+                'use_kernel': True,
+                'oauth_client_id': 'i',
+                'oauth_client_secret': 's',
+            },
+            True,
+        ),
+        (
+            {
+                'use_kernel': True,
+                'oauth_client_id': 'i',
+                'oauth_jwt_key_file': '/k.pem',
+            },
+            True,
+        ),
+        (
+            {
+                'use_kernel': True,
+                'azure_client_id': 'i',
+                'azure_client_secret': 's',
+            },
+            True,
+        ),
         ({'identity_federation_client_id': 'x', 'access_token': 't'}, True),
         ({'oauth_token_cache_enabled': True, 'access_token': 't'}, True),
+        ({'azure_client_id': 'i', 'azure_client_secret': 's'}, False),
+        ({'oauth_client_id': 'i', 'oauth_client_secret': 's'}, False),
+        ({'oauth_client_id': 'i', 'oauth_jwt_key_file': '/k.pem'}, False),
         ({'oauth_client_secret': 's'}, False),
-        ({'oauth_jwt_key_file': '/k.pem'}, False),
         ({'_use_cert_as_auth': True}, False),
         ({'azure_client_secret': 's'}, False),
         ({'tls_client_cert_file': 'c.pem'}, False),

@@ -130,3 +130,36 @@ def test_an_empty_answer_carries_the_columns_a_join_is_written_against() -> (
     assert empty.merge(
         _frame(2), left_on='id', right_on='id', how='inner'
     ).empty
+
+
+def test_an_empty_answer_has_no_id_where_the_scored_half_carries_none() -> None:
+    """Whether answers name their rows needs both a key in the schema and
+    every one of its columns in the half being sent. Asking only the schema
+    gave an empty answer an `id` where a full one had none."""
+    from sdm_client import Schema
+    from sdm_client.client import _names_its_rows
+
+    keyed = _frame()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': keyed}, primary_keys={'instance': 'id'}
+        )
+
+        carrying = Request(
+            context=keyed,
+            predict=keyed.head(0)[['id', 'x']],
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+        without = Request(
+            context=keyed,
+            predict=keyed.head(0)[['x']],
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    assert _names_its_rows(carrying)
+    assert not _names_its_rows(without)

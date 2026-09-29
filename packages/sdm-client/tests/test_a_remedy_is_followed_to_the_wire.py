@@ -462,3 +462,50 @@ def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:
     )
     assert not overlapping
     assert not said
+
+
+def test_the_warning_uses_the_adapter_s_own_widening_rule() -> None:
+    """A float column that is float only because pandas has no integer holding
+    a null is the integer it was declared to be. The adapter knows that and a
+    fresh inference does not, so a second rule written here chose float64
+    where the adapter chose int64, could not encode a wide value the adapter
+    encodes fine, and reported no leak where there was one."""
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    context = pd.DataFrame(
+        {
+            'k': pd.array([2**53 + 1, 2, 3], dtype='int64'),
+            'x': [0.1, 0.2, 0.3],
+            'y': [0, 1, 0],
+        }
+    )
+    predict = pd.DataFrame(
+        {'k': pd.array([2.0, None], dtype='Float64'), 'x': [0.1, 0.2]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'k'}
+        )
+
+    with warnings.catch_warnings(record=True) as heard:
+        warnings.simplefilter('always')
+        request = Request(
+            context=context,
+            predict=predict,
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    envelope = next(
+        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+    )
+    halves = {}
+    for half in ('context', 'predict'):
+        table = envelope[half]['instance_table']
+        at = table['columns'].index('k')
+        halves[half] = {row[at] for row in table['rows']}
+
+    assert halves['context'] & halves['predict']
+    assert any('rows being scored' in str(one.message) for one in heard)
