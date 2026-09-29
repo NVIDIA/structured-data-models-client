@@ -240,3 +240,27 @@ def test_a_key_this_cannot_read_is_refused_before_the_table_takes_it() -> None:
 
     assert schema['orders'].primary_key == before
     schema.snapshot()
+
+
+def test_declaring_a_meaning_on_a_live_key_does_not_change_what_it_is() -> None:
+    """A key's meaning is settled by its being a key, and the schema said so
+    wherever it was asked -- but only re-derived when the keys changed, so
+    between declaring a meaning on a live key and the next such moment the
+    column described itself as whatever was declared."""
+    schema = with_alt([Relationship('orders', 'user_id', 'users', 'user_id')])
+
+    schema['orders']['user_id'].stype = 'categorical'
+    assert schema['orders']['user_id'].stype == 'ID'
+
+    schema['orders']['order_id'].stype = 'categorical'
+    assert schema['orders']['order_id'].stype == 'ID'
+
+    schema.relationships = []
+    assert schema['orders']['user_id'].stype == 'categorical'
+
+
+def test_a_meaning_declared_on_an_ordinary_column_is_kept() -> None:
+    schema = with_alt([])
+    schema['orders']['alt_id'].stype = 'categorical'
+    assert schema['orders']['alt_id'].stype == 'categorical'
+    assert schema['orders']['alt_id'].stype_declared

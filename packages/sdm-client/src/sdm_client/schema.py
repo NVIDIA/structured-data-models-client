@@ -176,6 +176,28 @@ class Column:
         object.__setattr__(self, key, value)
         if key == 'stype' and value == 'timestamp':
             self._adopt_as_time_column()
+        if key == 'stype' and value != 'ID':
+            self._stay_a_key_if_the_schema_joins_on_this()
+
+    def _stay_a_key_if_the_schema_joins_on_this(self) -> None:
+        r"""Put ``ID`` back if this column is one the schema joins on.
+
+        A key's meaning is settled by its being a key, and the schema says so
+        wherever it is asked -- but the answer was only re-derived when the
+        keys changed, so between declaring a meaning on a live key and the
+        next such moment the column read as whatever was declared. Nothing was
+        sent that way, because a request re-derives as it takes its copy; the
+        object simply described itself wrongly in the meantime.
+        """
+        table = getattr(self, '_table', None)
+        schema = getattr(table, '_schema', None) if table is not None else None
+        if schema is None:
+            if table is not None and self.name in _as_key_tuple(
+                getattr(table, 'primary_key', None)
+            ):
+                self._mark_as_key()
+            return
+        schema._mark_key_columns()
 
     def _adopt_as_time_column(self) -> None:
         r"""Let a column named as a timestamp order the table it belongs to.
