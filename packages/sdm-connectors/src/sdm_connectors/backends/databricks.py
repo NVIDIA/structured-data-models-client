@@ -76,7 +76,6 @@ _DOCUMENTED_KWARGS = frozenset(
         'password',
         'token_url',
         'session_configuration',
-        'tls_client_cert_file',
         'tls_verify',
         'use_cloud_fetch',
         'use_kernel',

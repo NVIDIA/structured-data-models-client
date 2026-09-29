@@ -35,8 +35,8 @@ from sdm_client import (
     Schema,
 )
 from sdm_client.client import _held_back
-from sdm_client.request import warn_of_rows_scored_from_their_own_answers
 from sdm_client.errors import StructuredDataError
+from sdm_client.request import warn_of_rows_scored_from_their_own_answers
 
 
 def _quietly(build):
@@ -203,6 +203,7 @@ def test_indices_naming_nothing_is_refused_in_this_package_s_own_voice() -> (
 
 
 def test_a_holdout_that_matched_nothing_says_so() -> None:
+    """Silence looked the same whether nothing went or everything did."""
     payload = {
         'schema': {'instance_table': {'primary_key': 'id'}},
         'context': {
@@ -214,13 +215,28 @@ def test_a_holdout_that_matched_nothing_says_so() -> None:
     }
     with warnings.catch_warnings(record=True) as heard:
         warnings.simplefilter('always')
-        assert _held_back(payload, [1, 2]) == 0
+        assert _held_back(payload, [90, 91]) == 0
     assert any('matched a row' in str(one.message) for one in heard)
 
+
+def test_a_holdout_written_as_an_integer_holds_back_a_float_key() -> None:
+    """The same entity written two ways is one entity. Comparing the
+    spellings held nothing back and said nothing, which is how a holdout came
+    to be a silent no-op."""
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'context': {
+            'instance_table': {
+                'columns': ['id', 'y'],
+                'rows': [[1.0, 0], [2.0, 1], [3.0, 0]],
+            }
+        },
+    }
     with warnings.catch_warnings(record=True) as heard:
         warnings.simplefilter('always')
-        assert _held_back(payload, [1.0, 2.0]) == 2
+        assert _held_back(payload, [1, 2]) == 2
     assert not [one for one in heard if 'matched a row' in str(one.message)]
+    assert payload['context']['instance_table']['rows'] == [[3.0, 0]]
 
 
 def test_a_holdout_given_as_one_string_is_refused_not_spelled_out() -> None:

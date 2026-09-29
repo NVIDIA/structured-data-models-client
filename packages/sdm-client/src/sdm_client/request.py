@@ -43,13 +43,8 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
-from sdm_client.wire import (
-    UNTYPED,
-    infer_tfm_dtype,
-    is_container,
-    widen_tfm_dtype,
-)
-from sdm_client.wire.tables import encode_table
+from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
+from sdm_client.wire.keys import keys_from_a_frame
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -200,60 +195,6 @@ def _judge_a_context_that_teaches_nothing(
     )
 
 
-def _key_dtypes(
-    table: Any, key: Sequence[str], predict: pd.DataFrame
-) -> dict[str, str] | None:
-    r"""The wire dtype of each key column, the way the adapter settles it.
-
-    The schema's own answer, widened by what the rows being scored hold,
-    through the adapter's own widening rule rather than a second one written
-    here. Two rules disagreed: a float column that is float only because
-    pandas has no integer holding a null is the integer it was declared to be,
-    which the adapter knows and a fresh inference does not -- so this chose
-    `float64` where the adapter chose `int64`, could not encode a wide value
-    the adapter encodes fine, and reported no leak where there was one.
-
-    ``None`` where no dtype can be settled. Nothing is said in that case: this
-    exists to warn about a leak, and a warning is never worth a failure.
-    """
-    from sdm_client.adapters.tabular import _raw_dtype_of
-
-    try:
-        dtypes = {}
-        for name in key:
-            column = table.columns[name]
-            dtype = UNTYPED if column.untyped else column.dtype
-            if name in predict.columns:
-                dtype = widen_tfm_dtype(
-                    (dtype, _raw_dtype_of(predict[name], dtype))
-                )
-            dtypes[name] = dtype or 'string'
-        return dtypes
-    except Exception:  # noqa: BLE001 - a warning is never worth a failure
-        return None
-
-
-def _keys_as_the_wire_spells_them(
-    frame: pd.DataFrame, key: Sequence[str], dtypes: Mapping[str, str]
-) -> list[tuple[Any, ...]]:
-    r"""``frame``'s keys, written the way they will be written on the wire.
-
-    Through the encoder that writes them rather than an imitation of it. Two
-    halves can disagree in python about whether a key is ``1``, ``1.0`` or
-    ``'1'`` and agree completely once each is written from its column's
-    declared type -- and the rules are not guessable: an integer past the
-    JS-safe range is written as text and a smaller one as a number, in the
-    same column.
-    """
-    try:
-        encoded = encode_table(
-            frame[list(key)], {name: dtypes[name] for name in key}
-        )
-    except Exception:  # noqa: BLE001 - a warning is never worth a failure
-        return []
-    return [tuple(row) for row in encoded['rows']]
-
-
 def warn_of_rows_scored_from_their_own_answers(request: Request) -> None:
     r"""Say when the rows being scored sit in the context with their answers.
 
@@ -314,15 +255,15 @@ def _warn_of_rows_scored_from_their_own_answers(
     # way, so values that differ here are the same value by the time the model
     # reads them. The column's dtype is settled from both halves together, for
     # the same reason.
-    dtypes = _key_dtypes(schema[entity_table], key, predict)
-    if dtypes is None:
+    table = schema[entity_table]
+    answers = set(keys_from_a_frame(answered, key, table))
+    if not answers:
         return
-    answers = set(_keys_as_the_wire_spells_them(answered, key, dtypes))
     # Rows, not keys: the sentence counts rows being scored, and two rows
     # asking about one entity are two rows whose answer is being shown.
     shown = sum(
         1
-        for named in _keys_as_the_wire_spells_them(predict, key, dtypes)
+        for named in keys_from_a_frame(predict, key, table)
         if named in answers
     )
     if not shown:

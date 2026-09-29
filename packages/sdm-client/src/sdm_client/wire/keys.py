@@ -13,7 +13,7 @@ client, which should have to ask only whether two sets of rows overlap.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.schema import _as_key_tuple
@@ -120,10 +120,53 @@ def _named_by(values: Iterable[Any]) -> str:
     never meet, and the warning would go quiet on precisely the warehouse keys
     it matters most for.
 
+    A whole number written as a float is the same entity as the integer: a
+    context typed `int64` pins entity `1` and a scored frame of floats sends
+    `1.0`, and the endpoint answers the second with the first's id. Comparing
+    the spellings called that two entities, and a session scored rows its
+    context answers without saying so.
+
     A composite key becomes a tuple of its parts rather than nothing at all,
     which is what reading only single-column keys amounted to.
     """
-    return repr(tuple(str(value) for value in values))
+    return repr(tuple(_one_spelling(value) for value in values))
+
+
+def _one_spelling(value: Any) -> str:
+    r"""A value as the name of an entity, not as the type that carried it."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def keys_from_a_frame(frame: Any, key: Sequence[str], table: Any) -> list[Any]:
+    r"""``frame``'s keys, written the way the wire will write them.
+
+    The other side of every comparison here is read from an encoded envelope,
+    so a frame read raw does not meet it: an entity held as ``1.0`` in a frame
+    is ``1`` on the wire, and the two would never match -- which is how a
+    session came to score rows its pinned context answers without saying so.
+
+    Through the encoder that writes the request, with the dtype the adapter
+    settles, rather than an imitation of either. Empty where no dtype can be
+    settled or the encoding fails: every caller is a warning, and a warning is
+    never worth a failure.
+    """
+    from sdm_client.adapters.tabular import _raw_dtype_of
+    from sdm_client.wire import UNTYPED, widen_tfm_dtype
+    from sdm_client.wire.tables import encode_table
+
+    try:
+        dtypes = {}
+        for name in key:
+            column = table.columns[name]
+            dtype = UNTYPED if column.untyped else column.dtype
+            dtype = widen_tfm_dtype((dtype, _raw_dtype_of(frame[name], dtype)))
+            dtypes[name] = dtype or 'string'
+        encoded = encode_table(frame[list(key)], dtypes)
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return []
+    return [_named_by(row) for row in encoded['rows']]
 
 
 def scored_rows(request: Request, *, with_anchor: bool = False) -> list[Any]:
@@ -143,10 +186,7 @@ def scored_rows(request: Request, *, with_anchor: bool = False) -> list[Any]:
     names = _as_key_tuple(getattr(table, 'primary_key', None))
     if frame is None or not names or any(n not in frame for n in names):
         return []
-    return [
-        _named_by(values)
-        for values in zip(*(frame[n] for n in names), strict=True)
-    ]
+    return keys_from_a_frame(frame, names, table)
 
 
 def scored_keys(

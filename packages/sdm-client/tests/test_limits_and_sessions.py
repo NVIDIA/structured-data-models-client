@@ -691,3 +691,45 @@ def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
         )
 
     assert not [item for item in caught if 'being scored' in str(item.message)]
+
+
+def test_the_session_warning_knows_one_entity_written_two_ways():
+    """The pinned key is read from an encoded envelope and the scored key from
+    a frame, so an entity pinned as `1` and scored as `1.0` never met -- and a
+    session scored rows its context answers without saying so."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.client import _warn_scoring_what_was_pinned
+    from sdm_client.wire.keys import _named_by
+
+    context = pd.DataFrame(
+        {'id': [1, 2, 3], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'id'}
+        )
+
+    def warned_for(ids):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = Request(
+                context=context,
+                predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
+                schema=schema,
+                target='y',
+                task='classification',
+            )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            _warn_scoring_what_was_pinned(
+                request, frozenset({_named_by([1])}), False
+            )
+        return bool(caught)
+
+    for named in ([1], [1.0], pd.array([1.0], dtype='Float64'), ['1']):
+        assert warned_for(named)
+    for named in ([9], [9.0], [1.5]):
+        assert not warned_for(named)
