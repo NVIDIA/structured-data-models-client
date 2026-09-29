@@ -12,9 +12,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
-from sdm_relational_engine.rfm import Graph
+from sdm_relational_engine.rfm import Graph, KumoRelational
 
 try:
+    import psycopg
     from sdm_connectors import connect, read
     from sdm_relational_engine.rfm.backend.postgres import PostgresSampler
 except ImportError:
@@ -119,7 +120,7 @@ def postgres_schema(
                 f'INSERT INTO "{schema}".orders '
                 'SELECT value, 1 + (value % 20), '
                 "TIMESTAMP '2025-01-01' + value * INTERVAL '1 day' "
-                'FROM generate_series(1, 100) AS value'
+                'FROM generate_series(1, 1000) AS value'
             )
             cursor.execute(
                 f'INSERT INTO "{schema}".orders VALUES '
@@ -454,3 +455,48 @@ def test_composite_postgres_constraints_fail_loudly(
             tables=['unique_parent', 'composite_child'],
             verbose=False,
         )
+
+
+_COUNT_ORDERS = (
+    'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH customers.customer_id'
+)
+
+
+def _materialize(graph: Graph, query: str) -> None:
+    model = KumoRelational(graph, verbose=False)
+    task = model._get_task_table(
+        model._parse_query(query), indices=[1, 2], random_seed=0
+    )
+    model.materialize_task(task, random_seed=0, verbose=False)
+
+
+def test_reading_leaves_no_transaction_or_locks_behind(
+    postgres_schema: tuple[str, str],
+) -> None:
+    """Without autocommit, psycopg keeps the first read's transaction, with its
+    locks, until a commit, and one failed read then refuses every later one.
+    """
+    dsn, schema = postgres_schema
+    connection = connect('postgres', dsn)
+    other = connect('postgres', dsn, autocommit=True)
+    try:
+        graph = Graph.from_postgres(
+            connection,
+            tables=['customers', 'orders'],
+            schema=schema,
+            verbose=False,
+        )
+        _materialize(graph, _COUNT_ORDERS)
+        idle = psycopg.pq.TransactionStatus.IDLE
+        assert connection.info.transaction_status == idle
+        # A read left open would hold its locks and block this writer.
+        other.execute("SET lock_timeout = '2s'")
+        other.execute(f'ALTER TABLE "{schema}".orders ADD COLUMN extra INT')
+
+        other.execute(f'ALTER TABLE "{schema}".orders RENAME TO gone')
+        with pytest.raises(psycopg.errors.UndefinedTable):
+            _materialize(graph, _COUNT_ORDERS)
+        assert connection.execute('SELECT 1').fetchone() == (1,)
+    finally:
+        connection.close()
+        other.close()

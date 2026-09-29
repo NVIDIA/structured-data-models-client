@@ -1053,6 +1053,7 @@ class Graph:
             PostgresTable,
             connect,
         )
+        from sdm_relational_engine.rfm.backend.postgres.table import _reading
 
         internal_connection = False
         if not isinstance(connection, Connection):
@@ -1065,7 +1066,7 @@ class Graph:
 
         try:
             if schema is None:
-                with connection.cursor() as cursor:
+                with _reading(connection) as cursor:
                     cursor.execute('SELECT current_schema()')
                     result = cursor.fetchone()
                     assert result is not None
@@ -1078,7 +1079,7 @@ class Graph:
                 )
 
             if tables is None:
-                with connection.cursor() as cursor:
+                with _reading(connection) as cursor:
                     cursor.execute(
                         'SELECT table_name\n'
                         'FROM information_schema.tables\n'

@@ -97,6 +97,11 @@ The first release is being assembled. Nothing here has shipped yet.
   tables.** `Schema.from_source` compared the engine's qualified name for the
   referenced table with the caller's bare one, so no declared key matched and
   links fell back to name matching.
+- **Reading a Postgres database held a transaction open.** Without
+  autocommit, psycopg keeps the first statement's transaction, and its locks,
+  until a commit, so a graph kept writers to its tables waiting, and one failed
+  read made every later one fail too. Each read of the Postgres backend now
+  ends its own transaction, and the Lakebase notebook connects with autocommit.
 - **A table with no key was sampled in whatever order the engine read it.**
   Neighbours are kept newest first, and a keyless table had nothing after the
   timestamp to order by, while the rows kept came back unordered. Rows sharing

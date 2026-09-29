@@ -14,6 +14,7 @@ from predictive_query.schema.typing import Dtype
 from sdm_relational_engine.rfm.backend.postgres import PostgresTable
 from sdm_relational_engine.rfm.backend.postgres.table import (
     _frame,
+    _reading,
     _sanitize_postgres_frame,
 )
 from sdm_relational_engine.rfm.base import DataBackend, SQLSampler
@@ -144,7 +145,7 @@ class PostgresSampler(SQLSampler):
         frames: list[pd.DataFrame] = []
         offset = 0
         for chunk in self._chunk_rows(rows):
-            with self._connection.cursor() as cursor:
+            with _reading(self._connection) as cursor:
                 cursor.execute(sql, (_dumps(chunk),))
                 frame = _frame(cursor)
             if '__KUMO_BATCH__' in frame:
@@ -219,7 +220,7 @@ class PostgresSampler(SQLSampler):
             )
         sql = '\nUNION ALL\n'.join(selects)
         out: dict[str, tuple[pd.Timestamp, pd.Timestamp]] = {}
-        with self._connection.cursor() as cursor:
+        with _reading(self._connection) as cursor:
             cursor.execute(sql)
             for index, minimum, maximum in cursor.fetchall():
                 out[table_names[int(index)]] = (
@@ -262,7 +263,7 @@ class PostgresSampler(SQLSampler):
             if filters:
                 sql += f'\nWHERE {" AND ".join(filters)}'
             sql += f'\nORDER BY random()\nLIMIT {num_rows}'
-            with self._connection.cursor() as cursor:
+            with _reading(self._connection) as cursor:
                 if random_seed is not None:
                     cursor.execute(
                         'SELECT setseed(%s)',

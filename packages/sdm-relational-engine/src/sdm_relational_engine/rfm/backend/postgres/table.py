@@ -5,7 +5,8 @@
 import json
 import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 import pandas as pd
@@ -23,6 +24,22 @@ from sdm_relational_engine.rfm.base import (
     Table,
 )
 from sdm_relational_engine.rfm.base.table import MissingType
+
+
+@contextmanager
+def _reading(connection: Connection) -> Iterator[Any]:
+    r"""A cursor for one read that ends its own transaction.
+
+    Without autocommit, psycopg keeps the first read's transaction, and its
+    locks, open until a commit, and one failed statement then refuses every
+    later one. Inside a transaction the caller opened, this is a savepoint.
+    """
+    if connection.autocommit:
+        with connection.cursor() as cursor:
+            yield cursor
+    else:
+        with connection.transaction(), connection.cursor() as cursor:
+            yield cursor
 
 
 def _frame(cursor: Any) -> pd.DataFrame:
@@ -104,7 +121,7 @@ class PostgresTable(Table):
         end_time_column: str | None = None,
     ) -> None:
         if schema is None:
-            with connection.cursor() as cursor:
+            with _reading(connection) as cursor:
                 cursor.execute('SELECT current_schema()')
                 result = cursor.fetchone()
                 assert result is not None
@@ -141,7 +158,7 @@ class PostgresTable(Table):
         return DataBackend.POSTGRES
 
     def _get_source_columns(self) -> list[SourceColumn]:
-        with self._connection.cursor() as cursor:
+        with _reading(self._connection) as cursor:
             cursor.execute(
                 'SELECT c.column_name, c.data_type, c.udt_name,\n'
                 '       c.numeric_scale, c.is_nullable, c.table_schema,\n'
@@ -235,7 +252,7 @@ class PostgresTable(Table):
         ]
 
     def _get_source_foreign_keys(self) -> list[SourceForeignKey]:
-        with self._connection.cursor() as cursor:
+        with _reading(self._connection) as cursor:
             cursor.execute(
                 'SELECT tc.constraint_name, kcu.column_name,\n'
                 '       target_kcu.table_schema, target_kcu.table_name,\n'
@@ -296,7 +313,7 @@ class PostgresTable(Table):
 
     def _get_source_sample_df(self) -> pd.DataFrame:
         columns = [quote_ident(col) for col in self._source_column_dict]
-        with self._connection.cursor() as cursor:
+        with _reading(self._connection) as cursor:
             cursor.execute(
                 f'SELECT {", ".join(columns)} '
                 f'FROM {self._quoted_source_name} '
@@ -315,7 +332,7 @@ class PostgresTable(Table):
         )
 
     def _get_num_rows(self) -> int | None:
-        with self._connection.cursor() as cursor:
+        with _reading(self._connection) as cursor:
             cursor.execute(f'SELECT COUNT(*) FROM {self._quoted_source_name}')
             result = cursor.fetchone()
             assert result is not None
@@ -331,7 +348,7 @@ class PostgresTable(Table):
         projections = [
             f'{column.expr} AS {quote_ident(column.name)}' for column in columns
         ]
-        with self._connection.cursor() as cursor:
+        with _reading(self._connection) as cursor:
             cursor.execute(
                 f'SELECT {", ".join(projections)} '
                 f'FROM {self._quoted_source_name} '
