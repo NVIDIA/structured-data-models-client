@@ -20,6 +20,7 @@ everything.
 from __future__ import annotations
 
 import warnings
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -342,6 +343,69 @@ def test_the_leak_warning_needs_every_part_of_a_composite_key() -> None:
     assert not heard_for(pd.DataFrame({'id': [1], 'x': [0.9]}))
     assert not heard_for(pd.DataFrame({'tenant': ['z'], 'id': [9], 'x': [0.9]}))
     assert heard_for(pd.DataFrame({'tenant': ['a'], 'id': [1], 'x': [0.9]}))
+
+
+@pytest.mark.parametrize(
+    ('context_keys', 'predict_keys'),
+    [
+        ([1, 2, 3], [1]),
+        ([1, 2, 3], ['1']),
+        ([1.0, 2.0, 3.0], [1]),
+        ([1, 2, 3], [1.0]),
+        ([2**60 + 1, 2, 3], [2**60 + 1]),
+        ([2**60 + 1, 2, 3], [str(2**60 + 1)]),
+        (['a', 'b', 'c'], ['a']),
+        (['a', 'b', 'c'], ['z']),
+        ([1, 2, 3], [9]),
+        (
+            [Decimal('1.50'), Decimal('2'), Decimal('3')],
+            [Decimal('1.5')],
+        ),
+    ],
+)
+def test_the_warning_agrees_with_the_wire_on_every_way_of_writing_a_key(
+    context_keys: list, predict_keys: list
+) -> None:
+    """Approximating the encoder with `str()` disagreed with it: a key held as
+    1.0 in the context and 1 in the rows being scored reaches the model as one
+    value, and nothing was said. The encoder is asked instead of imitated."""
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    context = pd.DataFrame(
+        {
+            'k': context_keys,
+            'x': [0.1] * len(context_keys),
+            'y': [index % 2 for index in range(len(context_keys))],
+        }
+    )
+    predict = pd.DataFrame({'k': predict_keys, 'x': [0.1] * len(predict_keys)})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'k'}
+        )
+
+    with warnings.catch_warnings(record=True) as heard:
+        warnings.simplefilter('always')
+        request = Request(
+            context=context,
+            predict=predict,
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+    warned = any('rows being scored' in str(one.message) for one in heard)
+
+    envelope = next(
+        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+    )
+    halves = {}
+    for half in ('context', 'predict'):
+        table = envelope[half]['instance_table']
+        at = table['columns'].index('k')
+        halves[half] = {row[at] for row in table['rows']}
+
+    assert warned is bool(halves['context'] & halves['predict'])
 
 
 def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:

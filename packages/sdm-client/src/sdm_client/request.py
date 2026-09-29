@@ -44,7 +44,7 @@ from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
-from sdm_client.wire.dtypes import _is_missing
+from sdm_client.wire.tables import encode_table
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -195,14 +195,22 @@ def _judge_a_context_that_teaches_nothing(
     )
 
 
-def _as_the_wire_spells(values: Any) -> tuple[str, ...]:
-    r"""One key, written the way it will be written on the wire.
+def _keys_as_the_wire_spells_them(
+    frame: pd.DataFrame, key: Sequence[str], dtypes: Mapping[str, str]
+) -> list[tuple[Any, ...]]:
+    r"""``frame``'s keys, written the way they will be written on the wire.
 
-    Every value the contract carries is encoded from its column's declared
-    type, so two halves that disagree in python about whether a key is ``1``
-    or ``'1'`` agree completely by the time the model reads them.
+    Through the encoder that writes them rather than an imitation of it. Two
+    halves can disagree in python about whether a key is ``1``, ``1.0`` or
+    ``'1'`` and agree completely once each is written from its column's
+    declared type -- and the rules are not guessable: an integer past the
+    JS-safe range is written as text and a smaller one as a number, in the
+    same column.
     """
-    return tuple('' if _is_missing(value) else str(value) for value in values)
+    encoded = encode_table(
+        frame[list(key)], {name: dtypes[name] for name in key}
+    )
+    return [tuple(row) for row in encoded['rows']]
 
 
 def _warn_of_rows_scored_from_their_own_answers(
@@ -233,17 +241,27 @@ def _warn_of_rows_scored_from_their_own_answers(
     answered = context[context[target].notna()]
     if answered.empty:
         return
-    # Compared as the wire spells them. A key column whose two halves hold
-    # different python types -- 1 in the context and '1' in the rows being
-    # scored -- is one column, encoded one way, so the values that differ here
-    # are the same value by the time the model reads them.
-    answers = {_as_the_wire_spells(row) for row in answered[key].to_numpy()}
+    # Compared as the wire spells them, through the encoder that writes them.
+    # A key column whose two halves hold different python types -- 1 in the
+    # context and '1' in the rows being scored -- is one column written one
+    # way, so values that differ here are the same value by the time the model
+    # reads them. The column's dtype is settled from both halves together, for
+    # the same reason.
+    dtypes = {
+        name: str(
+            infer_tfm_dtype(
+                pd.concat([context[name], predict[name]], ignore_index=True)
+            )
+        )
+        for name in key
+    }
+    answers = set(_keys_as_the_wire_spells_them(answered, key, dtypes))
     # Rows, not keys: the sentence counts rows being scored, and two rows
     # asking about one entity are two rows whose answer is being shown.
     shown = sum(
         1
-        for row in predict[key].to_numpy()
-        if _as_the_wire_spells(row) in answers
+        for named in _keys_as_the_wire_spells_them(predict, key, dtypes)
+        if named in answers
     )
     if not shown:
         return
