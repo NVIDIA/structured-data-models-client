@@ -218,13 +218,16 @@ def _warn_of_rows_scored_from_their_own_answers(
     answered = context[context[target].notna()]
     if answered.empty:
         return
-    shown = set(map(tuple, answered[key].to_numpy())) & set(
-        map(tuple, predict[key].to_numpy())
+    answers = set(map(tuple, answered[key].to_numpy()))
+    # Rows, not keys: the sentence counts rows being scored, and two rows
+    # asking about one entity are two rows whose answer is being shown.
+    shown = sum(
+        1 for named in map(tuple, predict[key].to_numpy()) if named in answers
     )
     if not shown:
         return
     warnings.warn(
-        f'{len(shown)} of the {len(predict)} rows being scored are also in '
+        f'{shown} of the {len(predict)} rows being scored are also in '
         f'context, carrying the {target!r} being asked for, so the model is '
         f'being shown the answers to rows it is being asked about. Drop them '
         f'from context, or gather the request with materialize(), which '

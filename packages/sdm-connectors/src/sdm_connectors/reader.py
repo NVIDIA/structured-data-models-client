@@ -179,7 +179,12 @@ def read_table(
     try:
         with driver_guard('QUERY_FAILED', 'query execution failed', sql=sql):
             cursor.execute(sql)
-        with driver_guard('QUERY_FAILED', 'reading the result failed', sql=sql):
+        with driver_guard(
+            'QUERY_FAILED',
+            'reading the result failed',
+            sql=sql,
+            type_error_is_the_caller_s=False,
+        ):
             # Arrow first, every time. A driver's own pandas conversion decides
             # for itself what a wide integer becomes, and DuckDB's `fetchdf`
             # turns a HUGEINT -- which is what `sum(BIGINT)` widens to -- into a

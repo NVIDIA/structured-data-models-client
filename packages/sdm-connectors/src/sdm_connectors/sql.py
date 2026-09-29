@@ -120,6 +120,7 @@ def driver_guard(
     context: str,
     *,
     missing_as_not_found: bool = False,
+    type_error_is_the_caller_s: bool = True,
     **details: Any,
 ) -> Iterator[None]:
     r"""Translate driver exceptions into ConnectorError with a stable code.
@@ -129,15 +130,20 @@ def driver_guard(
     broken driver installation must not be reported as a connect/query/read
     failure. The original driver exception stays chained as ``__cause__``.
     TypeError maps to INVALID_CONNECTOR_ARGS (a deterministic caller error,
-    never worth retrying); FileNotFoundError maps to NOT_FOUND only where the
-    guarded region reads data by path (``missing_as_not_found=True``).
+    never worth retrying) -- except where the guarded region holds no caller
+    argument at all, as reading a result set does: there a driver's own
+    ``TypeError`` converting a value is a read failure and saying "invalid
+    connector args" names something the caller did not do
+    (``type_error_is_the_caller_s=False``). FileNotFoundError maps to NOT_FOUND
+    only where the guarded region reads data by path
+    (``missing_as_not_found=True``).
     """
     try:
         yield
     except (ConnectorError, ImportError):
         raise
     except Exception as error:
-        if isinstance(error, TypeError):
+        if type_error_is_the_caller_s and isinstance(error, TypeError):
             mapped = 'INVALID_CONNECTOR_ARGS'
         elif missing_as_not_found and isinstance(error, FileNotFoundError):
             mapped = 'NOT_FOUND'

@@ -301,3 +301,72 @@ def test_a_cursor_this_package_opened_is_closed_on_every_path() -> None:
             read_table(Connection(fail_on), query='select 1')
 
     assert len(closed) == 3
+
+
+def test_a_type_error_while_reading_is_not_called_a_bad_argument() -> None:
+    """`driver_guard` maps `TypeError` to INVALID_CONNECTOR_ARGS because it is
+    usually a caller's mistake. Reading a result set holds no caller argument,
+    so a driver failing to convert a value there is a read failure."""
+    from sdm_connectors.reader import read_table
+    from sdm_connectors.sql import ConnectorError
+
+    class Cursor:
+        description = [('a', None)]
+
+        def execute(self, sql: str) -> None:
+            pass
+
+        def fetchall(self) -> list:
+            raise TypeError('cannot convert returned value')
+
+        def close(self) -> None:
+            pass
+
+    class Connection:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    with pytest.raises(ConnectorError) as raised:
+        read_table(Connection(), query='select 1')
+
+    assert raised.value.code == 'QUERY_FAILED'
+
+
+def test_a_bad_connector_argument_is_still_called_one() -> None:
+    from sdm_connectors.sql import ConnectorError, driver_guard
+
+    with pytest.raises(ConnectorError) as raised:
+        with driver_guard('CONNECT_FAILED', 'failed to connect'):
+            raise TypeError("unexpected keyword argument 'hostt'")
+
+    assert raised.value.code == 'INVALID_CONNECTOR_ARGS'
+
+
+def test_a_client_certificate_is_a_credential() -> None:
+    """The guard listed the credentials it knew and refused a TLS client
+    certificate, which the driver accepts through the documented escape
+    hatch."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+
+    seen: dict = {}
+    saved = backend.databricks_sql.connect
+    saved_getenv = backend.os.getenv
+    backend.databricks_sql.connect = lambda **kwargs: (
+        seen.update(kwargs) or object()
+    )
+    backend.os.getenv = lambda name: None
+    try:
+        backend.connect(
+            server_hostname='h',
+            http_path='p',
+            driver_options={
+                '_use_cert_as_auth': True,
+                '_tls_client_cert_file': 'client.pem',
+            },
+        )
+    finally:
+        backend.databricks_sql.connect = saved
+        backend.os.getenv = saved_getenv
+
+    assert seen['_use_cert_as_auth'] is True

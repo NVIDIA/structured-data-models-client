@@ -130,8 +130,10 @@ def _a_conversion_that_works(value: object) -> str:
     if not isinstance(value, str):
         return ''
     try:
-        pd.Timestamp(value)
+        converted = pd.Timestamp(value)
     except Exception:
+        return ''
+    if converted is pd.NaT:
         return ''
     return f'; try pd.Timestamp({value!r})'
 

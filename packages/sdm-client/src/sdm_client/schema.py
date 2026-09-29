@@ -124,23 +124,26 @@ class Column:
 
         A key typed from its dtype alone becomes ``numerical``, the model
         stores it as a float, and the join against an integer key fails
-        downstream.
+        downstream. That is true of a column the caller called ``numerical``
+        too: what a key means is settled by its being a key, not by a
+        preference, so a declared meaning is overridden here rather than
+        honoured -- and, like an inferred one, recorded so it comes back if
+        the column stops being a key.
 
-        This is inference, not a declaration, so it goes around
-        ``__setattr__``: routed through it the schema's own marking set
-        ``stype_declared``, becoming indistinguishable from a meaning the
-        caller chose, and what inference had decided was gone with nothing to
-        restore. A meaning the caller did choose is left exactly as it is.
+        This goes around ``__setattr__``: routed through it the schema's own
+        marking set ``stype_declared``, becoming indistinguishable from a
+        meaning the caller chose, and what had been decided was gone with
+        nothing to restore.
         """
-        if self.stype_declared or self.stype == 'ID':
+        if self.stype == 'ID':
             return
         object.__setattr__(self, '_stype_before_key', self.stype)
         object.__setattr__(self, 'stype', 'ID')
 
     def _release_as_key(self) -> None:
-        r"""Give back the meaning the values had, the schema no longer joining
-        on this column."""
-        if self.stype_declared or self._stype_before_key is None:
+        r"""Give back the meaning this column had, the schema no longer joining
+        on it."""
+        if self._stype_before_key is None:
             return
         object.__setattr__(self, 'stype', self._stype_before_key)
         object.__setattr__(self, '_stype_before_key', None)
@@ -327,6 +330,10 @@ class Table:
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
+            # Read before anything is assigned. A key spelled in a way this
+            # cannot read used to be rejected only after the table had taken
+            # it, leaving a table that could not be copied or sent.
+            _as_key_tuple(value)
             if value is None:
                 object.__setattr__(self, 'duplicate_keys', 0)
                 object.__setattr__(self, key, None)
@@ -629,7 +636,14 @@ class Schema:
         link)` reaches it without passing the setter, and this is the question
         a caller runs to find out whether their schema holds together -- it
         should not be the one place that does not look.
+
+        Which columns are keys is re-derived first. `tables` and a table's
+        `columns` are ordinary dictionaries, so a table or a column replaced
+        through one arrives never having been asked, and a relationship key
+        left typed ``numerical`` would otherwise pass this and be sent as a
+        float.
         """
+        self._mark_key_columns()
         for table in self.tables.values():
             for column in table.columns.values():
                 column.check_consistent()

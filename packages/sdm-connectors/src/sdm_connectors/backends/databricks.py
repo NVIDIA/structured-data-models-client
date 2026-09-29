@@ -82,7 +82,10 @@ _CREDENTIAL_ARGS = frozenset(
         'oauth_client_id',
         'oauth_client_secret',
         'password',
+        'tls_client_cert_file',
         'username',
+        '_use_cert_as_auth',
+        '_tls_client_cert_file',
     }
 )
 

@@ -24,6 +24,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import Relationship, Schema
+from sdm_client.errors import StructuredDataError
 
 RNG = np.random.default_rng(0)
 USERS = pd.DataFrame({'user_id': range(60), 'age': RNG.integers(20, 70, 60)})
@@ -178,3 +179,64 @@ def test_a_table_on_its_own_answers_for_its_own_key() -> None:
 
     assert table['alt_id'].stype == 'ID'
     assert table['order_id'].stype == 'numerical'
+
+
+def test_a_declared_meaning_does_not_survive_becoming_a_key() -> None:
+    """What a key column means is settled by its being a key. Honouring a
+    declared `numerical` there sent a join key as a float, which is the
+    failure the marking exists to prevent."""
+    schema = with_alt([])
+    schema['orders']['alt_id'].stype = 'numerical'
+
+    schema['orders'].primary_key = 'alt_id'
+    assert schema['orders']['alt_id'].stype == 'ID'
+
+    schema['orders'].primary_key = 'order_id'
+    assert schema['orders']['alt_id'].stype == 'numerical'
+
+
+def test_a_declared_meaning_does_not_survive_a_link_either() -> None:
+    schema = with_alt([])
+    schema['orders']['user_id'].stype = 'numerical'
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+    assert schema['orders']['user_id'].stype == 'ID'
+
+    schema.relationships = []
+    assert schema['orders']['user_id'].stype == 'numerical'
+
+
+def test_a_key_column_replaced_through_the_columns_dict_is_asked_again() -> (
+    None
+):
+    """`tables` and a table's `columns` are ordinary dictionaries, so a table
+    or a column replaced through one arrives never having been asked, and
+    `check_consistent()` is where a caller asks whether their schema holds."""
+    from sdm_client.schema import Column
+
+    schema = with_alt([Relationship('orders', 'user_id', 'users', 'user_id')])
+    schema['orders'].columns['user_id'] = Column(
+        'user_id', 'int64', 'numerical'
+    )
+    assert schema['orders']['user_id'].stype == 'numerical'
+
+    schema.check_consistent()
+
+    assert schema['orders']['user_id'].stype == 'ID'
+
+
+def test_a_key_this_cannot_read_is_refused_before_the_table_takes_it() -> None:
+    """The refusal ran after the assignment, leaving a table that could not be
+    copied or sent and a `check_consistent()` that passed anyway."""
+    schema = with_alt([])
+    before = schema['orders'].primary_key
+
+    with pytest.raises(StructuredDataError):
+        schema['orders'].primary_key = {'alt_id'}
+
+    assert schema['orders'].primary_key == before
+    schema.snapshot()

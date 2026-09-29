@@ -259,3 +259,45 @@ def test_the_limits_page_records_the_default_the_code_has() -> None:
     ).read_text()
     assert '1,000 when explaining, otherwise 10,000' not in page
     assert '1,000 by default, up to 10,000 with `num_context_samples`' in page
+
+
+def test_a_timestamp_that_parses_to_nothing_is_not_suggested() -> None:
+    """Parsing without raising is not enough: `pd.Timestamp('NaT')` returns
+    `NaT`, which the check the remedy is meant to satisfy still refuses."""
+    from sdm_relational_engine.rfm.rfm import (
+        _a_conversion_that_works,
+        _check_anchor_time,
+    )
+
+    assert _a_conversion_that_works('NaT') == ''
+    with pytest.raises(TypeError):
+        _check_anchor_time(pd.Timestamp('NaT'), 'anchor_time')
+
+    suggested = _a_conversion_that_works('2025-03-01')
+    assert suggested
+    _check_anchor_time(pd.Timestamp('2025-03-01'), 'anchor_time')
+
+
+def test_the_leak_warning_counts_rows_and_not_keys() -> None:
+    """The sentence counts rows being scored, and two rows asking about one
+    entity are two rows whose answer is being shown."""
+    context = pd.DataFrame(
+        {'id': [1, 2, 3, 4], 'x': [0.1, 0.2, 0.3, 0.4], 'y': [0, 1, 0, 1]}
+    )
+    predict = pd.DataFrame({'id': [1, 1], 'x': [0.1, 0.1]})
+
+    with warnings.catch_warnings(record=True) as heard:
+        warnings.simplefilter('always')
+        Request(
+            context=context,
+            predict=predict,
+            target='y',
+            task='classification',
+        )
+
+    said = [
+        str(one.message)
+        for one in heard
+        if 'rows being scored' in str(one.message)
+    ]
+    assert said and said[0].startswith('2 of the 2 rows being scored')

@@ -18,6 +18,7 @@ engine.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import re
 import uuid
@@ -192,6 +193,12 @@ class RelationalAdapter:
             key: envelope[key] for key in _SESSION_PINNED if key in envelope
         }
         pinned['metadata'] = envelope['metadata']
+        # The gathered envelopes are the request's own, and a plan built by
+        # naming their keys shares them. A holdout edits the pinned context in
+        # place, so it was editing the request: a second fit of the same
+        # request, with no holdout, pinned the already-reduced context.
+        if 'context' in pinned:
+            pinned['context'] = copy.deepcopy(pinned['context'])
         return pinned
 
     def session_prediction_plan(
