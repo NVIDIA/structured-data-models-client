@@ -248,6 +248,25 @@ class TestDistributionCoherence:
                     f"this repository's distributions"
                 )
 
+    def test_the_databricks_extra_brings_what_reading_a_metric_view_needs(
+        self,
+    ):
+        """`Schema.from_source(..., metric_view=...)` parses the view's YAML.
+
+        The client's `databricks` extra reaches Databricks through the
+        connectors' own, and Databricks Runtime 14.3 LTS has no YAML parser, so
+        a metric view failed there with `No module named 'yaml'` until the
+        connectors' extra carried one.
+        """
+        client = _pyproject('sdm-client')['project']['optional-dependencies']
+        assert 'sdm-connectors[databricks]==1.0.0' in client['databricks']
+        connectors = _pyproject('sdm-connectors')['project']
+        names = [
+            requirement.split('>=')[0].split('==')[0].strip().lower()
+            for requirement in connectors['optional-dependencies']['databricks']
+        ]
+        assert 'pyyaml' in names
+
 
 class TestConfigurationTellsTheTruth:
     """A comment that states a checkable fact is checked.

@@ -54,6 +54,10 @@ databricks = [
     # read `_user_agent_entry` only, so the partner attribution this connector
     # is required to send would be accepted and silently dropped.
     "databricks-sql-connector>=4.0.1",
+    # A metric view's definition is YAML, and reading one fails without a
+    # parser. Databricks Runtime 14.3 LTS ships none, so the client's
+    # `databricks` extra, which points here, has to bring it.
+    "pyyaml>=5.4",
 ]
 postgres = [
     "psycopg[binary]>=3.1",
