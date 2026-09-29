@@ -82,8 +82,19 @@ The first release is being assembled. Nothing here has shipped yet.
   the public API by `test_databricks_notebooks.py`; they run only in a
   workspace.
 
+- A schema over tables in their source reads each table's columns, keys and
+  preview once, not once per question. Each question samples through fresh
+  copies of what was read, so what one writes onto its tables cannot reach
+  another. Against Databricks, a demand question after the first took 4.6 s
+  rather than 14.7 s. The time range is still read per question: it decides
+  the anchor a question defaults to, and must see new rows.
+
 ### Fixed
 
+- **A Databricks schema of every table recorded names it could not read
+  back.** Leaving `tables` out took each table's name as the engine reports it,
+  which on Databricks is qualified by catalog and schema, and the next read
+  asked the source's namespace for that qualified name.
 - **SQLite windows lost or gained rows on their edges when timestamps kept
   fractional seconds.** SQLite compares a window bound with the stored text,
   and the bound was written without the `.000000` pandas writes through ADBC,

@@ -677,6 +677,9 @@ class Schema:
         self._source = source
         self._tables = dict(tables)
         self.relationships = relationships
+        # The engine's own reading of the source's tables, kept so that each
+        # question does not read them again. Set by the first read.
+        self._engine_tables: Any = None
 
     @property
     def source(self) -> Source | None:
@@ -754,11 +757,15 @@ class Schema:
         question to guard against an edit nobody makes to a frame would cost
         more than the defect. What is copied is everything a schema *says*.
         """
-        return Schema(
+        copied = Schema(
             {name: _copy_table(table) for name, table in self._tables.items()},
             list(self.relationships),
             source=self._source,
         )
+        # What the engine read of the source is shared, not copied: it is what
+        # the tables are, and every gather is given its own copy of it.
+        copied._engine_tables = self._engine_tables
+        return copied
 
     @classmethod
     def from_data(
@@ -909,6 +916,7 @@ class Schema:
                 source, is not installed.
         """
         from sdm_client.materializers.sources import (
+            EngineTables,
             engine_graph,
             is_semantic_model,
             semantic_model_graph,
@@ -918,8 +926,10 @@ class Schema:
         if tables is not None:
             _require_table_names(tables)
 
+        read = EngineTables()
         if is_semantic_model(source):
             graph = semantic_model_graph(source)
+            read.keep({name: graph[name] for name in graph.tables})
             offered = list(graph.tables)
             chosen = (
                 dict(tables)
@@ -947,11 +957,15 @@ class Schema:
                 else {name: (named, None) for name, named in tables.items()},
                 infer_metadata=True,
             )
+            # The engine's own name for the table, not `source_name`, which on
+            # Databricks is qualified by catalog and schema and so is not a name
+            # the source can be asked for again under its namespace.
             chosen = (
                 dict(tables)
                 if tables is not None
-                else {name: graph[name].source_name for name in graph.tables}
+                else {name: graph[name]._source_name for name in graph.tables}
             )
+            read.keep({named: graph[name] for name, named in chosen.items()})
             if not chosen:
                 raise StructuredDataError(
                     f'{source!r} holds no table to describe',
@@ -980,6 +994,7 @@ class Schema:
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, links, source=source)
+        schema._engine_tables = read
         schema._mark_key_columns()
         _warn_several_columns_could_be_the_time_column(schema)
         _warn_two_ways_to_reach_one_table(built, schema.relationships)

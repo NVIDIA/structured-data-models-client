@@ -11,6 +11,7 @@ it. Both must agree on which columns a table has and where it lives.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -18,6 +19,79 @@ from sdm_client.errors import MissingExtraError, StructuredDataError
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm import Graph
+
+
+class EngineTables:
+    r"""The engine's table objects for one schema's source, read once.
+
+    Describing a table in place costs queries: its columns, its keys, a preview
+    of up to 1,000 rows, and on Databricks a row count. The engine keeps each
+    answer on the table object that asked, so the objects are kept here, by
+    their name in the source, and every later gather is given copies of them
+    rather than asking again.
+
+    Copies, and a fresh graph each time, because a gather writes onto what it
+    is given -- keys, time columns, semantic types, and a composite key's
+    derived column -- and two gathers, or a schema and its snapshot, must not
+    see each other's writes. What the copies share is only what was read.
+
+    The time range of each table is not kept. It decides the anchor a question
+    defaults to, the latest moment in the data, and a schema that outlives new
+    rows has to see them.
+    """
+
+    def __init__(self) -> None:
+        self._tables: dict[str, Any] = {}
+
+    def keep(self, tables: Mapping[str, Any]) -> None:
+        r"""Keep engine tables, each by the name the schema gives it in the
+        source.
+
+        Not by the engine's own ``source_name``: on Databricks that is the
+        table qualified by catalog and schema, which is not the name a schema
+        maps to, so nothing kept that way was ever found again.
+        """
+        for key, table in tables.items():
+            self._tables.setdefault(key, table)
+
+    def missing(self, source_names: Sequence[str]) -> list[str]:
+        return [name for name in source_names if name not in self._tables]
+
+    def graph(
+        self, tables: Mapping[str, tuple[str, Sequence[str] | None]]
+    ) -> Graph:
+        r"""A fresh graph over copies of the kept tables, named as the schema
+        names them and holding only the columns it kept, with no keys, time
+        columns or edges: the materializer writes every one of those.
+        """
+        from sdm_relational_engine.rfm import Graph
+
+        return Graph(
+            tables=[
+                _copy_for_one_gather(self._tables[source_name], name, columns)
+                for name, (source_name, columns) in tables.items()
+            ],
+            edges=[],
+        )
+
+
+def _copy_for_one_gather(
+    table: Any, name: str, columns: Sequence[str] | None
+) -> Any:
+    copied = copy.copy(table)
+    copied._column_dict = {
+        key: copy.copy(column) for key, column in table._column_dict.items()
+    }
+    # The engine names a table once, when it is built, and has no rename.
+    copied._name = name
+    copied.end_time_column = None
+    copied.time_column = None
+    copied.primary_key = None
+    if columns is not None:
+        for column in [c.name for c in copied.columns if c.name not in columns]:
+            copied.remove_column(column)
+    return copied
+
 
 # The engine's dtypes a scalar wire column can carry, as the wire names them.
 # Anything else -- lists, binary, durations -- has no scalar form on the wire.
@@ -47,6 +121,7 @@ def engine_graph(
     tables: Mapping[str, tuple[str, Sequence[str] | None]] | None,
     *,
     infer_metadata: bool,
+    cache: EngineTables | None = None,
 ) -> Graph:
     r"""Build the engine's graph over ``tables`` in ``source``.
 
@@ -60,9 +135,30 @@ def engine_graph(
             semantic types. Only the first read of a source asks; afterwards
             the schema says what they are.
 
+        cache: Tables already read from this source. Given, only a table not
+            in it is read, and the graph is a fresh one over copies of the
+            kept tables; see :class:`EngineTables`.
+
     Edges are never added here. The schema decides them, and the materializer
     links exactly those.
     """
+    if cache is not None and tables is not None:
+        wanted = [source_name for source_name, _ in tables.values()]
+        missing = cache.missing(wanted)
+        if missing:
+            if is_semantic_model(source):
+                model = semantic_model_graph(source)
+                cache.keep({name: model[name] for name in model.tables})
+            else:
+                # Read under their source names, so each is kept by one.
+                read = engine_graph(
+                    source,
+                    {name: (name, None) for name in missing},
+                    infer_metadata=infer_metadata,
+                )
+                cache.keep({name: read[name] for name in missing})
+        return cache.graph(tables)
+
     if is_semantic_model(source):
         graph = semantic_model_graph(source)
         return graph if tables is None else _selected(graph, tables)

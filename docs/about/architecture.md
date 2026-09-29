@@ -270,10 +270,24 @@ Each check `from_data` runs over every row either reads metadata for a source ta
 The two that would need a whole-table aggregate, key quality and whether a relationship joins anything, are skipped.
 The heuristic that searches column combinations for a composite key is not run: against a warehouse it scans the table once per candidate column.
 
-**Metadata still costs something.**
-The Databricks backend counts each table's rows, and the SQL samplers read each time column's minimum and maximum.
-Both are whole-table aggregates, run once per schema and cached.
-On clustered or partitioned tables they are cheap; elsewhere they are the first cost a user notices.
+**Metadata is read once per schema, except the time range.**
+Describing a table in place costs queries: its columns, its keys, a preview of up to 1,000 rows, and on Databricks a row count.
+The schema keeps the engine's table objects from its first read, and each question is given fresh copies of them, so a question writes its keys and semantic types onto its own copy and never onto another's.
+The minimum and maximum of each time column are still read for every question, because they decide the anchor a question defaults to, and a schema that outlives new rows has to see them.
+On clustered or partitioned tables that aggregate is cheap; elsewhere it is the first cost a user notices.
+
+**What it costs, measured.**
+Against the four AdventureWorks tables in Unity Catalog (121,317, 31,465, 19,820 and 504 rows, 173,106 in all), through a 2X-Small SQL warehouse, one demand question:
+
+| | Rows fetched | Schema | First question | Each later question | Peak memory |
+|---|---|---|---|---|---|
+| In place, metadata kept | 245,031 | 14.9 s | 10.6 s | 4.6 s | 254 MB |
+| In place, metadata read per question | 252,181 | 13.4 s | 17.9 s | 14.7 s | 259 MB |
+| Read into memory, `from_data` | 173,106 | 24.0 s | 0.4 s | 0.3 s | 328 MB |
+
+At this size sampling in place is the slower way to ask.
+The tables are smaller than the neighbourhoods a thousand context entities reach, so the sampler fetches more rows than the tables hold, and each hop is a round trip to the warehouse.
+It wins where a table does not fit in memory, or where reading it whole takes longer than sampling it: the cost of reading into memory grows with the tables, and the cost of sampling with the question.
 
 **Postgres needs the engine first.**
 The engine was carried across before the predecessor gained a Postgres backend, so the Postgres source brings that backend over too: the table, the `JOIN LATERAL` sampler, and key discovery from `pg_catalog`.

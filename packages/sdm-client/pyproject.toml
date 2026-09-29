@@ -95,5 +95,6 @@ xfail_strict = true
 addopts = ["--color=yes"]
 markers = [
     "live_nim: needs a running NIM",
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
     "socket: binds a local socket; deselect where that is not permitted",
 ]

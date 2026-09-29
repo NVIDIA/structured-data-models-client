@@ -22,7 +22,7 @@ from predictive_query.validator.utils import table_name
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.materializers.sources import engine_graph
+from sdm_client.materializers.sources import EngineTables, engine_graph
 from sdm_client.materializers.tabular import _holds_two_whole_numbers
 from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 from sdm_client.request import Request
@@ -305,6 +305,8 @@ class RelationalMaterializer:
             # Read in place: the engine picks the SQL sampler for this source,
             # and only the columns the schema describes are read, so a column
             # it left out as unsendable is never sampled either.
+            if self.schema._engine_tables is None:
+                self.schema._engine_tables = EngineTables()
             graph = engine_graph(
                 self.schema.source,
                 {
@@ -313,6 +315,7 @@ class RelationalMaterializer:
                     if isinstance(table, SourceTable)
                 },
                 infer_metadata=False,
+                cache=self.schema._engine_tables,
             )
         else:
             frames = {

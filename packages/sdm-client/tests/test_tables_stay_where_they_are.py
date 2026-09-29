@@ -340,3 +340,125 @@ def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
 def test_an_empty_table_mapping_is_refused(duckdb_source: Any) -> None:
     with pytest.raises(StructuredDataError, match='leave tables out'):
         Schema.from_source(duckdb_source, {})
+
+
+def test_no_graph_is_rebuilt_from_frames(
+    duckdb_source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A schema in its source is sampled there, never read into frames."""
+    from sdm_relational_engine.rfm import Graph
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError('a graph was rebuilt from frames')
+
+    monkeypatch.setattr(Graph, 'from_data', refuse)
+    schema = _schema(duckdb_source)
+
+    assert _payload(schema)['predict']['instance_table']['rows']
+
+
+def _count_reads(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    from sdm_relational_engine.rfm.backend.duckdb import (
+        DuckDBSampler,
+        DuckDBTable,
+    )
+
+    counts: dict[str, int] = {}
+    for owner, name in (
+        (DuckDBTable, '_get_source_columns'),
+        (DuckDBTable, '_get_source_foreign_keys'),
+        (DuckDBTable, '_get_source_sample_df'),
+        (DuckDBTable, '_get_num_rows'),
+        (DuckDBSampler, '_get_min_max_time_dict'),
+    ):
+        original = getattr(owner, name)
+
+        def counted(
+            self: Any, *args: Any, _o: Any = original, _n: str = name, **kw: Any
+        ) -> Any:
+            counts[_n] = counts.get(_n, 0) + 1
+            return _o(self, *args, **kw)
+
+        monkeypatch.setattr(owner, name, counted)
+    return counts
+
+
+def test_a_schema_reads_its_tables_once_across_questions(
+    duckdb_source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Each question used to read every table's columns and a preview of its
+    rows again before sampling: five metadata queries a question for these two
+    tables, now none. The time range is still read each time, deliberately:
+    it decides the anchor a question defaults to, and must see new rows.
+    """
+    schema = _schema(duckdb_source)
+    counts = _count_reads(monkeypatch)
+
+    for seed in (7, 11, 23):
+        _payload(schema, seed)
+
+    assert counts.get('_get_source_columns', 0) == 0
+    assert counts.get('_get_source_sample_df', 0) == 0
+    assert counts.get('_get_source_foreign_keys', 0) == 0
+    assert counts.get('_get_min_max_time_dict') == 3
+
+
+def test_a_question_cannot_change_what_the_next_one_is_given(
+    duckdb_source: Any,
+) -> None:
+    r"""Every gather writes keys, time columns and semantic types onto the
+    tables it samples; those it is given are copies of what was read."""
+    schema = _schema(duckdb_source)
+    changed = schema.snapshot()
+    changed['users']['age'].stype = 'categorical'
+    changed['users']['country'].stype = 'text'
+
+    _payload(changed)
+    graph = RelationalMaterializer(schema)._build_graph()
+
+    assert str(graph['users']['age'].stype) == 'numerical'
+    assert str(graph['users']['country'].stype) == 'categorical'
+    assert schema._engine_tables is changed._engine_tables
+
+
+def test_a_column_left_out_after_a_question_is_not_sent_by_the_next(
+    duckdb_source: Any,
+) -> None:
+    schema = _schema(duckdb_source)
+    _payload(schema)
+    del schema['users']['country']
+
+    payload = _payload(schema)
+
+    assert (
+        'country'
+        not in (payload['context']['related_tables']['users']['columns'])
+    )
+
+
+def test_a_source_that_qualifies_its_table_names_is_still_found(
+    duckdb_source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Databricks reports a table's source name as `catalog.schema.table`.
+
+    Kept under that name, the tables a schema read were never found again,
+    and its first question failed naming the table it asked for; the same name
+    written onto a schema of every table could not be read back under the
+    source's namespace. DuckDB is made to answer the Databricks way here.
+    """
+    from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable
+
+    monkeypatch.setattr(
+        DuckDBTable,
+        'source_name',
+        property(lambda self: f'memory.main.{self._source_name}'),
+    )
+    schema = _schema(duckdb_source)
+    _payload(schema)
+    _payload(schema)
+
+    every = Schema.from_source(duckdb_source)
+    assert {t.source_name for t in every.tables.values()} == {
+        'app_users',
+        'app_orders',
+    }
