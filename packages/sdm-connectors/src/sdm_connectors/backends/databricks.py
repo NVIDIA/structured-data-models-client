@@ -90,56 +90,36 @@ _DOCUMENTED_KWARGS = frozenset(
 )
 
 
-# What counts as having said how to authenticate, read from the branches the
-# installed driver dispatches on rather than from documentation. Each entry is
-# a set of names that have to be present together, because the driver reads
-# each of them only in the company of the others: a client secret beside its
-# client id and on the kernel route, a certificate beside the flag that turns
-# certificate authentication on. Any of them alone, or a machine-to-machine
-# pair on the thrift route, is resolved to the browser flow -- which is the
-# thing this guard exists to keep a script out of.
+# What this guard is for: the driver's thrift route, handed nothing it
+# recognises, falls through to an OAuth flow that opens a browser and waits for
+# a human, binding a listening socket while it does -- so a script that simply
+# forgot its token never returns. Everything else the driver refuses itself,
+# immediately and with a better message than this one could give.
 #
-# Azure service-principal credentials are read only when
-# `auth_type='azure-sp-m2m'` names the flow, on either route, and `auth_type`
-# counts on its own above -- so there is no entry for the azure pair alone.
-# A JWT private key needs the key id beside it for the same reason: without
-# one the driver has a key it cannot present.
-#
-# `tls_client_cert_file` is deliberately absent. The driver reads the
-# underscored spelling for certificate authentication and the public one only
-# as a transport setting.
-#
-# Naming an `auth_type` counts on its own: it is the caller choosing a flow,
-# including the browser one, which is theirs to choose.
-_WAYS_TO_AUTHENTICATE = (
+# So the question is narrow: would this call reach that fallthrough? The names
+# below are the branches the installed driver dispatches on before it, each
+# with the names it reads together. Anything that matches one of them, and
+# anything on the kernel route -- which raises rather than waiting -- is left
+# to the driver.
+_WAYS_THE_THRIFT_ROUTE_AUTHENTICATES = (
     frozenset({'access_token'}),
     frozenset({'credentials_provider'}),
     frozenset({'auth_type'}),
     frozenset({'_use_cert_as_auth', '_tls_client_cert_file'}),
-    # Machine-to-machine credentials are read on the kernel route. On the
-    # thrift one the driver never looks at them: it falls through to the
-    # browser flow, which is what this guard exists to keep a script out of.
-    # So the route is part of the credential.
-    frozenset({'use_kernel', 'oauth_client_id', 'oauth_client_secret'}),
-    frozenset(
-        {
-            'use_kernel',
-            'oauth_client_id',
-            'oauth_jwt_key_file',
-            'oauth_jwt_kid',
-        }
-    ),
-    # The driver refuses these itself, clearly and immediately, which is a
-    # better message than this one; they are here so it gets to give it.
+    # Refused by the driver before it reaches any flow, and its sentence --
+    # that this is no longer supported, use OAuth or an access token -- says
+    # more than this one could.
     frozenset({'username'}),
     frozenset({'password'}),
 )
 
 
 def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
-    r"""Whether these arguments name a way the driver can authenticate."""
+    r"""Whether this call can reach the driver's browser flow."""
     named = {name for name, value in given.items() if value}
-    return any(way <= named for way in _WAYS_TO_AUTHENTICATE)
+    if 'use_kernel' in named:
+        return True
+    return any(way <= named for way in _WAYS_THE_THRIFT_ROUTE_AUTHENTICATES)
 
 
 def _declared_connect_args() -> frozenset[str]:
@@ -192,15 +172,14 @@ def connect(
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
     if not _says_how_to_authenticate(kwargs):
-        named = ', '.join(
-            ' + '.join(sorted(way)) for way in _WAYS_TO_AUTHENTICATE[1:-2]
-        )
         raise ConnectorError(
-            f'connecting to Databricks needs a credential and none was given: '
-            f'pass access_token=..., set DATABRICKS_TOKEN, or name {named} to '
-            f'authenticate another way. Half of a pair is not a credential -- '
-            f'the driver resolves it to its browser flow, which waits for a '
-            f'human and never returns',
+            'connecting to Databricks needs a credential and none was given: '
+            'pass access_token=..., set DATABRICKS_TOKEN, or name '
+            'credentials_provider, an auth_type, or _use_cert_as_auth with '
+            '_tls_client_cert_file. Half of a pair is not a credential, and '
+            'neither is a machine-to-machine one on this route: the driver '
+            'resolves what it does not recognise to its browser flow, which '
+            'waits for a human and never returns',
             code='INVALID_CONNECTOR_ARGS',
         )
     # Databricks requires a partner product to identify every connection it

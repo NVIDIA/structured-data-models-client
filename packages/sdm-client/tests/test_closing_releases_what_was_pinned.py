@@ -211,3 +211,32 @@ def test_a_gathered_request_always_names_its_rows() -> None:
         'kumo-relational', ('prediction',), gathered
     ).to_pandas()
     assert list(built.columns) == ['row_index', 'id', 'prediction']
+
+
+def test_an_empty_forecast_still_says_which_step_it_is_about() -> None:
+    """`forecast_step` is put on the items as the parts are joined, so with no
+    items there was nothing to read it from and an empty forecast lost the
+    column that says which step an answer is about."""
+    from sdm_client.client import _by_step
+    from sdm_client.result import PredictionItem, PredictionResult
+
+    class Rewritten:
+        parts = [(None, 1), (None, 2)]
+
+    def parts_with(items: tuple) -> list[PredictionResult]:
+        return [
+            PredictionResult(
+                model='m', request_id='r', items=items, outputs=('prediction',)
+            )
+            for _ in range(2)
+        ]
+
+    full = _by_step(
+        parts_with((PredictionItem(row_index=0, id='a', prediction=1.0),)),
+        Rewritten(),
+    ).to_pandas()
+    empty = _by_step(parts_with(()), Rewritten()).to_pandas()
+
+    assert list(full.columns) == list(empty.columns)
+    assert 'forecast_step' in empty.columns
+    assert empty.empty

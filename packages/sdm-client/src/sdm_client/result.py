@@ -89,6 +89,9 @@ class PredictionResult:
         # Read only when there are no rows to read it from; `_empty_answer`
         # sets it, because only the request knows.
         self._names_its_rows = True
+        # Whether answers to this request say which forecast step they are
+        # about. Set where a forecast is assembled, for the same reason.
+        self._names_its_step = False
         self.metadata = dict(metadata or {})
         self._explanation = explanation
 
@@ -198,10 +201,13 @@ class PredictionResult:
         columns = ['row_index']
         if self._names_its_rows:
             columns.append('id')
+        if self._names_its_step:
+            columns.append('forecast_step')
         columns += [
             name
             for name in (*_SCALAR_FIELDS, *_SEQUENCE_FIELDS, 'rankings')
-            if name not in ('row_index', 'id') and name in self.outputs
+            if name not in ('row_index', 'id', 'forecast_step')
+            and name in self.outputs
         ]
         return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 
@@ -262,6 +268,7 @@ class PredictionResult:
             outputs=first.outputs,
         )
         merged._names_its_rows = all(part._names_its_rows for part in parts)
+        merged._names_its_step = any(part._names_its_step for part in parts)
         return merged
 
     def __len__(self) -> int:

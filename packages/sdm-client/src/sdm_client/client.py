@@ -876,7 +876,8 @@ def _by_step(
 
     `forecast_step` is the field the contract already carries for this, so a
     reader of the frame gets the series it asked for without knowing that it
-    arrived as several answers. An entity keeps its own row across the steps:
+    arrived as several answers. It is a column of every such answer, so an
+    empty one carries it too. An entity keeps its own row across the steps:
     the pair of row and step is what names a point in the series, which is how
     the contract reads it.
 
@@ -896,13 +897,20 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         if answer.explanation is not None
     }
-    return PredictionResult(
+    built = PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
         explanation={'by_forecast_step': by_step} if by_step else None,
     )
+    # `forecast_step` is put on the items above, so with no items there is
+    # nothing to read it from and an empty forecast lost the column that says
+    # which step an answer is about -- the same as `id` losing the column that
+    # says which row.
+    built._names_its_step = True
+    built._names_its_rows = all(part._names_its_rows for part in answers)
+    return built
 
 
 _WHAT_DIFFERS = (

@@ -416,7 +416,7 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
                 'oauth_client_id': 'i',
                 'oauth_jwt_key_file': '/k.pem',
             },
-            False,
+            True,
         ),
         (
             {
@@ -424,7 +424,7 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
                 'azure_client_id': 'i',
                 'azure_client_secret': 's',
             },
-            False,
+            True,
         ),
         ({'identity_federation_client_id': 'x', 'access_token': 't'}, True),
         ({'oauth_token_cache_enabled': True, 'access_token': 't'}, True),
@@ -442,10 +442,12 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
 def test_half_a_credential_is_not_a_credential(
     monkeypatch, given: dict, accepted: bool
 ) -> None:
-    """The driver reads a client secret only beside its client id, and a
-    certificate only beside the flag that turns certificate authentication on,
-    so counting either half alone let a call through that the driver then
-    resolves to its browser flow."""
+    """Only the thrift route waits for a human: handed nothing it
+    recognises it opens a browser and binds a listening socket, so a script
+    that forgot its token never returns. That is what is refused here.
+    Everything else -- a machine-to-machine credential on the wrong route, a
+    certificate without the flag that turns certificate authentication on --
+    the driver refuses itself, immediately and with a better message."""
     pytest.importorskip('databricks.sql')
     from sdm_connectors.backends import databricks as backend
     from sdm_connectors.sql import ConnectorError
@@ -456,6 +458,45 @@ def test_half_a_credential_is_not_a_credential(
     monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
 
     if accepted:
+        backend.connect(server_hostname='h', http_path='p', **given)
+    else:
+        with pytest.raises(ConnectorError):
+            backend.connect(server_hostname='h', http_path='p', **given)
+
+
+@pytest.mark.parametrize(
+    ('given', 'reaches_the_driver'),
+    [
+        ({'use_kernel': True, 'credentials_provider': object()}, True),
+        (
+            {
+                'use_kernel': True,
+                'oauth_client_id': 'i',
+                'oauth_jwt_key_file': '/k.pem',
+            },
+            True,
+        ),
+        ({'username': 'u', 'password': 'p'}, True),
+        ({'oauth_client_id': 'i', 'oauth_client_secret': 's'}, False),
+    ],
+)
+def test_the_guard_refuses_only_what_would_reach_the_browser(
+    monkeypatch, given: dict, reaches_the_driver: bool
+) -> None:
+    """The driver refuses everything else itself, immediately and with a
+    better message: a machine-to-machine credential on the wrong route, a JWT
+    key with no key id, username and password at all. Only the thrift
+    fallthrough waits for a human, and only that is refused here."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    monkeypatch.setattr(
+        backend.databricks_sql, 'connect', lambda **kwargs: object()
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    if reaches_the_driver:
         backend.connect(server_hostname='h', http_path='p', **given)
     else:
         with pytest.raises(ConnectorError):
