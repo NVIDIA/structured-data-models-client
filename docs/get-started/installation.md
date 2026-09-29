@@ -25,7 +25,7 @@ dbutils.library.restartPython()
 Four things differ from a laptop, each found by running on every LTS runtime and serverless environment:
 
 - **Keep NumPy 1 where the runtime has it.**
-  Databricks Runtime 14.3, 15.4 and 16.4 LTS, and serverless environments 1 and 2, build their own packages against NumPy 1.
+  Databricks Runtime 14.3, 15.4 and 16.4 LTS, and serverless environments 1 to 3, build their own packages against NumPy 1.
   Installing can pull NumPy 2 in beneath them, and the Python process then cannot start.
   Add `numpy~=1.0` on those runtimes, and leave it off where the runtime already has NumPy 2.
 - **Write version bounds with `~=`, not `<` or `>`.**
