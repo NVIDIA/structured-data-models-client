@@ -301,3 +301,42 @@ def test_the_leak_warning_counts_rows_and_not_keys() -> None:
         if 'rows being scored' in str(one.message)
     ]
     assert said and said[0].startswith('2 of the 2 rows being scored')
+
+
+def test_the_leak_warning_needs_every_part_of_a_composite_key() -> None:
+    """Reducing a composite key to the columns both frames happen to carry
+    compares a part of an identity, and two rows sharing a part are not the
+    same row: one tenant's entity 1 was reported as another tenant's."""
+    context = pd.DataFrame(
+        {
+            'tenant': ['a', 'a', 'b', 'b'],
+            'id': [1, 2, 1, 2],
+            'x': [0.1, 0.2, 0.3, 0.4],
+            'y': [0, 1, 0, 1],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': ['tenant', 'id']}
+        )
+
+    def heard_for(predict: pd.DataFrame) -> list[str]:
+        with warnings.catch_warnings(record=True) as heard:
+            warnings.simplefilter('always')
+            Request(
+                context=context,
+                predict=predict,
+                schema=schema,
+                target='y',
+                task='classification',
+            )
+        return [
+            str(one.message)
+            for one in heard
+            if 'rows being scored' in str(one.message)
+        ]
+
+    assert not heard_for(pd.DataFrame({'id': [1], 'x': [0.9]}))
+    assert not heard_for(pd.DataFrame({'tenant': ['z'], 'id': [9], 'x': [0.9]}))
+    assert heard_for(pd.DataFrame({'tenant': ['a'], 'id': [1], 'x': [0.9]}))

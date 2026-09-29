@@ -118,7 +118,14 @@ class RelationalAdapter:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
             envelope['output'] = {'fields': list(outputs)}
-            envelope.setdefault('metadata', {})['request_id'] = _request_id()
+            # The gathered payload's own metadata, copied. Shared, writing the
+            # call's id into it wrote it into the request -- so planning the
+            # same request twice changed the id of the envelope already handed
+            # out, and the one a caller had recorded named a different call.
+            envelope['metadata'] = {
+                **(payload.get('metadata') or {}),
+                'request_id': _request_id(),
+            }
             inference = self._inference(envelope.get('inference'), request)
             if inference is None:
                 envelope.pop('inference', None)

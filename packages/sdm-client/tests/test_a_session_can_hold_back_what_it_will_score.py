@@ -287,3 +287,49 @@ def test_a_holdout_edits_the_plan_and_not_the_request():
     assert len(request.payloads[0]['context']['instance_table']['rows']) == 3
     retried = adapter.session_plan(request, ('prediction',))
     assert len(retried['context']['instance_table']['rows']) == 3
+
+
+def test_planning_a_request_twice_does_not_rename_the_first_call():
+    """The gathered payload's metadata was shared, so writing the call's id
+    into it wrote it into the request: the envelope already handed out was
+    renamed, and the id a caller had recorded named a different call."""
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import Schema
+    from sdm_client.request import Request
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 2, 3], 'y': [1.0, 2.0, 3.0]})},
+            primary_keys={'t': 'id'},
+        )
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'y', 'dtype': 'float64'},
+        },
+        'metadata': {'caller': 'kept'},
+        'context': {
+            'instance_table': {'columns': ['id', 'y'], 'rows': [[1, 1.0]]}
+        },
+        'predict': {'instance_table': {'columns': ['id'], 'rows': [[1]]}},
+    }
+    request = Request.materialized(
+        payloads=(payload,),
+        schema=schema,
+        query='q',
+        indices=[1],
+        entity_table='t',
+    )
+
+    adapter = RelationalAdapter()
+    first = next(iter(adapter.prediction_plan(request, ('prediction',))))
+    named = first['metadata']['request_id']
+    second = next(iter(adapter.prediction_plan(request, ('prediction',))))
+
+    assert first['metadata']['request_id'] == named
+    assert second['metadata']['request_id'] != named
+    assert first['metadata']['caller'] == 'kept'
+    assert request.payloads[0]['metadata'] == {'caller': 'kept'}

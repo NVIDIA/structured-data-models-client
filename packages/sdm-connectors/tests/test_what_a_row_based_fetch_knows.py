@@ -370,3 +370,92 @@ def test_a_client_certificate_is_a_credential() -> None:
         backend.os.getenv = saved_getenv
 
     assert seen['_use_cert_as_auth'] is True
+
+
+def test_a_type_error_while_executing_is_not_called_a_bad_argument() -> None:
+    from sdm_connectors.reader import read_table
+    from sdm_connectors.sql import ConnectorError
+
+    class Cursor:
+        description = [('a', None)]
+
+        def execute(self, sql: str) -> None:
+            raise TypeError('driver failed preparing statement')
+
+        def fetchall(self) -> list:
+            return []
+
+        def close(self) -> None:
+            pass
+
+    class Connection:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    with pytest.raises(ConnectorError) as raised:
+        read_table(Connection(), query='select 1')
+
+    assert raised.value.code == 'QUERY_FAILED'
+
+
+@pytest.mark.parametrize(
+    'credential',
+    [
+        {
+            'oauth_client_id': 'i',
+            'oauth_client_secret': 's',
+            'use_kernel': True,
+        },
+        {
+            'auth_type': 'azure-sp-m2m',
+            'azure_client_id': 'i',
+            'azure_client_secret': 's',
+        },
+        {
+            'auth_type': 'databricks-oauth',
+            'oauth_client_id': 'i',
+            'oauth_redirect_port': 8020,
+        },
+    ],
+)
+def test_the_installed_driver_s_own_auth_options_are_accepted(
+    monkeypatch, credential: dict
+) -> None:
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+
+    seen: dict = {}
+    monkeypatch.setattr(
+        backend.databricks_sql,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    backend.connect(server_hostname='h', http_path='p', **credential)
+    assert set(credential) <= set(seen)
+
+
+@pytest.mark.parametrize(
+    'given',
+    [{'auth_type': ''}, {'access_token': ''}, {'_use_cert_as_auth': False}],
+)
+def test_a_credential_that_is_empty_is_no_credential(
+    monkeypatch, given: dict
+) -> None:
+    """The guard read the key and not the value, so an empty string said how
+    to authenticate no more than leaving it out did -- and the driver's answer
+    to that is a browser."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    def refuse(**kwargs: object) -> object:
+        raise AssertionError('the driver was called with no credential')
+
+    monkeypatch.setattr(backend.databricks_sql, 'connect', refuse)
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    with pytest.raises(ConnectorError) as raised:
+        backend.connect(server_hostname='h', http_path='p', **given)
+    assert 'needs a credential' in str(raised.value)

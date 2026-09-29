@@ -208,13 +208,17 @@ def _warn_of_rows_scored_from_their_own_answers(
     halves and did neither, so the model was shown the answer to the question
     it was being asked -- the one thing every other route here prevents.
     """
-    key = [
-        column
-        for column in _as_key_tuple(schema[entity_table].primary_key)
-        if column in context.columns and column in predict.columns
-    ]
-    if not key:
+    key = _as_key_tuple(schema[entity_table].primary_key)
+    # Every component or none. Reducing a composite key to the columns both
+    # frames happen to carry compares a part of an identity, and two rows that
+    # share a part are not the same row: one tenant's entity 1 was reported as
+    # another tenant's, scored from an answer that is not its own.
+    if not key or any(
+        column not in context.columns or column not in predict.columns
+        for column in key
+    ):
         return
+    key = list(key)
     answered = context[context[target].notna()]
     if answered.empty:
         return

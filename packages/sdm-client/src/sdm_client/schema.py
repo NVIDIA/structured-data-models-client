@@ -176,10 +176,10 @@ class Column:
         object.__setattr__(self, key, value)
         if key == 'stype' and value == 'timestamp':
             self._adopt_as_time_column()
-        if key == 'stype' and value != 'ID':
-            self._stay_a_key_if_the_schema_joins_on_this()
+        if key == 'stype':
+            self._stay_a_key_if_the_schema_joins_on_this(value)
 
-    def _stay_a_key_if_the_schema_joins_on_this(self) -> None:
+    def _stay_a_key_if_the_schema_joins_on_this(self, declared: str) -> None:
         r"""Put ``ID`` back if this column is one the schema joins on.
 
         A key's meaning is settled by its being a key, and the schema says so
@@ -188,7 +188,15 @@ class Column:
         next such moment the column read as whatever was declared. Nothing was
         sent that way, because a request re-derives as it takes its copy; the
         object simply described itself wrongly in the meantime.
+
+        The declaration replaces what there was to give back, rather than
+        being discarded beside it: declaring ``ID`` on a column that is
+        already a key left the meaning inference had found still recorded, and
+        moving the key elsewhere handed that back over the caller's own word.
         """
+        if declared == 'ID':
+            object.__setattr__(self, '_stype_before_key', None)
+            return
         table = getattr(self, '_table', None)
         schema = getattr(table, '_schema', None) if table is not None else None
         if schema is None:
@@ -911,6 +919,10 @@ class Schema:
 
         for name, table in self._tables.items():
             for column_name, column in table.columns.items():
+                # A column replaced through the ordinary `columns` dictionary
+                # arrives with no idea which table it is in, and could not be
+                # asked about again.
+                object.__setattr__(column, '_table', table)
                 if column_name in keys[name]:
                     column._mark_as_key()
                 else:

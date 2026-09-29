@@ -55,18 +55,29 @@ _ENV_BY_ARG = {
 _DOCUMENTED_KWARGS = frozenset(
     {
         'auth_type',
+        'azure_client_id',
+        'azure_client_secret',
+        'azure_tenant_id',
+        'azure_workspace_resource_id',
         'credentials_provider',
         'experimental_oauth_persistence',
         'oauth_client_id',
         'oauth_client_secret',
+        'oauth_redirect_port',
         'oauth_redirect_port_range',
         'oauth_scopes',
         'password',
         'session_configuration',
+        'tls_client_cert_file',
+        'tls_client_cert_key_file',
+        'tls_client_cert_key_password',
         'tls_verify',
         'use_cloud_fetch',
+        'use_kernel',
         'user_agent_entry',
         'username',
+        '_tls_client_cert_file',
+        '_use_cert_as_auth',
     }
 )
 
@@ -79,13 +90,15 @@ _CREDENTIAL_ARGS = frozenset(
         'access_token',
         'auth_type',
         'credentials_provider',
+        'azure_client_id',
+        'azure_client_secret',
         'oauth_client_id',
         'oauth_client_secret',
         'password',
         'tls_client_cert_file',
         'username',
-        '_use_cert_as_auth',
         '_tls_client_cert_file',
+        '_use_cert_as_auth',
     }
 )
 
@@ -139,7 +152,10 @@ def connect(
         if arg not in given and arg not in kwargs:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
-    if not _CREDENTIAL_ARGS & set(kwargs):
+    # The value, not the key. A credential given as an empty string, or a
+    # `_use_cert_as_auth` given as False, says how to authenticate no more than
+    # leaving it out does, and the driver's answer to that is a browser.
+    if not any(kwargs.get(name) for name in _CREDENTIAL_ARGS):
         raise ConnectorError(
             'connecting to Databricks needs a credential and none was given: '
             'pass access_token=..., set DATABRICKS_TOKEN, or name one of '

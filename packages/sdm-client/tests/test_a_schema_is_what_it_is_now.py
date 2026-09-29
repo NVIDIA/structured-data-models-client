@@ -264,3 +264,38 @@ def test_a_meaning_declared_on_an_ordinary_column_is_kept() -> None:
     schema['orders']['alt_id'].stype = 'categorical'
     assert schema['orders']['alt_id'].stype == 'categorical'
     assert schema['orders']['alt_id'].stype_declared
+
+
+def test_declaring_id_on_a_key_leaves_nothing_to_hand_back() -> None:
+    """The declaration replaces what there was to give back. Recorded beside
+    it, the meaning inference had found was handed back over the caller's own
+    word when the key moved elsewhere."""
+    schema = with_alt([])
+    schema['orders']['order_id'].stype = 'ID'
+
+    schema['orders'].primary_key = 'alt_id'
+
+    assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_a_key_the_caller_never_spoke_for_is_still_handed_back() -> None:
+    schema = with_alt([])
+    schema['orders'].primary_key = 'alt_id'
+    assert schema['orders']['order_id'].stype == 'numerical'
+
+
+def test_a_replacement_column_learns_which_table_it_is_in() -> None:
+    """`_mark_key_columns` bound each table to its schema but not each column
+    to its table, so a column replaced through the ordinary dictionary could
+    be repaired once and never asked again."""
+    from sdm_client.schema import Column
+
+    schema = with_alt([])
+    schema['orders'].columns['order_id'] = Column(
+        'order_id', 'int64', 'numerical'
+    )
+    schema.check_consistent()
+    assert schema['orders']['order_id'].stype == 'ID'
+
+    schema['orders']['order_id'].stype = 'categorical'
+    assert schema['orders']['order_id'].stype == 'ID'

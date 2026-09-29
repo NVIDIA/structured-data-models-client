@@ -177,7 +177,12 @@ def read_table(
     with driver_guard('QUERY_FAILED', 'query execution failed', sql=sql):
         cursor, owned = _query_handle(connection)
     try:
-        with driver_guard('QUERY_FAILED', 'query execution failed', sql=sql):
+        with driver_guard(
+            'QUERY_FAILED',
+            'query execution failed',
+            sql=sql,
+            type_error_is_the_caller_s=False,
+        ):
             cursor.execute(sql)
         with driver_guard(
             'QUERY_FAILED',
