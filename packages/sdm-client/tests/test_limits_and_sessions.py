@@ -792,3 +792,76 @@ def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
     table = unpinned['predict']['instance_table']
     at = table['columns'].index('id')
     assert [row[at] for row in table['rows']] == [1.0, 2.0]
+
+
+@pytest.mark.parametrize(
+    ('pinned_keys', 'scored_keys', 'answers'),
+    [
+        (list(range(24)), [1, 2], True),
+        (list(range(24)), [1.0, 2.0], True),
+        (list(range(24)), ['abc', 'def'], False),
+        ([float(i) for i in range(24)], [1, 2], True),
+        ([float(i) for i in range(24)], ['abc', 'def'], False),
+        ([str(i) for i in range(24)], [1, 2], True),
+        ([str(i) for i in range(24)], ['abc', 'def'], True),
+    ],
+)
+def test_rows_the_pinned_schema_cannot_hold_are_refused_by_name(
+    pinned_keys, scored_keys, answers
+):
+    """Writing the rows to the pinned schema is what makes the call legible to
+    the endpoint, and the only thing that can fail for a reason the caller
+    cannot see: the failure names a dtype they never wrote, or arrives as a
+    bare ValueError from inside pandas."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.adapters.tabular import TabularAdapter
+    from sdm_client.errors import StructuredDataError
+
+    frame = pd.DataFrame(
+        {
+            'id': pinned_keys,
+            'x': [1.0 * i for i in range(24)],
+            'y': [i % 2 for i in range(24)],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': frame}, primary_keys={'instance': 'id'}
+        )
+        opening = Request(
+            context=frame,
+            predict=frame.head(2)[['id', 'x']],
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+        scoring = Request(
+            context=frame,
+            predict=pd.DataFrame({'id': scored_keys, 'x': [9.0, 8.0]}),
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    adapter = TabularAdapter()
+    pinned = adapter.session_plan(opening, ('prediction',))
+
+    def plan():
+        return next(
+            iter(
+                adapter.session_prediction_plan(
+                    scoring, ('prediction',), pinned
+                )
+            )
+        )
+
+    if answers:
+        assert plan()['predict']['instance_table']['rows']
+    else:
+        with pytest.raises(StructuredDataError) as raised:
+            plan()
+        assert 'this session pinned' in str(raised.value)
+        assert 'fit()' in str(raised.value)

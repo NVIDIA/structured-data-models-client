@@ -108,7 +108,17 @@ class TabularAdapter:
         outputs: tuple[str, ...],
         pinned: Mapping[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        envelope = self._envelope(request, outputs, _declared_by(pinned))
+        declared = _declared_by(pinned)
+        try:
+            envelope = self._envelope(request, outputs, declared)
+        except Exception as error:
+            # Writing the rows to the pinned schema is what makes the call
+            # legible to the endpoint, and it is also the only thing that can
+            # fail for a reason the caller cannot see: the failure names a
+            # dtype they never wrote. So the session is named instead.
+            raise _a_row_the_pinned_schema_cannot_hold(
+                request, declared, error
+            ) from error
         yield {
             key: envelope[key] for key in _SESSION_SCORING if key in envelope
         }
@@ -317,6 +327,44 @@ def _raw_dtype_of(series: pd.Series, declared: str | None = None) -> str:
         if present.empty or bool((present == present.astype('int64')).all()):
             return declared
     return infer_tfm_dtype(series)
+
+
+def _a_row_the_pinned_schema_cannot_hold(
+    request: Request,
+    declared: Mapping[str, str] | None,
+    error: Exception,
+) -> Exception:
+    r"""Name the session, for a failure about a dtype the caller never wrote.
+
+    The scoring rows are written to the schema the session pinned, so a value
+    this package cannot write that way fails naming a type the caller did not
+    choose -- or, where pandas raises first, as a bare `ValueError` from
+    inside. Which column and which two types is what makes it actionable.
+    """
+    if declared is None:
+        if isinstance(error, (StructuredDataError, UnsupportedRequestError)):
+            return error
+        return StructuredDataError(str(error), code='INVALID_REQUEST')
+    try:
+        predict = request.predict.instance_table
+    except Exception:  # noqa: BLE001 - already reporting a failure
+        return StructuredDataError(str(error), code='INVALID_REQUEST')
+    differing = [
+        f'{name} was pinned as {declared[name]} and these rows hold '
+        f'{predict[name].dtype}'
+        for name in predict.columns
+        if name in declared and str(predict[name].dtype) != declared[name]
+    ]
+    if not differing:
+        return error
+    return StructuredDataError(
+        f'these rows cannot be written to the schema this session pinned: '
+        f'{"; ".join(differing)}. A scoring call does not send a schema -- it '
+        f'was settled by fit() -- so the rows have to be writable as it '
+        f'describes them. Give the column the type it was pinned with, or '
+        f'fit() again on a context that has the type you want. ({error})',
+        code='INVALID_REQUEST',
+    )
 
 
 def _declared_by(pinned: Mapping[str, Any] | None) -> dict[str, str] | None:
