@@ -561,6 +561,9 @@ def test_a_frame_built_request_says_when_it_scores_rows_it_shows_the_answers_to(
 
     from sdm_client import Request
     from sdm_client.core.warnings import SDMWarning
+    from sdm_client.request import (
+        warn_of_rows_scored_from_their_own_answers,
+    )
 
     context = pd.DataFrame(
         {
@@ -573,11 +576,13 @@ def test_a_frame_built_request_says_when_it_scores_rows_it_shows_the_answers_to(
     def notices(predict):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always', SDMWarning)
-            Request(
-                context=context,
-                predict=predict,
-                target='y',
-                task='classification',
+            warn_of_rows_scored_from_their_own_answers(
+                Request(
+                    context=context,
+                    predict=predict,
+                    target='y',
+                    task='classification',
+                )
             )
         return [
             str(item.message)
@@ -615,4 +620,74 @@ def test_a_context_whose_answers_are_missing_is_not_called_a_leak():
             target='y',
             task='classification',
         )
+    assert not [item for item in caught if 'being scored' in str(item.message)]
+
+
+def test_the_session_warning_counts_rows_and_not_keys():
+    """`scored_keys()` returns a set, so duplicate scoring rows disappeared
+    before either number was taken: two rows asking about one pinned entity
+    were reported as one of one."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.client import _warn_scoring_what_was_pinned
+    from sdm_client.wire.keys import _named_by
+
+    context = pd.DataFrame(
+        {'id': [1, 2, 3], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'id'}
+        )
+
+    def said_for(ids):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = Request(
+                context=context,
+                predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
+                schema=schema,
+                target='y',
+                task='classification',
+            )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            _warn_scoring_what_was_pinned(
+                request, frozenset({_named_by([1])}), False
+            )
+        return [str(item.message) for item in caught]
+
+    assert said_for([1, 1, 2])[0].startswith('2 of the 3 rows being scored')
+    assert said_for([1, 1])[0].startswith('2 of the 2 rows being scored')
+    assert said_for([7, 8, 9]) == []
+
+
+def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
+    """The leak warning is about a pairing that only travels on the one-shot
+    call. Asked where the request is built, it fired about a context a session
+    scoring call never sends -- and failed under warnings-as-errors."""
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [i % 2 for i in range(20)],
+        }
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always', SDMWarning)
+        Request(
+            context=context,
+            predict=context.head(3).drop(columns=['y']),
+            target='y',
+            task='classification',
+        )
+
     assert not [item for item in caught if 'being scored' in str(item.message)]

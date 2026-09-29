@@ -501,3 +501,47 @@ def test_the_guard_refuses_only_what_would_reach_the_browser(
     else:
         with pytest.raises(ConnectorError):
             backend.connect(server_hostname='h', http_path='p', **given)
+
+
+@pytest.mark.parametrize(
+    ('named', 'accepted'),
+    [
+        ('_tls_client_cert_key_file', True),
+        ('_tls_client_cert_key_password', True),
+        ('tls_client_cert_key_file', False),
+        ('tls_client_cert_key_password', False),
+    ],
+)
+def test_the_mtls_key_names_are_the_ones_the_driver_reads(
+    monkeypatch, named: str, accepted: bool
+) -> None:
+    """The public spellings were taken from documentation; the installed
+    driver reads the underscored ones, so a separately stored or encrypted
+    client key was accepted and then silently omitted."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    seen: dict = {}
+    monkeypatch.setattr(
+        backend.databricks_sql,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    def connect() -> None:
+        backend.connect(
+            server_hostname='h',
+            http_path='p',
+            _use_cert_as_auth=True,
+            _tls_client_cert_file='c.pem',
+            **{named: 'value'},
+        )
+
+    if accepted:
+        connect()
+        assert seen[named] == 'value'
+    else:
+        with pytest.raises(ConnectorError):
+            connect()

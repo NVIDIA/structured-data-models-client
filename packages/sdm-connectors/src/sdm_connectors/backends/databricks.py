@@ -77,14 +77,14 @@ _DOCUMENTED_KWARGS = frozenset(
         'token_url',
         'session_configuration',
         'tls_client_cert_file',
-        'tls_client_cert_key_file',
-        'tls_client_cert_key_password',
         'tls_verify',
         'use_cloud_fetch',
         'use_kernel',
         'user_agent_entry',
         'username',
         '_tls_client_cert_file',
+        '_tls_client_cert_key_file',
+        '_tls_client_cert_key_password',
         '_use_cert_as_auth',
     }
 )

@@ -46,6 +46,47 @@ def _anchor_column(payload: dict[str, Any] | None) -> str:
     return str(named) if named else _ANCHOR
 
 
+def rows_in(
+    payload: dict[str, Any] | None, half: str, *, with_anchor: bool = False
+) -> list[Any]:
+    r"""The key of every row one half of a wire envelope holds, one per row.
+
+    The row-wise reading. :func:`keys_in` is this without the duplicates, and
+    is what a question about overlap wants; a sentence that counts rows wants
+    this, because two rows about one entity are two rows.
+    """
+    if not isinstance(payload, dict):
+        return []
+    table = (payload.get(half) or {}).get('instance_table') or {}
+    columns = table.get('columns')
+    rows = table.get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return []
+    named: Any = next(
+        (name for name in columns if str(name).startswith(_ENTITY_REF)),
+        None,
+    )
+    if named is None:
+        named = ((payload.get('schema') or {}).get('instance_table') or {}).get(
+            'primary_key'
+        )
+    if named is None:
+        return []
+    wanted = named if isinstance(named, list) else [named]
+    if any(name not in columns for name in wanted):
+        return []
+    at = [columns.index(name) for name in wanted]
+    if with_anchor:
+        anchor = _anchor_column(payload)
+        if anchor in columns:
+            at = [*at, columns.index(anchor)]
+    return [
+        _named_by(row[position] for position in at)
+        for row in rows
+        if isinstance(row, list) and len(row) > max(at)
+    ]
+
+
 def keys_in(
     payload: dict[str, Any] | None, half: str, *, with_anchor: bool = False
 ) -> frozenset[Any]:
@@ -66,36 +107,7 @@ def keys_in(
     only answered the one it was asked at; an entity whose answer is a
     standing value has been given away at any moment at all.
     """
-    if not isinstance(payload, dict):
-        return frozenset()
-    table = (payload.get(half) or {}).get('instance_table') or {}
-    columns = table.get('columns')
-    rows = table.get('rows')
-    if not isinstance(columns, list) or not isinstance(rows, list):
-        return frozenset()
-    named: Any = next(
-        (name for name in columns if str(name).startswith(_ENTITY_REF)),
-        None,
-    )
-    if named is None:
-        named = ((payload.get('schema') or {}).get('instance_table') or {}).get(
-            'primary_key'
-        )
-    if named is None:
-        return frozenset()
-    wanted = named if isinstance(named, list) else [named]
-    if any(name not in columns for name in wanted):
-        return frozenset()
-    at = [columns.index(name) for name in wanted]
-    if with_anchor:
-        anchor = _anchor_column(payload)
-        if anchor in columns:
-            at = [*at, columns.index(anchor)]
-    return frozenset(
-        _named_by(row[position] for position in at)
-        for row in rows
-        if isinstance(row, list) and len(row) > max(at)
-    )
+    return frozenset(rows_in(payload, half, with_anchor=with_anchor))
 
 
 def _named_by(values: Iterable[Any]) -> str:
@@ -114,6 +126,29 @@ def _named_by(values: Iterable[Any]) -> str:
     return repr(tuple(str(value) for value in values))
 
 
+def scored_rows(request: Request, *, with_anchor: bool = False) -> list[Any]:
+    r"""The key of every row a request asks about, one per row.
+
+    A sentence that counts rows has to be given rows: two rows asking about
+    one entity are two rows, and a set of keys had already lost one of them.
+    """
+    if request.payloads:
+        return [
+            named
+            for payload in request.payloads
+            for named in rows_in(payload, 'predict', with_anchor=with_anchor)
+        ]
+    frame = getattr(request.predict, 'instance_table', None)
+    table = request.schema[request.entity_table] if request.schema else None
+    names = _as_key_tuple(getattr(table, 'primary_key', None))
+    if frame is None or not names or any(n not in frame for n in names):
+        return []
+    return [
+        _named_by(values)
+        for values in zip(*(frame[n] for n in names), strict=True)
+    ]
+
+
 def scored_keys(
     request: Request, *, with_anchor: bool = False
 ) -> frozenset[Any]:
@@ -125,22 +160,7 @@ def scored_keys(
     window over time -- the query is refused before it reaches here, so there
     is no moment in the frame to put in the key and none to look for.
     """
-    if request.payloads:
-        return frozenset().union(
-            *(
-                keys_in(payload, 'predict', with_anchor=with_anchor)
-                for payload in request.payloads
-            )
-        )
-    frame = getattr(request.predict, 'instance_table', None)
-    table = request.schema[request.entity_table] if request.schema else None
-    names = _as_key_tuple(getattr(table, 'primary_key', None))
-    if frame is None or not names or any(n not in frame for n in names):
-        return frozenset()
-    return frozenset(
-        _named_by(values)
-        for values in zip(*(frame[n] for n in names), strict=True)
-    )
+    return frozenset(scored_rows(request, with_anchor=with_anchor))
 
 
 def without_the_keys(payload: dict[str, Any], keys: frozenset[Any]) -> int:

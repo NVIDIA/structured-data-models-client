@@ -33,13 +33,17 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import RANKING, Decomposition, about_the_part
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
-from sdm_client.request import Question, Request
+from sdm_client.request import (
+    Question,
+    Request,
+    warn_of_rows_scored_from_their_own_answers,
+)
 from sdm_client.result import PredictionResult
 from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
     keys_in,
-    scored_keys,
+    scored_rows,
     without_the_keys,
 )
 
@@ -319,6 +323,9 @@ class SDMClient:
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
             return _empty_answer(adapter.spec.model_id, fields, request)
+        # Asked here, where both halves of the request travel together, which
+        # is the only call at which the pairing is a leak.
+        warn_of_rows_scored_from_their_own_answers(request)
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
@@ -717,12 +724,15 @@ def _warn_scoring_what_was_pinned(
     """
     if not pinned:
         return
-    scored = scored_keys(request, with_anchor=over_a_window)
-    shown = scored & pinned
+    # Rows, not the keys among them: two rows asking about one entity are two
+    # rows being scored, and a set had already lost one of them before either
+    # number was taken.
+    scored = scored_rows(request, with_anchor=over_a_window)
+    shown = sum(1 for named in scored if named in pinned)
     if not shown:
         return
     warnings.warn(
-        f'{len(shown)} of the {len(scored)} rows being scored are in this '
+        f'{shown} of the {len(scored)} rows being scored are in this '
         f"session's pinned context, with their target values, so the model "
         f'is being asked about rows it has already been shown the answers '
         f'for. The context was chosen when fit() ran and cannot be changed '

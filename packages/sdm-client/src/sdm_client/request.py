@@ -254,6 +254,38 @@ def _keys_as_the_wire_spells_them(
     return [tuple(row) for row in encoded['rows']]
 
 
+def warn_of_rows_scored_from_their_own_answers(request: Request) -> None:
+    r"""Say when the rows being scored sit in the context with their answers.
+
+    Both gathered routes take such rows out of the context they send, and a
+    session says so when it cannot. A request built from frames is handed both
+    halves and did neither, so the model was shown the answer to the question
+    it was being asked -- the one thing every other route here prevents.
+
+    Asked where both halves travel together rather than where the request is
+    built, because that is the only call at which the pairing is a leak. A
+    request built to score against a *session's* context sends only its rows,
+    and warning about a context that never travels made a correct call fail
+    under warnings-as-errors.
+    """
+    if request.payloads:
+        return
+    schema, entity_table = request.schema, request.entity_table
+    target = request.task.target.column_name
+    if schema is None or entity_table is None or not target:
+        return
+    try:
+        context = request.context.instance_table
+        predict = request.predict.instance_table
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return
+    if target not in context.columns:
+        return
+    _warn_of_rows_scored_from_their_own_answers(
+        context, predict, schema, entity_table, target
+    )
+
+
 def _warn_of_rows_scored_from_their_own_answers(
     context: pd.DataFrame,
     predict: pd.DataFrame,
@@ -261,13 +293,7 @@ def _warn_of_rows_scored_from_their_own_answers(
     entity_table: str,
     target: str,
 ) -> None:
-    r"""Say when the rows being scored sit in the context with their answers.
-
-    Both gathered routes take such rows out of the context they send, and a
-    session says so when it cannot. A request built from frames is handed both
-    halves and did neither, so the model was shown the answer to the question
-    it was being asked -- the one thing every other route here prevents.
-    """
+    r"""The comparison itself, given both halves as frames."""
     key = _as_key_tuple(schema[entity_table].primary_key)
     # Every component or none. Reducing a composite key to the columns both
     # frames happen to carry compares a part of an identity, and two rows that
@@ -481,9 +507,6 @@ class Request:
             )
 
         _judge_a_context_that_teaches_nothing(target, context[target], task)
-        _warn_of_rows_scored_from_their_own_answers(
-            context, predict, schema, entity_table, target
-        )
 
         self.schema = schema
         self.task = Task(

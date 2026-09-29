@@ -35,6 +35,7 @@ from sdm_client import (
     Schema,
 )
 from sdm_client.client import _held_back
+from sdm_client.request import warn_of_rows_scored_from_their_own_answers
 from sdm_client.errors import StructuredDataError
 
 
@@ -291,11 +292,13 @@ def test_the_leak_warning_counts_rows_and_not_keys() -> None:
 
     with warnings.catch_warnings(record=True) as heard:
         warnings.simplefilter('always')
-        Request(
-            context=context,
-            predict=predict,
-            target='y',
-            task='classification',
+        warn_of_rows_scored_from_their_own_answers(
+            Request(
+                context=context,
+                predict=predict,
+                target='y',
+                task='classification',
+            )
         )
 
     said = [
@@ -327,12 +330,14 @@ def test_the_leak_warning_needs_every_part_of_a_composite_key() -> None:
     def heard_for(predict: pd.DataFrame) -> list[str]:
         with warnings.catch_warnings(record=True) as heard:
             warnings.simplefilter('always')
-            Request(
-                context=context,
-                predict=predict,
-                schema=schema,
-                target='y',
-                task='classification',
+            warn_of_rows_scored_from_their_own_answers(
+                Request(
+                    context=context,
+                    predict=predict,
+                    schema=schema,
+                    target='y',
+                    task='classification',
+                )
             )
         return [
             str(one.message)
@@ -394,6 +399,7 @@ def test_the_warning_agrees_with_the_wire_on_every_way_of_writing_a_key(
             target='y',
             task='classification',
         )
+        warn_of_rows_scored_from_their_own_answers(request)
     warned = any('rows being scored' in str(one.message) for one in heard)
 
     envelope = next(
@@ -434,6 +440,7 @@ def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:
                 target='y',
                 task='classification',
             )
+            warn_of_rows_scored_from_their_own_answers(request)
         said = [
             str(one.message)
             for one in heard
@@ -497,6 +504,7 @@ def test_the_warning_uses_the_adapter_s_own_widening_rule() -> None:
             target='y',
             task='classification',
         )
+        warn_of_rows_scored_from_their_own_answers(request)
 
     envelope = next(
         iter(TabularAdapter().prediction_plan(request, ('prediction',)))
