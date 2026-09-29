@@ -37,8 +37,8 @@ The first release is being assembled. Nothing here has shipped yet.
   manylinux_2_28 baseline. Databricks serverless runs on either architecture
   and classic clusters on Graviton, so an x86-64-only wheel left
   `sdm-client[relational]` uninstallable there. A GitLab `wheels` job builds the
-  full cp310–cp313 matrix from the same `[tool.cibuildwheel]` table the release
-  reads.
+  full cp310–cp313 matrix from the same `[tool.cibuildwheel]` table the
+  release reads.
 - A PostgreSQL backend for the relational engine, so Lakebase and any other
   PostgreSQL can be sampled where the tables live. It came across after the
   rest of the engine had, so only the connector's reader had arrived:
@@ -46,12 +46,6 @@ The first release is being assembled. Nothing here has shipped yet.
   catalog, and a sampler that fetches only the rows a prediction needs. Its
   tests run in the `engine` job against a real `postgres:17`, and fail rather
   than skip there if the server or the driver is missing.
-- `sdm_connectors.backends.spark.SparkConnection`: a Databricks notebook's own
-  `spark` session, accepted wherever the engine's Databricks backend took a SQL
-  warehouse connection. Sampling then runs on the notebook's compute, as the
-  notebook's user, with no warehouse to name. Needs `DataFrame.toArrow()`, so
-  Databricks Runtime 17.3 LTS or serverless environment 4 and later; an older
-  session is refused with the warehouse route named instead.
 - `SDMClient.for_databricks_serving(endpoint)`: a client for a model served on
   Databricks Model Serving, reached by the endpoint's name with the
   workspace's own identity, so a notebook supplies no URL or key. `predict()`
@@ -59,18 +53,22 @@ The first release is being assembled. Nothing here has shipped yet.
   has no sessions. Needs the new `databricks-serving` extra. The envelope it
   sends is the one the relational engine sends, now defined once in
   `sdm_api.databricks_serving` so the two cannot drift apart.
-
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a
   notebook's own `spark`, `SnowflakeSource` a connection or a Snowpark
   session, `PostgresSource` PostgreSQL or Lakebase, and `DuckDBSource` and
   `SQLiteSource` their own; `Source(connection)` picks the class for you.
-  Leaving `tables` out takes every table the source holds. The engine could always do this; nothing on `Schema` reached it, so a
-  warehouse table had to be read whole into pandas first. One source per
-  schema, and `Table.data` stays a DataFrame: tables in place are a
-  `SourceTable`, which holds none. `del schema['t']['column']` leaves a column
-  of a table in place out of both the read and the request.
+  Leaving `tables` out takes every table the source holds. The engine could
+  always do this; nothing on `Schema` reached it, so a warehouse table had to
+  be read whole into pandas first. A notebook's `spark` samples on the
+  notebook's own compute, as its user, with no warehouse to name; it needs
+  `DataFrame.toArrow()`, so Databricks Runtime 17.3 LTS or serverless
+  environment 4, and an older session is refused with the warehouse route
+  named instead. One source per schema, and `Table.data` stays a DataFrame:
+  tables in place are a `SourceTable`, which holds none.
+  `del schema['t']['column']` leaves a column of a table in place out of both
+  the read and the request.
 - `source.semantic_model(name)` on `DatabricksSource` (a metric view) and
   `SnowflakeSource` (a semantic view): a source whose tables, keys and
   relationships the model declares, read by `Schema.from_source` like any
@@ -81,7 +79,11 @@ The first release is being assembled. Nothing here has shipped yet.
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a
   workspace.
-
+- What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
+  rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
+  and Databricks Runtime 14.3 LTS ships 8; `sdm-connectors[databricks]` brings
+  `pyyaml`, which a metric view's definition is parsed with; and the engine
+  has a `postgres` extra for its PostgreSQL backend.
 - A schema over tables in their source reads each table's columns, keys and
   preview once, not once per question. Each question samples through fresh
   copies of what was read, so what one writes onto its tables cannot reach
@@ -98,7 +100,7 @@ The first release is being assembled. Nothing here has shipped yet.
 - **A table with no key was sampled in whatever order the engine read it.**
   Neighbours are kept newest first, and a keyless table had nothing after the
   timestamp to order by, while the rows kept came back unordered. Rows sharing
-  a timestamp -- AdventureWorks order headers, recorded by the day -- then
+  a timestamp – AdventureWorks order headers, recorded by the day – then
   reached the request in a different order on Databricks serverless Spark than
   on a SQL warehouse, and the model's answer moved with it. A keyless table is
   now ordered on every scalar column after its timestamp, and the SQL samplers
@@ -124,7 +126,8 @@ The first release is being assembled. Nothing here has shipped yet.
   Databricks and Snowflake drivers they import were not installed; twenty more
   tests skipped for want of `databricks-sdk` and `openai`. The engine job now
   installs them, and the tests that need a real warehouse are marked
-  `live_warehouse` and deselected by name instead of skipping.
+  `live_warehouse`, a marker the engine's and the client's test configs now
+  register, and deselected by name instead of skipping.
 - **A session tells one question from another by what it asks.** The guard
   compared the query text, which a request built from frames has not got, which
   `task=` does not change, and which two spellings of one string literal write
