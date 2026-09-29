@@ -85,6 +85,10 @@ class PredictionResult:
         self.request_id = request_id
         self.items = tuple(items)
         self.outputs = tuple(outputs)
+        # Whether answers to this request name the row each one is about.
+        # Read only when there are no rows to read it from; `_empty_answer`
+        # sets it, because only the request knows.
+        self._names_its_rows = True
         self.metadata = dict(metadata or {})
         self._explanation = explanation
 
@@ -191,7 +195,9 @@ class PredictionResult:
         than what the answer is, so they are here whatever was asked for --
         the join a caller writes must not depend on the batch being empty.
         """
-        columns = ['row_index', 'id']
+        columns = ['row_index']
+        if self._names_its_rows:
+            columns.append('id')
         columns += [
             name
             for name in (*_SCALAR_FIELDS, *_SEQUENCE_FIELDS, 'rankings')
@@ -247,7 +253,7 @@ class PredictionResult:
                 f'({sorted(shapes)}), so they are not slices of one request',
                 code='INTERNAL_ERROR',
             )
-        return cls(
+        merged = cls(
             model=first.model,
             request_id=first.request_id,
             items=items,
@@ -255,6 +261,8 @@ class PredictionResult:
             explanation=explanation,
             outputs=first.outputs,
         )
+        merged._names_its_rows = all(part._names_its_rows for part in parts)
+        return merged
 
     def __len__(self) -> int:
         return len(self.items)

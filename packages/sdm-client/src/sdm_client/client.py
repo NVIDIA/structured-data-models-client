@@ -143,7 +143,7 @@ class FittedModel:
         if self._question is not None and asked is not None:
             _refuse_a_question_the_session_did_not_pin(self._question, asked)
         if request.nothing_to_score:
-            return _empty_answer(self.model, self._outputs)
+            return _empty_answer(self.model, self._outputs, request)
         _warn_scoring_what_was_pinned(
             request, self._pinned_keys, self._pinned_over_a_window
         )
@@ -317,7 +317,7 @@ class SDMClient:
             return self._answer_in_parts(request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
-            return _empty_answer(adapter.spec.model_id, fields)
+            return _empty_answer(adapter.spec.model_id, fields, request)
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
@@ -594,7 +594,26 @@ def _report_absent(
     return result
 
 
-def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
+def _names_its_rows(request: Request) -> bool:
+    r"""Whether answers to this request will say which row each one is about.
+
+    An ``id`` is the entity a row names, so it is there when the request names
+    one. A single-table request over a frame with no key has none, and an
+    empty answer that carried the column anyway would be the same defect
+    inverted: a shape no other answer to that request has.
+    """
+    table = request.entity_table
+    if table is None:
+        return False
+    try:
+        return request.schema[table].primary_key is not None
+    except Exception:  # noqa: BLE001 - a schema too partial to ask is a no
+        return False
+
+
+def _empty_answer(
+    model: str, outputs: Sequence[str], request: Request | None = None
+) -> PredictionResult:
     r"""The answer to a request with no rows in it, without asking.
 
     `Request` allows a zero-row `predict` on purpose: the contract sets no
@@ -607,9 +626,11 @@ def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
     the columns the request would have produced, which `to_pandas()` already
     knows how to build with no rows in them.
     """
-    return PredictionResult(
+    built = PredictionResult(
         model=model, request_id='', items=(), outputs=tuple(outputs)
     )
+    built._names_its_rows = request is None or _names_its_rows(request)
+    return built
 
 
 def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
