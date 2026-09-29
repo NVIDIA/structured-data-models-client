@@ -20,7 +20,10 @@ setup(
     install_requires=[
         'numpy',
         'pandas',
-        'pyarrow>=8.0.0',
+        # The warehouse backends read results as `pd.ArrowDtype`, which pandas
+        # refuses below pyarrow 10.0.1. Databricks Runtime 14.3 LTS and
+        # serverless environment 1 ship pyarrow 8, and failed there on import.
+        'pyarrow>=10.0.1',
         'python-dateutil',
         'requests>=2.28.2',
         'urllib3',
