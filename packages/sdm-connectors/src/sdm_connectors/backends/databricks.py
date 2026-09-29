@@ -71,6 +71,22 @@ _DOCUMENTED_KWARGS = frozenset(
 )
 
 
+# What counts as having said how to authenticate. Anything here is the
+# caller's answer to that question; nothing here means there is no answer, and
+# the driver's reply to no answer is to wait for a browser.
+_CREDENTIAL_ARGS = frozenset(
+    {
+        'access_token',
+        'auth_type',
+        'credentials_provider',
+        'oauth_client_id',
+        'oauth_client_secret',
+        'password',
+        'username',
+    }
+)
+
+
 def _declared_connect_args() -> frozenset[str]:
     r"""Return the Databricks driver's accepted connection keywords.
 
@@ -103,8 +119,15 @@ def connect(
     ``DATABRICKS_*`` environment variables are used when their corresponding
     keyword arguments are absent -- including ``DATABRICKS_CATALOG`` and
     ``DATABRICKS_SCHEMA``, which decide which table a bare name resolves to.
-    Passing one explicitly as ``None`` says to leave it to the workspace
-    rather than to the shell.
+    Passing one explicitly as ``None`` stops this function reading the variable
+    for it, and the key is then not sent at all; for ``catalog`` and ``schema``
+    that leaves the choice to the workspace, and for a credential it leaves no
+    credential, which is refused rather than sent.
+
+    A connect with no credential at all is refused here. The driver's own
+    answer is to open a browser and wait for a human to finish an OAuth flow,
+    binding a listening socket while it does, so a script that simply forgot
+    the token never returned.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)
@@ -113,6 +136,14 @@ def connect(
         if arg not in given and arg not in kwargs:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
+    if not _CREDENTIAL_ARGS & set(kwargs):
+        raise ConnectorError(
+            'connecting to Databricks needs a credential and none was given: '
+            'pass access_token=..., set DATABRICKS_TOKEN, or name one of '
+            f'{sorted(_CREDENTIAL_ARGS - {"access_token"})} to authenticate '
+            'another way',
+            code='INVALID_CONNECTOR_ARGS',
+        )
     # Databricks requires a partner product to identify every connection it
     # creates. Set after the caller's options are merged, so a connection we
     # own cannot quietly lose the attribution, and any tag the caller supplied

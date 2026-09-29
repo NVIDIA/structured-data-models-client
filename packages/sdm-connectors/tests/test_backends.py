@@ -89,12 +89,20 @@ def test_databricks_driver_options_bypass_the_allow_list(monkeypatch):
     )
     monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
 
-    backend.connect(catalog='c', driver_options={'use_cloud_fetch': True})
+    backend.connect(
+        catalog='c',
+        access_token='t',
+        driver_options={'use_cloud_fetch': True},
+    )
 
     # The partner attribution is added to every connection this package owns,
     # so it is expected here alongside what the caller asked for.
     assert seen.pop('user_agent_entry') == 'nvidia_sdm-client/1.0.0'
-    assert seen == {'catalog': 'c', 'use_cloud_fetch': True}
+    assert seen == {
+        'catalog': 'c',
+        'access_token': 't',
+        'use_cloud_fetch': True,
+    }
 
 
 @pytest.mark.parametrize(
