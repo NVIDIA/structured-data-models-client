@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from numbers import Integral
@@ -536,20 +537,41 @@ def _values_by_column(
     return [[row[position] for row in rows] for position in range(len(columns))]
 
 
-_WHOLE_NUMBER_TYPE_NAMES = frozenset(
-    {
-        'int',
-        'int2',
-        'int4',
-        'int8',
-        'integer',
-        'bigint',
-        'smallint',
-        'tinyint',
-        'long',
-        'short',
-    }
-)
+# What the server's own name for a type means here, for the one case values
+# cannot answer. Only the names a driver on this path actually reports; an
+# array or a name not listed is left alone rather than guessed at.
+_DTYPE_BY_SERVER_TYPE = {
+    'int': 'Int64',
+    'int2': 'Int64',
+    'int4': 'Int64',
+    'int8': 'Int64',
+    'integer': 'Int64',
+    'bigint': 'Int64',
+    'smallint': 'Int64',
+    'tinyint': 'Int64',
+    'long': 'Int64',
+    'short': 'Int64',
+    'float4': 'float64',
+    'float8': 'float64',
+    'float': 'float64',
+    'double': 'float64',
+    'real': 'float64',
+    'bool': 'boolean',
+    'boolean': 'boolean',
+    'date': 'datetime64[ns]',
+    'timestamp': 'datetime64[ns]',
+    'timestamptz': 'datetime64[ns, UTC]',
+    'text': 'string',
+    'varchar': 'string',
+    'char': 'string',
+    'bpchar': 'string',
+    'string': 'string',
+}
+
+# A server's type name may carry a length, as `varchar(42)` does. The length
+# does not change what the column holds, so it is dropped before the lookup.
+# Brackets are not: `int8[]` is an array and nothing here describes one.
+_A_LENGTH = re.compile(r'\(\d+(?:,\s*\d+)?\)$')
 
 
 def _typed_from_the_server(
@@ -557,25 +579,26 @@ def _typed_from_the_server(
 ) -> pd.DataFrame:
     r"""Type a column of nothing but nulls from what the server declared it to be.
 
-    :func:`_integer_columns_exactly` decides from the values, and a column
-    with no values decides nothing, so an all-null ``bigint`` was built as
-    ``object`` and described to the model as text. Every other backend reaches
-    this frame through Arrow, which carries the declared type, so postgres was
-    the only one that lost it.
+    Values decide every other column, and a column with no values decides
+    nothing, so an all-null ``bigint`` was built as ``object`` and described to
+    the model as text -- and so was an all-null ``float8``, ``bool``, ``date``
+    or ``timestamp``. Every other backend reaches this frame through Arrow,
+    which carries the declared type, so postgres was the only one that lost it.
 
-    Read only where the driver offers a name for the type; where it does not,
-    nothing is claimed.
+    Read only where the driver offers a name for the type and that name is one
+    this knows; where it does not, nothing is claimed.
     """
     for position, entry in enumerate(description):
         named = getattr(entry, 'type_display', None)
         if not isinstance(named, str):
             continue
-        if named.lower() not in _WHOLE_NUMBER_TYPE_NAMES:
+        dtype = _DTYPE_BY_SERVER_TYPE.get(_A_LENGTH.sub('', named.lower()))
+        if dtype is None:
             continue
         column = frame.iloc[:, position]
         if not column.isna().all():
             continue
-        frame.isetitem(position, pd.array([None] * len(column), dtype='Int64'))
+        frame.isetitem(position, pd.array([None] * len(column), dtype=dtype))
     return frame
 
 

@@ -54,11 +54,41 @@ def test_a_column_of_nothing_but_nulls_is_typed_from_what_the_server_called_it()
 
     assert frame['a'].dtype == 'int64'
     assert frame['b'].dtype == 'Int64'
-    assert frame['c'].dtype == object
+    assert str(frame['c'].dtype) == 'string'
 
 
 def test_nothing_is_claimed_where_the_driver_names_no_type() -> None:
     frame = _frame_from_rows([(None,), (None,)], [('a', None, None)])
+    assert frame['a'].dtype == object
+
+
+@pytest.mark.parametrize(
+    ('declared', 'dtype'),
+    [
+        ('int8', 'Int64'),
+        ('bigint', 'Int64'),
+        ('float8', 'float64'),
+        ('bool', 'boolean'),
+        ('date', 'datetime64[ns]'),
+        ('timestamp', 'datetime64[ns]'),
+        ('timestamptz', 'datetime64[ns, UTC]'),
+        ('text', 'string'),
+        ('varchar(42)', 'string'),
+    ],
+)
+def test_every_declared_type_this_knows_survives_a_column_of_nulls(
+    declared: str, dtype: str
+) -> None:
+    """The defect was filed about an integer and is the same for every other
+    type the row path can be handed: the values say nothing, so the server's
+    own name is all there is."""
+    frame = _frame_from_rows([(None,), (None,)], [Described('a', declared)])
+    assert str(frame['a'].dtype) == dtype
+
+
+@pytest.mark.parametrize('declared', ['int8[]', 'numeric', 'json', 'point'])
+def test_a_type_this_does_not_know_is_left_alone(declared: str) -> None:
+    frame = _frame_from_rows([(None,)], [Described('a', declared)])
     assert frame['a'].dtype == object
 
 
