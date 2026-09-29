@@ -85,6 +85,7 @@ request = PredictiveQuery(
 In a Databricks notebook, `DatabricksSource(spark, catalog=..., schema=...)` samples through the notebook's own session instead of a SQL warehouse (Databricks Runtime 17.3 LTS or serverless environment 4 and later).
 `SnowflakeSource`, `PostgresSource` (Lakebase included), `DuckDBSource` and `SQLiteSource` work the same way, each naming its own namespace.
 Leave `tables` out to take every table the source holds.
+Each is described from the catalog, which on a warehouse costs seconds per table, so on a large schema name the ones you need.
 A schema's tables all come from one source.
 A semantic model -- a Databricks metric view, a Snowflake semantic view -- is a source of its own, and brings its tables, keys and relationships: `Schema.from_source(source.semantic_model('sales_metrics'))`.
 
