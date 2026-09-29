@@ -161,7 +161,7 @@ class FittedModel:
                 {**self._pinned, **payload},
             )
             for payload in self._adapter.session_prediction_plan(
-                request, self._outputs
+                request, self._outputs, self._pinned
             )
         ]
         if not parts:

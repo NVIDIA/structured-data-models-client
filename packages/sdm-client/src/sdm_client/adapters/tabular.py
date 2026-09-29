@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pandas as pd
@@ -103,9 +103,12 @@ class TabularAdapter:
         return pinned
 
     def session_prediction_plan(
-        self, request: Request, outputs: tuple[str, ...]
+        self,
+        request: Request,
+        outputs: tuple[str, ...],
+        pinned: Mapping[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        envelope = self._envelope(request, outputs)
+        envelope = self._envelope(request, outputs, _declared_by(pinned))
         yield {
             key: envelope[key] for key in _SESSION_SCORING if key in envelope
         }
@@ -150,7 +153,10 @@ class TabularAdapter:
         transport and opens nothing of its own."""
 
     def _envelope(
-        self, request: Request, outputs: tuple[str, ...]
+        self,
+        request: Request,
+        outputs: tuple[str, ...],
+        pinned_dtypes: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         if request.payloads is not None:
             raise UnsupportedRequestError(
@@ -190,6 +196,17 @@ class TabularAdapter:
         # Untyped on both sides means there is genuinely no information, and
         # 'string' round-trips whatever arrives without claiming a width.
         dtypes = {name: dtype or 'string' for name, dtype in dtypes.items()}
+        # On a scoring call the schema is not sent: it was pinned when the
+        # session opened, and the rows have to be written to describe *that*.
+        # Typing them from the half that travels sent `1.0` under a column the
+        # session had pinned as `int64`, which the endpoint refused as
+        # `SESSION_PREDICT_SCHEMA_MISMATCH` -- a failure about a value the
+        # caller never wrote and cannot see.
+        if pinned_dtypes is not None:
+            dtypes = {
+                **dtypes,
+                **{name: d for name, d in pinned_dtypes.items() if d},
+            }
 
         target = request.task.target.column_name
         missing = [name for name in context.columns if name not in dtypes]
@@ -300,6 +317,22 @@ def _raw_dtype_of(series: pd.Series, declared: str | None = None) -> str:
         if present.empty or bool((present == present.astype('int64')).all()):
             return declared
     return infer_tfm_dtype(series)
+
+
+def _declared_by(pinned: Mapping[str, Any] | None) -> dict[str, str] | None:
+    r"""The dtypes a session pinned, read back off the envelope it sent."""
+    if not pinned:
+        return None
+    columns = ((pinned.get('schema') or {}).get('instance_table') or {}).get(
+        'columns'
+    )
+    if not isinstance(columns, Mapping):
+        return None
+    return {
+        name: str(described.get('dtype'))
+        for name, described in columns.items()
+        if isinstance(described, Mapping) and described.get('dtype')
+    }
 
 
 def _key_named_by(value: str) -> str | None:

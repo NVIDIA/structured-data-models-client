@@ -733,3 +733,62 @@ def test_the_session_warning_knows_one_entity_written_two_ways():
         assert warned_for(named)
     for named in ([9], [9.0], [1.5]):
         assert not warned_for(named)
+
+
+def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
+    """The schema is not sent again on a scoring call: it was pinned when the
+    session opened. Typing the rows from the half that travels sent `1.0`
+    under a column pinned as `int64`, which the endpoint refused as
+    `SESSION_PREDICT_SCHEMA_MISMATCH` -- a failure about a value the caller
+    never wrote and cannot see."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    frame = pd.DataFrame(
+        {
+            'id': range(24),
+            'x': [1.0 * i for i in range(24)],
+            'y': [i % 2 for i in range(24)],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': frame}, primary_keys={'instance': 'id'}
+        )
+        opening = Request(
+            context=frame,
+            predict=frame.head(2)[['id', 'x']],
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+        scoring = Request(
+            context=frame,
+            predict=pd.DataFrame({'id': [1.0, 2.0], 'x': [9.0, 8.0]}),
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    adapter = TabularAdapter()
+    pinned = adapter.session_plan(opening, ('prediction',))
+    assert pinned['schema']['instance_table']['columns']['id']['dtype'] == (
+        'int64'
+    )
+
+    payload = next(
+        iter(adapter.session_prediction_plan(scoring, ('prediction',), pinned))
+    )
+    table = payload['predict']['instance_table']
+    at = table['columns'].index('id')
+    assert [row[at] for row in table['rows']] == [1, 2]
+
+    unpinned = next(
+        iter(adapter.session_prediction_plan(scoring, ('prediction',)))
+    )
+    table = unpinned['predict']['instance_table']
+    at = table['columns'].index('id')
+    assert [row[at] for row in table['rows']] == [1.0, 2.0]

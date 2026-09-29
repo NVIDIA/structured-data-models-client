@@ -209,7 +209,10 @@ class RelationalAdapter:
         return pinned
 
     def session_prediction_plan(
-        self, request: Request, outputs: tuple[str, ...]
+        self,
+        request: Request,
+        outputs: tuple[str, ...],
+        pinned: Mapping[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
         for envelope in self.prediction_plan(
             request, outputs, _SENDS_ROWS_TO_SCORE
