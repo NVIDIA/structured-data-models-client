@@ -373,3 +373,55 @@ def test_a_shallow_copy_of_a_table_is_a_table_of_its_own_columns() -> None:
     assert copied['order_id'].stype == 'numerical'
     assert schema['orders']['order_id'].stype == 'ID'
     assert schema['orders']['alt_id'].stype == 'numerical'
+
+
+def test_a_primary_key_cannot_be_a_generator() -> None:
+    """The key is read more than once -- to check it, to type its columns, to
+    copy the table -- and a generator is empty after the first, which arrived
+    as "was given an empty primary key" about a key that named two columns."""
+    schema = with_alt([])
+
+    with pytest.raises(StructuredDataError) as raised:
+        schema['orders'].primary_key = (name for name in ['order_id', 'alt_id'])
+
+    assert 'read more than once' in str(raised.value)
+    assert schema['orders'].primary_key == 'order_id'
+
+
+@pytest.mark.parametrize(
+    'how',
+    ['copy', 'deepcopy', 'pickle', 'snapshot'],
+)
+def test_every_way_of_copying_a_schema_keeps_the_same_things(how: str) -> None:
+    import copy as copying
+    import pickle
+
+    frame = pd.DataFrame(
+        {
+            'a': [1, 2, 3],
+            'b': [3, 4, 5],
+            'ts': pd.date_range('2024-01-01', periods=3),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        base = Schema.from_data(
+            {'t': frame}, primary_keys={'t': 'a'}, time_columns={'t': 'ts'}
+        )
+    base['t']['b'].stype = 'categorical'
+
+    made = {
+        'copy': copying.copy,
+        'deepcopy': copying.deepcopy,
+        'pickle': lambda one: pickle.loads(pickle.dumps(one)),
+        'snapshot': lambda one: one.snapshot(),
+    }[how](base)
+
+    table = made['t']
+    assert len(table.data) == 3
+    assert table.primary_key == 'a'
+    assert table.time_column == 'ts'
+    assert table['b'].stype == 'categorical'
+    assert table['b'].stype_declared
+    assert table['a'].stype == 'ID'
+    assert table['a']._stype_before_key == 'numerical'

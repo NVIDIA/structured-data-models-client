@@ -989,12 +989,23 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
     `collections.abc.Sequence`, so asking that question rejected it.
 
     A set is not one of them. A composite key's columns are in an order, and
-    a set has none, so the key it named would differ between runs.
+    a set has none, so the key it named would differ between runs. Nor is a
+    generator: the key is read more than once -- to check it, to type its
+    columns, to copy the table -- and a generator is empty after the first,
+    which arrived as "was given an empty primary key" about a key that named
+    two columns.
     """
     if key is None:
         return ()
     if isinstance(key, str):
         return (key,)
+    if isinstance(key, Iterator):
+        raise StructuredDataError(
+            f'a primary key is read more than once, so it cannot be a '
+            f'{type(key).__name__}, which is empty after the first; pass '
+            f'list(...) of the names',
+            code='INVALID_REQUEST',
+        )
     if isinstance(key, (bytes, Mapping, AbstractSet)) or not isinstance(
         key, Iterable
     ):
