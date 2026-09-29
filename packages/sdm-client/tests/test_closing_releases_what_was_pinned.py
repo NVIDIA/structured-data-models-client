@@ -163,3 +163,51 @@ def test_an_empty_answer_has_no_id_where_the_scored_half_carries_none() -> None:
 
     assert _names_its_rows(carrying)
     assert not _names_its_rows(without)
+
+
+def test_a_gathered_request_always_names_its_rows() -> None:
+    """The gathered envelope spells the entity as a transport reference rather
+    than as the schema's key, so asking whether the predict half carries the
+    key answered no about requests whose every answer names its entity."""
+    pytest.importorskip('sdm_relational_engine')
+
+    import numpy as np
+
+    from sdm_client import (
+        KumoRelational,
+        PredictiveQuery,
+        Relationship,
+        Schema,
+    )
+    from sdm_client.client import _names_its_rows
+
+    rng = np.random.default_rng(0)
+    users = pd.DataFrame({'uid': range(60), 'seg': rng.choice(['a', 'b'], 60)})
+    orders = pd.DataFrame(
+        {
+            'oid': range(400),
+            'uid': rng.integers(0, 60, 400),
+            'p': rng.random(400) * 100,
+            'ts': pd.date_range('2024-01-01', periods=400, freq='h'),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'users': users, 'orders': orders},
+            primary_keys={'users': 'uid', 'orders': 'oid'},
+            time_columns={'orders': 'ts'},
+            relationships=[Relationship('orders', 'uid', 'users', 'uid')],
+        )
+        gathered = PredictiveQuery(
+            'PREDICT users.seg FOR EACH users.uid', schema
+        ).materialize(indices=[1, 2], model=KumoRelational())
+
+    assert _names_its_rows(gathered)
+
+    from sdm_client.client import _empty_answer
+
+    built = _empty_answer(
+        'kumo-relational', ('prediction',), gathered
+    ).to_pandas()
+    assert list(built.columns) == ['row_index', 'id', 'prediction']

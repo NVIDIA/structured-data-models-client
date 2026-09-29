@@ -599,11 +599,19 @@ def _names_its_rows(request: Request) -> bool:
     r"""Whether answers to this request will say which row each one is about.
 
     An ``id`` is the entity a row names, so it is there when the rows being
-    scored carry one -- which needs both a key in the schema and every one of
-    its columns in the half being sent. Asking only the schema gave an empty
-    answer an ``id`` where a full one had none, which is the defect this
-    exists to prevent, inverted.
+    scored carry one. On the route that builds its own frames that needs both
+    a key in the schema and every one of its columns in the half being sent:
+    asking only the schema gave an empty answer an ``id`` where a full one had
+    none. On the gathered route the entity is what was asked for, and the
+    envelope spells it as a transport reference rather than as the schema's
+    key -- so asking the same question there answered no about requests whose
+    every answer names its entity.
     """
+    if request.payloads:
+        # A gathered request is about entities by construction: the envelope
+        # carries an entity reference for every row it scores, and the adapter
+        # names each answer with the entity it asked about.
+        return True
     table = request.entity_table
     if table is None:
         return False
