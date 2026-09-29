@@ -15,12 +15,18 @@ extra. Warehouse drivers are opt-in the same way.
 
 ## On Databricks
 
-Install into the notebook with `%pip`, then restart Python:
+Install into the notebook with `%pip`, then restart Python, each step in its own cell:
 
 ```text
 import numpy
 keep_numpy = f'numpy=={numpy.__version__}'
+```
+
+```text
 %pip install --only-binary=:all: "sdm-client[relational,databricks,databricks-serving]" $keep_numpy
+```
+
+```text
 dbutils.library.restartPython()
 ```
 
