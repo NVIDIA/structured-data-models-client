@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import inspect
 import os
+from collections.abc import Mapping
 from typing import Any, TypeAlias
 
 from sdm_connectors._databricks_telemetry import (
@@ -63,12 +64,17 @@ _DOCUMENTED_KWARGS = frozenset(
         'experimental_oauth_persistence',
         'oauth_client_id',
         'oauth_client_secret',
+        'identity_federation_client_id',
+        'oauth_jwt_algorithm',
         'oauth_jwt_key_file',
         'oauth_jwt_kid',
+        'oauth_jwt_passphrase',
         'oauth_redirect_port',
         'oauth_redirect_port_range',
         'oauth_scopes',
+        'oauth_token_cache_enabled',
         'password',
+        'token_url',
         'session_configuration',
         'tls_client_cert_file',
         'tls_client_cert_key_file',
@@ -84,30 +90,38 @@ _DOCUMENTED_KWARGS = frozenset(
 )
 
 
-# What counts as having said how to authenticate, taken from the names the
-# installed driver actually reads when it resolves an auth provider. Anything
-# here is the caller's answer to that question; nothing here means there is no
-# answer, and the driver's reply to no answer is to wait for a browser.
+# What counts as having said how to authenticate, read from the branches the
+# installed driver dispatches on rather than from documentation. Each entry is
+# a set of names that have to be present together: the driver reads a client
+# secret only beside its client id, and a certificate only beside the flag that
+# turns certificate authentication on, so counting either half on its own let a
+# call through that the driver then resolves to its browser flow.
 #
-# `tls_client_cert_file` is deliberately not here. The driver reads the
+# `tls_client_cert_file` is deliberately absent. The driver reads the
 # underscored spelling for certificate authentication and the public one only
-# as a transport setting, so counting the public one satisfied this guard
-# while leaving the driver with no certificate and a browser to open.
-_CREDENTIAL_ARGS = frozenset(
-    {
-        'access_token',
-        'auth_type',
-        'credentials_provider',
-        'azure_client_id',
-        'azure_client_secret',
-        'oauth_client_id',
-        'oauth_client_secret',
-        'oauth_jwt_key_file',
-        'password',
-        'username',
-        '_use_cert_as_auth',
-    }
+# as a transport setting.
+#
+# Naming an `auth_type` counts on its own: it is the caller choosing a flow,
+# including the browser one, which is theirs to choose.
+_WAYS_TO_AUTHENTICATE = (
+    frozenset({'access_token'}),
+    frozenset({'credentials_provider'}),
+    frozenset({'auth_type'}),
+    frozenset({'azure_client_id', 'azure_client_secret'}),
+    frozenset({'oauth_client_id', 'oauth_client_secret'}),
+    frozenset({'oauth_client_id', 'oauth_jwt_key_file'}),
+    frozenset({'_use_cert_as_auth', '_tls_client_cert_file'}),
+    # The driver refuses these itself, clearly and immediately, which is a
+    # better message than this one; they are here so it gets to give it.
+    frozenset({'username'}),
+    frozenset({'password'}),
 )
+
+
+def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
+    r"""Whether these arguments name a way the driver can authenticate."""
+    named = {name for name, value in given.items() if value}
+    return any(way <= named for way in _WAYS_TO_AUTHENTICATE)
 
 
 def _declared_connect_args() -> frozenset[str]:
@@ -159,15 +173,16 @@ def connect(
         if arg not in given and arg not in kwargs:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
-    # The value, not the key. A credential given as an empty string, or a
-    # `_use_cert_as_auth` given as False, says how to authenticate no more than
-    # leaving it out does, and the driver's answer to that is a browser.
-    if not any(kwargs.get(name) for name in _CREDENTIAL_ARGS):
+    if not _says_how_to_authenticate(kwargs):
+        named = ', '.join(
+            ' + '.join(sorted(way)) for way in _WAYS_TO_AUTHENTICATE[1:-2]
+        )
         raise ConnectorError(
-            'connecting to Databricks needs a credential and none was given: '
-            'pass access_token=..., set DATABRICKS_TOKEN, or name one of '
-            f'{sorted(_CREDENTIAL_ARGS - {"access_token"})} to authenticate '
-            'another way',
+            f'connecting to Databricks needs a credential and none was given: '
+            f'pass access_token=..., set DATABRICKS_TOKEN, or name {named} to '
+            f'authenticate another way. Half of a pair is not a credential -- '
+            f'the driver resolves it to its browser flow, which waits for a '
+            f'human and never returns',
             code='INVALID_CONNECTOR_ARGS',
         )
     # Databricks requires a partner product to identify every connection it

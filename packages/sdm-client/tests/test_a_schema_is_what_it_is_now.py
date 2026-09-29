@@ -327,3 +327,49 @@ def test_editing_a_shallow_copy_leaves_the_original_alone() -> None:
     copied['orders']['price'].stype = 'categorical'
 
     assert original['orders']['price'].stype != 'categorical'
+
+
+@pytest.mark.parametrize(
+    'named',
+    [['tenant', 'id'], ('tenant', 'id'), pd.Index(['tenant', 'id'])],
+    ids=['list', 'tuple', 'Index'],
+)
+def test_a_composite_key_can_be_named_the_way_the_frame_names_it(named) -> None:
+    """`frame.columns` is a `pd.Index`, which is the most natural way to name a
+    composite key from the data it came from and is not a
+    `collections.abc.Sequence`, so asking that question rejected it."""
+    frame = pd.DataFrame({'tenant': [1, 1], 'id': [1, 2], 'v': [0.1, 0.2]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'t': frame}, primary_keys={'t': 'id'})
+
+    schema['t'].primary_key = named
+
+    assert schema['t']['tenant'].stype == 'ID'
+    assert schema['t']['id'].stype == 'ID'
+
+
+@pytest.mark.parametrize('named', [{'a', 'b'}, {'a': 1}, 42, b'ab'])
+def test_a_key_that_is_not_an_ordered_list_of_names_is_refused(named) -> None:
+    """A set is excluded on purpose: a composite key's columns are in an
+    order, and a set has none."""
+    schema = with_alt([])
+    with pytest.raises(StructuredDataError):
+        schema['orders'].primary_key = named
+
+
+def test_a_shallow_copy_of_a_table_is_a_table_of_its_own_columns() -> None:
+    """Sharing them left the copy unable to answer for itself -- its columns
+    pointed at the table they came from, so changing the copy's key typed
+    nothing."""
+    import copy as copying
+
+    schema = with_alt([])
+    copied = copying.copy(schema['orders'])
+
+    copied.primary_key = 'alt_id'
+
+    assert copied['alt_id'].stype == 'ID'
+    assert copied['order_id'].stype == 'numerical'
+    assert schema['orders']['order_id'].stype == 'ID'
+    assert schema['orders']['alt_id'].stype == 'numerical'

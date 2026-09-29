@@ -530,3 +530,70 @@ def test_the_driver_s_jwt_private_key_auth_is_accepted(monkeypatch) -> None:
     )
 
     assert seen['oauth_jwt_key_file'] == '/keys/client.pem'
+
+
+def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
+    """Splitting the query guard so a fetch failure stops being called an
+    execution failure also stopped a `TypeError` naming the caller's own
+    argument, and `query` is the one such argument the region holds."""
+    import sqlite3
+
+    from sdm_connectors.reader import read_table
+    from sdm_connectors.sql import ConnectorError
+
+    with pytest.raises(ConnectorError) as raised:
+        read_table(sqlite3.connect(':memory:'), query=123)
+
+    assert raised.value.code == 'INVALID_CONNECTOR_ARGS'
+    assert 'must be a SQL statement' in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ('given', 'accepted'),
+    [
+        ({'access_token': 't'}, True),
+        ({'credentials_provider': object()}, True),
+        ({'auth_type': 'databricks-oauth'}, True),
+        ({'azure_client_id': 'i', 'azure_client_secret': 's'}, True),
+        ({'oauth_client_id': 'i', 'oauth_client_secret': 's'}, True),
+        (
+            {
+                'oauth_client_id': 'i',
+                'oauth_jwt_key_file': '/k.pem',
+                'use_kernel': True,
+            },
+            True,
+        ),
+        ({'_use_cert_as_auth': True, '_tls_client_cert_file': 'c.pem'}, True),
+        ({'identity_federation_client_id': 'x', 'access_token': 't'}, True),
+        ({'oauth_token_cache_enabled': True, 'access_token': 't'}, True),
+        ({'oauth_client_secret': 's'}, False),
+        ({'oauth_jwt_key_file': '/k.pem'}, False),
+        ({'_use_cert_as_auth': True}, False),
+        ({'azure_client_secret': 's'}, False),
+        ({'tls_client_cert_file': 'c.pem'}, False),
+        ({'auth_type': ''}, False),
+        ({}, False),
+    ],
+)
+def test_half_a_credential_is_not_a_credential(
+    monkeypatch, given: dict, accepted: bool
+) -> None:
+    """The driver reads a client secret only beside its client id, and a
+    certificate only beside the flag that turns certificate authentication on,
+    so counting either half alone let a call through that the driver then
+    resolves to its browser flow."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    monkeypatch.setattr(
+        backend.databricks_sql, 'connect', lambda **kwargs: object()
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    if accepted:
+        backend.connect(server_hostname='h', http_path='p', **given)
+    else:
+        with pytest.raises(ConnectorError):
+            backend.connect(server_hostname='h', http_path='p', **given)

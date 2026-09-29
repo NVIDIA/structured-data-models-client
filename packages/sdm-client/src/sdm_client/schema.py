@@ -34,7 +34,7 @@ Nothing here contacts a model. Inference reads your frames locally.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
@@ -357,6 +357,16 @@ class Table:
                 self.columns[name] = _copy_column(self.columns[name])
         for column in self.columns.values():
             object.__setattr__(column, '_table', self)
+
+    def __copy__(self) -> Table:
+        r"""A shallow copy is still a table of its own columns.
+
+        Sharing them left the copy unable to answer for itself -- its columns
+        pointed at the table they came from, so changing the copy's key typed
+        nothing -- and able to retype the original once the copy was put in a
+        schema.
+        """
+        return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key == 'primary_key':
@@ -970,19 +980,35 @@ def _require_column(
     return column
 
 
-def _as_key_tuple(key: str | Sequence[str] | None) -> tuple[str, ...]:
+def _as_key_tuple(key: Any) -> tuple[str, ...]:
+    r"""A primary key as the tuple of column names it is.
+
+    A single name, or any ordered iterable of them -- including a `pd.Index`,
+    which is what `frame.columns` is and so the most natural way to name a
+    composite key from the data it came from. `pd.Index` is not a
+    `collections.abc.Sequence`, so asking that question rejected it.
+
+    A set is not one of them. A composite key's columns are in an order, and
+    a set has none, so the key it named would differ between runs.
+    """
     if key is None:
         return ()
     if isinstance(key, str):
         return (key,)
-    if not isinstance(key, Sequence) or not all(
-        isinstance(name, str) for name in key
+    if isinstance(key, (bytes, Mapping, AbstractSet)) or not isinstance(
+        key, Iterable
     ):
         raise StructuredDataError(
             f'a primary key names a column or a sequence of them, got {key!r}',
             code='INVALID_REQUEST',
         )
-    return tuple(key)
+    names = list(key)
+    if not all(isinstance(name, str) for name in names):
+        raise StructuredDataError(
+            f'a primary key names a column or a sequence of them, got {key!r}',
+            code='INVALID_REQUEST',
+        )
+    return tuple(names)
 
 
 def _infer_table(name: str, frame: pd.DataFrame) -> Table:

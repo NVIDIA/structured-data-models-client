@@ -301,6 +301,15 @@ def resolve_sql(*, table: str | None, query: str | None) -> str:
             code='INVALID_CONNECTOR_ARGS',
         )
     if query is not None:
+        # Named here rather than left to the driver. Splitting the query guard
+        # so a fetch failure stops being called an execution failure also
+        # stopped a `TypeError` naming the caller's own argument, and this is
+        # the one such argument the region holds.
+        if not isinstance(query, str):
+            raise ConnectorError(
+                f'query must be a SQL statement, got {type(query).__name__}',
+                code='INVALID_CONNECTOR_ARGS',
+            )
         return query
     if not _TABLE_IDENTIFIER_RE.fullmatch(table):
         raise ConnectorError(

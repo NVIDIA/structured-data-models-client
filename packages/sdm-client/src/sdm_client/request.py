@@ -43,7 +43,12 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
-from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
+from sdm_client.wire import (
+    UNTYPED,
+    infer_tfm_dtype,
+    is_container,
+    widen_tfm_dtype,
+)
 from sdm_client.wire.tables import encode_table
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
@@ -195,6 +200,35 @@ def _judge_a_context_that_teaches_nothing(
     )
 
 
+def _key_dtypes(
+    table: Any, key: Sequence[str], predict: pd.DataFrame
+) -> dict[str, str] | None:
+    r"""The wire dtype of each key column, the way the adapter settles it.
+
+    The schema's own answer, widened by what the rows being scored hold, which
+    is the rule the adapter applies before encoding. Deriving one here instead
+    made this disagree with the encoder -- and made a *diagnostic* able to
+    refuse a request the adapter would have sent, by raising on a value the
+    dtype it chose could not hold.
+
+    ``None`` where no dtype can be settled. Nothing is said in that case: this
+    exists to warn about a leak, and a warning is never worth a failure.
+    """
+    try:
+        dtypes = {}
+        for name in key:
+            column = table.columns[name]
+            dtype = UNTYPED if column.untyped else column.dtype
+            if name in predict.columns:
+                dtype = widen_tfm_dtype(
+                    (dtype, str(infer_tfm_dtype(predict[name])))
+                )
+            dtypes[name] = dtype or 'string'
+        return dtypes
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return None
+
+
 def _keys_as_the_wire_spells_them(
     frame: pd.DataFrame, key: Sequence[str], dtypes: Mapping[str, str]
 ) -> list[tuple[Any, ...]]:
@@ -207,9 +241,12 @@ def _keys_as_the_wire_spells_them(
     JS-safe range is written as text and a smaller one as a number, in the
     same column.
     """
-    encoded = encode_table(
-        frame[list(key)], {name: dtypes[name] for name in key}
-    )
+    try:
+        encoded = encode_table(
+            frame[list(key)], {name: dtypes[name] for name in key}
+        )
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return []
     return [tuple(row) for row in encoded['rows']]
 
 
@@ -247,14 +284,9 @@ def _warn_of_rows_scored_from_their_own_answers(
     # way, so values that differ here are the same value by the time the model
     # reads them. The column's dtype is settled from both halves together, for
     # the same reason.
-    dtypes = {
-        name: str(
-            infer_tfm_dtype(
-                pd.concat([context[name], predict[name]], ignore_index=True)
-            )
-        )
-        for name in key
-    }
+    dtypes = _key_dtypes(schema[entity_table], key, predict)
+    if dtypes is None:
+        return
     answers = set(_keys_as_the_wire_spells_them(answered, key, dtypes))
     # Rows, not keys: the sentence counts rows being scored, and two rows
     # asking about one entity are two rows whose answer is being shown.
