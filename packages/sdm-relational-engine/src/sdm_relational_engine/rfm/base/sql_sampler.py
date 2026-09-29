@@ -168,8 +168,13 @@ class SQLSampler(Sampler):
 
         Ordering on ``key_ref`` alone cannot serve as that tie-break: it is the
         foreign key the partition is keyed by, so it holds one value per
-        partition. It is kept only as the last resort for a keyless table,
-        where no stable ordering is available.
+        partition. A table with no primary key is ordered by every one of its
+        scalar columns instead, in name order. Two rows that agree on all of
+        them are the same row as far as the model can tell, so the order
+        between them cannot change what is sent. Without this, rows sharing a
+        timestamp came back in whatever order the engine read them, and the
+        same question built a different request on Databricks serverless Spark
+        than on a SQL warehouse.
 
         Args:
             table_name: The table being sampled from.
@@ -181,7 +186,17 @@ class SQLSampler(Sampler):
         primary_key = self.primary_key_dict.get(table_name)
         if primary_key is not None:
             terms.append(self.table_column_ref_dict[table_name][primary_key])
-        elif not terms:
+            return ', '.join(terms)
+
+        dtypes = self.table_dtype_dict.get(table_name, {})
+        for column, ref in sorted(
+            self.table_column_ref_dict[table_name].items()
+        ):
+            dtype = dtypes.get(column)
+            if ref == time_ref or (dtype is not None and dtype.is_list()):
+                continue
+            terms.append(ref)
+        if not terms:
             terms.append(key_ref)
 
         return ', '.join(terms)

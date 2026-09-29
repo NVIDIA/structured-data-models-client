@@ -91,6 +91,14 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **A table with no key was sampled in whatever order the engine read it.**
+  Neighbours are kept newest first, and a keyless table had nothing after the
+  timestamp to order by, while the rows kept came back unordered. Rows sharing
+  a timestamp -- AdventureWorks order headers, recorded by the day -- then
+  reached the request in a different order on Databricks serverless Spark than
+  on a SQL warehouse, and the model's answer moved with it. A keyless table is
+  now ordered on every scalar column after its timestamp, and the SQL samplers
+  return neighbours in that order.
 - **A Databricks schema of every table recorded names it could not read
   back.** Leaving `tables` out took each table's name as the engine reports it,
   which on Databricks is qualified by catalog and schema, and the next read

@@ -347,7 +347,10 @@ class SnowSampler(SQLSampler):
         )
         order_by = self._neighbor_order_by(table_name, time_ref, key_ref)
         sql += f'  ORDER BY {order_by}\n'
-        sql += f') <= {num_neighbors}'
+        sql += f') <= {num_neighbors}\n'
+        # Returned in that order too, so the rows reach the request the same
+        # way however the warehouse reads them.
+        sql += f'ORDER BY TMP.__KUMO_BATCH__, {order_by}'
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:
             cursor.execute(sql, (payload,))

@@ -216,7 +216,10 @@ class DuckDBSampler(SQLSampler):
         )
         order_by = self._neighbor_order_by(table_name, time_ref, key_ref)
         sql += f'  ORDER BY {order_by}\n'
-        sql += f') <= {num_neighbors}'
+        sql += f') <= {num_neighbors}\n'
+        # Returned in that order too, so the rows reach the request the same
+        # way however the table is stored.
+        sql += f'ORDER BY tmp.__kumo_batch__, {order_by}'
 
         with self._connection.cursor() as cursor:
             cursor.register(tmp_name, tmp)

@@ -454,7 +454,10 @@ class SQLiteSampler(SQLSampler):
         )
         order_by = self._neighbor_order_by(table_name, time_ref, key_ref)
         sql += f'  ORDER BY {order_by}\n'
-        sql += f'  LIMIT {num_neighbors}\n)'
+        sql += f'  LIMIT {num_neighbors}\n)\n'
+        # Returned in that order too, so the rows reach the request the same
+        # way however the table is stored.
+        sql += f'ORDER BY __kumo_batch__, {order_by}'
 
         with self._connection.cursor() as cursor:
             cursor.adbc_ingest(tmp_name, tmp, mode='replace')

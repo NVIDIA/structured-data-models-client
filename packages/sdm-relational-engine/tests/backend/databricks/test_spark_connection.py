@@ -256,3 +256,32 @@ def test_the_sampler_runs_through_the_session(
     assert df['user_id'].tolist() == [3, 1]
     assert df['age'].tolist() == [27.0, 31.0]
     assert batch.tolist() == [0, 1]
+
+
+def test_neighbours_come_back_in_the_order_they_were_chosen(
+    session: _Session, graph: Graph
+) -> None:
+    """``_by_fkey`` returned its rows in whatever order the engine read them,
+    and serverless Spark reads them differently from a SQL warehouse, so the
+    same question built a different request on each. The rows are now returned
+    in the order that chose them, and a table with no key is ordered on every
+    column so that order is total.
+    """
+    graph['orders'].primary_key = None
+    sampler = KumoRelational(graph, verbose=False)._sampler
+
+    before = len(session.calls)
+    sampler._by_fkey(
+        'orders',
+        'user_id',
+        pd.Series([1]),
+        num_neighbors=2,
+        anchor_time=None,
+        columns={'user_id', 'ts'},
+    )
+    query, _ = session.calls[before]
+
+    refs = sampler.table_column_ref_dict['orders']
+    order_by = sampler._neighbor_order_by('orders', refs['ts'], refs['user_id'])
+    assert query.rstrip().endswith(f'ORDER BY TMP.__KUMO_BATCH__, {order_by}')
+    assert all(ref in order_by for ref in refs.values())

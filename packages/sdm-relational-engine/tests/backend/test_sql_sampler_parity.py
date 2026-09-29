@@ -255,6 +255,27 @@ def test_neighbor_order_breaks_ties_on_the_primary_key(sql_graph):
     assert '"date" DESC' in order_by
 
 
+def test_neighbor_order_of_a_keyless_table_breaks_ties_on_every_column(
+    sql_graph,
+):
+    """A table with no primary key had nothing after the timestamp to order
+    by, so rows sharing one came back in whatever order the engine read them.
+    Every scalar column, in name order, makes the order total: rows that agree
+    on all of them are indistinguishable to the model.
+    """
+    sql_graph['orders'].primary_key = None
+    sampler = rfm.KumoRelational(sql_graph, verbose=False)._sampler
+    refs = sampler.table_column_ref_dict['orders']
+    order_by = sampler._neighbor_order_by(
+        'orders', refs['date'], refs['user_id']
+    )
+
+    terms = [term.strip() for term in order_by.split(',')]
+    assert terms[0] == f'{refs["date"]} DESC'
+    expected = [ref for name, ref in sorted(refs.items()) if name != 'date']
+    assert terms[1:] == expected
+
+
 def test_projection_order_is_independent_of_set_iteration(sql_graph):
     """The projection list was built by iterating a ``set``, whose order depends
     on the per-process string hash seed.
