@@ -102,6 +102,10 @@ The first release is being assembled. Nothing here has shipped yet.
   until a commit, so a graph kept writers to its tables waiting, and one failed
   read made every later one fail too. Each read of the Postgres backend now
   ends its own transaction, and the Lakebase notebook connects with autocommit.
+- **A keyless Postgres table with a json or xml column failed to sample.**
+  The tie-break that orders a keyless table on every scalar column included
+  json and xml, which Postgres reads as strings but cannot order, so the whole
+  neighbour query failed. Those columns are now left out of the tie-break.
 - **A table with no key was sampled in whatever order the engine read it.**
   Neighbours are kept newest first, and a keyless table had nothing after the
   timestamp to order by, while the rows kept came back unordered. Rows sharing

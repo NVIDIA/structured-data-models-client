@@ -195,11 +195,21 @@ class SQLSampler(Sampler):
             dtype = dtypes.get(column)
             if ref == time_ref or (dtype is not None and dtype.is_list()):
                 continue
+            if not self._orderable(table_name, column):
+                continue
             terms.append(ref)
         if not terms:
             terms.append(key_ref)
 
         return ', '.join(terms)
+
+    def _orderable(self, table_name: str, column: str) -> bool:
+        r"""Whether ``ORDER BY`` accepts this column, for the keyless tie-break.
+
+        A backend whose scalar dtypes include types it cannot order overrides
+        this, since one such column fails the whole neighbour query.
+        """
+        return True
 
     def _warn_random_seed_unsupported(self, random_seed: int | None) -> None:
         r"""Warns once that this backend cannot draw a reproducible random

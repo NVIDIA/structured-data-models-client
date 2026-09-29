@@ -500,3 +500,42 @@ def test_reading_leaves_no_transaction_or_locks_behind(
     finally:
         connection.close()
         other.close()
+
+
+def test_a_keyless_table_with_json_and_xml_columns_samples(
+    postgres_schema: tuple[str, str],
+) -> None:
+    """A keyless table breaks timestamp ties on every scalar column, and json
+    and xml read as strings but have no ordering operator.
+    """
+    dsn, schema = postgres_schema
+    connection = connect('postgres', dsn)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'CREATE TABLE "{schema}".notes ('
+                'customer_id BIGINT NOT NULL REFERENCES '
+                f'"{schema}".customers(customer_id), '
+                'noted_at TIMESTAMP NOT NULL, body JSON, doc XML)'
+            )
+            cursor.execute(
+                f'INSERT INTO "{schema}".notes '
+                "SELECT 1 + (value % 20), TIMESTAMP '2025-01-01' "
+                "+ (value / 5) * INTERVAL '1 day', "
+                "json_build_object('n', value), "
+                'xmlelement(name n, value) '
+                'FROM generate_series(1, 1000) AS value'
+            )
+        connection.commit()
+        graph = Graph.from_postgres(
+            connection,
+            tables=['customers', 'notes'],
+            schema=schema,
+            verbose=False,
+        )
+        _materialize(
+            graph,
+            'PREDICT COUNT(notes.*, 0, 30, days) FOR EACH customers.customer_id',
+        )
+    finally:
+        connection.close()
