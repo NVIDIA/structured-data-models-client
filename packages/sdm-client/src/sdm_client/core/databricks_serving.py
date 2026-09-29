@@ -48,9 +48,28 @@ logger = logging.getLogger('sdm_client')
 #: NIM call is given.
 DEFAULT_TIMEOUT_SECONDS = 300.0
 
-# The SDK logs request and response bodies at DEBUG, and a body here is the
-# caller's rows.
-_SDK_BODY_LOGGER = 'databricks.sdk.core'
+# The SDK logs each round trip, bodies included, at DEBUG on this logger, and a
+# serving call's body is the caller's rows.
+_SDK_LOGGER = 'databricks.sdk'
+_SERVING_CALL = re.compile(r'POST /serving-endpoints/[^/\s]+/invocations\b')
+
+
+class _WithoutServingBodies(logging.Filter):
+    r"""Drop the SDK's round-trip record of a serving call, and only that."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.funcName != '_record_request_log':
+            return True
+        return not _SERVING_CALL.match(record.getMessage())
+
+
+def _keep_rows_out_of_the_sdk_log() -> None:
+    sdk_logger = logging.getLogger(_SDK_LOGGER)
+    if not any(
+        isinstance(f, _WithoutServingBodies) for f in sdk_logger.filters
+    ):
+        sdk_logger.addFilter(_WithoutServingBodies())
+
 
 # The served model reports a failure as ``CODE: detail``, both drawn from a
 # closed vocabulary that carries no request content.
@@ -109,9 +128,7 @@ class DatabricksServingTransport:
             )
         self._max_request_bytes = max_request_bytes
         self._closed = False
-        sdk_logger = logging.getLogger(_SDK_BODY_LOGGER)
-        if sdk_logger.getEffectiveLevel() < logging.INFO:
-            sdk_logger.setLevel(logging.INFO)
+        _keep_rows_out_of_the_sdk_log()
         self._workspace = (
             workspace_client
             if workspace_client is not None
