@@ -311,6 +311,8 @@ class SDMClient:
                 Raised before anything is sent.
             NimRequestError: If the endpoint answered with an error.
         """
+        _require_a_request(request)
+        _require_output_names(outputs)
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
@@ -426,6 +428,8 @@ class SDMClient:
         Raises:
             UnsupportedRequestError: If the endpoint does not serve sessions.
         """
+        _require_a_request(request)
+        _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
@@ -482,11 +486,8 @@ class SDMClient:
         request the model cannot answer fails with a message naming the model
         rather than as an opaque 422.
         """
-        if not isinstance(request, Request):
-            raise StructuredDataError(
-                f'request must be a Request, got {type(request).__name__}',
-                code='INVALID_REQUEST',
-            )
+        _require_a_request(request)
+        _require_output_names(outputs)
         spec = self._spec(model)
         adapter = self._adapters.get(spec.model_id)
         if adapter is None:
@@ -878,6 +879,46 @@ def _refuse_a_question_the_session_did_not_pin(
         f'would be answered. Fit again to ask something else',
         code='INVALID_REQUEST',
     )
+
+
+def _require_a_request(request: Any) -> None:
+    """Refuse anything that is not a request, before reading a field off it.
+
+    `errors.py` promises that `except StructuredDataError` catches everything
+    this client reports. `_prepare` held the right message and ran after the
+    first attribute was dereferenced, so the wrong type escaped as an
+    `AttributeError` naming a field the caller never heard of.
+
+    Asked at the entry rather than in `_prepare`, because a rewritten question
+    is answered in parts and never reaches it.
+    """
+    if not isinstance(request, Request):
+        raise StructuredDataError(
+            f'request must be a Request, got {type(request).__name__}; build '
+            f'one with Request(context=..., predict=...) or '
+            f'PredictiveQuery(...).materialize(...)',
+            code='INVALID_REQUEST',
+        )
+
+
+def _require_output_names(outputs: Any) -> None:
+    """Refuse an `outputs` that is not a sequence of field names."""
+    if outputs is None:
+        return
+    if isinstance(outputs, str):
+        raise StructuredDataError(
+            f'outputs must be a sequence of field names, not a single '
+            f'string; pass [{outputs!r}]',
+            code='INVALID_REQUEST',
+        )
+    if not isinstance(outputs, Sequence) or not all(
+        isinstance(name, str) for name in outputs
+    ):
+        raise StructuredDataError(
+            f'outputs must be a sequence of field names, got '
+            f'{type(outputs).__name__}',
+            code='INVALID_REQUEST',
+        )
 
 
 def _refuse_to_pin_a_rewritten_question(request: Request) -> None:

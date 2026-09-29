@@ -592,3 +592,55 @@ def test_related_frames_are_refused_where_they_are_offered():
     message = str(raised.value)
     assert 'child' in message
     assert 'materialize' in message
+
+
+# --- except StructuredDataError is enough, as the module promises -----------
+
+
+@pytest.mark.parametrize(
+    'call',
+    [
+        lambda c, r: c.predict(object(), model='kumo-tabular'),
+        lambda c, r: c.fit(object(), model='kumo-tabular'),
+        lambda c, r: c.predict(r, model='kumo-tabular', outputs=123),
+        lambda c, r: c.predict(r, model='kumo-tabular', outputs='prediction'),
+        lambda c, r: c.predict(r, model='kumo-tabular', outputs=[1, 2]),
+    ],
+    ids=['predict', 'fit', 'outputs int', 'outputs str', 'outputs of ints'],
+)
+def test_a_wrong_argument_is_reported_as_this_client_reports_things(call):
+    """`_prepare` held the right message and ran after the first attribute was
+    dereferenced, so the wrong type escaped as an `AttributeError`."""
+    import pandas as pd
+
+    from sdm_client import Request, SDMClient
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [i % 2 for i in range(20)],
+        }
+    )
+    request = Request(
+        context=context,
+        predict=pd.DataFrame({'id': [99], 'x': [9.0]}),
+        target='y',
+        task='classification',
+    )
+    client = SDMClient('http://127.0.0.1:1', api_key='none')
+    try:
+        with pytest.raises(StructuredDataError):
+            call(client, request)
+    finally:
+        client.close()
+
+
+def test_a_primary_key_that_is_not_a_name_is_reported_the_same_way():
+    import pandas as pd
+
+    from sdm_client import Schema
+
+    frame = pd.DataFrame({'id': range(5), 'x': [1.0] * 5})
+    with pytest.raises(StructuredDataError, match='names a column'):
+        Schema.from_data({'t': frame}, primary_keys={'t': 1})

@@ -1042,3 +1042,31 @@ def test_what_is_appended_to_a_part_failure_reads_as_a_sentence(
         )
     )
     assert joined in said
+
+
+@pytest.mark.parametrize(
+    'outputs', ['prediction', 123, [1, 2]], ids=['a string', 'an int', 'ints']
+)
+def test_a_ranking_reports_a_bad_outputs_the_way_every_route_does(outputs):
+    """A rewritten question is answered in parts and never reaches `_prepare`,
+    so the ranking's own output check saw a string first and refused it one
+    character at a time."""
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import KumoRelational, SDMClient
+
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2], candidates=[10, 11])
+    client = SDMClient('http://127.0.0.1:1', api_key='none')
+    try:
+        with pytest.raises(StructuredDataError) as raised:
+            client.predict(request, model=KumoRelational(), outputs=outputs)
+    finally:
+        client.close()
+
+    said = str(raised.value)
+    assert 'sequence of field names' in said
+    assert "'p', 'r', 'e'" not in said

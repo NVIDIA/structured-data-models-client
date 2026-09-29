@@ -833,6 +833,13 @@ def _as_key_tuple(key: str | Sequence[str] | None) -> tuple[str, ...]:
         return ()
     if isinstance(key, str):
         return (key,)
+    if not isinstance(key, Sequence) or not all(
+        isinstance(name, str) for name in key
+    ):
+        raise StructuredDataError(
+            f'a primary key names a column or a sequence of them, got {key!r}',
+            code='INVALID_REQUEST',
+        )
     return tuple(key)
 
 
