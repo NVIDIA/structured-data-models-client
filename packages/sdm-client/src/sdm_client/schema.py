@@ -561,8 +561,8 @@ class SourceTable(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
-    #: Always zero: the rows are not here to count. Declared keys are checked
-    #: against the source when a query is first materialized.
+    #: Always zero: the rows are not here to count, and declared keys are not
+    #: checked against the source.
     duplicate_keys: int = field(init=False, default=0)
 
     def __post_init__(self) -> None:

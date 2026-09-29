@@ -315,7 +315,7 @@ def test_the_tabular_model_is_refused_rather_than_fed_nothing(
 
     with pytest.raises(StructuredDataError, match='only the relational'):
         query.materialize(indices=[1], model=KumoTabular())
-    with pytest.raises(StructuredDataError, match='only the relational'):
+    with pytest.raises(StructuredDataError, match='score with indices='):
         query.materialize(predict=USERS.head(1))
 
 

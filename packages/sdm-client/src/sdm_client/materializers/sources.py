@@ -159,10 +159,6 @@ def engine_graph(
                 cache.keep({name: read[name] for name in missing})
         return cache.graph(tables)
 
-    if is_semantic_model(source):
-        graph = semantic_model_graph(source)
-        return graph if tables is None else _selected(graph, tables)
-
     try:
         from sdm_relational_engine.rfm import Graph
     except ImportError as error:  # pragma: no cover - optional extra
@@ -283,40 +279,3 @@ def semantic_model_graph(model: Any) -> Graph:
         f'no semantic model is kept in a {model.backend!r} source',
         code='INVALID_REQUEST',
     )
-
-
-def _selected(
-    graph: Graph, tables: Mapping[str, tuple[str, Sequence[str] | None]]
-) -> Graph:
-    r"""``graph`` holding only the model tables the schema kept, under the
-    names the schema gives them, with the columns it kept, and no edges.
-
-    Keys and time columns are cleared as well: the materializer sets every one
-    of them from the schema, and a column the model keyed on may be one the
-    schema left out.
-    """
-    for edge in list(graph.edges):
-        graph.unlink(edge.src_table, edge.fkey, edge.dst_table)
-    kept = {source_name: name for name, (source_name, _) in tables.items()}
-    engine_tables = {name: graph[name] for name in list(graph.tables)}
-    for name in engine_tables:
-        graph.remove_table(name)
-    for source_name, table in engine_tables.items():
-        if source_name not in kept:
-            continue
-        # The engine names a table once, when it is built, and has no rename;
-        # a model's tables are named by the model, and the schema may call
-        # them something else.
-        table._name = kept[source_name]
-        graph.add_table(table)
-    for name, (_, columns) in tables.items():
-        table = graph[name]
-        # The engine's setter is declared apart from its getter, which mypy
-        # reads as a read-only property.
-        table.primary_key = None  # type: ignore[misc]
-        table.time_column = None
-        if columns is None:
-            continue
-        for column in [c.name for c in table.columns if c.name not in columns]:
-            table.remove_column(column)
-    return graph

@@ -146,7 +146,14 @@ class PredictiveQuery:
             or len(self.schema) > 1
             or bool(self.schema.relationships)
         )
-        if in_place and (not relational or predict is not None):
+        if in_place and predict is not None and relational:
+            raise StructuredDataError(
+                'predict= carries rows, and a schema over tables in their '
+                'source is sampled there instead; name the entities to score '
+                'with indices=',
+                code='INVALID_REQUEST',
+            )
+        if in_place and not relational:
             raise StructuredDataError(
                 'a schema over tables in their source is sampled with SQL, '
                 'which only the relational model reads; the tabular model '
