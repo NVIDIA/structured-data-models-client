@@ -257,23 +257,28 @@ def test_readiness_is_the_endpoint_s_own_state():
     assert client.health_ready() is False
 
 
-def test_the_served_model_s_diagnosis_becomes_the_error_code():
-    """The served model reports ``CODE: detail`` from a closed vocabulary; the
-    gateway wraps it in its own message and code."""
-    errors = pytest.importorskip('databricks.sdk.errors')
-    refusal = errors.BadRequest(
+@pytest.mark.parametrize(
+    'said',
+    [
         'Encountered an unexpected error while evaluating the model. '
         "Error 'INVALID_SCHEMA: the request schema is invalid'",
-        error_code='BAD_REQUEST',
-    )
-    client, _ = opened(raiser=refusal)
+        'INVALID_SCHEMA: Failed to parse input: row 3 customer_name=Jane Doe '
+        'ssn=123-45-6789',
+    ],
+)
+def test_the_served_model_s_code_is_repeated_and_its_text_is_not(said):
+    """A model's error text can quote the rows it was sent."""
+    errors = pytest.importorskip('databricks.sdk.errors')
+    client, _ = opened(raiser=errors.BadRequest(said, error_code='BAD_REQUEST'))
     with pytest.raises(NimRequestError) as error:
         client.predict(asked(), model='kumo-tabular')
     assert error.value.status_code == 400
     assert error.value.code == 'INVALID_SCHEMA'
-    assert ENDPOINT in str(error.value)
-    assert 'the request schema is invalid' in str(error.value)
     assert error.value.details['provider_code'] == 'BAD_REQUEST'
+    shown = str(error.value) + json.dumps(error.value.details)
+    assert ENDPOINT in shown
+    for detail in ('schema is invalid', 'Jane', '123-45'):
+        assert detail not in shown
 
 
 def test_a_gateway_failure_names_the_endpoint_and_nothing_it_said():

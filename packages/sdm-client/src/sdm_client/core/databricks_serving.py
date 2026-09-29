@@ -32,7 +32,6 @@ from sdm_api.databricks_serving import (
 
 from sdm_client.core.transport import (
     _check_encodable,
-    _snippet,
     _to_nim_error,
     _validate_limits,
 )
@@ -71,9 +70,9 @@ def _keep_rows_out_of_the_sdk_log() -> None:
         sdk_logger.addFilter(_WithoutServingBodies())
 
 
-# The served model reports a failure as ``CODE: detail``, both drawn from a
-# closed vocabulary that carries no request content.
-_MODEL_DIAGNOSIS = re.compile(r'\b([A-Z][A-Z0-9_]{2,63}): ([^\n\'"]{1,300})')
+# The served model reports a failure as ``CODE: detail``. Only the code is
+# repeated: the detail is free text, and can quote the rows it was sent.
+_MODEL_DIAGNOSIS = re.compile(r'\b([A-Z][A-Z0-9_]{2,63}): \S')
 
 _NO_SESSIONS = (
     'a Databricks Model Serving endpoint has no sessions: it answers one '
@@ -265,15 +264,14 @@ class DatabricksServingTransport:
         }
         if provider_code is not None:
             details['provider_code'] = provider_code
-        said = _model_diagnosis(error, provider_code)
-        if said is not None:
-            code, detail = said
+        code = _model_diagnosis(error, provider_code)
+        if code is not None:
             return NimRequestError(
                 status,
                 code=code,
                 message=(
                     f'serving endpoint {self._endpoint!r} refused the '
-                    f'request: {_snippet(detail)}'
+                    f'request ({code})'
                 ),
                 details=details,
             )
@@ -288,20 +286,17 @@ class DatabricksServingTransport:
 
 def _model_diagnosis(
     error: BaseException, provider_code: str | None
-) -> tuple[str, str] | None:
-    r"""The code and detail the served model gave, if the SDK carried them.
+) -> str | None:
+    r"""The code the served model gave, if the SDK carried one.
 
-    The provider's own code is skipped: a gateway message of the form
-    ``BAD_REQUEST: ...`` is Databricks describing the call, not the model
-    describing the request, and its text is not held to the model's rule of
-    carrying no request content.
+    The provider's own code is skipped: ``BAD_REQUEST: ...`` is Databricks
+    describing the call, not the model describing the request.
     """
     said = getattr(error, 'message', None)
     text = said if isinstance(said, str) else str(error)
     for match in _MODEL_DIAGNOSIS.finditer(text):
-        code, detail = match.group(1), match.group(2).strip()
-        if code != provider_code and detail:
-            return code, detail
+        if match.group(1) != provider_code:
+            return match.group(1)
     return None
 
 
