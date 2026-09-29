@@ -342,3 +342,59 @@ def test_the_leak_warning_needs_every_part_of_a_composite_key() -> None:
     assert not heard_for(pd.DataFrame({'id': [1], 'x': [0.9]}))
     assert not heard_for(pd.DataFrame({'tenant': ['z'], 'id': [9], 'x': [0.9]}))
     assert heard_for(pd.DataFrame({'tenant': ['a'], 'id': [1], 'x': [0.9]}))
+
+
+def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:
+    """A key column whose halves hold different python types -- 1 in the
+    context and '1' in the rows being scored -- is one column, encoded one
+    way, so values that differ in python are the same value by the time the
+    model reads them."""
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    context = pd.DataFrame(
+        {'tenant': [1, 2], 'id': [10, 20], 'x': [0.1, 0.2], 'y': [0, 1]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': ['tenant', 'id']}
+        )
+
+    def heard_for(predict: pd.DataFrame) -> tuple[list[str], set]:
+        with warnings.catch_warnings(record=True) as heard:
+            warnings.simplefilter('always')
+            request = Request(
+                context=context,
+                predict=predict,
+                schema=schema,
+                target='y',
+                task='classification',
+            )
+        said = [
+            str(one.message)
+            for one in heard
+            if 'rows being scored' in str(one.message)
+        ]
+        envelope = next(
+            iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+        )
+        halves = {}
+        for half in ('context', 'predict'):
+            table = envelope[half]['instance_table']
+            at = [table['columns'].index(name) for name in ('tenant', 'id')]
+            halves[half] = {
+                tuple(row[index] for index in at) for row in table['rows']
+            }
+        return said, halves['context'] & halves['predict']
+
+    said, overlapping = heard_for(
+        pd.DataFrame({'tenant': ['1'], 'id': [10], 'x': [0.1]})
+    )
+    assert overlapping
+    assert said
+
+    said, overlapping = heard_for(
+        pd.DataFrame({'tenant': ['9'], 'id': [99], 'x': [0.1]})
+    )
+    assert not overlapping
+    assert not said

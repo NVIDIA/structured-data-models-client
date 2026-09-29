@@ -703,6 +703,20 @@ class Schema:
             return
         object.__setattr__(self, key, value)
 
+    def __copy__(self) -> Schema:
+        r"""A shallow copy is still a schema of its own tables.
+
+        `copy.copy` shared the tables and their columns, so editing the copy
+        edited the original -- which was always a trap, and became a
+        destructive one once key columns were re-derived: clearing the copy's
+        relationships retyped a column of a schema that still had them.
+
+        The rows are still shared, as they are in `snapshot()`: they are the
+        data, and copying a warehouse extract is not what a caller asking for
+        a copy of the schema is asking for.
+        """
+        return self.snapshot()
+
     def __setstate__(self, state: dict[str, Any]) -> None:
         r"""Restore a copied or unpickled schema with its links still checked.
 

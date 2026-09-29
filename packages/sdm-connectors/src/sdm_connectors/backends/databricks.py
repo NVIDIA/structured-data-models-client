@@ -63,6 +63,8 @@ _DOCUMENTED_KWARGS = frozenset(
         'experimental_oauth_persistence',
         'oauth_client_id',
         'oauth_client_secret',
+        'oauth_jwt_key_file',
+        'oauth_jwt_kid',
         'oauth_redirect_port',
         'oauth_redirect_port_range',
         'oauth_scopes',
@@ -82,9 +84,15 @@ _DOCUMENTED_KWARGS = frozenset(
 )
 
 
-# What counts as having said how to authenticate. Anything here is the
-# caller's answer to that question; nothing here means there is no answer, and
-# the driver's reply to no answer is to wait for a browser.
+# What counts as having said how to authenticate, taken from the names the
+# installed driver actually reads when it resolves an auth provider. Anything
+# here is the caller's answer to that question; nothing here means there is no
+# answer, and the driver's reply to no answer is to wait for a browser.
+#
+# `tls_client_cert_file` is deliberately not here. The driver reads the
+# underscored spelling for certificate authentication and the public one only
+# as a transport setting, so counting the public one satisfied this guard
+# while leaving the driver with no certificate and a browser to open.
 _CREDENTIAL_ARGS = frozenset(
     {
         'access_token',
@@ -94,10 +102,9 @@ _CREDENTIAL_ARGS = frozenset(
         'azure_client_secret',
         'oauth_client_id',
         'oauth_client_secret',
+        'oauth_jwt_key_file',
         'password',
-        'tls_client_cert_file',
         'username',
-        '_tls_client_cert_file',
         '_use_cert_as_auth',
     }
 )

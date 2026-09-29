@@ -174,7 +174,12 @@ def read_table(
             ``QUERY_FAILED`` if the statement does not execute.
     """
     sql = resolve_sql(table=table, query=query)
-    with driver_guard('QUERY_FAILED', 'query execution failed', sql=sql):
+    with driver_guard(
+        'QUERY_FAILED',
+        'query execution failed',
+        sql=sql,
+        type_error_is_the_caller_s=False,
+    ):
         cursor, owned = _query_handle(connection)
     try:
         with driver_guard(

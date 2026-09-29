@@ -299,3 +299,31 @@ def test_a_replacement_column_learns_which_table_it_is_in() -> None:
 
     schema['orders']['order_id'].stype = 'categorical'
     assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_a_shallow_copy_is_a_schema_of_its_own() -> None:
+    """`copy.copy` shared the tables and their columns, which was always a
+    trap and became a destructive one once key columns were re-derived:
+    clearing the copy's relationships retyped a column of a schema that still
+    had them."""
+    import copy as copying
+
+    original = build([LINK])
+    copied = copying.copy(original)
+
+    copied.relationships = []
+
+    assert original.relationships
+    assert original['orders']['user_id'].stype == 'ID'
+    assert copied['orders']['user_id'].stype == 'numerical'
+
+
+def test_editing_a_shallow_copy_leaves_the_original_alone() -> None:
+    import copy as copying
+
+    original = build([])
+    copied = copying.copy(original)
+
+    copied['orders']['price'].stype = 'categorical'
+
+    assert original['orders']['price'].stype != 'categorical'

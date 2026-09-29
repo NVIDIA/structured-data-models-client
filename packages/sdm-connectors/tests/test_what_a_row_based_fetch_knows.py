@@ -459,3 +459,74 @@ def test_a_credential_that_is_empty_is_no_credential(
     with pytest.raises(ConnectorError) as raised:
         backend.connect(server_hostname='h', http_path='p', **given)
     assert 'needs a credential' in str(raised.value)
+
+
+def test_a_type_error_creating_a_cursor_is_not_called_a_bad_argument() -> None:
+    from sdm_connectors.reader import read_table
+    from sdm_connectors.sql import ConnectorError
+
+    class Connection:
+        def cursor(self) -> object:
+            raise TypeError('driver failed creating cursor')
+
+    with pytest.raises(ConnectorError) as raised:
+        read_table(Connection(), query='select 1')
+
+    assert raised.value.code == 'QUERY_FAILED'
+
+
+def test_only_the_names_the_driver_reads_count_as_a_credential(
+    monkeypatch,
+) -> None:
+    """The driver reads the underscored spelling for certificate
+    authentication and the public one only as a transport setting, so counting
+    the public one satisfied the guard while leaving the driver with no
+    certificate and a browser to open."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    seen: dict = {}
+    monkeypatch.setattr(
+        backend.databricks_sql,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    with pytest.raises(ConnectorError):
+        backend.connect(
+            server_hostname='h', http_path='p', tls_client_cert_file='c.pem'
+        )
+
+    backend.connect(
+        server_hostname='h',
+        http_path='p',
+        _use_cert_as_auth=True,
+        _tls_client_cert_file='c.pem',
+    )
+    assert seen['_tls_client_cert_file'] == 'c.pem'
+
+
+def test_the_driver_s_jwt_private_key_auth_is_accepted(monkeypatch) -> None:
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+
+    seen: dict = {}
+    monkeypatch.setattr(
+        backend.databricks_sql,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or object(),
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    backend.connect(
+        server_hostname='h',
+        http_path='p',
+        use_kernel=True,
+        oauth_client_id='i',
+        oauth_jwt_key_file='/keys/client.pem',
+        oauth_jwt_kid='kid-1',
+    )
+
+    assert seen['oauth_jwt_key_file'] == '/keys/client.pem'

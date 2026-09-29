@@ -44,6 +44,7 @@ from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
+from sdm_client.wire.dtypes import _is_missing
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -194,6 +195,16 @@ def _judge_a_context_that_teaches_nothing(
     )
 
 
+def _as_the_wire_spells(values: Any) -> tuple[str, ...]:
+    r"""One key, written the way it will be written on the wire.
+
+    Every value the contract carries is encoded from its column's declared
+    type, so two halves that disagree in python about whether a key is ``1``
+    or ``'1'`` agree completely by the time the model reads them.
+    """
+    return tuple('' if _is_missing(value) else str(value) for value in values)
+
+
 def _warn_of_rows_scored_from_their_own_answers(
     context: pd.DataFrame,
     predict: pd.DataFrame,
@@ -222,11 +233,17 @@ def _warn_of_rows_scored_from_their_own_answers(
     answered = context[context[target].notna()]
     if answered.empty:
         return
-    answers = set(map(tuple, answered[key].to_numpy()))
+    # Compared as the wire spells them. A key column whose two halves hold
+    # different python types -- 1 in the context and '1' in the rows being
+    # scored -- is one column, encoded one way, so the values that differ here
+    # are the same value by the time the model reads them.
+    answers = {_as_the_wire_spells(row) for row in answered[key].to_numpy()}
     # Rows, not keys: the sentence counts rows being scored, and two rows
     # asking about one entity are two rows whose answer is being shown.
     shown = sum(
-        1 for named in map(tuple, predict[key].to_numpy()) if named in answers
+        1
+        for row in predict[key].to_numpy()
+        if _as_the_wire_spells(row) in answers
     )
     if not shown:
         return
