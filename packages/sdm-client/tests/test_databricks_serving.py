@@ -351,42 +351,65 @@ def test_the_size_counted_is_the_wrapped_envelope_not_the_payload():
 
 @pytest.fixture
 def workspace_host() -> Any:
-    """A local stand-in for a workspace that answers every call alike."""
+    """A local stand-in for a workspace; set ``answer`` to choose its reply."""
     import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
-    reply = json.dumps(
-        {'predictions': [{'response_json': json.dumps({'ok': True})}]}
-    ).encode()
+    answer = {
+        'status': 200,
+        'body': json.dumps(
+            {'predictions': [{'response_json': json.dumps({'ok': True})}]}
+        ),
+    }
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             self.rfile.read(int(self.headers.get('Content-Length', 0)))
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
+            self.send_response(answer['status'])
+            self.send_header('Content-Type', 'text/plain')
             self.end_headers()
-            self.wfile.write(reply)
+            self.wfile.write(answer['body'].encode())
 
         def log_message(self, *args: Any) -> None:
             pass
 
     server = HTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f'http://127.0.0.1:{server.server_port}'
+    yield f'http://127.0.0.1:{server.server_port}', answer
     server.shutdown()
 
 
-def test_the_sdk_s_debug_log_carries_no_rows(workspace_host, caplog):
+@pytest.mark.parametrize(
+    'status, body',
+    [
+        (200, None),
+        (500, 'upstream failure'),
+        (500, f'could not parse row {SECRET}'),
+    ],
+    ids=['answered', 'unparseable-error', 'error-quoting-a-row'],
+)
+def test_the_debug_log_carries_no_rows(workspace_host, caplog, status, body):
     sdk = pytest.importorskip('databricks.sdk')
+    host, answer = workspace_host
+    if body is not None:
+        answer.update(status=status, body=body)
     loggers = ('databricks.sdk', 'databricks.sdk.core')
     levels = {name: logging.getLogger(name).level for name in loggers}
     caplog.set_level(logging.DEBUG)
     workspace = sdk.WorkspaceClient(
-        host=workspace_host, token='dapi-test', auth_type='pat'
+        config=sdk.core.Config(
+            host=host,
+            token='dapi-test',
+            auth_type='pat',
+            retry_timeout_seconds=5,
+        )
     )
 
     transport = DatabricksServingTransport(ENDPOINT, workspace_client=workspace)
-    transport.predict({'context': {'rows': [[SECRET]]}})
+    try:
+        transport.predict({'context': {'rows': [[SECRET]]}})
+    except NimRequestError:
+        assert status >= 400
 
     assert SECRET not in caplog.text
     assert {name: logging.getLogger(name).level for name in loggers} == levels

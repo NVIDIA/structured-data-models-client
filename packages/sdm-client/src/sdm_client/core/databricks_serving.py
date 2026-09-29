@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from typing import Any
 
 from sdm_api.databricks_serving import (
@@ -50,7 +51,7 @@ DEFAULT_TIMEOUT_SECONDS = 300.0
 # The SDK logs each round trip, bodies included, at DEBUG on this logger, and a
 # serving call's body is the caller's rows.
 _SDK_LOGGER = 'databricks.sdk'
-_SERVING_CALL = re.compile(r'POST /serving-endpoints/[^/\s]+/invocations\b')
+_SERVING_CALL = re.compile(r'/serving-endpoints/[^/\s]+/invocations\b')
 
 
 class _WithoutServingBodies(logging.Filter):
@@ -59,15 +60,20 @@ class _WithoutServingBodies(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.funcName != '_record_request_log':
             return True
-        return not _SERVING_CALL.match(record.getMessage())
+        # The first line is ``METHOD /path``; a host may add a path prefix.
+        first_line = record.getMessage().split('\n', 1)[0]
+        return _SERVING_CALL.search(first_line) is None
+
+
+_BODY_FILTER = _WithoutServingBodies()
+_BODY_FILTER_LOCK = threading.Lock()
 
 
 def _keep_rows_out_of_the_sdk_log() -> None:
     sdk_logger = logging.getLogger(_SDK_LOGGER)
-    if not any(
-        isinstance(f, _WithoutServingBodies) for f in sdk_logger.filters
-    ):
-        sdk_logger.addFilter(_WithoutServingBodies())
+    with _BODY_FILTER_LOCK:
+        if _BODY_FILTER not in sdk_logger.filters:
+            sdk_logger.addFilter(_BODY_FILTER)
 
 
 # The served model reports a failure as ``CODE: detail``. Only the code is
@@ -246,25 +252,26 @@ class DatabricksServingTransport:
         r"""The endpoint's failure, as the client reports any endpoint's.
 
         The status comes from the SDK's error class and the code from the
-        served model's own diagnosis where it gave one. Nothing else of the
-        SDK's message is repeated: it is logged at DEBUG, and what reaches the
-        caller is the endpoint's name and what the model said was wrong.
+        served model's own diagnosis where it gave one. The SDK's message is
+        neither repeated nor logged: it can hold the request body, which is the
+        caller's rows.
         """
-        logger.debug(
-            'serving endpoint %r failed with %s',
-            self._endpoint,
-            type(error).__name__,
-            exc_info=error,
-        )
         status = status_of(error)
         provider_code = error_code_of(error)
+        code = _model_diagnosis(error, provider_code)
+        logger.debug(
+            'serving endpoint %r failed with %s (status %s, code %s)',
+            self._endpoint,
+            type(error).__name__,
+            status,
+            code or provider_code,
+        )
         details: dict[str, Any] = {
             'endpoint': self._endpoint,
             'provider_error': type(error).__name__,
         }
         if provider_code is not None:
             details['provider_code'] = provider_code
-        code = _model_diagnosis(error, provider_code)
         if code is not None:
             return NimRequestError(
                 status,
