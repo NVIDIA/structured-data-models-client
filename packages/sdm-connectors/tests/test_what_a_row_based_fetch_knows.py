@@ -432,6 +432,15 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
         ({'oauth_client_id': 'i', 'oauth_client_secret': 's'}, False),
         ({'oauth_client_id': 'i', 'oauth_jwt_key_file': '/k.pem'}, False),
         ({'oauth_client_secret': 's'}, False),
+        ({'oauth_client_id': 'app', 'oauth_redirect_port': 8020}, True),
+        (
+            {
+                'oauth_client_id': 'app',
+                'oauth_redirect_port_range': [8020, 8021],
+            },
+            True,
+        ),
+        ({'oauth_client_id': 'app'}, True),
         ({'_use_cert_as_auth': True}, False),
         ({'azure_client_secret': 's'}, False),
         ({'tls_client_cert_file': 'c.pem'}, False),
@@ -581,3 +590,36 @@ def test_only_an_auth_type_the_driver_knows_counts_as_one(
     else:
         with pytest.raises(ConnectorError):
             backend.connect(server_hostname='h', http_path='p', **given)
+
+
+def test_naming_an_oauth_app_is_choosing_the_browser_flow_on_purpose(
+    monkeypatch,
+) -> None:
+    """The driver resolves to its browser flow for anything it does not
+    recognise, including an empty call, so it cannot tell a deliberate U2M
+    setup from a forgotten token. Naming an OAuth application can: the guard
+    is for the accident, not the choice. Not beside a machine-to-machine
+    secret, which asks for something else and would be quietly downgraded."""
+    pytest.importorskip('databricks.sql')
+    from sdm_connectors.backends import databricks as backend
+    from sdm_connectors.sql import ConnectorError
+
+    monkeypatch.setattr(
+        backend.databricks_sql, 'connect', lambda **kwargs: object()
+    )
+    monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
+
+    backend.connect(
+        server_hostname='h',
+        http_path='p',
+        oauth_client_id='app',
+        oauth_redirect_port=8020,
+    )
+
+    with pytest.raises(ConnectorError):
+        backend.connect(
+            server_hostname='h',
+            http_path='p',
+            oauth_client_id='app',
+            oauth_client_secret='secret',
+        )

@@ -131,13 +131,29 @@ def _an_auth_type_the_driver_knows() -> frozenset[str]:
 _KNOWN_AUTH_TYPES = _an_auth_type_the_driver_knows()
 
 
+#: Naming an OAuth application is choosing the browser flow on purpose. The
+#: driver resolves to it for anything it does not recognise -- including an
+#: empty call -- so the driver cannot tell a deliberate U2M setup from a
+#: forgotten token, and this is the only thing that can: one of them says the
+#: word `oauth`. Not beside a machine-to-machine secret, which asks for
+#: something else and would be quietly downgraded to a browser.
+_AN_OAUTH_APP = frozenset(
+    {'oauth_client_id', 'oauth_redirect_port', 'oauth_redirect_port_range'}
+)
+_MACHINE_TO_MACHINE = frozenset(
+    {'oauth_client_secret', 'oauth_jwt_key_file', 'azure_client_secret'}
+)
+
+
 def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
-    r"""Whether this call can reach the driver's browser flow."""
+    r"""Whether this call can reach the driver's browser flow by accident."""
     named = {name for name, value in given.items() if value}
     if 'use_kernel' in named:
         return True
     if 'auth_type' in named and given['auth_type'] not in _KNOWN_AUTH_TYPES:
         named = named - {'auth_type'}
+    if _AN_OAUTH_APP & named and not _MACHINE_TO_MACHINE & named:
+        return True
     return any(way <= named for way in _WAYS_THE_THRIFT_ROUTE_AUTHENTICATES)
 
 
@@ -194,8 +210,9 @@ def connect(
         raise ConnectorError(
             'connecting to Databricks needs a credential and none was given: '
             'pass access_token=..., set DATABRICKS_TOKEN, or name '
-            'credentials_provider, an auth_type, or _use_cert_as_auth with '
-            '_tls_client_cert_file. Half of a pair is not a credential, and '
+            'credentials_provider, an auth_type, an oauth_client_id, or '
+            '_use_cert_as_auth with _tls_client_cert_file. Half of a pair is '
+            'not a credential, and '
             'neither is a machine-to-machine one on this route: the driver '
             'resolves what it does not recognise to its browser flow, which '
             'waits for a human and never returns',
