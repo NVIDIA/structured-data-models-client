@@ -194,6 +194,46 @@ def _judge_a_context_that_teaches_nothing(
     )
 
 
+def _warn_of_rows_scored_from_their_own_answers(
+    context: pd.DataFrame,
+    predict: pd.DataFrame,
+    schema: Schema,
+    entity_table: str,
+    target: str,
+) -> None:
+    r"""Say when the rows being scored sit in the context with their answers.
+
+    Both gathered routes take such rows out of the context they send, and a
+    session says so when it cannot. A request built from frames is handed both
+    halves and did neither, so the model was shown the answer to the question
+    it was being asked -- the one thing every other route here prevents.
+    """
+    key = [
+        column
+        for column in _as_key_tuple(schema[entity_table].primary_key)
+        if column in context.columns and column in predict.columns
+    ]
+    if not key:
+        return
+    answered = context[context[target].notna()]
+    if answered.empty:
+        return
+    shown = set(map(tuple, answered[key].to_numpy())) & set(
+        map(tuple, predict[key].to_numpy())
+    )
+    if not shown:
+        return
+    warnings.warn(
+        f'{len(shown)} of the {len(predict)} rows being scored are also in '
+        f'context, carrying the {target!r} being asked for, so the model is '
+        f'being shown the answers to rows it is being asked about. Drop them '
+        f'from context, or gather the request with materialize(), which '
+        f'leaves the rows it scores out of the context it sends.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 @dataclass(frozen=True)
 class Split:
     r"""One half of a request: the instance rows, plus any related tables.
@@ -363,6 +403,9 @@ class Request:
             )
 
         _judge_a_context_that_teaches_nothing(target, context[target], task)
+        _warn_of_rows_scored_from_their_own_answers(
+            context, predict, schema, entity_table, target
+        )
 
         self.schema = schema
         self.task = Task(

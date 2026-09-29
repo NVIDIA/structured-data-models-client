@@ -11,6 +11,8 @@ check here exists so the caller reads a sentence instead.
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 
 from sdm_client import KumoRelational, Schema, UnsupportedRequestError
@@ -550,3 +552,67 @@ def test_a_session_accepts_a_literal_written_with_the_other_quote():
     assert spelled(double) == spelled(single)
     assert spelled('o.a="x" AND o.b=\'y\'') == spelled('o.a=\'x\' AND o.b="y"')
     assert spelled('o.a="x"') != spelled('o.a="z"')
+
+
+def test_a_frame_built_request_says_when_it_scores_rows_it_shows_the_answers_to():
+    """Both gathered routes take such rows out of the context they send, and a
+    session says so when it cannot. This route did neither."""
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [i % 2 for i in range(20)],
+        }
+    )
+
+    def notices(predict):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always', SDMWarning)
+            Request(
+                context=context,
+                predict=predict,
+                target='y',
+                task='classification',
+            )
+        return [
+            str(item.message)
+            for item in caught
+            if 'being scored' in str(item.message)
+        ]
+
+    overlapping = notices(context.head(3).drop(columns=['y']))
+    assert len(overlapping) == 1
+    assert '3 of the 3 rows being scored' in overlapping[0]
+    assert 'materialize()' in overlapping[0]
+
+    assert notices(pd.DataFrame({'id': [90, 91], 'x': [9.0, 9.1]})) == []
+
+
+def test_a_context_whose_answers_are_missing_is_not_called_a_leak():
+    """A row with no target teaches nothing and gives nothing away."""
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [None] * 3 + [i % 2 for i in range(17)],
+        }
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always', SDMWarning)
+        Request(
+            context=context,
+            predict=context.head(3).drop(columns=['y']),
+            target='y',
+            task='classification',
+        )
+    assert not [item for item in caught if 'being scored' in str(item.message)]

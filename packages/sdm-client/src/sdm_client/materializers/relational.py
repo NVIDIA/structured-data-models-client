@@ -422,6 +422,7 @@ class RelationalMaterializer:
             raise StructuredDataError(
                 f'{error}{detail}',
                 code='INVALID_REQUEST',
+                details=_what_the_engine_refused(str(error)),
             ) from error
 
     @staticmethod
@@ -705,6 +706,27 @@ def _holds_text(values: pd.Series) -> bool:
     ):
         return False
     return pd.api.types.infer_dtype(values, skipna=True) == 'string'
+
+
+_A_WINDOW_THAT_OUTRAN_THE_DATA = (
+    'aggregation time range',
+    'we would need data back to',
+    'anchor timestamp is too early',
+)
+
+
+def _what_the_engine_refused(said: str) -> dict[str, Any]:
+    """What the engine's complaint is about, as something to branch on.
+
+    A question asked as several parts appends an account of which part failed,
+    and that account can only name a remedy where it knows the failure is one
+    the remedy addresses. The engine says so in words; this records it so the
+    seam reads a value rather than the words.
+    """
+    lowered = said.lower()
+    if any(mark in lowered for mark in _A_WINDOW_THAT_OUTRAN_THE_DATA):
+        return {'window_outran_the_data': True}
+    return {}
 
 
 def _only_junk_is_unread(present: pd.Series) -> bool:

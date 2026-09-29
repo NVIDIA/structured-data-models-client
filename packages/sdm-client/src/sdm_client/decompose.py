@@ -138,6 +138,11 @@ def about_the_part(
 
     A remedy this is about to contradict is taken out rather than left to be
     read first: no context size reaches a candidate the data does not.
+
+    Which part failed is always said, because it is always true. A remedy is
+    added only where the failure is one it addresses -- an unknown model is not
+    answered by asking for fewer steps, and at step 1 there are no fewer to ask
+    for.
     """
     how_many = len(rewritten.parts)
     first = _ended(error.args[0])
@@ -156,12 +161,15 @@ def about_the_part(
                 'without it rather than for a wider context.'
             )
     else:
-        said = (
-            f'This is forecast step {about} of {how_many}, and the window '
-            f"named above is that step's rather than the one written; ask "
-            f'for fewer than {about} steps if the data does not reach that '
-            f'far.'
-        )
+        said = f'This is forecast step {about} of {how_many}.'
+        if (getattr(error, 'details', None) or {}).get(
+            'window_outran_the_data'
+        ):
+            said += (
+                f" The window named above is that step's rather than the one "
+                f'written; ask for fewer than {about} steps if the data does '
+                f'not reach that far.'
+            )
     said = f'{first} {said}'
     carried = error.__class__.__new__(error.__class__)
     carried.__dict__.update(error.__dict__)
