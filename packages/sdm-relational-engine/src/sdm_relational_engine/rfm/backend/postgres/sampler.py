@@ -186,10 +186,12 @@ class PostgresSampler(SQLSampler):
     def _postgres_type(self, table_name: str, column: str) -> str:
         return self._postgres_type_dict[table_name][column]
 
-    def _orderable(self, table_name: str, column: str) -> bool:
-        # json and xml read as strings but have no ordering operator.
-        spelling = self._postgres_type_dict[table_name].get(column, '')
-        return spelling.split('(')[0].strip().lower() not in {'json', 'xml'}
+    def _tie_break_term(self, table_name: str, column: str, ref: str) -> str:
+        # json and xml read as strings but cannot be ordered, and a domain can
+        # hide either, so every string column is ordered by its text.
+        if self.table_dtype_dict[table_name].get(column) == Dtype.string:
+            return f'CAST({ref} AS text)'
+        return ref
 
     @staticmethod
     def _serialize_time(value: Any) -> str | None:

@@ -512,18 +512,20 @@ def test_a_keyless_table_with_json_and_xml_columns_samples(
     connection = connect('postgres', dsn)
     try:
         with connection.cursor() as cursor:
+            cursor.execute(f'CREATE DOMAIN "{schema}".payload AS JSON')
             cursor.execute(
                 f'CREATE TABLE "{schema}".notes ('
                 'customer_id BIGINT NOT NULL REFERENCES '
                 f'"{schema}".customers(customer_id), '
-                'noted_at TIMESTAMP NOT NULL, body JSON, doc XML)'
+                'noted_at TIMESTAMP NOT NULL, body JSON, doc XML, '
+                f'meta "{schema}".payload)'
             )
             cursor.execute(
                 f'INSERT INTO "{schema}".notes '
                 "SELECT 1 + (value % 20), TIMESTAMP '2025-01-01' "
                 "+ (value / 5) * INTERVAL '1 day', "
                 "json_build_object('n', value), "
-                'xmlelement(name n, value) '
+                "xmlelement(name n, value), json_build_object('m', value) "
                 'FROM generate_series(1, 1000) AS value'
             )
         connection.commit()
