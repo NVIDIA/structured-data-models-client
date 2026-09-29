@@ -14,8 +14,10 @@ computes is the one the rows say.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import sqlite3
+import uuid
 import warnings
 from pathlib import Path
 from typing import Any
@@ -208,6 +210,49 @@ def test_a_declared_foreign_key_links_what_names_would_not() -> None:
 
     assert schema.relationships == [
         Relationship('orders', 'buyer', 'users', 'user_id')
+    ]
+
+
+def test_a_foreign_key_declared_in_postgres_links_its_tables() -> None:
+    # Postgres names the referenced table with its schema; DuckDB does not, so
+    # the test above could not see a mismatch.
+    dsn = os.getenv('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        if os.getenv('SDM_REQUIRE_POSTGRES'):
+            pytest.fail(
+                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+            )
+        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
+    psycopg = pytest.importorskip('psycopg')
+    from sdm_connectors import PostgresSource
+
+    namespace = f'fk_{uuid.uuid4().hex[:8]}'
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(f'CREATE SCHEMA {namespace}')
+        try:
+            connection.execute(
+                f'CREATE TABLE {namespace}.u (user_id INTEGER PRIMARY KEY)'
+            )
+            connection.execute(
+                f'CREATE TABLE {namespace}.o (order_id INTEGER PRIMARY KEY, '
+                f'buyer INTEGER REFERENCES {namespace}.u(user_id), ts TIMESTAMP)'
+            )
+            connection.execute(f'INSERT INTO {namespace}.u VALUES (1)')
+            connection.execute(
+                f"INSERT INTO {namespace}.o VALUES (1, 1, '2024-01-01')"
+            )
+            source = PostgresSource(connection, schema=namespace)
+
+            named = Schema.from_source(source, {'users': 'u', 'orders': 'o'})
+            everything = Schema.from_source(source)
+        finally:
+            connection.execute(f'DROP SCHEMA {namespace} CASCADE')
+
+    assert named.relationships == [
+        Relationship('orders', 'buyer', 'users', 'user_id')
+    ]
+    assert everything.relationships == [
+        Relationship('o', 'buyer', 'u', 'user_id')
     ]
 
 

@@ -1263,9 +1263,9 @@ def _declared_links(
     A constraint naming a table outside the schema links nothing here, and
     one naming a column the schema left out is skipped with it.
     """
-    by_source_name = {
-        source_name.lower(): name for name, source_name in tables.items()
-    }
+    # `dst_table` is qualified the way `source_name` is, not the way the caller
+    # named the table.
+    by_source_name = {graph[name].source_name.lower(): name for name in tables}
     links = []
     for name in tables:
         for key in graph[name]._source_foreign_key_dict.values():

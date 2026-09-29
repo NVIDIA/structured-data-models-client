@@ -91,6 +91,10 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **Foreign keys a PostgreSQL or Databricks catalog declares now link the
+  tables.** `Schema.from_source` compared the engine's qualified name for the
+  referenced table with the caller's bare one, so no declared key matched and
+  links fell back to name matching.
 - **A table with no key was sampled in whatever order the engine read it.**
   Neighbours are kept newest first, and a keyless table had nothing after the
   timestamp to order by, while the rows kept came back unordered. Rows sharing
