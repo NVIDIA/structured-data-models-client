@@ -153,6 +153,7 @@ def test_a_text_target_within_the_class_limit_still_gets_the_remedy() -> None:
 
 
 def test_an_anchor_time_remedy_is_a_call_that_parses() -> None:
+    pytest.importorskip('sdm_relational_engine')
     from sdm_relational_engine.rfm.rfm import _a_conversion_that_works
 
     assert _a_conversion_that_works('not a date') == ''
@@ -264,6 +265,7 @@ def test_the_limits_page_records_the_default_the_code_has() -> None:
 def test_a_timestamp_that_parses_to_nothing_is_not_suggested() -> None:
     """Parsing without raising is not enough: `pd.Timestamp('NaT')` returns
     `NaT`, which the check the remedy is meant to satisfy still refuses."""
+    pytest.importorskip('sdm_relational_engine')
     from sdm_relational_engine.rfm.rfm import (
         _a_conversion_that_works,
         _check_anchor_time,
