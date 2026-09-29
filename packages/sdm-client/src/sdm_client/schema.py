@@ -675,7 +675,6 @@ class Schema:
     ) -> None:
         _require_one_kind_of_table(tables, source)
         self._source = source
-        self._metric_view: str | None = None
         self._tables = dict(tables)
         self.relationships = relationships
 
@@ -755,13 +754,11 @@ class Schema:
         question to guard against an edit nobody makes to a frame would cost
         more than the defect. What is copied is everything a schema *says*.
         """
-        copied = Schema(
+        return Schema(
             {name: _copy_table(table) for name, table in self._tables.items()},
             list(self.relationships),
             source=self._source,
         )
-        copied._metric_view = self._metric_view
-        return copied
 
     @classmethod
     def from_data(
@@ -854,14 +851,13 @@ class Schema:
         source: Source,
         tables: Mapping[str, str] | None = None,
         *,
-        metric_view: str | None = None,
         primary_keys: Mapping[str, str | Sequence[str]] | None = None,
         time_columns: Mapping[str, str] | None = None,
         relationships: Sequence[Relationship] | None = None,
     ) -> Schema:
         r"""Describe tables that stay in their source.
 
-        >>> source = Source(spark, catalog='main', schema='sales')
+        >>> source = DatabricksSource(spark, catalog='main', schema='sales')
         >>> schema = Schema.from_source(
         ...     source,
         ...     {'customers': 'adventureworks_customers',
@@ -877,29 +873,26 @@ class Schema:
         the tables with SQL, a hop at a time, and only the rows it samples
         leave the source.
 
-        A schema has exactly one source. Sampling sends the ids each hop found
-        to the next query, so it runs against one engine; tables in two
-        systems are joined by the platform, not here.
+        A semantic model -- a Databricks metric view, a Snowflake semantic
+        view -- is a source of its own, and already says how its tables join:
 
-        A Databricks metric view already says which tables a question is
-        about and how they join, so it can stand in for ``tables``:
+        >>> schema = Schema.from_source(source.semantic_model('sales_metrics'))
 
-        >>> schema = Schema.from_source(source, metric_view='sales_metrics')
+        Its keys and relationships come from the model, and its tables are
+        named as the model names them.
 
-        Its source table becomes a table named as it is in the catalog, each
-        join a table named after the join, and each dimension a column of the
-        table it reads, computed in the warehouse where it is an expression.
-        Measures are aggregations rather than row values, so a predictive
-        query expresses them instead. Keys and relationships come from the
-        joins.
+        Everything that differs between warehouses belongs to the source, so
+        this reads the same whichever one the tables are in. A schema has
+        exactly one source: sampling sends the ids each hop found to the next
+        query, so it runs against one engine.
 
         Args:
-            source: Where the tables are, as an ``sdm_connectors.Source``.
+            source: Where the tables are: an ``sdm_connectors.Source``, or a
+                ``SemanticModel`` got from one.
             tables: For each name a query will use, the table's name in the
-                source. Give this or ``metric_view``.
-            metric_view: A Databricks metric view to take the tables, keys and
-                relationships from, qualified or resolved against the source's
-                catalog and schema.
+                source. Left out, every table the source describes is taken,
+                under its own name: every table in the namespace, or every
+                table of the semantic model.
             primary_keys: Overrides for a table's key.
             time_columns: Overrides for a table's time column.
             relationships: Overrides for the relationships. Pass an empty
@@ -909,58 +902,69 @@ class Schema:
             A schema of :class:`SourceTable`, bound to ``source``.
 
         Raises:
-            StructuredDataError: If neither or both of ``tables`` and
-                ``metric_view`` are given, ``tables`` is empty, a name is not
-                a string, a metric view is asked of a source other than
-                Databricks, or an override names something that does not
-                exist.
+            StructuredDataError: If ``tables`` is empty, a name is not a
+                string, a table is not in the source, the source describes no
+                table, or an override names something that does not exist.
             MissingExtraError: If the relational engine, which reads the
                 source, is not installed.
         """
-        _require_a_source(source)
-        if metric_view is not None:
-            if tables is not None:
-                raise StructuredDataError(
-                    'a metric view already names its tables; give tables or '
-                    'metric_view, not both',
-                    code='INVALID_REQUEST',
-                )
-            return cls._from_metric_view(
-                source, metric_view, primary_keys, time_columns, relationships
-            )
-        if not tables:
-            raise StructuredDataError(
-                'a schema needs at least one table: name them with tables, or '
-                'give a metric_view',
-                code='INVALID_REQUEST',
-            )
-        for name, source_name in tables.items():
-            if not isinstance(name, str) or not name:
-                raise StructuredDataError(
-                    f'table names must be non-empty strings; got {name!r}',
-                    code='INVALID_REQUEST',
-                )
-            if not isinstance(source_name, str) or not source_name:
-                raise StructuredDataError(
-                    f'table {name!r} must map to its name in the source, a '
-                    f'non-empty string; got {source_name!r}',
-                    code='INVALID_REQUEST',
-                )
-
-        from sdm_client.materializers.sources import engine_graph
-
-        graph = engine_graph(
-            source,
-            {name: (source_name, None) for name, source_name in tables.items()},
-            infer_metadata=True,
+        from sdm_client.materializers.sources import (
+            engine_graph,
+            is_semantic_model,
+            semantic_model_graph,
         )
-        built = {
-            name: _describe_source_table(graph[name], source_name)
-            for name, source_name in tables.items()
-        }
+
+        _require_a_source(source)
+        if tables is not None:
+            _require_table_names(tables)
+
+        if is_semantic_model(source):
+            graph = semantic_model_graph(source)
+            offered = list(graph.tables)
+            chosen = (
+                dict(tables)
+                if tables is not None
+                else {name: name for name in offered}
+            )
+            absent = sorted(set(chosen.values()) - set(offered))
+            if absent:
+                raise StructuredDataError(
+                    f'{absent} are not tables of {source!r}; it has '
+                    f'{sorted(offered)}',
+                    code='INVALID_REQUEST',
+                )
+            as_named = {model: name for name, model in chosen.items()}
+            built = {
+                name: _describe_source_table(graph[model], model, name=name)
+                for name, model in chosen.items()
+            }
+            declared = _model_links(graph, built, as_named)
+        else:
+            graph = engine_graph(
+                source,
+                None
+                if tables is None
+                else {name: (named, None) for name, named in tables.items()},
+                infer_metadata=True,
+            )
+            chosen = (
+                dict(tables)
+                if tables is not None
+                else {name: graph[name].source_name for name in graph.tables}
+            )
+            if not chosen:
+                raise StructuredDataError(
+                    f'{source!r} holds no table to describe',
+                    code='INVALID_REQUEST',
+                )
+            built = {
+                name: _describe_source_table(graph[name], named)
+                for name, named in chosen.items()
+            }
+            declared = _declared_links(graph, chosen, built)
+
         _apply_keys_and_times(built, primary_keys, time_columns)
         if relationships is None:
-            declared = _declared_links(graph, tables, built)
             covered = {
                 (link.source_table, link.source_column) for link in declared
             }
@@ -980,59 +984,6 @@ class Schema:
         _warn_several_columns_could_be_the_time_column(schema)
         _warn_two_ways_to_reach_one_table(built, schema.relationships)
         return schema
-
-    @classmethod
-    def _from_metric_view(
-        cls,
-        source: Source,
-        metric_view: str,
-        primary_keys: Mapping[str, str | Sequence[str]] | None,
-        time_columns: Mapping[str, str] | None,
-        relationships: Sequence[Relationship] | None,
-    ) -> Schema:
-        r"""The schema a Databricks metric view describes; see
-        :meth:`from_source`.
-        """
-        if not isinstance(metric_view, str) or not metric_view:
-            raise StructuredDataError(
-                f'metric_view must name a metric view, got {metric_view!r}',
-                code='INVALID_REQUEST',
-            )
-        if source.backend != 'databricks':
-            raise StructuredDataError(
-                f'a metric view is a Databricks object, and this source is '
-                f'{source.backend}; name its tables with tables instead',
-                code='INVALID_REQUEST',
-            )
-
-        from sdm_client.materializers.sources import metric_view_graph
-
-        graph = metric_view_graph(source, metric_view)
-        built = {
-            name: _describe_source_table(table, table.source_name)
-            for name, table in graph.tables.items()
-        }
-        _apply_keys_and_times(built, primary_keys, time_columns)
-        if relationships is None:
-            links = _joinable_inferred_links(
-                built, _metric_view_links(graph, built)
-            )
-        else:
-            links = _checked_links(built, relationships)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', SDMWarning)
-            schema = cls(built, links, source=source)
-        schema._metric_view = metric_view
-        schema._mark_key_columns()
-        _warn_several_columns_could_be_the_time_column(schema)
-        _warn_two_ways_to_reach_one_table(built, schema.relationships)
-        return schema
-
-    @property
-    def metric_view(self) -> str | None:
-        r"""The metric view this schema was built from, or ``None``."""
-        return self._metric_view
 
     @property
     def tables(self) -> dict[str, Table | SourceTable]:
@@ -1139,6 +1090,27 @@ def _checked_links(
     return links
 
 
+def _require_table_names(tables: Mapping[str, str]) -> None:
+    if not tables:
+        raise StructuredDataError(
+            'a schema needs at least one table; leave tables out to take every '
+            'table the source describes',
+            code='INVALID_REQUEST',
+        )
+    for name, source_name in tables.items():
+        if not isinstance(name, str) or not name:
+            raise StructuredDataError(
+                f'table names must be non-empty strings; got {name!r}',
+                code='INVALID_REQUEST',
+            )
+        if not isinstance(source_name, str) or not source_name:
+            raise StructuredDataError(
+                f'table {name!r} must map to its name in the source, a '
+                f'non-empty string; got {source_name!r}',
+                code='INVALID_REQUEST',
+            )
+
+
 def _require_a_source(source: object) -> None:
     try:
         from sdm_connectors import Source
@@ -1148,8 +1120,8 @@ def _require_a_source(source: object) -> None:
         raise StructuredDataError(
             f'a schema over tables in place needs an sdm_connectors.Source, '
             f'got {type(source).__name__}. Build one from a connection: '
-            f"Source(connect('databricks', ...), catalog=..., schema=...), "
-            f'or Source(spark, ...) in a notebook',
+            f"DatabricksSource(connect('databricks', ...), catalog=..., "
+            f'schema=...), or DatabricksSource(spark, ...) in a notebook',
             code='INVALID_REQUEST',
         )
 
@@ -1194,7 +1166,9 @@ def _require_one_kind_of_table(
         _require_a_source(source)
 
 
-def _describe_source_table(engine_table: Any, source_name: str) -> SourceTable:
+def _describe_source_table(
+    engine_table: Any, source_name: str, *, name: str | None = None
+) -> SourceTable:
     r"""A table in place, described from what the engine read of it.
 
     A column whose values have no scalar form on the wire -- a list, binary, a
@@ -1215,13 +1189,15 @@ def _describe_source_table(engine_table: Any, source_name: str) -> SourceTable:
         columns[engine_column.name] = Column(engine_column.name, dtype, stype)
     if unreadable:
         warnings.warn(
-            f'{engine_table.name} leaves out {", ".join(unreadable)}: a '
+            f'{name or engine_table.name} leaves out {", ".join(unreadable)}: a '
             f'request carries one scalar value per cell, and these hold none',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
     table = SourceTable(
-        name=engine_table.name, source_name=source_name, columns=columns
+        name=name or engine_table.name,
+        source_name=source_name,
+        columns=columns,
     )
     keys = tuple(engine_table.primary_key_columns or ())
     if keys and all(key in columns for key in keys):
@@ -1232,28 +1208,32 @@ def _describe_source_table(engine_table: Any, source_name: str) -> SourceTable:
     return table
 
 
-def _metric_view_links(
-    graph: Any, built: Mapping[str, SourceTable]
+def _model_links(
+    graph: Any, built: Mapping[str, SourceTable], as_named: Mapping[str, str]
 ) -> list[Relationship]:
-    r"""The relationships a metric view's joins make, as the schema says them.
+    r"""The relationships a semantic model's joins make, as the schema says
+    them.
 
-    Each join links the many side's key to the one side's, which the view
-    makes that table's primary key.
+    Each join links the many side's key to the one side's, which the model
+    makes that table's primary key. A join to a table the schema did not take
+    links nothing.
     """
     links = []
     for edge in graph.edges:
-        target = built.get(edge.dst_table)
-        source = built.get(edge.src_table)
-        if target is None or source is None:
+        source_name = as_named.get(edge.src_table)
+        target_name = as_named.get(edge.dst_table)
+        if source_name is None or target_name is None:
             continue
+        target = built[target_name]
+        source = built[source_name]
         key = target.primary_key
         if not isinstance(key, str) or edge.fkey not in source.columns:
             continue
         links.append(
             Relationship(
-                source_table=edge.src_table,
+                source_table=source_name,
                 source_column=edge.fkey,
-                target_table=edge.dst_table,
+                target_table=target_name,
                 target_column=key,
             )
         )

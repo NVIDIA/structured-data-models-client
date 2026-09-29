@@ -28,7 +28,7 @@ pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 pytest.importorskip('adbc_driver_sqlite')
 
-from sdm_connectors import Source, connect  # noqa: E402
+from sdm_connectors import DuckDBSource, SQLiteSource, connect  # noqa: E402
 
 from sdm_client import (  # noqa: E402
     KumoTabular,
@@ -79,7 +79,7 @@ def duckdb_source() -> Any:
     connection.register('orders_frame', ORDERS)
     connection.execute('CREATE TABLE app_users AS SELECT * FROM users_frame')
     connection.execute('CREATE TABLE app_orders AS SELECT * FROM orders_frame')
-    yield Source(connection)
+    yield DuckDBSource(connection)
     connection.close()
 
 
@@ -94,7 +94,7 @@ def sqlite_source(tmp_path: Path) -> Any:
         cursor.adbc_ingest('app_users', USERS, mode='create')
         cursor.adbc_ingest('app_orders', ORDERS, mode='create')
     connection.commit()
-    yield Source(connection)
+    yield SQLiteSource(connection)
     connection.close()
 
 
@@ -203,7 +203,7 @@ def test_a_declared_foreign_key_links_what_names_would_not() -> None:
     connection.execute("INSERT INTO o VALUES (1, 1, 9.5, '2024-01-01')")
 
     schema = Schema.from_source(
-        Source(connection), {'users': 'u', 'orders': 'o'}
+        DuckDBSource(connection), {'users': 'u', 'orders': 'o'}
     )
 
     assert schema.relationships == [
@@ -234,7 +234,7 @@ def test_a_column_with_no_scalar_form_is_left_out_and_named() -> None:
     connection.execute('INSERT INTO t VALUES (1, [1, 2], 0.5)')
 
     with pytest.warns(SDMWarning, match=r'leaves out tags'):
-        schema = Schema.from_source(Source(connection), {'t': 't'})
+        schema = Schema.from_source(DuckDBSource(connection), {'t': 't'})
 
     assert list(schema['t'].columns) == ['id', 'x']
 
@@ -324,3 +324,19 @@ def test_a_snapshot_keeps_the_source(duckdb_source: Any) -> None:
 def test_a_source_schema_does_not_pickle(duckdb_source: Any) -> None:
     with pytest.raises(TypeError, match='cannot be pickled'):
         pickle.dumps(_schema(duckdb_source))
+
+
+def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        schema = Schema.from_source(source)
+
+    assert set(schema.tables) == {'app_users', 'app_orders'}
+    assert schema['app_orders'].source_name == 'app_orders'
+    assert set(schema['app_orders'].columns) == set(ORDERS.columns)
+    assert schema['app_orders'].time_column == 'ts'
+
+
+def test_an_empty_table_mapping_is_refused(duckdb_source: Any) -> None:
+    with pytest.raises(StructuredDataError, match='leave tables out'):
+        Schema.from_source(duckdb_source, {})

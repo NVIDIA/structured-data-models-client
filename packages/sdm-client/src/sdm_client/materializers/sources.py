@@ -44,29 +44,28 @@ def wire_dtype(engine_dtype: Any) -> str | None:
 
 def engine_graph(
     source: Any,
-    tables: Mapping[str, tuple[str, Sequence[str] | None]],
+    tables: Mapping[str, tuple[str, Sequence[str] | None]] | None,
     *,
     infer_metadata: bool,
-    metric_view: str | None = None,
 ) -> Graph:
     r"""Build the engine's graph over ``tables`` in ``source``.
 
     Args:
-        source: The :class:`sdm_connectors.Source` the tables are in.
+        source: The ``sdm_connectors.Source`` the tables are in, or a
+            ``SemanticModel`` kept in one.
         tables: For each name the schema uses, the table's name in the source
-            and the columns to read, or ``None`` for all of them.
+            and the columns to read, or ``None`` for all of them. ``None`` in
+            place of the mapping reads every table the source describes.
         infer_metadata: Whether the engine infers keys, time columns and
             semantic types. Only the first read of a source asks; afterwards
             the schema says what they are.
-        metric_view: The metric view the schema was built from. Its tables are
-            rebuilt from the view, since a dimension can be an expression the
-            view alone defines, and then cut down to what the schema kept.
 
     Edges are never added here. The schema decides them, and the materializer
     links exactly those.
     """
-    if metric_view is not None:
-        return _trimmed_to(metric_view_graph(source, metric_view), tables)
+    if is_semantic_model(source):
+        graph = semantic_model_graph(source)
+        return graph if tables is None else _selected(graph, tables)
 
     try:
         from sdm_relational_engine.rfm import Graph
@@ -75,12 +74,14 @@ def engine_graph(
             'relational', 'sdm-relational-engine'
         ) from error
 
-    specs: list[dict[str, Any]] = []
-    for name, (source_name, columns) in tables.items():
-        spec: dict[str, Any] = {'name': name, 'source_name': source_name}
-        if columns is not None:
-            spec['columns'] = list(columns)
-        specs.append(spec)
+    specs: list[dict[str, Any]] | None = None
+    if tables is not None:
+        specs = []
+        for name, (source_name, columns) in tables.items():
+            spec: dict[str, Any] = {'name': name, 'source_name': source_name}
+            if columns is not None:
+                spec['columns'] = list(columns)
+            specs.append(spec)
 
     backend = source.backend
     namespace = source.namespace
@@ -136,8 +137,22 @@ def engine_graph(
     )
 
 
-def metric_view_graph(source: Any, metric_view: str) -> Graph:
-    r"""The engine's graph of a Databricks metric view in ``source``."""
+def is_semantic_model(source: Any) -> bool:
+    r"""Whether ``source`` is a semantic model rather than a namespace."""
+    try:
+        from sdm_connectors import SemanticModel
+    except ImportError:  # pragma: no cover - nothing could have built one
+        return False
+    return isinstance(source, SemanticModel)
+
+
+def semantic_model_graph(model: Any) -> Graph:
+    r"""The engine's graph of a semantic model: a Databricks metric view or a
+    Snowflake semantic view.
+
+    Named after the model's own tables, with its links, keys and time columns
+    as the model declares them.
+    """
     try:
         from sdm_relational_engine.rfm import Graph
     except ImportError as error:  # pragma: no cover - optional extra
@@ -145,31 +160,59 @@ def metric_view_graph(source: Any, metric_view: str) -> Graph:
             'relational', 'sdm-relational-engine'
         ) from error
 
-    namespace = source.namespace
-    return Graph.from_databricks_metric_view(
-        metric_view,
-        source.connection,
-        catalog=namespace.get('catalog'),
-        schema=namespace.get('schema'),
-        verbose=False,
+    namespace = model.namespace
+    if model.backend == 'databricks':
+        return Graph.from_databricks_metric_view(
+            model.name,
+            model.connection,
+            catalog=namespace.get('catalog'),
+            schema=namespace.get('schema'),
+            verbose=False,
+        )
+    if model.backend == 'snowflake':
+        # The engine resolves an unqualified name against the connection's
+        # current database and schema, so the source's own are written in.
+        parts = [
+            namespace[part]
+            for part in ('database', 'schema')
+            if part in namespace
+        ]
+        name = (
+            model.name if '.' in model.name else '.'.join([*parts, model.name])
+        )
+        return Graph.from_snowflake_semantic_view(
+            name, model.connection, verbose=False
+        )
+    raise StructuredDataError(  # pragma: no cover - SemanticModel refuses
+        f'no semantic model is kept in a {model.backend!r} source',
+        code='INVALID_REQUEST',
     )
 
 
-def _trimmed_to(
+def _selected(
     graph: Graph, tables: Mapping[str, tuple[str, Sequence[str] | None]]
 ) -> Graph:
-    r"""``graph`` holding only the tables and columns the schema kept, and no
-    edges.
+    r"""``graph`` holding only the model tables the schema kept, under the
+    names the schema gives them, with the columns it kept, and no edges.
 
     Keys and time columns are cleared as well: the materializer sets every one
-    of them from the schema, and a column the view keyed on may be one the
+    of them from the schema, and a column the model keyed on may be one the
     schema left out.
     """
     for edge in list(graph.edges):
         graph.unlink(edge.src_table, edge.fkey, edge.dst_table)
-    for name in list(graph.tables):
-        if name not in tables:
-            graph.remove_table(name)
+    kept = {source_name: name for name, (source_name, _) in tables.items()}
+    engine_tables = {name: graph[name] for name in list(graph.tables)}
+    for name in engine_tables:
+        graph.remove_table(name)
+    for source_name, table in engine_tables.items():
+        if source_name not in kept:
+            continue
+        # The engine names a table once, when it is built, and has no rename;
+        # a model's tables are named by the model, and the schema may call
+        # them something else.
+        table._name = kept[source_name]
+        graph.add_table(table)
     for name, (_, columns) in tables.items():
         table = graph[name]
         # The engine's setter is declared apart from its getter, which mypy

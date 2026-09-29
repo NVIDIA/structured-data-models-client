@@ -251,7 +251,7 @@ class TestDistributionCoherence:
     def test_the_databricks_extra_brings_what_reading_a_metric_view_needs(
         self,
     ):
-        """`Schema.from_source(..., metric_view=...)` parses the view's YAML.
+        """A metric view reached through `semantic_model` is parsed as YAML.
 
         The client's `databricks` extra reaches Databricks through the
         connectors' own, and Databricks Runtime 14.3 LTS has no YAML parser, so

@@ -313,7 +313,6 @@ class RelationalMaterializer:
                     if isinstance(table, SourceTable)
                 },
                 infer_metadata=False,
-                metric_view=self.schema.metric_view,
             )
         else:
             frames = {

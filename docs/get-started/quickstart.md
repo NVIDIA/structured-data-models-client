@@ -69,9 +69,9 @@ Describe them with `Schema.from_source`, and `materialize()` samples them there 
 
 ```python
 from sdm_client import PredictiveQuery, Schema
-from sdm_connectors import Source, connect
+from sdm_connectors import DatabricksSource, connect
 
-source = Source(connect('databricks', server_hostname=..., http_path=...), catalog='main', schema='sales')
+source = DatabricksSource(connect('databricks', server_hostname=..., http_path=...), catalog='main', schema='sales')
 schema = Schema.from_source(
     source,
     {'users': 'crm_users', 'orders': 'shop_orders'},
@@ -82,10 +82,11 @@ request = PredictiveQuery(
 ).materialize(indices=[7, 12, 3])
 ```
 
-In a Databricks notebook, `Source(spark, catalog=..., schema=...)` samples through the notebook's own session instead of a SQL warehouse (Databricks Runtime 17.3 LTS or serverless environment 4 and later).
-A Snowflake, PostgreSQL (including Lakebase), DuckDB or SQLite connection works the same way.
+In a Databricks notebook, `DatabricksSource(spark, catalog=..., schema=...)` samples through the notebook's own session instead of a SQL warehouse (Databricks Runtime 17.3 LTS or serverless environment 4 and later).
+`SnowflakeSource`, `PostgresSource` (Lakebase included), `DuckDBSource` and `SQLiteSource` work the same way, each naming its own namespace.
+Leave `tables` out to take every table the source holds.
 A schema's tables all come from one source.
-On Databricks, `Schema.from_source(source, metric_view=...)` takes the tables, keys and relationships from a metric view instead of `tables`.
+A semantic model -- a Databricks metric view, a Snowflake semantic view -- is a source of its own, and brings its tables, keys and relationships: `Schema.from_source(source.semantic_model('sales_metrics'))`.
 
 ## Asking the same context several questions
 

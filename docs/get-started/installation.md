@@ -31,8 +31,8 @@ Four things differ from a laptop, each found by running on every LTS runtime and
 - **Write version bounds with `~=`, not `<` or `>`.**
   A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
 - **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**
-  `Source(spark, ...)` reads results with `DataFrame.toArrow()`, which arrived in Spark 4.
-  On an older runtime, name a SQL warehouse instead: `Source(connect('databricks', ...), ...)`.
+  `DatabricksSource(spark, ...)` reads results with `DataFrame.toArrow()`, which arrived in Spark 4.
+  On an older runtime, name a SQL warehouse instead: `DatabricksSource(connect('databricks', ...), ...)`.
 - **For Lakebase, install plain `psycopg` rather than the `postgres` extra.**
   The extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
   Plain `psycopg` uses the runtime's own libpq, which works on both architectures.

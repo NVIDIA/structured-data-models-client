@@ -4,26 +4,22 @@
 
 r"""Where a schema's tables are, and how to reach them.
 
-A :class:`Source` pairs a connection with the namespace its tables live in. It
-reads nothing itself: it is what a schema over tables that stay where they are
-is built from, so that sampling can run as SQL against the tables in place.
+A source pairs a connection with the namespace its tables live in. It reads
+nothing itself: it is what a schema over tables that stay where they are is
+built from, so that sampling can run as SQL against the tables in place.
+
+Everything that differs between warehouses lives here, on a class of its own
+per backend -- how a table is qualified, which sessions stand in for a
+connection, and whether the warehouse keeps semantic models -- so that a schema
+built from any of them is described the same way.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, ClassVar
 
 from sdm_connectors.sql import ConnectorError
-
-# The names each backend qualifies a table with, in the order it nests them.
-_NAMESPACES: Mapping[str, tuple[str, ...]] = {
-    'databricks': ('catalog', 'schema'),
-    'snowflake': ('database', 'schema'),
-    'postgres': ('schema',),
-    'duckdb': (),
-    'sqlite': (),
-}
 
 # Recognised by the module that defines the connection's class, or any of its
 # bases, so a driver is never imported just to be ruled out.
@@ -65,6 +61,10 @@ def _is_snowpark_session(value: Any) -> bool:
 
 
 def _backend_of(connection: Any) -> str | None:
+    if _is_spark_session(connection):
+        return 'databricks'
+    if _is_snowpark_session(connection):
+        return 'snowflake'
     for module in _modules(connection):
         for prefix, backend in _DRIVER_MODULES:
             if module == prefix or module.startswith(prefix + '.'):
@@ -75,75 +75,79 @@ def _backend_of(connection: Any) -> str | None:
 class Source:
     r"""A connection, and the namespace its tables live in.
 
-    >>> source = Source(spark, catalog='main', schema='sales')
-    >>> source = Source(connect('databricks', ...), catalog='main', schema='sales')
-    >>> source = Source(connect('snowflake', ...), database='SALES', schema='PUBLIC')
-    >>> source = Source(connect('postgres', ...), schema='public')
-    >>> source = Source(connect('duckdb', 'sales.duckdb'))
+    Build one with the class for its warehouse, which names that warehouse's
+    namespace and offers what only it has:
 
-    A Databricks notebook's ``spark`` is accepted as it is and sampled through
-    ``spark.sql``, so no SQL warehouse is needed; a Snowpark ``session`` is
-    reached through its own connector connection.
+    >>> source = DatabricksSource(spark, catalog='main', schema='sales')
+    >>> source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
+    >>> source = PostgresSource(connect('postgres', ...), schema='public')
+    >>> source = DuckDBSource(connect('duckdb', 'sales.duckdb'))
+
+    ``Source(connection, ...)`` works too, and returns the class that fits the
+    connection. It is typed as the base class, so a method only one warehouse
+    has, such as :meth:`DatabricksSource.semantic_model`, needs the class
+    named.
 
     The source never closes the connection. It belongs to whoever opened it.
-
-    Args:
-        connection: An open connection, or a notebook session.
-        catalog: The Databricks catalog. Defaults to the connection's current
-            one.
-        database: The Snowflake database. Defaults to the connection's current
-            one.
-        schema: The schema the tables are in. Defaults to the connection's
-            current one.
 
     Raises:
         ConnectorError: ``UNKNOWN_CONNECTOR`` for a connection this package
             cannot sample through, ``INVALID_CONNECTOR_ARGS`` for a namespace
-            the backend does not have.
+            the warehouse does not have.
     """
 
-    def __init__(
-        self,
-        connection: Any,
-        *,
-        catalog: str | None = None,
-        database: str | None = None,
-        schema: str | None = None,
-    ) -> None:
-        if _is_spark_session(connection):
-            from sdm_connectors.backends.spark import SparkConnection
+    #: Which engine the tables are sampled with.
+    _BACKEND: ClassVar[str] = ''
+    #: The names this warehouse qualifies a table with, outermost first.
+    _NAMESPACE: ClassVar[tuple[str, ...]] = ()
+    #: What the class accepts, for the message when it is given anything else.
+    _TAKES: ClassVar[str] = _ACCEPTED
 
-            connection = SparkConnection(connection)
-        elif _is_snowpark_session(connection):
-            connection = connection.connection
+    _backend: str
+    _connection: Any
+    _namespace: dict[str, str]
+
+    def __new__(
+        cls, connection: Any = None, *args: Any, **namespace: Any
+    ) -> Source:
+        if cls is not Source:
+            return super().__new__(cls)
         backend = _backend_of(connection)
-        if backend is None:
+        chosen = _BY_BACKEND.get(backend or '')
+        if chosen is None:
             raise ConnectorError(
                 f'a Source needs {_ACCEPTED}; got {type(connection).__name__}',
                 code='UNKNOWN_CONNECTOR',
             )
-        given = {
-            name: value
-            for name, value in (
-                ('catalog', catalog),
-                ('database', database),
-                ('schema', schema),
-            )
-            if value is not None
-        }
-        allowed = _NAMESPACES[backend]
-        foreign = sorted(set(given) - set(allowed))
+        chosen._check_namespace_names(namespace)
+        return super().__new__(chosen)
+
+    @classmethod
+    def _check_namespace_names(cls, namespace: Mapping[str, Any]) -> None:
+        given = [name for name, value in namespace.items() if value is not None]
+        foreign = sorted(set(given) - set(cls._NAMESPACE))
         if foreign:
             has = (
-                f'is qualified by {" and ".join(allowed)}'
-                if allowed
+                f'is qualified by {" and ".join(cls._NAMESPACE)}'
+                if cls._NAMESPACE
                 else 'has no namespace to name'
             )
             raise ConnectorError(
-                f'a {backend} source {has}, so {", ".join(foreign)} '
+                f'a {cls._BACKEND} source {has}, so {", ".join(foreign)} '
                 f'cannot be given',
                 code='INVALID_CONNECTOR_ARGS',
             )
+
+    def _bind(self, connection: Any, namespace: Mapping[str, Any]) -> None:
+        backend = _backend_of(connection)
+        if backend != self._BACKEND:
+            raise ConnectorError(
+                f'{type(self).__name__} needs {self._TAKES}; got '
+                f'{type(connection).__name__}',
+                code='UNKNOWN_CONNECTOR',
+            )
+        self._check_namespace_names(namespace)
+        given = {name: v for name, v in namespace.items() if v is not None}
         for name, value in given.items():
             if not isinstance(value, str) or not value:
                 raise ConnectorError(
@@ -180,4 +184,211 @@ class Source:
 
     def __repr__(self) -> str:
         where = ', '.join(f'{k}={v!r}' for k, v in self._namespace.items())
-        return f'Source({self._backend}{", " if where else ""}{where})'
+        return f'{type(self).__name__}({where})'
+
+
+class DatabricksSource(Source):
+    r"""Tables in a Databricks catalog and schema.
+
+    >>> source = DatabricksSource(spark, catalog='main', schema='sales')
+    >>> source = DatabricksSource(connect('databricks', ...), catalog='main')
+
+    A notebook's ``spark`` is sampled through ``spark.sql``, so no SQL warehouse
+    is needed; that takes ``DataFrame.toArrow()``, which Databricks Runtime
+    17.3 LTS and serverless environment 4 have. On an older runtime, pass a SQL
+    warehouse connection instead.
+
+    Args:
+        connection: A Databricks SQL connection, or a notebook's Spark session.
+        catalog: The catalog. Defaults to the connection's current one.
+        schema: The schema. Defaults to the connection's current one.
+    """
+
+    _BACKEND = 'databricks'
+    _NAMESPACE = ('catalog', 'schema')
+    _TAKES = (
+        "a Databricks SQL connection -- connect('databricks', ...) -- or a "
+        "notebook's Spark session"
+    )
+
+    def __init__(
+        self,
+        connection: Any,
+        *,
+        catalog: str | None = None,
+        schema: str | None = None,
+    ) -> None:
+        if _is_spark_session(connection):
+            from sdm_connectors.backends.spark import SparkConnection
+
+            connection = SparkConnection(connection)
+        self._bind(connection, {'catalog': catalog, 'schema': schema})
+
+    def semantic_model(self, name: str) -> SemanticModel:
+        r"""A metric view in this catalog and schema, as a source of its own.
+
+        >>> model = source.semantic_model('sales_metrics')
+
+        A metric view already names the tables a question is about and how
+        they join. Its source table becomes a table named as it is in the
+        catalog, each join a table named after the join, and each dimension a
+        column of the table it reads. Measures are aggregations rather than
+        row values, so they are left out.
+
+        Args:
+            name: The metric view, qualified or resolved against this source's
+                catalog and schema.
+        """
+        return SemanticModel(self, name)
+
+
+class SnowflakeSource(Source):
+    r"""Tables in a Snowflake database and schema.
+
+    >>> source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
+
+    A Snowpark ``session`` is reached through its own connector connection, so
+    a Snowflake notebook passes it as it is.
+
+    Args:
+        connection: A Snowflake connection, or a Snowpark session.
+        database: The database. Defaults to the connection's current one.
+        schema: The schema. Defaults to the connection's current one.
+    """
+
+    _BACKEND = 'snowflake'
+    _NAMESPACE = ('database', 'schema')
+    _TAKES = (
+        "a Snowflake connection -- connect('snowflake', ...) -- or a Snowpark "
+        'session'
+    )
+
+    def __init__(
+        self,
+        connection: Any,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> None:
+        if _is_snowpark_session(connection):
+            connection = connection.connection
+        self._bind(connection, {'database': database, 'schema': schema})
+
+    def semantic_model(self, name: str) -> SemanticModel:
+        r"""A semantic view in this database and schema, as a source of its
+        own.
+
+        >>> model = source.semantic_model('SALES_SEMANTICS')
+
+        Its logical tables become tables, its relationships the links between
+        them, and its dimensions and facts their columns. Metrics are
+        aggregations rather than row values, so they are left out.
+
+        Args:
+            name: The semantic view, qualified or resolved against this
+                source's database and schema.
+        """
+        return SemanticModel(self, name)
+
+
+class PostgresSource(Source):
+    r"""Tables in a PostgreSQL schema, Lakebase included.
+
+    >>> source = PostgresSource(connect('postgres', ...), schema='public')
+
+    Args:
+        connection: A psycopg connection.
+        schema: The schema. Defaults to the connection's current one.
+    """
+
+    _BACKEND = 'postgres'
+    _NAMESPACE = ('schema',)
+    _TAKES = "a psycopg connection -- connect('postgres', ...)"
+
+    def __init__(self, connection: Any, *, schema: str | None = None) -> None:
+        self._bind(connection, {'schema': schema})
+
+
+class DuckDBSource(Source):
+    r"""Tables in a DuckDB database.
+
+    >>> source = DuckDBSource(connect('duckdb', 'sales.duckdb'))
+    """
+
+    _BACKEND = 'duckdb'
+    _TAKES = "a DuckDB connection -- connect('duckdb', ...)"
+
+    def __init__(self, connection: Any) -> None:
+        self._bind(connection, {})
+
+
+class SQLiteSource(Source):
+    r"""Tables in a SQLite database.
+
+    >>> source = SQLiteSource(connect('sqlite', 'sales.sqlite'))
+    """
+
+    _BACKEND = 'sqlite'
+    _TAKES = "an ADBC SQLite connection -- connect('sqlite', ...)"
+
+    def __init__(self, connection: Any) -> None:
+        self._bind(connection, {})
+
+
+class SemanticModel(Source):
+    r"""A warehouse's semantic model: tables, and how they join, it describes.
+
+    Got from :meth:`DatabricksSource.semantic_model` (a metric view) or
+    :meth:`SnowflakeSource.semantic_model` (a semantic view). Both are
+    what the Open Semantic Interchange and dbt call a semantic model, and a
+    schema reads the same thing from each: tables, the links between them, and
+    row-level columns. Their aggregations -- measures, metrics -- are not rows,
+    so a predictive query expresses them instead.
+
+    Args:
+        source: The source the model is kept in.
+        name: The model's name, qualified or resolved against ``source``'s
+            namespace.
+    """
+
+    def __init__(
+        self, source: DatabricksSource | SnowflakeSource, name: str
+    ) -> None:
+        if not isinstance(source, DatabricksSource | SnowflakeSource):
+            raise ConnectorError(
+                f'a semantic model is kept in Databricks or Snowflake, not '
+                f'{type(source).__name__}',
+                code='INVALID_CONNECTOR_ARGS',
+            )
+        if not isinstance(name, str) or not name:
+            raise ConnectorError(
+                f'a semantic model needs its name, got {name!r}',
+                code='INVALID_CONNECTOR_ARGS',
+            )
+        self._source = source
+        self._name = name
+        self._backend = source.backend
+        self._connection = source.connection
+        self._namespace = source.namespace
+
+    @property
+    def source(self) -> DatabricksSource | SnowflakeSource:
+        r"""The source the model is kept in."""
+        return self._source
+
+    @property
+    def name(self) -> str:
+        r"""The model's name, as given."""
+        return self._name
+
+    def __repr__(self) -> str:
+        return f'SemanticModel({self._name!r} in {self._source!r})'
+
+
+_BY_BACKEND: Mapping[str, type[Source]] = {
+    'databricks': DatabricksSource,
+    'snowflake': SnowflakeSource,
+    'postgres': PostgresSource,
+    'duckdb': DuckDBSource,
+    'sqlite': SQLiteSource,
+}

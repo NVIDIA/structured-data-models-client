@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A Databricks metric view standing in for a schema's tables.
+r"""A semantic model -- here a Databricks metric view -- as a schema's source.
 
 The connection is faked: it answers the metadata and preview queries a
 metric view is read with, the way a SQL warehouse would. Sampling over a real
@@ -25,7 +25,7 @@ pa = pytest.importorskip('pyarrow')
 pytest.importorskip('yaml')
 
 from databricks.sql.client import Connection  # noqa: E402
-from sdm_connectors import Source  # noqa: E402
+from sdm_connectors import DatabricksSource, SemanticModel  # noqa: E402
 
 from sdm_client import (  # noqa: E402
     Relationship,
@@ -208,20 +208,25 @@ class _Warehouse(Connection):
 
 @pytest.fixture
 def source() -> Any:
-    return Source(_Warehouse(), catalog=_CATALOG, schema=_SCHEMA)
+    return DatabricksSource(_Warehouse(), catalog=_CATALOG, schema=_SCHEMA)
 
 
-def _schema(source: Any, **options: Any) -> Schema:
+def _schema(source: Any, tables: Any = None, **options: Any) -> Schema:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', UserWarning)
-        return Schema.from_source(source, metric_view='sales_mv', **options)
+        return Schema.from_source(
+            source.semantic_model('sales_mv'), tables, **options
+        )
 
 
-def test_the_view_names_the_tables_keys_and_relationships(source: Any) -> None:
+def test_the_model_names_the_tables_keys_and_relationships(
+    source: Any,
+) -> None:
     schema = _schema(source)
 
-    assert schema.metric_view == 'sales_mv'
-    assert schema.source is source
+    assert isinstance(schema.source, SemanticModel)
+    assert schema.source.name == 'sales_mv'
+    assert schema.source.source is source
     assert set(schema.tables) == {'order_lines', 'customers', 'products'}
     assert all(isinstance(t, SourceTable) for t in schema.tables.values())
     assert schema['customers'].primary_key == 'customer_id'
@@ -233,9 +238,35 @@ def test_the_view_names_the_tables_keys_and_relationships(source: Any) -> None:
     }
     assert schema['order_lines']['discounted'].dtype == 'bool'
     assert 'discount' not in schema['order_lines']
+    assert not hasattr(schema, 'metric_view')
 
 
-def test_the_graph_sampled_is_the_view_cut_to_the_schema(source: Any) -> None:
+def test_tables_select_and_rename_among_the_model_s_own(source: Any) -> None:
+    schema = _schema(source, {'lines': 'order_lines', 'buyers': 'customers'})
+
+    assert set(schema.tables) == {'lines', 'buyers'}
+    assert schema['lines'].source_name == 'order_lines'
+    assert schema.relationships == [
+        Relationship('lines', 'customer_id', 'buyers', 'customer_id')
+    ]
+
+    graph = RelationalMaterializer(schema)._build_graph()
+
+    assert set(graph.tables) == {'lines', 'buyers'}
+    assert {(e.src_table, e.fkey, e.dst_table) for e in graph.edges} == {
+        ('lines', 'customer_id', 'buyers')
+    }
+    assert str(graph['lines']['discounted'].expr) == 'discount > 0'
+
+
+def test_a_table_the_model_does_not_have_is_named(source: Any) -> None:
+    with pytest.raises(StructuredDataError, match='not tables of'):
+        _schema(source, {'orders': 'orders'})
+
+
+def test_the_graph_sampled_is_the_model_cut_to_the_schema(
+    source: Any,
+) -> None:
     from sdm_relational_engine.rfm.base import DataBackend
 
     schema = _schema(source)
@@ -266,23 +297,13 @@ def test_overrides_mean_what_they_mean_for_tables(source: Any) -> None:
     assert schema.relationships == []
 
 
-def test_a_snapshot_keeps_the_view(source: Any) -> None:
-    assert _schema(source).snapshot().metric_view == 'sales_mv'
+def test_a_snapshot_keeps_the_model(source: Any) -> None:
+    schema = _schema(source)
+    assert schema.snapshot().source is schema.source
 
 
-def test_tables_or_a_view_but_not_both_or_neither(source: Any) -> None:
-    with pytest.raises(StructuredDataError, match='not both'):
-        Schema.from_source(
-            source, {'orders': 'order_lines'}, metric_view='sales_mv'
-        )
-    with pytest.raises(StructuredDataError, match='or give a metric_view'):
-        Schema.from_source(source)
-    with pytest.raises(StructuredDataError, match='must name a metric view'):
-        Schema.from_source(source, metric_view='')
+def test_the_model_needs_its_name(source: Any) -> None:
+    from sdm_connectors import ConnectorError
 
-
-def test_a_view_is_asked_only_of_databricks() -> None:
-    duckdb = pytest.importorskip('duckdb')
-
-    with pytest.raises(StructuredDataError, match='Databricks object'):
-        Schema.from_source(Source(duckdb.connect()), metric_view='sales_mv')
+    with pytest.raises(ConnectorError, match='needs its name'):
+        source.semantic_model('')

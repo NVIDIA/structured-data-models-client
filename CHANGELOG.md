@@ -60,20 +60,23 @@ The first release is being assembled. Nothing here has shipped yet.
   sends is the one the relational engine sends, now defined once in
   `sdm_api.databricks_serving` so the two cannot drift apart.
 
-- `Schema.from_source` and `sdm_connectors.Source`: a schema over tables that
-  stay in their source, sampled there with SQL, so only the rows a prediction
-  needs are read. A source is a Databricks SQL warehouse or a notebook's own
-  `spark`, Snowflake or a Snowpark session, PostgreSQL or Lakebase, DuckDB or
-  SQLite. The engine could always do this; nothing on `Schema` reached it, so a
+- `Schema.from_source` and the sources in `sdm_connectors`: a schema over
+  tables that stay in their source, sampled there with SQL, so only the rows a
+  prediction needs are read. `DatabricksSource` takes a SQL warehouse or a
+  notebook's own `spark`, `SnowflakeSource` a connection or a Snowpark
+  session, `PostgresSource` PostgreSQL or Lakebase, and `DuckDBSource` and
+  `SQLiteSource` their own; `Source(connection)` picks the class for you.
+  Leaving `tables` out takes every table the source holds. The engine could always do this; nothing on `Schema` reached it, so a
   warehouse table had to be read whole into pandas first. One source per
   schema, and `Table.data` stays a DataFrame: tables in place are a
   `SourceTable`, which holds none. `del schema['t']['column']` leaves a column
   of a table in place out of both the read and the request.
-- `Schema.from_source(source, metric_view=...)`: a Databricks metric view in
-  place of `tables`. Its source table and joins become the schema's tables,
-  its joins the keys and relationships, and its dimensions the columns, an
-  expression dimension computed in the warehouse when it is sampled. Measures
-  are left to the predictive query.
+- `source.semantic_model(name)` on `DatabricksSource` (a metric view) and
+  `SnowflakeSource` (a semantic view): a source whose tables, keys and
+  relationships the model declares, read by `Schema.from_source` like any
+  other. Its dimensions become columns, an expression dimension computed in
+  the warehouse when it is sampled; measures and metrics are left to the
+  predictive query. `Schema` itself names no warehouse.
 - `examples/databricks/`: AdventureWorks over Unity Catalog and over Lakebase,
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a

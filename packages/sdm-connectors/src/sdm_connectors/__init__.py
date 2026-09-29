@@ -5,7 +5,15 @@
 from sdm_connectors._version import __version__
 from sdm_connectors.backends import connect
 from sdm_connectors.reader import read, read_table
-from sdm_connectors.source import Source
+from sdm_connectors.source import (
+    DatabricksSource,
+    DuckDBSource,
+    PostgresSource,
+    SemanticModel,
+    SnowflakeSource,
+    Source,
+    SQLiteSource,
+)
 from sdm_connectors.sql import (
     ConnectorError,
     MissingBackendError,
@@ -15,7 +23,13 @@ from sdm_connectors.sql import (
 
 __all__ = [
     'ConnectorError',
+    'DatabricksSource',
+    'DuckDBSource',
     'MissingBackendError',
+    'PostgresSource',
+    'SQLiteSource',
+    'SemanticModel',
+    'SnowflakeSource',
     'Source',
     '__version__',
     'connect',

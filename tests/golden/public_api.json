@@ -873,14 +873,13 @@
         "bases": [],
         "kind": "class",
         "public_attributes": [
-          "metric_view",
           "source",
           "tables"
         ],
         "public_methods": {
           "check_consistent": "(self) -> 'None'",
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
-          "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, metric_view: 'str | None' = None, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
+          "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
           "snapshot": "(self) -> 'Schema'"
         },
         "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"
@@ -973,7 +972,13 @@
   "sdm_connectors": {
     "__all__": [
       "ConnectorError",
+      "DatabricksSource",
+      "DuckDBSource",
       "MissingBackendError",
+      "PostgresSource",
+      "SQLiteSource",
+      "SemanticModel",
+      "SnowflakeSource",
       "Source",
       "__version__",
       "connect",
@@ -992,6 +997,34 @@
         "public_methods": {},
         "signature": "(message: 'str', *, code: 'str | None' = None, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
+      "DatabricksSource": {
+        "bases": [
+          "sdm_connectors.source.Source"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "semantic_model": "(self, name: 'str') -> 'SemanticModel'"
+        },
+        "signature": "(connection: 'Any', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+      },
+      "DuckDBSource": {
+        "bases": [
+          "sdm_connectors.source.Source"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {},
+        "signature": "(connection: 'Any') -> 'None'"
+      },
       "MissingBackendError": {
         "bases": [
           "sdm_connectors.sql.ConnectorError",
@@ -1002,6 +1035,62 @@
         "public_methods": {},
         "signature": "(backend: 'str', driver: 'str') -> 'None'"
       },
+      "PostgresSource": {
+        "bases": [
+          "sdm_connectors.source.Source"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {},
+        "signature": "(connection: 'Any', *, schema: 'str | None' = None) -> 'None'"
+      },
+      "SQLiteSource": {
+        "bases": [
+          "sdm_connectors.source.Source"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {},
+        "signature": "(connection: 'Any') -> 'None'"
+      },
+      "SemanticModel": {
+        "bases": [
+          "sdm_connectors.source.Source"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "name",
+          "namespace",
+          "source"
+        ],
+        "public_methods": {},
+        "signature": "(source: 'DatabricksSource | SnowflakeSource', name: 'str') -> 'None'"
+      },
+      "SnowflakeSource": {
+        "bases": [
+          "sdm_connectors.source.Source"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "backend",
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "semantic_model": "(self, name: 'str') -> 'SemanticModel'"
+        },
+        "signature": "(connection: 'Any', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+      },
       "Source": {
         "bases": [],
         "kind": "class",
@@ -1011,7 +1100,7 @@
           "namespace"
         ],
         "public_methods": {},
-        "signature": "(connection: 'Any', *, catalog: 'str | None' = None, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+        "signature": "(connection: 'Any' = None, *args: 'Any', **namespace: 'Any') -> 'Source'"
       },
       "__version__": {
         "kind": "str",

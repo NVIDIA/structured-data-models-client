@@ -202,9 +202,9 @@ Nothing on `Schema` reached it, so every warehouse table had to be read whole in
 
 ```python
 from sdm_client import Schema
-from sdm_connectors import Source, connect
+from sdm_connectors import DatabricksSource
 
-adventureworks = Source(spark, catalog='main', schema='sales')  # in a Databricks notebook
+adventureworks = DatabricksSource(spark, catalog='main', schema='sales')  # in a Databricks notebook
 schema = Schema.from_source(
     adventureworks,
     tables={'customers': 'adventureworks_customers', 'orders': 'adventureworks_orders'},
@@ -214,17 +214,20 @@ request = PredictiveQuery(query, schema).materialize(indices=[...])
 ```
 
 `tables` maps the names a query uses to the names in the source.
+Left out, it is every table the source describes, each under its own name.
 `primary_keys`, `time_columns` and `relationships` mean what they mean on `from_data`.
 
-A `Source` is where the tables are and how to reach them, and it is the only thing that differs between backends:
+A source is where the tables are and how to reach them, and it is the only thing that differs between backends.
+Each warehouse has a class of its own, named for it, so what only one warehouse has is a method only its class offers:
 
 | Source | Built from | Names | Notes |
 |---|---|---|---|
-| Databricks SQL warehouse | `connect('databricks', ...)` | `catalog`, `schema` | Any runtime; needs a warehouse |
-| Databricks notebook | the notebook's `spark` | `catalog`, `schema` | No warehouse; the notebook's own compute and identity. DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()` |
-| Snowflake | `connect('snowflake', ...)`, or a Snowpark `session.connection` | `database`, `schema` | Snowpark's connection is the connector's own type, so a Snowflake notebook passes it as it is |
-| PostgreSQL, Lakebase | `connect('postgres', ...)` | `schema` | Lakebase authenticates with a short-lived OAuth token as the password, minted with the Databricks SDK; the connection outlives the token once it is open |
-| DuckDB, SQLite | a connection or a path | — | What lets CI run the whole path, SQL sampling included, with no credentials |
+| `DatabricksSource` | `connect('databricks', ...)`, or the notebook's `spark` | `catalog`, `schema` | A SQL warehouse on any runtime; `spark` needs no warehouse and uses the notebook's own compute and identity, on DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()`. Offers `semantic_model()` |
+| `SnowflakeSource` | `connect('snowflake', ...)`, or a Snowpark `session` | `database`, `schema` | A Snowpark session is reached through its own connector connection. Offers `semantic_model()` |
+| `PostgresSource` | `connect('postgres', ...)` | `schema` | Lakebase authenticates with a short-lived OAuth token as the password, minted with the Databricks SDK; the connection outlives the token once it is open |
+| `DuckDBSource`, `SQLiteSource` | a connection | — | What lets CI run the whole path, SQL sampling included, with no credentials |
+
+`Source(connection, ...)` still works, and returns the class that fits the connection; the classes are the spelling to reach for, because they are what a type checker and an editor can see.
 
 `from_data` does not change: a mapping of frames is still read into memory and sampled there.
 
@@ -275,13 +278,16 @@ On clustered or partitioned tables they are cheap; elsewhere they are the first 
 **Postgres needs the engine first.**
 The engine was carried across before the predecessor gained a Postgres backend, so the Postgres source brings that backend over too: the table, the `JOIN LATERAL` sampler, and key discovery from `pg_catalog`.
 
-**A metric view stands in for the tables, not for one of them.**
-A Databricks metric view already says which tables a question is about and how they join: a source table, joins to others, and dimensions that are columns or SQL expressions over them.
-So `Schema.from_source(source, metric_view='sales_metrics')` takes the view in place of `tables`, rather than accepting a view as one entry of `tables`, which would have one name describe several tables.
+**A semantic model is a source, not an argument to `Schema`.**
+A Databricks metric view and a Snowflake semantic view each already say which tables a question is about and how they join, and the engine reads both into the same thing: tables, the links between them, and row-level columns, with their aggregations -- measures, metrics -- left out.
+The industry's own name for that is a semantic model: the Open Semantic Interchange, which Databricks and Snowflake both back, and dbt use it.
+So `source.semantic_model('sales_metrics')` is a source of its own, and `Schema.from_source` reads it like any other; `tables`, if given, selects and renames among the model's tables.
+Only `DatabricksSource` and `SnowflakeSource` offer it, because only those warehouses keep one, and `Schema` names no warehouse at all.
+An earlier draft took `metric_view=` on `from_source`, which put one vendor's word on the one method meant to be the same for every warehouse.
 The engine turns the view into its graph: the source becomes a table named as it is in the catalog, each join a table named after the join, each dimension a column of the table it reads, and each join a relationship to the key it names.
 An expression dimension stays an expression, computed in the warehouse when the table is sampled, so `materialize()` rebuilds the tables from the view and then keeps only what the schema kept.
 Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
-Snowflake semantic views are the same idea, and the engine reads them too; reaching them from `from_source` is left until a Snowflake account can test it.
+A Snowflake semantic view goes through the same path, read by the engine's own semantic-view support; it is tested against a fake connection, not yet against a Snowflake account.
 
 ---
 
