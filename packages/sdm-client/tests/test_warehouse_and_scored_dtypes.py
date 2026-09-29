@@ -691,3 +691,52 @@ def test_probabilities_that_would_collapse_are_left_as_they_came():
     ]
 
     assert as_declared_target(items, payload)[0].probabilities == given
+
+
+@pytest.mark.parametrize(
+    ('column', 'expected'),
+    [
+        (pd.Series([D(2**64 + i) for i in range(20)], dtype=object), 'string'),
+        (
+            pd.Series(
+                [np.uint64(2**64 - 1 - i) for i in range(20)], dtype=object
+            ),
+            'string',
+        ),
+        (pd.Series([2**64 + i for i in range(20)], dtype=object), 'string'),
+        (pd.Series(np.array([1, 2, 3], dtype='uint64')), 'int64'),
+        (pd.Series([1, 2, 3], dtype='int64'), 'int64'),
+        (pd.Series([1, 2, 3], dtype='int32'), 'int64'),
+        (pd.Series([1, None, 3], dtype='Int64'), 'int64'),
+    ],
+    ids=[
+        'Decimal',
+        'uint64 object',
+        'python int',
+        'uint64 in range',
+        'int64',
+        'int32',
+        'Int64 with a null',
+    ],
+)
+def test_a_whole_number_is_typed_by_whether_it_fits_not_by_how_it_arrives(
+    column, expected
+):
+    """The too-wide rule was applied to a decimal column and not the integer
+    column beside it, so a `uint64` past the range was announced as `int64` --
+    a dtype the values provably cannot hold."""
+    from sdm_client.wire import infer_tfm_dtype
+
+    assert infer_tfm_dtype(column) == expected
+
+
+def test_a_column_typed_string_for_its_width_serializes():
+    """The point of the rule: the dtype the schema names has to be one the
+    values can travel under."""
+    from sdm_client.wire.dtypes import serialize_column
+
+    wide = pd.Series([np.uint64(2**64 - 1), np.uint64(2**64 - 2)], dtype=object)
+    assert serialize_column(wide, 'string') == [
+        '18446744073709551615',
+        '18446744073709551614',
+    ]

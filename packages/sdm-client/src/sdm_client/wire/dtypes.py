@@ -227,7 +227,7 @@ def infer_tfm_dtype(series: pd.Series) -> str:
     if pd.api.types.is_datetime64_any_dtype(dtype):
         return 'timestamp[us]'
     if pd.api.types.is_integer_dtype(dtype):
-        return 'int64'
+        return _whole_numbers_dtype(series, dtype)
     if pd.api.types.is_float_dtype(dtype):
         return 'float64' if dtype.itemsize > 4 else 'float32'
     decimal_type = arrow_decimal_type(dtype)
@@ -239,6 +239,8 @@ def infer_tfm_dtype(series: pd.Series) -> str:
             return UNTYPED
         if content == 'decimal':
             return _decimal_dtype(series)
+        if content == 'integer':
+            return _whole_numbers_dtype(series, dtype)
         return _OBJECT_CONTENT_DTYPES.get(content, 'string')
     return 'string'
 
@@ -268,6 +270,38 @@ def arrow_decimal_type(dtype: Any) -> Any | None:
     if not isinstance(getattr(arrow_type, 'scale', None), int):
         return None
     return arrow_type
+
+
+def _whole_numbers_dtype(series: pd.Series, dtype: Any) -> str:
+    r"""``int64`` for a column of whole numbers, ``string`` where they do not fit.
+
+    The rule that a whole number too wide for an ``int64`` travels as its
+    digits was applied to a decimal column and not to the integer column
+    beside it. A ``uint64`` or a Python ``int`` past the range was announced as
+    ``int64`` -- a dtype the values provably cannot hold -- and the request
+    failed at serialization instead of being described correctly here.
+
+    Only the two that can exceed are read. Every signed numpy width fits an
+    ``int64`` by construction, and that is the hot path.
+    """
+    if not _may_hold_more_than_an_int64(dtype):
+        return 'int64'
+    for value in series:
+        if _is_missing(value):
+            continue
+        try:
+            if not INT64_MIN <= int(value) <= INT64_MAX:
+                return 'string'
+        except (TypeError, ValueError, OverflowError):
+            return 'string'
+    return 'int64'
+
+
+def _may_hold_more_than_an_int64(dtype: Any) -> bool:
+    """Whether a column of ``dtype`` can carry a value an ``int64`` cannot."""
+    if pd.api.types.is_object_dtype(dtype):
+        return True
+    return 'uint64' in str(dtype).lower()
 
 
 def _decimal_dtype(series: pd.Series, arrow_type: Any | None = None) -> str:

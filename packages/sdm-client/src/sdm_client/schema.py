@@ -388,14 +388,24 @@ class Table:
     def _could_hold_a_key(self, name: str) -> bool:
         r"""Whether `_check_key` would take this column as part of a key.
 
-        The two conditions it refuses on that a column carries on its own: a
-        dtype no identifier can be made of, and being the table's time column.
-        Asked here so that what is recommended is what is accepted.
+        The conditions it refuses on that a column carries on its own: a dtype
+        no identifier can be made of, being the table's time column, and
+        holding a null. Asked here so that what is recommended is what is
+        accepted -- a column with one null was offered as half of a composite
+        key and refused by `_check_key` on the very next call.
+
+        Uniqueness is not asked here. It is a property of the combination, and
+        the caller of this is choosing what to combine.
         """
         column = self.columns.get(name)
         if column is None or name == getattr(self, 'time_column', None):
             return False
-        return supports_dtype('ID', column.dtype)
+        if not supports_dtype('ID', column.dtype):
+            return False
+        frame = getattr(self, 'data', None)
+        if frame is None or name not in frame.columns:
+            return True
+        return not bool(frame[name].isna().any())
 
     def _check_name(self, name: str) -> None:
         if not isinstance(name, str) or not name:
@@ -460,15 +470,21 @@ class Table:
             return
         quality = _key_quality(frame, names)
         if quality.nulls:
+            empty = [
+                name
+                for name in names
+                if name in frame.columns and frame[name].isna().any()
+            ]
             raise StructuredDataError(
-                f'{".".join((self.name, *names))} has {quality.nulls} row(s) '
-                f'with no value, so those rows cannot be identified; fill or '
-                f'drop them before using the column as a primary key',
+                f'{_the_key_of(self.name, names)} has {quality.nulls} row(s) '
+                f'with no value, in {_and_list(empty)}, so those rows cannot '
+                f'be identified; fill or drop them before using '
+                f'{"them" if len(empty) > 1 else "it"} as a primary key',
                 code='INVALID_REQUEST',
             )
         if quality.duplicates > len(frame) * (1 - _KEY_UNIQUENESS):
             raise StructuredDataError(
-                f'{".".join((self.name, *names))} is not unique enough to '
+                f'{_the_key_of(self.name, names)} is not unique enough to '
                 f'identify a row: {quality.duplicates} of {len(frame)} rows '
                 f'repeat a value already used, e.g. {quality.example!r}',
                 code='INVALID_REQUEST',
@@ -1776,6 +1792,17 @@ def _is_joinable(tables: Mapping[str, Table], link: Relationship) -> bool:
     except StructuredDataError:
         return False
     return True
+
+
+def _the_key_of(table: str, names: Sequence[str]) -> str:
+    """How to name a key in a message, for one column or several.
+
+    Joining the parts with a dot rendered `['a', 'b']` of table `t` as
+    `t.a.b`, which reads as one column named `a.b`.
+    """
+    if len(names) == 1:
+        return f'{table}.{names[0]}'
+    return f'the primary key of {table!r}, {_and_list(list(names))},'
 
 
 def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:
