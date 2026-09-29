@@ -120,7 +120,7 @@ def postgres_schema(
                 f'INSERT INTO "{schema}".orders '
                 'SELECT value, 1 + (value % 20), '
                 "TIMESTAMP '2025-01-01' + value * INTERVAL '1 day' "
-                'FROM generate_series(1, 1000) AS value'
+                'FROM generate_series(1, 100) AS value'
             )
             cursor.execute(
                 f'INSERT INTO "{schema}".orders VALUES '
