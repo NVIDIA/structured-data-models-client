@@ -13,6 +13,30 @@ preference**. A model that does heavy client-side work — the relational one,
 with its graph building, native sampling and query resolution — is an opt-in
 extra. Warehouse drivers are opt-in the same way.
 
+## On Databricks
+
+Install into the notebook with `%pip`, then restart Python:
+
+```text
+%pip install --only-binary=:all: "sdm-client[relational,databricks,databricks-serving]" numpy~=1.0
+dbutils.library.restartPython()
+```
+
+Four things differ from a laptop, each found by running on every LTS runtime and serverless environment:
+
+- **Keep NumPy 1 where the runtime has it.**
+  Databricks Runtime 14.3, 15.4 and 16.4 LTS, and serverless environments 1 and 2, build their own packages against NumPy 1.
+  Installing can pull NumPy 2 in beneath them, and the Python process then cannot start.
+  Add `numpy~=1.0` on those runtimes, and leave it off where the runtime already has NumPy 2.
+- **Write version bounds with `~=`, not `<` or `>`.**
+  A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
+- **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**
+  `Source(spark, ...)` reads results with `DataFrame.toArrow()`, which arrived in Spark 4.
+  On an older runtime, name a SQL warehouse instead: `Source(connect('databricks', ...), ...)`.
+- **For Lakebase, install plain `psycopg` rather than the `postgres` extra.**
+  The extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
+  Plain `psycopg` uses the runtime's own libpq, which works on both architectures.
+
 ## Packages
 
 Five distributions, released together on one version.
