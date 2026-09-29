@@ -114,9 +114,36 @@ class Column:
     stype: str
     untyped: bool = field(init=False, default=False)
     stype_declared: bool = field(init=False, default=False)
+    _stype_before_key: str | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
+
+    def _mark_as_key(self) -> None:
+        r"""Type this column as an identifier because the schema joins on it.
+
+        A key typed from its dtype alone becomes ``numerical``, the model
+        stores it as a float, and the join against an integer key fails
+        downstream.
+
+        This is inference, not a declaration, so it goes around
+        ``__setattr__``: routed through it the schema's own marking set
+        ``stype_declared``, becoming indistinguishable from a meaning the
+        caller chose, and what inference had decided was gone with nothing to
+        restore. A meaning the caller did choose is left exactly as it is.
+        """
+        if self.stype_declared or self.stype == 'ID':
+            return
+        object.__setattr__(self, '_stype_before_key', self.stype)
+        object.__setattr__(self, 'stype', 'ID')
+
+    def _release_as_key(self) -> None:
+        r"""Give back the meaning the values had, the schema no longer joining
+        on this column."""
+        if self.stype_declared or self._stype_before_key is None:
+            return
+        object.__setattr__(self, 'stype', self._stype_before_key)
+        object.__setattr__(self, '_stype_before_key', None)
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Assign a field, keeping the three that describe each other true.
@@ -607,6 +634,9 @@ class Schema:
         """
         if key == 'relationships' and hasattr(self, '_tables'):
             value = _Links(self._settle(value), self)
+            object.__setattr__(self, key, value)
+            self._mark_key_columns()
+            return
         object.__setattr__(self, key, value)
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -801,20 +831,33 @@ class Schema:
         return len(self._tables)
 
     def _mark_key_columns(self) -> None:
-        r"""Type every key column as an identifier.
+        r"""Say which columns this schema joins on, and which it no longer does.
 
-        A join key typed from its dtype alone becomes ``numerical``, which the
-        model then stores as a float, and the join against an integer key fails
-        downstream. Resolving keys as identifiers first is what stops that.
+        Derived from the schema as it stands rather than applied once when it
+        was built. Marking only on the way in meant a relationship dropped
+        afterwards left its source column typed ``ID``, so two schemas with
+        the same tables and no relationships asked different questions -- one
+        a regression, the other a multiclass classification -- according to a
+        link only one of them had ever had.
         """
-        for table in self._tables.values():
-            for name in _as_key_tuple(table.primary_key):
-                if name in table.columns:
-                    table.columns[name].stype = 'ID'
+        keys: dict[str, set[str]] = {}
+        for name, table in self._tables.items():
+            keys[name] = {
+                column
+                for column in _as_key_tuple(table.primary_key)
+                if column in table.columns
+            }
         for link in self.relationships:
             source = self._tables.get(link.source_table)
             if source is not None and link.source_column in source.columns:
-                source.columns[link.source_column].stype = 'ID'
+                keys[link.source_table].add(link.source_column)
+
+        for name, table in self._tables.items():
+            for column_name, column in table.columns.items():
+                if column_name in keys[name]:
+                    column._mark_as_key()
+                else:
+                    column._release_as_key()
 
     def __repr__(self) -> str:
         return (
@@ -953,7 +996,14 @@ def _copy_column(column: Column) -> Column:
     the moment its storage and meaning are held against each other.
     """
     made = Column.__new__(Column)
-    for field_name in ('name', 'dtype', 'stype', 'untyped', 'stype_declared'):
+    for field_name in (
+        'name',
+        'dtype',
+        'stype',
+        'untyped',
+        'stype_declared',
+        '_stype_before_key',
+    ):
         object.__setattr__(made, field_name, getattr(column, field_name))
     return made
 
@@ -1547,6 +1597,26 @@ class _Links(list):
         settled = self._schema._settle(links)
         super().clear()
         super().extend(settled)
+        self._schema._mark_key_columns()
+
+    def remove(self, link: Any) -> None:
+        kept = list(self)
+        kept.remove(link)
+        self._resettle(kept)
+
+    def pop(self, index: Any = -1) -> Relationship:
+        kept = list(self)
+        gone = kept.pop(index)
+        self._resettle(kept)
+        return gone
+
+    def clear(self) -> None:
+        self._resettle([])
+
+    def __delitem__(self, index: Any) -> None:
+        kept = list(self)
+        del kept[index]
+        self._resettle(kept)
 
     def append(self, link: Relationship) -> None:
         self._resettle([*self, link])
