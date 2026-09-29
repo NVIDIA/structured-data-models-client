@@ -99,8 +99,11 @@ _DOCUMENTED_KWARGS = frozenset(
 # pair on the thrift route, is resolved to the browser flow -- which is the
 # thing this guard exists to keep a script out of.
 #
-# Azure service-principal credentials are read on either route when
-# `auth_type='azure-sp-m2m'` names the flow, and `auth_type` counts on its own.
+# Azure service-principal credentials are read only when
+# `auth_type='azure-sp-m2m'` names the flow, on either route, and `auth_type`
+# counts on its own above -- so there is no entry for the azure pair alone.
+# A JWT private key needs the key id beside it for the same reason: without
+# one the driver has a key it cannot present.
 #
 # `tls_client_cert_file` is deliberately absent. The driver reads the
 # underscored spelling for certificate authentication and the public one only
@@ -118,8 +121,14 @@ _WAYS_TO_AUTHENTICATE = (
     # browser flow, which is what this guard exists to keep a script out of.
     # So the route is part of the credential.
     frozenset({'use_kernel', 'oauth_client_id', 'oauth_client_secret'}),
-    frozenset({'use_kernel', 'oauth_client_id', 'oauth_jwt_key_file'}),
-    frozenset({'use_kernel', 'azure_client_id', 'azure_client_secret'}),
+    frozenset(
+        {
+            'use_kernel',
+            'oauth_client_id',
+            'oauth_jwt_key_file',
+            'oauth_jwt_kid',
+        }
+    ),
     # The driver refuses these itself, clearly and immediately, which is a
     # better message than this one; they are here so it gets to give it.
     frozenset({'username'}),

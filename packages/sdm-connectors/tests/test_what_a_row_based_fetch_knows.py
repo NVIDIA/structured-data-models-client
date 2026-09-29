@@ -240,6 +240,12 @@ def test_a_databricks_connect_with_no_credential_is_refused_not_opened(
             'oauth_client_id': 'i',
             'oauth_redirect_port': 8020,
         },
+        {
+            'use_kernel': True,
+            'oauth_client_id': 'i',
+            'oauth_jwt_key_file': '/keys/client.pem',
+            'oauth_jwt_kid': 'kid-1',
+        },
     ],
 )
 def test_the_installed_driver_s_own_auth_options_are_accepted(
@@ -400,8 +406,17 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
                 'use_kernel': True,
                 'oauth_client_id': 'i',
                 'oauth_jwt_key_file': '/k.pem',
+                'oauth_jwt_kid': 'k1',
             },
             True,
+        ),
+        (
+            {
+                'use_kernel': True,
+                'oauth_client_id': 'i',
+                'oauth_jwt_key_file': '/k.pem',
+            },
+            False,
         ),
         (
             {
@@ -409,7 +424,7 @@ def test_a_query_that_is_not_a_statement_is_named_as_the_caller_s() -> None:
                 'azure_client_id': 'i',
                 'azure_client_secret': 's',
             },
-            True,
+            False,
         ),
         ({'identity_federation_client_id': 'x', 'access_token': 't'}, True),
         ({'oauth_token_cache_enabled': True, 'access_token': 't'}, True),

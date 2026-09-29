@@ -408,6 +408,29 @@ def test_a_key_is_read_once_and_what_was_read_is_kept(named) -> None:
     assert schema.snapshot()['orders'].primary_key == ('order_id', 'alt_id')
 
 
+@pytest.mark.parametrize(
+    'named',
+    [
+        lambda: (name for name in ['tenant', 'id']),
+        lambda: _ReadableOnce(['tenant', 'id']),
+    ],
+    ids=['generator', 'one-shot-iterable'],
+)
+def test_the_constructor_reads_a_key_once_as_the_setter_does(named) -> None:
+    """`from_data` read the key to check its columns exist and then handed the
+    original along, emptying it exactly as the setter used to."""
+    frame = pd.DataFrame(
+        {'tenant': [1, 1, 2], 'id': [1, 2, 1], 'v': [1.0, 2.0, 3.0]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'t': frame}, primary_keys={'t': named()})
+
+    assert schema['t'].primary_key == ('tenant', 'id')
+    assert schema['t']['tenant'].stype == 'ID'
+    assert schema['t']['id'].stype == 'ID'
+
+
 def test_a_single_name_is_kept_as_the_name_it_is() -> None:
     schema = with_alt([])
     schema['orders'].primary_key = 'alt_id'

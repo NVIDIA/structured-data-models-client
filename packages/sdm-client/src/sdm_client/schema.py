@@ -853,9 +853,14 @@ class Schema:
 
         for name, key in (primary_keys or {}).items():
             table = _require_table(built, name)
-            for column in _as_key_tuple(key):
+            # Read once, and the names are what is passed on. Reading it here
+            # to check the columns exist and then handing the original along
+            # emptied a key that can only be read once, exactly as the setter
+            # used to before it read once itself.
+            names = _as_key_tuple(key)
+            for column in names:
                 _require_column(built, name, column)
-            table.primary_key = key
+            table.primary_key = key if isinstance(key, str) else names
         for name, column in (time_columns or {}).items():
             _require_table(built, name).time_column = _require_column(
                 built, name, column
