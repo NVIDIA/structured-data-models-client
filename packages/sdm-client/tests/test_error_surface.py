@@ -307,7 +307,7 @@ def test_a_zero_row_predict_is_answered_without_asking():
     built = answer.to_pandas()
 
     assert len(built) == 0
-    assert list(built.columns) == ['row_index', 'prediction']
+    assert list(built.columns) == ['row_index', 'id', 'prediction']
 
 
 def test_selecting_no_rows_by_key_is_the_same_no_op_as_an_empty_frame():
@@ -325,7 +325,7 @@ def test_selecting_no_rows_by_key_is_the_same_no_op_as_an_empty_frame():
 
 def test_the_empty_answer_carries_the_columns_that_were_asked_for():
     built = _empty_answer('kumo-tabular', ('prediction', 'scores')).to_pandas()
-    assert set(built.columns) == {'row_index', 'prediction', 'scores'}
+    assert set(built.columns) == {'row_index', 'id', 'prediction', 'scores'}
 
 
 def test_the_empty_answer_reports_no_missing_fields():

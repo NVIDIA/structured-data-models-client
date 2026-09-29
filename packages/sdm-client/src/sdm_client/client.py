@@ -185,6 +185,9 @@ class FittedModel:
             return
         self._client._transport.delete_session(self._session_id)
         self._closed = True
+        pinned = getattr(self._client, '_pinned', None)
+        if pinned is not None:
+            pinned.discard(self)
 
     def __enter__(self) -> FittedModel:
         return self
@@ -258,6 +261,7 @@ class SDMClient:
             max_retries=max_retries,
         )
         self._adapters: dict[str, ModelAdapter] = {}
+        self._pinned: set[FittedModel] = set()
 
     @property
     def url(self) -> str:
@@ -459,7 +463,7 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        return FittedModel(
+        fitted = FittedModel(
             self,
             adapter,
             str(session_id),
@@ -473,6 +477,8 @@ class SDMClient:
             pinned_over_a_window=request.target_moves_with_time,
             question=request._question,
         )
+        self._pinned.add(fitted)
+        return fitted
 
     def _prepare(
         self,
@@ -520,12 +526,20 @@ class SDMClient:
     def close(self) -> None:
         r"""Release pooled connections and retire this client.
 
-        Adapters are asked to release what they opened first, then the
-        transport is closed even if one of them fails -- the transport's pool
-        is the one that cannot be rebuilt on demand.
+        Contexts this client pinned are released first, because the transport
+        that would release them is about to close and `FittedModel.close()`
+        is the only call that can. Adapters follow, then the transport itself
+        even if one of them fails -- its pool is the one that cannot be
+        rebuilt on demand.
         """
         try:
             error: BaseException | None = None
+            for fitted in list(self._pinned):
+                try:
+                    fitted.close()
+                except BaseException as session_error:  # noqa: BLE001
+                    error = error or session_error
+            self._pinned.clear()
             for adapter in self._adapters.values():
                 try:
                     adapter.close()
@@ -610,6 +624,13 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     """
     if holdout is None:
         return 0
+    if isinstance(holdout, (str, bytes)):
+        raise StructuredDataError(
+            f'holdout names the rows this session may score, and {holdout!r} '
+            f'is one string rather than a list of keys; pass [{holdout!r}] if '
+            f'that is the key you mean',
+            code='INVALID_REQUEST',
+        )
     keys = frozenset(
         _named_by(key if isinstance(key, (tuple, list)) else [key])
         for key in holdout
@@ -617,6 +638,16 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     if not keys:
         return 0
     removed = without_the_keys(payload, keys)
+    if not removed:
+        warnings.warn(
+            f'none of the {len(keys)} keys named as holdout matched a row of '
+            f'the context about to be pinned, so nothing was held back. The '
+            f'keys are compared as the schema spells them, so a key given as '
+            f'a different type matches nothing -- check they are the same '
+            f'kind of value as the entity column holds.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
     if removed:
         warnings.warn(
             f'{removed} of the rows named as holdout were in the context '

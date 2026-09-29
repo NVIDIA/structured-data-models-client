@@ -185,12 +185,17 @@ class PredictionResult:
         return frame
 
     def _empty_frame(self) -> pd.DataFrame:
-        r"""The columns this request would have produced, with no rows."""
-        columns = ['row_index']
+        r"""The columns this request would have produced, with no rows.
+
+        ``row_index`` and ``id`` say which row an answer belongs to rather
+        than what the answer is, so they are here whatever was asked for --
+        the join a caller writes must not depend on the batch being empty.
+        """
+        columns = ['row_index', 'id']
         columns += [
             name
             for name in (*_SCALAR_FIELDS, *_SEQUENCE_FIELDS, 'rankings')
-            if name != 'row_index' and name in self.outputs
+            if name not in ('row_index', 'id') and name in self.outputs
         ]
         return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 

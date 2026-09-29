@@ -39,7 +39,7 @@ from sdm_client.decompose import (
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
-from sdm_client.models import Model, spec_for
+from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
@@ -405,7 +405,8 @@ class PredictiveQuery:
             )
             raise StructuredDataError(
                 f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}'
+                f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
+                f'{self._why_the_target_is_text(reasons, profile)}'
                 f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
                 code='INVALID_REQUEST',
             )
@@ -459,7 +460,7 @@ class PredictiveQuery:
             f'== {target!r} and link.source_column in {rest!r})].'
         )
 
-    def _why_the_target_is_text(self, reasons: str) -> str:
+    def _why_the_target_is_text(self, reasons: str, profile: Profile) -> str:
         r"""Say why a target is `text`, when that is what refused the query.
 
         Inference types a string column by how many distinct values it holds,
@@ -488,11 +489,25 @@ class PredictiveQuery:
         if column is None or column.stype != 'text' or column.stype_declared:
             return ''
         distinct = self.schema[table].data[name].nunique()
-        return (
+        said = (
             f'. {table}.{name} holds {distinct:,} distinct values, and a '
             f'string column with more than {_MAX_CATEGORICAL} is typed text '
             f'rather than categorical -- a fair rule for a feature and a poor '
-            f'one for a label. If it is a label, say so with '
+            f'one for a label'
+        )
+        ceiling = (
+            RELATIONAL_LIMITS['classes_max'] if profile == RELATIONAL else None
+        )
+        if ceiling is not None and distinct > ceiling:
+            return (
+                f'{said}. Typing it categorical would not help here, though: '
+                f'{profile.capabilities.model} classifies at most {ceiling} '
+                f'classes and this column holds {distinct:,}, so the send '
+                f'would be refused. Predict a column with fewer classes, or '
+                f'group these into that many first'
+            )
+        return (
+            f'{said}. If it is a label, say so with '
             f"schema[{table!r}][{name!r}].stype = 'categorical'"
         )
 
@@ -523,6 +538,27 @@ _PREDICTED_COLUMN = re.compile(
 #: The English sentence inside a pydantic validation error, without the
 #: `[type=..., input_value=...]` tail the library appends to it.
 _VALIDATOR_SENTENCE = re.compile(r'Value error, (.+?)(?= \[type=)', re.DOTALL)
+
+
+_A_REMEDY_IN_THE_LANGUAGE_S_OWN_WORDS = re.compile(
+    r'\s*(?:Keep the one this query means and drop the rest, for example:'
+    r'|You can drop the extra foreign keys? with:)'
+    r'[^.]*?(?:schema|graph)\.unlink\([^)]*\)'
+    r'(?:\s*;\s*(?:schema|graph)\.unlink\([^)]*\))*\.?'
+)
+
+
+def _without_a_remedy_this_caller_cannot_run(reasons: str) -> str:
+    r"""The refusal without the repair written in the language's vocabulary.
+
+    The query language advises `schema.unlink(...)`, a call on its own
+    `SchemaDefinition` and not on the `Schema` a caller holds, and it chooses
+    which link to keep by position. This object restates both in terms the
+    caller can run, and two remedies that disagree about which link to keep
+    are worse than one: followed in order they keep the wrong one. So the one
+    that cannot be run is removed rather than printed beside it.
+    """
+    return _A_REMEDY_IN_THE_LANGUAGE_S_OWN_WORDS.sub('', reasons)
 
 
 def _without_the_validator_trace(message: str) -> str:

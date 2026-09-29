@@ -137,7 +137,10 @@ def test_naming_nothing_changes_nothing():
     assert len(payload['context']['instance_table']['rows']) == before
 
 
-def test_naming_rows_that_are_not_in_the_context_removes_none():
+def test_naming_rows_that_are_not_in_the_context_says_it_held_nothing():
+    """Silence here looked exactly like silence after holding everything back,
+    and the commonest way to match nothing is a key of the wrong type, which
+    nothing else would have shown."""
     payload = tabular_session()
     before = len(payload['context']['instance_table']['rows'])
 
@@ -147,7 +150,7 @@ def test_naming_rows_that_are_not_in_the_context_removes_none():
 
     assert removed == 0
     assert len(payload['context']['instance_table']['rows']) == before
-    assert not [w for w in caught if 'holdout' in str(w.message)]
+    assert [w for w in caught if 'matched a row' in str(w.message)]
 
 
 # --- and `fit()` has to be the thing that does it ---------------------------
