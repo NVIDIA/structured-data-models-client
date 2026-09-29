@@ -123,3 +123,58 @@ def test_a_copy_carries_what_the_marking_had_to_restore() -> None:
         assert copied['orders']['user_id'].stype == 'ID'
         copied.relationships = []
         assert copied['orders']['user_id'].stype == 'numerical'
+
+
+ALT = pd.DataFrame(
+    {
+        'order_id': range(300),
+        'alt_id': range(1_000, 1_300),
+        'user_id': RNG.integers(0, 60, 300),
+    }
+)
+
+
+def with_alt(links: list[Relationship]) -> Schema:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {'users': USERS, 'orders': ALT},
+            primary_keys={'users': 'user_id', 'orders': 'order_id'},
+            relationships=links,
+        )
+
+
+def test_a_primary_key_that_was_replaced_stops_typing_its_old_column() -> None:
+    schema = with_alt([])
+    assert schema['orders']['order_id'].stype == 'ID'
+
+    schema['orders'].primary_key = 'alt_id'
+
+    assert schema['orders']['alt_id'].stype == 'ID'
+    assert schema['orders']['order_id'].stype == 'numerical'
+
+
+def test_a_replaced_key_a_link_still_joins_on_stays_an_identifier() -> None:
+    schema = with_alt([Relationship('orders', 'order_id', 'users', 'user_id')])
+
+    schema['orders'].primary_key = 'alt_id'
+
+    assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_clearing_the_primary_key_releases_the_column_it_named() -> None:
+    schema = with_alt([])
+    schema['orders'].primary_key = None
+    assert schema['orders']['order_id'].stype == 'numerical'
+
+
+def test_a_table_on_its_own_answers_for_its_own_key() -> None:
+    schema = with_alt([])
+    table = schema['orders']
+    object.__setattr__(table, '_schema', None)
+    assert table['order_id'].stype == 'ID'
+
+    table.primary_key = 'alt_id'
+
+    assert table['alt_id'].stype == 'ID'
+    assert table['order_id'].stype == 'numerical'

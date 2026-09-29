@@ -330,14 +330,34 @@ class Table:
             if value is None:
                 object.__setattr__(self, 'duplicate_keys', 0)
                 object.__setattr__(self, key, None)
+                self._re_derive_key_columns()
                 return
             self._check_key(value)
             object.__setattr__(self, key, value)
             self._adopt_key(value)
+            self._re_derive_key_columns()
             return
         if key == 'time_column' and value is not None:
             self._check_time_column(value)
         object.__setattr__(self, key, value)
+
+    def _re_derive_key_columns(self) -> None:
+        r"""Ask this table's schema which of its columns are still keys.
+
+        A key that has just been replaced is no longer a key, and nothing said
+        so: the column it was kept the ``ID`` the old key gave it. Only the
+        schema knows whether some relationship still joins on that column, so
+        the question goes there; a table held on its own answers it for its own
+        key alone.
+        """
+        schema = getattr(self, '_schema', None)
+        if schema is not None:
+            schema._mark_key_columns()
+            return
+        named = set(_as_key_tuple(getattr(self, 'primary_key', None)))
+        for name, column in getattr(self, 'columns', {}).items():
+            if name not in named:
+                column._release_as_key()
 
     def _adopt_key(self, value: str | Sequence[str]) -> None:
         r"""Make the rest of the table agree with the key it was just given.
@@ -365,7 +385,7 @@ class Table:
         """
         names = _as_key_tuple(value)
         for name in names:
-            self.columns[name].stype = 'ID'
+            self.columns[name]._mark_as_key()
         frame = getattr(self, 'data', None)
         if frame is None or frame.empty:
             return
@@ -842,6 +862,7 @@ class Schema:
         """
         keys: dict[str, set[str]] = {}
         for name, table in self._tables.items():
+            object.__setattr__(table, '_schema', self)
             keys[name] = {
                 column
                 for column in _as_key_tuple(table.primary_key)
