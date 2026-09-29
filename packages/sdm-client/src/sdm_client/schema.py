@@ -700,7 +700,13 @@ class Schema:
         tables: Mapping[str, Table],
         relationships: Sequence[Relationship] = (),
     ) -> None:
-        self._tables = dict(tables)
+        # Copied, because a schema types the key columns of its own tables
+        # and two schemas handed the same ones fought over them: building an
+        # unlinked schema retyped a linked schema's join key, and checking the
+        # linked one retyped the unlinked one's back.
+        self._tables = {
+            name: _copy_table(table) for name, table in tables.items()
+        }
         self.relationships = relationships
 
     def __setattr__(self, key: str, value: Any) -> None:

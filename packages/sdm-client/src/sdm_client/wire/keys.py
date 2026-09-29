@@ -151,11 +151,17 @@ def _one_spelling(value: Any) -> str:
         return str(value)
     try:
         exact = Decimal(str(value))
+        # A name is not arithmetic. An infinity or a NaN is not an entity and
+        # cannot be read as one, and asking anyway raised `OverflowError` and
+        # `InvalidOperation` out of a function whose whole job is to write a
+        # name -- so a holdout naming one failed the call before it was sent.
+        if not exact.is_finite():
+            return str(value)
+        if exact == exact.to_integral_value():
+            return str(int(exact))
+        return str(exact.normalize())
     except (ArithmeticError, ValueError):
         return str(value)
-    if exact == exact.to_integral_value():
-        return str(int(exact))
-    return str(exact.normalize())
 
 
 def key_dtypes(

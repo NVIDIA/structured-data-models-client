@@ -626,3 +626,39 @@ def test_a_text_key_is_not_read_as_a_number() -> None:
     assert _one_spelling('1.50') != _one_spelling('1.5')
     assert _one_spelling(Decimal('1.50')) == _one_spelling(1.5)
     assert _one_spelling(True) == 'True'
+
+
+@pytest.mark.parametrize(
+    'named',
+    [
+        float('inf'),
+        float('-inf'),
+        float('nan'),
+        Decimal('Infinity'),
+        Decimal('-Infinity'),
+        Decimal('NaN'),
+        Decimal('sNaN'),
+    ],
+)
+def test_a_name_is_never_arithmetic(named) -> None:
+    """An infinity or a NaN is not an entity and cannot be read as one, and
+    asking anyway raised `OverflowError` and `InvalidOperation` out of a
+    function whose whole job is to write a name -- so a holdout naming one
+    failed the call before it was sent."""
+    from sdm_client.wire.keys import _one_spelling
+
+    assert isinstance(_one_spelling(named), str)
+
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'context': {
+            'instance_table': {
+                'columns': ['id', 'y'],
+                'rows': [[1.0, 0], [2.0, 1]],
+            }
+        },
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        assert _held_back(payload, [named]) == 0
+    assert len(payload['context']['instance_table']['rows']) == 2

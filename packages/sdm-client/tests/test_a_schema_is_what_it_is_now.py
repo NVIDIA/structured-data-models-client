@@ -474,3 +474,31 @@ def test_every_way_of_copying_a_schema_keeps_the_same_things(how: str) -> None:
     assert table['b'].stype_declared
     assert table['a'].stype == 'ID'
     assert table['a']._stype_before_key == 'numerical'
+
+
+def test_two_schemas_over_the_same_tables_do_not_fight_over_them() -> None:
+    """A schema types the key columns of its own tables, and two handed the
+    same ones fought: building an unlinked schema retyped a linked schema's
+    join key, and checking the linked one retyped the unlinked one's back."""
+    from sdm_client.schema import _infer_table
+
+    parent = pd.DataFrame({'id': [1, 2, 3]})
+    child = pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        tables = {
+            'p': _infer_table('p', parent),
+            'c': _infer_table('c', child),
+        }
+        linked = Schema(tables, [Relationship('c', 'pid', 'p', 'id')])
+        unlinked = Schema(tables, [])
+
+    assert linked['c']['pid'].stype == 'ID'
+    assert unlinked['c']['pid'].stype == 'numerical'
+
+    linked.check_consistent()
+    unlinked.check_consistent()
+
+    assert linked['c']['pid'].stype == 'ID'
+    assert unlinked['c']['pid'].stype == 'numerical'
+    assert tables['c']['pid'].stype == 'numerical'
