@@ -36,6 +36,7 @@ Four things differ from a laptop, each found by running on every LTS runtime and
 - **For Lakebase, install plain `psycopg` rather than the `postgres` extra.**
   The extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
   Plain `psycopg` uses the runtime's own libpq, which works on both architectures.
+  Reach Lakebase from serverless compute, which connects on a private address; a classic cluster goes over the public internet and connects only if the workspace admits its egress address.
 
 ## Packages
 
