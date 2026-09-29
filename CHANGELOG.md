@@ -69,6 +69,11 @@ The first release is being assembled. Nothing here has shipped yet.
   schema, and `Table.data` stays a DataFrame: tables in place are a
   `SourceTable`, which holds none. `del schema['t']['column']` leaves a column
   of a table in place out of both the read and the request.
+- `Schema.from_source(source, metric_view=...)`: a Databricks metric view in
+  place of `tables`. Its source table and joins become the schema's tables,
+  its joins the keys and relationships, and its dimensions the columns, an
+  expression dimension computed in the warehouse when it is sampled. Measures
+  are left to the predictive query.
 - `examples/databricks/`: AdventureWorks over Unity Catalog and over Lakebase,
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a

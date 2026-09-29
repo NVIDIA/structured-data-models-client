@@ -85,6 +85,7 @@ request = PredictiveQuery(
 In a Databricks notebook, `Source(spark, catalog=..., schema=...)` samples through the notebook's own session instead of a SQL warehouse (Databricks Runtime 17.3 LTS or serverless environment 4 and later).
 A Snowflake, PostgreSQL (including Lakebase), DuckDB or SQLite connection works the same way.
 A schema's tables all come from one source.
+On Databricks, `Schema.from_source(source, metric_view=...)` takes the tables, keys and relationships from a metric view instead of `tables`.
 
 ## Asking the same context several questions
 

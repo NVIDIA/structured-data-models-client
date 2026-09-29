@@ -275,6 +275,14 @@ On clustered or partitioned tables they are cheap; elsewhere they are the first 
 **Postgres needs the engine first.**
 The engine was carried across before the predecessor gained a Postgres backend, so the Postgres source brings that backend over too: the table, the `JOIN LATERAL` sampler, and key discovery from `pg_catalog`.
 
+**A metric view stands in for the tables, not for one of them.**
+A Databricks metric view already says which tables a question is about and how they join: a source table, joins to others, and dimensions that are columns or SQL expressions over them.
+So `Schema.from_source(source, metric_view='sales_metrics')` takes the view in place of `tables`, rather than accepting a view as one entry of `tables`, which would have one name describe several tables.
+The engine turns the view into its graph: the source becomes a table named as it is in the catalog, each join a table named after the join, each dimension a column of the table it reads, and each join a relationship to the key it names.
+An expression dimension stays an expression, computed in the warehouse when the table is sampled, so `materialize()` rebuilds the tables from the view and then keeps only what the schema kept.
+Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
+Snowflake semantic views are the same idea, and the engine reads them too; reaching them from `from_source` is left until a Snowflake account can test it.
+
 ---
 
 ## 4. `Request` — one type

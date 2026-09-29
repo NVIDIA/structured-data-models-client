@@ -47,6 +47,7 @@ def engine_graph(
     tables: Mapping[str, tuple[str, Sequence[str] | None]],
     *,
     infer_metadata: bool,
+    metric_view: str | None = None,
 ) -> Graph:
     r"""Build the engine's graph over ``tables`` in ``source``.
 
@@ -57,10 +58,16 @@ def engine_graph(
         infer_metadata: Whether the engine infers keys, time columns and
             semantic types. Only the first read of a source asks; afterwards
             the schema says what they are.
+        metric_view: The metric view the schema was built from. Its tables are
+            rebuilt from the view, since a dimension can be an expression the
+            view alone defines, and then cut down to what the schema kept.
 
     Edges are never added here. The schema decides them, and the materializer
     links exactly those.
     """
+    if metric_view is not None:
+        return _trimmed_to(metric_view_graph(source, metric_view), tables)
+
     try:
         from sdm_relational_engine.rfm import Graph
     except ImportError as error:  # pragma: no cover - optional extra
@@ -127,3 +134,50 @@ def engine_graph(
         f'no engine backend samples a {backend!r} source',
         code='INVALID_REQUEST',
     )
+
+
+def metric_view_graph(source: Any, metric_view: str) -> Graph:
+    r"""The engine's graph of a Databricks metric view in ``source``."""
+    try:
+        from sdm_relational_engine.rfm import Graph
+    except ImportError as error:  # pragma: no cover - optional extra
+        raise MissingExtraError(
+            'relational', 'sdm-relational-engine'
+        ) from error
+
+    namespace = source.namespace
+    return Graph.from_databricks_metric_view(
+        metric_view,
+        source.connection,
+        catalog=namespace.get('catalog'),
+        schema=namespace.get('schema'),
+        verbose=False,
+    )
+
+
+def _trimmed_to(
+    graph: Graph, tables: Mapping[str, tuple[str, Sequence[str] | None]]
+) -> Graph:
+    r"""``graph`` holding only the tables and columns the schema kept, and no
+    edges.
+
+    Keys and time columns are cleared as well: the materializer sets every one
+    of them from the schema, and a column the view keyed on may be one the
+    schema left out.
+    """
+    for edge in list(graph.edges):
+        graph.unlink(edge.src_table, edge.fkey, edge.dst_table)
+    for name in list(graph.tables):
+        if name not in tables:
+            graph.remove_table(name)
+    for name, (_, columns) in tables.items():
+        table = graph[name]
+        # The engine's setter is declared apart from its getter, which mypy
+        # reads as a read-only property.
+        table.primary_key = None  # type: ignore[misc]
+        table.time_column = None
+        if columns is None:
+            continue
+        for column in [c.name for c in table.columns if c.name not in columns]:
+            table.remove_column(column)
+    return graph

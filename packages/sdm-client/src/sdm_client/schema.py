@@ -674,6 +674,7 @@ class Schema:
     ) -> None:
         _require_one_kind_of_table(tables, source)
         self._source = source
+        self._metric_view: str | None = None
         self._tables = dict(tables)
         self.relationships = _each_link_once(relationships)
 
@@ -728,11 +729,13 @@ class Schema:
         question to guard against an edit nobody makes to a frame would cost
         more than the defect. What is copied is everything a schema *says*.
         """
-        return Schema(
+        copied = Schema(
             {name: _copy_table(table) for name, table in self._tables.items()},
             list(self.relationships),
             source=self._source,
         )
+        copied._metric_view = self._metric_view
+        return copied
 
     @classmethod
     def from_data(
@@ -821,8 +824,9 @@ class Schema:
     def from_source(
         cls,
         source: Source,
-        tables: Mapping[str, str],
+        tables: Mapping[str, str] | None = None,
         *,
+        metric_view: str | None = None,
         primary_keys: Mapping[str, str | Sequence[str]] | None = None,
         time_columns: Mapping[str, str] | None = None,
         relationships: Sequence[Relationship] | None = None,
@@ -849,10 +853,25 @@ class Schema:
         to the next query, so it runs against one engine; tables in two
         systems are joined by the platform, not here.
 
+        A Databricks metric view already says which tables a question is
+        about and how they join, so it can stand in for ``tables``:
+
+        >>> schema = Schema.from_source(source, metric_view='sales_metrics')
+
+        Its source table becomes a table named as it is in the catalog, each
+        join a table named after the join, and each dimension a column of the
+        table it reads, computed in the warehouse where it is an expression.
+        Measures are aggregations rather than row values, so a predictive
+        query expresses them instead. Keys and relationships come from the
+        joins.
+
         Args:
             source: Where the tables are, as an ``sdm_connectors.Source``.
             tables: For each name a query will use, the table's name in the
-                source.
+                source. Give this or ``metric_view``.
+            metric_view: A Databricks metric view to take the tables, keys and
+                relationships from, qualified or resolved against the source's
+                catalog and schema.
             primary_keys: Overrides for a table's key.
             time_columns: Overrides for a table's time column.
             relationships: Overrides for the relationships. Pass an empty
@@ -862,15 +881,30 @@ class Schema:
             A schema of :class:`SourceTable`, bound to ``source``.
 
         Raises:
-            StructuredDataError: If ``tables`` is empty, a name is not a
-                string, or an override names something that does not exist.
+            StructuredDataError: If neither or both of ``tables`` and
+                ``metric_view`` are given, ``tables`` is empty, a name is not
+                a string, a metric view is asked of a source other than
+                Databricks, or an override names something that does not
+                exist.
             MissingExtraError: If the relational engine, which reads the
                 source, is not installed.
         """
         _require_a_source(source)
+        if metric_view is not None:
+            if tables is not None:
+                raise StructuredDataError(
+                    'a metric view already names its tables; give tables or '
+                    'metric_view, not both',
+                    code='INVALID_REQUEST',
+                )
+            return cls._from_metric_view(
+                source, metric_view, primary_keys, time_columns, relationships
+            )
         if not tables:
             raise StructuredDataError(
-                'a schema needs at least one table', code='INVALID_REQUEST'
+                'a schema needs at least one table: name them with tables, or '
+                'give a metric_view',
+                code='INVALID_REQUEST',
             )
         for name, source_name in tables.items():
             if not isinstance(name, str) or not name:
@@ -916,6 +950,57 @@ class Schema:
         _warn_several_columns_could_be_the_time_column(built)
         _warn_two_ways_to_reach_one_table(schema)
         return schema
+
+    @classmethod
+    def _from_metric_view(
+        cls,
+        source: Source,
+        metric_view: str,
+        primary_keys: Mapping[str, str | Sequence[str]] | None,
+        time_columns: Mapping[str, str] | None,
+        relationships: Sequence[Relationship] | None,
+    ) -> Schema:
+        r"""The schema a Databricks metric view describes; see
+        :meth:`from_source`.
+        """
+        if not isinstance(metric_view, str) or not metric_view:
+            raise StructuredDataError(
+                f'metric_view must name a metric view, got {metric_view!r}',
+                code='INVALID_REQUEST',
+            )
+        if source.backend != 'databricks':
+            raise StructuredDataError(
+                f'a metric view is a Databricks object, and this source is '
+                f'{source.backend}; name its tables with tables instead',
+                code='INVALID_REQUEST',
+            )
+
+        from sdm_client.materializers.sources import metric_view_graph
+
+        graph = metric_view_graph(source, metric_view)
+        built = {
+            name: _describe_source_table(table, table.source_name)
+            for name, table in graph.tables.items()
+        }
+        _apply_keys_and_times(built, primary_keys, time_columns)
+        if relationships is None:
+            links = _joinable_inferred_links(
+                built, _metric_view_links(graph, built)
+            )
+        else:
+            links = _checked_links(built, relationships)
+
+        schema = cls(built, links, source=source)
+        schema._metric_view = metric_view
+        schema._mark_key_columns()
+        _warn_several_columns_could_be_the_time_column(built)
+        _warn_two_ways_to_reach_one_table(schema)
+        return schema
+
+    @property
+    def metric_view(self) -> str | None:
+        r"""The metric view this schema was built from, or ``None``."""
+        return self._metric_view
 
     @property
     def tables(self) -> dict[str, Table | SourceTable]:
@@ -1113,6 +1198,34 @@ def _describe_source_table(engine_table: Any, source_name: str) -> SourceTable:
     if time is not None and time.name in columns and time.name not in keys:
         table.time_column = time.name
     return table
+
+
+def _metric_view_links(
+    graph: Any, built: Mapping[str, SourceTable]
+) -> list[Relationship]:
+    r"""The relationships a metric view's joins make, as the schema says them.
+
+    Each join links the many side's key to the one side's, which the view
+    makes that table's primary key.
+    """
+    links = []
+    for edge in graph.edges:
+        target = built.get(edge.dst_table)
+        source = built.get(edge.src_table)
+        if target is None or source is None:
+            continue
+        key = target.primary_key
+        if not isinstance(key, str) or edge.fkey not in source.columns:
+            continue
+        links.append(
+            Relationship(
+                source_table=edge.src_table,
+                source_column=edge.fkey,
+                target_table=edge.dst_table,
+                target_column=key,
+            )
+        )
+    return links
 
 
 def _declared_links(
