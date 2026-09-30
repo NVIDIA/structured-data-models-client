@@ -1010,7 +1010,7 @@
         "public_methods": {
           "semantic_model": "(self, name: 'str') -> 'SemanticModel'"
         },
-        "signature": "(connection: 'Any', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+        "signature": "(connection: 'DatabricksConnection | SparkSession', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
       },
       "DuckDBSource": {
         "bases": [
@@ -1023,7 +1023,7 @@
           "namespace"
         ],
         "public_methods": {},
-        "signature": "(connection: 'Any') -> 'None'"
+        "signature": "(connection: 'DuckDBConnection') -> 'None'"
       },
       "MissingBackendError": {
         "bases": [
@@ -1046,7 +1046,7 @@
           "namespace"
         ],
         "public_methods": {},
-        "signature": "(connection: 'Any', *, schema: 'str | None' = None) -> 'None'"
+        "signature": "(connection: 'PostgresConnection', *, schema: 'str | None' = None) -> 'None'"
       },
       "SQLiteSource": {
         "bases": [
@@ -1059,7 +1059,7 @@
           "namespace"
         ],
         "public_methods": {},
-        "signature": "(connection: 'Any') -> 'None'"
+        "signature": "(connection: 'SQLiteConnection') -> 'None'"
       },
       "SemanticModel": {
         "bases": [
@@ -1089,7 +1089,7 @@
         "public_methods": {
           "semantic_model": "(self, name: 'str') -> 'SemanticModel'"
         },
-        "signature": "(connection: 'Any', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+        "signature": "(connection: 'SnowflakeConnection | SnowparkSession', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
       },
       "Source": {
         "bases": [],

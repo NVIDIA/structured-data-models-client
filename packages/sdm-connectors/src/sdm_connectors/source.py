@@ -17,9 +17,34 @@ built from any of them is described the same way.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, TypeGuard, overload
 
 from sdm_connectors.sql import ConnectorError
+
+if TYPE_CHECKING:
+    from sdm_connectors._types import (
+        DatabricksLike,
+        DuckDBLike,
+        PostgresLike,
+        SnowflakeLike,
+        SnowparkLike,
+        SnowparkSession,
+        SparkLike,
+        SparkSession,
+        SQLiteLike,
+    )
+    from sdm_connectors.backends.databricks import (
+        Connection as DatabricksConnection,
+    )
+    from sdm_connectors.backends.duckdb import Connection as DuckDBConnection
+    from sdm_connectors.backends.postgres import (
+        Connection as PostgresConnection,
+    )
+    from sdm_connectors.backends.snowflake import (
+        Connection as SnowflakeConnection,
+    )
+    from sdm_connectors.backends.spark import SparkConnection
+    from sdm_connectors.backends.sqlite import Connection as SQLiteConnection
 
 # Recognised by the module that defines the connection's class, or any of its
 # bases, so a driver is never imported just to be ruled out.
@@ -44,7 +69,7 @@ def _modules(value: Any) -> list[str]:
     return [cls.__module__ or '' for cls in type(value).__mro__]
 
 
-def _is_spark_session(value: Any) -> bool:
+def _is_spark_session(value: object) -> TypeGuard[SparkSession]:
     return any(
         cls.__name__ == 'SparkSession'
         and (cls.__module__ or '').startswith('pyspark.')
@@ -52,7 +77,7 @@ def _is_spark_session(value: Any) -> bool:
     )
 
 
-def _is_snowpark_session(value: Any) -> bool:
+def _is_snowpark_session(value: object) -> TypeGuard[SnowparkSession]:
     return any(
         cls.__name__ == 'Session'
         and (cls.__module__ or '').startswith('snowflake.snowpark')
@@ -84,9 +109,7 @@ class Source:
     >>> source = DuckDBSource(connect('duckdb', 'sales.duckdb'))
 
     ``Source(connection, ...)`` works too, and returns the class that fits the
-    connection. It is typed as the base class, so a method only one warehouse
-    has, such as :meth:`DatabricksSource.semantic_model`, needs the class
-    named.
+    connection, which is also the type a type checker gives it.
 
     The source never closes the connection. It belongs to whoever opened it.
 
@@ -107,6 +130,48 @@ class Source:
     _connection: Any
     _namespace: dict[str, str]
 
+    # So that `Source(connection)` is typed as the class it returns. Each takes
+    # a shape from _types rather than the driver's class, which may be Any.
+    @overload
+    def __new__(
+        cls,
+        connection: DatabricksLike,
+        *,
+        catalog: str | None = None,
+        schema: str | None = None,
+    ) -> DatabricksSource: ...
+    @overload
+    def __new__(
+        cls,
+        connection: SnowflakeLike,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> SnowflakeSource: ...
+    @overload
+    def __new__(
+        cls, connection: PostgresLike, *, schema: str | None = None
+    ) -> PostgresSource: ...
+    @overload
+    def __new__(cls, connection: DuckDBLike) -> DuckDBSource: ...
+    @overload
+    def __new__(cls, connection: SQLiteLike) -> SQLiteSource: ...
+    @overload
+    def __new__(
+        cls,
+        connection: SparkLike,
+        *,
+        catalog: str | None = None,
+        schema: str | None = None,
+    ) -> DatabricksSource: ...
+    @overload
+    def __new__(
+        cls,
+        connection: SnowparkLike,
+        *,
+        database: str | None = None,
+        schema: str | None = None,
+    ) -> SnowflakeSource: ...
     def __new__(
         cls, connection: Any = None, *args: Any, **namespace: Any
     ) -> Source:
@@ -213,16 +278,24 @@ class DatabricksSource(Source):
 
     def __init__(
         self,
-        connection: Any,
+        connection: DatabricksConnection | SparkSession,
         *,
         catalog: str | None = None,
         schema: str | None = None,
     ) -> None:
+        bound: object = connection
         if _is_spark_session(connection):
             from sdm_connectors.backends.spark import SparkConnection
 
-            connection = SparkConnection(connection)
-        self._bind(connection, {'catalog': catalog, 'schema': schema})
+            bound = SparkConnection(connection)
+        self._bind(bound, {'catalog': catalog, 'schema': schema})
+
+    @property
+    def connection(self) -> DatabricksConnection | SparkConnection:
+        r"""The connection sampling runs through: the SQL connection, or the
+        Spark session as a connection.
+        """
+        return self._connection
 
     def semantic_model(self, name: str) -> SemanticModel:
         r"""A metric view in this catalog and schema, as a source of its own.
@@ -265,7 +338,7 @@ class SnowflakeSource(Source):
 
     def __init__(
         self,
-        connection: Any,
+        connection: SnowflakeConnection | SnowparkSession,
         *,
         database: str | None = None,
         schema: str | None = None,
@@ -273,6 +346,11 @@ class SnowflakeSource(Source):
         if _is_snowpark_session(connection):
             connection = connection.connection
         self._bind(connection, {'database': database, 'schema': schema})
+
+    @property
+    def connection(self) -> SnowflakeConnection:
+        r"""The connection sampling runs through, a Snowpark session's own."""
+        return self._connection
 
     def semantic_model(self, name: str) -> SemanticModel:
         r"""A semantic view in this database and schema, as a source of its
@@ -305,8 +383,15 @@ class PostgresSource(Source):
     _NAMESPACE = ('schema',)
     _TAKES = "a psycopg connection – connect('postgres', ...)"
 
-    def __init__(self, connection: Any, *, schema: str | None = None) -> None:
+    def __init__(
+        self, connection: PostgresConnection, *, schema: str | None = None
+    ) -> None:
         self._bind(connection, {'schema': schema})
+
+    @property
+    def connection(self) -> PostgresConnection:
+        r"""The connection sampling runs through."""
+        return self._connection
 
 
 class DuckDBSource(Source):
@@ -318,8 +403,13 @@ class DuckDBSource(Source):
     _BACKEND = 'duckdb'
     _TAKES = "a DuckDB connection – connect('duckdb', ...)"
 
-    def __init__(self, connection: Any) -> None:
+    def __init__(self, connection: DuckDBConnection) -> None:
         self._bind(connection, {})
+
+    @property
+    def connection(self) -> DuckDBConnection:
+        r"""The connection sampling runs through."""
+        return self._connection
 
 
 class SQLiteSource(Source):
@@ -331,8 +421,13 @@ class SQLiteSource(Source):
     _BACKEND = 'sqlite'
     _TAKES = "an ADBC SQLite connection – connect('sqlite', ...)"
 
-    def __init__(self, connection: Any) -> None:
+    def __init__(self, connection: SQLiteConnection) -> None:
         self._bind(connection, {})
+
+    @property
+    def connection(self) -> SQLiteConnection:
+        r"""The connection sampling runs through."""
+        return self._connection
 
 
 class SemanticModel(Source):

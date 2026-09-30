@@ -62,9 +62,12 @@ The first release is being assembled. Nothing here has shipped yet.
   notebook's own `spark`, `SnowflakeSource` a connection or a Snowpark
   session, `PostgresSource` PostgreSQL or Lakebase, and `DuckDBSource` and
   `SQLiteSource` their own; `Source(connection)` picks the class for you.
-  Leaving `tables` out takes every table the source holds. The engine could
-  always do this; nothing on `Schema` reached it, so a warehouse table had to
-  be read whole into pandas first. A notebook's `spark` samples on the
+  A type checker sees the same: each class takes, and its `connection` is,
+  the driver's own type, and `Source(connection)` is typed as the class it
+  returns, with no driver imported to say so. Leaving `tables` out takes
+  every table the source holds. The engine could always do this; nothing on
+  `Schema` reached it, so a warehouse table had to be read whole into pandas
+  first. A notebook's `spark` samples on the
   notebook's own compute, as its user, with no warehouse to name; it needs
   `DataFrame.toArrow()`, so Databricks Runtime 17.3 LTS or serverless
   environment 4, and an older session is refused with the warehouse route
