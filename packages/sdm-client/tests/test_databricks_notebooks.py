@@ -41,20 +41,33 @@ def test_there_are_notebooks_for_the_catalog_and_for_lakebase() -> None:
     }
 
 
+def _ours(module: str | None) -> bool:
+    return module is not None and (
+        module == 'sdm_client'
+        or module == 'sdm_connectors'
+        or module.startswith('sdm_connectors.')
+    )
+
+
 @pytest.mark.parametrize('notebook', NOTEBOOKS, ids=lambda path: path.stem)
-def test_every_name_imported_from_this_project_exists(notebook: Path) -> None:
-    missing = []
+def test_every_name_imported_from_this_project_is_public(
+    notebook: Path,
+) -> None:
+    # Public, not merely present: a notebook is copied from, so a private name
+    # it reaches for is one a user comes to depend on.
+    imported: list[str] = []
+    private: list[str] = []
     for source in _cells(notebook, 'code'):
         for node in ast.walk(ast.parse(_python(source))):
-            if not isinstance(node, ast.ImportFrom) or node.module not in (
-                'sdm_client',
-                'sdm_connectors',
-            ):
+            if not isinstance(node, ast.ImportFrom) or not _ours(node.module):
                 continue
             module = importlib.import_module(node.module)
-            missing += [
-                f'{node.module}.{alias.name}'
-                for alias in node.names
-                if not hasattr(module, alias.name)
-            ]
-    assert not missing, f'{notebook.name} imports {missing}'
+            for alias in node.names:
+                imported.append(f'{node.module}.{alias.name}')
+                if alias.name not in getattr(module, '__all__', ()):
+                    private.append(f'{node.module}.{alias.name}')
+    assert imported, f'{notebook.name} imports nothing from this project'
+    assert not private, (
+        f"{notebook.name} imports {private}, which are not in their module's "
+        f'__all__'
+    )
