@@ -611,8 +611,16 @@ def test_every_sql_backend_is_named_in_read_s_own_documentation():
     assert not missing, f'accepted but undocumented: {missing}'
 
 
-def test_an_explicit_none_leaves_a_databricks_default_to_the_workspace(
-    monkeypatch,
+@pytest.mark.parametrize(
+    'given, taken',
+    [
+        ({'catalog': None}, {'schema': 'also_from_the_shell'}),
+        ({}, {'catalog': 'from_the_shell', 'schema': 'also_from_the_shell'}),
+    ],
+    ids=['explicit-none', 'absent'],
+)
+def test_a_databricks_default_is_taken_from_the_environment_only_when_absent(
+    monkeypatch, given, taken
 ):
     """`DATABRICKS_CATALOG` decides which table a bare name resolves to, so
     taking it from the shell over an explicit argument reads a different table
@@ -628,23 +636,8 @@ def test_an_explicit_none_leaves_a_databricks_default_to_the_workspace(
     )
 
     databricks.connect(
-        server_hostname='h', http_path='p', access_token='t', catalog=None
+        server_hostname='h', http_path='p', access_token='t', **given
     )
-    assert 'catalog' not in sent
-    assert sent['schema'] == 'also_from_the_shell'
-
-
-def test_an_absent_databricks_default_is_still_taken_from_the_environment(
-    monkeypatch,
-):
-    pytest.importorskip('databricks.sql')
-    from sdm_connectors.backends import databricks
-
-    monkeypatch.setenv('DATABRICKS_CATALOG', 'from_the_shell')
-    sent: dict = {}
-    monkeypatch.setattr(
-        databricks.databricks_sql, 'connect', lambda **kw: sent.update(kw)
+    assert {k: v for k, v in sent.items() if k in ('catalog', 'schema')} == (
+        taken
     )
-
-    databricks.connect(server_hostname='h', http_path='p', access_token='t')
-    assert sent['catalog'] == 'from_the_shell'

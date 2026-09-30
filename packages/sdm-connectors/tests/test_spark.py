@@ -58,38 +58,31 @@ def _session() -> _Session:
     return _Session(pa.table({'a': [1, 2], 'b': ['x', 'y']}))
 
 
-def test_parameters_are_bound_positionally_not_formatted() -> None:
+@pytest.mark.parametrize(
+    'given, bound',
+    [({'parameters': ["1' OR 1=1"]}, ["1' OR 1=1"]), ({}, None)],
+    ids=['bound', 'none'],
+)
+def test_parameters_are_bound_positionally_not_formatted(
+    given: dict, bound: Any
+) -> None:
     session = _session()
     with SparkConnection(session).cursor() as cursor:
-        cursor.execute('SELECT * FROM t WHERE a = ?', parameters=["1' OR 1=1"])
-    assert session.calls == [('SELECT * FROM t WHERE a = ?', ["1' OR 1=1"])]
+        cursor.execute('SELECT * FROM t WHERE a = ?', **given)
+    assert session.calls == [('SELECT * FROM t WHERE a = ?', bound)]
 
 
-def test_a_statement_without_parameters_passes_none() -> None:
+def test_a_result_is_fetched_as_plain_tuples_or_as_arrow() -> None:
     session = _session()
     with SparkConnection(session).cursor() as cursor:
-        cursor.execute('SELECT 1')
-    assert session.calls == [('SELECT 1', None)]
-
-
-def test_rows_come_back_as_plain_tuples() -> None:
-    with SparkConnection(_session()).cursor() as cursor:
         cursor.execute('SELECT a, b FROM t')
         assert cursor.fetchone() == (1, 'x')
         rows = cursor.fetchall()
+        assert cursor.fetchall_arrow().equals(session.table)
     assert rows == [(1, 'x'), (2, 'y')]
     assert all(type(row) is tuple for row in rows)
 
-
-def test_arrow_is_what_the_session_returns() -> None:
-    session = _session()
-    with SparkConnection(session).cursor() as cursor:
-        cursor.execute('SELECT a, b FROM t')
-        assert cursor.fetchall_arrow().equals(session.table)
-
-
-def test_an_empty_result_has_no_first_row() -> None:
-    session = _Session(pa.table({'a': pa.array([], pa.int64())}))
+    session.table = pa.table({'a': pa.array([], pa.int64())})
     with SparkConnection(session).cursor() as cursor:
         cursor.execute('SELECT a FROM t WHERE false')
         assert cursor.fetchone() is None

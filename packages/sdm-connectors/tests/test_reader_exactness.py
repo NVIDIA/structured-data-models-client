@@ -434,12 +434,6 @@ def test_two_result_columns_of_one_name_keep_their_own_values():
     assert [tuple(row) for row in read.to_numpy()] == truth
 
 
-def test_distinct_names_are_unaffected():
-    connection = joined_tables()
-    read = read_table(connection, table='users')
-    assert read.to_dict('list') == {'id': [1, 2], 'name': ['ann', 'bob']}
-
-
 def test_no_rows_still_gives_the_columns():
     connection = joined_tables()
     read = read_table(connection, query='select * from users where id > 99')

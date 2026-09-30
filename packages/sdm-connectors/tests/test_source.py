@@ -40,97 +40,147 @@ def _postgres() -> Any:
     return _class_in('psycopg', 'Connection')()
 
 
-def test_a_duckdb_connection_is_a_duckdb_source() -> None:
+def _duckdb(tmp_path: Path) -> Any:
     pytest.importorskip('duckdb')
-    connection = connect('duckdb')
-    source = DuckDBSource(connection)
-
-    assert source.backend == 'duckdb'
-    assert source.connection is connection
-    assert source.namespace == {}
+    return connect('duckdb')
 
 
-def test_a_sqlite_connection_is_a_sqlite_source(tmp_path: Path) -> None:
+def _sqlite(tmp_path: Path) -> Any:
     pytest.importorskip('adbc_driver_sqlite')
     path = tmp_path / 'db.sqlite'
     sqlite3.connect(path).close()
-
-    assert SQLiteSource(connect('sqlite', str(path))).backend == 'sqlite'
-
-
-def test_each_class_names_its_own_namespace() -> None:
-    source = DatabricksSource(_databricks(), catalog='main', schema='sales')
-    assert (source.backend, source.namespace) == (
-        'databricks',
-        {'catalog': 'main', 'schema': 'sales'},
-    )
-    snowflake = SnowflakeSource(_snowflake(), database='DB')
-    assert snowflake.namespace == {'database': 'DB'}
-    assert PostgresSource(_postgres(), schema='public').backend == 'postgres'
-
-    with pytest.raises(ConnectorError, match='non-empty string'):
-        PostgresSource(_postgres(), schema='')
+    return connect('sqlite', str(path))
 
 
-def test_a_class_refuses_another_warehouse_s_connection() -> None:
-    with pytest.raises(ConnectorError, match='DatabricksSource needs') as error:
-        DatabricksSource(_postgres(), catalog='main')
-    assert error.value.code == 'UNKNOWN_CONNECTOR'
-    with pytest.raises(ConnectorError, match='PostgresSource needs'):
-        PostgresSource(_databricks())
+@pytest.mark.parametrize(
+    'cls, connection, backend, namespace',
+    [
+        (DuckDBSource, _duckdb, 'duckdb', {}),
+        (SQLiteSource, _sqlite, 'sqlite', {}),
+        (
+            DatabricksSource,
+            lambda _: _databricks(),
+            'databricks',
+            {'catalog': 'main', 'schema': 'sales'},
+        ),
+        (
+            SnowflakeSource,
+            lambda _: _snowflake(),
+            'snowflake',
+            {'database': 'DB'},
+        ),
+        (
+            PostgresSource,
+            lambda _: _postgres(),
+            'postgres',
+            {'schema': 'public'},
+        ),
+    ],
+    ids=['duckdb', 'sqlite', 'databricks', 'snowflake', 'postgres'],
+)
+def test_a_source_is_the_class_that_fits_its_connection(
+    cls: type, connection: Any, backend: str, namespace: dict, tmp_path: Path
+) -> None:
+    opened = connection(tmp_path)
+
+    for source in (cls(opened, **namespace), Source(opened, **namespace)):
+        assert type(source) is cls
+        assert source.connection is opened
+        assert (source.backend, source.namespace) == (backend, namespace)
 
 
-def test_source_returns_the_class_that_fits_the_connection() -> None:
-    assert type(Source(_databricks(), catalog='main')) is DatabricksSource
-    assert type(Source(_snowflake(), database='DB')) is SnowflakeSource
-    assert type(Source(_postgres(), schema='public')) is PostgresSource
+@pytest.mark.parametrize(
+    'call, match, code',
+    [
+        (
+            lambda: PostgresSource(_postgres(), schema=''),
+            'non-empty string',
+            'INVALID_CONNECTOR_ARGS',
+        ),
+        (
+            lambda: DatabricksSource(_postgres(), catalog='main'),
+            'DatabricksSource needs',
+            'UNKNOWN_CONNECTOR',
+        ),
+        (
+            lambda: PostgresSource(_databricks()),
+            'PostgresSource needs',
+            'UNKNOWN_CONNECTOR',
+        ),
+        (
+            lambda: Source(_databricks(), database='DB'),
+            'catalog and schema',
+            'INVALID_CONNECTOR_ARGS',
+        ),
+        (
+            lambda: Source(_duckdb(Path()), schema='main'),
+            'no namespace',
+            'INVALID_CONNECTOR_ARGS',
+        ),
+        (lambda: Source(object()), 'got object', 'UNKNOWN_CONNECTOR'),
+        (
+            lambda: SemanticModel(PostgresSource(_postgres()), 'x'),  # type: ignore[arg-type]
+            'kept in Databricks or',
+            'INVALID_CONNECTOR_ARGS',
+        ),
+        (
+            lambda: DatabricksSource(_databricks(), catalog='c').semantic_model(
+                ''
+            ),
+            'needs its name',
+            'INVALID_CONNECTOR_ARGS',
+        ),
+    ],
+)
+def test_what_a_source_cannot_be_is_refused(
+    call: Any, match: str, code: str
+) -> None:
+    with pytest.raises(ConnectorError, match=match) as error:
+        call()
+    assert error.value.code == code
 
-    with pytest.raises(ConnectorError, match='catalog and schema') as error:
-        Source(_databricks(), database='DB')
-    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
 
-
-def test_duckdb_has_no_namespace_to_name() -> None:
-    pytest.importorskip('duckdb')
-    with pytest.raises(ConnectorError, match='no namespace'):
-        Source(connect('duckdb'), schema='main')
-
-
-def test_anything_else_is_refused_by_name() -> None:
-    with pytest.raises(ConnectorError, match='got object') as error:
-        Source(object())
-    assert error.value.code == 'UNKNOWN_CONNECTOR'
-
-
-def test_a_notebook_spark_session_is_sampled_through_spark_sql() -> None:
-    session_type = _class_in(
+def _spark_session() -> Any:
+    return _class_in(
         'pyspark.sql.session',
         'SparkSession',
         sql=lambda self, *args, **kwargs: None,
         version='4.0.0',
-    )
-
-    from sdm_connectors.backends.spark import SparkConnection
-
-    for source in (
-        DatabricksSource(session_type(), catalog='main', schema='sales'),
-        Source(session_type(), catalog='main', schema='sales'),
-    ):
-        assert isinstance(source, DatabricksSource)
-        assert isinstance(source.connection, SparkConnection)
+    )()
 
 
-def test_a_snowpark_session_is_reached_through_its_connection() -> None:
-    connection = _snowflake()
+def _snowpark_session() -> Any:
     session = _class_in('snowflake.snowpark.session', 'Session')()
-    session.connection = connection
+    session.connection = _snowflake()
+    return session
 
-    for source in (
-        SnowflakeSource(session, database='DB', schema='PUBLIC'),
-        Source(session, database='DB', schema='PUBLIC'),
-    ):
-        assert isinstance(source, SnowflakeSource)
-        assert source.connection is connection
+
+@pytest.mark.parametrize(
+    'session, cls, namespace, reaches',
+    [
+        (
+            _spark_session,
+            DatabricksSource,
+            {'catalog': 'main', 'schema': 'sales'},
+            lambda source, session: source.connection.session is session,
+        ),
+        (
+            _snowpark_session,
+            SnowflakeSource,
+            {'database': 'DB', 'schema': 'PUBLIC'},
+            lambda source, session: source.connection is session.connection,
+        ),
+    ],
+    ids=['spark', 'snowpark'],
+)
+def test_a_notebook_session_is_a_source(
+    session: Any, cls: type, namespace: dict, reaches: Any
+) -> None:
+    opened = session()
+
+    for source in (cls(opened, **namespace), Source(opened, **namespace)):
+        assert type(source) is cls
+        assert reaches(source, opened)
 
 
 def test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake() -> None:
@@ -147,13 +197,6 @@ def test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake() -> None:
         SnowflakeSource(_snowflake()).semantic_model('SV').backend
         == 'snowflake'
     )
-
-
-def test_only_warehouses_that_keep_semantic_models_offer_them() -> None:
-    for cls in (PostgresSource, DuckDBSource, SQLiteSource):
-        assert not hasattr(cls, 'semantic_model')
-    with pytest.raises(ConnectorError, match='kept in Databricks or'):
-        SemanticModel(PostgresSource(_postgres()), 'x')  # type: ignore[arg-type]
 
 
 def test_a_source_does_not_pickle_its_connection() -> None:
