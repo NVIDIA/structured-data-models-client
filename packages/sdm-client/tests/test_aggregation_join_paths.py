@@ -8,7 +8,7 @@ A star schema is the commonest relational shape there is, and only one child of
 a parent could be aggregated: whichever relationship happened to be declared
 last. The refusal said "there is no foreign key from bureau to application" at a
 moment when there was exactly one, and reversing the declaration order swapped
-which child worked -- same tables, same rows, same query.
+which child worked: same tables, same rows, same query.
 
 A table two hops away cannot be aggregated either, and that one is a real limit
 rather than a defect: an aggregation joins on a single key and the language has

@@ -6,7 +6,7 @@
 
 Two silences. The tabular endpoint caps a context at 10,000 rows and the client
 did not know it, so a caller could encode and transmit a table of any size to
-be refused at the far end -- while the identical overage on the other model was
+be refused at the far end, while the identical overage on the other model was
 refused locally with a message naming the limit.
 
 And a field a caller names is validated against the model and never against
@@ -488,7 +488,7 @@ def sent(request):
 
 def test_scoring_every_entity_is_refused_rather_than_sent_with_no_context():
     """A row carrying the answer is kept out of the context, so scoring every
-    row takes every row out of it -- and zero distinct answers is not one, so
+    row takes every row out of it, and zero distinct answers is not one, so
     the guard for a context of one row did not see this."""
     request = gathered_scoring(60)
     assert request.context_rows == 0

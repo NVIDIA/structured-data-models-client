@@ -12,8 +12,8 @@ candidate, *will this entity reach this one?*, whose probability orders them;
 a forecast is, per step, *what does this window hold?*, which is the question
 already being asked with its window moved along.
 
-Each part needs its own context, because the labels differ -- what was true in
-the second window is not what was true in the first -- so the split happens
+Each part needs its own context because the labels differ. What was true in
+the second window is not what was true in the first, so the split happens
 where contexts are gathered.
 """
 

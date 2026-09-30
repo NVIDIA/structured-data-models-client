@@ -222,8 +222,8 @@ def test_oversized_error_body_is_refused_before_it_becomes_a_message():
 
 
 def test_deeply_nested_json_stays_inside_the_error_contract():
-    r"""``json`` raises ``RecursionError`` -- a ``RuntimeError``, not a
-    ``ValueError`` -- so ``except StructuredDataError`` used to miss it entirely.
+    r"""``json`` raises ``RecursionError``, a ``RuntimeError``, not a
+    ``ValueError``, so ``except StructuredDataError`` used to miss it entirely.
     """
     depth = 200_000
     nested = b'[' * depth + b']' * depth
@@ -275,7 +275,7 @@ def test_a_slow_session_create_is_not_retried():
 def test_the_replayable_session_routes_keep_the_retry_policy():
     r"""Only the create is held out. Scoring against a pinned context is
     replayable, and must not lose its resilience to the narrower policy mounted
-    on the prefix above it -- nor may the plain prediction route, which shares
+    on the prefix above it, nor may the plain prediction route, which shares
     no prefix with either.
     """
     with _serve(_Reply(status=503), _Reply()) as (server, url):
@@ -378,9 +378,9 @@ def test_a_detail_that_is_not_text_names_no_diagnosis():
 
 def test_a_request_is_sent_again_only_for_what_sending_it_again_can_fix():
     """A 500 is not retried. The payload and the model are the same on every
-    attempt, so a server fault reproduces, and the caller mistakes this
-    endpoint reports as a 500 are reclassified from the body as the caller's
-    -- after three more uploads of the whole gathered context. Overload,
+    attempt, so a server fault reproduces. Caller mistakes this endpoint
+    reports as a 500 are reclassified from the body, but only after three more
+    uploads of the whole gathered context. Overload,
     gateway and timeout are the transient ones and are still retried."""
     for status, sends in (
         (500, 1),
@@ -440,7 +440,7 @@ def test_an_unusable_timeout_is_named_on_every_route_that_takes_one(timeout):
 
 def test_a_server_that_stalls_is_reported_as_a_timeout_not_as_retries():
     """urllib3 wraps a read timeout in MaxRetryError, which requests surfaces
-    as ConnectionError, so the branch naming the knob never ran -- and the
+    as ConnectionError, so the branch naming the knob never ran, and the
     message said retries were exceeded when none had been asked for."""
     with _serve(_Reply(delay=5.0)) as (_, url):
         transport = Transport(url, timeout=0.5, max_retries=0)

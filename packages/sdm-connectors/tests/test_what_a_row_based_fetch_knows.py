@@ -11,7 +11,7 @@ as text, though the server had called it ``bigint``; every other backend gets
 its type through Arrow, so postgres was the only one that lost it.
 
 Three more of the same shape. Rows were indexed by position, which a mapping
-row factory refuses -- and ``row_factory`` is on this connector's own
+row factory refuses, and ``row_factory`` is on this connector's own
 allow-list, so the connection opens and every read fails with ``KeyError: 0``
 surfacing as a query failure naming ``0``. A result set of no columns kept no
 rows. A null-free integer came back nullable where every other path narrows
@@ -274,7 +274,7 @@ def test_a_credential_that_is_empty_is_no_credential(
     monkeypatch, given: dict
 ) -> None:
     """The guard read the key and not the value, so an empty string said how
-    to authenticate no more than leaving it out did -- and the driver's answer
+    to authenticate no more than leaving it out did, and the driver's answer
     to that is a browser."""
     pytest.importorskip('databricks.sql')
     from sdm_connectors.backends import databricks as backend
@@ -458,7 +458,7 @@ def test_half_a_credential_is_not_a_credential(
 
     A machine-to-machine credential on the wrong route would, and a
     certificate without the flag that turns certificate authentication on
-    would, so both are refused here rather than sent -- naming a credential
+    would, so both are refused here rather than sent, naming a credential
     is not the same as naming one this route uses. Asking for the browser
     flow on purpose is allowed through.
     """

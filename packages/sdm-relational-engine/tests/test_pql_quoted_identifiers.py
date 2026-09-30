@@ -183,8 +183,8 @@ def test_fqn_leaves_spellable_names_unquoted() -> None:
 def test_the_ast_holds_the_name_the_data_uses(spaced_graph) -> None:
     r"""The regression that made quoting useless.
 
-    The parser sees ```Customer ID``` but every consumer -- the sampler, a
-    dataframe lookup, the graph -- knows the column as ``Customer ID``. If the
+    The parser sees ```Customer ID``` but every consumer, the sampler, a
+    dataframe lookup, the graph, knows the column as ``Customer ID``. If the
     quotes reach the AST the query validates and then fails with a
     ``KeyError`` once it is executed.
     """

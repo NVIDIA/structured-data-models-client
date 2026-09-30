@@ -169,8 +169,8 @@ def test_indices_naming_nothing_is_refused_in_this_package_s_own_voice() -> (
     None
 ):
     """The relational route cannot gather a neighbourhood around no entity,
-    and said so in the engine's words -- 'Provide at least one entity to
-    predict for' -- which names nothing a caller can do. The single-table
+    and said so in the engine's words, 'Provide at least one entity to
+    predict for', which names nothing a caller can do. The single-table
     route answers an empty selection as the no-op it is, and that is where the
     refusal points."""
     frame = pd.DataFrame(
@@ -431,8 +431,8 @@ def test_the_warning_agrees_with_the_wire_on_every_way_of_writing_a_key(
 
 
 def test_the_leak_warning_compares_keys_as_the_wire_spells_them() -> None:
-    """A key column whose halves hold different python types -- 1 in the
-    context and '1' in the rows being scored -- is one column, encoded one
+    """A key column whose halves hold different python types, 1 in the
+    context and '1' in the rows being scored, is one column, encoded one
     way, so values that differ in python are the same value by the time the
     model reads them."""
     from sdm_client.adapters.tabular import TabularAdapter
@@ -643,7 +643,7 @@ def test_a_text_key_is_not_read_as_a_number() -> None:
 def test_a_name_is_never_arithmetic(named) -> None:
     """An infinity or a NaN is not an entity and cannot be read as one, and
     asking anyway raised `OverflowError` and `InvalidOperation` out of a
-    function whose whole job is to write a name -- so a holdout naming one
+    function whose whole job is to write a name, so a holdout naming one
     failed the call before it was sent."""
     from sdm_client.wire.keys import _one_spelling
 

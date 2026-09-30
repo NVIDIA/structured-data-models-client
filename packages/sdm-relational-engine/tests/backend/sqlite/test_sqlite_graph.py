@@ -112,8 +112,8 @@ def test_random_seed_does_not_warn_without_seed(tmp_path: Path) -> None:
 def test_discovery_on_an_empty_database_names_what_it_searched(
     tmp_path: Path,  #
 ) -> None:
-    """A database with nothing in it -- what a mistyped path used to produce,
-    since sqlite creates on connect -- returned a valid-looking empty graph
+    """A database with nothing in it, what a mistyped path used to produce,
+    since sqlite creates on connect, returned a valid-looking empty graph
     that failed much later as "At least one table needs to be added to the
     graph", pointing at the caller's table list rather than the path.
     """

@@ -50,8 +50,8 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     """A pin, not a probe.
 
     These numbers were read from the relational NIM. This asserts they have
-    not drifted in the client, which is all it can do offline -- the live
-    suites are what check the endpoint still agrees.
+    not drifted in the client, which is all it can do offline. The live suites
+    check that the endpoint still agrees.
     """
     assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
@@ -667,7 +667,7 @@ def test_the_session_warning_counts_rows_and_not_keys():
 def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
     """The leak warning is about a pairing that only travels on the one-shot
     call. Asked where the request is built, it fired about a context a session
-    scoring call never sends -- and failed under warnings-as-errors."""
+    scoring call never sends, and failed under warnings-as-errors."""
     import pandas as pd
 
     from sdm_client import Request
@@ -695,7 +695,7 @@ def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
 
 def test_the_session_warning_knows_one_entity_written_two_ways():
     """The pinned key is read from an encoded envelope and the scored key from
-    a frame, so an entity pinned as `1` and scored as `1.0` never met -- and a
+    a frame, so an entity pinned as `1` and scored as `1.0` never met, and a
     session scored rows its context answers without saying so."""
     import pandas as pd
 
@@ -739,7 +739,7 @@ def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
     """The schema is not sent again on a scoring call: it was pinned when the
     session opened. Typing the rows from the half that travels sent `1.0`
     under a column pinned as `int64`, which the endpoint refused as
-    `SESSION_PREDICT_SCHEMA_MISMATCH` -- a failure about a value the caller
+    `SESSION_PREDICT_SCHEMA_MISMATCH`, a failure about a value the caller
     never wrote and cannot see."""
     import pandas as pd
 

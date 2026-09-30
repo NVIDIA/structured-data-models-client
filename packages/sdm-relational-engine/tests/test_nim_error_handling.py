@@ -112,7 +112,7 @@ def test_oversized_request_is_not_retried_and_carries_the_remedy(
 
     Asserting the remedy and not merely the failure is the point: the retry
     classifier already treats 413 as non-transient, so deleting this branch
-    would still raise -- just as a RuntimeError with no batch_size advice, and
+    would still raise, just as a RuntimeError with no batch_size advice, and
     nothing would fail.
     """
     api = FailingAPI(413, 'request entity too large')

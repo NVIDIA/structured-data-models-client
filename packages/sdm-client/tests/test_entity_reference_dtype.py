@@ -5,7 +5,7 @@
 """The entity's transport key must be the type of the key it joins to.
 
 `_entity_values` read the key with `df.iloc[row][key]`, which builds a Series
-for the whole row -- and a row has one dtype. An integer key sitting beside a
+for the whole row, and a row has one dtype. An integer key sitting beside a
 float column therefore came back as a float, the payload declared the entity
 reference `float64` while the key it joins to was `int64`, and the endpoint
 refused the request:

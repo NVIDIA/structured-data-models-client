@@ -44,7 +44,7 @@ def test_own_table_qualifier_is_stripped_outside_string_literals(
     expr, expected
 ):
     """``ORDERS.`` inside a literal is data. Stripping it rewrote the expression
-    to compare against a different value -- still valid SQL, so nothing
+    to compare against a different value, still valid SQL, so nothing
     downstream could tell that what the client runs is not what the view declares.
     Double quotes stay in scope: ``"USERS".NAME`` is a quoted-identifier
     qualifier the pattern is built to match.

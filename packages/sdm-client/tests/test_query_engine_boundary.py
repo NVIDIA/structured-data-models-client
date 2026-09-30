@@ -227,7 +227,7 @@ def test_the_two_ceilings_are_the_engine_s_own():
 
 def test_a_relationship_listed_twice_is_linked_once():
     """`graph.link()` became unconditional, and the engine refuses an edge it
-    already has -- which a caller appending to an inferred list produces."""
+    already has, which a caller appending to an inferred list produces."""
     import pandas as pd
 
     from sdm_client import Relationship, Schema
@@ -275,7 +275,7 @@ def test_the_frame_test_decides_it_without_help_from_the_message():
 
     A bad call made from the relational materializer leaves its deepest frame
     there, and the two are told apart even when the wording carries no
-    signature phrase at all -- which is the point of not depending on
+    signature phrase at all, which is the point of not depending on
     CPython's wording.
     """
     import sdm_client.materializers.relational as relational
@@ -310,8 +310,8 @@ def test_the_frame_test_decides_it_without_help_from_the_message():
 
 
 def test_the_message_fallback_covers_a_traceback_free_type_error():
-    """A TypeError with no traceback -- reconstructed, or raised across a
-    boundary -- still has to be sorted, and only the message is left."""
+    """A TypeError with no traceback, reconstructed, or raised across a
+    boundary, still has to be sorted, and only the message is left."""
     assert RelationalMaterializer._is_call_signature_error(
         TypeError("f() got an unexpected keyword argument 'verbose'")
     )
@@ -539,7 +539,7 @@ def star(satellites: int, joining: int) -> Schema:
     """One entity table and `satellites` children, `joining` of which match.
 
     A child whose foreign key names no entity is not gathered, so the schema
-    is wide and the subgraph is narrow -- the shape a warehouse catalogue has
+    is wide and the subgraph is narrow, the shape a warehouse catalogue has
     and the one the declared-table check measured wrongly.
     """
     entities = [f'u{index}' for index in range(8)]

@@ -7,7 +7,7 @@
 Two failures are worth catching separately. Someone editing the generated file
 by hand is caught without needing the contract checked out, so it runs
 everywhere. Drift against the contract itself needs the sibling repository, so
-it skips when that is absent -- which is everywhere except a maintainer's
+it skips when that is absent, which is everywhere except a maintainer's
 machine and the pipeline.
 """
 

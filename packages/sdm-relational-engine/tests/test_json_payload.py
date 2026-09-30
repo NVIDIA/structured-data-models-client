@@ -961,7 +961,7 @@ def test_decimal_cells_are_named_by_what_they_hold() -> None:
     assert schema['FEATURE']['dtype'] == 'int64'
     json.dumps(payload)
 
-    # Integral but wider than int64 -- decimal(38, 0) permits 38 digits where
+    # Integral but wider than int64, decimal(38, 0) permits 38 digits where
     # int64 holds 19. Named `string`, which keeps every digit, rather than
     # int64, which would declare a width the value does not have.
     # Built from digits rather than by arithmetic: Decimal addition applies the

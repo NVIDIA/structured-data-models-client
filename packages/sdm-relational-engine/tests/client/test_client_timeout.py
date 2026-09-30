@@ -116,7 +116,7 @@ def test_max_retries_reaches_the_transport_policy():
     `NimClient(max_retries=...)` is documented without a model qualifier, next
     to `timeout`, which was made to reach both paths. This client used to
     hardcode `total=10, connect=3, read=3, status=5` regardless, so `0` still
-    retried and a raised value changed nothing -- and its prediction `POST` was
+    retried and a raised value changed nothing, and its prediction `POST` was
     not retried on a 5xx at all, because urllib3's default `allowed_methods`
     excludes `POST`.
     """

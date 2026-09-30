@@ -66,8 +66,8 @@ def _sampler(row: Any, fail: bool = False) -> SQLiteSampler:
     sampler._connection = _Connection(row, fail)
     # `__new__` skips `__init__`, so the per-table memo it installs has to be
     # supplied here. It is per-instance rather than a `functools.cache` on the
-    # method, which would key on `self` and keep every sampler -- and its
-    # graph and its open connection -- alive for the life of the process.
+    # method, which would key on `self` and keep every sampler, and its
+    # graph and its open connection, alive for the life of the process.
     sampler._time_separator_dict = {}
     return sampler
 
@@ -89,7 +89,7 @@ def test_a_window_bound_is_spelled_the_way_the_column_is(
     bounds were written ``YYYY-MM-DD HH:MM:SS`` unconditionally, and
     ``'...T00:00:00' <= '... 00:00:00'`` is false for the same instant because
     ``T`` sorts after a space. A column written by an ISO-8601 writer therefore
-    dropped every row landing exactly on a window edge -- no error, just a
+    dropped every row landing exactly on a window edge, no error, just a
     quietly smaller answer.
     """
     assert _sampler((stored,))._time_separator('t') == expected

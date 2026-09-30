@@ -9,7 +9,7 @@
 the `except` written against the docstring never fired. Raising the subclass
 instead would have replaced the error's ``SESSIONS_UNSUPPORTED`` code with
 that class's fixed ``UNSUPPORTED_REQUEST``, and the code is what callers are
-told to branch on -- so the docstring was corrected to name what is raised,
+told to branch on, so the docstring was corrected to name what is raised,
 and this pins both halves of it.
 """
 

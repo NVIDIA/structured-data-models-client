@@ -39,7 +39,7 @@ def _covered_by(rule: str, selectors: Sequence[str]) -> bool:
     """Whether any selector actually enables ``rule``.
 
     Plain string prefixes are wrong here: `'FIX002'.startswith('F')` is True,
-    but ruff's `F` is Pyflakes and `FIX` is flake8-fixme -- selecting one does
+    but ruff's `F` is Pyflakes and `FIX` is flake8-fixme, selecting one does
     not select the other, which is verifiable with
     """
     if 'ALL' in selectors:
@@ -298,7 +298,7 @@ class TestConfigurationTellsTheTruth:
 
         The materializer refuses a stated `task=` the tabular deployment does
         not serve, and it has to do that before a model handle is necessarily
-        in hand -- so the list is written twice. A comment claiming two things
+        in hand, so the list is written twice. A comment claiming two things
         """
         from sdm_client.materializers.tabular import TABULAR_TASK_KINDS
         from sdm_client.models import spec_for
@@ -388,7 +388,7 @@ class TestConfigurationTellsTheTruth:
     ):
         """The engine's ignore list records a backlog and names where it is clean.
 
-        That claim used to be wrong in both halves -- the rules were not
+        That claim used to be wrong in both halves, the rules were not
         selected anywhere, and the two packages named did not pass clean under
         them. A comment cannot be wrong for long if a test reads it.
         """
@@ -537,8 +537,8 @@ class TestInterpreterSupportIsStated:
         """Compare versions numerically.
 
         `'3.10' >= '3.9'` is False as strings, because `'1' < '9'`. Nothing
-        here has a 3.9 floor today, so a lexical comparison happened to agree
-        -- and would have started disagreeing silently at 3.20, in a helper
+        here has a 3.9 floor today, so a lexical comparison happened to agree,
+        and it would have started disagreeing silently at 3.20, in a helper
         """
         return tuple(int(part) for part in version.split('.'))
 
@@ -609,8 +609,8 @@ class TestInterpreterSupportIsStated:
     def test_an_extra_narrower_than_its_parent_says_so(self):
         """The relational extra does not resolve on every Python the client does.
 
-        That is correct -- the engine is a native build with a shorter wheel
-        matrix -- but pip's error names a distribution, not a reason. Anything
+        That is correct, the engine is a native build with a shorter wheel
+        matrix, but pip's error names a distribution, not a reason. Anything
         that narrow has to be explained where someone reads it.
         """
         client = _pyproject('sdm-client')

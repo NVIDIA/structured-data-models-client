@@ -181,7 +181,7 @@ def test_ranking_a_column_that_points_nowhere_never_reaches_the_rewrite():
     The rewrite would turn it into a question about which rows an entity
     reaches, which is a different question with a different answer. Nothing
     guards this here because the query language refuses it first, and says
-    what to do instead -- so the test pins that the refusal is the one that
+    what to do instead, so the test pins that the refusal is the one that
     arrives, not that the rewrite declines it.
     """
     with pytest.raises(StructuredDataError, match='foreign key column'):
@@ -348,8 +348,8 @@ def test_candidates_are_refused_on_a_question_that_ranks_nothing():
 
 def test_candidates_are_refused_on_a_forecast_rather_than_discarded():
     """A forecast ranks nothing, so candidates describe nothing about it. They
-    were accepted and dropped, while `top_k` -- the sibling ranking-only
-    option -- was refused."""
+    were accepted and dropped, while `top_k`, the sibling ranking-only
+    option, was refused."""
     with pytest.raises(StructuredDataError, match='does not rank anything'):
         PredictiveQuery(
             'PREDICT COUNT(buys.*, 0, 7, days) FORECAST 2 TIMEFRAMES '

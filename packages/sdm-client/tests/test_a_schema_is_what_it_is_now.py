@@ -5,8 +5,8 @@
 """A schema asks the question its present state describes, not its history.
 
 Two schemas with the same tables and no relationships asked different
-questions -- one a regression, the other a multiclass classification --
-because one of them had once had a link. Key columns were typed `ID` when the
+questions: one a regression, the other a multiclass classification, because
+one of them had once had a link. Key columns were typed `ID` when the
 schema was built and never re-derived, and the marking went through the same
 assignment a caller uses, so it set `stype_declared` and became
 indistinguishable from a meaning the caller chose, with nothing recorded to
@@ -244,7 +244,7 @@ def test_a_key_this_cannot_read_is_refused_before_the_table_takes_it() -> None:
 
 def test_declaring_a_meaning_on_a_live_key_does_not_change_what_it_is() -> None:
     """A key's meaning is settled by its being a key, and the schema said so
-    wherever it was asked -- but only re-derived when the keys changed, so
+    wherever it was asked, but only re-derived when the keys changed, so
     between declaring a meaning on a live key and the next such moment the
     column described itself as whatever was declared."""
     schema = with_alt([Relationship('orders', 'user_id', 'users', 'user_id')])
@@ -359,7 +359,7 @@ def test_a_key_that_is_not_an_ordered_list_of_names_is_refused(named) -> None:
 
 
 def test_a_shallow_copy_of_a_table_is_a_table_of_its_own_columns() -> None:
-    """Sharing them left the copy unable to answer for itself -- its columns
+    """Sharing them left the copy unable to answer for itself. Its columns
     pointed at the table they came from, so changing the copy's key typed
     nothing."""
     import copy as copying
@@ -394,8 +394,8 @@ class _ReadableOnce:
     ids=['generator', 'one-shot-iterable'],
 )
 def test_a_key_is_read_once_and_what_was_read_is_kept(named) -> None:
-    """A key is consulted many times after it is set -- to check it, to type
-    its columns, to copy the table -- and an iterable that empties on the
+    """A key is consulted many times after it is set: to check it, to type
+    its columns, and to copy the table. An iterable that empties on the
     first read arrived as "was given an empty primary key" about a key that
     named two columns."""
     schema = with_alt([])
@@ -506,7 +506,7 @@ def test_two_schemas_over_the_same_tables_do_not_fight_over_them() -> None:
 
 def test_a_table_owns_its_columns_before_it_marks_any_of_them() -> None:
     """Ownership was taken in `__post_init__`, which runs after the fields are
-    assigned -- so a table built on another's columns typed *those* first, and
+    assigned, so a table built on another's columns typed *those* first, and
     left the table it borrowed them from changed."""
     from sdm_client import Table
     from sdm_client.schema import _infer_table
@@ -533,7 +533,7 @@ def test_a_table_owns_its_columns_before_it_marks_any_of_them() -> None:
 def test_a_released_key_that_means_a_timestamp_orders_its_table_again() -> None:
     """A column that means `timestamp` orders the table it belongs to, and
     restoring the meaning around that assignment left a table saying it held a
-    timestamp while naming no time column -- which `check_consistent()`
+    timestamp while naming no time column, which `check_consistent()`
     accepted and every temporal query then failed on."""
     from sdm_client.schema import _infer_table
 
@@ -565,7 +565,7 @@ def test_a_released_key_that_means_a_timestamp_orders_its_table_again() -> None:
 
 def test_a_schema_owns_a_table_that_arrives_from_another_one() -> None:
     """`tables` hands back the live dictionary, so a table can arrive from a
-    schema that is still using it -- and typing its key columns for this
+    schema that is still using it, and typing its key columns for this
     schema retyped them for that one. The same rule a table applies to the
     columns it is handed."""
     from sdm_client.schema import _infer_table
@@ -649,7 +649,7 @@ def test_owning_columns_does_not_compare_the_frames_inside() -> None:
 
 def test_two_tables_can_be_compared_without_raising() -> None:
     """The generated comparison compares the frames with `==`, which for a
-    DataFrame is a frame of booleans -- so asking whether two tables are equal
+    DataFrame is a frame of booleans, so asking whether two tables are equal
     raised `ValueError: The truth value of a DataFrame is ambiguous` from
     inside pandas, naming nothing the caller wrote."""
     from sdm_client.schema import _infer_table
