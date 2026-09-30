@@ -50,9 +50,9 @@ The first release is being assembled. Nothing here has shipped yet.
   Databricks Model Serving, reached by the endpoint's name with the
   workspace's own identity, so a notebook supplies no URL or key. `predict()`
   works as it does against a NIM; `fit()` is refused, since a serving endpoint
-  has no sessions. Needs the new `databricks-serving` extra. The envelope it
-  sends is the one the relational engine sends, now defined once in
-  `sdm_api.databricks_serving` so the two cannot drift apart.
+  has no sessions. Needs the new `databricks-serving` extra. It sends the
+  same `request_json`/`response_json` envelope as the relational engine's
+  serving client.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a

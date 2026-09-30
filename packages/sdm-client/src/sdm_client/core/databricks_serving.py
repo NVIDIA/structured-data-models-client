@@ -7,8 +7,9 @@ r"""A client's requests, carried to a Databricks Model Serving endpoint.
 The model is served by name inside a workspace rather than at a URL, and is
 reached with the workspace's own identity, so a notebook needs no token. Each
 request travels as the one ``request_json`` row the served model reads, and
-the answer comes back as one ``response_json`` row; the envelope is
-:mod:`sdm_api.databricks_serving`, shared with the relational engine.
+the answer comes back as one ``response_json`` row: the frozen envelope the
+relational engine's serving client sends too, which every deployed endpoint
+reads and writes.
 
 What a NIM serves and this does not: sessions, and a list of models. A
 serving endpoint hosts one model and answers one request at a time.
@@ -21,16 +22,8 @@ import logging
 import math
 import re
 import threading
+from collections.abc import Mapping
 from typing import Any
-
-from sdm_api.databricks_serving import (
-    MAX_REQUEST_BYTES,
-    envelope,
-    error_code_of,
-    response_body,
-    status_of,
-    validate_endpoint_name,
-)
 
 from sdm_client.core.transport import (
     _check_encodable,
@@ -48,6 +41,16 @@ logger = logging.getLogger('sdm_client')
 #: A serving endpoint scales to zero, and a cold start outlasts the minute a
 #: NIM call is given.
 DEFAULT_TIMEOUT_SECONDS = 300.0
+
+# Renaming either column breaks every endpoint already deployed.
+_REQUEST_COLUMN = 'request_json'
+_RESPONSE_COLUMN = 'response_json'
+
+# The gateway's own limit, in decimal MB: "correcting" it to MiB lets through
+# 5% more, which then fails as a bare "request failed".
+_MAX_REQUEST_BYTES = 16 * 1000 * 1000
+
+_ERROR_CODE_RE = re.compile(r'^[A-Z][A-Z0-9_]{0,63}$')
 
 # The SDK logs each round trip, bodies included, at DEBUG on this logger, and a
 # serving call's body is the caller's rows.
@@ -115,10 +118,10 @@ class DatabricksServingTransport:
         workspace_client: Any | None = None,
         *,
         timeout: float | None = None,
-        max_request_bytes: int = MAX_REQUEST_BYTES,
+        max_request_bytes: int = _MAX_REQUEST_BYTES,
     ) -> None:
         try:
-            self._endpoint = validate_endpoint_name(endpoint)
+            self._endpoint = _validate_endpoint_name(endpoint)
         except ValueError as error:
             raise StructuredDataError(
                 str(error), code='INVALID_CONFIGURATION'
@@ -197,7 +200,7 @@ class DatabricksServingTransport:
         self._require_open()
         _check_encodable(payload)
         try:
-            records, size = envelope(payload)
+            records, size = _envelope(payload)
         except (TypeError, ValueError) as error:
             raise StructuredDataError(
                 f'this request carries a value that cannot be sent as JSON: '
@@ -223,7 +226,7 @@ class DatabricksServingTransport:
         except OSError as error:
             raise self._error_from(error) from None
         try:
-            body = response_body(reply)
+            body = _response_body(reply)
         except ValueError as error:
             raise StructuredDataError(
                 f'{error} (serving endpoint {self._endpoint!r})',
@@ -277,8 +280,8 @@ class DatabricksServingTransport:
         neither repeated nor logged: it can hold the request body, which is the
         caller's rows.
         """
-        status = status_of(error)
-        provider_code = error_code_of(error)
+        status = _status_of(error)
+        provider_code = _error_code_of(error)
         code = _model_diagnosis(error, provider_code)
         logger.debug(
             'serving endpoint %r failed with %s (status %s, code %s)',
@@ -325,6 +328,115 @@ def _model_diagnosis(
     for match in _MODEL_DIAGNOSIS.finditer(text):
         if match.group(1) != provider_code:
             return match.group(1)
+    return None
+
+
+def _validate_endpoint_name(name: object) -> str:
+    r"""Reject anything URL-shaped, without echoing it.
+
+    A serving endpoint is named, not addressed, and a pasted workspace URL can
+    carry userinfo credentials or a token query parameter. So the URL scan runs
+    before any check that echoes the value, and the rejection never quotes it.
+    ``@`` is in the reject set because a schemeless ``user:token@host`` carries
+    userinfo without any of the other markers.
+
+    Raises:
+        ValueError: With a message that does not contain ``name``.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError('endpoint must be a non-empty serving endpoint name')
+    for token in ('://', '/', '?', '#', '@'):
+        if token in name:
+            raise ValueError(
+                'endpoint must be a serving endpoint name, not a URL'
+            )
+    if name != name.strip():
+        raise ValueError('endpoint name has surrounding whitespace')
+    return name
+
+
+def _envelope(request: Mapping[str, Any]) -> tuple[list[dict[str, str]], int]:
+    r"""The ``dataframe_records`` to send, and their size on the wire.
+
+    The size is of the body the gateway weighs, which re-escapes every quote in
+    the payload (~1.15x), and the records returned are the ones measured.
+    ``ensure_ascii`` (the default) makes ``len`` the byte count.
+
+    Raises:
+        ValueError: If ``request`` holds a value with no strict JSON form,
+            such as ``NaN``.
+    """
+    payload = json.dumps(request, allow_nan=False, separators=(',', ':'))
+    records = [{_REQUEST_COLUMN: payload}]
+    body = json.dumps({'dataframe_records': records}, separators=(',', ':'))
+    return records, len(body)
+
+
+def _response_body(reply: Any) -> str:
+    r"""The single canonical response string the contract promises.
+
+    ``reply`` is whatever the SDK returned: an object with ``predictions`` or a
+    mapping holding it. Each row may be a mapping or an object.
+
+    Raises:
+        ValueError: If there is not exactly one row, or it holds no
+            ``response_json`` string.
+    """
+    predictions = getattr(reply, 'predictions', None)
+    if predictions is None and isinstance(reply, Mapping):
+        predictions = reply.get('predictions')
+    if not isinstance(predictions, list) or len(predictions) != 1:
+        raise ValueError(
+            'serving endpoint did not return exactly one prediction row'
+        )
+    row = predictions[0]
+    if isinstance(row, Mapping):
+        body = row.get(_RESPONSE_COLUMN)
+    else:
+        body = getattr(row, _RESPONSE_COLUMN, None)
+    if not isinstance(body, str):
+        raise ValueError(
+            f'serving endpoint response row has no {_RESPONSE_COLUMN!r} '
+            'string column'
+        )
+    return body
+
+
+def _status_of(error: BaseException) -> int:
+    r"""Map a Databricks SDK error onto an HTTP-equivalent status.
+
+    Matched by class name so the SDK need not be importable to read this
+    module, and a version bump that moves the classes cannot break the mapping
+    silently. An unclassified failure is 503 rather than 500, because it is
+    usually the endpoint being unavailable, and 503 is what callers retry.
+    """
+    names = {cls.__name__ for cls in type(error).__mro__}
+    if names & {'PermissionDenied', 'Unauthenticated'}:
+        return 403 if 'PermissionDenied' in names else 401
+    if 'NotFound' in names:
+        return 404
+    if 'ResourceConflict' in names:
+        return 409
+    if names & {'TooManyRequests', 'RequestLimitExceeded'}:
+        return 429
+    if names & {
+        'DeadlineExceeded',
+        'OperationTimeout',
+        'TimeoutError',
+        'Timeout',
+    }:
+        return 504
+    if 'BadRequest' in names:
+        return 400
+    status = getattr(error, 'status_code', None)
+    return status if isinstance(status, int) else 503
+
+
+def _error_code_of(error: BaseException) -> str | None:
+    r"""The provider's error code, when enum-shaped enough to be non-secret."""
+    code = getattr(error, 'error_code', None)
+    if isinstance(code, str) and _ERROR_CODE_RE.match(code):
+        return code
     return None
 
 

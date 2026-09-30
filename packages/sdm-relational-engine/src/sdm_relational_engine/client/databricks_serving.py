@@ -9,15 +9,15 @@ The RFM execution path is unchanged: it still calls ``_request`` and reads
 underneath.
 
 The boundary is the frozen v1 contract: one ``request_json`` row in, one
-``response_json`` row out. The envelope itself -- the two columns, the size
-cap, and what the gateway's failures mean -- is owned by
-:mod:`sdm_api.databricks_serving`, which the client's serving transport reads
-too, so the two cannot drift apart. What stays here is the engine's side of
-it: its ``HTTPException`` and ``ServingResponse``.
+``response_json`` row out.
 
-``MAX_REQUEST_BYTES`` is deliberately not the dispatcher's 30 MiB
-model-boundary cap, which a request between the two would pass locally and
-fail remotely.
+Two constants below are load-bearing and look like mistakes:
+
+``MAX_REQUEST_BYTES`` is decimal MB rather than MiB because that is the
+gateway's own limit; "correcting" it to MiB raises the cap by 5% and the excess
+returns as a bare "request failed". It is deliberately not the dispatcher's
+30 MiB model-boundary cap, which a request between the two would pass locally
+and fail remotely.
 
 ``DEFAULT_TIMEOUT_SECONDS`` is far above the client default because a serving
 endpoint scales to zero and a cold start outlasts ~60s.
@@ -25,46 +25,96 @@ endpoint scales to zero and a cold start outlasts ~60s.
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections.abc import Mapping
 from typing import Any
 
-from sdm_api.databricks_serving import (
-    MAX_REQUEST_BYTES,
-    REQUEST_COLUMN,
-    RESPONSE_COLUMN,
-    envelope,
-    error_code_of,
-    response_body,
-    status_of,
-    validate_endpoint_name,
-)
 from sdm_api.endpoints import Endpoint
 from sdm_api.generated.tfm_api import TFMOperations
 
 from sdm_relational_engine.client.transport import ServingResponse
 from sdm_relational_engine.exceptions import HTTPException
 
-__all__ = [
-    'MAX_REQUEST_BYTES',
-    'REQUEST_COLUMN',
-    'RESPONSE_COLUMN',
-    'DatabricksServingClient',
-    'ServingResponse',
-]
+__all__ = ['DatabricksServingClient', 'ServingResponse']
 
 logger = logging.getLogger('sdm_relational_engine')
 
+# The frozen v1 request/response column names. A deployed serving endpoint
+# reads and writes exactly these two, so renaming either breaks every endpoint
+# already in production.
+REQUEST_COLUMN = 'request_json'
+RESPONSE_COLUMN = 'response_json'
+
 _PREDICTION_PATH = TFMOperations.run_prediction.endpoint.get_path()
 
+# Decimal MB, not MiB: see the module docstring before changing either.
+MAX_REQUEST_BYTES = 16 * 1000 * 1000
 DEFAULT_TIMEOUT_SECONDS = 300.0
 
 _SDK_BODY_LOGGER = 'databricks.sdk.core'
 
-# Kept under the names this module has always used: its tests read them here.
-_status_of = status_of
-_error_code_of = error_code_of
-_validate_endpoint_name = validate_endpoint_name
+_ERROR_CODE_RE = re.compile(r'^[A-Z][A-Z0-9_]{0,63}$')
+
+
+def _validate_endpoint_name(name: str) -> str:
+    r"""Reject anything URL-shaped.
+
+    A serving endpoint is named, not addressed, and a pasted workspace URL can
+    carry userinfo credentials or a token query parameter. So the URL scan runs
+    before any check that echoes the value, and the rejection never quotes it.
+    ``@`` is in the reject set because a schemeless ``user:token@host`` carries
+    userinfo without any of the other markers.
+    """
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError('endpoint must be a non-empty serving endpoint name')
+    for token in ('://', '/', '?', '#', '@'):
+        if token in name:
+            raise ValueError(
+                'endpoint must be a serving endpoint name, not a URL'
+            )
+    if name != name.strip():
+        raise ValueError('endpoint name has surrounding whitespace')
+    return name
+
+
+def _status_of(error: BaseException) -> int:
+    r"""Map a Databricks SDK error onto an HTTP-equivalent status.
+
+    Matched by class name so ``databricks.sdk`` need not be importable to read
+    this module, and a version bump that moves the classes cannot break the
+    mapping silently. An unclassified failure is 503 rather than 500, because it
+    is usually the endpoint being unavailable and 503 is what RFM retries.
+    """
+    names = {cls.__name__ for cls in type(error).__mro__}
+    if names & {'PermissionDenied', 'Unauthenticated'}:
+        return 403 if 'PermissionDenied' in names else 401
+    if 'NotFound' in names:
+        return 404
+    if 'ResourceConflict' in names:
+        return 409
+    if names & {'TooManyRequests', 'RequestLimitExceeded'}:
+        return 429
+    if names & {
+        'DeadlineExceeded',
+        'OperationTimeout',
+        'TimeoutError',
+        'Timeout',
+    }:
+        return 504
+    if 'BadRequest' in names:
+        return 400
+    status = getattr(error, 'status_code', None)
+    return status if isinstance(status, int) else 503
+
+
+def _error_code_of(error: BaseException) -> str | None:
+    r"""The provider's error code, when enum-shaped enough to be non-secret."""
+    code = getattr(error, 'error_code', None)
+    if isinstance(code, str) and _ERROR_CODE_RE.match(code):
+        return code
+    return None
 
 
 class DatabricksServingClient:
@@ -166,7 +216,10 @@ class DatabricksServingClient:
         count. The comparison is ``>`` because the cap is the largest size the
         gateway accepts.
         """
-        records, size = envelope(request)
+        payload = json.dumps(request, allow_nan=False, separators=(',', ':'))
+        records = [{REQUEST_COLUMN: payload}]
+        body = json.dumps({'dataframe_records': records}, separators=(',', ':'))
+        size = len(body)
         if size > self._max_request_bytes:
             raise HTTPException(
                 413,
@@ -197,7 +250,24 @@ class DatabricksServingClient:
 
     def _body_of(self, reply: Any) -> str:
         r"""Extract the single canonical response the contract promises."""
-        try:
-            return response_body(reply)
-        except ValueError as error:
-            raise HTTPException(502, str(error)) from None
+        predictions = getattr(reply, 'predictions', None)
+        if predictions is None and isinstance(reply, Mapping):
+            predictions = reply.get('predictions')
+        if not isinstance(predictions, list) or len(predictions) != 1:
+            raise HTTPException(
+                502,
+                'serving endpoint did not return exactly one prediction row',
+            )
+
+        row = predictions[0]
+        if isinstance(row, Mapping):
+            body = row.get(RESPONSE_COLUMN)
+        else:
+            body = getattr(row, RESPONSE_COLUMN, None)
+        if not isinstance(body, str):
+            raise HTTPException(
+                502,
+                f'serving endpoint response row has no {RESPONSE_COLUMN!r} '
+                'string column',
+            )
+        return body
