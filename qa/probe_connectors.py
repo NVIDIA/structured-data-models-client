@@ -45,7 +45,7 @@ def run(client):
     ) as e:
         path = SCRATCH / 'adult.csv'
         adult.to_csv(path, index=False)
-        frame = read('local', path=str(path))
+        frame = read(str(path))
         if len(frame) != len(adult) or list(frame.columns) != list(
             adult.columns
         ):
@@ -58,7 +58,7 @@ def run(client):
     ) as e:
         path = SCRATCH / 'adult.parquet'
         adult.to_parquet(path, index=False)
-        frame = read('local', path=str(path))
+        frame = read(str(path))
         if not frame.dtypes.equals(adult.dtypes):
             fail(
                 e,
@@ -72,7 +72,7 @@ def run(client):
     ) as e:
         path = SCRATCH / 'adult.csv.gz'
         adult.to_csv(path, index=False, compression='gzip')
-        frame = read('local', path=str(path))
+        frame = read(str(path))
         if len(frame) != len(adult):
             fail(e, f'{len(frame)} rows')
 
@@ -83,7 +83,7 @@ def run(client):
         directory.mkdir(exist_ok=True)
         for i, part in enumerate([adult.head(200), adult.tail(200)]):
             part.to_parquet(directory / f'part-{i}.parquet', index=False)
-        frame = read('local', path=str(directory))
+        frame = read(str(directory))
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows from a 2-part directory')
 
@@ -91,7 +91,7 @@ def run(client):
         AREA, 'a file that is not there', 'a ConnectorError naming the path'
     ) as e:
         try:
-            read('local', path=str(SCRATCH / 'nope.csv'))
+            read(str(SCRATCH / 'nope.csv'))
             fail(e, 'a missing file was accepted')
         except (ConnectorError, FileNotFoundError, OSError) as exc:
             note(e, f'{type(exc).__name__}: {str(exc)[:120]}')
@@ -102,19 +102,8 @@ def run(client):
         path = SCRATCH / 'adult.xlsx'
         path.write_bytes(b'not really a spreadsheet')
         try:
-            read('local', path=str(path))
+            read(str(path))
             fail(e, 'an unknown suffix was accepted')
-        except ConnectorError as exc:
-            note(e, str(exc)[:140])
-
-    with probe(
-        AREA,
-        'an s3:// path given to the local reader',
-        'refused, pointing at the s3 connector',
-    ) as e:
-        try:
-            read('local', path='s3://bucket/key.csv')
-            fail(e, 'the local reader accepted an s3 URI')
         except ConnectorError as exc:
             note(e, str(exc)[:140])
 
@@ -333,7 +322,7 @@ def run_exactness(client):  # noqa: ARG001
         pd.DataFrame(
             {'id': pd.array([big, None], dtype='Int64'), 'v': [1.0, 2.0]}
         ).to_parquet(path, index=False)
-        ok, dtype, cells = exact(read('local', path=str(path)))
+        ok, dtype, cells = exact(read(str(path)))
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
@@ -342,7 +331,7 @@ def run_exactness(client):  # noqa: ARG001
         pd.DataFrame({'id': [big, big + 2], 'v': [1.0, 2.0]}).to_parquet(
             path, index=False
         )
-        ok, dtype, cells = exact(read('local', path=str(path)))
+        ok, dtype, cells = exact(read(str(path)))
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
@@ -383,32 +372,14 @@ def run_exactness(client):  # noqa: ARG001
     ) as e:
         path = SCRATCH / 'blank.csv'
         path.write_text(f'id,v\n{big},1.0\n,2.0\n{big + 2},3.0\n')
-        ok, dtype, cells = exact(read('local', path=str(path)))
+        ok, dtype, cells = exact(read(str(path)))
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
     with probe(AREA, 'csv, a large integer with no blank', 'exact') as e:
         path = SCRATCH / 'noblank.csv'
         path.write_text(f'id,v\n{big},1.0\n{big + 2},3.0\n')
-        ok, dtype, cells = exact(read('local', path=str(path)))
-        if not ok:
-            fail(e, f'{dtype} -> {cells}')
-
-    with probe(AREA, 'a python int list through data=', 'exact') as e:
-        ok, dtype, cells = exact(
-            read('local', data={'id': [big, big + 2], 'v': [1.0, 2.0]})
-        )
-        if not ok:
-            fail(e, f'{dtype} -> {cells}')
-
-    with probe(
-        AREA, 'a python int list through data= with a None', 'exact'
-    ) as e:
-        ok, dtype, cells = exact(
-            read(
-                'local', data={'id': [big, None, big + 2], 'v': [1.0, 2.0, 3.0]}
-            )
-        )
+        ok, dtype, cells = exact(read(str(path)))
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 

@@ -17,11 +17,13 @@ testing precisely because neither behaves like a table.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
+from typing import Any
 
 import pandas as pd
 import pytest
 
-from sdm_connectors import ConnectorError, connect, read, read_table
+from sdm_connectors import ConnectorError, read_table
 
 pytestmark = pytest.mark.live_warehouse
 
@@ -51,8 +53,10 @@ requires_databricks = pytest.mark.skipif(
 )
 
 
-def snowflake_args() -> dict:
-    return {
+@pytest.fixture(scope='module')
+def snowflake() -> Iterator[Any]:
+    connector = pytest.importorskip('snowflake.connector')
+    arguments = {
         'account': os.environ['SNOWFLAKE_ACCOUNT'],
         'user': os.environ['SNOWFLAKE_USER'],
         'password': os.environ['SNOWFLAKE_PASSWORD'],
@@ -61,14 +65,23 @@ def snowflake_args() -> dict:
         'warehouse': os.environ['SNOWFLAKE_WAREHOUSE'],
         'role': os.environ.get('SNOWFLAKE_ROLE'),
     }
+    connection = connector.connect(
+        **{key: value for key, value in arguments.items() if value}
+    )
+    yield connection
+    connection.close()
 
 
-def databricks_args() -> dict:
-    return {
-        'server_hostname': os.environ['DATABRICKS_SERVER_HOSTNAME'],
-        'http_path': os.environ['DATABRICKS_HTTP_PATH'],
-        'access_token': os.environ['DATABRICKS_TOKEN'],
-    }
+@pytest.fixture(scope='module')
+def databricks() -> Iterator[Any]:
+    sql = pytest.importorskip('databricks.sql')
+    connection = sql.connect(
+        server_hostname=os.environ['DATABRICKS_SERVER_HOSTNAME'],
+        http_path=os.environ['DATABRICKS_HTTP_PATH'],
+        access_token=os.environ['DATABRICKS_TOKEN'],
+    )
+    yield connection
+    connection.close()
 
 
 def databricks_schema() -> str:
@@ -81,11 +94,10 @@ def databricks_schema() -> str:
 
 
 @requires_snowflake
-def test_snowflake_connects_and_reports_where_it_landed():
-    frame = read(
-        'snowflake',
+def test_snowflake_connects_and_reports_where_it_landed(snowflake):
+    frame = read_table(
+        snowflake,
         query='SELECT CURRENT_DATABASE() AS db, CURRENT_SCHEMA() AS sc',
-        **snowflake_args(),
     )
     # Snowflake folds an unquoted identifier to upper case, so the name it
     # reports back is not character-for-character the one that was sent.
@@ -96,45 +108,40 @@ def test_snowflake_connects_and_reports_where_it_landed():
 
 
 @requires_snowflake
-def test_snowflake_reads_a_table_by_name():
-    frame = read('snowflake', table='GPUS', **snowflake_args())
+def test_snowflake_reads_a_table_by_name(snowflake):
+    frame = read_table(snowflake, table='GPUS')
     assert not frame.empty
     assert len(frame.columns) > 1
 
 
 @requires_snowflake
-def test_snowflake_reads_a_table_through_an_open_connection():
-    """``connect`` then ``read_table`` reuses one session for several reads."""
-    connection = connect('snowflake', **snowflake_args())
-    try:
-        first = read_table(connection, table='GPUS')
-        second = read_table(connection, table='DATACENTERS')
-        assert not first.empty
-        assert not second.empty
-    finally:
-        connection.close()
+def test_snowflake_one_connection_serves_several_reads(snowflake):
+    first = read_table(snowflake, table='GPUS')
+    second = read_table(snowflake, table='DATACENTERS')
+    assert not first.empty
+    assert not second.empty
 
 
 @requires_snowflake
-def test_snowflake_row_counts_agree_between_a_table_read_and_a_count():
-    args = snowflake_args()
-    rows = len(read('snowflake', table='DATACENTERS', **args))
-    counted = read(
-        'snowflake', query='SELECT COUNT(*) AS n FROM DATACENTERS', **args
+def test_snowflake_row_counts_agree_between_a_table_read_and_a_count(
+    snowflake,
+):
+    rows = len(read_table(snowflake, table='DATACENTERS'))
+    counted = read_table(
+        snowflake, query='SELECT COUNT(*) AS n FROM DATACENTERS'
     ).loc[0, 'N']
     assert rows == int(counted)
 
 
 @requires_snowflake
-def test_snowflake_semantic_view_is_described_and_queried():
+def test_snowflake_semantic_view_is_described_and_queried(snowflake):
     """A semantic view is not a table: it is read through ``SEMANTIC_VIEW()``.
 
     Reaching one at all is the thing worth proving -- the connector passes SQL
     through rather than assuming every object can be ``SELECT *``-ed.
     """
-    args = snowflake_args()
-    described = read(
-        'snowflake', query='DESCRIBE SEMANTIC VIEW GPU_FLEET_SV', **args
+    described = read_table(
+        snowflake, query='DESCRIBE SEMANTIC VIEW GPU_FLEET_SV'
     )
     assert not described.empty
     dimensions = described[described['object_kind'] == 'DIMENSION']
@@ -142,14 +149,13 @@ def test_snowflake_semantic_view_is_described_and_queried():
     assert not dimensions.empty, 'the semantic view declares no dimensions'
     assert not metrics.empty, 'the semantic view declares no metrics'
 
-    frame = read(
-        'snowflake',
+    frame = read_table(
+        snowflake,
         query=(
             'SELECT * FROM SEMANTIC_VIEW('
             'GPU_FLEET_SV DIMENSIONS DATACENTERS.REGION '
             'METRICS GPUS.GPU_COUNT) ORDER BY 1'
         ),
-        **args,
     )
     assert list(frame.columns) == ['REGION', 'GPU_COUNT']
     assert not frame.empty
@@ -157,19 +163,21 @@ def test_snowflake_semantic_view_is_described_and_queried():
 
 
 @requires_snowflake
-def test_snowflake_a_missing_table_is_a_connector_error_not_a_driver_error():
+def test_snowflake_a_missing_table_is_a_connector_error_not_a_driver_error(
+    snowflake,
+):
     with pytest.raises(ConnectorError) as error:
-        read('snowflake', table='NO_SUCH_TABLE_XYZ', **snowflake_args())
+        read_table(snowflake, table='NO_SUCH_TABLE_XYZ')
     assert error.value.code in {'QUERY_FAILED', 'NOT_FOUND'}
 
 
 @requires_snowflake
-def test_snowflake_an_identifier_needing_quotes_survives_the_round_trip():
+def test_snowflake_an_identifier_needing_quotes_survives_the_round_trip(
+    snowflake,
+):
     """A name a bare identifier cannot spell must still be readable."""
-    frame = read(
-        'snowflake',
-        query='SELECT 1 AS "Total Revenue", 2 AS "order count"',
-        **snowflake_args(),
+    frame = read_table(
+        snowflake, query='SELECT 1 AS "Total Revenue", 2 AS "order count"'
     )
     assert list(frame.columns) == ['Total Revenue', 'order count']
 
@@ -178,51 +186,42 @@ def test_snowflake_an_identifier_needing_quotes_survives_the_round_trip():
 
 
 @requires_databricks
-def test_databricks_connects_and_reports_where_it_landed():
-    frame = read(
-        'databricks',
+def test_databricks_connects_and_reports_where_it_landed(databricks):
+    frame = read_table(
+        databricks,
         query='SELECT current_catalog() AS cat, current_schema() AS sc',
-        **databricks_args(),
     )
     assert frame.loc[0, 'cat'] == os.environ['DATABRICKS_CATALOG']
     assert frame.loc[0, 'sc'] == os.environ['DATABRICKS_SCHEMA']
 
 
 @requires_databricks
-def test_databricks_reads_a_table_by_name():
-    frame = read(
-        'databricks',
-        table=f'{databricks_schema()}.customers',
-        **databricks_args(),
-    )
+def test_databricks_reads_a_table_by_name(databricks):
+    frame = read_table(databricks, table=f'{databricks_schema()}.customers')
     assert not frame.empty
 
 
 @requires_databricks
-def test_databricks_reads_a_table_through_an_open_connection():
-    connection = connect('databricks', **databricks_args())
-    try:
-        frame = read_table(connection, table=f'{databricks_schema()}.products')
-        assert not frame.empty
-    finally:
-        connection.close()
+def test_databricks_one_connection_serves_several_reads(databricks):
+    schema = databricks_schema()
+    assert not read_table(databricks, table=f'{schema}.products').empty
+    assert not read_table(databricks, table=f'{schema}.customers').empty
 
 
 @requires_databricks
-def test_databricks_row_counts_agree_between_a_table_read_and_a_count():
-    args = databricks_args()
+def test_databricks_row_counts_agree_between_a_table_read_and_a_count(
+    databricks,
+):
     schema = databricks_schema()
-    rows = len(read('databricks', table=f'{schema}.suppliers', **args))
-    counted = read(
-        'databricks',
-        query=f'SELECT COUNT(*) AS n FROM {schema}.suppliers',
-        **args,
+    rows = len(read_table(databricks, table=f'{schema}.suppliers'))
+    counted = read_table(
+        databricks, query=f'SELECT COUNT(*) AS n FROM {schema}.suppliers'
     ).loc[0, 'n']
     assert rows == int(counted)
 
 
 @requires_databricks
-def test_databricks_metric_view_needs_measure_and_says_so_plainly():
+def test_databricks_metric_view_needs_measure_and_says_so_plainly(databricks):
     """A metric view refuses a plain read, and the refusal is legible.
 
     This is the server's rule, not a defect in this package: a measure column
@@ -230,38 +229,32 @@ def test_databricks_metric_view_needs_measure_and_says_so_plainly():
     arrives as a ``ConnectorError`` naming the reason rather than as a raw
     driver exception.
     """
-    args = databricks_args()
     view = f'{databricks_schema()}.nvidia_erp_mv'
 
     with pytest.raises(ConnectorError) as error:
-        read('databricks', table=view, **args)
+        read_table(databricks, table=view)
     assert 'MEASURE' in str(error.value).upper()
 
-    frame = read(
-        'databricks',
+    frame = read_table(
+        databricks,
         query=f'SELECT MEASURE(`Order Count`) AS order_count FROM {view}',
-        **args,
     )
     assert int(frame.loc[0, 'order_count']) > 0
 
 
 @requires_databricks
-def test_databricks_a_missing_table_is_a_connector_error():
+def test_databricks_a_missing_table_is_a_connector_error(databricks):
     with pytest.raises(ConnectorError) as error:
-        read(
-            'databricks',
-            table=f'{databricks_schema()}.no_such_table_xyz',
-            **databricks_args(),
-        )
+        read_table(databricks, table=f'{databricks_schema()}.no_such_table_xyz')
     assert error.value.code in {'QUERY_FAILED', 'NOT_FOUND'}
 
 
 @requires_databricks
-def test_databricks_a_backticked_identifier_survives_the_round_trip():
-    frame = read(
-        'databricks',
-        query='SELECT 1 AS `Total Revenue`, 2 AS `order count`',
-        **databricks_args(),
+def test_databricks_a_backticked_identifier_survives_the_round_trip(
+    databricks,
+):
+    frame = read_table(
+        databricks, query='SELECT 1 AS `Total Revenue`, 2 AS `order count`'
     )
     assert list(frame.columns) == ['Total Revenue', 'order count']
 
@@ -271,15 +264,15 @@ def test_databricks_a_backticked_identifier_survives_the_round_trip():
 
 @requires_snowflake
 @requires_databricks
-def test_both_warehouses_produce_frames_a_schema_can_be_inferred_from():
+def test_both_warehouses_produce_frames_a_schema_can_be_inferred_from(
+    snowflake, databricks
+):
     """The point of a connector here: what comes out feeds a request."""
-    snowflake = read('snowflake', table='GPUS', **snowflake_args())
-    databricks = read(
-        'databricks',
-        table=f'{databricks_schema()}.customers',
-        **databricks_args(),
+    frames = (
+        read_table(snowflake, table='GPUS'),
+        read_table(databricks, table=f'{databricks_schema()}.customers'),
     )
-    for frame in (snowflake, databricks):
+    for frame in frames:
         assert isinstance(frame, pd.DataFrame)
         assert not frame.empty
         assert all(isinstance(name, str) for name in frame.columns)

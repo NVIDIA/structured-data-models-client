@@ -33,19 +33,17 @@ def test_connect_unknown_backend_raises_connector_error():
     assert excinfo.value.code == 'UNKNOWN_CONNECTOR'
 
 
-def test_connect_failure_maps_to_connect_failed(tmp_path):
-    database = tmp_path / 'not-a-database.duckdb'
-    database.write_text('this is not a duckdb database')
-    with pytest.raises(ConnectorError) as excinfo:
-        read('duckdb', database=str(database), table='items')
-    assert excinfo.value.code == 'CONNECT_FAILED'
-    assert excinfo.value.details['driver_error']
-    assert excinfo.value.__cause__ is not None
+@pytest.fixture()
+def sqlite_connection(sqlite_db):
+    dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
+    connection = dbapi.connect(sqlite_db)
+    yield connection
+    connection.close()
 
 
-def test_query_failure_maps_to_query_failed(sqlite_db):
+def test_query_failure_maps_to_query_failed(sqlite_connection):
     with pytest.raises(ConnectorError) as excinfo:
-        read('sqlite', database=sqlite_db, query='SELECT * FROM missing')
+        read_table(sqlite_connection, query='SELECT * FROM missing')
     assert excinfo.value.code == 'QUERY_FAILED'
     assert excinfo.value.details['sql'] == 'SELECT * FROM missing'
     assert excinfo.value.__cause__ is not None
@@ -61,15 +59,15 @@ def test_read_table_direct_query_failure(sqlite_db):
         connection.close()
 
 
-def test_invalid_table_identifier_is_not_rewrapped(sqlite_db):
+def test_invalid_table_identifier_is_not_rewrapped(sqlite_connection):
     with pytest.raises(ConnectorError) as excinfo:
-        read('sqlite', database=sqlite_db, table='bad ident!')
+        read_table(sqlite_connection, table='bad ident!')
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
 def test_local_missing_file_maps_to_not_found(tmp_path):
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=str(tmp_path / 'absent.csv'))
+        read(str(tmp_path / 'absent.csv'))
     assert excinfo.value.code == 'NOT_FOUND'
     assert isinstance(excinfo.value.__cause__, FileNotFoundError)
 
@@ -78,15 +76,9 @@ def test_local_malformed_parquet_maps_to_read_failed(tmp_path):
     path = tmp_path / 'table.parquet'
     path.write_text('this is not parquet')
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=str(path))
+        read(str(path))
     assert excinfo.value.code == 'READ_FAILED'
     assert excinfo.value.details['path'] == str(path)
-
-
-def test_local_bad_data_maps_to_invalid_args():
-    with pytest.raises(ConnectorError) as excinfo:
-        read('local', data={'a': [1, 2], 'b': [1]})
-    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
 def _driver_installed(module: str) -> bool:
@@ -102,7 +94,7 @@ def _driver_installed(module: str) -> bool:
 )
 def test_missing_snowflake_driver_raises_missing_backend():
     with pytest.raises(MissingBackendError) as excinfo:
-        read('snowflake', table='items')
+        importlib.import_module('sdm_connectors.backends.snowflake')
     assert excinfo.value.backend == 'snowflake'
 
 
@@ -112,7 +104,7 @@ def test_missing_snowflake_driver_raises_missing_backend():
 )
 def test_missing_databricks_driver_raises_missing_backend():
     with pytest.raises(MissingBackendError) as excinfo:
-        read('databricks', table='items')
+        importlib.import_module('sdm_connectors.backends.databricks')
     assert excinfo.value.backend == 'databricks'
 
 
@@ -151,21 +143,16 @@ def test_driver_guard_propagates_import_error():
 def test_unexpected_connect_kwarg_maps_to_invalid_args(tmp_path):
     import duckdb as duckdb_driver
 
+    from sdm_connectors.backends import duckdb
+
     database = tmp_path / 'db.duckdb'
     duckdb_driver.connect(str(database)).close()
     with pytest.raises(ConnectorError) as excinfo:
-        read(
-            'duckdb',
-            database=str(database),
-            table='items',
-            bogus_option=1,
-        )
+        duckdb.connect(str(database), bogus_option=1)
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
-def test_close_failure_does_not_mask_result(monkeypatch):
-    import sdm_connectors.reader as reader_module
-
+def test_a_cursor_close_failure_does_not_mask_result():
     class _Cursor:
         description = [('a',)]
 
@@ -182,15 +169,7 @@ def test_close_failure_does_not_mask_result(monkeypatch):
         def cursor(self):
             return _Cursor()
 
-        def close(self):
-            raise RuntimeError('close exploded')
-
-    monkeypatch.setattr(
-        reader_module,
-        'connect',
-        lambda source, *a, **k: _Connection(),
-    )
-    frame = read('sqlite', database='ignored', table='items')
+    frame = read_table(_Connection(), table='items')
     assert list(frame['a']) == [1, 2]
 
 

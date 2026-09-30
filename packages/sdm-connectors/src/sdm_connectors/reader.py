@@ -17,16 +17,12 @@ from urllib.request import url2pathname
 import pandas as pd
 import pyarrow as pa
 
-from sdm_connectors.backends import connect, owns_connection
 from sdm_connectors.sql import (
     ConnectorError,
     driver_guard,
     require_driver,
     resolve_sql,
 )
-
-_SQL_SOURCES = ('sqlite', 'duckdb', 'postgres', 'snowflake', 'databricks')
-_FILE_SOURCES = ('local', 's3')
 
 _PARQUET_SUFFIXES = ('.parquet', '.pq', '.parq')
 _CSV_SUFFIXES = ('.csv', '.txt')
@@ -55,62 +51,47 @@ _NULLABLE_INTEGER_DTYPES = {
 }
 
 
-def read(source: str, **kwargs: Any) -> pd.DataFrame:
-    r"""Reads one flat table from any supported source.
+def read(
+    path: str | os.PathLike[str],
+    *,
+    format: str | None = None,
+    storage_options: dict[str, Any] | None = None,
+) -> pd.DataFrame:
+    r"""Reads one flat table from a CSV or Parquet file.
+
+    A table in a database is read with :func:`read_table`, over a connection
+    the caller opened.
 
     Args:
-        source: ``'local'`` (``data=`` a DataFrame/dict, or ``path=`` a CSV or
-            Parquet file), ``'s3'`` (``path='s3://...'``, optional
-            ``storage_options=``), or a SQL backend -- ``'sqlite'``,
-            ``'duckdb'``, ``'postgres'``, ``'snowflake'``, ``'databricks'``.
-        **kwargs: For a SQL source, exactly one of ``table=`` / ``query=`` plus
-            the connection arguments :func:`connect` takes for that backend
-            (``sqlite`` / ``duckdb`` also accept the database path as
-            ``database=`` or ``uri=``). Connections opened here are closed
-            again before returning.
+        path: A local path, a ``file:`` URI, or an ``s3://`` URI. A directory
+            is a Parquet dataset.
+        format: ``'csv'`` or ``'parquet'``, for a path whose name does not
+            say which it is.
+        storage_options: For an ``s3://`` path, passed to ``s3fs``, e.g. an
+            endpoint or an explicit credential.
 
     Returns:
         The rows as a ``pd.DataFrame``.
 
     Raises:
-        ConnectorError: With a stable ``code`` -- ``UNKNOWN_CONNECTOR``,
-            ``INVALID_CONNECTOR_ARGS``, ``CONNECT_FAILED``, ``QUERY_FAILED``,
-            ``READ_FAILED`` or ``NOT_FOUND`` -- and the driver exception
-            chained as ``__cause__``.
-        MissingBackendError: If the source's optional driver is not installed.
+        ConnectorError: With a stable ``code`` -- ``INVALID_CONNECTOR_ARGS``,
+            ``CONNECT_FAILED``, ``READ_FAILED`` or ``NOT_FOUND`` -- and the
+            driver exception chained as ``__cause__``.
+        MissingBackendError: For an ``s3://`` path without ``s3fs``.
     """
-    if source == 'local':
-        return _read_local(**kwargs)
-    if source == 's3':
-        return _read_s3(**kwargs)
-    if source not in _SQL_SOURCES:
+    path = _as_path_str(path)
+    if path.startswith('s3://'):
+        require_driver('s3', 's3fs', 's3fs')
+        return _read_file(path, storage_options=storage_options, format=format)
+    _require_local_path(path)
+    if storage_options is not None:
         raise ConnectorError(
-            f'Unknown connector {source!r}; supported: '
-            f'{sorted((*_FILE_SOURCES, *_SQL_SOURCES))}',
-            code='UNKNOWN_CONNECTOR',
+            f'storage_options applies to an s3:// path, not to the local '
+            f'path {path!r}',
+            code='INVALID_CONNECTOR_ARGS',
+            details={'path': path},
         )
-
-    table = kwargs.pop('table', None)
-    query = kwargs.pop('query', None)
-    if source in ('sqlite', 'duckdb'):
-        if 'database' in kwargs and 'uri' in kwargs:
-            raise ConnectorError(
-                f"{source} connector accepts exactly one of 'database' or "
-                f"'uri', not both",
-                code='INVALID_CONNECTOR_ARGS',
-            )
-        uri = kwargs.pop('database', None)
-        uri = kwargs.pop('uri', uri)
-        connection = connect(source, uri, **kwargs)
-    else:
-        connection = connect(source, **kwargs)
-
-    try:
-        return read_table(connection, table=table, query=query)
-    finally:
-        if owns_connection(connection):
-            with suppress(Exception):
-                connection.close()
+    return _read_file(path, format=format)
 
 
 def _query_handle(connection: Any) -> tuple[Any, bool]:
@@ -246,49 +227,7 @@ def _arrow_to_pandas(arrow_table: Any) -> pd.DataFrame:
     return df
 
 
-def _read_local(
-    *,
-    data: pd.DataFrame | dict[str, Any] | None = None,
-    path: str | None = None,
-    format: str | None = None,
-    **extra: Any,
-) -> pd.DataFrame:
-    if extra:
-        raise ConnectorError(
-            f'local connector got unexpected arguments {sorted(extra)}; '
-            "supported: 'data', 'path' and 'format'",
-            code='INVALID_CONNECTOR_ARGS',
-            details={'arguments': sorted(extra)},
-        )
-    if data is not None and path is not None:
-        raise ConnectorError(
-            "local connector accepts exactly one of 'data' or 'path', not both",
-            code='INVALID_CONNECTOR_ARGS',
-        )
-    if data is not None:
-        if isinstance(data, pd.DataFrame):
-            return data
-        try:
-            return _narrow_nullable_dtypes(
-                pd.DataFrame(_integer_columns_exactly(data))
-            )
-        except (ValueError, TypeError) as error:
-            raise ConnectorError(
-                f'local connector could not build a DataFrame from '
-                f"'data': {error}",
-                code='INVALID_CONNECTOR_ARGS',
-            ) from error
-    if path is None:
-        raise ConnectorError(
-            "local connector requires either 'data' or 'path'",
-            code='INVALID_CONNECTOR_ARGS',
-        )
-    path = _as_path_str('local', path)
-    _require_local_path(path)
-    return _read_file(path, format=format)
-
-
-def _as_path_str(backend: str, path: Any) -> str:
+def _as_path_str(path: Any) -> str:
     r"""Coerce a filesystem path argument to ``str`` before validation.
 
     File readers parse schemes, prefixes and suffixes as strings. Coercing
@@ -302,8 +241,8 @@ def _as_path_str(backend: str, path: Any) -> str:
         coerced = os.fspath(path)
     except TypeError as error:
         raise ConnectorError(
-            f'{backend} connector requires a filesystem path as a string or '
-            f'os.PathLike, got {type(path).__name__}',
+            f'read requires a path as a string or os.PathLike, got '
+            f'{type(path).__name__}',
             code='INVALID_CONNECTOR_ARGS',
             details={'path': repr(path)},
         ) from error
@@ -311,21 +250,20 @@ def _as_path_str(backend: str, path: Any) -> str:
 
 
 def _require_local_path(path: str) -> None:
-    r"""Reject a URI handed to the connector named ``local``.
+    r"""Reject a URI that is neither ``file:`` nor ``s3://``.
 
-    ``pandas`` resolves any fsspec/urllib-supported URL, so without this the
-    'safe, no-network' source reaches the network and returns the response as
-    a DataFrame. A single-character scheme is a Windows drive letter, not a
-    URI. A ``file://`` URI naming a host is refused too: ``urllib`` drops the
-    authority and reads the path locally, so the URI does not mean what it
-    says.
+    ``pandas`` resolves any fsspec/urllib-supported URL, so without this a
+    path the caller meant as local reaches the network and returns the
+    response as a DataFrame. A single-character scheme is a Windows drive
+    letter, not a URI. A ``file://`` URI naming a host is refused too:
+    ``urllib`` drops the authority and reads the path locally, so the URI does
+    not mean what it says.
     """
     parsed = urlparse(path)
     if len(parsed.scheme) > 1 and parsed.scheme != 'file':
         raise ConnectorError(
-            f'the local connector reads local filesystem paths, got a '
-            f'{parsed.scheme!r} URI: {path!r}. Use the matching connector, '
-            f"e.g. source='s3'.",
+            f'read takes a local path, a file: URI or an s3:// URI, got a '
+            f'{parsed.scheme!r} URI: {path!r}',
             code='INVALID_CONNECTOR_ARGS',
             details={'path': path},
         )
@@ -334,41 +272,11 @@ def _require_local_path(path: str) -> None:
         'localhost',
     ):
         raise ConnectorError(
-            f'the local connector reads local filesystem paths, got a '
-            f'file:// URI naming the host {parsed.netloc!r}: {path!r}',
+            f'read takes a file: URI only for a local path, got one naming '
+            f'the host {parsed.netloc!r}: {path!r}',
             code='INVALID_CONNECTOR_ARGS',
             details={'path': path},
         )
-
-
-def _read_s3(
-    *,
-    path: str | None = None,
-    storage_options: dict[str, Any] | None = None,
-    format: str | None = None,
-    **extra: Any,
-) -> pd.DataFrame:
-    if extra:
-        raise ConnectorError(
-            f's3 connector got unexpected arguments {sorted(extra)}; '
-            "supported: 'path', 'storage_options' and 'format'",
-            code='INVALID_CONNECTOR_ARGS',
-            details={'arguments': sorted(extra)},
-        )
-    if path is None:
-        raise ConnectorError(
-            "s3 connector requires 'path' (an s3:// object URI)",
-            code='INVALID_CONNECTOR_ARGS',
-        )
-    path = _as_path_str('s3', path)
-    if not path.startswith('s3://'):
-        raise ConnectorError(
-            f's3 connector requires an s3:// URI, got {path!r}',
-            code='INVALID_CONNECTOR_ARGS',
-            details={'path': path},
-        )
-    require_driver('s3', 's3fs', 's3fs')
-    return _read_file(path, storage_options=storage_options, format=format)
 
 
 def _is_directory(

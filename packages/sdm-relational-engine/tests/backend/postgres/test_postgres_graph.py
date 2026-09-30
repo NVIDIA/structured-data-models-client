@@ -15,7 +15,7 @@ from sdm_relational_engine.rfm import Graph, KumoRelational
 
 try:
     import psycopg
-    from sdm_connectors import connect, read
+    from sdm_connectors import connect, read_table
     from sdm_relational_engine.rfm.backend.postgres import PostgresSampler
 except ImportError:
     if os.getenv('SDM_REQUIRE_POSTGRES'):
@@ -143,11 +143,8 @@ def test_from_postgres_discovers_constraints_and_pushes_down_sampling(
     postgres_schema: tuple[str, str],
 ) -> None:
     dsn, schema = postgres_schema
-    flat_table = read(
-        'postgres',
-        conninfo=dsn,
-        table=f'{schema}.customers',
-    )
+    with psycopg.connect(dsn) as connection:
+        flat_table = read_table(connection, table=f'{schema}.customers')
     assert len(flat_table) == 20
 
     graph = Graph.from_postgres(

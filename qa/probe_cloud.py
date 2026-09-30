@@ -44,7 +44,7 @@ def run_s3(client):
         local = SCRATCH / 'adult.csv'
         adult.to_csv(local, index=False)
         fs.put(str(local), f'{BUCKET}/qa/adult.csv')
-        frame = read('s3', path=f'{PREFIX}/adult.csv')
+        frame = read(f'{PREFIX}/adult.csv')
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows')
         elif len(scores(client, frame, 'income')) != 3:
@@ -54,7 +54,7 @@ def run_s3(client):
         local = SCRATCH / 'adult.parquet'
         adult.to_parquet(local, index=False)
         fs.put(str(local), f'{BUCKET}/qa/adult.parquet')
-        frame = read('s3', path=f'{PREFIX}/adult.parquet')
+        frame = read(f'{PREFIX}/adult.parquet')
         if not frame.dtypes.equals(adult.dtypes):
             fail(e, 'dtypes changed over s3')
 
@@ -64,7 +64,7 @@ def run_s3(client):
         local = SCRATCH / 'adult.csv.gz'
         adult.to_csv(local, index=False, compression='gzip')
         fs.put(str(local), f'{BUCKET}/qa/adult.csv.gz')
-        frame = read('s3', path=f'{PREFIX}/adult.csv.gz')
+        frame = read(f'{PREFIX}/adult.csv.gz')
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows')
 
@@ -83,7 +83,7 @@ def run_s3(client):
             parts.append(path)
         for path in parts:
             fs.put(str(path), f'{BUCKET}/qa/parts/{path.name}')
-        frame = read('s3', path=f'{PREFIX}/parts')
+        frame = read(f'{PREFIX}/parts')
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows from a 2-object prefix')
 
@@ -91,7 +91,7 @@ def run_s3(client):
         AREA, 'a key that is not there', 'a ConnectorError naming the key'
     ) as e:
         try:
-            read('s3', path=f'{PREFIX}/missing.csv')
+            read(f'{PREFIX}/missing.csv')
             fail(e, 'a missing key was accepted')
         except (ConnectorError, FileNotFoundError, OSError) as exc:
             note(e, f'{type(exc).__name__}: {str(exc)[:120]}')
@@ -100,39 +100,20 @@ def run_s3(client):
         AREA, 'a bucket that is not there', 'a clear error, not a hang'
     ) as e:
         try:
-            read('s3', path='s3://sdm-client-qa-does-not-exist-42/x.csv')
+            read('s3://sdm-client-qa-does-not-exist-42/x.csv')
             fail(e, 'a missing bucket was accepted')
         except Exception as exc:  # noqa: BLE001
             note(e, f'{type(exc).__name__}: {str(exc)[:120]}')
 
     with probe(
-        AREA,
-        'a local path given to the s3 connector',
-        'refused, pointing at local',
-    ) as e:
-        try:
-            read('s3', path=str(SCRATCH / 'adult.csv'))
-            fail(e, 'the s3 connector accepted a local path')
-        except ConnectorError as exc:
-            note(e, str(exc)[:140])
-
-    with probe(
         AREA, 'storage_options reach s3fs', 'an explicit region is honoured'
     ) as e:
         frame = read(
-            's3',
-            path=f'{PREFIX}/adult.csv',
+            f'{PREFIX}/adult.csv',
             storage_options={'client_kwargs': {'region_name': 'us-west-2'}},
         )
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows')
-
-    with probe(AREA, 'an unexpected keyword', 'refused by name') as e:
-        try:
-            read('s3', path=f'{PREFIX}/adult.csv', nonsense=1)
-            fail(e, 'an unknown keyword was accepted')
-        except ConnectorError as exc:
-            note(e, str(exc)[:140])
 
 
 def cleanup():

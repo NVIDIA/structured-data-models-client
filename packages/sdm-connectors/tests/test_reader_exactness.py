@@ -42,7 +42,7 @@ def wire(series: pd.Series) -> list:
 def test_a_csv_integer_column_with_a_blank_stays_exact(tmp_path):
     path = tmp_path / 'ids.csv'
     path.write_text(f'id,v\n{BIG},1.0\n,2.0\n{BIG + 2},3.0\n')
-    frame = read('local', path=str(path))
+    frame = read(str(path))
     assert wire(frame['id']) == [str(BIG), None, str(BIG + 2)]
 
 
@@ -50,7 +50,7 @@ def test_a_csv_without_a_blank_keeps_its_plain_dtypes(tmp_path):
     """Nothing ordinary should start looking unusual."""
     path = tmp_path / 'plain.csv'
     path.write_text('a,b,c\n1,x,1.5\n2,y,2.5\n')
-    frame = read('local', path=str(path))
+    frame = read(str(path))
     assert frame.dtypes.equals(pd.read_csv(path).dtypes)
 
 
@@ -58,39 +58,46 @@ def test_a_csv_float_column_with_a_blank_is_still_a_float(tmp_path):
     path = tmp_path / 'floats.csv'
     # Two columns, so the gap is a blank field rather than a blank line.
     path.write_text('f,g\n1.5,1\n,2\n2.5,3\n')
-    frame = read('local', path=str(path))
+    frame = read(str(path))
     assert pd.api.types.is_float_dtype(frame['f'])
     assert wire(frame['f']) == [1.5, None, 2.5]
 
 
-# --- data=: the DataFrame constructor promotes too ---------------------------
+# --- rows: the DataFrame constructor promotes too ----------------------------
 
 
-def test_a_python_int_list_with_a_none_stays_exact():
-    frame = read(
-        'local', data={'id': [BIG, None, BIG + 2], 'v': [1.0, 2.0, 3.0]}
-    )
-    assert wire(frame['id']) == [str(BIG), None, str(BIG + 2)]
+def from_rows(**columns: list) -> pd.DataFrame:
+    r"""What `read_table` makes of these columns from a driver that offers
+    neither Arrow nor a pandas fetch, only rows."""
+    rows = list(zip(*columns.values(), strict=True))
 
+    class Cursor:
+        description = [(name,) for name in columns]
 
-def test_a_python_int_list_without_a_none_is_a_plain_int64():
-    frame = read('local', data={'id': [BIG, BIG + 2]})
-    assert str(frame['id'].dtype) == 'int64'
+        def execute(self, sql):
+            pass
+
+        def fetchall(self):
+            return rows
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+    return read_table(Connection(), query='select 1')
 
 
 def test_a_float_list_with_a_none_is_left_alone():
-    frame = read('local', data={'v': [1.5, None, 2.5]})
+    frame = from_rows(v=[1.5, None, 2.5])
     assert pd.api.types.is_float_dtype(frame['v'])
 
 
 def test_a_bool_list_is_not_mistaken_for_integers():
-    frame = read('local', data={'flag': [True, None, False]})
+    frame = from_rows(flag=[True, None, False])
     assert not pd.api.types.is_integer_dtype(frame['flag'])
-
-
-def test_a_dataframe_passed_through_data_is_untouched():
-    original = pd.DataFrame({'id': [BIG, BIG + 2]})
-    assert read('local', data=original) is original
 
 
 # --- DuckDB: Arrow before the driver's own pandas conversion ----------------
@@ -145,7 +152,7 @@ def test_a_local_directory_is_a_parquet_dataset(tmp_path):
     frame = pd.DataFrame({'a': range(4)})
     frame.head(2).to_parquet(directory / 'p0.parquet', index=False)
     frame.tail(2).to_parquet(directory / 'p1.parquet', index=False)
-    assert len(read('local', path=str(directory))) == 4
+    assert len(read(str(directory))) == 4
 
 
 def test_a_remote_prefix_is_not_asked_of_the_local_filesystem():
@@ -194,7 +201,7 @@ def test_a_trailing_slash_still_means_a_directory():
     assert _resolve_format('s3://bucket/prefix/') == 'parquet'
 
 
-# --- data=: what pandas would have done, only exact -------------------------
+# --- rows: what pandas would have done, only exact --------------------------
 
 
 @pytest.mark.parametrize(
@@ -210,30 +217,12 @@ def test_an_integer_outside_int64_is_left_to_pandas(label, values):
 
     Forcing the dtype raised `OverflowError` where nothing used to fail.
     """
-    frame = read('local', data={'id': values})
+    frame = from_rows(id=values)
     assert str(frame['id'].iloc[0]) == str(values[0])
 
 
-def test_a_pandas_na_is_a_null_like_any_other():
-    frame = read('local', data={'id': [BIG, pd.NA, BIG + 2]})
-    assert wire(frame['id']) == [str(BIG), None, str(BIG + 2)]
-
-
-def test_a_numpy_integer_with_a_null_stays_exact():
-    """A numpy scalar is an integer too, and used to round."""
-    import numpy as np
-
-    frame = read('local', data={'id': [np.int64(BIG), None]})
-    assert wire(frame['id']) == [str(BIG), None]
-
-
-def test_a_bool_column_with_a_null_is_not_made_an_integer():
-    frame = read('local', data={'flag': [True, None, False]})
-    assert not pd.api.types.is_integer_dtype(frame['flag'])
-
-
 def test_an_empty_column_is_left_alone():
-    frame = read('local', data={'id': [], 'v': []})
+    frame = from_rows(id=[], v=[])
     assert len(frame) == 0
 
 
@@ -241,9 +230,7 @@ def test_a_string_column_lands_where_a_plain_read_would_put_it(tmp_path):
     """The null-aware backend must not change what an ordinary read gives."""
     path = tmp_path / 'strings.csv'
     path.write_text('a,b\n1,x\n2,y\n')
-    assert (
-        read('local', path=str(path))['b'].dtype == pd.read_csv(path)['b'].dtype
-    )
+    assert read(str(path))['b'].dtype == pd.read_csv(path)['b'].dtype
 
 
 def test_an_unreachable_store_error_carries_a_code():
@@ -301,7 +288,7 @@ def test_a_parquet_nullable_integer_is_not_rounded(tmp_path):
         path,
     )
 
-    frame = read('local', path=str(path))
+    frame = read(str(path))
 
     assert str(frame['id'].iloc[0]) == '9007199254740993'
 
@@ -315,7 +302,7 @@ def test_a_parquet_integer_without_nulls_stays_a_plain_integer(tmp_path):
     path = tmp_path / 'plain.parquet'
     pq.write_table(pa.table({'n': pa.array([1, 2], type=pa.int64())}), path)
 
-    assert str(read('local', path=str(path))['n'].dtype) == 'int64'
+    assert str(read(str(path))['n'].dtype) == 'int64'
 
 
 def test_a_parquet_decimal_is_still_a_decimal(tmp_path):
@@ -335,7 +322,7 @@ def test_a_parquet_decimal_is_still_a_decimal(tmp_path):
         path,
     )
 
-    value = read('local', path=str(path))['d'].iloc[0]
+    value = read(str(path))['d'].iloc[0]
 
     assert isinstance(value, Decimal)
     assert str(value) == '1.234567890123456789'
@@ -380,25 +367,22 @@ def test_an_integer_too_wide_for_int64_survives_a_null_beside_it():
     Without a null pandas keeps such a column `object` on its own, which is
     what made this look handled.
     """
-    frame = read('local', data={'id': [9223372036854775809, None]})
+    frame = from_rows(id=[9223372036854775809, None])
 
     assert str(frame['id'].iloc[0]) == '9223372036854775809'
 
 
 def test_a_column_pandas_already_keeps_exact_is_unchanged():
-    frame = read('local', data={'id': [9223372036854775809, 1]})
+    frame = from_rows(id=[9223372036854775809, 1])
 
     assert str(frame['id'].iloc[0]) == '9223372036854775809'
 
 
 def test_ordinary_columns_are_not_turned_into_objects():
     """Only a column holding an integer too wide for Int64 takes that path."""
-    assert str(read('local', data={'x': [1.5, None]})['x'].dtype) == 'float64'
-    assert str(read('local', data={'b': [True, False]})['b'].dtype) == 'bool'
-    assert (
-        str(read('local', data={'id': [9007199254740993, None]})['id'].dtype)
-        == 'Int64'
-    )
+    assert str(from_rows(x=[1.5, None])['x'].dtype) == 'float64'
+    assert str(from_rows(b=[True, False])['b'].dtype) == 'bool'
+    assert str(from_rows(id=[9007199254740993, None])['id'].dtype) == 'Int64'
 
 
 # --- a value keeps the column it was in ------------------------------------

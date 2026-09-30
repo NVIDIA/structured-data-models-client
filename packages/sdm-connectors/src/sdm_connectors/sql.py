@@ -87,8 +87,8 @@ def connect_with(backend: str, opener: Any, *args: Any, **kwargs: Any) -> Any:
         raise ConnectorError(
             f'{backend} connector got an unsupported argument: {error}. It '
             f"takes the database as 'database' or 'uri'; other arguments are "
-            f"passed to the driver. To read a local file, use read('local', "
-            f'path=...) instead.',
+            f'passed to the driver. To read a CSV or Parquet file, use '
+            f'read(path) instead.',
             code='INVALID_CONNECTOR_ARGS',
             details={'backend': backend, 'arguments': sorted(kwargs)},
         ) from error

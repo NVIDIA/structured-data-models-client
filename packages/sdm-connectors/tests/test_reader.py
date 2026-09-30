@@ -45,58 +45,27 @@ class _FakeConnection:
         return self._cursor
 
 
-def test_read_unknown_connector_raises():
-    with pytest.raises(ConnectorError) as excinfo:
-        read('mysql')
-    assert excinfo.value.code == 'UNKNOWN_CONNECTOR'
-
-
-def test_read_local_from_dataframe():
-    frame = pd.DataFrame({'a': [1, 2]})
-    assert read('local', data=frame) is frame
-
-
-def test_read_local_from_dict():
-    assert read('local', data={'a': [1, 2, 3]}).shape == (3, 1)
+def _adbc_sqlite(database: str):
+    dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
+    return dbapi.connect(database)
 
 
 def test_read_local_from_csv(tmp_path):
     path = tmp_path / 'table.csv'
     pd.DataFrame({'a': [1, 2], 'b': ['x', 'y']}).to_csv(path, index=False)
-    assert read('local', path=str(path)).shape == (2, 2)
+    assert read(str(path)).shape == (2, 2)
 
 
 def test_read_local_from_parquet(tmp_path):
     path = tmp_path / 'table.parquet'
     pd.DataFrame({'a': [1, 2, 3]}).to_parquet(path)
-    assert read('local', path=str(path)).shape == (3, 1)
-
-
-def test_read_local_without_data_or_path_raises():
-    with pytest.raises(ConnectorError) as excinfo:
-        read('local')
-    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-
-
-def test_read_local_rejects_both_data_and_path(tmp_path):
-    path = tmp_path / 'table.csv'
-    pd.DataFrame({'a': [1]}).to_csv(path, index=False)
-    with pytest.raises(ConnectorError) as excinfo:
-        read('local', data={'a': [1]}, path=str(path))
-    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-
-
-def test_read_local_rejects_unknown_kwarg():
-    with pytest.raises(ConnectorError) as excinfo:
-        read('local', data={'a': [1]}, bogus=1)
-    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-    assert excinfo.value.details['arguments'] == ['bogus']
+    assert read(str(path)).shape == (3, 1)
 
 
 def test_read_local_rejects_storage_options():
     """Valid for s3, not for local."""
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path='table.csv', storage_options={})
+        read('table.csv', storage_options={})
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
@@ -105,7 +74,7 @@ def test_read_local_rejects_unsupported_format(tmp_path, name):
     path = tmp_path / name
     pd.DataFrame({'a': [1, 2, 3], 'b': ['x', 'y', 'z']}).to_json(path)
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=str(path))
+        read(str(path))
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
     assert excinfo.value.details['suffix'] == PurePosixPath(name).suffix
 
@@ -114,22 +83,22 @@ def test_read_local_accepts_parquet_aliases(tmp_path):
     """'.pq' is Parquet."""
     path = tmp_path / 'table.pq'
     pd.DataFrame({'a': [1, 2, 3]}).to_parquet(path)
-    assert read('local', path=str(path)).shape == (3, 1)
+    assert read(str(path)).shape == (3, 1)
 
 
 def test_read_local_accepts_compressed_csv(tmp_path):
     path = tmp_path / 'table.csv.gz'
     pd.DataFrame({'a': [1, 2]}).to_csv(path, index=False)
-    assert read('local', path=str(path)).shape == (2, 1)
+    assert read(str(path)).shape == (2, 1)
 
 
 def test_read_local_format_override_reads_suffixless_file(tmp_path):
     """Escape hatch."""
     path = tmp_path / 'table'
     pd.DataFrame({'a': [1, 2]}).to_csv(path, index=False)
-    assert read('local', path=str(path), format='csv').shape == (2, 1)
+    assert read(str(path), format='csv').shape == (2, 1)
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=str(path), format='avro')
+        read(str(path), format='avro')
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
@@ -137,24 +106,29 @@ def test_read_local_parquet_directory_without_trailing_slash(tmp_path):
     dataset = tmp_path / 'dataset'
     dataset.mkdir()
     pd.DataFrame({'a': [1, 2, 3]}).to_parquet(dataset / 'part-0.parquet')
-    assert read('local', path=str(dataset)).shape == (3, 1)
+    assert read(str(dataset)).shape == (3, 1)
 
 
-def test_read_sqlite_missing_database_is_not_found(tmp_path):
+def test_the_sqlite_backend_refuses_a_missing_database(tmp_path):
+    """The engine opens its own connection from a path, and a read must not
+    create the database it was pointed at."""
+    from sdm_connectors.backends import sqlite
+
     database = tmp_path / 'typo.sqlite'
     with pytest.raises(ConnectorError) as excinfo:
-        read('sqlite', database=str(database), table='items')
+        sqlite.connect(str(database))
     assert excinfo.value.code == 'NOT_FOUND'
     assert not database.exists()
 
 
-def test_read_sqlite_rejects_database_and_uri_together(tmp_path):
+def test_the_sqlite_backend_refuses_database_and_uri_together(tmp_path):
+    from sdm_connectors.backends import sqlite
+
     first, second = str(tmp_path / 'a.sqlite'), str(tmp_path / 'b.sqlite')
     for database in (first, second):
-        with sqlite3.connect(database) as connection:
-            pd.DataFrame({'a': [1]}).to_sql('items', connection, index=False)
+        sqlite3.connect(database).close()
     with pytest.raises(ConnectorError) as excinfo:
-        read('sqlite', database=first, uri=second, table='items')
+        sqlite.connect(first, database=second)
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
@@ -176,47 +150,47 @@ def test_read_table_runs_in_the_caller_duckdb_session():
         connection.close()
 
 
-def test_read_sqlite_by_table_and_query(tmp_path):
+def test_read_table_over_sqlite_by_table_and_query(tmp_path):
     database = str(tmp_path / 'db.sqlite')
     with sqlite3.connect(database) as connection:
         pd.DataFrame({'a': [1, 2, 3]}).to_sql('items', connection, index=False)
-    assert len(read('sqlite', database=database, table='items')) == 3
-    assert (
-        len(
-            read(
-                'sqlite',
-                database=database,
-                query='SELECT * FROM items WHERE a > 1',
-            )
+    connection = _adbc_sqlite(database)
+    try:
+        assert len(read_table(connection, table='items')) == 3
+        assert (
+            len(read_table(connection, query='SELECT * FROM items WHERE a > 1'))
+            == 2
         )
-        == 2
-    )
+    finally:
+        connection.close()
 
 
-def test_read_duckdb_in_memory_query():
-    frame = read('duckdb', query='SELECT 1 AS a, 2 AS b')
-    assert frame.shape == (1, 2)
-    assert int(frame['a'][0]) == 1
-
-
-def test_read_duckdb_by_table(tmp_path):
-    database = str(tmp_path / 'db.duckdb')
+def test_read_table_over_duckdb_by_table(tmp_path):
     import duckdb
 
+    database = str(tmp_path / 'db.duckdb')
     connection = duckdb.connect(database)
     connection.execute('CREATE TABLE items AS SELECT * FROM range(5) AS t(a)')
     connection.close()
-    assert len(read('duckdb', database=database, table='items')) == 5
+    connection = duckdb.connect(database, read_only=True)
+    try:
+        assert len(read_table(connection, table='items')) == 5
+    finally:
+        connection.close()
 
 
-def test_read_sqlite_keeps_nullable_integers_exact(tmp_path):
+def test_read_table_over_sqlite_keeps_nullable_integers_exact(tmp_path):
     database = str(tmp_path / 'ids.sqlite')
     with sqlite3.connect(database) as connection:
         connection.execute('CREATE TABLE users (user_id BIGINT, age INTEGER)')
         connection.execute('INSERT INTO users VALUES (?, 20)', (LARGE_ID,))
         connection.execute('INSERT INTO users VALUES (NULL, 30)')
 
-    frame = read('sqlite', database=database, table='users')
+    connection = _adbc_sqlite(database)
+    try:
+        frame = read_table(connection, table='users')
+    finally:
+        connection.close()
 
     assert frame['user_id'].dtype == 'Int64'
     assert frame['user_id'][0] == LARGE_ID
@@ -248,16 +222,15 @@ def test_read_table_falls_back_to_pandas_fetch_without_arrow_result():
 
 def test_read_local_accepts_a_path_object(tmp_path):
     """``_require_local_path`` ran ``urlparse`` on the raw argument, so a
-    ``pathlib.Path`` -- which the sibling ``sqlite``/``duckdb`` connectors
-    accept, and which ``pandas`` reads -- raised ``AttributeError`` from
-    inside ``urllib``, escaping the connector's error contract entirely.
+    ``pathlib.Path`` -- which ``pandas`` reads -- raised ``AttributeError``
+    from inside ``urllib``, escaping the connector's error contract entirely.
     """
     path = tmp_path / 'rows.csv'
     pd.DataFrame({'a': [1, 2]}).to_csv(path, index=False)
 
-    frame = read('local', path=path)
+    frame = read(path)
     assert frame.shape == (2, 1)
-    assert read('local', path=str(path)).equals(frame)
+    assert read(str(path)).equals(frame)
 
 
 def test_read_local_rejects_a_non_path_argument():
@@ -266,33 +239,40 @@ def test_read_local_rejects_a_non_path_argument():
     client's own error with a stable code.
     """
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=object())
+        read(object())
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
 def test_read_local_still_rejects_a_remote_uri_given_as_a_path(tmp_path):
     """The coercion runs before the scheme guard, so the guard must still see a
-    URI as a URI. See .
+    URI as a URI.
     """
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path='https://example.com/rows.csv')
+        read('https://example.com/rows.csv')
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
-def test_read_duckdb_missing_database_is_not_found(tmp_path):
+def test_the_duckdb_backend_refuses_a_missing_database(tmp_path):
     """The "a read must not write" guard landed on sqlite only; duckdb
     still created an empty database for a mistyped path and then blamed the
     table.
     """
     pytest.importorskip('duckdb')
+    from sdm_connectors.backends import duckdb
+
     database = tmp_path / 'typo.duckdb'
     with pytest.raises(ConnectorError) as excinfo:
-        read('duckdb', database=str(database), table='items')
+        duckdb.connect(str(database))
     assert excinfo.value.code == 'NOT_FOUND'
     assert not database.exists()
 
 
-def test_duckdb_in_memory_database_is_unaffected():
+def test_the_duckdb_backend_opens_an_in_memory_database():
     pytest.importorskip('duckdb')
-    frame = read('duckdb', database=':memory:', query='SELECT 1 AS a')
-    assert frame.shape == (1, 1)
+    from sdm_connectors.backends import duckdb
+
+    connection = duckdb.connect(database=':memory:')
+    try:
+        assert read_table(connection, query='SELECT 1 AS a').shape == (1, 1)
+    finally:
+        connection.close()

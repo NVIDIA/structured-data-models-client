@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-r"""The ``local`` connector must stay local."""
+r"""A path read as local must stay local."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def _serve() -> Iterator[tuple[ThreadingHTTPServer, str]]:
 def test_read_local_does_not_fetch_http_urls():
     with _serve() as (server, url):
         with pytest.raises(ConnectorError) as excinfo:
-            read('local', path=f'{url}/internal-metadata.csv')
+            read(f'{url}/internal-metadata.csv')
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
     assert server.received == []
 
@@ -65,14 +65,13 @@ def test_read_local_does_not_fetch_http_urls():
     'path',
     [
         'https://example.invalid/table.csv',
-        's3://bucket/key.csv',
         'gs://bucket/key.csv',
         'ftp://example.invalid/table.csv',
     ],
 )
 def test_read_local_rejects_remote_uris(path):
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=path)
+        read(path)
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
     assert 'local' in str(excinfo.value)
 
@@ -90,15 +89,15 @@ def test_read_local_rejects_file_uris_naming_a_host(path):
     That is not remote access, but the URI does not mean what it says.
     """
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path=path)
+        read(path)
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
 def test_read_local_still_reads_plain_and_file_uri_paths(tmp_path):
     path = tmp_path / 'table.csv'
     pd.DataFrame({'a': [1, 2], 'b': ['x', 'y']}).to_csv(path, index=False)
-    assert read('local', path=str(path)).shape == (2, 2)
-    assert read('local', path=path.as_uri()).shape == (2, 2)
+    assert read(str(path)).shape == (2, 2)
+    assert read(path.as_uri()).shape == (2, 2)
 
 
 def test_read_local_keeps_windows_style_drive_letters(tmp_path):
@@ -106,5 +105,5 @@ def test_read_local_keeps_windows_style_drive_letters(tmp_path):
     not a URI scheme, so it must reach the reader rather than be refused.
     """
     with pytest.raises(ConnectorError) as excinfo:
-        read('local', path='C:/does-not-exist.csv')
+        read('C:/does-not-exist.csv')
     assert excinfo.value.code == 'NOT_FOUND'

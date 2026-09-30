@@ -1116,7 +1116,7 @@
       },
       "read": {
         "kind": "callable",
-        "signature": "(source: 'str', **kwargs: 'Any') -> 'pd.DataFrame'"
+        "signature": "(path: 'str | os.PathLike[str]', *, format: 'str | None' = None, storage_options: 'dict[str, Any] | None' = None) -> 'pd.DataFrame'"
       },
       "read_table": {
         "kind": "callable",

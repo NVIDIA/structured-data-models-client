@@ -78,8 +78,7 @@ def storage_options():
 
 def test_read_s3_csv(storage_options):
     frame = read(
-        's3',
-        path=f's3://{BUCKET}/table.csv',
+        f's3://{BUCKET}/table.csv',
         storage_options=storage_options,
     )
     assert frame.shape == (3, 2)
@@ -88,8 +87,7 @@ def test_read_s3_csv(storage_options):
 
 def test_read_s3_parquet(storage_options):
     frame = read(
-        's3',
-        path=f's3://{BUCKET}/nested/table.parquet',
+        f's3://{BUCKET}/nested/table.parquet',
         storage_options=storage_options,
     )
     assert frame.shape == (3, 2)
@@ -98,8 +96,7 @@ def test_read_s3_parquet(storage_options):
 
 def test_read_s3_uppercase_parquet_suffix(storage_options):
     frame = read(
-        's3',
-        path=f's3://{BUCKET}/upper/TABLE.PARQUET',
+        f's3://{BUCKET}/upper/TABLE.PARQUET',
         storage_options=storage_options,
     )
     assert frame.shape == (3, 2)
@@ -107,8 +104,7 @@ def test_read_s3_uppercase_parquet_suffix(storage_options):
 
 def test_read_s3_parquet_dataset_prefix(storage_options):
     frame = read(
-        's3',
-        path=f's3://{BUCKET}/dataset/',
+        f's3://{BUCKET}/dataset/',
         storage_options=storage_options,
     )
     assert frame.shape == (3, 2)
@@ -117,8 +113,7 @@ def test_read_s3_parquet_dataset_prefix(storage_options):
 def test_read_s3_missing_object_maps_to_not_found(storage_options):
     with pytest.raises(ConnectorError) as excinfo:
         read(
-            's3',
-            path=f's3://{BUCKET}/absent.csv',
+            f's3://{BUCKET}/absent.csv',
             storage_options=storage_options,
         )
     assert excinfo.value.code == 'NOT_FOUND'
@@ -128,8 +123,7 @@ def test_read_s3_missing_object_maps_to_not_found(storage_options):
 def test_read_s3_unreachable_endpoint_maps_to_read_failed():
     with pytest.raises(ConnectorError) as excinfo:
         read(
-            's3',
-            path='s3://bucket/table.csv',
+            's3://bucket/table.csv',
             storage_options={
                 'key': 'x',
                 'secret': 'x',
@@ -144,32 +138,11 @@ def test_read_s3_unreachable_endpoint_maps_to_read_failed():
     assert excinfo.value.details['path'] == 's3://bucket/table.csv'
 
 
-def test_read_s3_without_path_raises():
+def test_another_object_store_is_refused_naming_s3():
     with pytest.raises(ConnectorError) as excinfo:
-        read('s3')
+        read('gs://bucket/table.csv')
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-
-
-def test_read_s3_rejects_unexpected_arguments():
-    with pytest.raises(ConnectorError) as excinfo:
-        read('s3', path='s3://bucket/table.csv', table='items')
-    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-    assert excinfo.value.details['arguments'] == ['table']
-
-
-def test_read_s3_rejects_non_s3_uri(tmp_path):
-    path = tmp_path / 'table.csv'
-    pd.DataFrame({'a': [1]}).to_csv(path, index=False)
-    with pytest.raises(ConnectorError) as excinfo:
-        read('s3', path=str(path))
-    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-    assert excinfo.value.details['path'] == str(path)
-
-
-def test_unknown_connector_message_lists_s3():
-    with pytest.raises(ConnectorError) as excinfo:
-        read('gcs')
-    assert "'s3'" in excinfo.value.message
+    assert 's3://' in excinfo.value.message
 
 
 def test_read_s3_missing_driver_raises(monkeypatch):
@@ -178,7 +151,7 @@ def test_read_s3_missing_driver_raises(monkeypatch):
 
     monkeypatch.setattr(importlib, 'import_module', raise_missing)
     with pytest.raises(MissingBackendError) as excinfo:
-        read('s3', path='s3://bucket/table.csv')
+        read('s3://bucket/table.csv')
     assert excinfo.value.backend == 's3'
     assert excinfo.value.driver == 's3fs'
     assert 'sdm-connectors[s3]' in str(excinfo.value)
@@ -192,8 +165,7 @@ def test_read_s3_live():
     anon = os.environ.get('KUMO_RELATIONAL_S3_LIVE_ANON', '').lower()
     options = {'anon': True} if anon in ('1', 'true', 'yes') else None
     frame = read(
-        's3',
-        path=os.environ['KUMO_RELATIONAL_S3_LIVE_URI'],
+        os.environ['KUMO_RELATIONAL_S3_LIVE_URI'],
         storage_options=options,
     )
     assert len(frame) > 0
