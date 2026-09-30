@@ -37,9 +37,7 @@ def probe(area: str, name: str, expect: str):
         entry['status'], entry['status']
     )
     detail = entry.get('error') or entry.get('detail') or ''
-    print(
-        f'{mark:5} [{area}] {name}' + (f' -- {detail[:160]}' if detail else '')
-    )
+    print(f'{mark:5} [{area}] {name}' + (f': {detail[:160]}' if detail else ''))
 
 
 def fail(entry: dict, detail: str) -> None:

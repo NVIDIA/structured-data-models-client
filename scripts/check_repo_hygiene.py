@@ -10,7 +10,7 @@ added without one is otherwise invisible until a release audit finds it.
 
 ``retired`` asserts no shipped file sends a reader to an interface this client
 dropped. An example naming one is worse than no example, and a sweep that
-chooses its own roots will miss a tree -- so this enumerates from
+chooses its own roots will miss a tree, so this enumerates from
 ``git ls-files``.
 
 ``internal`` asserts no internal-only reference reaches a *shipped* file. The
@@ -113,7 +113,7 @@ SHIPPED_NAMES = {'LICENSE', 'NOTICE'}
 # Interfaces earlier generations of this client had. An example naming one sends
 # a reader to an API that does not exist, which is why this is scanned for
 # rather than left to review. The scan covers every tracked shipped file,
-# including notebooks and per-package example directories -- a sweep that
+# including notebooks and per-package example directories. A sweep that
 # looked only at `src/` and the top-level `examples/` missed a whole tree.
 RETIRED_INTERFACES = (
     'RelationalClient',

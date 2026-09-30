@@ -32,7 +32,7 @@ Five packages are released together and share a version:
 
 - `sdm-client`: the client, the schema, and the model handles
 - `sdm-api`: the generated wire types for the Universal TFM API, and nothing else
-- `sdm-pql`: the Predictive Query Language — parser, AST and schema types
+- `sdm-pql`: the Predictive Query Language, with parser, AST and schema types
 - `sdm-connectors`: reading source tables from warehouses and object stores
 - `sdm-relational-engine`: the relational driver, graph building and sampling
 

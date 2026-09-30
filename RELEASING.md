@@ -19,7 +19,8 @@ mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/
 python scripts/check_repo_hygiene.py all
 ```
 
-Then, against running NIMs — a release should not be the first time these run:
+Then, against running NIMs, because a release should not be the first time
+these run:
 
 ```bash
 SDM_TABULAR_URL=... SDM_RELATIONAL_URL=... \
@@ -50,7 +51,7 @@ git tag v1.2.0 && git push origin v1.2.0
 
 That is the whole release. `.github/workflows/publish.yml` builds the four
 pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
-(cp310–cp313, manylinux x86-64, each smoke-imported), and then refuses to
+(cp310 to cp313, manylinux x86-64, each smoke-imported), and then refuses to
 continue unless **all five** are present and agree with the tag. That check is
 not ceremony: `sdm-client[relational]` pins the engine by exact version, so a
 release missing it publishes an extra nobody can install. It then generates the
@@ -72,6 +73,6 @@ python -m pypi_attestations verify pypi /tmp/verify/*.whl
 
 ## Yanking
 
-A release that is wrong is yanked, not deleted — deleting it breaks anyone who
+A release that is wrong is yanked, not deleted. Deleting it breaks anyone who
 pinned it, and yanking leaves it installable for them while keeping resolvers
 away from it. Yank on PyPI, then release the fix as a patch.

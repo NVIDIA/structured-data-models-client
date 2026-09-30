@@ -20,7 +20,7 @@ target-version = "py310"
 # that record on every run.
 # Prose, not source. A fenced snippet in a bug report is written to be read --
 # aligned comments comparing two behaviours, a query left on one line to show
-# its shape -- and formatting it as a module rewrites the thing being
+# its shape, and formatting it as a module rewrites the thing being
 # illustrated.
 extend-exclude = [
     "packages/sdm-pql/src/predictive_query/grammar",
@@ -35,7 +35,7 @@ select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 quote-style = "single"
 
 # Static type checking. Every distribution ships `py.typed`, which is a promise
-# made to other people's type checkers -- so one has to run here, or the
+# made to other people's type checkers, so one has to run here, or the
 # promise is only as good as the last person who happened to check.
 #
 # It is introduced the way a checker can be introduced to an existing tree
@@ -67,7 +67,7 @@ exclude = [
 # `ignore_errors` is blunt: it hides a *new* error in a listed module as well as
 # the recorded ones. That is the cost of adopting a checker on a tree this size
 # without rewriting it, and it is why the list is dated and counted rather than
-# open-ended -- the counts are what make a growing entry visible.
+# open-ended. The counts are what make a growing entry visible.
 [[tool.mypy.overrides]]
 module = [
     "sdm_client.materializers.relational",   # 15
@@ -76,7 +76,7 @@ module = [
     # decompose.py's eight are all "Item None of X has no attribute Y" on
     # `Aggregation | None` and `DateOffsetRange | None`. They may each be
     # guarded by something mypy cannot see, but they are the shape a real
-    # AttributeError takes, and they are in new code -- worth reading before
+    # AttributeError takes, and they are in new code, worth reading before
     # this entry is retired rather than after.
     "sdm_client.decompose",                  #  8
     "sdm_client.query",                      #  3
@@ -141,7 +141,7 @@ disable_error_code = ["unused-ignore"]
 # because line coverage counts an `if` as covered when only one side ever runs.
 #
 # What it found when it was first turned on, and what the number is for:
-# `predictive_query.rewriting` -- 401 statements, exported from that package's
+# `predictive_query.rewriting`: 401 statements, exported from that package's
 # `__all__`, reached by no test and imported by nothing in this repository.
 [tool.coverage.run]
 branch = true

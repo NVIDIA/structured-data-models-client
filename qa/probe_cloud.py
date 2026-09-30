@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""S3, Snowflake and Databricks -- the connectors that need real credentials.
+"""S3, Snowflake and Databricks: the connectors that need real credentials.
 
 Everything written here is written under a prefix this file also removes.
 """

@@ -290,7 +290,7 @@ class TestConfigurationTellsTheTruth:
         for rule in listed(backlog_block):
             assert not _covered_by(rule, selected), (
                 f'{rule} sits under "Recorded backlog", which says the shared '
-                f'baseline does not select it -- but {selected} does'
+                f'baseline does not select it, but {selected} does'
             )
 
     def test_the_tabular_task_kinds_match_what_the_model_declares(self):
@@ -517,7 +517,7 @@ class TestDocumentedExamples:
                     ]
                     assert not outside, (
                         f'the README imports {outside} from sdm_client, which '
-                        f'is not in __all__ -- so the first thing a new user '
+                        f'is not in __all__, so the first thing a new user '
                         f'copies is an unsupported import'
                     )
 
@@ -539,6 +539,7 @@ class TestInterpreterSupportIsStated:
         `'3.10' >= '3.9'` is False as strings, because `'1' < '9'`. Nothing
         here has a 3.9 floor today, so a lexical comparison happened to agree,
         and it would have started disagreeing silently at 3.20, in a helper
+        every version comparison in this file runs through.
         """
         return tuple(int(part) for part in version.split('.'))
 

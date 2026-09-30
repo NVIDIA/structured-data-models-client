@@ -4,7 +4,7 @@
 
 """Snowflake and Databricks: real warehouses, real types, into a prediction.
 
-The interesting question is not "does a SELECT work" -- it is whether what a
+The interesting question is not "does a SELECT work". It is whether what a
 warehouse hands back still means the same thing by the time it reaches a model.
 """
 

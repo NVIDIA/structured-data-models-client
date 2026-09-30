@@ -113,7 +113,7 @@ engine:
     - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
     # And root tests/ again, with the engine present. The `test` job runs them
     # without one, and the wire-payload snapshot deliberately excludes the
-    # relational case when the engine cannot build it -- so that case was
+    # relational case when the engine cannot build it, so that case was
     # recorded and then compared nowhere. Here it is compared.
     - python -m pytest tests -q
 
@@ -189,7 +189,7 @@ installed-wheel:
           location = pathlib.Path(module.__file__).resolve()
           assert 'site-packages' in location.parts, (
               f'{module.__name__} was imported from {location}, not from the '
-              f'installed wheel -- this job is testing the checkout again'
+              f'installed wheel, so this job is testing the checkout again'
           )
           marker = location.parent / 'py.typed'
           assert marker.is_file(), (

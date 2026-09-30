@@ -3,8 +3,8 @@ Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
-This distribution is first-party NVIDIA source -- the client, the schema and
-the model handles -- and vendors no third-party source.
+This distribution is first-party NVIDIA source: the client, the schema and
+the model handles. It vendors no third-party source.
 
 Everything it depends on is resolved by the package manager at install time and
 licensed by its own authors.
