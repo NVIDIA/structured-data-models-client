@@ -232,7 +232,7 @@ class BPFilterTransformer(FilterSplitter):
             # If there's no bp_non_applicable_filter, we just use the original
             # untouched text instead of the possibly-rewritten version in
             # split_fitler.bp_applicable_filter
-            # TODO (vid) Make this info-level if possible.
+            # Reported as a warning; an info level would suit it better.
             response.warnings.append(
                 ValidationWarning(
                     title='Target filter applied during batch prediction.',
@@ -273,7 +273,7 @@ class BPFilterTransformer(FilterSplitter):
                 + non_bold_prefix_len
                 + len(str(split_filter.applicable_filter)),
             )
-            # TODO (vid) Make this info-level if possible.
+            # Reported as a warning; an info level would suit it better.
             response.warnings.append(
                 ValidationWarning(
                     title='Target filter applied during batch prediction.',
@@ -323,9 +323,9 @@ class BPFilterTransformer(FilterSplitter):
                 may be modified.
 
         """
-        # TODO (vid): This method should be improved once we start storing
-        # locations in the original query as part of better error reporting.
-        # At the moment, this code recovers the query from the parsed tree
+        # This recovers the query text from the parsed tree, and could be
+        # simpler once locations in the original query are stored as part of
+        # error reporting. For now the text is recovered from the parsed tree
         # instead of using `original_query_text`. This is because it's hard
         # to determine which parts of the original query were dropped because
         # they don't belong into batch prediction, which parts were dropped

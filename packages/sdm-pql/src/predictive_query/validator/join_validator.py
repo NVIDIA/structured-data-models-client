@@ -505,7 +505,6 @@ class JoinValidator:
                 rhs_key=keys[0],
             ), response
         elif isinstance(node, Condition):
-            # replace the target
             filter_condition = entity_filter_condition
             if in_entity_filter and filter_condition is None:
                 filter_condition = repr(node)

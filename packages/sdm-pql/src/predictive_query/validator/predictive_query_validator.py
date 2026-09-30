@@ -103,7 +103,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # infer and validate types
         self.type_validator = TypeValidator(
             self.schema,
             allow_array_targets=self.allow_array_targets,
@@ -122,7 +121,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # validate problem type
         self.problem_type_validator = ProblemTypeValidator()
         response = merge(
             response,
@@ -131,7 +129,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # validate time ranges
         self.time_range_validator = TimeRangeValidator(self.schema, self.mode)
         response = merge(
             response,
@@ -140,12 +137,10 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # target filter validation
         response = merge(response, self.validate_target_filters(parsed_query))
         if not response.ok:
             return None, response
 
-        # infer and validate joins
         self.join_validator = JoinValidator(self.schema)
         response = merge(
             response, self.join_validator.infer_and_validate_joins(parsed_query)
@@ -153,7 +148,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # list distinct special rules validation
         response = merge(response, self.validate_list_distinct(parsed_query))
         if not response.ok:
             return None, response
@@ -497,7 +491,6 @@ class PredictiveQueryValidator:
                     valid_entities.append(
                         f'FOR EACH {col.table_name}.{col.col_name}'
                     )
-            # Show the error message to the user
             error_msg = (
                 f'{target_ast.get_location().message_start}: '
                 f'Target {target_fqn} creates a loop by pointing to the '

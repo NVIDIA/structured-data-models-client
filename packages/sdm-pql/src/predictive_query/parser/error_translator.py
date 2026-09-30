@@ -215,12 +215,10 @@ class ErrorTranslator:
 
         error_parts = []
 
-        # Add error summary if available
         error_summary = self._summarize_error(err)
         if error_summary is not None:
             error_parts.append(error_summary)
 
-        # Add specific error messages
         if isinstance(err.e, NoViableAltException):
             error_parts.append('Specific error: ')
             error_parts.extend(self._handle_no_viable_alt_exception(err))
@@ -241,7 +239,6 @@ class ErrorTranslator:
         if not error_parts:
             error_parts.append(self._default_error(err))
 
-        # Join all error parts with newlines
         return '\n'.join(error_parts)
 
     def _invalid_time_unit_error(

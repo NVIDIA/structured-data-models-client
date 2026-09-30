@@ -360,7 +360,6 @@ class FilterSplitter:
                 )
             )
 
-            # combine all non-applicable terms
             while len(non_applicable_terms) > 1:
                 term1 = non_applicable_terms.pop()
                 term2 = non_applicable_terms.pop()

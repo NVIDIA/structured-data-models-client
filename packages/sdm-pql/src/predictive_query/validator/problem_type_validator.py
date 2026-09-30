@@ -125,7 +125,6 @@ class ProblemTypeValidator:
                 ]
             )
 
-        # Rank problem requires top_k to be specified.
         if problem_type == ProblemType.RANK and query.top_k is None:
             return ValidationResponse(
                 errors=[

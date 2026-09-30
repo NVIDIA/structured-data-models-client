@@ -229,7 +229,6 @@ class ModelValidator:
             response = merge(
                 response, self._find_disabled_ops(parsed_query.whatif_ast)
             )
-        # Disable unsupported aggregations
         response = merge(
             response,
             self._find_disabled_aggrs(
@@ -285,7 +284,6 @@ class ModelValidator:
                 ),
             )
 
-        # Check the correct use of FOR
         if parsed_query.for_each == FOR:
             if parsed_query.rfm_entity_ids is None:
                 response.errors.append(
