@@ -13,10 +13,13 @@ client, which should have to ask only whether two sets of rows overlap.
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Iterable, Mapping, Sequence
 from decimal import Decimal
 from numbers import Real
 from typing import TYPE_CHECKING, Any
+
+import pandas as pd
 
 from sdm_client.schema import _as_key_tuple
 
@@ -32,6 +35,9 @@ _ENTITY_REF = '__kumo_entity_ref'
 
 #: What ties a related row to the instance it hangs off.
 INSTANCE_ID = 'instance_id'
+
+#: Counts the rows that name no entity, so that no two of them are one.
+_UNIDENTIFIED = itertools.count()
 
 
 def _anchor_column(payload: dict[str, Any] | None) -> str:
@@ -131,7 +137,26 @@ def _named_by(values: Iterable[Any]) -> str:
     A composite key becomes a tuple of its parts rather than nothing at all,
     which is what reading only single-column keys amounted to.
     """
-    return repr(tuple(_one_spelling(value) for value in values))
+    named = tuple(values)
+    if any(_is_missing(value) for value in named):
+        # A row with no identifier is not the same row as another with no
+        # identifier. Named alike, two unidentified rows were reported as one
+        # entity leaking into the other, and `holdout=[None]` took every
+        # unidentified row out of the context at once.
+        return f'<unidentified {next(_UNIDENTIFIED)}>'
+    return repr(tuple(_one_spelling(value) for value in named))
+
+
+def _is_missing(value: Any) -> bool:
+    r"""Whether this value names no entity at all."""
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (ArithmeticError, TypeError, ValueError):
+        # A signalling NaN raises rather than comparing. It names no entity
+        # either, and asking whether it does must not be the thing that fails.
+        return True
 
 
 def _one_spelling(value: Any) -> str:

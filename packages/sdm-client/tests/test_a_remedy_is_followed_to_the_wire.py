@@ -662,3 +662,30 @@ def test_a_name_is_never_arithmetic(named) -> None:
         warnings.simplefilter('ignore')
         assert _held_back(payload, [named]) == 0
     assert len(payload['context']['instance_table']['rows']) == 2
+
+
+def test_a_row_that_names_no_entity_is_not_the_same_row_as_another() -> None:
+    """Named alike, two unidentified rows were reported as one entity leaking
+    into the other, and `holdout=[None]` took every unidentified row out of
+    the context at once."""
+    from sdm_client.wire.keys import _named_by
+
+    for missing in (None, float('nan'), pd.NA, Decimal('NaN')):
+        assert _named_by([missing]) != _named_by([missing])
+        assert _named_by([1, missing]) != _named_by([1, missing])
+
+    assert _named_by([1]) == _named_by([1.0]) == _named_by(['1'])
+
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'context': {
+            'instance_table': {
+                'columns': ['id', 'y'],
+                'rows': [[None, 0], [None, 1], [1.0, 0]],
+            }
+        },
+    }
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        assert _held_back(payload, [None]) == 0
+    assert len(payload['context']['instance_table']['rows']) == 3

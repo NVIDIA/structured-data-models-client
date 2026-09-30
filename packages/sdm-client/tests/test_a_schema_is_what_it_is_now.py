@@ -502,3 +502,62 @@ def test_two_schemas_over_the_same_tables_do_not_fight_over_them() -> None:
     assert linked['c']['pid'].stype == 'ID'
     assert unlinked['c']['pid'].stype == 'numerical'
     assert tables['c']['pid'].stype == 'numerical'
+
+
+def test_a_table_owns_its_columns_before_it_marks_any_of_them() -> None:
+    """Ownership was taken in `__post_init__`, which runs after the fields are
+    assigned -- so a table built on another's columns typed *those* first, and
+    left the table it borrowed them from changed."""
+    from sdm_client import Table
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        lent = _infer_table(
+            'lent', pd.DataFrame({'rid': [1, 2, 3], 'v': [10, 20, 30]})
+        )
+    assert lent['v'].stype == 'numerical'
+
+    borrowed = Table(
+        name='borrowed',
+        columns=lent.columns,
+        data=pd.DataFrame({'rid': [1, 2, 3], 'v': [10, 20, 30]}),
+        primary_key='v',
+    )
+
+    assert borrowed['v'].stype == 'ID'
+    assert lent['v'].stype == 'numerical'
+    assert lent.columns['v'] is not borrowed.columns['v']
+
+
+def test_a_released_key_that_means_a_timestamp_orders_its_table_again() -> None:
+    """A column that means `timestamp` orders the table it belongs to, and
+    restoring the meaning around that assignment left a table saying it held a
+    timestamp while naming no time column -- which `check_consistent()`
+    accepted and every temporal query then failed on."""
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        table = _infer_table(
+            't',
+            pd.DataFrame(
+                {
+                    'when': ['2024-01-01', '2024-01-02', '2024-01-03'],
+                    'v': [1.0, 2.0, 3.0],
+                }
+            ),
+        )
+        schema = Schema({'t': table}, [])
+
+    schema['t'].primary_key = 'when'
+    schema['t']['when'].dtype = 'timestamp[us]'
+    schema['t']['when'].stype = 'timestamp'
+    assert schema['t']['when'].stype == 'ID'
+
+    schema['t'].primary_key = None
+
+    assert schema['t']['when'].stype == 'timestamp'
+    assert schema['t'].time_column == 'when'
+    schema.check_consistent()
+    assert schema['t'].time_column == 'when'

@@ -142,11 +142,21 @@ class Column:
 
     def _release_as_key(self) -> None:
         r"""Give back the meaning this column had, the schema no longer joining
-        on it."""
+        on it.
+
+        Through the same adoption an assignment goes through: a column that
+        means `timestamp` orders the table it belongs to, and restoring the
+        meaning around that left a table saying it held a timestamp while
+        naming no time column -- which `check_consistent()` accepted and every
+        temporal query then failed on.
+        """
         if self._stype_before_key is None:
             return
-        object.__setattr__(self, 'stype', self._stype_before_key)
+        restored = self._stype_before_key
+        object.__setattr__(self, 'stype', restored)
         object.__setattr__(self, '_stype_before_key', None)
+        if restored == 'timestamp':
+            self._adopt_as_time_column()
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Assign a field, keeping the three that describe each other true.
@@ -369,6 +379,13 @@ class Table:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
+        if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
+            # Before anything is marked, not after. Naming a key or a time
+            # column types the columns it names, and ownership was taken in
+            # `__post_init__` -- which runs after the fields are assigned, so
+            # a table built on another's columns typed *those* first and left
+            # the table it borrowed them from changed.
+            self._own_columns()
         if key == 'primary_key':
             # Read once, here, and what was read is what is kept. A key is
             # consulted many times afterwards -- to check it, to type its
