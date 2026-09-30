@@ -85,6 +85,15 @@ def _is_snowpark_session(value: object) -> TypeGuard[SnowparkSession]:
     )
 
 
+def _is_async_psycopg(value: object) -> bool:
+    # By name, like the sessions, so psycopg is never imported to rule it out.
+    return any(
+        cls.__name__ == 'AsyncConnection'
+        and (cls.__module__ or '').startswith('psycopg')
+        for cls in type(value).__mro__
+    )
+
+
 def _backend_of(connection: Any) -> str | None:
     if _is_spark_session(connection):
         return 'databricks'
@@ -386,6 +395,13 @@ class PostgresSource(Source):
     def __init__(
         self, connection: PostgresConnection, *, schema: str | None = None
     ) -> None:
+        if _is_async_psycopg(connection):
+            raise ConnectorError(
+                f'PostgresSource needs a synchronous psycopg connection, '
+                f'since the engine reads synchronously; got '
+                f'{type(connection).__name__}',
+                code='UNKNOWN_CONNECTOR',
+            )
         self._bind(connection, {'schema': schema})
 
     @property

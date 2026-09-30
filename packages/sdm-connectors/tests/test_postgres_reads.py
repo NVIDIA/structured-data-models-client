@@ -11,6 +11,7 @@ refuses every later one.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Iterator
 from typing import Any
@@ -82,3 +83,22 @@ def test_a_failed_read_inside_the_callers_transaction_leaves_it_usable(
         frame = read_table(connection, query='SELECT 1 AS one')
 
         assert frame['one'].tolist() == [1]
+
+
+def test_an_async_connection_is_refused_since_the_engine_reads_synchronously(
+    postgres_dsn: str,
+) -> None:
+    import psycopg
+
+    from sdm_connectors import PostgresSource, Source
+
+    async def build_each() -> None:
+        async with await psycopg.AsyncConnection.connect(postgres_dsn) as conn:
+            for build in (PostgresSource, Source):
+                with pytest.raises(
+                    ConnectorError, match='synchronous'
+                ) as error:
+                    build(conn, schema='public')
+                assert error.value.code == 'UNKNOWN_CONNECTOR'
+
+    asyncio.run(build_each())

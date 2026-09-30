@@ -25,8 +25,8 @@ if TYPE_CHECKING:
     )
     SnowparkSession: TypeAlias = snowflake.snowpark.Session
 
-# What `Source(connection)` dispatches on: a member only that driver has, not
-# its class, since a missing driver is Any, and an Any overload claims any call.
+# What `Source(connection)` dispatches on: members that tell the drivers apart,
+# not their classes, since a missing driver is Any and would claim any call.
 
 
 class DatabricksLike(Protocol):
@@ -41,12 +41,18 @@ class PostgresLike(Protocol):
     @property
     def pgconn(self) -> Any: ...
 
+    # A synchronous commit, which psycopg's AsyncConnection does not have.
+    def commit(self) -> None: ...
+
 
 class DuckDBLike(Protocol):
     def install_extension(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class SQLiteLike(Protocol):
+    # ADBC's, so the standard library's sqlite3, which has the other, is not.
+    def adbc_get_info(self, *args: Any, **kwargs: Any) -> Any: ...
+
     def enable_load_extension(self, *args: Any, **kwargs: Any) -> Any: ...
 
 

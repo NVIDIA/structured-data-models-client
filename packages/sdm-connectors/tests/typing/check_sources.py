@@ -12,6 +12,7 @@ starts to type-check fails the check.
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any, assert_type
 
 import adbc_driver_sqlite.dbapi
@@ -111,6 +112,8 @@ def the_wrong_connection_is_refused(
     postgres: psycopg.Connection[Any],
     duckdb_connection: duckdb.DuckDBPyConnection,
     sqlite: adbc_driver_sqlite.dbapi.AdbcSqliteConnection,
+    sqlite3_connection: sqlite3.Connection,
+    async_postgres: psycopg.AsyncConnection[Any],
 ) -> None:
     DatabricksSource(42)  # type: ignore[arg-type]
     DatabricksSource(postgres)  # type: ignore[arg-type]
@@ -120,6 +123,12 @@ def the_wrong_connection_is_refused(
     SQLiteSource(duckdb_connection)  # type: ignore[arg-type]
     Source(42)  # type: ignore[call-overload]
     Source('postgresql://localhost/sales')  # type: ignore[call-overload]
+    # Each has a member of the driver it is not: the ADBC SQLite one's, and
+    # psycopg's, without the synchronous commit the engine reads through.
+    Source(sqlite3_connection)  # type: ignore[call-overload]
+    SQLiteSource(sqlite3_connection)  # type: ignore[arg-type]
+    Source(async_postgres)  # type: ignore[call-overload]
+    PostgresSource(async_postgres)  # type: ignore[arg-type]
 
 
 def a_namespace_the_warehouse_lacks_is_refused(
