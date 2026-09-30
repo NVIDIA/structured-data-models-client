@@ -275,7 +275,8 @@ class TestDistributionCoherence:
         """
         client = _pyproject('sdm-client')['project']['optional-dependencies']
         assert client['lakebase'] == ['sdm-connectors[lakebase]==1.0.0']
-        assert 'lakebase' in client['all'][0]
+        (everything,) = client['all']
+        assert 'lakebase' in everything.partition('[')[2].rstrip(']').split(',')
         connectors = _pyproject('sdm-connectors')['project']
         extra = connectors['optional-dependencies']['lakebase']
         assert sorted(extra) == ['databricks-sdk>=0.89,<1.0', 'psycopg>=3.1']
