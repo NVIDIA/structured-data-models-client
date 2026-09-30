@@ -15,7 +15,7 @@ from sdm_relational_engine.rfm import Edge, Graph
 
 try:
     import pyarrow as pa
-    from sdm_relational_engine.rfm.backend.databricks import Connection
+    from sdm_connectors.backends.databricks import Connection
     from sdm_relational_engine.rfm.backend.databricks.metric_view import (
         SOURCE_ALIAS,
         JoinKeyRef,

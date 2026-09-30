@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
+    from sdm_connectors.backends.databricks import Connection
     from sdm_relational_engine.rfm import Graph
-    from sdm_relational_engine.rfm.backend.databricks import Connection
 
 # The Databricks integration tests run read-only against a pre-populated ERP
 # dataset, configured through the following environment variables:
