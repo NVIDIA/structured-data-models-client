@@ -71,8 +71,6 @@ class ProblemTypeValidator:
             and problem_type is None
             and mode is Mode.TRAINING
         ):
-            # If target is multicategorical and problem_type is not specified,
-            # then we respond with an error.
             return ValidationResponse(
                 errors=[
                     ValidationError(

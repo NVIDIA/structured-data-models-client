@@ -121,7 +121,6 @@ class Condition(ASTNode):
         return f'{self.target.to_string(rich=rich)} {op} {value}'
 
     def like_to_str_op(self, negate: bool = False) -> tuple[StrOp, str]:
-        # Check the string whether starts with '%', ends with '%', or both
         str_op = None
         assert isinstance(self.value, Constant)
         value = self.value.typed_value()
