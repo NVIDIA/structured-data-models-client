@@ -64,6 +64,7 @@ duckdb = ["sdm-connectors[duckdb]==1.0.0"]
 snowflake = ["sdm-connectors[snowflake]==1.0.0"]
 databricks = ["sdm-connectors[databricks]==1.0.0"]
 postgres = ["sdm-connectors[postgres]==1.0.0"]
+lakebase = ["sdm-connectors[lakebase]==1.0.0"]
 s3 = ["sdm-connectors[s3]==1.0.0"]
 # Reaching a model served on Databricks Model Serving. The one extra that names
 # a third-party package directly: the transport that imports it lives in this
@@ -72,7 +73,7 @@ s3 = ["sdm-connectors[s3]==1.0.0"]
 # name, as with the engine's extra of the same name.
 databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
 all = [
-    "sdm-client[relational,sqlite,duckdb,postgres,snowflake,databricks,s3]",
+    "sdm-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
 test = ["pytest", "requests-mock"]
 

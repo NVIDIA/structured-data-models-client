@@ -58,15 +58,24 @@ databricks = [
     # parser. Databricks Runtime 14.3 LTS ships none, so the client's
     # `databricks` extra, which points here, has to bring it.
     "pyyaml>=5.4",
+    # For `sdm_connectors.databricks.warehouse`, which looks the warehouse up as
+    # the caller's workspace client.
+    "databricks-sdk>=0.89,<1.0",
 ]
 postgres = [
     "psycopg[binary]>=3.1",
+]
+# `sdm_connectors.databricks.lakebase`. Plain psycopg, since the binary wheel's
+# OpenSSL aborts on Databricks' aarch64 FIPS hosts; 0.89 added `postgres`.
+lakebase = [
+    "psycopg>=3.1",
+    "databricks-sdk>=0.89,<1.0",
 ]
 s3 = [
     "s3fs>=2023.12.0",
 ]
 all = [
-    "sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks,s3]",
+    "sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
 test = [
     "pytest",

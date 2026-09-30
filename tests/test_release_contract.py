@@ -267,6 +267,19 @@ class TestDistributionCoherence:
         ]
         assert 'pyyaml' in names
 
+    def test_the_lakebase_extra_brings_plain_psycopg_and_a_postgres_sdk(self):
+        """`lakebase()` calls `WorkspaceClient.postgres`, added in 0.89.
+
+        Plain psycopg, because the binary wheel's OpenSSL fails its FIPS
+        self-test on Databricks' aarch64 hosts and aborts the process.
+        """
+        client = _pyproject('sdm-client')['project']['optional-dependencies']
+        assert client['lakebase'] == ['sdm-connectors[lakebase]==1.0.0']
+        assert 'lakebase' in client['all'][0]
+        connectors = _pyproject('sdm-connectors')['project']
+        extra = connectors['optional-dependencies']['lakebase']
+        assert sorted(extra) == ['databricks-sdk>=0.89,<1.0', 'psycopg>=3.1']
+
 
 class TestConfigurationTellsTheTruth:
     """A comment that states a checkable fact is checked.
