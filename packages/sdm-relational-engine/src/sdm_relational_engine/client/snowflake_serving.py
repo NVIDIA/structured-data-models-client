@@ -4,17 +4,18 @@
 
 """Invoke Kumo Relational through a Snowpark Container Services model service.
 
-The peer of :mod:`sdm_relational_engine.client.databricks_serving`, and the same contract:
-one ``request_json`` row in, one ``response_json`` row out. What differs is how
-the service is reached.
+This is the peer of
+:mod:`sdm_relational_engine.client.databricks_serving`, with the same contract:
+one ``request_json`` row in and one ``response_json`` row out. Only the service
+access method differs.
 
 A Snowflake model service is invoked as a SQL method on the service,
 ``SELECT <service>!PREDICT(?)``, over a Snowpark session or a Snowflake
-connection. That is deliberate rather than a REST call to the service's ingress:
-ingress has to be enabled explicitly, is reachable only by users of the account
-that created it, and carries a 90-second connection timeout, whereas the SQL
-path works from a Snowflake notebook with the session already in hand and from
-outside with ordinary warehouse credentials.
+connection. This deliberately avoids a REST call to the service's ingress.
+Ingress must be explicitly enabled, is available only to users of the account
+that created it, and has a 90-second connection timeout. The SQL path works
+from a Snowflake notebook with its existing session and externally with
+ordinary warehouse credentials.
 
 The request travels as a bind parameter, never interpolated into the statement.
 A canonical RFM request is megabytes of sampled customer rows; splicing it into
@@ -330,8 +331,8 @@ class SnowflakeServingClient:
         ``{"response_json": "{...}"}`` rather than as the string itself. The
         SQL column and the model's column have the same name, so the nesting is
         invisible until something reads the result: it surfaces as the parser
-        reporting a missing ``id``, which reads like a contract violation by the
-        model rather than an envelope around it.
+        reporting a missing ``id``. This reads like a model contract violation,
+        not an envelope around the response.
 
         Unwrapped only when the payload really is that envelope. A canonical
         response is also a JSON object, but it has no ``response_json`` member,

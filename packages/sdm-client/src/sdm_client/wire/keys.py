@@ -179,7 +179,7 @@ def _one_spelling(value: Any) -> str:
         # A name is not arithmetic. An infinity or a NaN is not an entity and
         # cannot be read as one, and asking anyway raised `OverflowError` and
         # `InvalidOperation` out of a function whose whole job is to write a
-        # name -- so a holdout naming one failed the call before it was sent.
+        # name. Thus, a holdout naming one failed the call before it was sent.
         if not exact.is_finite():
             return str(value)
         if exact == exact.to_integral_value():
@@ -227,7 +227,7 @@ def keys_from_a_frame(
 
     The other side of every comparison here is read from an encoded envelope,
     so a frame read raw does not meet it: an entity held as ``1.0`` in a frame
-    is ``1`` on the wire, and the two would never match -- which is how a
+    is ``1`` on the wire, and the two would never match. This is how a
     session came to score rows its pinned context answers without saying so.
 
     Through the encoder that writes the request, given the dtypes
@@ -259,8 +259,8 @@ def scored_rows(
     A sentence that counts rows has to be given rows: two rows asking about
     one entity are two rows, and a set of keys had already lost one of them.
 
-    ``dtypes`` are the ones the other side of the comparison was written with
-    -- a session's pinned schema. Settled here instead, the same entity has
+    ``dtypes`` come from the other side of the comparison, namely a session's
+    pinned schema. Settled here instead, the same entity has
     one name on each side and neither meets the other.
     """
     if request.payloads:
@@ -287,7 +287,7 @@ def scored_keys(
     Read from the envelopes where there are any, and from the frame where
     there are not. Only the first can carry a moment: a request holding
     frames is a single-table one, and a single-table model is not asked for a
-    window over time -- the query is refused before it reaches here, so there
+    window over time. The query is refused before it reaches here, so there
     is no moment in the frame to put in the key and none to look for.
     """
     return frozenset(scored_rows(request, with_anchor=with_anchor))
@@ -346,7 +346,7 @@ def without_the_keys(payload: dict[str, Any], keys: frozenset[Any]) -> int:
 
 
 def _drop_instances(table: Any, instances: set[Any]) -> None:
-    r"""Take out of a related table the rows tied to instances that have gone."""
+    r"""Remove related rows tied to removed instances."""
     columns = (table or {}).get('columns')
     rows = (table or {}).get('rows')
     if not isinstance(columns, list) or not isinstance(rows, list):

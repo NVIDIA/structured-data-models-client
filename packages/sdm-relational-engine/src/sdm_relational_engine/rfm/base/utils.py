@@ -47,9 +47,9 @@ def to_naive_utc(value: Any) -> Any:
 
     Anchor timestamps are compared against, and joined to, the graph's own
     timezone-naive UTC timestamps, so a timezone-aware one has to be converted
-    rather than refused. ``predict`` returns ``ANCHOR_TIMESTAMP`` timezone-aware,
-    which makes this the difference between a prediction output being usable as
-    the next call's context and not.
+    rather than refused. ``predict`` returns ``ANCHOR_TIMESTAMP`` with a
+    timezone. This conversion makes that output usable as the next call's
+    context.
 
     Anything that is not a timezone-aware timestamp or series is returned
     unchanged.

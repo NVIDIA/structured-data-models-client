@@ -13,8 +13,8 @@ Both are the same question asked repeatedly, though, and the repetition is
 what the endpoint does serve:
 
 * a ranking over candidates is, per candidate, *will this entity reach this
-  one?* -- a binary question whose probability orders the candidates;
-* a forecast over steps is, per step, *what does this window hold?* -- the
+  one?* This is a binary question whose probability orders the candidates.
+* a forecast over steps is, per step, *what does this window hold?* This is the
   question already being asked, with its window moved along.
 
 Each part needs its own context, because the labels differ: what was true in
@@ -77,7 +77,7 @@ def parts_of(
 ) -> Decomposition | None:
     r"""The queries this one is asked as, or nothing if it is asked as itself.
 
-    Returns query text paired with what the part is about -- the candidate it
+    Returns query text paired with what the part is about: the candidate it
     asks after, or the step it covers. The pair matters: reading the candidate
     back out of the text it was written into loses its type and trusts a
     string the caller chose.
@@ -140,7 +140,7 @@ def about_the_part(
     read first: no context size reaches a candidate the data does not.
 
     Which part failed is always said, because it is always true. A remedy is
-    added only where the failure is one it addresses -- an unknown model is not
+    added only where the failure is one it addresses. An unknown model is not
     answered by asking for fewer steps, and at step 1 there are no fewer to ask
     for.
     """
@@ -360,7 +360,7 @@ def _decimal_as_typed(value: Decimal, dtype: str | None = None) -> Any:
 
     A warehouse ``DECIMAL`` reaches a caller as a :class:`~decimal.Decimal`,
     and written as a string it asks after the row named ``"1"`` on a column of
-    integers -- a question the validator refuses and nobody wrote. Which type
+    integers, a question the validator refuses and nobody wrote. Which type
     that is does not follow from the Python type: :func:`_decimal_dtype` is
     what decides whether such a column travels as an integer, a float, or its
     digits. ``dtype`` carries the column's; the value alone is used only where

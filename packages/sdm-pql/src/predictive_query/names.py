@@ -56,11 +56,11 @@ def split_fqn(full_name: str) -> list[str]:
 
 
 def canonical_fqn(full_name: str) -> str:
-    r"""Renders *full_name* with every part unquoted.
+    r"""Render *full_name* with every part unquoted.
 
-    Called once, as a query is parsed, so that the AST and everything reading
-    it -- dataframe lookups, schema lookups, the sampler -- see the name the
-    data uses rather than the way the query spelled it.
+    Called once during parsing so the AST and its consumers, including
+    dataframe lookups, schema lookups and the sampler, see the data's name
+    instead of the query's spelling.
 
     A quoted part holding a dot is rejected. The parts are rejoined with dots,
     so such a name is indistinguishable from a table/column pair here and at

@@ -14,15 +14,15 @@ union. Here an explanation is an output field like any other:
 >>> result.explanation       # None unless you asked for it
 
 The frame's shape depends on the **task**, not the model. Classification and
-multiclass both give one row per entity -- multiclass carries a probability per
-class as columns rather than a row per class -- while forecasting gives one row per
-step. Ranking is the exception to the row-per-answer rule: the ``k`` ranked
+multiclass both give one row per entity. Multiclass carries a probability per
+class as columns rather than a row per class, while forecasting gives one row
+per step. Ranking is the exception to the row-per-answer rule: the ``k`` ranked
 candidates arrive as a **list in one row**, under ``rankings``, because
 expanding them would make the frame's key no longer identify a row.
 
 Every row carries ``row_index``. It also carries ``id`` when the model has an
-entity key -- a single-table request may have none. **Join on the key when it
-is there, otherwise on** ``row_index``, **and never on row order.**
+entity key, though a single-table request may have none. **Join on the key when
+it is there, otherwise on** ``row_index``, **and never on row order.**
 """
 
 from __future__ import annotations
@@ -99,7 +99,7 @@ class PredictionResult:
         r"""Which of ``requested`` the answer does not carry.
 
         A field a model produces for one task kind and not another is accepted
-        by the endpoint, answered `200`, and simply left out -- so a caller who
+        by the endpoint, answered `200`, and simply left out. A caller who
         names it reads a frame that has no such column and nothing anywhere
         said why. Rather than deciding in advance which model produces what for
         which kind, which is a moving target across deployments, this reports
@@ -155,7 +155,7 @@ class PredictionResult:
         would otherwise be reading whichever rows finished first.
 
         A result with no rows still has columns. Scoring an empty frame is
-        legal -- the contract puts no minimum on ``rows`` -- and it is what a
+        legal because the contract puts no minimum on ``rows``. It is what a
         filter that matched nothing produces, so it happens inside ordinary
         loops. Returning a frame with no columns at all made that case fail
         differently from every other: ``frame['prediction']`` became a
@@ -196,8 +196,8 @@ class PredictionResult:
         r"""The columns this request would have produced, with no rows.
 
         ``row_index`` and ``id`` say which row an answer belongs to rather
-        than what the answer is, so they are here whatever was asked for --
-        the join a caller writes must not depend on the batch being empty.
+        than what the answer is, so they are here whatever was asked for.
+        The join a caller writes must not depend on the batch being empty.
         ``id`` only when this request names its rows at all, which is the
         same condition a non-empty answer carries it under.
         """
@@ -245,7 +245,7 @@ class PredictionResult:
         metadata = dict(first.metadata)
         metadata['batches'] = len(parts)
         # Each call has its own id in the endpoint's logs, and only the first
-        # would otherwise survive -- which is the one you do not have when a
+        # would otherwise survive. That is the one you do not have when a
         # later batch is the one that misbehaved.
         metadata['batch_request_ids'] = [part.request_id for part in parts]
         explanation = next(

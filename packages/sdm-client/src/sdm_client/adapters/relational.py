@@ -12,8 +12,8 @@ are already finished.
 
 That split is why this adapter is short. It sends what was gathered, and reads
 the answer back. It does not reimplement the gathering, which would duplicate
-point-in-time correctness logic that already lives -- and is tested -- in the
-engine.
+point-in-time correctness logic that already lives in the engine and is tested
+there.
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ class RelationalAdapter:
             envelope['model'] = self.spec.model_id
             envelope['output'] = {'fields': list(outputs)}
             # The gathered payload's own metadata, copied. Shared, writing the
-            # call's id into it wrote it into the request -- so planning the
+            # call's id into it wrote it into the request. Thus, planning the
             # same request twice changed the id of the envelope already handed
             # out, and the one a caller had recorded named a different call.
             envelope['metadata'] = {
@@ -141,7 +141,7 @@ class RelationalAdapter:
         The engine was written against a different backend and fills in an
         inference config on every request, including keys this one refuses
         outright. Dropping them is safe because they are the engine's defaults
-        rather than anything asked for -- but if the *caller* asked for one, it
+        rather than anything asked for. If the *caller* asked for one, it
         is named rather than silently discarded, because a dropped request for
         four estimators is a different prediction than the one that was wanted.
 
@@ -292,8 +292,8 @@ class RelationalAdapter:
                 f'with something coarser.'
             )
             return _reworded(error, message)
-        # The payload does not carry the entity table's real name --
-        # `instance_table` is what the wire calls it -- so an example naming
+        # The payload does not carry the entity table's real name,
+        # `instance_table` is what the wire calls it. Thus, an example naming
         # it would render a line the caller cannot run. Prefer a related
         # table, whose name did survive, and fall back to naming no table at
         # all rather than a made-up one.
@@ -334,7 +334,7 @@ class RelationalAdapter:
 
         `sends` names the halves this call puts on the wire. A session pins its
         context at `fit()` and a scoring call carries only rows, so judging the
-        context there refuses a request over rows that are thrown away -- and
+        context there refuses a request over rows that are thrown away, while
         judging the rows when pinning refuses over rows that are not sent at
         all. Every check below asks only about a half that travels.
         """
@@ -381,8 +381,8 @@ class RelationalAdapter:
         r"""A classification target the model cannot represent is a size too.
 
         The endpoint answers ``422 UNSUPPORTED_FEATURE`` with both numbers in
-        it, which is a decent message -- but it arrives after the context has
-        been gathered, encoded and sent, and the count is knowable here.
+        it, which is a decent message. However, it arrives after gathering,
+        encoding, and sending the context, and the count is knowable here.
         """
         ceiling = limits.get('classes_max')
         if not ceiling:
@@ -433,7 +433,7 @@ class RelationalAdapter:
     def _check_target_varies(
         self, payloads: tuple[dict[str, Any], ...], asked: str | None = None
     ) -> None:
-        r"""Refuse, or remark on, a context whose every row says the same thing.
+        r"""Refuse or note a context whose every row says the same thing.
 
         The tabular route judges this before it sends and the relational one
         said nothing, so the same unlearnable question was refused by one model
@@ -493,9 +493,9 @@ class RelationalAdapter:
                 'a relational request has to be gathered first, and this '
                 'one was not. Build it with '
                 'PredictiveQuery(...).materialize(indices=[...], '
-                "model='kumo-relational') -- a schema of one table is "
+                "model='kumo-relational'). A schema of one table is "
                 'gathered for the tabular model unless the relational one is '
-                'named -- rather than with Request(context=..., '
+                'named, rather than with Request(context=..., '
                 'predict=...), which is the single-table form',
                 details={'model': KUMO_RELATIONAL.model_id},
             )
@@ -554,7 +554,7 @@ def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
 
     Counted by the engine's own helper rather than here. What the guard counts
     is not every cell: it is string cells only, across the predict half as well
-    as the context, reduced to the larger of the two -- and a text cell travels
+    as the context, reduced to the larger of the two. A text cell travels
     as a list of tokens, which it counts individually. Counting it a second way
     here would name columns the endpoint was not talking about, a numeric key
     among them.
@@ -665,7 +665,7 @@ def _columns_with_stype(payload: Mapping[str, Any], stype: str) -> list[str]:
     r"""Every ``table.column`` in the payload declared as ``stype``.
 
     The endpoint refuses an unsupported semantic type without saying which
-    column carries it, and a real dataset acquires them in bulk -- Northwind
+    column carries it, and a real dataset acquires them in bulk. Northwind
     produces fifteen. The payload that was just refused knows.
 
     A relational schema is ``instance_table`` plus ``related_tables``, so both
@@ -815,8 +815,8 @@ def _key_dtype(payload: dict[str, Any], reference: str) -> str | None:
 
     An integer wider than a double travels as a base-10 string by contract, so
     a key past 2**53 comes back as text unless what it was is looked up. The
-    reference column itself is declared `string` -- it is a transport key --
-    so the answer is on the table it points at.
+    reference column itself is declared `string` because it is a transport key.
+    The answer is therefore on the table it points at.
     """
     schema = payload.get('schema', {})
     for link in schema.get('relationships', []):

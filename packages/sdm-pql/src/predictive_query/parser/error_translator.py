@@ -107,7 +107,7 @@ class ErrorTranslator:
             # DEBUG, not WARNING: the caller raises a ValueError carrying
             # `error_message` and the query on the very next line, so this
             # record is a duplicate for everyone except a grammar maintainer.
-            # The raw query is deliberately omitted -- PQL embeds literal
+            # The raw query is deliberately omitted. PQL embeds literal
             # filter values, and WARNING-and-above records are typically
             # shipped to a central log store.
             logger.debug(
@@ -122,8 +122,8 @@ class ErrorTranslator:
 
         An aggregation whose unit the grammar has no token for fails inside the
         target clause, so it used to be reported as "The target (PREDICT)
-        clause in this query is empty or invalid" -- pointing at the start of
-        the query rather than at the one word that was wrong.
+        clause in this query is empty or invalid". That pointed at the start of
+        the query rather than the incorrect word.
         """
         symbol = getattr(err, 'offending_symbol', None)
         text = (getattr(symbol, 'text', None) or '').strip().lower()

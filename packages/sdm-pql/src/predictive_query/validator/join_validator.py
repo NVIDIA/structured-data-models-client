@@ -143,9 +143,9 @@ class JoinValidator:
 
         Only for explaining a refusal. An aggregation joins on a single key, so
         a target two tables away cannot be expressed however short the route
-        is -- but "there is no foreign key from C to A" is false when C reaches
-        A through B, and it sends the caller to add a key rather than to ask
-        the question one level down.
+        is. But "there is no foreign key from C to A" is false when C reaches A
+        through B, and it sends the caller to add a key rather than to ask the
+        question one level down.
 
         Directed, child to parent, because an undirected walk invents routes
         that cannot be travelled. `A -> B` is the reverse of `B -> A` and

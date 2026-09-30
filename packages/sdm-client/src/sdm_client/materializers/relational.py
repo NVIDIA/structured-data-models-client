@@ -249,7 +249,7 @@ class RelationalMaterializer:
         remedy, and nothing about the name being spoken for.
 
         The suggestion is made per column, and by suffixing rather than by
-        substituting a word only one of the two names contains -- which left
+        substituting a word only one of the two names contains. That left
         `__kumo_anchor_time` told to rename itself to `__kumo_anchor_time`.
         """
         taken = sorted(
@@ -291,7 +291,7 @@ class RelationalMaterializer:
 
         The other route recognises two whole numbers as a label and says so.
         Here the task follows the column's stype, so the same question over
-        the same column is asked as a regression and nothing is said -- and
+        the same column is asked as a regression and nothing is said. Also,
         `task=` is refused on this route, so the warning's own remedy does not
         apply either.
         """
@@ -408,7 +408,7 @@ class RelationalMaterializer:
         that builds it. `Graph.from_data`, the key and stype assignments, the
         links and `graph.validate()` all raise bare `ValueError` out of a
         package the caller never imported, and all of them used to run one line
-        above this guard -- so a caller who wrote the `except
+        above this guard. A caller who wrote the `except
         StructuredDataError` the reference tells them to write did not catch
         the whole construction phase.
 
@@ -566,7 +566,7 @@ class RelationalMaterializer:
     def _check_limits(
         part: MaterializedPredictionRequest, limits: Mapping[str, int]
     ) -> None:
-        r"""Refuse a gathered part the endpoint would reject before sending it."""
+        r"""Refuse a gathered part the endpoint would reject before sending."""
         payload = getattr(part, 'payload', None)
         if not isinstance(payload, dict):
             return
@@ -605,7 +605,7 @@ class RelationalMaterializer:
         count is the wrong quantity: a warehouse schema of 21 tables whose
         query reaches 6 of them was refused here while the endpoint answered
         it. Reachability from the entity table is the wrong quantity too, and
-        for the same reason -- it is an upper bound on what the sampler
+        for the same reason: it is an upper bound on what the sampler
         gathers, and the 21-table graph above reaches all 21. Only the
         gathered subgraph knows, which is why the check is in
         `_check_limits`, against the payload that was actually built.
@@ -674,7 +674,7 @@ def _as_typed(table: Table) -> pd.DataFrame:
 
     A warehouse `DECIMAL` arrives from pandas as an `object` column of
     :class:`~decimal.Decimal`. The schema layer reads the values and types it
-    -- `int64` for whole numbers, `float64` otherwise -- and the tabular path
+    (`int64` for whole numbers and `float64` otherwise), and the tabular path
     sends it happily. The relational path handed the engine the raw frame
     instead, which re-infers from the object column, reaches a different answer
     and eventually meets a `Decimal` where a dtype name belongs:
@@ -709,7 +709,7 @@ def _as_typed(table: Table) -> pd.DataFrame:
 
 
 def _holds_timestamps_loosely(values: pd.Series, declared: str | None) -> bool:
-    """Whether the schema read timestamps here that pandas is still holding loose.
+    """Whether schema timestamps are still loose in pandas.
 
     An `object` column of `Timestamp` is typed `timestamp[us]` by the schema,
     correctly, and handed to the engine unchanged it re-infers `string` and
@@ -776,7 +776,7 @@ def _only_junk_is_unread(present: pd.Series) -> bool:
     Asked of each value, by the one function that answers that question. It
     was asked here with the default reading, which leaves most of a day-first
     column unread, so the single value that is genuinely not a date was
-    reported as ambiguity -- while the same column written year-first was
+    reported as ambiguity, while the same column written year-first was
     reported correctly.
     """
     read = dates.reads_as_a_date(present)
@@ -820,9 +820,9 @@ def _refuse_values_that_do_not_read(present: pd.Series, where: str) -> None:
     raise StructuredDataError(
         f'{where} is the time column and {len(unread)} of {len(present)} of its '
         f'values do not read as a date, such as {example!r}. Fix or drop those '
-        f'values, or read the column yourself and let them become NaT -- '
+        f'values, or read the column yourself and let them become NaT: '
         f'frame[{column!r}] = pd.to_datetime(frame[{column!r}], '
-        f"errors='coerce') -- which this client accepts, saying how many rows "
+        f"errors='coerce'). This client accepts it and says how many rows "
         f'the model will not see',
         code='INVALID_REQUEST',
     )
@@ -840,7 +840,7 @@ def _refuse_a_column_written_two_ways(
     Said before the values that do not read, where a column has both, and
     saying so. Coercing is what the other message offers, and coercing a
     column written two ways throws away every row of the shape it does not
-    settle on -- so the caller has to know about the shapes first.
+    settle on. The caller therefore has to know about the shapes first.
     """
     year_first = shapes['year-first']
     other = shapes['day-or-month-first']
@@ -854,8 +854,8 @@ def _refuse_a_column_written_two_ways(
     raise StructuredDataError(
         f'{where} is the time column and is written two ways: {year_first!r} '
         f'leads with its year and {other!r} leads with its day or its month. '
-        f'No one reading covers both -- the call that reads {other!r} reads '
-        f'{year_first!r} as a different date -- so read the halves apart and '
+        f'No one reading covers both. The call that reads {other!r} reads '
+        f'{year_first!r} as a different date, so read the halves apart and '
         f'put them back as one column, or store frame[{column!r}] in one '
         f'shape before naming it as the time column.{also}',
         code='INVALID_REQUEST',
@@ -869,16 +869,16 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
     strings can be named as a table's time column and is accepted. The strings
     then have to become timestamps before the model sees them, and that was
     left to `pd.to_datetime`'s defaults, which read an ambiguous slash date
-    month-first. A day-first column was silently re-dated -- twelve monthly
-    events across a year became twelve daily events in one week of February --
+    month-first. A day-first column was silently re-dated: twelve monthly
+    events across a year became twelve daily events in one week of February,
     and nothing in the request, the schema or the response recorded that a
     conversion had happened at all. It surfaced, when it surfaced, as an
     unrelated complaint about anchor times.
 
     So a column is read only where it says what its dates are. A year-first one
     says it outright. A slash-separated one says it when a value of its own
-    rules a reading out -- no month is 15, so `15/03/2020` is day-first and
-    every other row reads the same way -- which is the ordinary case for any
+    rules a reading out. No month is 15, so `15/03/2020` is day-first and
+    every other row reads the same way. This is the ordinary case for any
     column spanning more than twelve days. Where nothing decides, `02/01/2020`
     is the 2nd of January to half the world and the 1st of February to the
     other half, and there the caller says, by converting it themselves.
@@ -922,9 +922,9 @@ def _to_time(values: pd.Series, where: str) -> pd.Series:
         f'{where} is the time column and holds text such as {example!r}, '
         f'which does not say unambiguously what date it is: read day-first it '
         f'is one date and month-first another, and nothing in the column says '
-        f'which. Convert it yourself so the reading is yours -- '
+        f'which. Convert it yourself so the reading is yours: '
         f'frame[{column!r}] = pd.to_datetime(frame[{column!r}], '
-        f'dayfirst=True) -- or store it year-first',
+        f'dayfirst=True), or store it year-first',
         code='INVALID_REQUEST',
     )
 
@@ -947,7 +947,7 @@ def _to_declared(values: pd.Series, dtype: str, where: str) -> pd.Series:
 
     Only what the schema asked for. A whole decimal too wide for an `int64` is
     typed `string` precisely so its digits survive, and reading "not an int" as
-    "a float" would put 9223372036854775808 back as 9.223372036854776e+18 --
+    "a float" would put 9223372036854775808 back as 9.223372036854776e+18,
     the corruption this exists to prevent, reintroduced one branch over.
 
     A column with a missing value cannot be a plain `int64`, so it becomes
@@ -996,7 +996,7 @@ def _columns_to_leave_out(
     column away from the model did nothing.
 
     Merged rather than replaced. The query excludes columns for reasons of its
-    own -- the target among them -- and letting a caller's list stand in for
+    own, including the target. Letting a caller's list stand in for
     that would hand the model back something the query had deliberately
     removed.
 
@@ -1035,7 +1035,7 @@ def _candidates_to_rank(
 ) -> int | None:
     r"""How many candidates to rank, held to the limits the language holds.
 
-    A `TOP K` written in the query is checked -- at least one, and no more than
+    A `TOP K` written in the query is checked: at least one, and no more than
     the endpoint ranks. Passing it as an option went straight through to the
     task, so an override could put a number in a request that the same number
     written in the query would have been refused for.
@@ -1063,7 +1063,7 @@ def _warn_rows_the_graph_dropped(model: KumoRelational) -> None:
 
     A fact row with no time, no key, or a key another row already used cannot
     be placed in the graph and is dropped. The count and the reason are worked
-    out either way -- `_sanitization_detail` builds the sentence -- and it was
+    out either way, and `_sanitization_detail` builds the sentence. It was
     only ever shown when something else had already failed. So a request that
     succeeded was answered from a graph smaller than the one the caller
     passed, the result looked ordinary, and the number was sitting there
@@ -1101,7 +1101,7 @@ def _drop_context_that_answers_the_question(
     r"""Take out of the context any row that is a scored row at its own anchor.
 
     On a target with no time window the entity being scored is sampled into the
-    context as well, at the same anchor, carrying the value being asked for --
+    context as well, at the same anchor, carrying the value being asked for,
     so the model is shown the answer to the question it is being asked.
     Measured against the live endpoint on a label that is pure noise, a hundred
     scored entities came back 0.660 correct where chance is 0.500.
@@ -1116,7 +1116,7 @@ def _drop_context_that_answers_the_question(
 
     A static column is not a window over anything. Its value does not move with
     the anchor, so the same entity at *any* anchor carries the answer being
-    asked for -- which a caller reaches by setting `context_anchor_time`, and
+    asked for. A caller reaches this by setting `context_anchor_time`, and
     which matching on the anchor alone would have let straight through.
 
     The two halves carry their own `instance_id` space, so removing a context
@@ -1283,7 +1283,7 @@ def _tables_linked_to(schema: Schema, entity_table: str) -> frozenset[str]:
 
     Read in both directions, because the sampler traverses an edge either way:
     a parent is reached from its child as readily as a child from its parent.
-    Used only to say why a table is missing, never to refuse one -- what is
+    Used only to say why a table is missing, never to refuse one. What is
     reachable is an upper bound on what is gathered, and refusing on it denies
     graphs the endpoint answers.
     """
@@ -1309,7 +1309,7 @@ def _warn_of_tables_left_out(
     A table the sampler does not reach is removed from the payload, and the
     removal was silent. Measured on a parent whose value is the mean of its
     children's, leaving the one edge between them undeclared moved the error
-    from 0.008 to 0.134 -- sixteen times worse, with nothing said and a result
+    from 0.008 to 0.134, sixteen times worse, with nothing said and a result
     that looks entirely ordinary.
 
     The two causes are said separately because they take different remedies.
@@ -1331,9 +1331,9 @@ def _warn_of_tables_left_out(
             f'request: no relationship connects {"them" if many else "it"} '
             f'to {entity_table!r}, so the model answers without '
             f'{"them" if many else "it"}. Say how '
-            f'{"they join" if many else "it joins"} -- '
+            f'{"they join" if many else "it joins"}: '
             f'schema.relationships.append(Relationship({unlinked[0]!r}, '
-            f'<foreign key>, <parent table>, <its primary key>)) -- or leave '
+            f'<foreign key>, <parent table>, <its primary key>)), or leave '
             f'{"them" if many else "it"} out of the schema to say '
             f'{"they are" if many else "it is"} not wanted.',
             category=SDMWarning,
@@ -1439,8 +1439,8 @@ def _warn_of_columns_the_model_does_not_read(
 
     `sent` is the same question asked of the table. A table nothing links, or
     one further out than the hops sampled, is not in the payload either, and
-    naming its columns reported a loss that did not happen with a remedy --
-    type it categorical -- that under that hop budget changes nothing. Why
+    naming its columns reported a loss that did not happen. Its remedy, to
+    type it categorical, changes nothing under that hop budget. Why
     that table is missing is said by `_warn_of_tables_left_out`, which is the
     line a caller can act on.
     """
@@ -1479,7 +1479,7 @@ def _warn_the_filter_chose_only_the_examples(
     question and is answered as two. The filter selects the labelled examples
     the model learns from; the rows actually scored are the caller's indices,
     untouched by it. Measured on synthetic data, a filter matching 12 of 50
-    named sellers still scored all 50 -- so the model was shown a thousand
+    named sellers still scored all 50. The model was shown a thousand
     northern sellers and then asked about thirty-eight southern ones, with
     nothing said and predictions that look entirely ordinary.
 
@@ -1495,7 +1495,7 @@ def _warn_the_filter_chose_only_the_examples(
     warnings.warn(
         f'the entity filter {str(query.entity_ast.condition)!r} selects the '
         f'labelled examples the model learns from, and does not narrow the '
-        f'{len(indices)} rows named for scoring -- those are scored as given, '
+        f'{len(indices)} rows named for scoring. Those are scored as given, '
         f'whether or not they satisfy it. Pass only indices that satisfy the '
         f'condition if that is what you meant.',
         category=SDMWarning,

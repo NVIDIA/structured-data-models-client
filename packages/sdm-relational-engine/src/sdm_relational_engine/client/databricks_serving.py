@@ -84,8 +84,8 @@ def _status_of(error: BaseException) -> int:
 
     Matched by class name so ``databricks.sdk`` need not be importable to read
     this module, and a version bump that moves the classes cannot break the
-    mapping silently. An unclassified failure is 503 rather than 500, because it
-    is usually the endpoint being unavailable and 503 is what RFM retries.
+    mapping silently. An unclassified failure is 503 rather than 500 because it
+    usually means the endpoint is unavailable, and RFM retries 503 responses.
     """
     names = {cls.__name__ for cls in type(error).__mro__}
     if names & {'PermissionDenied', 'Unauthenticated'}:
@@ -118,7 +118,7 @@ def _error_code_of(error: BaseException) -> str | None:
 
 
 class DatabricksServingClient:
-    r"""Address a Kumo Relational model served as a Databricks Model Serving endpoint.
+    r"""Address a Kumo Relational model on Databricks Model Serving.
 
     Args:
         endpoint: The serving endpoint **name**.
@@ -211,10 +211,10 @@ class DatabricksServingClient:
         The cap is measured on the serialized envelope rather than on the
         payload, because the gateway weighs what is sent and every quote in the
         payload is re-escaped inside it (~1.15x): measuring the payload alone
-        ships 18.3 MB believing it is 15.9. ``records`` is reused below, so what
-        is measured is what is sent, and ``ensure_ascii`` makes ``len`` the byte
-        count. The comparison is ``>`` because the cap is the largest size the
-        gateway accepts.
+        ships 18.3 MB believing it is 15.9. ``records`` is reused below, so the
+        measured data is sent unchanged. ``ensure_ascii`` makes ``len`` the
+        byte count. The comparison is ``>`` because the cap is the largest size
+        the gateway accepts.
         """
         payload = json.dumps(request, allow_nan=False, separators=(',', ':'))
         records = [{REQUEST_COLUMN: payload}]

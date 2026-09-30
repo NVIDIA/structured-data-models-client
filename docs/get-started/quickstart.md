@@ -25,8 +25,7 @@ with SDMClient(url='http://localhost:8000') as client:
     print(client.predict(request, model=KumoTabular()).to_pandas())
 ```
 
-The rows being scored need not appear in the labelled half. That is the point:
-this model exists to score rows it has never seen.
+The model can score rows absent from the labelled half.
 
 ## Several related tables
 
@@ -45,27 +44,25 @@ with SDMClient(url='http://localhost:8001') as client:
     print(client.predict(request, model=KumoRelational()).to_pandas())
 ```
 
-`materialize()` is where the work happens: it resolves the query, finds
+`materialize()` resolves the query, finds
 labelled examples in history, samples each entity's neighbourhood and encodes
-the result. It is a separate call because it is the expensive one.
+the result. This expensive work uses a separate call.
 
 **Pick a window your data can support.** An example's features come from
 before its anchor and its label from the window after it, so a query over
-`0, 30, days` needs a dataset that spans comfortably more than 30 days: one
-shorter than the window leaves no anchor with a label after it, and nothing to
-learn from. You will be told if it does not have it.
+`0, 30, days` needs a dataset spanning comfortably more than 30 days. A
+dataset shorter than the window leaves no anchor with a later label and
+nothing to learn from. The client reports this condition.
 
 **The window opens after the anchor and closes on its last day.** `0, 30,
 days` covers `(anchor, anchor + 30 days]`: a row at the anchor itself does not
 count, one a day later does, one exactly thirty days later does, one thirty-one
-days later does not. It is worth knowing if you are computing the same
-aggregate yourself to check a model against a baseline, because taking either
-edge the other way moves every number.
+days later does not. If you compute the same aggregate to check a baseline,
+reversing either edge changes every number.
 
 ## Asking the same context several questions
 
-Uploading a context once and scoring against it repeatedly is what `fit` is
-for.
+Use `fit` to upload a context once and score against it repeatedly.
 
 ```python
 with client.fit(request, model=KumoRelational()) as fitted:
@@ -85,15 +82,15 @@ A query says *what* to predict. It never says *which rows*.
 
 There is no all-rows default, because it would silently score a whole table.
 
-For multiple tables, `materialize()` additionally gathers records related to each
+For multiple tables, `materialize()` also gathers records related to each
 entity.
 
 ## Which model it is gathered for
 
 The two models read a request differently, so it is gathered for one of them.
-Left unsaid, the schema's shape decides: a schema of one table with no
-relationships is gathered for `kumo-tabular`, and anything wider — a second
-table, or a table that points at itself — for `kumo-relational`.
+By default, the schema's shape decides. One table with no relationships uses
+`kumo-tabular`. A second table or a self-referencing table uses
+`kumo-relational`.
 
 Name a model when that default is not what you want. A single table is a graph
 of one node, and the relational model answers it:
@@ -112,9 +109,9 @@ The endpoint serves classification and regression. A ranking and a multi-step
 forecast are neither, so the client asks each as the questions it does serve
 and puts the answers back together.
 
-A ranking is asked once per candidate — *will this entity reach this one?* —
-and the candidates are ordered by how sure each answer was. The set is yours to
-name, because there is no ranking task to choose it for you:
+A ranking asks once per candidate: *will this entity reach this one?* It orders
+the candidates by answer confidence. You must name the set because no ranking
+task chooses it:
 
 ```python
 request = PredictiveQuery(
@@ -145,7 +142,7 @@ request = PredictiveQuery(
 ).materialize(indices=[1, 2, 3])
 ```
 
-Both are sent as several calls, so they cost several calls: a ranking over
-fifty candidates is fifty. `request.context_rows` and `request.predict_rows`
-count what will actually be sent. Neither can be pinned with `fit()`, because
-each part needs the context its own labels come from and a session pins one.
+Both use several calls. A ranking over fifty candidates uses fifty calls.
+`request.context_rows` and `request.predict_rows` count the rows actually
+sent. Neither can be pinned with `fit()` because each part needs the context
+that supplies its own labels, while a session pins one context.

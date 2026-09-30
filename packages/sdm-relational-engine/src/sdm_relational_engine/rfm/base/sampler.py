@@ -245,9 +245,9 @@ class Sampler(ABC):
             ValueError: If ``exclude_cols_dict`` names a table or a feature
                 column that does not exist. ``exclude_cols_dict`` is a public
                 ``predict_task`` argument, so a typo in it is a caller mistake
-                and has to read as one -- deleting straight out of the stype
-                map reported it as a bare ``KeyError``, which the client could
-                only classify as an internal failure.
+                and must read as one. Deleting directly from the stype map
+                reported it as a bare ``KeyError``, which the client could only
+                classify as an internal failure.
         """
         # Exclude all columns that leak target information:
         table_stype_dict: dict[str, dict[str, Stype]] = self.table_stype_dict
@@ -1114,9 +1114,8 @@ def _pooled_offset(
     Otherwise none of them does, and the bound is built. A month is shorter
     than thirty days from some anchors and longer from others, so neither is a
     bound for the pair; what bounds both is the extreme of what either can
-    span. That is a rigid span, so it is returned as one -- correct both for
-    the caller that converts it to seconds and the caller that adds it to a
-    timestamp.
+    span. That rigid span works both for the caller that converts it to seconds
+    and the caller that adds it to a timestamp.
     """
     assert len(offsets) > 0
     bound: TimeBound = 'earliest' if earliest else 'latest'
@@ -1136,7 +1135,7 @@ def _pooled_offset(
 
 
 def min_date_offset(*args: pd.DateOffset | None) -> pd.DateOffset | None:
-    r"""The offset that reaches furthest back, whatever the anchor turns out to be."""
+    r"""Return the offset that reaches furthest back for any anchor."""
     offsets = [arg for arg in args if arg is not None]
 
     if len(offsets) != len(args):
@@ -1146,7 +1145,7 @@ def min_date_offset(*args: pd.DateOffset | None) -> pd.DateOffset | None:
 
 
 def max_date_offset(*args: pd.DateOffset) -> pd.DateOffset:
-    r"""The offset that reaches furthest forward, whatever the anchor turns out to be."""
+    r"""Return the offset that reaches furthest forward for any anchor."""
     return _pooled_offset(list(args), earliest=False)
 
 

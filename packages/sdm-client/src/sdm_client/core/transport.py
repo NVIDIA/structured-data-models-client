@@ -34,13 +34,13 @@ _DEFAULT_BACKOFF_FACTOR = 0.5
 #: The transient ones. A 500 is not among them: the payload and the model are
 #: the same on every attempt, so a server fault reproduces, and the caller
 #: mistakes this endpoint reports as a 500 are reclassified from the body as
-#: the caller's -- after three more uploads of the whole gathered context.
+#: the caller's after three more uploads of the whole gathered context.
 _RETRY_STATUS = (429, 502, 503, 504)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512
 _LOCAL_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
-# Well above any real prediction response -- a full-precision float64 column
-# for a million rows is ~25 MB of JSON -- but far below what a compressed
+# Well above any real prediction response (a full-precision float64 column
+# for a million rows is ~25 MB of JSON), but far below what a compressed
 # hostile body can inflate to.
 _MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 _RESPONSE_CHUNK_BYTES = 1024 * 1024
@@ -60,8 +60,9 @@ def redact_url(url: str | None) -> str | None:
     through here first, so the credential does not travel with the diagnosis
     into a log aggregator or a bug report.
 
-    Mirrors ``sdm_relational_engine.client.client.redact_url``, which guards the same
-    credential on the Kumo Relational path. The two cannot share one implementation:
+    Mirrors ``sdm_relational_engine.client.client.redact_url``, which guards
+    the same credential on the Kumo Relational path. The two cannot share one
+    implementation:
     this package must not import the optional driver, and the package both
     depend on is a SQL-connector package with no URL handling. Keep them in
     step.
@@ -83,7 +84,7 @@ def scrub_userinfo(text: str) -> str:
     r"""Remove any ``user:secret@`` credential from free text.
 
     The counterpart to :func:`redact_url` for strings that merely *contain* a
-    URL rather than being one -- chiefly the ``requests`` exception messages
+    URL rather than being one, chiefly the ``requests`` exception messages
     quoted into transport errors, which echo back whatever URL was requested.
     """
     return _USERINFO_RE.sub('', text)
@@ -124,7 +125,7 @@ def _validate_url(url: str, api_key: str | None) -> None:
         )
     # A base URL is a scheme, a host and at most a path prefix. A query or
     # fragment is not a meaningful part of one, and every route is appended to
-    # this string -- so `http://host?api_key=x` becomes
+    # this string. Thus, `http://host?api_key=x` becomes
     # `http://host/?api_key=x/v1/predictions`, which is both a broken URL and a
     # secret in a plaintext request line that redaction never sees.
     if parsed.query or parsed.fragment:
@@ -161,8 +162,9 @@ class _Session(requests.Session):
     to any host it names, defeating ``_validate_url``.
 
     Redirects are still followed, and this covers the credential only. A
-    ``307``/``308`` therefore re-sends the request *body* -- for Kumo Tabular, the
-    caller's whole labelled context table -- to the redirect target, including
+    ``307``/``308`` therefore re-sends the request *body* to the redirect
+    target,
+    including the caller's whole labelled context table for Kumo Tabular and
     across an ``https`` to ``http`` downgrade, which ``_validate_url`` never
     sees because it runs at construction against the configured URL. That is
     an accepted trade when certificate verification is enabled. When it is
@@ -181,7 +183,7 @@ class _Session(requests.Session):
 
         Close rather than drain: the connection is surrendered instead of being
         read to the end so it can be reused. Marking the body consumed is what
-        stops ``requests`` reading it afterwards -- ``resp.content`` returns the
+        stops ``requests`` reading it afterwards. ``resp.content`` returns the
         empty bytes set here instead of pulling from the socket.
         """
         if not isinstance(resp, requests.Response):
@@ -201,13 +203,14 @@ class _Session(requests.Session):
         r"""Follow redirects without reading the bodies they carry.
 
         ``requests`` consumes each hop's body (``resp.content``) to release the
-        socket, with no cap. This layer never needs those bytes -- the only
-        request it makes reports a status -- and they are attacker-controlled on
+        socket, with no cap. This layer never needs those bytes because its
+        only
+        request reports a status. They are attacker-controlled on
         a misconfigured endpoint.
 
         Every hop is released, not just the first. ``requests`` resolves the
         rest inside the generator below, reading each one as it loops, so each
-        is released as it is yielded -- before control returns to that loop.
+        is released as it is yielded, before control returns to that loop.
         """
         # ``Session.send`` calls this for every response, redirect or not, so
         # the check matters: releasing unconditionally would close the body of
@@ -246,7 +249,8 @@ def _validate_limits(timeout: Any, max_retries: Any) -> None:
 
     ``inf`` and ``nan`` are rejected explicitly: both compare ``False`` against
     ``<= 0`` and so pass an ordinary positivity test, then fail on the first
-    request with ``OverflowError``/``ValueError`` from the socket layer. ``inf``
+    request with ``OverflowError``/``ValueError`` from the socket layer.
+    ``inf``
     is the natural way to reach for "no timeout" here, since this constructor
     does not accept ``None``.
     """
@@ -291,8 +295,8 @@ def _build_retry(
     and a request that never reached the server cannot have had an effect.
 
     ``DELETE`` is always retryable. Releasing a session is idempotent by
-    contract -- the NIM answers 204 whether or not the session is still there
-    -- and the status it returns when it cannot release one right now is a
+    contract. The NIM answers 204 whether or not the session is still there,
+    and the status it returns when it cannot release one right now is a
     `429` whose message asks the caller to retry. Leaving it out meant the
     client raised the one error it documents as worth retrying and then did
     not retry it.
@@ -417,8 +421,8 @@ def _path_segment(value: str) -> str:
     route.
 
     ``quote`` leaves a dot alone, because it is unreserved. A resolver then
-    removes the two segments that mean something to it -- ``.`` and ``..``,
-    and those two only -- so ``..`` turned a scoring call against a pinned
+    removes the only two segments that mean something to it, ``.`` and ``..``.
+    Thus, ``..`` turned a scoring call against a pinned
     context into a one-shot prediction elsewhere. Those name no session and
     are refused; ``...`` is an ordinary segment and is escaped like any
     other. An empty id is refused for its own reason: it contributes no
@@ -604,7 +608,7 @@ class Transport:
         contract's four paths, so an endpoint may not serve it at all. That is
         reported as a transport error naming the path rather than being
         answered from this client's own list of models, which is what the
-        previous generation did -- and which meant it claimed a model the
+        previous generation did. That meant it claimed a model the
         endpoint did not serve.
         """
         self._require_open()
@@ -803,7 +807,7 @@ def _diagnosis_in(reported: Any) -> tuple[str, str] | None:
 def _the_diagnosis_alone(message: str, wording: str) -> str:
     r"""The part of ``message`` that says what the caller got wrong.
 
-    What comes before it is the endpoint describing its own failure -- which
+    What comes before it is the endpoint describing its own failure: which
     prediction, at which address, and the Python type that reached its
     response, matched by ``_LEAKED_EXCEPTION``. None of that is the caller's
     to act on, and a type from inside the server reads as a crash, which is

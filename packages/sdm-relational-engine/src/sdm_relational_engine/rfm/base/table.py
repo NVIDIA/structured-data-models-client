@@ -282,12 +282,12 @@ class Table(ABC):
     def remove_column(self, name: str) -> Self:
         r"""Removes a column from this table.
 
-        A :class:`~sdm_relational_engine.rfm.Table` does not know which graph holds it, so
-        this clears the table's own primary-key/time-column pointers but
-        leaves any graph edge that uses ``name`` as its foreign key in place.
-        Call :meth:`~sdm_relational_engine.rfm.Graph.unlink` first when removing a linked
-        foreign key; otherwise :meth:`~sdm_relational_engine.rfm.Graph.validate` rejects the
-        graph.
+        A :class:`~sdm_relational_engine.rfm.Table` does not know which graph
+        holds it. This clears the table's primary-key and time-column pointers
+        but leaves any graph edge using ``name`` as its foreign key. Call
+        :meth:`~sdm_relational_engine.rfm.Graph.unlink` before removing a
+        linked foreign key. Otherwise,
+        :meth:`~sdm_relational_engine.rfm.Graph.validate` rejects the graph.
 
         Args:
             name: The name of the column.
@@ -356,10 +356,9 @@ class Table(ABC):
     def _set_composite_primary_key(self, names: Sequence[str]) -> None:
         r"""Folds *names* into one derived identity column and keys on it.
 
-        Everything downstream -- links, the sampler, the payload, the serving
-        contract's ``instance_id`` -- identifies a row by a single value, so a
-        multi-column identity is carried by a derived column here rather than
-        threaded through each of those.
+        Links, the sampler, the payload, and the serving contract's
+        ``instance_id`` each identify a row by one value. A derived column
+        therefore carries a multi-column identity.
         """
         names = tuple(names)
         missing = [name for name in names if name not in self]
@@ -452,7 +451,7 @@ class Table(ABC):
         self._assert_warehouse_folds_like_pandas(derived, names)
 
     def _sample_values(self, name: str) -> pd.Series | None:
-        r"""A sample of *name*, whether the source holds it or it is derived."""
+        r"""Return a sample of source or derived column *name*."""
         source = self._source_sample_df
         if name in source.columns:
             return source[name]
@@ -468,10 +467,9 @@ class Table(ABC):
         r"""Checks the warehouse renders an identity exactly as pandas does.
 
         Seeds are folded here while the warehouse folds the rows it joins
-        against, so a dialect that renders a value differently -- a number, a
-        date, a decimal's trailing zeros -- yields no matched rows rather than
-        an error. Comparing the two on a sample turns that into a refusal at
-        the point the key is declared.
+        against. A dialect that renders a number, date, or decimal's trailing
+        zeros differently yields no matched rows instead of an error. Comparing
+        a sample turns that into a refusal when the key is declared.
         """
         folded = self._sample_values(derived)
         source = self._source_sample_df
@@ -554,9 +552,9 @@ class Table(ABC):
 
         The setter marks a column as this table's time column. A name the
         data frame does not carry raises :class:`KeyError`, and a dtype
-        that cannot mean a timestamp -- an integer, say -- raises
-        :class:`ValueError`. A column that can carry one, such as text
-        waiting to be parsed, is accepted and its semantic type rewritten.
+        that cannot mean a timestamp, such as an integer, raises
+        :class:`ValueError`. A column that can carry a timestamp, such as text
+        waiting to be parsed, is accepted and its semantic type is rewritten.
         """
         if self._time_column is None:
             return None
@@ -654,9 +652,10 @@ class Table(ABC):
             >>> # doctest: +SKIP
             >>> import sdm_relational_engine.rfm as rfm
             >>> table = rfm.LocalTable(df=..., name=...).infer_metadata()
-            >>> table.metadata
-                Name        Data Type  Semantic Type  Primary Key  Time Column  End Time Column
-            0   CustomerID  float64    ID             True         False        False
+            >>> table.metadata.iloc[0].to_dict()
+            {'Name': 'CustomerID', 'Data Type': 'float64',
+             'Semantic Type': 'ID', 'Primary Key': True,
+             'Time Column': False, 'End Time Column': False}
         """
         cols = self.columns
 
@@ -757,7 +756,7 @@ class Table(ABC):
 
         # Nothing scored high enough. Record the candidates that would have
         # served as a key so `Graph.infer_links` can report the ones link
-        # inference does not go on to explain -- at this point a viable key and
+        # inference does not go on to explain. At this point, a viable key and
         # a coincidentally unique foreign key look identical, and only the
         # edges tell them apart.
         #

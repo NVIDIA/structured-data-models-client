@@ -210,7 +210,7 @@ class TabularAdapter:
         # session opened, and the rows have to be written to describe *that*.
         # Typing them from the half that travels sent `1.0` under a column the
         # session had pinned as `int64`, which the endpoint refused as
-        # `SESSION_PREDICT_SCHEMA_MISMATCH` -- a failure about a value the
+        # `SESSION_PREDICT_SCHEMA_MISMATCH`, a failure about a value the
         # caller never wrote and cannot see.
         if pinned_dtypes is not None:
             dtypes = {
@@ -280,7 +280,7 @@ class TabularAdapter:
         r"""The semantic type to declare for one column.
 
         Schema inference is task-agnostic, so an integer label column comes
-        back ``numerical`` -- which is right for a regression target and wrong
+        back ``numerical``, which is right for a regression target and wrong
         for a classification one. The task is what settles it, and only the
         adapter knows the task, so the correction happens here rather than
         being baked into the schema a caller may reuse for another question.
@@ -314,7 +314,7 @@ def _raw_dtype_of(series: pd.Series, declared: str | None = None) -> str:
     an id through a float: `9007199254740993` left as `9007199254740992.0`,
     which is the corruption the integer rules exist to prevent, arriving by the
     one route that looks like an ordinary type difference. The values decide,
-    not the dtype -- a genuine float column of whole numbers is still a float,
+    not the dtype. A genuine float column of whole numbers is still a float,
     because nothing declared it otherwise.
     """
     if (
@@ -338,7 +338,7 @@ def _a_row_the_pinned_schema_cannot_hold(
 
     The scoring rows are written to the schema the session pinned, so a value
     this package cannot write that way fails naming a type the caller did not
-    choose -- or, where pandas raises first, as a bare `ValueError` from
+    choose, or where pandas raises first, as a bare `ValueError` from
     inside. Which column and which two types is what makes it actionable.
     """
     if declared is None:
@@ -359,8 +359,8 @@ def _a_row_the_pinned_schema_cannot_hold(
         return error
     return StructuredDataError(
         f'these rows cannot be written to the schema this session pinned: '
-        f'{"; ".join(differing)}. A scoring call does not send a schema -- it '
-        f'was settled by fit() -- so the rows have to be writable as it '
+        f'{"; ".join(differing)}. A scoring call does not send a schema. It '
+        f'was settled by fit(), so the rows have to be writable as it '
         f'describes them. Give the column the type it was pinned with, or '
         f'fit() again on a context that has the type you want. ({error})',
         code='INVALID_REQUEST',
@@ -453,16 +453,16 @@ def _named_entities(
     the operation that can misattribute an answer, so a row is checked against
     the batch it claims to belong to before its id is replaced. The endpoint
     answers under the list of key values and the relational endpoint answers
-    under the key itself, so a key is recognised in either shape, and an id
-    recognisable as a key has to be the key of the row it was paired with. An id
-    in any other shape is not second-guessed: it may be a correlation token of
-    the endpoint's own.
+    under the key itself, so a key is recognised in either shape. An id
+    recognisable as a key has to be the key of the row it was paired with. An
+    id in any other shape is not second-guessed: it may be a correlation token
+    of the endpoint's own.
 
-    Those checks are about the batch rather than about the key, so they hold for
-    a request that has no key to put back too: a composite key, or rows the
-    caller supplied without the key column, still have to be answered once each
-    and no more. What such a request has nothing of is a value to restore, and a
-    null key is the same case -- ``str`` would turn it into ``'None'``, which
+    Those checks are about the batch rather than the key, so they also hold for
+    a request that has no key to put back: a composite key, or rows the caller
+    supplied without the key column, still have to be answered once each and
+    no more. Such a request has no value to restore. A null key is the same
+    case. ``str`` would turn it into ``'None'``, which
     reads as a key that was asked about. Rows in a shape this cannot read at
     all, a format other than ``arrays``, are left alone entirely.
     """
@@ -562,7 +562,7 @@ def _coherent_stype(stype: str, dtype: str, column: Column) -> str:
 
     An all-null context column is typed `categorical` because a schema has to
     say something. The scored rows then decide its dtype, and if they hold
-    timestamps the column goes out as `timestamp[us]` meaning `categorical` --
+    timestamps the column goes out as `timestamp[us]` meaning `categorical`,
     which is not a thing a column can be, and is the same self-contradiction on
     the wire that a scored frame re-typing a real column used to produce.
 
@@ -574,7 +574,7 @@ def _coherent_stype(stype: str, dtype: str, column: Column) -> str:
     # Every spelling of a timestamp, not one of them. The contract writes
     # `timestamp[us]`, but a hand-built schema may say `[ns]`, `[ms]` or `[s]`,
     # and reading those as categorical puts a dtype and a meaning on the wire
-    # that contradict each other -- which is what this exists to prevent.
+    # that contradict each other. That is what this exists to prevent.
     if dtype.startswith('timestamp'):
         return 'timestamp'
     return _MEANING_OF.get(dtype, 'categorical')

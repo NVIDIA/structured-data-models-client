@@ -11,7 +11,7 @@ _HANDLER_ATTR = '_sdm_relational_engine_handler'
 
 
 def _install_handler(logger: logging.Logger) -> None:
-    r"""Attaches our formatter to the ``sdm_relational_engine`` logger, and only to it.
+    r"""Attach our formatter only to the ``sdm_relational_engine`` logger.
 
     A library must not call :func:`logging.basicConfig`: that attaches a
     handler to the *root* logger and silently reconfigures the host
@@ -44,14 +44,14 @@ def _install_handler(logger: logging.Logger) -> None:
 
 
 def initialize_logging() -> None:
-    r"""Initializes Kumo Relational logging.
+    r"""Initialize Kumo Relational logging.
 
-    Touches the ``sdm_relational_engine`` logger and nothing else. This used to raise the
-    level of ``matplotlib``, ``urllib3`` and ``snowflake`` to ``ERROR``, which
-    meant importing this package silently suppressed three unrelated libraries
-    for the whole process -- including in an application that never predicts
-    anything and had deliberately configured them otherwise. Quieting a noisy
-    dependency is the application's decision, not a library's.
+    This touches only the ``sdm_relational_engine`` logger. It once raised
+    ``matplotlib``, ``urllib3`` and ``snowflake`` to ``ERROR``. Importing the
+    package then suppressed three unrelated libraries for the whole process,
+    including applications that never predict and had configured them
+    otherwise. Applications, not libraries, decide whether to quiet noisy
+    dependencies.
     """
     logger: logging.Logger = logging.getLogger('sdm_relational_engine')
 

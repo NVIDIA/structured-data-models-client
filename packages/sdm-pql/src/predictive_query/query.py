@@ -38,9 +38,8 @@ from predictive_query.schema.utils import QueryType, maybe_bold
 class ParsedPredictiveQuery:
     r"""A predictive query as the parser produced it.
 
-    Carries nothing that depends on the schema -- no types, no join keys.
-    :class:`ValidatedPredictiveQuery` is the same query once those are
-    known.
+    Carries no schema-dependent data, including types or join keys.
+    :class:`ValidatedPredictiveQuery` is the same query once those are known.
 
     Args:
         entity_ast: The abstract syntax tree corresponding to the entity
@@ -264,9 +263,9 @@ class ValidatedPredictiveQuery(ParsedPredictiveQuery):
     r"""A parsed query the validator has accepted, against a schema.
 
     Adds the types, join keys and task metadata that
-    :class:`ParsedPredictiveQuery` deliberately lacks, and keeps the
-    :class:`ValidationResponse` that produced them -- which may still
-    carry warnings, since only errors stop a query.
+    :class:`ParsedPredictiveQuery` deliberately lacks. It also keeps the
+    :class:`ValidationResponse` that produced them. The response may still
+    carry warnings because only errors stop a query.
     """
 
     validation_response: ValidationResponse = field(

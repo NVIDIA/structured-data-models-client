@@ -2,8 +2,8 @@
 
 - **Python** 3.10 to 3.14 for the client, the language, the wire types and the
   connectors. **3.10 to 3.13 for the relational engine**, which is a native
-  build with a shorter wheel matrix — so `pip install sdm-client[relational]`
-  does not resolve on 3.14 while plain `pip install sdm-client` does. pip
+  build with a shorter wheel matrix. `pip install sdm-client[relational]` does
+  not resolve on 3.14, while plain `pip install sdm-client` does. pip
   reports that as `No matching distribution found for sdm-relational-engine`,
   which names the package and not the reason.
 - **A reachable NIM** serving `kumo-tabular` or `kumo-relational`. The client
@@ -19,7 +19,7 @@ a laptop; `kumo-relational` needs Linux.
 
 ## Getting a NIM
 
-Two ways.
+Use either option:
 
 **A hosted endpoint.** Find the model in the NVIDIA API catalog, generate a
 key, and pass the endpoint and key to `SDMClient`.

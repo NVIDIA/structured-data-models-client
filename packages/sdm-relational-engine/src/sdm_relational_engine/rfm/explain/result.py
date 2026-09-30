@@ -23,15 +23,15 @@ class ExplainConfig(CastMixin):
 
         **The natural-language summary is generated off-machine.** With
         ``skip_summary=False`` (the default), the ``openai`` package installed
-        (``pip install 'sdm-relational-engine[explain]'``) and an API key discoverable, the
-        client sends the predictive query, the returned predictions, the cohort
-        analysis and the subgraph attribution -- which contains the **raw
-        cell values** of the explained entity's subgraph -- to an
-        OpenAI-compatible chat-completions endpoint. Unless
-        ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` points somewhere else, that endpoint
+        (``pip install 'sdm-relational-engine[explain]'``), and a discoverable
+        API key, the client sends the predictive query, returned predictions,
+        cohort analysis, and subgraph attribution to an OpenAI-compatible
+        chat-completions endpoint. The attribution includes the
+        **raw cell values** of the explained entity's subgraph. Unless
+        ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` points elsewhere, the endpoint
         is OpenAI's ``https://api.openai.com/v1/``, a non-NVIDIA service. The
-        key is read from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY`` only. Setting
-        that variable is what turns the call on; no other key enables it.
+        key comes only from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY``. Setting
+        that variable enables the call; no other key does.
 
         Pass ``skip_summary=True`` (e.g.
         ``predict(..., explain=dict(skip_summary=True))``) to turn it off. The
@@ -42,10 +42,12 @@ class ExplainConfig(CastMixin):
     Args:
         skip_summary: Whether to skip generating a human-readable summary of
             the explanation. The summary's LLM endpoint is configured once via
-            the environment: the API key from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY``
-            ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` (for
-            any OpenAI-compatible endpoint, including a self-hosted one),
-            ``KUMO_RELATIONAL_EXPLAIN_LLM_MODEL`` (default ``gpt-4.1-mini-2025-04-14``) and
+            the environment: the API key from
+            ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY``,
+            ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` (for any OpenAI-compatible
+            endpoint, including a self-hosted one),
+            ``KUMO_RELATIONAL_EXPLAIN_LLM_MODEL`` (default
+            ``gpt-4.1-mini-2025-04-14``), and
             ``KUMO_RELATIONAL_EXPLAIN_LLM_TIMEOUT`` (default 20s).
     """
 

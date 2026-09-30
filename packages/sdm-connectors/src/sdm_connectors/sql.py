@@ -66,18 +66,17 @@ _REJECTED_KEYWORD_MESSAGES = (
 
 
 def connect_with(backend: str, opener: Any, *args: Any, **kwargs: Any) -> Any:
-    r"""Open a connection, reporting a rejected keyword against the connector.
+    r"""Open a connection and report rejected keywords against the connector.
 
-    A file-backed backend takes its path as ``database`` or ``uri`` and passes
-    anything else through to the driver, so a caller reaching for ``path`` --
-    the name :func:`read` uses for a local file -- got the driver's own
-    ``Connection.__init__() got an unexpected keyword argument 'path'``, which
-    names neither the connector nor the two arguments it does accept.
+    A file-backed backend accepts its path as ``database`` or ``uri`` and
+    passes anything else to the driver. A caller using ``path``, the name
+    :func:`read` uses for a local file, received the driver's own
+    ``Connection.__init__() got an unexpected keyword argument 'path'``. That
+    message names neither the connector nor its two accepted arguments.
 
-    Both phrasings are matched: a driver written in Python reports the rejected
-    keyword the way CPython does, while a compiled one built with pybind11 --
-    DuckDB's, for instance -- reports "incompatible function arguments" and
-    dumps its whole overload set instead.
+    Both message forms are matched. A Python driver reports the rejected
+    keyword as CPython does. A compiled pybind11 driver such as DuckDB reports
+    "incompatible function arguments" and dumps its whole overload set.
     """
     try:
         return opener(*args, **kwargs)
@@ -129,9 +128,9 @@ def driver_guard(
     regions never double-wrap, and ImportError propagates unchanged because a
     broken driver installation must not be reported as a connect/query/read
     failure. The original driver exception stays chained as ``__cause__``.
-    TypeError maps to INVALID_CONNECTOR_ARGS (a deterministic caller error,
-    never worth retrying) -- except where the guarded region holds no caller
-    argument at all, as reading a result set does: there a driver's own
+    TypeError maps to INVALID_CONNECTOR_ARGS, a deterministic caller error that
+    is never worth retrying. The exception is a guarded region with no caller
+    argument, such as reading a result set. There, a driver's own
     ``TypeError`` converting a value is a read failure and saying "invalid
     connector args" names something the caller did not do
     (``type_error_is_the_caller_s=False``). FileNotFoundError maps to NOT_FOUND
@@ -160,11 +159,11 @@ def require_existing_database(backend: str, uri: str) -> None:
     r"""Reject a database path that does not exist yet.
 
     The file-backed drivers open a missing path in create-if-missing mode, so
-    a mistyped path leaves a new empty database on disk and the failure then
-    surfaces as a missing *table* -- sending the caller to debug the wrong
-    problem, having silently written to their working tree. A read must not
-    write. ``:memory:`` and URI forms that carry their own open mode are
-    passed through untouched.
+    a mistyped path leaves a new empty database on disk. The failure then
+    surfaces as a missing *table*, sending the caller to debug the wrong
+    problem after silently writing to their working tree. A read must not
+    write. ``:memory:`` and URI forms with their own open mode pass through
+    untouched.
 
     Shared by every file-backed backend so the two cannot drift apart on what
     the same mistake does.
@@ -243,9 +242,9 @@ def merge_driver_options(
 
 
 def quote_ident(ident: str, char: str = '"') -> str:
-    r"""Quotes a SQL identifier, doubling any embedded quote character.
+    r"""Quote a SQL identifier by doubling embedded quote characters.
 
-    Doubling is sufficient for an *identifier* -- no supported backend lets a
+    Doubling is sufficient for an *identifier*. No supported backend lets a
     backslash escape out of ``"``, ``` ` ``` or ``[]`` quoting. It is **not**
     sufficient for a string literal on a backend that also honours backslash
     escapes: Snowflake and Databricks both read ``\'`` as an escaped quote, so
@@ -256,8 +255,8 @@ def quote_ident(ident: str, char: str = '"') -> str:
     character.
 
     Args:
-        ident: The identifier to quote. A single component -- a dotted name
-            must be split and quoted per part.
+        ident: One identifier component. Split and quote a dotted name by
+            part.
         char: The quote character, e.g. ``'"'`` (default) or ``"'"`` for a
             string literal on a standard-conforming backend.
 
@@ -268,20 +267,20 @@ def quote_ident(ident: str, char: str = '"') -> str:
 
 
 def resolve_sql(*, table: str | None, query: str | None) -> str:
-    r"""Turns a ``table=`` or ``query=`` argument pair into one SQL statement.
+    r"""Turn a ``table=`` or ``query=`` pair into one SQL statement.
 
-    Exactly one must be given. ``query`` is returned verbatim -- the caller owns
-    its safety. ``table`` is checked against a strict identifier pattern and
-    interpolated unquoted, which also means it is subject to each backend's
+    Exactly one must be given. ``query`` is returned verbatim, and the caller
+    owns its safety. ``table`` is checked against a strict identifier pattern
+    and interpolated unquoted, which also means it is subject to each backend's
     default case folding (Snowflake upper-cases, Databricks lower-cases). Names
-    that need quoting -- spaces, non-ASCII characters, a leading digit -- are
-    rejected; reach them with a hand-written ``query`` using
+    that need quoting, including spaces, non-ASCII characters or a leading
+    digit, are rejected. Reach them with a hand-written ``query`` using
     :func:`quote_ident`.
 
-    A reserved word such as ``select`` is a plain identifier by this pattern, so
-    it is *not* rejected here; it reaches the driver unquoted and fails at
-    execution as ``QUERY_FAILED``. Quoting is dialect-specific, so this
-    layer -- which has no backend context -- does not attempt it.
+    A reserved word such as ``select`` is a plain identifier by this pattern,
+    so it is *not* rejected here; it reaches the driver unquoted and fails at
+    execution as ``QUERY_FAILED``. Quoting is dialect-specific, so this layer
+    does not attempt it because it has no backend context.
 
     Args:
         table: A dot-separated identifier matching
@@ -317,7 +316,7 @@ def resolve_sql(*, table: str | None, query: str | None) -> str:
             f'dot-separated identifiers are accepted here. A name that needs '
             f'quoting (spaces, non-ASCII characters, a leading digit) has to '
             f'go through query=, e.g. '
-            f'query=f"SELECT * FROM {{quote_ident(name)}}" -- quoting it '
+            f'query=f"SELECT * FROM {{quote_ident(name)}}". Quoting it '
             f'also changes how the backend folds its case.',
             code='INVALID_CONNECTOR_ARGS',
             details={'table': table},

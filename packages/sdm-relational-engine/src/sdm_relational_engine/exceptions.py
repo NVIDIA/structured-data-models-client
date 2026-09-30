@@ -56,11 +56,11 @@ class GraphConstructionError(KumoRelationalError):
     r"""A data source could not be read while building a graph.
 
     The driver's own exception is kept as ``__cause__``. Without this, reading
-    a warehouse raised whatever that driver raises -- a
+    a warehouse raised whatever that driver raises, such as a
     ``databricks.sql.exc.ServerOperationError``, a
-    ``snowflake.connector.errors.ProgrammingError`` -- none of which share a
-    base with anything else this client raises, so building a graph could not be
-    guarded by the same ``except`` as using one.
+    ``snowflake.connector.errors.ProgrammingError``. These exceptions share no
+    base with anything else this client raises, so building a graph could not
+    be guarded by the same ``except`` as using one.
     """
 
 
@@ -75,7 +75,7 @@ class InvalidResponseError(KumoRelationalError, ValueError):
 
 
 class NimFailureError(KumoRelationalError, RuntimeError):
-    r"""A failed KumoRelational NIM prediction, classified and ready to re-wrap.
+    r"""Represent a classified KumoRelational NIM prediction failure.
 
     Subclasses :class:`RuntimeError` so existing callers keep working, and
     carries the structured facts a caller (or the ``sdm-client`` adapter) needs

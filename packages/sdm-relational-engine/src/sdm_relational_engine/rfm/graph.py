@@ -162,8 +162,7 @@ _UNSAFE_EXPR_KEYWORDS = re.compile(
 
 
 def _unsafe_expr_reason(expr: str) -> str | None:
-    r"""Returns why a column expression must not be lifted out of a remote
-    view definition, or ``None`` if it is an ordinary scalar expression.
+    r"""Return why a remote view expression is unsafe, or ``None``.
 
     A semantic/metric view is authored by a third party, yet its column
     expressions are spliced verbatim into sampler queries and run under the
@@ -178,23 +177,21 @@ def _unsafe_expr_reason(expr: str) -> str | None:
     not become invisible just because this function believes it is quoted.
 
     Deciding what counts as quoted is itself dialect-specific, and getting it
-    wrong hands an attacker the whole guard. Snowflake also has ``$$...$$``,
-    and both Snowflake and Databricks honour backslash escapes inside a
-    literal, so a payload that writes its quotes as ``$$`` or ``\'`` shifts
-    where a doubling-only reader believes the literal ends and smuggles a
-    sub-query through the gap. Both forms are therefore recognised. Anything
-    left over that still looks like a delimiter means this function's model of
-    the string boundaries disagrees with the warehouse's, so it fails closed
-    rather than scanning a string it cannot account for -- which also refuses
-    a quoted name ending in a lone backslash (invalid on Databricks, exotic on
-    Snowflake).
+    wrong defeats the guard. Snowflake also has ``$$...$$``, and both
+    Snowflake and Databricks honour backslash escapes inside a literal. A
+    payload using ``$$`` or ``\'`` shifts where a doubling-only reader sees the
+    literal end and can smuggle a sub-query through the gap, so both forms are
+    recognised. A remaining delimiter means this function and the warehouse
+    disagree about string boundaries, so it fails closed. This also refuses a
+    quoted name ending in a lone backslash, which is invalid on Databricks and
+    exotic on Snowflake.
 
     ``INSERT`` and ``TRUNCATE`` are also ordinary Snowflake scalar functions,
     and as statements are always followed by ``INTO``/``TABLE`` rather than by
     ``(``, so a call cannot be one. A keyword directly behind a ``.`` is the
-    trailing part of a qualified name (``ORDERS.MERGE``), which likewise
-    cannot begin a statement -- unlike ``SELECT``, which may legally be
-    followed by ``(``, so it stays refused either way.
+    trailing part of a qualified name (``ORDERS.MERGE``), which also cannot
+    begin a statement. ``SELECT`` may legally be followed by ``(``, so it is
+    always refused.
 
     Args:
         expr: The expression as written in the view definition.
@@ -215,26 +212,23 @@ def _unsafe_expr_reason(expr: str) -> str | None:
 
 
 class ViewConversionWarning(UserWarning):
-    r"""Warns that parts of a metric or semantic view could not be represented
-    in a :class:`Graph`.
+    r"""Warn that parts of a view could not be represented in a :class:`Graph`.
 
-    A partial conversion is the normal outcome for these views -- measures,
-    filters and cross-table expressions have no graph equivalent -- so this has
-    its own category, letting a project silence it without silencing every
-    other warning the client raises. The same diagnostics are on the returned
-    graph as :attr:`Graph.conversion_messages`, which is the way to react to
-    them in code.
+    Metric and semantic views normally convert only partially because measures,
+    filters, and cross-table expressions have no graph equivalent. The
+    dedicated category lets a project silence this warning without silencing
+    every client warning. The same diagnostics appear on the returned graph as
+    :attr:`Graph.conversion_messages` for programmatic handling.
     """
 
 
 def _warn_view_conversion(message: str, owned_connection: Any) -> None:
-    r"""Reports what a view conversion dropped, without leaking a connection.
+    r"""Report what a view conversion dropped without leaking a connection.
 
     Under a warnings-as-errors policy ``warnings.warn`` raises, so the caller
-    never receives the graph -- and therefore never receives the connection the
-    graph would have owned. Closing it here keeps the same contract the rest of
-    these constructors follow: a connection the client opened is closed on every
-    path that does not hand the graph back.
+    never receives the graph or the connection it would have owned. Closing the
+    connection here preserves the constructor contract: the client closes any
+    connection it opened when it does not return the graph.
 
     Args:
         message: The aggregated conversion diagnostics.
@@ -275,13 +269,13 @@ def _reraise_as_graph_error(error: BaseException, source: str) -> None:
 
 
 def _require_discovered_tables(tables: Sequence[Any], where: str) -> None:
-    r"""Rejects a discovery query that found nothing.
+    r"""Reject a discovery query that found no tables.
 
     Naming a table that does not exist raises on every backend, but a mistyped
     database path or schema name is the more common slip and used to return a
-    valid-looking empty graph -- which only fails much later, as "At least one
-    table needs to be added to the graph", pointing at the table list rather
-    than at the typo.
+    valid-looking empty graph. It failed much later with "At least one table
+    needs to be added to the graph", pointing at the table list rather than the
+    typo.
 
     Args:
         tables: The table names the discovery query returned.
@@ -352,14 +346,13 @@ class Graph:
         tables: Sequence[Table],
         edges: Sequence[EdgeLike] | None = None,
     ) -> None:
-        r"""Builds a graph from ``tables``.
+        r"""Build a graph from ``tables``.
 
         ``edges=None`` adds the foreign keys the source catalog declares, on
-        the backends that have one. Passing an explicit sequence -- including
-        an empty one -- makes it the complete edge set instead, so a caller who
-        pins the graph's shape gets that shape and nothing else. Edges change
-        what the model sees, so a catalog link the caller did not ask for
-        changes predictions.
+        backends that have one. An explicit sequence, including an empty one,
+        becomes the complete edge set. A caller that pins the graph's shape
+        gets only that shape. Edges change what the model sees, so an
+        unrequested catalog link changes predictions.
         """
         self._tables: dict[str, Table] = {}
         self._edges: list[Edge] = []
@@ -437,8 +430,9 @@ class Graph:
         Args:
             df_dict: A dictionary of data frames, where the keys are the names
                 of the tables and the values hold table data.
-            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
-                add to the graph. If not provided (:obj:`None`), edges will be
+            edges: An optional list of
+                :class:`~sdm_relational_engine.rfm.Edge` objects to add to the
+                graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``. An empty sequence is not the same
                 thing: it means "these edges and no others", and suppresses
@@ -514,15 +508,16 @@ class Graph:
 
         Args:
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.sqlite.connect` or the
-                path to the database file.
+                :meth:`~sdm_relational_engine.rfm.backend.sqlite.connect` or
+                the path to the database file.
             tables: Set of table names or :class:`SQLiteTable` keyword
                 arguments to include, such as ``name``, ``source_name``,
                 ``primary_key``, or ``time_column``. If ``None``, will add all
                 tables present in the database.
             edges: Optional edge-like objects to add to the graph. Each item
-                may be a :class:`~sdm_relational_engine.rfm.Edge`, a dictionary, or a tuple
-                such as ``(src_table, fkey, dst_table)``. If not provided
+                may be a :class:`~sdm_relational_engine.rfm.Edge`, a
+                dictionary, or a tuple such as
+                ``(src_table, fkey, dst_table)``. If not provided
                 (:obj:`None`), edges will be automatically inferred from the
                 data in case ``infer_metadata=True``, and the foreign keys
                 the source catalog declares are added as well. An empty
@@ -608,14 +603,15 @@ class Graph:
 
         Args:
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.duckdb.connect`, the path to the
-                database file, a connection config, or ``None`` for an
+                :meth:`~sdm_relational_engine.rfm.backend.duckdb.connect`, the
+                database file path, a connection config, or ``None`` for an
                 in-memory database.
             tables: Set of table names or :class:`DuckDBTable` keyword
                 arguments to include. If ``None``, will add all non-temporary
                 tables present in the database.
-            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
-                add to the graph. If not provided (:obj:`None`), edges will be
+            edges: An optional list of
+                :class:`~sdm_relational_engine.rfm.Edge` objects to add to the
+                graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``, and the foreign keys the source
                 catalog declares are added as well. An empty sequence is not
@@ -750,8 +746,9 @@ class Graph:
                 current database and schema.
             database: The database.
             schema: The schema.
-            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
-                add to the graph. If not provided (:obj:`None`), edges will be
+            edges: An optional list of
+                :class:`~sdm_relational_engine.rfm.Edge` objects to add to the
+                graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``, and the foreign keys the source
                 catalog declares are added as well. An empty sequence is not
@@ -890,17 +887,18 @@ class Graph:
 
         Args:
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect` or the
-                :class:`databricks.sql` connector keyword arguments to open a
-                new connection. If ``None``, will open a connection from
+                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect`
+                or the :class:`databricks.sql` connector keyword arguments to
+                open a new connection. If ``None``, will open a connection from
                 credentials stored in environment variables.
             tables: Set of table names or :class:`DatabricksTable` keyword
                 arguments to include. If ``None``, will add all tables present
                 in the current catalog and schema.
             catalog: The Unity Catalog catalog.
             schema: The schema.
-            edges: An optional list of :class:`~sdm_relational_engine.rfm.Edge` objects to
-                add to the graph. If not provided (:obj:`None`), edges will be
+            edges: An optional list of
+                :class:`~sdm_relational_engine.rfm.Edge` objects to add to the
+                graph. If not provided (:obj:`None`), edges will be
                 automatically inferred from the data in case
                 ``infer_metadata=True``, and the foreign keys the source
                 catalog declares are added as well. An empty sequence is not
@@ -1016,9 +1014,9 @@ class Graph:
 
         A dimension expression becomes SQL that later runs under your own
         warehouse credentials, so the view definition is executable input.
-        Expressions that are not plain scalar expressions -- ones carrying a
-        statement separator, a comment or a sub-query -- are dropped with a
-        warning; load metric views you trust.
+        Expressions carrying a statement separator, comment, or sub-query are
+        not plain scalar expressions and are dropped with a warning. Load only
+        metric views you trust.
 
         .. code-block:: python
 
@@ -1038,9 +1036,9 @@ class Graph:
             metric_view_name: The name of the metric view, either fully
                 qualified or resolved against ``catalog`` and ``schema``.
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect` or the
-                :class:`databricks.sql` connector keyword arguments to open a
-                new connection. If ``None``, will open a connection from
+                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect`
+                or the :class:`databricks.sql` connector keyword arguments to
+                open a new connection. If ``None``, will open a connection from
                 credentials stored in environment variables.
             catalog: The Unity Catalog catalog of the metric view. If set to
                 ``None``, an unqualified ``metric_view_name`` is resolved
@@ -1331,7 +1329,8 @@ class Graph:
 
         ``semantic_view_name`` is passed to Snowflake as written, so an
         unqualified name resolves against the connection's current database and
-        schema. Qualify it (``'MY_DB.MY_SCHEMA.MY_VIEW'``) to reach another one.
+        schema. Qualify it (``'MY_DB.MY_SCHEMA.MY_VIEW'``) to reach another
+        one.
 
         .. code-block:: python
 
@@ -1698,8 +1697,8 @@ class Graph:
             A tuple ``(graph, pquery)`` where *graph* is a :class:`Graph`
             ready for use with :class:`KumoRelational` and *pquery* is a
             predictive-query string for single-step forecasting.  Pass
-            *pquery* to :meth:`KumoRelational.predict` together with ``anchor_time``
-            to generate forecasts.
+            *pquery* to :meth:`KumoRelational.predict` with ``anchor_time`` to
+            generate forecasts.
         """
         from sdm_relational_engine.rfm.backend.local import LocalTable
 
@@ -2446,11 +2445,10 @@ class Graph:
     def inferred_edges(self) -> tuple[tuple[str, str, str], ...]:
         r"""The edges :meth:`infer_links` chose, as ``(src, fkey, dst)``.
 
-        Inference reads names and values to guess a relationship, so the graph a
-        question runs against is partly a guess. Recording which edges were
-        guessed is what lets a caller say why a prediction came out as it did,
-        and what lets a cache tell one guessed shape from another rather than
-        serving whichever was inferred first.
+        Inference reads names and values to guess relationships, so a question
+        runs against a partly guessed graph. Recording guessed edges lets a
+        caller explain a prediction and lets a cache distinguish guessed
+        shapes instead of serving whichever was inferred first.
 
         Empty before inference runs, and empty when every edge was declared.
         An edge stays marked for as long as it is there: a later inference pass
@@ -2470,22 +2468,19 @@ class Graph:
         return tuple(edge for edge in marked if edge in present)
 
     def _warn_unlinkable_tables(self) -> None:
-        r"""Reports a table that ended up with no primary key even though one
-        of its columns looks like one.
+        r"""Report a key-like column on a table with no primary key.
 
         Primary-key inference weighs the column name far more heavily than the
-        data, so a key whose name does not echo its table -- ``sales_orders.
-        order_id``, ``order_lines.line_id`` -- is declined however unique it
-        is. Nothing else says so, and the cost is silent: no other table can
-        link to a table without a primary key, so the graph quietly loses the
-        edge and predictions merely come out worse.
+        data, so it declines a unique key whose name does not echo its table,
+        such as ``sales_orders.order_id`` or ``order_lines.line_id``. Nothing
+        else reports this. No other table can link to a table without a primary
+        key, so the graph silently loses the edge and predictions worsen.
 
         Deliberately deferred until link inference has run. Before that a
-        genuine key is indistinguishable from a foreign key that happens to be
-        unique -- one row per order in a returns table, say -- and warning
-        there fires on every junction table. A candidate that link inference
-        has since claimed as a foreign key is explained, so only the rest are
-        reported.
+        genuine key is indistinguishable from a unique foreign key, such as one
+        row per order in a returns table, and warning then fires on every
+        junction table. A candidate since claimed as a foreign key is
+        explained, so only the rest are reported.
         """
         fkeys: set[tuple[str, str]] = {
             (edge.src_table, edge.fkey) for edge in self.edges
@@ -2523,7 +2518,7 @@ class Graph:
         Concretely, validation ensures that edges properly link foreign keys to
         primary keys between valid tables.
         It additionally ensures that primary and foreign keys between tables
-        in an :class:`~sdm_relational_engine.rfm.Edge` are of the same data type.
+        in an :class:`~sdm_relational_engine.rfm.Edge` have the same data type.
 
         Raises:
             ValueError: if validation fails.
@@ -2544,13 +2539,13 @@ class Graph:
         return self
 
     def _edge_error(self, edge: Edge) -> str | None:
-        r"""Returns why ``edge`` is unusable, or ``None`` if it is valid.
+        r"""Return why ``edge`` is unusable, or ``None`` if it is valid.
 
         Split out of :meth:`validate` so that a caller converting a warehouse
-        view -- which is a best-effort, partial conversion by contract -- can
-        drop the offending relationship and report it through
+        view can drop an offending relationship and report it through
         :attr:`conversion_messages` rather than lose the whole graph to one bad
-        edge. :meth:`validate` keeps raising on the first failure.
+        edge. View conversion is best-effort and partial by contract.
+        :meth:`validate` still raises on the first failure.
         """
         src_table, fkey, dst_table = edge
 
@@ -2612,14 +2607,14 @@ class Graph:
         return None
 
     def _drop_invalid_edges(self) -> list[str]:
-        r"""Removes every edge :meth:`_edge_error` rejects, describing each.
+        r"""Remove and describe every edge :meth:`_edge_error` rejects.
 
         The view constructors convert partially by contract: an element with no
         graph equivalent is dropped and reported, not raised. A relationship
-        whose keys do not line up -- most often a foreign key and primary key
-        with incompatible data types, which the caller cannot fix in a view
-        they do not own -- belongs in that same channel, so that one bad
-        relationship costs one edge instead of every table the view declares.
+        with mismatched keys belongs in that channel. Most often, the foreign
+        and primary keys have incompatible data types that the caller cannot
+        fix in a view they do not own. One bad relationship then costs one edge
+        instead of every table declared by the view.
         """
         msgs = []
         for edge in list(self.edges):
@@ -2777,10 +2772,10 @@ class Graph:
     def to_mermaid(self, show_columns: bool = True) -> str:
         r"""This graph as a Mermaid entity-relationship diagram.
 
-        Returns the diagram *source*, which any Mermaid renderer will draw --
-        a notebook, a documentation site, or mermaid.live. Use
-        :meth:`visualize` to draw it here instead; that path renders offline
-        from the bundled Mermaid, so it works where a CDN fetch would not.
+        Any Mermaid renderer can draw the source, including a notebook, a
+        documentation site, or mermaid.live. Use :meth:`visualize` to draw it
+        here instead. That path renders offline from the bundled Mermaid, so it
+        works where a CDN fetch would not.
 
         Args:
             show_columns: Whether to show every column, or only the primary

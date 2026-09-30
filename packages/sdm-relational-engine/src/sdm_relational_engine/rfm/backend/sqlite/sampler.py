@@ -37,8 +37,8 @@ class SQLiteSampler(SQLSampler):
 
         # Per table, decided once on first use by `_time_separator`. Held on
         # the instance rather than in a `functools.cache`, which would key on
-        # `self` and so keep every sampler -- and its graph and its open
-        # connection -- alive for the life of the process.
+        # `self` and so keep every sampler, its graph, and its open connection
+        # alive for the life of the process.
         self._time_separator_dict: dict[str, str] = {}
 
         if optimize:
@@ -148,8 +148,8 @@ class SQLiteSampler(SQLSampler):
         has to be spelled the way the column is. ``datetime()`` and
         ``pandas.to_sql`` write ``YYYY-MM-DD HH:MM:SS``, but an ISO-8601 writer
         emits a ``T``, and ``'...T00:00:00' <= '... 00:00:00'`` is false for
-        the same instant because ``T`` sorts after a space -- silently dropping
-        every row that lands on a window edge.
+        the same instant because ``T`` sorts after a space. This silently drops
+        every row on a window edge.
 
         One stored value decides it, and the answer is remembered per table.
         Anything unreadable falls back to the space form, which is what this
@@ -159,9 +159,9 @@ class SQLiteSampler(SQLSampler):
         A column that mixes both spellings is the one case this cannot get
         right: whichever spelling the probe reads, rows written the other way
         are misplaced by one boundary instant. Widening the window to admit
-        both -- a space lower bound and a ``T`` upper bound -- is worse, since
-        it also admits every space-written row on the whole of the end date.
-        Store one spelling per column.
+        both by using a space lower bound and a ``T`` upper bound is worse. It
+        also admits every space-written row on the whole end date. Store one
+        spelling per column.
         """
         separator = self._time_separator_dict.get(table_name)
         if separator is None:
@@ -385,8 +385,8 @@ class SQLiteSampler(SQLSampler):
         # `TEXT` in SQLite's own `YYYY-MM-DD HH:MM:SS` UTC form, which is what
         # `datetime()` returns and what `pandas.to_sql` writes. A column stored
         # with the ISO-8601 `T` separator instead does NOT compare correctly on
-        # the boundary -- `'...T00:00:00' <= '... 00:00:00'` is false for the
-        # same instant, because `T` sorts after a space -- so rows landing
+        # the boundary: `'...T00:00:00' <= '... 00:00:00'` is false for the
+        # same instant because `T` sorts after a space, so rows landing
         # exactly on a window edge are dropped.
         tmp = pa.table([pa.array(index)], names=['__kumo_id__'])
         if time_column is not None and anchor_time is not None:
@@ -457,8 +457,8 @@ class SQLiteSampler(SQLSampler):
         # `TEXT` in SQLite's own `YYYY-MM-DD HH:MM:SS` UTC form, which is what
         # `datetime()` returns and what `pandas.to_sql` writes. A column stored
         # with the ISO-8601 `T` separator instead does NOT compare correctly on
-        # the boundary -- `'...T00:00:00' <= '... 00:00:00'` is false for the
-        # same instant, because `T` sorts after a space -- so rows landing
+        # the boundary: `'...T00:00:00' <= '... 00:00:00'` is false for the
+        # same instant because `T` sorts after a space, so rows landing
         # exactly on a window edge are dropped.
         tmp = pa.table([pa.array(index)], names=['__kumo_id__'])
         _sep = self._time_separator(table_name)

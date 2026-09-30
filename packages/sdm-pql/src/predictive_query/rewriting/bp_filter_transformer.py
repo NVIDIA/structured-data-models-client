@@ -799,7 +799,7 @@ class BPFilterTransformer(FilterSplitter):
             assert isinstance(combined_target.rhs_target.target, Filter)
             assert combined_filter is not None
             combined_target.rhs_target.target.condition = combined_filter
-            print(f'KOMBINACIJA -- {combined_target}')
+            print(f'KOMBINACIJA: {combined_target}')
         return ValidatedPredictiveQuery(
             entity_ast=prediction_query.entity_ast,
             target_ast=combined_target,

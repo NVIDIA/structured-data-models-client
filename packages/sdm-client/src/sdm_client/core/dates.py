@@ -7,7 +7,7 @@ r"""Reading a date out of text, only where the text says one thing.
 Inference does not parse strings for dates, because a reader loose enough for
 a warehouse `DATE` column stored as `STRING` also reads part codes as dates and
 fails much later on a value it should never have touched. But a caller may name
-a string column as a table's time column, and then it has to be read -- so this
+a string column as a table's time column, and then it has to be read. This
 is where the reading is done, and where it refuses rather than guesses.
 """
 
@@ -44,7 +44,7 @@ PLAUSIBLE_YEARS = (1900, 2100)
 
 
 #: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be, with or without
-#: a time and a zone after it -- a warehouse hands back all of them, in the
+#: a time and a zone after it. A warehouse hands back all of them in the
 #: same spellings `YEAR_FIRST` takes, because a column is not written in two
 #: shapes just because this client reads a zone on one of them.
 _TWO_PART_PATTERN = (
@@ -100,8 +100,8 @@ def reads_as_a_date(values: pd.Series) -> pd.Series:
     Asked of each value rather than of the column: one inferred format does
     not cover a column zoned on some rows and bare on others, and whether a
     value is a date is not a question about its neighbours. Read to a common
-    zone, and a reading that will not run at all counts as reading nothing --
-    this is asked to find out whether a column reads, so it is the one place
+    zone, and a reading that will not run at all counts as reading nothing.
+    This is asked to find out whether a column reads, so it is the one place
     that must not fail to answer.
     """
     read = pd.Series(False, index=values.index)
@@ -130,7 +130,7 @@ def day_comes_first(values: pd.Series, limit: int | None = None) -> bool | None:
     component is the day, and every other row reads the same way. The same
     argument the other way round for `03/15/2024`.
 
-    So the question is not whether a single value is ambiguous -- most are --
+    The question is not whether a single value is ambiguous because most are,
     but whether anything in the column decides it. `None` means nothing did,
     which is also the answer when the column contradicts itself.
 
@@ -162,7 +162,7 @@ def looks_unambiguous(values: pd.Series, limit: int = SAMPLE) -> bool:
     Year-first says it outright, and the shape of a sample answers that: the
     column has one shape throughout. A slash-separated column says it when one
     of its own values rules a reading out, which is the ordinary case for any
-    column spanning more than twelve days -- and that question is asked of the
+    column spanning more than twelve days. That question is asked of the
     whole column, because the value that answers it can be anywhere.
 
     Matches whole rather than by prefix: a part code can open with something
@@ -185,7 +185,7 @@ class Conversion:
 
     `pd.to_datetime` takes these; a message shows them. Carrying the decision
     as a value keeps those two from drifting, and keeps the reading that was
-    checked as the reading that is applied -- deciding it again at the point
+    checked as the reading that is applied. Deciding it again at the point
     of use is how the two come to disagree.
     """
 
@@ -206,7 +206,7 @@ class Conversion:
         return given
 
     def __str__(self) -> str:
-        r"""How to write the call, for a message that tells someone to make it."""
+        r"""Write the call for a message that tells someone to make it."""
         return ''.join(
             f', {name}={value!r}' for name, value in self.arguments.items()
         )

@@ -22,15 +22,14 @@ from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 
 
 def _path_segment(value: str) -> str:
-    r"""Escape a server-supplied id before it becomes part of a URL path.
+    r"""Escape a server-supplied ID for use in a URL path.
 
     The session id comes back from the NIM, so it is not ours to trust: an
     id carrying a slash would otherwise redirect the call to a different
-    route. ``quote`` does not help with a dot -- it is unreserved -- and a
-    resolver removes ``.`` and ``..``, those two and no others. They name no
-    session and are refused rather than escaped. ``...`` is an ordinary
-    segment and is escaped like any other. An empty id is refused for its
-    own reason: it contributes no segment at all.
+    route. ``quote`` does not escape dots because they are unreserved. A
+    resolver removes ``.`` and ``..``, so those two values name no session and
+    are refused. ``...`` is an ordinary segment and is escaped like any other.
+    An empty ID is refused because it contributes no segment.
     """
     if value in {'', '.', '..'}:
         raise InvalidResponseError(
@@ -42,7 +41,7 @@ def _path_segment(value: str) -> str:
 
 
 class RFMAPI:
-    r"""Typed API definition for KumoRelational (Relational Foundation Model)."""
+    r"""Define the typed KumoRelational API."""
 
     def __init__(self, client: RFMTransport) -> None:
         self._client = client
@@ -461,10 +460,11 @@ def _prediction_item_to_multiclass_rows(
     entity_id: Any,
     anchor_time: Any = None,
 ) -> list[dict[str, Any]]:
-    r"""One row per class (CLASS, SCORE, PREDICTED), sorted by score descending.
+    r"""Return one row per class, sorted by descending score.
 
-    Matches the long, per-class layout users had for multi-class classification
-    on the SaaS client, which is easier to read than a wide column-per-class table.
+    Each row contains (CLASS, SCORE, PREDICTED), matching the long, per-class
+    layout users had for multi-class classification on the SaaS client. This is
+    easier to read than a wide column-per-class table.
     """
     predicted = None if item.prediction is None else str(item.prediction)
     ranked = sorted(
