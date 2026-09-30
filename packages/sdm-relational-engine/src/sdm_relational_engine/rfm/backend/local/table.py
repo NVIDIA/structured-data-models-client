@@ -22,9 +22,8 @@ from sdm_relational_engine.rfm.base.table import MissingType
 class LocalTable(Table):
     r"""A table backed by a :class:`pandas.DataFrame`.
 
-    A :class:`LocalTable` fully specifies the relevant metadata, *i.e.*
-    selected columns, column semantic types, primary keys and time columns.
-    :class:`LocalTable` is used to create a :class:`Graph`.
+    A :class:`LocalTable` fully specifies columns, semantic types, primary
+    keys, and time columns; use :class:`LocalTable` to create a :class:`Graph`.
 
     .. code-block:: python
 

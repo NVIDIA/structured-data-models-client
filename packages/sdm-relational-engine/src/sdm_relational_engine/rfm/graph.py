@@ -291,8 +291,7 @@ def _require_discovered_tables(tables: Sequence[Any], where: str) -> None:
 class Graph:
     r"""A relational graph of :class:`Table` objects and links.
 
-    Creating a graph is the final data-definition step; after a :class:`Graph`
-    is created, use it to initialize :class:`KumoRelational`.
+    Use :class:`Graph` to finalize data and initialize :class:`KumoRelational`.
 
     .. code-block:: python
 
@@ -333,10 +332,10 @@ class Graph:
         >>> # Validate graph:
         >>> graph.validate()
 
-    A graph can also be built directly from a data source rather than from
-    :class:`Table` objects, via :meth:`from_data`, :meth:`from_snowflake`,
+    Build directly from a data source instead of :class:`Table` objects with
+    :meth:`from_data`, :meth:`from_snowflake`,
     :meth:`from_snowflake_semantic_view`, :meth:`from_databricks`,
-    :meth:`from_databricks_metric_view` and :meth:`from_relbench`.
+    :meth:`from_databricks_metric_view`, or :meth:`from_relbench`.
     """
 
     # Constructors ############################################################
@@ -473,9 +472,8 @@ class Graph:
         infer_metadata: bool = True,
         verbose: bool = True,
     ) -> Self:
-        r"""Creates a :class:`Graph` from a :class:`sqlite` database.
-
-        Automatically infers table metadata and links by default.
+        r"""Create a :class:`Graph` from :class:`sqlite`, inferring table
+        metadata and links by default.
 
         .. code-block:: python
 
@@ -692,10 +690,8 @@ class Graph:
         infer_metadata: bool = True,
         verbose: bool = True,
     ) -> Self:
-        r"""Creates a :class:`Graph` from a :class:`snowflake` database and
-        schema.
-
-        Automatically infers table metadata and links by default.
+        r"""Create a :class:`Graph` from a :class:`snowflake` database and
+        schema, inferring table metadata and links by default.
 
         .. code-block:: python
 
@@ -853,9 +849,8 @@ class Graph:
         infer_metadata: bool = True,
         verbose: bool = True,
     ) -> Self:
-        r"""Creates a :class:`Graph` from a :class:`databricks` SQL warehouse.
-
-        Automatically infers table metadata and links by default.
+        r"""Create a :class:`Graph` from a :class:`databricks` SQL warehouse,
+        inferring table metadata and links by default.
 
         .. code-block:: python
 
@@ -1000,23 +995,21 @@ class Graph:
         schema: str | None = None,
         verbose: bool = True,
     ) -> Self:
-        r"""Creates a :class:`Graph` from a Databricks Unity Catalog metric
+        r"""Create a :class:`Graph` from a Databricks Unity Catalog metric
         view.
 
-        The star/snowflake schema of the metric view is converted into a
-        graph: the ``source`` table becomes a fact table, every join becomes
-        a linked table named after its join alias, and every dimension
-        becomes an (expression) column on the table it references. Measures
-        define aggregations rather than row-level values and are therefore
-        not part of the graph; use a predictive query to express aggregations
-        instead. Elements that cannot be represented in a graph are dropped
-        with a warning.
+        Its star or snowflake schema becomes a graph: ``source`` becomes the
+        fact table, each join a linked table named for its alias, and each
+        dimension an expression column on its referenced table. Measures define
+        aggregations, not row-level values, so the graph omits them; express
+        aggregations with a predictive query. Other unrepresentable elements
+        are dropped with a warning.
 
-        A dimension expression becomes SQL that later runs under your own
-        warehouse credentials, so the view definition is executable input.
-        Expressions carrying a statement separator, comment, or sub-query are
-        not plain scalar expressions and are dropped with a warning. Load only
-        metric views you trust.
+        Dimension expressions later run as SQL under your warehouse
+        credentials, making the view definition executable input. Expressions
+        with a statement separator, comment, or sub-query are not plain scalar
+        expressions and are dropped with a warning. Load only trusted metric
+        views.
 
         .. code-block:: python
 
@@ -1304,16 +1297,13 @@ class Graph:
         connection: SnowflakeConnection | dict[str, Any] | None = None,
         verbose: bool = True,
     ) -> Self:
-        r"""Creates a :class:`Graph` from a Snowflake semantic view.
+        r"""Create a :class:`Graph` from a Snowflake semantic view.
 
-        The semantic view's logical tables become graph tables backed by their
-        ``base_table``, and its ``relationships`` become edges. Dimensions,
-        time dimensions and facts become columns; an ``expr`` that is just the
-        column name (optionally qualified with its own table) is treated as a
-        plain column, any other ``expr`` becomes an expression column.
-
-        These elements cannot be represented in a graph and are dropped with a
-        warning listing each one:
+        Logical tables become graph tables backed by ``base_table`` and
+        ``relationships`` become edges. Dimensions, time dimensions, and facts
+        become columns. An ``expr`` containing only the column name, optionally
+        qualified by its table, is plain; any other ``expr`` is an expression
+        column. The following are dropped with a warning listing each one:
 
         - **Metrics.** They define aggregations rather than row-level values;
           express aggregations with a predictive query instead.
@@ -1323,14 +1313,11 @@ class Graph:
           key**, i.e. one-to-one relationships. Note a view made only of such
           relationships yields a graph with no edges at all.
 
-        The time column of each table is inferred, preferring the view's
-        ``time_dimensions``; correct it with
-        ``graph['table'].time_column = 'column'`` if the inference is wrong.
-
-        ``semantic_view_name`` is passed to Snowflake as written, so an
-        unqualified name resolves against the connection's current database and
-        schema. Qualify it (``'MY_DB.MY_SCHEMA.MY_VIEW'``) to reach another
-        one.
+        Each time column is inferred, preferring ``time_dimensions``. Correct a
+        mistake with ``graph['table'].time_column = 'column'``.
+        ``semantic_view_name`` reaches Snowflake unchanged, so an unqualified
+        name uses the connection's current database and schema; qualify it as
+        ``'MY_DB.MY_SCHEMA.MY_VIEW'`` to reach another one.
 
         .. code-block:: python
 
@@ -1623,21 +1610,19 @@ class Graph:
         entity_col: str | None = None,
         num_timeframes: int = 1,
     ) -> tuple[Self, str]:
-        r"""Creates a :class:`Graph` and predictive query string from a
-        time-series dataset stored as a single flat table.
+        r"""Create a :class:`Graph` and predictive query from a flat time-series
+        table.
 
-        Many forecasting datasets arrive as a single table where each row
-        represents one entity and a column holds an array of historical
-        observations.  This method converts such a table into the two-table
-        *(entity + target)* structure expected by Kumo Relational and returns a
-        ready-to-use predictive query.
+        Each row is an entity whose ``timeseries_col`` holds an array of
+        historical observations. This produces the two-table *(entity +
+        target)* structure Kumo Relational expects and a ready-to-use query.
 
         The input ``df`` is split into:
 
-        * An entity table - one row per input row, containing all columns
-          except ``timeseries_col`` (and ``timestamps_col`` when given).
-        * A target table - one row per observation, with a foreign-key to
-          the entity table, a timestamp column, and the observed value.
+        * An entity table with one row per input row and all columns except
+          ``timeseries_col`` and, when given, ``timestamps_col``.
+        * A target table with one row per observation, a foreign key to the
+          entity table, a timestamp, and the observed value.
 
         .. code-block:: python
 

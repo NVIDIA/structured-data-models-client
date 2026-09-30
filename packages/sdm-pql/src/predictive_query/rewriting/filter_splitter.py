@@ -66,16 +66,12 @@ class SplitFilter:
 
 
 class FilterSplitter:
-    """Base class to generate a filter splitter that splits a Filter AST node
-    into a subset of conditions that are applicable and a subset that is not
-    based on the `_condition_base_case` method which is the only required
-    method to implement for subclasses.
+    """Split a Filter AST into applicable and non-applicable conditions.
 
-    If the `_condition_base_case` needs extra information, you can pass
-    in additional kwargs from `_recursively_split_filter`.
-
-    It is recommended but not required to implement a public entry method
-    that calls `_recursively_split_filter` internally.
+    Subclasses need only implement `_condition_base_case`; pass any extra
+    information it needs as kwargs from `_recursively_split_filter`. A public
+    entry method that calls `_recursively_split_filter` is recommended but not
+    required.
 
     Example Usage:
 

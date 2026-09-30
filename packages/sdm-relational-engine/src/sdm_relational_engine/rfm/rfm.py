@@ -584,11 +584,10 @@ def _decode_composite_entities(
 
 
 class KumoRelational:
-    r"""Run Kumo Relational predictions over a relational graph.
+    r""":class:`KumoRelational` is the prediction interface for a pre-trained
+    relational foundation model.
 
-    :class:`KumoRelational` provides the prediction interface for a pre-trained
-    relational foundation model. Build it from a :class:`Graph`, then issue PQL
-    queries with :meth:`predict`.
+    Build it from a :class:`Graph`, then pass PQL queries to :meth:`predict`.
 
     .. code-block:: python
 
@@ -883,34 +882,32 @@ class KumoRelational:
         Inference Configuration
         -----------------------
         ``inference_config`` controls inference-time behavior and ensembling.
-        It accepts a dictionary or a config object from
-        ``sdm_relational_engine.rfm.inference.config``. Dictionaries become a
-        ``ClassificationInferenceConfig`` for classification or a
-        ``RegressionInferenceConfig`` for regression and forecasting. Omitting
-        it selects task-specific defaults.
+        It accepts a config from ``sdm_relational_engine.rfm.inference.config``
+        or a dictionary, which becomes a ``ClassificationInferenceConfig`` for
+        classification or a ``RegressionInferenceConfig`` for regression and
+        forecasting. Omitting it selects task-specific defaults.
 
-        * ``num_estimators``: Estimators to ensemble. Defaults to ``1`` and
-          must be between ``1`` and ``4``.
+        * ``num_estimators``: Ensemble ``1`` (default) to ``4`` estimators.
         * ``column_shuffle``: Shuffle column order across estimators.
         * ``category_shuffle``: Shuffle categorical-column categories across
           estimators.
         * ``hop_shuffle``: Shuffle subgraph depth across estimators.
         * ``class_shuffle``: Shuffle class order across estimators
           (classification only).
-        * ``target_transforms``: Vary target preprocessing across estimators
-          for regression and forecasting. Supports ``"clip"``, ``"power"``,
-          ``"quantile"``, and ``None``. Defaults to ``["quantile"]``.
+        * ``target_transforms``: Vary regression and forecasting target
+          preprocessing across estimators. Supports ``"clip"``, ``"power"``,
+          ``"quantile"``, and ``None``; defaults to ``["quantile"]``.
         * ``output_type``: Summarize regression and forecasting distributions
-          with ``"median"``, ``"mean"``, or ``"quantiles"``. Defaults to
-          ``"median"``. ``"quantiles"`` adds the full distribution as
-          ``Q_<level>`` columns beside the point prediction. ``"mean"`` is
-          unreliable on **zero-inflated regression targets**. When roughly 40%
-          of the predicted quantile grid is zero, the NIM returns exactly
-          ``0.0`` for every entity without an error. This is precisely the data
-          shape a mean is chosen for. Prefer ``"median"`` or ``"quantiles"``.
+          with ``"median"`` (default), ``"mean"``, or ``"quantiles"``. The
+          last adds the full distribution as ``Q_<level>`` columns beside the
+          point prediction. ``"mean"`` is unreliable on **zero-inflated
+          regression targets**: when roughly 40% of the predicted quantile
+          grid is zero, the NIM returns exactly ``0.0`` for every entity
+          without an error. This is precisely the data shape a mean targets;
+          prefer ``"median"`` or ``"quantiles"``.
 
-        Any other key is rejected by name. Unknown keys are not forwarded to
-        the NIM, so accepting one would silently substitute the default.
+        Any other key is rejected by name rather than forwarded to the NIM,
+        where it would silently substitute the default.
 
         .. code-block:: python
 
