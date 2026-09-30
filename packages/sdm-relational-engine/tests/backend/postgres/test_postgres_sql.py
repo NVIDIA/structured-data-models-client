@@ -50,6 +50,14 @@ def test_chunk_rows_keeps_every_value():
     assert len(chunks) == 3
 
 
+def test_time_serialization_preserves_precision_and_timezone():
+    timestamp = pd.Timestamp('2025-01-02T03:04:05.123456-08:00')
+    assert PostgresSampler._serialize_time(timestamp) == (
+        '2025-01-02T03:04:05.123456-08:00'
+    )
+    assert PostgresSampler._serialize_time(pd.NaT) is None
+
+
 def test_sanitize_preserves_nullable_postgres_scalar_types():
     frame = pd.DataFrame(
         {
