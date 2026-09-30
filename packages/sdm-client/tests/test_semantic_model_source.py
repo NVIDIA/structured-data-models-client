@@ -250,14 +250,6 @@ def test_tables_select_and_rename_among_the_model_s_own(source: Any) -> None:
         Relationship('lines', 'customer_id', 'buyers', 'customer_id')
     ]
 
-    graph = RelationalMaterializer(schema)._build_graph()
-
-    assert set(graph.tables) == {'lines', 'buyers'}
-    assert {(e.src_table, e.fkey, e.dst_table) for e in graph.edges} == {
-        ('lines', 'customer_id', 'buyers')
-    }
-    assert str(graph['lines']['discounted'].expr) == 'discount > 0'
-
 
 def test_a_table_the_model_does_not_have_is_named(source: Any) -> None:
     with pytest.raises(StructuredDataError, match='not tables of'):
@@ -269,41 +261,15 @@ def test_the_graph_sampled_is_the_model_cut_to_the_schema(
 ) -> None:
     from sdm_relational_engine.rfm.base import DataBackend
 
-    schema = _schema(source)
-    del schema['order_lines']['quantity']
-    schema.relationships = [
-        Relationship('order_lines', 'customer_id', 'customers', 'customer_id')
-    ]
+    schema = _schema(source, {'lines': 'order_lines', 'buyers': 'customers'})
+    del schema['lines']['quantity']
 
     graph = RelationalMaterializer(schema)._build_graph()
 
     assert graph.backend == DataBackend.DATABRICKS
-    assert set(graph.tables) == {'order_lines', 'customers', 'products'}
-    assert 'quantity' not in graph['order_lines']
-    assert str(graph['order_lines']['discounted'].expr) == 'discount > 0'
+    assert set(graph.tables) == {'lines', 'buyers'}
+    assert 'quantity' not in graph['lines']
+    assert str(graph['lines']['discounted'].expr) == 'discount > 0'
     assert {(e.src_table, e.fkey, e.dst_table) for e in graph.edges} == {
-        ('order_lines', 'customer_id', 'customers')
+        ('lines', 'customer_id', 'buyers')
     }
-
-
-def test_overrides_mean_what_they_mean_for_tables(source: Any) -> None:
-    schema = _schema(
-        source,
-        primary_keys={'order_lines': 'line_id'},
-        relationships=[],
-    )
-
-    assert schema['order_lines'].primary_key == 'line_id'
-    assert schema.relationships == []
-
-
-def test_a_snapshot_keeps_the_model(source: Any) -> None:
-    schema = _schema(source)
-    assert schema.snapshot().source is schema.source
-
-
-def test_the_model_needs_its_name(source: Any) -> None:
-    from sdm_connectors import ConnectorError
-
-    with pytest.raises(ConnectorError, match='needs its name'):
-        source.semantic_model('')

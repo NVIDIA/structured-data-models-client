@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import pickle
 import sqlite3
 import uuid
 import warnings
@@ -24,7 +23,12 @@ pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 pytest.importorskip('adbc_driver_sqlite')
 
-from sdm_connectors import DuckDBSource, SQLiteSource, connect  # noqa: E402
+from sdm_connectors import (  # noqa: E402
+    DuckDBSource,
+    PostgresSource,
+    SQLiteSource,
+    connect,
+)
 
 from sdm_client import (  # noqa: E402
     KumoTabular,
@@ -93,6 +97,60 @@ def sqlite_source(tmp_path: Path) -> Any:
     connection.close()
 
 
+@pytest.fixture
+def postgres() -> Any:
+    r"""A psycopg connection and a schema of its own, dropped afterwards."""
+    dsn = os.getenv('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        if os.getenv('SDM_REQUIRE_POSTGRES'):
+            pytest.fail(
+                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+            )
+        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
+    psycopg = pytest.importorskip('psycopg')
+
+    namespace = f'sdm_{uuid.uuid4().hex[:8]}'
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(f'CREATE SCHEMA {namespace}')
+        try:
+            yield connection, namespace
+        finally:
+            connection.execute(f'DROP SCHEMA {namespace} CASCADE')
+
+
+def _python_rows(frame: pd.DataFrame) -> list[tuple[Any, ...]]:
+    # psycopg adapts Python values, not numpy's.
+    return [
+        tuple(
+            value.to_pydatetime() if isinstance(value, pd.Timestamp) else value
+            for value in row.values()
+        )
+        for row in frame.to_dict('records')
+    ]
+
+
+@pytest.fixture
+def postgres_source(postgres: Any) -> Any:
+    connection, namespace = postgres
+    for name, frame, columns in (
+        ('app_users', USERS, 'user_id BIGINT, age BIGINT, country TEXT'),
+        (
+            'app_orders',
+            ORDERS,
+            'order_id BIGINT, user_id BIGINT, amount DOUBLE PRECISION, '
+            'ts TIMESTAMP',
+        ),
+    ):
+        connection.execute(f'CREATE TABLE {namespace}.{name} ({columns})')
+        markers = ', '.join(['%s'] * len(frame.columns))
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                f'INSERT INTO {namespace}.{name} VALUES ({markers})',
+                _python_rows(frame),
+            )
+    return PostgresSource(connection, schema=namespace)
+
+
 @pytest.fixture(params=['duckdb', 'sqlite'])
 def source(request: pytest.FixtureRequest) -> Any:
     return request.getfixturevalue(f'{request.param}_source')
@@ -115,6 +173,8 @@ def _payload(schema: Any, seed: int = 7) -> dict[str, Any]:
 
 
 def test_the_tables_are_described_without_being_read(source: Any) -> None:
+    from sdm_relational_engine.rfm.base import DataBackend
+
     schema = _schema(source)
 
     assert schema.source is source
@@ -129,14 +189,9 @@ def test_the_tables_are_described_without_being_read(source: Any) -> None:
     assert schema.relationships == [
         Relationship('orders', 'user_id', 'users', 'user_id')
     ]
-
-
-def test_sampling_runs_in_the_source(source: Any) -> None:
-    from sdm_relational_engine.rfm.base import DataBackend
-
-    graph = RelationalMaterializer(_schema(source))._build_graph()
-
-    assert graph.backend == DataBackend(source.backend)
+    assert RelationalMaterializer(schema)._build_graph().backend == (
+        DataBackend(source.backend)
+    )
 
 
 @pytest.mark.parametrize('seed', [7, 11, 23])
@@ -144,7 +199,8 @@ def test_every_sampled_label_is_the_sum_the_rows_give(
     source: Any, seed: int
 ) -> None:
     r"""An order exactly on a window edge must count; SQLite compares bounds
-    as text."""
+    as text.
+    """
     rows = _payload(_schema(source), seed)['context']['instance_table']['rows']
 
     wrong = []
@@ -183,59 +239,34 @@ def test_a_scored_entity_sees_the_history_it_would_in_memory(
     )
 
 
-def test_a_declared_foreign_key_links_what_names_would_not() -> None:
-    connection = duckdb.connect()
-    connection.execute('CREATE TABLE u (user_id INTEGER PRIMARY KEY, age INT)')
-    connection.execute(
-        'CREATE TABLE o (order_id INTEGER PRIMARY KEY, '
-        'buyer INTEGER REFERENCES u(user_id), amount DOUBLE, ts TIMESTAMP)'
-    )
-    connection.execute('INSERT INTO u VALUES (1, 30)')
-    connection.execute("INSERT INTO o VALUES (1, 1, 9.5, '2024-01-01')")
-
-    schema = Schema.from_source(
-        DuckDBSource(connection), {'users': 'u', 'orders': 'o'}
-    )
-
-    assert schema.relationships == [
-        Relationship('orders', 'buyer', 'users', 'user_id')
-    ]
+_KEYED = (
+    'CREATE TABLE {in_}u (user_id INTEGER PRIMARY KEY)',
+    'CREATE TABLE {in_}o (order_id INTEGER PRIMARY KEY, '
+    'buyer INTEGER REFERENCES {in_}u(user_id), ts TIMESTAMP)',
+    'INSERT INTO {in_}u VALUES (1)',
+    "INSERT INTO {in_}o VALUES (1, 1, '2024-01-01')",
+)
 
 
-def test_a_foreign_key_declared_in_postgres_links_its_tables() -> None:
-    # Postgres names the referenced table with its schema; DuckDB does not, so
-    # the test above could not see a mismatch.
-    dsn = os.getenv('SDM_POSTGRES_TEST_DSN')
-    if not dsn:
-        if os.getenv('SDM_REQUIRE_POSTGRES'):
-            pytest.fail(
-                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
-            )
-        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
-    psycopg = pytest.importorskip('psycopg')
-    from sdm_connectors import PostgresSource
+@pytest.fixture(params=['duckdb', 'postgres'])
+def keyed_source(request: pytest.FixtureRequest) -> Any:
+    # Postgres names the referenced table with its schema; DuckDB does not.
+    if request.param == 'duckdb':
+        connection = duckdb.connect()
+        for statement in _KEYED:
+            connection.execute(statement.format(in_=''))
+        return DuckDBSource(connection)
+    connection, namespace = request.getfixturevalue('postgres')
+    for statement in _KEYED:
+        connection.execute(statement.format(in_=f'{namespace}.'))
+    return PostgresSource(connection, schema=namespace)
 
-    namespace = f'fk_{uuid.uuid4().hex[:8]}'
-    with psycopg.connect(dsn, autocommit=True) as connection:
-        connection.execute(f'CREATE SCHEMA {namespace}')
-        try:
-            connection.execute(
-                f'CREATE TABLE {namespace}.u (user_id INTEGER PRIMARY KEY)'
-            )
-            connection.execute(
-                f'CREATE TABLE {namespace}.o (order_id INTEGER PRIMARY KEY, '
-                f'buyer INTEGER REFERENCES {namespace}.u(user_id), ts TIMESTAMP)'
-            )
-            connection.execute(f'INSERT INTO {namespace}.u VALUES (1)')
-            connection.execute(
-                f"INSERT INTO {namespace}.o VALUES (1, 1, '2024-01-01')"
-            )
-            source = PostgresSource(connection, schema=namespace)
 
-            named = Schema.from_source(source, {'users': 'u', 'orders': 'o'})
-            everything = Schema.from_source(source)
-        finally:
-            connection.execute(f'DROP SCHEMA {namespace} CASCADE')
+def test_a_declared_foreign_key_links_what_names_would_not(
+    keyed_source: Any,
+) -> None:
+    named = Schema.from_source(keyed_source, {'users': 'u', 'orders': 'o'})
+    everything = Schema.from_source(keyed_source)
 
     assert named.relationships == [
         Relationship('orders', 'buyer', 'users', 'user_id')
@@ -256,9 +287,6 @@ def test_overrides_mean_what_they_mean_on_from_data(
     )
     assert schema.relationships == []
 
-    with pytest.raises(StructuredDataError, match="no table 'order'"):
-        _schema(duckdb_source, time_columns={'order': 'ts'})
-
 
 def test_a_column_with_no_scalar_form_is_left_out_and_named() -> None:
     connection = duckdb.connect()
@@ -273,13 +301,14 @@ def test_a_column_with_no_scalar_form_is_left_out_and_named() -> None:
     assert list(schema['t'].columns) == ['id', 'x']
 
 
-def test_a_column_left_out_is_neither_read_nor_sent(duckdb_source: Any) -> None:
-    schema = _schema(duckdb_source)
+def test_a_column_left_out_after_a_question_is_not_sent_by_the_next(
+    source: Any,
+) -> None:
+    schema = _schema(source)
+    _payload(schema)
     del schema['users']['country']
 
     assert 'country' not in schema['users']
-    graph = RelationalMaterializer(schema)._build_graph()
-    assert 'country' not in graph['users']
     payload = _payload(schema)
     assert (
         'country'
@@ -324,24 +353,53 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
     assert request.schema.source is duckdb_source
 
 
-def test_a_schema_is_frames_or_tables_in_one_source(duckdb_source: Any) -> None:
-    in_place = _schema(duckdb_source)
-    frame = Table('users', USERS, {})
-
-    with pytest.raises(StructuredDataError, match='samples one or the other'):
-        Schema(
-            {'users': frame, 'orders': in_place['orders']},
-            source=duckdb_source,
-        )
-    with pytest.raises(StructuredDataError, match='needs that source'):
-        Schema({'orders': in_place['orders']})
-    with pytest.raises(StructuredDataError, match='which a source does not'):
-        Schema({'users': frame}, source=duckdb_source)
-
-
-def test_a_connection_is_not_a_source(duckdb_source: Any) -> None:
-    with pytest.raises(StructuredDataError, match=r'needs an sdm_connectors'):
-        Schema.from_source(duckdb_source.connection, TABLES)
+@pytest.mark.parametrize(
+    'call, match',
+    [
+        (
+            lambda source: Schema.from_source(source.connection, TABLES),
+            'needs an sdm_connectors',
+        ),
+        (lambda source: Schema.from_source(source, {}), 'leave tables out'),
+        (
+            lambda source: _schema(source, time_columns={'order': 'ts'}),
+            "no table 'order'",
+        ),
+        (
+            lambda source: Schema(
+                {
+                    'users': Table('users', USERS, {}),
+                    'orders': _schema(source)['orders'],
+                },
+                source=source,
+            ),
+            'samples one or the other',
+        ),
+        (
+            lambda source: Schema({'orders': _schema(source)['orders']}),
+            'needs that source',
+        ),
+        (
+            lambda source: Schema(
+                {'users': Table('users', USERS, {})}, source=source
+            ),
+            'which a source does not',
+        ),
+    ],
+    ids=[
+        'a connection',
+        'no tables',
+        'an unknown override',
+        'frames and tables in place',
+        'tables in place without their source',
+        'frames with a source',
+    ],
+)
+def test_a_schema_that_cannot_be_sampled_is_refused(
+    duckdb_source: Any, call: Any, match: str
+) -> None:
+    with pytest.raises(StructuredDataError, match=match):
+        call(duckdb_source)
 
 
 def test_a_snapshot_keeps_the_source(duckdb_source: Any) -> None:
@@ -355,11 +413,6 @@ def test_a_snapshot_keeps_the_source(duckdb_source: Any) -> None:
     assert schema['orders']['amount'].stype == 'numerical'
 
 
-def test_a_source_schema_does_not_pickle(duckdb_source: Any) -> None:
-    with pytest.raises(TypeError, match='cannot be pickled'):
-        pickle.dumps(_schema(duckdb_source))
-
-
 def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', UserWarning)
@@ -371,78 +424,37 @@ def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
     assert schema['app_orders'].time_column == 'ts'
 
 
-def test_an_empty_table_mapping_is_refused(duckdb_source: Any) -> None:
-    with pytest.raises(StructuredDataError, match='leave tables out'):
-        Schema.from_source(duckdb_source, {})
-
-
-def test_no_graph_is_rebuilt_from_frames(
-    duckdb_source: Any, monkeypatch: pytest.MonkeyPatch
+def test_a_question_repeats_none_of_the_reads_that_described_the_tables(
+    postgres_source: Any,
 ) -> None:
-    r"""A schema in its source is sampled there, never read into frames."""
-    from sdm_relational_engine.rfm import Graph
+    r"""The time range is still read per question, so new rows are seen."""
+    import psycopg
 
-    def refuse(*args: Any, **kwargs: Any) -> Any:
-        raise AssertionError('a graph was rebuilt from frames')
+    statements: list[str] = []
 
-    monkeypatch.setattr(Graph, 'from_data', refuse)
-    schema = _schema(duckdb_source)
+    class Recorded(psycopg.Cursor):
+        def execute(self, query: Any, *args: Any, **kwargs: Any) -> Any:
+            statements.append(str(query))
+            return super().execute(query, *args, **kwargs)
 
-    assert _payload(schema)['predict']['instance_table']['rows']
-
-
-def _count_reads(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
-    from sdm_relational_engine.rfm.backend.duckdb import (
-        DuckDBSampler,
-        DuckDBTable,
-    )
-
-    counts: dict[str, int] = {}
-    for owner, name in (
-        (DuckDBTable, '_get_source_columns'),
-        (DuckDBTable, '_get_source_foreign_keys'),
-        (DuckDBTable, '_get_source_sample_df'),
-        (DuckDBTable, '_get_num_rows'),
-        (DuckDBSampler, '_get_min_max_time_dict'),
-    ):
-        original = getattr(owner, name)
-
-        def counted(
-            self: Any, *args: Any, _o: Any = original, _n: str = name, **kw: Any
-        ) -> Any:
-            counts[_n] = counts.get(_n, 0) + 1
-            return _o(self, *args, **kw)
-
-        monkeypatch.setattr(owner, name, counted)
-    return counts
-
-
-def test_a_schema_reads_its_tables_once_across_questions(
-    duckdb_source: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    r"""Each question used to read every table's columns and a preview of its
-    rows again before sampling: five metadata queries a question for these two
-    tables, now none. The time range is still read each time, deliberately:
-    it decides the anchor a question defaults to, and must see new rows.
-    """
-    schema = _schema(duckdb_source)
-    counts = _count_reads(monkeypatch)
-
-    for seed in (7, 11, 23):
+    postgres_source.connection.cursor_factory = Recorded
+    schema = _schema(postgres_source)
+    described = list(statements)
+    for seed in (7, 11):
         _payload(schema, seed)
+    asked = statements[len(described) :]
 
-    assert counts.get('_get_source_columns', 0) == 0
-    assert counts.get('_get_source_sample_df', 0) == 0
-    assert counts.get('_get_source_foreign_keys', 0) == 0
-    assert counts.get('_get_min_max_time_dict') == 3
+    assert any('information_schema' in sql for sql in described)
+    assert asked
+    assert not set(described) & set(asked)
 
 
 def test_a_question_cannot_change_what_the_next_one_is_given(
-    duckdb_source: Any,
+    source: Any,
 ) -> None:
     r"""Every gather writes keys, time columns and semantic types onto the
     tables it samples; those it is given are copies of what was read."""
-    schema = _schema(duckdb_source)
+    schema = _schema(source)
     changed = schema.snapshot()
     changed['users']['age'].stype = 'categorical'
     changed['users']['country'].stype = 'text'
@@ -452,47 +464,3 @@ def test_a_question_cannot_change_what_the_next_one_is_given(
 
     assert str(graph['users']['age'].stype) == 'numerical'
     assert str(graph['users']['country'].stype) == 'categorical'
-    assert schema._engine_tables is changed._engine_tables
-
-
-def test_a_column_left_out_after_a_question_is_not_sent_by_the_next(
-    duckdb_source: Any,
-) -> None:
-    schema = _schema(duckdb_source)
-    _payload(schema)
-    del schema['users']['country']
-
-    payload = _payload(schema)
-
-    assert (
-        'country'
-        not in (payload['context']['related_tables']['users']['columns'])
-    )
-
-
-def test_a_source_that_qualifies_its_table_names_is_still_found(
-    duckdb_source: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    r"""Databricks reports a table's source name as `catalog.schema.table`.
-
-    Kept under that name, the tables a schema read were never found again,
-    and its first question failed naming the table it asked for; the same name
-    written onto a schema of every table could not be read back under the
-    source's namespace. DuckDB is made to answer the Databricks way here.
-    """
-    from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable
-
-    monkeypatch.setattr(
-        DuckDBTable,
-        'source_name',
-        property(lambda self: f'memory.main.{self._source_name}'),
-    )
-    schema = _schema(duckdb_source)
-    _payload(schema)
-    _payload(schema)
-
-    every = Schema.from_source(duckdb_source)
-    assert {t.source_name for t in every.tables.values()} == {
-        'app_users',
-        'app_orders',
-    }

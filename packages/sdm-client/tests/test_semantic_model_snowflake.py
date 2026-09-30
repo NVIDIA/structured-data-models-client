@@ -129,6 +129,12 @@ class _FakeCursor:
         sql = ' '.join(sql.split())
 
         if 'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW' in sql:
+            # An unqualified name resolves against the session, not the
+            # source, so only the name the source qualifies is found.
+            if parameters != ('DB.SCH.GPU_FLEET_SV',):
+                raise RuntimeError(
+                    f'SQL compilation error: {parameters!r} does not exist'
+                )
             self._rows = [(_SEMANTIC_VIEW_YAML,)]
             return
 
@@ -241,22 +247,3 @@ def test_tables_select_and_rename_within_the_view() -> None:
     assert {(e.src_table, e.fkey, e.dst_table) for e in graph.edges} == {
         ('racks', 'DATACENTER_ID', 'sites')
     }
-
-
-def test_an_unqualified_name_is_read_in_the_source_s_namespace() -> None:
-    seen: list[str] = []
-    original = _FakeCursor.execute
-
-    def recording(self: Any, sql: str, parameters: object = None) -> None:
-        seen.append(f'{" ".join(sql.split())} {parameters!r}')
-        original(self, sql, parameters)
-
-    _FakeCursor.execute = recording  # type: ignore[method-assign]
-    try:
-        _schema()
-    finally:
-        _FakeCursor.execute = original  # type: ignore[method-assign]
-    reads = [
-        sql for sql in seen if 'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW' in sql
-    ]
-    assert reads and 'DB.SCH.GPU_FLEET_SV' in reads[0]

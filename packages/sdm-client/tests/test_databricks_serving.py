@@ -234,20 +234,24 @@ def forecast_request() -> Any:
 # --- what is refused, and how failures read ---------------------------------
 
 
-def test_fit_is_refused_before_anything_is_prepared():
+@pytest.mark.parametrize(
+    'call, code',
+    [
+        (
+            lambda client: client.fit(asked(), model='kumo-tabular'),
+            'SESSIONS_UNSUPPORTED',
+        ),
+        (lambda client: client.models(), 'UNSUPPORTED_REQUEST'),
+    ],
+    ids=['fit', 'models'],
+)
+def test_a_route_serving_has_not_got_is_refused_before_a_call(call, code):
     client, endpoints = opened(answer=tabular_answer([]))
     with pytest.raises(StructuredDataError) as error:
-        client.fit(asked(), model='kumo-tabular')
-    assert error.value.code == 'SESSIONS_UNSUPPORTED'
+        call(client)
+    assert error.value.code == code
     assert 'predict()' in str(error.value)
     assert endpoints.calls == []
-
-
-def test_the_models_route_is_refused_rather_than_answered_from_a_guess():
-    client, _ = opened()
-    with pytest.raises(StructuredDataError) as error:
-        client.models()
-    assert error.value.code == 'UNSUPPORTED_REQUEST'
 
 
 def test_readiness_is_the_endpoint_s_own_state():

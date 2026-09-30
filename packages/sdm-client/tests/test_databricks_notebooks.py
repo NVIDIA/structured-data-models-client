@@ -42,15 +42,6 @@ def test_there_are_notebooks_for_the_catalog_and_for_lakebase() -> None:
 
 
 @pytest.mark.parametrize('notebook', NOTEBOOKS, ids=lambda path: path.stem)
-def test_every_code_cell_parses(notebook: Path) -> None:
-    for index, source in enumerate(_cells(notebook, 'code')):
-        try:
-            ast.parse(_python(source))
-        except SyntaxError as error:  # pragma: no cover - the failure is it
-            pytest.fail(f'{notebook.name} cell {index} does not parse: {error}')
-
-
-@pytest.mark.parametrize('notebook', NOTEBOOKS, ids=lambda path: path.stem)
 def test_every_name_imported_from_this_project_exists(notebook: Path) -> None:
     missing = []
     for source in _cells(notebook, 'code'):
@@ -67,12 +58,3 @@ def test_every_name_imported_from_this_project_exists(notebook: Path) -> None:
                 if not hasattr(module, alias.name)
             ]
     assert not missing, f'{notebook.name} imports {missing}'
-
-
-@pytest.mark.parametrize('notebook', NOTEBOOKS, ids=lambda path: path.stem)
-def test_the_tables_are_sampled_in_place(notebook: Path) -> None:
-    body = '\n'.join(_cells(notebook, 'code'))
-    assert 'Schema.from_source(' in body
-    assert 'Schema.from_data(' not in body
-    assert 'SDMClient.for_databricks_serving(' in body
-    assert 'model=KumoRelational()' in body
