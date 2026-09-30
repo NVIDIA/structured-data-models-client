@@ -44,13 +44,18 @@ typecheck:
   extends: .python
   script:
     - pip install -q mypy
-    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
+    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks]'
+    # Every session a source takes too, so each driver's types are its own
+    # rather than Any. pyspark-client is pyspark's Python without its jars.
+    - pip install -q snowflake-snowpark-python pyspark-client
     # The engine needs its runtime deps present to be checked at all, and a
     # toolchain to install. It ships py.typed exactly like the other four,
     # so leaving it out made the gate narrower than the promise.
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
     - pip install -q -e './packages/sdm-relational-engine'
     - mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/sdm-connectors/src packages/sdm-relational-engine/src
+    # What a caller's type checker infers for a source, and what it refuses.
+    - mypy packages/sdm-connectors/tests/typing/check_sources.py
 
 hygiene:
   stage: lint
