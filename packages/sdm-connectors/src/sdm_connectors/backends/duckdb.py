@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.sql import (
     ConnectorError,
@@ -14,7 +14,12 @@ from sdm_connectors.sql import (
     require_existing_database,
 )
 
-duckdb = require_driver('duckdb', 'duckdb', 'duckdb')
+# A type checker reads the driver's own types; at runtime its absence is
+# reported as MissingBackendError rather than an ImportError.
+if TYPE_CHECKING:
+    import duckdb
+else:
+    duckdb = require_driver('duckdb', 'duckdb', 'duckdb')
 
 Connection: TypeAlias = duckdb.DuckDBPyConnection
 

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.backends import mark_owned
 from sdm_connectors.sql import (
@@ -15,12 +15,17 @@ from sdm_connectors.sql import (
     require_driver,
 )
 
-snowflake_connector = require_driver(
-    'snowflake',
-    'snowflake-connector-python',
-    'snowflake.connector',
-    absent=('snowflake', 'snowflake.connector'),
-)
+# A type checker reads the driver's own types; at runtime its absence is
+# reported as MissingBackendError rather than an ImportError.
+if TYPE_CHECKING:
+    import snowflake.connector as snowflake_connector
+else:
+    snowflake_connector = require_driver(
+        'snowflake',
+        'snowflake-connector-python',
+        'snowflake.connector',
+        absent=('snowflake', 'snowflake.connector'),
+    )
 
 Connection: TypeAlias = snowflake_connector.SnowflakeConnection
 

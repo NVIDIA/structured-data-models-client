@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import inspect
 import os
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.sql import (
     ConnectorError,
@@ -17,18 +17,24 @@ from sdm_connectors.sql import (
 
 _ABSENT = ('databricks', 'databricks.sql', 'databricks.sql.client')
 
-databricks_sql = require_driver(
-    'databricks',
-    'databricks-sql-connector',
-    'databricks.sql',
-    absent=_ABSENT,
-)
-_client = require_driver(
-    'databricks',
-    'databricks-sql-connector',
-    'databricks.sql.client',
-    absent=_ABSENT,
-)
+# A type checker reads the driver's own types; at runtime its absence is
+# reported as MissingBackendError rather than an ImportError.
+if TYPE_CHECKING:
+    import databricks.sql as databricks_sql
+    import databricks.sql.client as _client
+else:
+    databricks_sql = require_driver(
+        'databricks',
+        'databricks-sql-connector',
+        'databricks.sql',
+        absent=_ABSENT,
+    )
+    _client = require_driver(
+        'databricks',
+        'databricks-sql-connector',
+        'databricks.sql.client',
+        absent=_ABSENT,
+    )
 
 if not hasattr(_client, 'Connection'):
     raise ImportError(

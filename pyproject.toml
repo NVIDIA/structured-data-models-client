@@ -92,11 +92,6 @@ module = [
     "predictive_query.validator.join_validator",  # 4
     "sdm_connectors.sql",                    #  1
     "sdm_connectors.reader",                 #  1
-    "sdm_connectors.backends.sqlite",        #  1
-    "sdm_connectors.backends.snowflake",     #  1
-    "sdm_connectors.backends.postgres",      #  1
-    "sdm_connectors.backends.duckdb",        #  1
-    "sdm_connectors.backends.databricks",    #  1
     # --- relational engine: 62 errors across 21 modules --------------------
     "sdm_relational_engine.rfm.base.table",          # 13
     "sdm_relational_engine.rfm.graph",               # 10

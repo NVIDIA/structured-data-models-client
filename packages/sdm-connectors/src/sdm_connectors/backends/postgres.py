@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from contextlib import AbstractContextManager, nullcontext
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.sql import (
     check_connect_args,
@@ -14,9 +14,17 @@ from sdm_connectors.sql import (
     require_driver,
 )
 
-psycopg = require_driver('postgres', 'psycopg[binary]', 'psycopg')
+# A type checker reads the driver's own types; at runtime its absence is
+# reported as MissingBackendError rather than an ImportError.
+if TYPE_CHECKING:
+    import psycopg
 
-Connection: TypeAlias = psycopg.Connection
+    Connection: TypeAlias = psycopg.Connection[Any]
+else:
+    psycopg = require_driver('postgres', 'psycopg[binary]', 'psycopg')
+    # Unsubscripted, because the engine checks connections with isinstance,
+    # which refuses a subscripted generic.
+    Connection = psycopg.Connection
 
 _ENV_BY_ARG = {
     'host': 'PGHOST',

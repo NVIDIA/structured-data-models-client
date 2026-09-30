@@ -2996,12 +2996,14 @@ class Graph:
                 table._connection = connection
             if table.backend == DataBackend.DUCKDB:
                 from sdm_relational_engine.rfm.backend.duckdb import (
-                    Connection,
+                    Connection as DuckDBConnection,
+                )
+                from sdm_relational_engine.rfm.backend.duckdb import (
                     DuckDBTable,
                 )
 
                 assert isinstance(table, DuckDBTable)
-                assert isinstance(connection, Connection)
+                assert isinstance(connection, DuckDBConnection)
                 table._connection = connection
             if table.backend == DataBackend.SNOWFLAKE:
                 from snowflake.connector import SnowflakeConnection
@@ -3024,12 +3026,14 @@ class Graph:
 
             if table.backend == DataBackend.POSTGRES:
                 from sdm_relational_engine.rfm.backend.postgres import (
-                    Connection,
+                    Connection as PgConnection,
+                )
+                from sdm_relational_engine.rfm.backend.postgres import (
                     PostgresTable,
                 )
 
                 assert isinstance(table, PostgresTable)
-                assert isinstance(connection, Connection)
+                assert isinstance(connection, PgConnection)
                 table._connection = connection
 
     # Class properties ########################################################

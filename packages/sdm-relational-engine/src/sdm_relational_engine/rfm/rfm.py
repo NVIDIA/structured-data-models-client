@@ -1947,12 +1947,14 @@ class KumoRelational:
             self._sampler._connection = connection
         if self._sampler.backend == DataBackend.DUCKDB:
             from sdm_relational_engine.rfm.backend.duckdb import (
-                Connection,
+                Connection as DuckDBConnection,
+            )
+            from sdm_relational_engine.rfm.backend.duckdb import (
                 DuckDBSampler,
             )
 
             assert isinstance(self._sampler, DuckDBSampler)
-            assert isinstance(connection, Connection)
+            assert isinstance(connection, DuckDBConnection)
             self._sampler._connection = connection
         if self._sampler.backend == DataBackend.SNOWFLAKE:
             from snowflake.connector import SnowflakeConnection
@@ -1973,12 +1975,14 @@ class KumoRelational:
             self._sampler._connection = connection
         if self._sampler.backend == DataBackend.POSTGRES:
             from sdm_relational_engine.rfm.backend.postgres import (
-                Connection,
+                Connection as PgConnection,
+            )
+            from sdm_relational_engine.rfm.backend.postgres import (
                 PostgresSampler,
             )
 
             assert isinstance(self._sampler, PostgresSampler)
-            assert isinstance(connection, Connection)
+            assert isinstance(connection, PgConnection)
             self._sampler._connection = connection
 
     # Helpers #################################################################

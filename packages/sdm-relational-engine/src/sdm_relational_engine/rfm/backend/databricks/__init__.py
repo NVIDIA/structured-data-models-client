@@ -2,6 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+from __future__ import annotations
+
 from typing import TypeAlias
 
 from sdm_connectors.backends.spark import SparkConnection
@@ -10,7 +12,7 @@ from sdm_connectors.sql import MissingBackendError
 #: Every connection the Databricks backend samples through: a SQL warehouse,
 #: or a notebook's own Spark session. Checked with ``isinstance``, so the
 #: session route needs no pyspark import to be recognised.
-CONNECTION_TYPES: tuple[type, ...]
+CONNECTION_TYPES: tuple[type[Connection] | type[SparkConnection], ...]
 try:
     from sdm_connectors.backends.databricks import Connection
 except MissingBackendError:

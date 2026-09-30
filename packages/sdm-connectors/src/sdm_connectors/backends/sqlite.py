@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.sql import (
     ConnectorError,
@@ -14,11 +14,16 @@ from sdm_connectors.sql import (
     require_existing_database,
 )
 
-adbc = require_driver(
-    'sqlite',
-    'adbc-driver-sqlite',
-    'adbc_driver_sqlite.dbapi',
-)
+# A type checker reads the driver's own types; at runtime its absence is
+# reported as MissingBackendError rather than an ImportError.
+if TYPE_CHECKING:
+    import adbc_driver_sqlite.dbapi as adbc
+else:
+    adbc = require_driver(
+        'sqlite',
+        'adbc-driver-sqlite',
+        'adbc_driver_sqlite.dbapi',
+    )
 
 Connection: TypeAlias = adbc.AdbcSqliteConnection
 
