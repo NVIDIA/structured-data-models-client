@@ -59,8 +59,10 @@ class Explanation:
     Attributes:
         prediction: The prediction this explains.
         summary: The account in prose.
-        details: The structured attribution the summary was written
-            from, whose shape depends on the model that produced it.
+        details: The explanation payload as the model returned it,
+            structured attribution included where the model provides
+            it. Present even when ``skip_summary`` left ``summary``
+            empty.
         warning: What the explanation could not establish, when
             anything; :obj:`None` when nothing stood in the way.
     """

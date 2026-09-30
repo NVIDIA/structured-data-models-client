@@ -323,9 +323,11 @@ class Table(ABC):
         The getter returns the primary key column of this table, or ``None`` if
         no such primary key is present.
 
-        The setter sets a column as a primary key on this table, and raises a
-        :class:`ValueError` if the primary key has a non-ID compatible data
-        type or if the column name does not match a column in the data frame.
+        The setter marks a column as this table's primary key, accepting
+        either one name or a sequence of them for an identity spread
+        across several columns. A name the data frame does not carry
+        raises :class:`KeyError`; a column already serving as a time or
+        end time column raises :class:`ValueError`.
         """
         if self._primary_key is None:
             return None
@@ -549,10 +551,10 @@ class Table(ABC):
         The getter returns the time column of this table, or ``None`` if no
         such time column is present.
 
-        The setter sets a column as a time column on this table, and raises a
-        :class:`ValueError` if the time column has a non-timestamp compatible
-        data type or if the column name does not match a column in the data
-        frame.
+        The setter marks a column as this table's time column. A name the
+        data frame does not carry raises :class:`KeyError`. A column whose
+        values are not timestamps is not refused: its semantic type is
+        rewritten to one, on the reading that naming it was deliberate.
         """
         if self._time_column is None:
             return None
@@ -599,10 +601,10 @@ class Table(ABC):
         The getter returns the end time column of this table, or ``None`` if no
         such end time column is present.
 
-        The setter sets a column as an end time column on this table, and
-        raises a :class:`ValueError` if the end time column has a non-timestamp
-        compatible data type or if the column name does not match a column in
-        the data frame.
+        The setter marks a column as this table's end time column. A name
+        the data frame does not carry raises :class:`KeyError`, and a
+        column whose type is not timestamp-compatible raises
+        :class:`ValueError`.
         """
         if self._end_time_column is None:
             return None

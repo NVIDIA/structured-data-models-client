@@ -332,8 +332,11 @@ def _raise_init_error(url: str, exc: BaseException) -> NoReturn:
 class NimClient:
     r"""Speaks the prediction contract to one endpoint.
 
-    The transport under the relational engine: it signs, sends and
-    retries requests, and raises rather than returning an error body.
+    The transport under the relational engine: it holds the pooled
+    session, sends requests with the API key attached when there is one,
+    and retries what is worth retrying. It returns the response whatever
+    its status; deciding that a status is an error belongs to the layer
+    above.
     """
 
     def __init__(

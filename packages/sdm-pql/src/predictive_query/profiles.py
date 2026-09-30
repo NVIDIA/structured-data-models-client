@@ -131,7 +131,7 @@ class Capabilities:
         )
 
     def also(self, **supported: bool) -> 'Capabilities':
-        r"""The same capabilities, with *supported* switched on."""
+        r"""The same capabilities, with each named one set as given."""
         unknown = set(supported) - {
             field for field in vars(self) if field != 'model'
         }

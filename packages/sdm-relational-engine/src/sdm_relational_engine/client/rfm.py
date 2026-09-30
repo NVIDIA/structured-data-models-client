@@ -24,10 +24,18 @@ from sdm_relational_engine.rfm.inference.requests import RFMPredictResponse
 def _path_segment(value: str) -> str:
     r"""Escape a server-supplied id before it becomes part of a URL path.
 
-    The session id comes back from the NIM, so it is not ours to trust: an id
-    carrying a slash or ``..`` would otherwise redirect the call to a different
-    route.
+    The session id comes back from the NIM, so it is not ours to trust: an
+    id carrying a slash would otherwise redirect the call to a different
+    route. ``quote`` does not help with a dot -- it is unreserved -- and a
+    segment of nothing but dots is what a URL resolver removes, so such an
+    id is refused rather than escaped. It names no session.
     """
+    if not value or set(value) == {'.'}:
+        raise InvalidResponseError(
+            f'{value!r} is not a session id: a path segment of dots is '
+            f'removed when the URL is resolved, so the call would be '
+            f'made against a different route than the one it names'
+        )
     return quote(value, safe='')
 
 

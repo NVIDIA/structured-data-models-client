@@ -37,9 +37,9 @@ class SplitFilter:
             part of the filter that meets the applicability criteria.
         non_applicable_filter (Optional[ASTNode]): If not :obj:`None`, the
             part of the filter that does not meet the applicability criteria.
-            Should be ignored with `non_applicable_is_valid` is :obj:`True`
-            because it experienced an exponential blow-up during rewriting and
-            was set to :obj:`None`.
+            Should be ignored when `non_applicable_is_valid` is :obj:`False`:
+            rewriting it blew up exponentially, so it was abandoned and set
+            to :obj:`None`.
         rewritten (bool): Indicates if any rewriting took place.
         n_applicable_conditions (int): Number of conditions in the applicable
             part of the query. Here to prevent an exponential blow-up.
@@ -47,11 +47,13 @@ class SplitFilter:
             non-applicable part of the query. Here to prevent an exponential
             blow-up.
         non_applicable_is_valid (bool): :obj:`False` if the non-applicable part
-            of the query had to be ommitted because of an exponential blow-up
+            of the query had to be omitted because of an exponential blow-up
             in its size. That happens when the total number of conditions in
             both applicable and non-applicable side exceed MAX_N_CONDITIONS.
             :obj:`True` otherwise. The applicable part of the filter does
             not grow during rewriting and is thus not tracked.
+        original_filter (Optional[ASTNode]): The filter as it stood before
+            any rewriting, or :obj:`None` if there was none.
     """
 
     applicable_filter: Condition | LogicalOperation | None

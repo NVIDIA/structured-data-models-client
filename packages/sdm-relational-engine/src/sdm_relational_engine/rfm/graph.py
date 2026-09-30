@@ -1360,8 +1360,9 @@ class Graph:
             verbose: Whether to print verbose output.
 
         Raises:
-            snowflake.connector.errors.ProgrammingError: If the semantic view
-                does not exist or the role cannot read it.
+            GraphConstructionError: If the semantic view does not exist or
+                the role cannot read it. The driver's own error is
+                translated, and travels as the cause.
         """
         import yaml
 

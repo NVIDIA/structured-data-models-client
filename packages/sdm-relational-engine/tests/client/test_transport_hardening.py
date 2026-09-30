@@ -17,7 +17,10 @@ from sdm_api.endpoints import Endpoint
 from sdm_relational_engine.client.client import _MAX_BODY_SNIPPET, capped_body
 from sdm_relational_engine.client.rfm import RFMAPI, _path_segment
 from sdm_relational_engine.client.utils import raise_on_error
-from sdm_relational_engine.exceptions import HTTPException
+from sdm_relational_engine.exceptions import (
+    HTTPException,
+    InvalidResponseError,
+)
 
 
 class _Response:
@@ -82,6 +85,16 @@ def test_path_segment_escapes_server_chosen_ids(
     session_id: str, expected: str
 ) -> None:
     assert _path_segment(session_id) == expected
+
+
+@pytest.mark.parametrize('session_id', ['.', '..', '...', ''])
+def test_a_session_id_of_only_dots_is_refused(session_id: str) -> None:
+    r"""``quote`` leaves a dot alone, because it is unreserved. A segment
+    of nothing but dots is then removed when the URL is resolved, so such
+    an id would send the call to a route other than the one it names.
+    """
+    with pytest.raises(InvalidResponseError):
+        _path_segment(session_id)
 
 
 def test_session_predict_escapes_the_session_id() -> None:

@@ -88,8 +88,8 @@ def init(
     r"""Point the engine at an endpoint, on behalf of ``sdm_client``.
 
     Not callable directly: without the token the client passes, this
-    raises :class:`RuntimeError` naming the supported route. Run
-    inference through ``sdm_client`` instead.
+    raises ``RuntimeError`` naming the supported route. Run inference
+    through ``sdm_client`` instead.
     """
     if _token is not _CLIENT_TOKEN:
         raise RuntimeError(_DIRECT_USE_MESSAGE)

@@ -88,9 +88,6 @@ class PredictiveQueryValidator:
             Validated `parsed_query` with metadata and validation response
             if no errors were encountered. If errors were encountered,
             a tuple of :obj:`None` and a validation response are returned.
-
-        Raises:
-            ValueError: if the query is not valid.
         """
         response = ValidationResponse()
         # A stripped `EXPLAIN` or `EVALUATE` prefix moves every column, so

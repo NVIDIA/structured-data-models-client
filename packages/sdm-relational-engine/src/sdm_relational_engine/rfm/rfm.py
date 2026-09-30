@@ -1000,9 +1000,10 @@ class KumoRelational:
 
         Returns:
             The predictions as a :class:`pandas.DataFrame` when
-            ``explain`` is falsy, which it is by default. Otherwise an
-            :class:`Explanation`, carrying that frame together with a
-            summary and its details.
+            ``explain`` is ``False``, which it is by default. Anything
+            else -- including an empty mapping -- asks for an
+            :class:`Explanation`, which carries that frame together with
+            a summary and its details.
         """
         query_def = self._parse_query(query)
 
@@ -1661,9 +1662,10 @@ class KumoRelational:
 
         Returns:
             The predictions as a :class:`pandas.DataFrame` when
-            ``explain`` is falsy, which it is by default. Otherwise an
-            :class:`Explanation`, carrying that frame together with a
-            summary and its details.
+            ``explain`` is ``False``, which it is by default. Anything
+            else -- including an empty mapping -- asks for an
+            :class:`Explanation`, which carries that frame together with
+            a summary and its details.
         """
         run_mode, num_neighbors, inference_config = (
             self._resolve_task_request_options(
