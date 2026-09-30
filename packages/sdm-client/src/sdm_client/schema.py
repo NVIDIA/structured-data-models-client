@@ -1819,7 +1819,7 @@ def _warn_repeats_cost_the_table_its_key(
                 f'gathered through it, and a question about another table '
                 f'reaches it only where {name!r} names that table itself. '
                 f'Keep one row per {column!r} – '
-                f'frame = frame.drop_duplicates({column!r}) -- and infer '
+                f'frame = frame.drop_duplicates({column!r}) – and infer '
                 f'again, or name a column that does identify a row with '
                 f'primary_keys={{{name!r}: ...}}.',
                 category=SDMWarning,
