@@ -231,12 +231,8 @@ def refusal(message: str, status: int = 422) -> NimRequestError:
     return NimRequestError(status, code='UNSUPPORTED_SHAPE', message=message)
 
 
-@pytest.fixture(scope='module')
-def counted_refusal():
-    """The explained cardinality refusal the three checks below are about.
-
-    Each asserts a different property of it, and each was building it again.
-    """
+def _counted_refusal():
+    """The explained cardinality refusal the three checks below are about."""
     pytest.importorskip('sdm_relational_engine')
     return RelationalAdapter().explain_error(
         refusal('categorical cardinality 120 exceeds limit 100.'),
@@ -244,26 +240,27 @@ def counted_refusal():
     )
 
 
-def test_a_cardinality_refusal_names_the_columns_that_are_over(
-    counted_refusal,
-):
+def test_a_cardinality_refusal_names_the_columns_that_are_over():
     """The deployments word this two ways and only one was matched, so on the
     one that counts, the hook never ran."""
-    assert 'biz.addr (120 values)' in str(counted_refusal)
-    assert 'biz.city' not in str(counted_refusal)
-    assert 'biz.bid' not in str(counted_refusal)
+    explained = str(_counted_refusal())
+    assert 'biz.addr (120 values)' in explained
+    assert 'biz.city' not in explained
+    assert 'biz.bid' not in explained
 
 
-def test_a_cardinality_refusal_advises_something_that_helps(counted_refusal):
+def test_a_cardinality_refusal_advises_something_that_helps():
     """These columns are already categorical, so telling their owner to make
     them categorical would change nothing."""
-    assert 'exclude_cols_dict' in str(counted_refusal)
-    assert "stype = 'categorical'" not in str(counted_refusal)
+    explained = str(_counted_refusal())
+    assert 'exclude_cols_dict' in explained
+    assert "stype = 'categorical'" not in explained
 
 
-def test_a_refusal_keeps_its_status_and_code(counted_refusal):
-    assert counted_refusal.status_code == 422
-    assert counted_refusal.code == 'UNSUPPORTED_SHAPE'
+def test_a_refusal_keeps_its_status_and_code():
+    explained = _counted_refusal()
+    assert explained.status_code == 422
+    assert explained.code == 'UNSUPPORTED_SHAPE'
 
 
 def test_the_stype_wording_still_names_its_columns():

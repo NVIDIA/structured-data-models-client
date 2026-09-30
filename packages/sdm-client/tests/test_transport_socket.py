@@ -307,13 +307,8 @@ _EMPTY_CONTEXT = (
 )
 
 
-@pytest.fixture(scope='module')
-def empty_context_500() -> NimRequestError:
-    """The one request all three checks below are about, made once.
-
-    Each of them asserts a different property of the same corrected error, and
-    each was starting its own server and repeating the same call to get it.
-    """
+def _empty_context_failure() -> NimRequestError:
+    """The corrected error the three checks below are each about."""
     with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
         transport = Transport(url, max_retries=0, backoff_factor=0.0)
         with pytest.raises(NimRequestError) as raised:
@@ -321,34 +316,29 @@ def empty_context_500() -> NimRequestError:
     return raised.value
 
 
-def test_a_500_naming_the_callers_mistake_is_reported_as_theirs(
-    empty_context_500: NimRequestError,
-):
+def test_a_500_naming_the_callers_mistake_is_reported_as_theirs():
     """The status says server, the code says internal, and only the sentence
     says otherwise. An orchestrator branching on the code retries a request
     that can only fail the same way."""
-    assert empty_context_500.code == 'INVALID_REQUEST'
+    assert _empty_context_failure().code == 'INVALID_REQUEST'
 
 
-def test_the_python_exception_the_server_leaked_is_not_shown(
-    empty_context_500: NimRequestError,
-):
+def test_the_python_exception_the_server_leaked_is_not_shown():
     """``RuntimeError`` is a type from inside the endpoint. It names nothing
     the caller can act on and reads as a crash, which is the impression this
     whole path is being corrected for."""
-    message = empty_context_500.message
+    message = _empty_context_failure().message
     assert 'RuntimeError' not in message
     assert 'failed unexpectedly' not in message
     assert message.startswith('Failed to collect any context examples')
     assert 'too restrictive' in message
 
 
-def test_what_the_endpoint_called_it_is_kept_beside_the_correction(
-    empty_context_500: NimRequestError,
-):
-    assert empty_context_500.status_code == 500
-    assert empty_context_500.details['endpoint_code'] == 'INTERNAL_ERROR'
-    assert empty_context_500.details['diagnosis'] == 'EMPTY_CONTEXT'
+def test_what_the_endpoint_called_it_is_kept_beside_the_correction():
+    error = _empty_context_failure()
+    assert error.status_code == 500
+    assert error.details['endpoint_code'] == 'INTERNAL_ERROR'
+    assert error.details['diagnosis'] == 'EMPTY_CONTEXT'
 
 
 def test_a_500_naming_nothing_is_reported_as_the_endpoints():

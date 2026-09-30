@@ -19,6 +19,7 @@ where contexts are gathered.
 
 from __future__ import annotations
 
+import copy
 import warnings
 
 import numpy as np
@@ -88,13 +89,19 @@ def test_a_ranking_is_one_question_per_candidate():
 
 
 @pytest.fixture(scope='module')
-def forecast_request():
-    """The gathered forecast both checks below are about, materialized once.
-
-    Gathering it is the expensive part of each, and they were each doing it.
-    """
+def _forecast_template():
     pytest.importorskip('sdm_relational_engine')
     return built(FORECAST, indices=[3])
+
+
+@pytest.fixture()
+def forecast_request(_forecast_template):
+    """A copy of the gathered forecast both checks below are about.
+
+    Gathering it is the expensive part of each, and they were each doing it.
+    Copied rather than shared, so neither can reach the other's.
+    """
+    return copy.deepcopy(_forecast_template)
 
 
 def test_a_forecast_is_one_question_per_step(forecast_request):
