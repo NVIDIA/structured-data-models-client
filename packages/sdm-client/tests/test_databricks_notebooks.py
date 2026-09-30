@@ -43,9 +43,8 @@ def test_there_are_notebooks_for_the_catalog_and_for_lakebase() -> None:
 
 def _ours(module: str | None) -> bool:
     return module is not None and (
-        module == 'sdm_client'
-        or module == 'sdm_connectors'
-        or module.startswith('sdm_connectors.')
+        module in ('sdm_client', 'sdm_connectors')
+        or module.startswith(('sdm_client.', 'sdm_connectors.'))
     )
 
 
