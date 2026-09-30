@@ -209,6 +209,12 @@ def test_copy_leaves_the_original_as_it_was(sample_df: pd.DataFrame) -> None:
     assert table.primary_key.name == 'user_id'
     assert table['age'].stype == Stype.numerical
 
+    composite = table.copy()
+    composite.primary_key = ('user_id', 'name')
+
+    assert list(table._data.columns) == list(sample_df)
+    assert [column.name for column in table.columns] == list(sample_df)
+
 
 def test_metadata(sample_df: pd.DataFrame) -> None:
     table = LocalTable(sample_df, name='users').infer_metadata()
