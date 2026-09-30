@@ -23,6 +23,8 @@ from sdm_relational_engine.exceptions import (
     NimFailureError,
     NimTimeoutError,
     NimUnreachableError,
+    NoTablesFoundError,
+    TableNotFoundError,
     UnknownDatasetError,
 )
 from sdm_relational_engine.utils.environment import (
@@ -48,7 +50,9 @@ __all__ = [
     'NimFailureError',
     'NimTimeoutError',
     'NimUnreachableError',
+    'NoTablesFoundError',
     'Stype',
+    'TableNotFoundError',
     'UnknownDatasetError',
     '__version__',
     'global_state',

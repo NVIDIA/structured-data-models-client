@@ -14,6 +14,7 @@ from predictive_query.schema.typing import Dtype, Stype
 from sdm_connectors import quote_ident
 from sdm_connectors.backends.postgres import own_transaction
 
+from sdm_relational_engine.exceptions import TableNotFoundError
 from sdm_relational_engine.rfm.backend.postgres import Connection
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -175,7 +176,7 @@ class PostgresTable(Table):
             )
             rows = cursor.fetchall()
             if not rows:
-                raise ValueError(
+                raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the PostgreSQL database'
                 )

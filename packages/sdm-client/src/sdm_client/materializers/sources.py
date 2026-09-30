@@ -120,7 +120,10 @@ def engine_graph(
         infer_metadata: Let the engine infer keys, time columns and stypes.
     """
     try:
-        from sdm_relational_engine.rfm import Graph
+        from sdm_relational_engine import (
+            NoTablesFoundError,
+            TableNotFoundError,
+        )
     except ImportError as error:  # pragma: no cover - optional extra
         raise MissingExtraError(
             'relational', 'sdm-relational-engine'
@@ -134,6 +137,21 @@ def engine_graph(
             for name, source_name in tables.items()
         ]
     )
+    try:
+        return _read(source, specs, infer_metadata)
+    except NoTablesFoundError as error:
+        # The engine's own advice names its API, which cannot fill a namespace.
+        raise StructuredDataError(
+            f'{source!r} holds no table to describe', code='INVALID_REQUEST'
+        ) from error
+    except TableNotFoundError as error:
+        raise StructuredDataError(str(error), code='INVALID_REQUEST') from error
+
+
+def _read(
+    source: Any, specs: list[dict[str, Any]] | None, infer_metadata: bool
+) -> Graph:
+    from sdm_relational_engine.rfm import Graph
 
     backend = source.backend
     namespace = source.namespace

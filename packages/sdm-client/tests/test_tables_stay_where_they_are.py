@@ -425,7 +425,7 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
         ),
         (
             lambda source: Schema.from_source(DuckDBSource(connect('duckdb'))),
-            'No tables found',
+            r'DuckDBSource\(\) holds no table to describe',
         ),
         (lambda source: SourceTable('t', '', {}), 'needs the name it has'),
         (

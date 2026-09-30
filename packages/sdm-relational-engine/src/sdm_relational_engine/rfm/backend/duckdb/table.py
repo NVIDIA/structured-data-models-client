@@ -11,6 +11,7 @@ import pandas as pd
 from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
+from sdm_relational_engine.exceptions import TableNotFoundError
 from sdm_relational_engine.rfm.backend.duckdb import Connection
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -74,14 +75,14 @@ class DuckDBTable(Table):
                 sql = f'PRAGMA table_info({self._quoted_source_name})'
                 cursor.execute(sql)
             except Exception as e:
-                raise ValueError(
+                raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the DuckDB database'
                 ) from e
             columns = cursor.fetchall()
 
             if len(columns) == 0:
-                raise ValueError(
+                raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the DuckDB database'
                 )

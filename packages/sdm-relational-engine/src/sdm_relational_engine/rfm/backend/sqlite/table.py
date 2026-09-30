@@ -11,6 +11,7 @@ import pandas as pd
 from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
+from sdm_relational_engine.exceptions import TableNotFoundError
 from sdm_relational_engine.rfm.backend.sqlite import Connection
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -76,7 +77,7 @@ class SQLiteTable(Table):
             columns = cursor.fetchall()
 
             if len(columns) == 0:
-                raise ValueError(
+                raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the SQLite database'
                 )

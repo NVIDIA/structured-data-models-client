@@ -950,14 +950,7 @@ class Schema:
             }
             declared = _model_links(graph, built, as_named)
         else:
-            try:
-                graph = engine_graph(source, tables, infer_metadata=True)
-            except ValueError as error:
-                # The engine's refusal of a missing table, or of a namespace
-                # with none, reaches a caller who catches this client's errors.
-                raise StructuredDataError(
-                    str(error), code='INVALID_REQUEST'
-                ) from error
+            graph = engine_graph(source, tables, infer_metadata=True)
             chosen = (
                 dict(tables)
                 if tables is not None

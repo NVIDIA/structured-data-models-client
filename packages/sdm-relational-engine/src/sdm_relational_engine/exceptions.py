@@ -46,6 +46,14 @@ class UnknownDatasetError(KumoRelationalError, ValueError):
     r"""A named dataset does not exist in the RelBench registry."""
 
 
+class TableNotFoundError(KumoRelationalError, ValueError):
+    r"""A table named for a graph is not in its source."""
+
+
+class NoTablesFoundError(KumoRelationalError, ValueError):
+    r"""A source searched for its tables holds none."""
+
+
 class GraphConstructionError(KumoRelationalError):
     r"""A data source could not be read while building a graph.
 

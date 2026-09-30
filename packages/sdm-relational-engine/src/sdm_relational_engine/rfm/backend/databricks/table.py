@@ -11,6 +11,7 @@ import pandas as pd
 from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
+from sdm_relational_engine.exceptions import TableNotFoundError
 from sdm_relational_engine.rfm.backend.databricks import AnyConnection
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -138,7 +139,7 @@ class DatabricksTable(Table):
             rows = cursor.fetchall()
 
             if len(rows) == 0:
-                raise ValueError(
+                raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the remote data backend'
                 )

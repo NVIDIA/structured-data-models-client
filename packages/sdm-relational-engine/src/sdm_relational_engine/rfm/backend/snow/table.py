@@ -11,6 +11,7 @@ import pandas as pd
 from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
+from sdm_relational_engine.exceptions import TableNotFoundError
 from sdm_relational_engine.rfm.backend.snow import Connection
 from sdm_relational_engine.rfm.backend.snow.binding import paramstyle
 from sdm_relational_engine.rfm.base import (
@@ -150,7 +151,7 @@ class SnowTable(Table):
                 self._database, self._schema, self._source_name = candidate
                 break
             else:
-                raise ValueError(
+                raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the remote data backend'
                 ) from error

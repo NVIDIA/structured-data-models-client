@@ -33,6 +33,7 @@ import sdm_relational_engine.utils.display as display
 from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
+    NoTablesFoundError,
 )
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -290,7 +291,7 @@ def _require_discovered_tables(tables: Sequence[Any], where: str) -> None:
         where: What was searched, for the message.
     """
     if len(tables) == 0:
-        raise ValueError(
+        raise NoTablesFoundError(
             f'No tables found in {where}. Check the name, or '
             f'pass `tables=[...]` explicitly.'
         )
