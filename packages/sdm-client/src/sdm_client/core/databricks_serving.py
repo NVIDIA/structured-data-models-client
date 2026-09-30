@@ -119,12 +119,7 @@ class DatabricksServingTransport:
         timeout: float | None = None,
         max_request_bytes: int = _MAX_REQUEST_BYTES,
     ) -> None:
-        try:
-            self._endpoint = _validate_endpoint_name(endpoint)
-        except ValueError as error:
-            raise StructuredDataError(
-                str(error), code='INVALID_CONFIGURATION'
-            ) from None
+        self._endpoint = _validate_endpoint_name(endpoint)
         if timeout is not None and workspace_client is not None:
             # Silently ignoring it would leave the caller believing a bound
             # they asked for is in force.
@@ -224,14 +219,7 @@ class DatabricksServingTransport:
         # requests' own; anything else is a bug, and is not dressed as a 503.
         except OSError as error:
             raise self._error_from(error) from None
-        try:
-            body = _response_body(reply)
-        except ValueError as error:
-            raise StructuredDataError(
-                f'{error} (serving endpoint {self._endpoint!r})',
-                code='TRANSPORT_ERROR',
-            ) from None
-        return self._decoded(body)
+        return self._decoded(_response_body(reply, self._endpoint))
 
     def _decoded(self, body: str) -> dict[str, Any]:
         try:
@@ -367,18 +355,18 @@ def _validate_endpoint_name(name: object) -> str:
     userinfo without any of the other markers.
 
     Raises:
-        ValueError: With a message that does not contain ``name``.
+        StructuredDataError: ``INVALID_CONFIGURATION``, with a message that
+            does not contain ``name``.
     """
     if not isinstance(name, str) or not name.strip():
-        raise ValueError('endpoint must be a non-empty serving endpoint name')
-    for token in ('://', '/', '?', '#', '@'):
-        if token in name:
-            raise ValueError(
-                'endpoint must be a serving endpoint name, not a URL'
-            )
-    if name != name.strip():
-        raise ValueError('endpoint name has surrounding whitespace')
-    return name
+        refusal = 'endpoint must be a non-empty serving endpoint name'
+    elif any(token in name for token in ('://', '/', '?', '#', '@')):
+        refusal = 'endpoint must be a serving endpoint name, not a URL'
+    elif name != name.strip():
+        refusal = 'endpoint name has surrounding whitespace'
+    else:
+        return name
+    raise StructuredDataError(refusal, code='INVALID_CONFIGURATION')
 
 
 def _envelope(request: Mapping[str, Any]) -> tuple[list[dict[str, str]], int]:
@@ -398,22 +386,24 @@ def _envelope(request: Mapping[str, Any]) -> tuple[list[dict[str, str]], int]:
     return records, len(body)
 
 
-def _response_body(reply: Any) -> str:
+def _response_body(reply: Any, endpoint: str) -> str:
     r"""The single canonical response string the contract promises.
 
     ``reply`` is whatever the SDK returned: an object with ``predictions`` or a
     mapping holding it. Each row may be a mapping or an object.
 
     Raises:
-        ValueError: If there is not exactly one row, or it holds no
-            ``response_json`` string.
+        StructuredDataError: ``TRANSPORT_ERROR``, if there is not exactly one
+            row, or it holds no ``response_json`` string.
     """
     predictions = getattr(reply, 'predictions', None)
     if predictions is None and isinstance(reply, Mapping):
         predictions = reply.get('predictions')
     if not isinstance(predictions, list) or len(predictions) != 1:
-        raise ValueError(
-            'serving endpoint did not return exactly one prediction row'
+        raise StructuredDataError(
+            f'serving endpoint {endpoint!r} did not return exactly one '
+            f'prediction row',
+            code='TRANSPORT_ERROR',
         )
     row = predictions[0]
     if isinstance(row, Mapping):
@@ -421,9 +411,10 @@ def _response_body(reply: Any) -> str:
     else:
         body = getattr(row, _RESPONSE_COLUMN, None)
     if not isinstance(body, str):
-        raise ValueError(
-            f'serving endpoint response row has no {_RESPONSE_COLUMN!r} '
-            'string column'
+        raise StructuredDataError(
+            f'serving endpoint {endpoint!r} answered with a row that has no '
+            f'{_RESPONSE_COLUMN!r} string column',
+            code='TRANSPORT_ERROR',
         )
     return body
 
