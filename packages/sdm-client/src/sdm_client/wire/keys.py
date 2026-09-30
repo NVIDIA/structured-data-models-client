@@ -13,8 +13,13 @@ client, which should have to ask only whether two sets of rows overlap.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import itertools
+from collections.abc import Iterable, Mapping, Sequence
+from decimal import Decimal
+from numbers import Real
 from typing import TYPE_CHECKING, Any
+
+import pandas as pd
 
 from sdm_client.schema import _as_key_tuple
 
@@ -31,6 +36,9 @@ _ENTITY_REF = '__kumo_entity_ref'
 #: What ties a related row to the instance it hangs off.
 INSTANCE_ID = 'instance_id'
 
+#: Counts the rows that name no entity, so that no two of them are one.
+_UNIDENTIFIED = itertools.count()
+
 
 def _anchor_column(payload: dict[str, Any] | None) -> str:
     r"""What this envelope calls the moment.
@@ -44,6 +52,47 @@ def _anchor_column(payload: dict[str, Any] | None) -> str:
         task.get('anchor_time_column') if isinstance(task, Mapping) else None
     )
     return str(named) if named else _ANCHOR
+
+
+def rows_in(
+    payload: dict[str, Any] | None, half: str, *, with_anchor: bool = False
+) -> list[Any]:
+    r"""The key of every row one half of a wire envelope holds, one per row.
+
+    The row-wise reading. :func:`keys_in` is this without the duplicates, and
+    is what a question about overlap wants; a sentence that counts rows wants
+    this, because two rows about one entity are two rows.
+    """
+    if not isinstance(payload, dict):
+        return []
+    table = (payload.get(half) or {}).get('instance_table') or {}
+    columns = table.get('columns')
+    rows = table.get('rows')
+    if not isinstance(columns, list) or not isinstance(rows, list):
+        return []
+    named: Any = next(
+        (name for name in columns if str(name).startswith(_ENTITY_REF)),
+        None,
+    )
+    if named is None:
+        named = ((payload.get('schema') or {}).get('instance_table') or {}).get(
+            'primary_key'
+        )
+    if named is None:
+        return []
+    wanted = named if isinstance(named, list) else [named]
+    if any(name not in columns for name in wanted):
+        return []
+    at = [columns.index(name) for name in wanted]
+    if with_anchor:
+        anchor = _anchor_column(payload)
+        if anchor in columns:
+            at = [*at, columns.index(anchor)]
+    return [
+        _named_by(row[position] for position in at)
+        for row in rows
+        if isinstance(row, list) and len(row) > max(at)
+    ]
 
 
 def keys_in(
@@ -66,36 +115,7 @@ def keys_in(
     only answered the one it was asked at; an entity whose answer is a
     standing value has been given away at any moment at all.
     """
-    if not isinstance(payload, dict):
-        return frozenset()
-    table = (payload.get(half) or {}).get('instance_table') or {}
-    columns = table.get('columns')
-    rows = table.get('rows')
-    if not isinstance(columns, list) or not isinstance(rows, list):
-        return frozenset()
-    named: Any = next(
-        (name for name in columns if str(name).startswith(_ENTITY_REF)),
-        None,
-    )
-    if named is None:
-        named = ((payload.get('schema') or {}).get('instance_table') or {}).get(
-            'primary_key'
-        )
-    if named is None:
-        return frozenset()
-    wanted = named if isinstance(named, list) else [named]
-    if any(name not in columns for name in wanted):
-        return frozenset()
-    at = [columns.index(name) for name in wanted]
-    if with_anchor:
-        anchor = _anchor_column(payload)
-        if anchor in columns:
-            at = [*at, columns.index(anchor)]
-    return frozenset(
-        _named_by(row[position] for position in at)
-        for row in rows
-        if isinstance(row, list) and len(row) > max(at)
-    )
+    return frozenset(rows_in(payload, half, with_anchor=with_anchor))
 
 
 def _named_by(values: Iterable[Any]) -> str:
@@ -108,10 +128,155 @@ def _named_by(values: Iterable[Any]) -> str:
     never meet, and the warning would go quiet on precisely the warehouse keys
     it matters most for.
 
+    A whole number written as a float is the same entity as the integer: a
+    context typed `int64` pins entity `1` and a scored frame of floats sends
+    `1.0`, and the endpoint answers the second with the first's id. Comparing
+    the spellings called that two entities, and a session scored rows its
+    context answers without saying so.
+
     A composite key becomes a tuple of its parts rather than nothing at all,
     which is what reading only single-column keys amounted to.
     """
-    return repr(tuple(str(value) for value in values))
+    named = tuple(values)
+    if any(_is_missing(value) for value in named):
+        # A row with no identifier is not the same row as another with no
+        # identifier. Named alike, two unidentified rows were reported as one
+        # entity leaking into the other, and `holdout=[None]` took every
+        # unidentified row out of the context at once.
+        return f'<unidentified {next(_UNIDENTIFIED)}>'
+    return repr(tuple(_one_spelling(value) for value in named))
+
+
+def _is_missing(value: Any) -> bool:
+    r"""Whether this value names no entity at all."""
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (ArithmeticError, TypeError, ValueError):
+        # A signalling NaN raises rather than comparing. It names no entity
+        # either, and asking whether it does must not be the thing that fails.
+        return True
+
+
+def _one_spelling(value: Any) -> str:
+    r"""A value as the name of an entity, not as the type that carried it.
+
+    Every real number is read as the number it is, rather than a list of the
+    types that can hold one: ``1``, ``1.0``, a numpy float of any width and
+    ``Decimal("1.00")`` all name entity 1, and ``Decimal("1.50")`` names the
+    same entity as ``1.5``. Written by type instead, a holdout given as a
+    ``float32`` removed nothing and a trailing zero made two names for one row.
+
+    Anything that is not a number is left as it is written. A key column of
+    text has ``"1.50"`` and ``"1.5"`` as two different entities, and reading
+    them as numbers would merge two rows the schema says are distinct.
+    """
+    if isinstance(value, bool) or not isinstance(value, (Real, Decimal)):
+        return str(value)
+    try:
+        exact = Decimal(str(value))
+        # A name is not arithmetic. An infinity or a NaN is not an entity and
+        # cannot be read as one, and asking anyway raised `OverflowError` and
+        # `InvalidOperation` out of a function whose whole job is to write a
+        # name -- so a holdout naming one failed the call before it was sent.
+        if not exact.is_finite():
+            return str(value)
+        if exact == exact.to_integral_value():
+            return str(int(exact))
+        return str(exact.normalize())
+    except (ArithmeticError, ValueError):
+        return str(value)
+
+
+def key_dtypes(
+    table: Any, key: Sequence[str], widened_by: Any = None
+) -> dict[str, str] | None:
+    r"""One wire dtype per key column, settled the way the adapter settles it.
+
+    One per column, not one per half. Settled separately for each frame, the
+    same entity came out ``1.0`` on the side read from the context and ``1``
+    on the side read from the rows being scored, and the comparison between
+    them reported overlaps the encoded request does not have.
+
+    ``None`` where no dtype can be settled. Every caller is a warning, and a
+    warning is never worth a failure.
+    """
+    from sdm_client.adapters.tabular import _raw_dtype_of
+    from sdm_client.wire import UNTYPED, widen_tfm_dtype
+
+    try:
+        dtypes = {}
+        for name in key:
+            column = table.columns[name]
+            dtype = UNTYPED if column.untyped else column.dtype
+            if widened_by is not None and name in widened_by.columns:
+                dtype = widen_tfm_dtype(
+                    (dtype, _raw_dtype_of(widened_by[name], dtype))
+                )
+            dtypes[name] = dtype or 'string'
+        return dtypes
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return None
+
+
+def keys_from_a_frame(
+    frame: Any, key: Sequence[str], dtypes: Mapping[str, str] | None
+) -> list[Any]:
+    r"""``frame``'s keys, written the way the wire will write them.
+
+    The other side of every comparison here is read from an encoded envelope,
+    so a frame read raw does not meet it: an entity held as ``1.0`` in a frame
+    is ``1`` on the wire, and the two would never match -- which is how a
+    session came to score rows its pinned context answers without saying so.
+
+    Through the encoder that writes the request, given the dtypes
+    :func:`key_dtypes` settled for the request as a whole. Empty where there
+    are none or the encoding fails: every caller is a warning, and a warning
+    is never worth a failure.
+    """
+    from sdm_client.wire.tables import encode_table
+
+    if dtypes is None:
+        return []
+    try:
+        encoded = encode_table(
+            frame[list(key)], {name: dtypes[name] for name in key}
+        )
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return []
+    return [_named_by(row) for row in encoded['rows']]
+
+
+def scored_rows(
+    request: Request,
+    *,
+    with_anchor: bool = False,
+    dtypes: Mapping[str, str] | None = None,
+) -> list[Any]:
+    r"""The key of every row a request asks about, one per row.
+
+    A sentence that counts rows has to be given rows: two rows asking about
+    one entity are two rows, and a set of keys had already lost one of them.
+
+    ``dtypes`` are the ones the other side of the comparison was written with
+    -- a session's pinned schema. Settled here instead, the same entity has
+    one name on each side and neither meets the other.
+    """
+    if request.payloads:
+        return [
+            named
+            for payload in request.payloads
+            for named in rows_in(payload, 'predict', with_anchor=with_anchor)
+        ]
+    frame = getattr(request.predict, 'instance_table', None)
+    table = request.schema[request.entity_table] if request.schema else None
+    names = _as_key_tuple(getattr(table, 'primary_key', None))
+    if frame is None or not names or any(n not in frame for n in names):
+        return []
+    if dtypes is None:
+        dtypes = key_dtypes(table, names, frame)
+    return keys_from_a_frame(frame, names, dtypes)
 
 
 def scored_keys(
@@ -125,22 +290,7 @@ def scored_keys(
     window over time -- the query is refused before it reaches here, so there
     is no moment in the frame to put in the key and none to look for.
     """
-    if request.payloads:
-        return frozenset().union(
-            *(
-                keys_in(payload, 'predict', with_anchor=with_anchor)
-                for payload in request.payloads
-            )
-        )
-    frame = getattr(request.predict, 'instance_table', None)
-    table = request.schema[request.entity_table] if request.schema else None
-    names = _as_key_tuple(getattr(table, 'primary_key', None))
-    if frame is None or not names or any(n not in frame for n in names):
-        return frozenset()
-    return frozenset(
-        _named_by(values)
-        for values in zip(*(frame[n] for n in names), strict=True)
-    )
+    return frozenset(scored_rows(request, with_anchor=with_anchor))
 
 
 def without_the_keys(payload: dict[str, Any], keys: frozenset[Any]) -> int:

@@ -944,7 +944,11 @@ def test_a_forecast_part_names_the_step_that_failed():
 
     said = str(
         about_the_part(
-            StructuredDataError('too far.', code='INVALID_REQUEST'),
+            StructuredDataError(
+                'too far.',
+                code='INVALID_REQUEST',
+                details={'window_outran_the_data': True},
+            ),
             parts('forecast', 40),
             16,
         )
@@ -952,6 +956,22 @@ def test_a_forecast_part_names_the_step_that_failed():
     assert 'step 16 of 40' in said
     assert 'fewer than 16 steps' in said
     assert 'fewer than 40' not in said
+
+
+def test_a_forecast_part_failure_that_is_not_about_the_window_says_only_which():
+    """An unknown model is not answered by asking for fewer steps, and at step
+    1 there are no fewer to ask for."""
+    from sdm_client.decompose import about_the_part
+    from sdm_client.errors import UnknownModelError
+
+    for raised in (
+        UnknownModelError('nope', ['kumo-tabular']),
+        StructuredDataError('indices is empty', code='INVALID_REQUEST'),
+    ):
+        said = str(about_the_part(raised, parts('forecast', 3), 1))
+        assert 'This is forecast step 1 of 3.' in said
+        assert 'fewer than' not in said
+        assert 'window' not in said
 
 
 def test_a_cold_candidate_is_not_told_to_widen_a_context_that_cannot_help():
@@ -1022,3 +1042,31 @@ def test_what_is_appended_to_a_part_failure_reads_as_a_sentence(
         )
     )
     assert joined in said
+
+
+@pytest.mark.parametrize(
+    'outputs', ['prediction', 123, [1, 2]], ids=['a string', 'an int', 'ints']
+)
+def test_a_ranking_reports_a_bad_outputs_the_way_every_route_does(outputs):
+    """A rewritten question is answered in parts and never reaches `_prepare`,
+    so the ranking's own output check saw a string first and refused it one
+    character at a time."""
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import KumoRelational, SDMClient
+
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2], candidates=[10, 11])
+    client = SDMClient('http://127.0.0.1:1', api_key='none')
+    try:
+        with pytest.raises(StructuredDataError) as raised:
+            client.predict(request, model=KumoRelational(), outputs=outputs)
+    finally:
+        client.close()
+
+    said = str(raised.value)
+    assert 'sequence of field names' in said
+    assert "'p', 'r', 'e'" not in said

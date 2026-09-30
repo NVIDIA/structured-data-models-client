@@ -120,6 +120,7 @@ def driver_guard(
     context: str,
     *,
     missing_as_not_found: bool = False,
+    type_error_is_the_caller_s: bool = True,
     **details: Any,
 ) -> Iterator[None]:
     r"""Translate driver exceptions into ConnectorError with a stable code.
@@ -129,15 +130,20 @@ def driver_guard(
     broken driver installation must not be reported as a connect/query/read
     failure. The original driver exception stays chained as ``__cause__``.
     TypeError maps to INVALID_CONNECTOR_ARGS (a deterministic caller error,
-    never worth retrying); FileNotFoundError maps to NOT_FOUND only where the
-    guarded region reads data by path (``missing_as_not_found=True``).
+    never worth retrying) -- except where the guarded region holds no caller
+    argument at all, as reading a result set does: there a driver's own
+    ``TypeError`` converting a value is a read failure and saying "invalid
+    connector args" names something the caller did not do
+    (``type_error_is_the_caller_s=False``). FileNotFoundError maps to NOT_FOUND
+    only where the guarded region reads data by path
+    (``missing_as_not_found=True``).
     """
     try:
         yield
     except (ConnectorError, ImportError):
         raise
     except Exception as error:
-        if isinstance(error, TypeError):
+        if type_error_is_the_caller_s and isinstance(error, TypeError):
             mapped = 'INVALID_CONNECTOR_ARGS'
         elif missing_as_not_found and isinstance(error, FileNotFoundError):
             mapped = 'NOT_FOUND'
@@ -295,6 +301,15 @@ def resolve_sql(*, table: str | None, query: str | None) -> str:
             code='INVALID_CONNECTOR_ARGS',
         )
     if query is not None:
+        # Named here rather than left to the driver. Splitting the query guard
+        # so a fetch failure stops being called an execution failure also
+        # stopped a `TypeError` naming the caller's own argument, and this is
+        # the one such argument the region holds.
+        if not isinstance(query, str):
+            raise ConnectorError(
+                f'query must be a SQL statement, got {type(query).__name__}',
+                code='INVALID_CONNECTOR_ARGS',
+            )
         return query
     if not _TABLE_IDENTIFIER_RE.fullmatch(table):
         raise ConnectorError(

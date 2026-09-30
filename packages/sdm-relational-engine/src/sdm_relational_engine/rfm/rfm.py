@@ -120,6 +120,24 @@ _SIZE_LIMIT_MSG = (
 _SESSION_UNSUPPORTED_STATUS = frozenset({404, 405, 501})
 
 
+def _a_conversion_that_works(value: object) -> str:
+    """A suggested conversion, only where it converts.
+
+    `try pd.Timestamp('not a date')` was printed for any string, including the
+    ones that make that call raise -- so the remedy was the input wrapped in a
+    constructor that cannot take it.
+    """
+    if not isinstance(value, str):
+        return ''
+    try:
+        converted = pd.Timestamp(value)
+    except Exception:
+        return ''
+    if converted is pd.NaT:
+        return ''
+    return f'; try pd.Timestamp({value!r})'
+
+
 def _sessions_unsupported(error: HTTPException) -> bool:
     return error.status_code in _SESSION_UNSUPPORTED_STATUS
 
@@ -456,7 +474,7 @@ def _check_anchor_time(value: Any, name: str) -> Any:
         return to_naive_utc(value)
     if isinstance(value, str) and value == 'entity':
         return value
-    hint = f'; try pd.Timestamp({value!r})' if isinstance(value, str) else ''
+    hint = _a_conversion_that_works(value)
     raise TypeError(
         f"'{name}' must be a pandas.Timestamp or the literal 'entity' (got "
         f'{type(value).__name__} {value!r}){hint}'

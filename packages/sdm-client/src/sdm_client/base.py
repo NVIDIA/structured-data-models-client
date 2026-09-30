@@ -143,9 +143,17 @@ class ModelAdapter(Protocol):
         ...
 
     def session_prediction_plan(
-        self, request: Request, outputs: tuple[str, ...]
+        self,
+        request: Request,
+        outputs: tuple[str, ...],
+        pinned: Mapping[str, Any] | None = None,
     ) -> Iterable[dict[str, Any]]:
-        r"""The payloads that score against an already-pinned context."""
+        r"""The payloads that score against an already-pinned context.
+
+        ``pinned`` is the envelope the session opened with, minus the context
+        itself. The schema is not sent again on a scoring call, so the rows
+        have to be written to describe the one that was pinned.
+        """
         ...
 
     def normalize(

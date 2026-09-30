@@ -147,7 +147,7 @@ def handle(pinned_keys) -> object:
         class spec:  # noqa: N801 - a stand-in for a ModelSpec
             model_id = 'kumo-tabular'
 
-        def session_prediction_plan(self, request, outputs):
+        def session_prediction_plan(self, request, outputs, pinned=None):
             return ()
 
     return FittedModel(

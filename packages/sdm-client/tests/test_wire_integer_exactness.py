@@ -157,12 +157,26 @@ def test_a_uint64_column_inside_the_range_is_unchanged():
 
 
 @pytest.mark.parametrize('dtype', ['uint64', 'UInt64'])
-def test_a_uint64_past_int64_is_refused_by_name(dtype):
+def test_a_uint64_past_int64_is_refused_when_int64_is_declared(dtype):
+    """A value outside int64 cannot travel under int64, however it is declared."""
     series = pd.Series([2**64 - 1, 1], dtype=dtype)
     with pytest.raises(StructuredDataError) as error:
-        serialize_column(series, infer_tfm_dtype(series))
+        serialize_column(series, 'int64')
     assert 'outside the range' in str(error.value)
     assert str(INT64_MAX) in str(error.value)
+
+
+@pytest.mark.parametrize('dtype', ['uint64', 'UInt64'])
+def test_a_uint64_past_int64_is_not_declared_int64_in_the_first_place(dtype):
+    """It used to be, and the request then failed at serialization rather than
+    being described correctly at inference -- which is what the same column of
+    `Decimal` has always done."""
+    series = pd.Series([2**64 - 1, 1], dtype=dtype)
+    assert infer_tfm_dtype(series) == 'string'
+    assert serialize_column(series, infer_tfm_dtype(series)) == [
+        str(2**64 - 1),
+        '1',
+    ]
 
 
 def test_the_int64_boundary_itself_is_allowed():

@@ -34,7 +34,7 @@ Nothing here contacts a model. Inference reads your frames locally.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
@@ -114,9 +114,49 @@ class Column:
     stype: str
     untyped: bool = field(init=False, default=False)
     stype_declared: bool = field(init=False, default=False)
+    _stype_before_key: str | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         self._check_stype(self.stype)
+
+    def _mark_as_key(self) -> None:
+        r"""Type this column as an identifier because the schema joins on it.
+
+        A key typed from its dtype alone becomes ``numerical``, the model
+        stores it as a float, and the join against an integer key fails
+        downstream. That is true of a column the caller called ``numerical``
+        too: what a key means is settled by its being a key, not by a
+        preference, so a declared meaning is overridden here rather than
+        honoured -- and, like an inferred one, recorded so it comes back if
+        the column stops being a key.
+
+        This goes around ``__setattr__``: routed through it the schema's own
+        marking set ``stype_declared``, becoming indistinguishable from a
+        meaning the caller chose, and what had been decided was gone with
+        nothing to restore.
+        """
+        if self.stype == 'ID':
+            return
+        object.__setattr__(self, '_stype_before_key', self.stype)
+        object.__setattr__(self, 'stype', 'ID')
+
+    def _release_as_key(self) -> None:
+        r"""Give back the meaning this column had, the schema no longer joining
+        on it.
+
+        Through the same adoption an assignment goes through: a column that
+        means `timestamp` orders the table it belongs to, and restoring the
+        meaning around that left a table saying it held a timestamp while
+        naming no time column -- which `check_consistent()` accepted and every
+        temporal query then failed on.
+        """
+        if self._stype_before_key is None:
+            return
+        restored = self._stype_before_key
+        object.__setattr__(self, 'stype', restored)
+        object.__setattr__(self, '_stype_before_key', None)
+        if restored == 'timestamp':
+            self._adopt_as_time_column()
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Assign a field, keeping the three that describe each other true.
@@ -146,6 +186,36 @@ class Column:
         object.__setattr__(self, key, value)
         if key == 'stype' and value == 'timestamp':
             self._adopt_as_time_column()
+        if key == 'stype':
+            self._stay_a_key_if_the_schema_joins_on_this(value)
+
+    def _stay_a_key_if_the_schema_joins_on_this(self, declared: str) -> None:
+        r"""Put ``ID`` back if this column is one the schema joins on.
+
+        A key's meaning is settled by its being a key, and the schema says so
+        wherever it is asked -- but the answer was only re-derived when the
+        keys changed, so between declaring a meaning on a live key and the
+        next such moment the column read as whatever was declared. Nothing was
+        sent that way, because a request re-derives as it takes its copy; the
+        object simply described itself wrongly in the meantime.
+
+        The declaration replaces what there was to give back, rather than
+        being discarded beside it: declaring ``ID`` on a column that is
+        already a key left the meaning inference had found still recorded, and
+        moving the key elsewhere handed that back over the caller's own word.
+        """
+        if declared == 'ID':
+            object.__setattr__(self, '_stype_before_key', None)
+            return
+        table = getattr(self, '_table', None)
+        schema = getattr(table, '_schema', None) if table is not None else None
+        if schema is None:
+            if table is not None and self.name in _as_key_tuple(
+                getattr(table, 'primary_key', None)
+            ):
+                self._mark_as_key()
+            return
+        schema._mark_key_columns()
 
     def _adopt_as_time_column(self) -> None:
         r"""Let a column named as a timestamp order the table it belongs to.
@@ -286,10 +356,14 @@ class Table:
         there. The back-reference itself is set directly: it is not a field,
         and must stay out of equality and `repr`.
         """
+        # By identity. A `Table` is a dataclass, so `in (None, self)` asks
+        # `==`, which compares the frames inside and raises on any table that
+        # holds one.
         borrowed = [
             name
             for name, column in self.columns.items()
-            if getattr(column, '_table', None) not in (None, self)
+            if (owner := getattr(column, '_table', None)) is not None
+            and owner is not self
         ]
         if borrowed:
             object.__setattr__(self, 'columns', dict(self.columns))
@@ -298,19 +372,94 @@ class Table:
         for column in self.columns.values():
             object.__setattr__(column, '_table', self)
 
+    def __eq__(self, other: object) -> bool:
+        r"""Whether two tables describe the same thing.
+
+        Written out because the generated one compares the frames with `==`,
+        which for a DataFrame is a frame of booleans -- so asking whether two
+        tables are equal raised `ValueError: The truth value of a DataFrame is
+        ambiguous` from inside pandas, naming nothing the caller wrote. The
+        rows are compared as rows, and everything else by value, which is what
+        the question means.
+        """
+        if not isinstance(other, Table):
+            return NotImplemented
+        described = (
+            self.name == other.name
+            and self.columns == other.columns
+            and _as_key_tuple(self.primary_key)
+            == _as_key_tuple(other.primary_key)
+            and self.time_column == other.time_column
+        )
+        if not described:
+            return False
+        mine, theirs = self.data, other.data
+        if mine is None or theirs is None:
+            return mine is theirs
+        return bool(mine.equals(theirs))
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def __copy__(self) -> Table:
+        r"""A shallow copy is still a table of its own columns.
+
+        Sharing them left the copy unable to answer for itself -- its columns
+        pointed at the table they came from, so changing the copy's key typed
+        nothing -- and able to retype the original once the copy was put in a
+        schema.
+        """
+        return _copy_table(self)
+
     def __setattr__(self, key: str, value: Any) -> None:
+        if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
+            # Before anything is marked, not after. Naming a key or a time
+            # column types the columns it names, and ownership was taken in
+            # `__post_init__` -- which runs after the fields are assigned, so
+            # a table built on another's columns typed *those* first and left
+            # the table it borrowed them from changed.
+            self._own_columns()
         if key == 'primary_key':
+            # Read once, here, and what was read is what is kept. A key is
+            # consulted many times afterwards -- to check it, to type its
+            # columns, to copy the table -- and an iterable that empties on
+            # the first read arrived as "was given an empty primary key"
+            # about a key that named two columns. Reading it before anything
+            # is assigned also stops a key this cannot read from being taken
+            # and leaving a table that can be neither copied nor sent.
+            names = _as_key_tuple(value)
+            if value is not None and not isinstance(value, str):
+                value = names
             if value is None:
                 object.__setattr__(self, 'duplicate_keys', 0)
                 object.__setattr__(self, key, None)
+                self._re_derive_key_columns()
                 return
             self._check_key(value)
             object.__setattr__(self, key, value)
             self._adopt_key(value)
+            self._re_derive_key_columns()
             return
         if key == 'time_column' and value is not None:
             self._check_time_column(value)
         object.__setattr__(self, key, value)
+
+    def _re_derive_key_columns(self) -> None:
+        r"""Ask this table's schema which of its columns are still keys.
+
+        A key that has just been replaced is no longer a key, and nothing said
+        so: the column it was kept the ``ID`` the old key gave it. Only the
+        schema knows whether some relationship still joins on that column, so
+        the question goes there; a table held on its own answers it for its own
+        key alone.
+        """
+        schema = getattr(self, '_schema', None)
+        if schema is not None:
+            schema._mark_key_columns()
+            return
+        named = set(_as_key_tuple(getattr(self, 'primary_key', None)))
+        for name, column in getattr(self, 'columns', {}).items():
+            if name not in named:
+                column._release_as_key()
 
     def _adopt_key(self, value: str | Sequence[str]) -> None:
         r"""Make the rest of the table agree with the key it was just given.
@@ -338,7 +487,7 @@ class Table:
         """
         names = _as_key_tuple(value)
         for name in names:
-            self.columns[name].stype = 'ID'
+            self.columns[name]._mark_as_key()
         frame = getattr(self, 'data', None)
         if frame is None or frame.empty:
             return
@@ -388,14 +537,24 @@ class Table:
     def _could_hold_a_key(self, name: str) -> bool:
         r"""Whether `_check_key` would take this column as part of a key.
 
-        The two conditions it refuses on that a column carries on its own: a
-        dtype no identifier can be made of, and being the table's time column.
-        Asked here so that what is recommended is what is accepted.
+        The conditions it refuses on that a column carries on its own: a dtype
+        no identifier can be made of, being the table's time column, and
+        holding a null. Asked here so that what is recommended is what is
+        accepted -- a column with one null was offered as half of a composite
+        key and refused by `_check_key` on the very next call.
+
+        Uniqueness is not asked here. It is a property of the combination, and
+        the caller of this is choosing what to combine.
         """
         column = self.columns.get(name)
         if column is None or name == getattr(self, 'time_column', None):
             return False
-        return supports_dtype('ID', column.dtype)
+        if not supports_dtype('ID', column.dtype):
+            return False
+        frame = getattr(self, 'data', None)
+        if frame is None or name not in frame.columns:
+            return True
+        return not bool(frame[name].isna().any())
 
     def _check_name(self, name: str) -> None:
         if not isinstance(name, str) or not name:
@@ -460,15 +619,21 @@ class Table:
             return
         quality = _key_quality(frame, names)
         if quality.nulls:
+            empty = [
+                name
+                for name in names
+                if name in frame.columns and frame[name].isna().any()
+            ]
             raise StructuredDataError(
-                f'{".".join((self.name, *names))} has {quality.nulls} row(s) '
-                f'with no value, so those rows cannot be identified; fill or '
-                f'drop them before using the column as a primary key',
+                f'{_the_key_of(self.name, names)} has {quality.nulls} row(s) '
+                f'with no value, in {_and_list(empty)}, so those rows cannot '
+                f'be identified; fill or drop them before using '
+                f'{"them" if len(empty) > 1 else "it"} as a primary key',
                 code='INVALID_REQUEST',
             )
         if quality.duplicates > len(frame) * (1 - _KEY_UNIQUENESS):
             raise StructuredDataError(
-                f'{".".join((self.name, *names))} is not unique enough to '
+                f'{_the_key_of(self.name, names)} is not unique enough to '
                 f'identify a row: {quality.duplicates} of {len(frame)} rows '
                 f'repeat a value already used, e.g. {quality.example!r}',
                 code='INVALID_REQUEST',
@@ -566,7 +731,14 @@ class Schema:
         link)` reaches it without passing the setter, and this is the question
         a caller runs to find out whether their schema holds together -- it
         should not be the one place that does not look.
+
+        Which columns are keys is re-derived first. `tables` and a table's
+        `columns` are ordinary dictionaries, so a table or a column replaced
+        through one arrives never having been asked, and a relationship key
+        left typed ``numerical`` would otherwise pass this and be sent as a
+        float.
         """
+        self._mark_key_columns()
         for table in self.tables.values():
             for column in table.columns.values():
                 column.check_consistent()
@@ -577,7 +749,13 @@ class Schema:
         tables: Mapping[str, Table],
         relationships: Sequence[Relationship] = (),
     ) -> None:
-        self._tables = dict(tables)
+        # Copied, because a schema types the key columns of its own tables
+        # and two schemas handed the same ones fought over them: building an
+        # unlinked schema retyped a linked schema's join key, and checking the
+        # linked one retyped the unlinked one's back.
+        self._tables = {
+            name: _copy_table(table) for name, table in tables.items()
+        }
         self.relationships = relationships
 
     def __setattr__(self, key: str, value: Any) -> None:
@@ -591,7 +769,24 @@ class Schema:
         """
         if key == 'relationships' and hasattr(self, '_tables'):
             value = _Links(self._settle(value), self)
+            object.__setattr__(self, key, value)
+            self._mark_key_columns()
+            return
         object.__setattr__(self, key, value)
+
+    def __copy__(self) -> Schema:
+        r"""A shallow copy is still a schema of its own tables.
+
+        `copy.copy` shared the tables and their columns, so editing the copy
+        edited the original -- which was always a trap, and became a
+        destructive one once key columns were re-derived: clearing the copy's
+        relationships retyped a column of a schema that still had them.
+
+        The rows are still shared, as they are in `snapshot()`: they are the
+        data, and copying a warehouse extract is not what a caller asking for
+        a copy of the schema is asking for.
+        """
+        return self.snapshot()
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         r"""Restore a copied or unpickled schema with its links still checked.
@@ -713,9 +908,14 @@ class Schema:
 
         for name, key in (primary_keys or {}).items():
             table = _require_table(built, name)
-            for column in _as_key_tuple(key):
+            # Read once, and the names are what is passed on. Reading it here
+            # to check the columns exist and then handing the original along
+            # emptied a key that can only be read once, exactly as the setter
+            # used to before it read once itself.
+            names = _as_key_tuple(key)
+            for column in names:
                 _require_column(built, name, column)
-            table.primary_key = key
+            table.primary_key = key if isinstance(key, str) else names
         for name, column in (time_columns or {}).items():
             _require_table(built, name).time_column = _require_column(
                 built, name, column
@@ -784,21 +984,62 @@ class Schema:
     def __len__(self) -> int:
         return len(self._tables)
 
-    def _mark_key_columns(self) -> None:
-        r"""Type every key column as an identifier.
+    def _own_tables(self) -> None:
+        r"""Take a copy of any table that still belongs to another schema.
 
-        A join key typed from its dtype alone becomes ``numerical``, which the
-        model then stores as a float, and the join against an integer key fails
-        downstream. Resolving keys as identifiers first is what stops that.
+        `tables` hands back the live dictionary, so a table can arrive from a
+        schema that is still using it -- and typing its key columns for this
+        schema would retype them for that one. The same rule a table applies
+        to the columns it is handed.
         """
+        borrowed = [
+            name
+            for name, table in self._tables.items()
+            if (owner := getattr(table, '_schema', None)) is not None
+            and owner is not self
+        ]
+        for name in borrowed:
+            self._tables[name] = _copy_table(self._tables[name])
         for table in self._tables.values():
-            for name in _as_key_tuple(table.primary_key):
-                if name in table.columns:
-                    table.columns[name].stype = 'ID'
+            object.__setattr__(table, '_schema', self)
+            # And the columns inside them, for the same reason: a column
+            # inserted through `table.columns` arrives still belonging to the
+            # table it came from, and typing it here typed it there.
+            table._own_columns()
+
+    def _mark_key_columns(self) -> None:
+        r"""Say which columns this schema joins on, and which it no longer does.
+
+        Derived from the schema as it stands rather than applied once when it
+        was built. Marking only on the way in meant a relationship dropped
+        afterwards left its source column typed ``ID``, so two schemas with
+        the same tables and no relationships asked different questions -- one
+        a regression, the other a multiclass classification -- according to a
+        link only one of them had ever had.
+        """
+        self._own_tables()
+        keys: dict[str, set[str]] = {}
+        for name, table in self._tables.items():
+            keys[name] = {
+                column
+                for column in _as_key_tuple(table.primary_key)
+                if column in table.columns
+            }
         for link in self.relationships:
             source = self._tables.get(link.source_table)
             if source is not None and link.source_column in source.columns:
-                source.columns[link.source_column].stype = 'ID'
+                keys[link.source_table].add(link.source_column)
+
+        for name, table in self._tables.items():
+            for column_name, column in table.columns.items():
+                # A column replaced through the ordinary `columns` dictionary
+                # arrives with no idea which table it is in, and could not be
+                # asked about again.
+                object.__setattr__(column, '_table', table)
+                if column_name in keys[name]:
+                    column._mark_as_key()
+                else:
+                    column._release_as_key()
 
     def __repr__(self) -> str:
         return (
@@ -828,12 +1069,35 @@ def _require_column(
     return column
 
 
-def _as_key_tuple(key: str | Sequence[str] | None) -> tuple[str, ...]:
+def _as_key_tuple(key: Any) -> tuple[str, ...]:
+    r"""A primary key as the tuple of column names it is.
+
+    A single name, or any ordered iterable of them -- including a `pd.Index`,
+    which is what `frame.columns` is and so the most natural way to name a
+    composite key from the data it came from. `pd.Index` is not a
+    `collections.abc.Sequence`, so asking that question rejected it.
+
+    A set is not one of them. A composite key's columns are in an order, and
+    a set has none, so the key it named would differ between runs.
+    """
     if key is None:
         return ()
     if isinstance(key, str):
         return (key,)
-    return tuple(key)
+    if isinstance(key, (bytes, Mapping, AbstractSet)) or not isinstance(
+        key, Iterable
+    ):
+        raise StructuredDataError(
+            f'a primary key names a column or a sequence of them, got {key!r}',
+            code='INVALID_REQUEST',
+        )
+    names = list(key)
+    if not all(isinstance(name, str) for name in names):
+        raise StructuredDataError(
+            f'a primary key names a column or a sequence of them, got {key!r}',
+            code='INVALID_REQUEST',
+        )
+    return tuple(names)
 
 
 def _infer_table(name: str, frame: pd.DataFrame) -> Table:
@@ -930,7 +1194,14 @@ def _copy_column(column: Column) -> Column:
     the moment its storage and meaning are held against each other.
     """
     made = Column.__new__(Column)
-    for field_name in ('name', 'dtype', 'stype', 'untyped', 'stype_declared'):
+    for field_name in (
+        'name',
+        'dtype',
+        'stype',
+        'untyped',
+        'stype_declared',
+        '_stype_before_key',
+    ):
         object.__setattr__(made, field_name, getattr(column, field_name))
     return made
 
@@ -1524,6 +1795,26 @@ class _Links(list):
         settled = self._schema._settle(links)
         super().clear()
         super().extend(settled)
+        self._schema._mark_key_columns()
+
+    def remove(self, link: Any) -> None:
+        kept = list(self)
+        kept.remove(link)
+        self._resettle(kept)
+
+    def pop(self, index: Any = -1) -> Relationship:
+        kept = list(self)
+        gone = kept.pop(index)
+        self._resettle(kept)
+        return gone
+
+    def clear(self) -> None:
+        self._resettle([])
+
+    def __delitem__(self, index: Any) -> None:
+        kept = list(self)
+        del kept[index]
+        self._resettle(kept)
 
     def append(self, link: Relationship) -> None:
         self._resettle([*self, link])
@@ -1769,6 +2060,17 @@ def _is_joinable(tables: Mapping[str, Table], link: Relationship) -> bool:
     except StructuredDataError:
         return False
     return True
+
+
+def _the_key_of(table: str, names: Sequence[str]) -> str:
+    """How to name a key in a message, for one column or several.
+
+    Joining the parts with a dot rendered `['a', 'b']` of table `t` as
+    `t.a.b`, which reads as one column named `a.b`.
+    """
+    if len(names) == 1:
+        return f'{table}.{names[0]}'
+    return f'the primary key of {table!r}, {_and_list(list(names))},'
 
 
 def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:

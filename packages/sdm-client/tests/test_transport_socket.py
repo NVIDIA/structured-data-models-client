@@ -499,3 +499,26 @@ def test_a_stalled_delete_reports_the_timeout_it_was_given(monkeypatch):
 
     assert 'timed out after 0.5 seconds' in str(raised.value)
     assert raised.value.details['timeout'] == 0.5
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        '{"object": "list", "data": {"id": "kumo-tabular"}}',
+        '{"object": "list", "data": "kumo-tabular"}',
+    ],
+    ids=['an object', 'a string'],
+)
+def test_a_models_body_whose_data_is_not_a_list_is_refused(body):
+    """The object check was added for the body and not one level deeper, so a
+    malformed body read as an endpoint that serves nothing."""
+    with _serve(_Reply(body=body)) as (_, url):
+        with pytest.raises(StructuredDataError) as raised:
+            Transport(url, max_retries=0).list_models()
+    assert 'under "data"' in str(raised.value)
+
+
+def test_a_proper_models_body_still_reads():
+    body = '{"object": "list", "data": [{"id": "kumo-tabular"}]}'
+    with _serve(_Reply(body=body)) as (_, url):
+        assert Transport(url, max_retries=0).list_models() == ['kumo-tabular']

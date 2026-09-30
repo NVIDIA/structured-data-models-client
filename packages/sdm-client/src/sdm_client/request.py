@@ -44,6 +44,7 @@ from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
+from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
 
 # Task kinds the contract carries. A model narrows this further -- a tabular
 # model takes only the coarse 'classification' -- and its adapter says so.
@@ -189,6 +190,92 @@ def _judge_a_context_that_teaches_nothing(
         f'being scored are the ones that differ, score fewer of them; if '
         f'{column} is constant in the whole table, there is no context that '
         f'answers this question.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+def warn_of_rows_scored_from_their_own_answers(request: Request) -> None:
+    r"""Say when the rows being scored sit in the context with their answers.
+
+    Both gathered routes take such rows out of the context they send, and a
+    session says so when it cannot. A request built from frames is handed both
+    halves and did neither, so the model was shown the answer to the question
+    it was being asked -- the one thing every other route here prevents.
+
+    Asked where both halves travel together rather than where the request is
+    built, because that is the only call at which the pairing is a leak. A
+    request built to score against a *session's* context sends only its rows,
+    and warning about a context that never travels made a correct call fail
+    under warnings-as-errors.
+    """
+    if request.payloads:
+        return
+    schema, entity_table = request.schema, request.entity_table
+    target = request.task.target.column_name
+    if schema is None or entity_table is None or not target:
+        return
+    try:
+        context = request.context.instance_table
+        predict = request.predict.instance_table
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return
+    if target not in context.columns:
+        return
+    _warn_of_rows_scored_from_their_own_answers(
+        context, predict, schema, entity_table, target
+    )
+
+
+def _warn_of_rows_scored_from_their_own_answers(
+    context: pd.DataFrame,
+    predict: pd.DataFrame,
+    schema: Schema,
+    entity_table: str,
+    target: str,
+) -> None:
+    r"""The comparison itself, given both halves as frames."""
+    key = _as_key_tuple(schema[entity_table].primary_key)
+    # Every component or none. Reducing a composite key to the columns both
+    # frames happen to carry compares a part of an identity, and two rows that
+    # share a part are not the same row: one tenant's entity 1 was reported as
+    # another tenant's, scored from an answer that is not its own.
+    if not key or any(
+        column not in context.columns or column not in predict.columns
+        for column in key
+    ):
+        return
+    key = list(key)
+    answered = context[context[target].notna()]
+    if answered.empty:
+        return
+    # Compared as the wire spells them, through the encoder that writes them:
+    # a key column whose two halves hold different python types is one column
+    # written one way, so values that differ here are the same value by the
+    # time the model reads them. One dtype for the whole request, not one per
+    # half -- settled per half, the same entity came out `1.0` on the side
+    # read from the context and `1` on the side being scored, and the
+    # comparison reported overlaps the encoded request does not have.
+    table = schema[entity_table]
+    dtypes = key_dtypes(table, key, predict)
+    answers = set(keys_from_a_frame(answered, key, dtypes))
+    if not answers:
+        return
+    # Rows, not keys: the sentence counts rows being scored, and two rows
+    # asking about one entity are two rows whose answer is being shown.
+    shown = sum(
+        1
+        for named in keys_from_a_frame(predict, key, dtypes)
+        if named in answers
+    )
+    if not shown:
+        return
+    warnings.warn(
+        f'{shown} of the {len(predict)} rows being scored are also in '
+        f'context, carrying the {target!r} being asked for, so the model is '
+        f'being shown the answers to rows it is being asked about. Drop them '
+        f'from context, or gather the request with materialize(), which '
+        f'leaves the rows it scores out of the context it sends.',
         category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )

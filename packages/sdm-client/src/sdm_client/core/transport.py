@@ -620,7 +620,16 @@ class Transport:
         except requests.RequestException as error:
             raise _failed_to_reach(error, url, request_timeout) from error
 
-        entries = _decoded_object(content, url).get('data') or []
+        entries = _decoded_object(content, url).get('data')
+        if entries is None:
+            entries = []
+        if not isinstance(entries, list):
+            raise StructuredDataError(
+                f'Expected a list of models under "data" from '
+                f'{redact_url(url)}, got {type(entries).__name__}',
+                code='TRANSPORT_ERROR',
+                details={'url': redact_url(url)},
+            )
         return [
             str(entry['id'])
             for entry in entries

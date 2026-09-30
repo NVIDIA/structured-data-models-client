@@ -137,7 +137,10 @@ def test_naming_nothing_changes_nothing():
     assert len(payload['context']['instance_table']['rows']) == before
 
 
-def test_naming_rows_that_are_not_in_the_context_removes_none():
+def test_naming_rows_that_are_not_in_the_context_says_it_held_nothing():
+    """Silence here looked exactly like silence after holding everything back,
+    and the commonest way to match nothing is a key of the wrong type, which
+    nothing else would have shown."""
     payload = tabular_session()
     before = len(payload['context']['instance_table']['rows'])
 
@@ -147,7 +150,7 @@ def test_naming_rows_that_are_not_in_the_context_removes_none():
 
     assert removed == 0
     assert len(payload['context']['instance_table']['rows']) == before
-    assert not [w for w in caught if 'holdout' in str(w.message)]
+    assert [w for w in caught if 'matched a row' in str(w.message)]
 
 
 # --- and `fit()` has to be the thing that does it ---------------------------
@@ -235,3 +238,98 @@ def test_fit_without_a_holdout_pins_what_it_gathered(monkeypatch):
 
     pinned = keys_in(sent['payload'], 'context')
     assert pinned & frozenset(_named_by([key]) for key in range(200, 260))
+
+
+def test_a_holdout_edits_the_plan_and_not_the_request():
+    """The relational session plan named the gathered envelope's keys, so it
+    shared its context: a holdout edited the request, and a second fit of the
+    same request with no holdout pinned the already-reduced context."""
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import Schema
+    from sdm_client.request import Request
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 2, 3], 'y': [1.0, 2.0, 3.0]})},
+            primary_keys={'t': 'id'},
+        )
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'y', 'dtype': 'float64'},
+        },
+        'context': {
+            'instance_table': {
+                'columns': ['id', 'y'],
+                'rows': [[1, 1.0], [2, 2.0], [3, 3.0]],
+            }
+        },
+        'predict': {'instance_table': {'columns': ['id'], 'rows': [[1]]}},
+    }
+    request = Request.materialized(
+        payloads=(payload,),
+        schema=schema,
+        query='q',
+        indices=[1],
+        entity_table='t',
+    )
+
+    adapter = RelationalAdapter()
+    held = adapter.session_plan(request, ('prediction',))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        assert _held_back(held, [2]) == 1
+
+    assert len(held['context']['instance_table']['rows']) == 2
+    assert len(request.payloads[0]['context']['instance_table']['rows']) == 3
+    retried = adapter.session_plan(request, ('prediction',))
+    assert len(retried['context']['instance_table']['rows']) == 3
+
+
+def test_planning_a_request_twice_does_not_rename_the_first_call():
+    """The gathered payload's metadata was shared, so writing the call's id
+    into it wrote it into the request: the envelope already handed out was
+    renamed, and the id a caller had recorded named a different call."""
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import Schema
+    from sdm_client.request import Request
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'t': pd.DataFrame({'id': [1, 2, 3], 'y': [1.0, 2.0, 3.0]})},
+            primary_keys={'t': 'id'},
+        )
+    payload = {
+        'schema': {'instance_table': {'primary_key': 'id'}},
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'y', 'dtype': 'float64'},
+        },
+        'metadata': {'caller': 'kept'},
+        'context': {
+            'instance_table': {'columns': ['id', 'y'], 'rows': [[1, 1.0]]}
+        },
+        'predict': {'instance_table': {'columns': ['id'], 'rows': [[1]]}},
+    }
+    request = Request.materialized(
+        payloads=(payload,),
+        schema=schema,
+        query='q',
+        indices=[1],
+        entity_table='t',
+    )
+
+    adapter = RelationalAdapter()
+    first = next(iter(adapter.prediction_plan(request, ('prediction',))))
+    named = first['metadata']['request_id']
+    second = next(iter(adapter.prediction_plan(request, ('prediction',))))
+
+    assert first['metadata']['request_id'] == named
+    assert second['metadata']['request_id'] != named
+    assert first['metadata']['caller'] == 'kept'
+    assert request.payloads[0]['metadata'] == {'caller': 'kept'}

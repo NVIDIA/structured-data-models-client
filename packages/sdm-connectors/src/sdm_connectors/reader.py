@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from numbers import Integral
@@ -173,10 +174,27 @@ def read_table(
             ``QUERY_FAILED`` if the statement does not execute.
     """
     sql = resolve_sql(table=table, query=query)
-    with driver_guard('QUERY_FAILED', 'query execution failed', sql=sql):
+    with driver_guard(
+        'QUERY_FAILED',
+        'query execution failed',
+        sql=sql,
+        type_error_is_the_caller_s=False,
+    ):
         cursor, owned = _query_handle(connection)
-        try:
+    try:
+        with driver_guard(
+            'QUERY_FAILED',
+            'query execution failed',
+            sql=sql,
+            type_error_is_the_caller_s=False,
+        ):
             cursor.execute(sql)
+        with driver_guard(
+            'QUERY_FAILED',
+            'reading the result failed',
+            sql=sql,
+            type_error_is_the_caller_s=False,
+        ):
             # Arrow first, every time. A driver's own pandas conversion decides
             # for itself what a wide integer becomes, and DuckDB's `fetchdf`
             # turns a HUGEINT -- which is what `sum(BIGINT)` widens to -- into a
@@ -198,13 +216,11 @@ def read_table(
                     return frame
             if hasattr(cursor, 'fetchdf'):
                 return cursor.fetchdf()
-            rows = cursor.fetchall()
-            columns = [description[0] for description in cursor.description]
-            return _frame_by_position(rows, columns)
-        finally:
-            if owned:
-                with suppress(Exception):
-                    cursor.close()
+            return _frame_from_rows(cursor.fetchall(), cursor.description)
+    finally:
+        if owned:
+            with suppress(Exception):
+                cursor.close()
 
 
 def _arrow_to_pandas(arrow_table: Any) -> pd.DataFrame:
@@ -468,27 +484,136 @@ def _narrow_nullable_dtypes(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+def _frame_from_rows(
+    rows: Sequence[Any], description: Sequence[Any] | None
+) -> pd.DataFrame:
+    r"""The rows of a driver that answers in rows rather than in columns.
+
+    Everything this path can know about a column beyond its values is in
+    ``description``, so it is read here rather than thrown away: the name, and
+    the type the server declared, which is the only thing that can type a
+    column holding nothing but nulls.
+    """
+    entries = list(description or ())
+    columns = [str(entry[0]) for entry in entries]
+    frame = _frame_by_position(rows, columns, entries)
+    return _narrow_nullable_dtypes(frame)
+
+
 def _frame_by_position(
-    rows: Sequence[Sequence[Any]], columns: Sequence[str]
+    rows: Sequence[Any],
+    columns: Sequence[str],
+    description: Sequence[Any] = (),
 ) -> pd.DataFrame:
     r"""The rows as a frame, keyed by where a value sits rather than by its name.
 
     A join returns two columns of one name, and keying by name collapses them:
-    same shape, same names, the last one's values, nothing said.
+    same shape, same names, the last one's values, nothing said. Only a driver
+    that answers in rows arrives here -- Databricks and DuckDB answer in Arrow,
+    which refuses such a result before this sees it.
 
     Built a column at a time for the reason :func:`_integer_columns_exactly`
     exists: pandas promotes a null-bearing integer column as it builds.
+
+    A row factory that hands back a mapping -- psycopg's ``dict_row``, which
+    the connector's own allow-list admits -- has no positions to read, and
+    indexing one raised ``KeyError: 0``, surfacing as a query failure naming
+    only ``0``. Those are read by name, which is all such a row has; a driver
+    that collapsed two columns of one name before this saw them is said so
+    rather than guessed at.
+
+    A result set of no columns still has rows -- ``SELECT FROM
+    generate_series(1, 2)`` is legal -- and returning an empty frame lost
+    them, so a caller counting rows counted none.
     """
     if not columns:
-        return pd.DataFrame()
-    built = _integer_columns_exactly(
-        {
-            position: [row[position] for row in rows]
-            for position in range(len(columns))
-        }
-    )
+        return pd.DataFrame(index=pd.RangeIndex(len(rows)))
+    values = _values_by_column(rows, columns)
+    built = _integer_columns_exactly(dict(enumerate(values)))
     frame = pd.DataFrame(built, columns=list(range(len(columns))))
     frame.columns = pd.Index(columns)
+    return _typed_from_the_server(frame, description)
+
+
+def _values_by_column(
+    rows: Sequence[Any], columns: Sequence[str]
+) -> list[list[Any]]:
+    r"""One list per column, read the way this driver's rows can be read."""
+    if rows and isinstance(rows[0], Mapping):
+        if len(set(columns)) != len(columns):
+            raise ConnectorError(
+                'this connection returns rows as mappings, and the result has '
+                'two columns of one name, which the driver collapsed before '
+                'this saw them. Name them apart with AS, or connect without '
+                'a mapping row factory',
+                code='QUERY_FAILED',
+            )
+        return [[row.get(name) for row in rows] for name in columns]
+    return [[row[position] for row in rows] for position in range(len(columns))]
+
+
+# What the server's own name for a type means here, for the one case values
+# cannot answer. Only the names a driver on this path actually reports; an
+# array or a name not listed is left alone rather than guessed at.
+_DTYPE_BY_SERVER_TYPE = {
+    'int': 'Int64',
+    'int2': 'Int64',
+    'int4': 'Int64',
+    'int8': 'Int64',
+    'integer': 'Int64',
+    'bigint': 'Int64',
+    'smallint': 'Int64',
+    'tinyint': 'Int64',
+    'long': 'Int64',
+    'short': 'Int64',
+    'float4': 'float64',
+    'float8': 'float64',
+    'float': 'float64',
+    'double': 'float64',
+    'real': 'float64',
+    'bool': 'boolean',
+    'boolean': 'boolean',
+    'date': 'datetime64[ns]',
+    'timestamp': 'datetime64[ns]',
+    'timestamptz': 'datetime64[ns, UTC]',
+    'text': 'string',
+    'varchar': 'string',
+    'char': 'string',
+    'bpchar': 'string',
+    'string': 'string',
+}
+
+# A server's type name may carry a length, as `varchar(42)` does. The length
+# does not change what the column holds, so it is dropped before the lookup.
+# Brackets are not: `int8[]` is an array and nothing here describes one.
+_A_LENGTH = re.compile(r'\(\d+(?:,\s*\d+)?\)$')
+
+
+def _typed_from_the_server(
+    frame: pd.DataFrame, description: Sequence[Any]
+) -> pd.DataFrame:
+    r"""Type a column of nothing but nulls from what the server declared it to be.
+
+    Values decide every other column, and a column with no values decides
+    nothing, so an all-null ``bigint`` was built as ``object`` and described to
+    the model as text -- and so was an all-null ``float8``, ``bool``, ``date``
+    or ``timestamp``. Every other backend reaches this frame through Arrow,
+    which carries the declared type, so postgres was the only one that lost it.
+
+    Read only where the driver offers a name for the type and that name is one
+    this knows; where it does not, nothing is claimed.
+    """
+    for position, entry in enumerate(description):
+        named = getattr(entry, 'type_display', None)
+        if not isinstance(named, str):
+            continue
+        dtype = _DTYPE_BY_SERVER_TYPE.get(_A_LENGTH.sub('', named.lower()))
+        if dtype is None:
+            continue
+        column = frame.iloc[:, position]
+        if not column.isna().all():
+            continue
+        frame.isetitem(position, pd.array([None] * len(column), dtype=dtype))
     return frame
 
 

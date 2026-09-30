@@ -85,6 +85,13 @@ class PredictionResult:
         self.request_id = request_id
         self.items = tuple(items)
         self.outputs = tuple(outputs)
+        # Whether answers to this request name the row each one is about.
+        # Read only when there are no rows to read it from; `_empty_answer`
+        # sets it, because only the request knows.
+        self._names_its_rows = True
+        # Whether answers to this request say which forecast step they are
+        # about. Set where a forecast is assembled, for the same reason.
+        self._names_its_step = False
         self.metadata = dict(metadata or {})
         self._explanation = explanation
 
@@ -185,12 +192,22 @@ class PredictionResult:
         return frame
 
     def _empty_frame(self) -> pd.DataFrame:
-        r"""The columns this request would have produced, with no rows."""
+        r"""The columns this request would have produced, with no rows.
+
+        ``row_index`` and ``id`` say which row an answer belongs to rather
+        than what the answer is, so they are here whatever was asked for --
+        the join a caller writes must not depend on the batch being empty.
+        """
         columns = ['row_index']
+        if self._names_its_rows:
+            columns.append('id')
+        if self._names_its_step:
+            columns.append('forecast_step')
         columns += [
             name
             for name in (*_SCALAR_FIELDS, *_SEQUENCE_FIELDS, 'rankings')
-            if name != 'row_index' and name in self.outputs
+            if name not in ('row_index', 'id', 'forecast_step')
+            and name in self.outputs
         ]
         return pd.DataFrame({name: pd.Series(dtype=object) for name in columns})
 
@@ -242,7 +259,7 @@ class PredictionResult:
                 f'({sorted(shapes)}), so they are not slices of one request',
                 code='INTERNAL_ERROR',
             )
-        return cls(
+        merged = cls(
             model=first.model,
             request_id=first.request_id,
             items=items,
@@ -250,6 +267,9 @@ class PredictionResult:
             explanation=explanation,
             outputs=first.outputs,
         )
+        merged._names_its_rows = all(part._names_its_rows for part in parts)
+        merged._names_its_step = any(part._names_its_step for part in parts)
+        return merged
 
     def __len__(self) -> int:
         return len(self.items)

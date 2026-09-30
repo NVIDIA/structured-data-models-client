@@ -17,7 +17,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -33,12 +33,17 @@ from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import RANKING, Decomposition, about_the_part
 from sdm_client.errors import StructuredDataError, UnknownModelError
 from sdm_client.models import MODELS, Model, spec_for
-from sdm_client.request import Question, Request
+from sdm_client.request import (
+    Question,
+    Request,
+    warn_of_rows_scored_from_their_own_answers,
+)
 from sdm_client.result import PredictionResult
+from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
     keys_in,
-    scored_keys,
+    scored_rows,
     without_the_keys,
 )
 
@@ -125,11 +130,7 @@ class FittedModel:
         adapter is handed the whole request while the wire gets only the half
         the contract allows on a scoring call.
         """
-        if not isinstance(request, Request):
-            raise StructuredDataError(
-                f'request must be a Request, got {type(request).__name__}',
-                code='INVALID_REQUEST',
-            )
+        _require_a_request(request)
         if self._closed:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
@@ -147,9 +148,12 @@ class FittedModel:
         if self._question is not None and asked is not None:
             _refuse_a_question_the_session_did_not_pin(self._question, asked)
         if request.nothing_to_score:
-            return _empty_answer(self.model, self._outputs)
+            return _empty_answer(self.model, self._outputs, request)
         _warn_scoring_what_was_pinned(
-            request, self._pinned_keys, self._pinned_over_a_window
+            request,
+            self._pinned_keys,
+            self._pinned_over_a_window,
+            _pinned_dtypes(self._pinned),
         )
         parts = [
             self._adapter.normalize(
@@ -160,7 +164,7 @@ class FittedModel:
                 {**self._pinned, **payload},
             )
             for payload in self._adapter.session_prediction_plan(
-                request, self._outputs
+                request, self._outputs, self._pinned
             )
         ]
         if not parts:
@@ -185,6 +189,9 @@ class FittedModel:
             return
         self._client._transport.delete_session(self._session_id)
         self._closed = True
+        pinned = getattr(self._client, '_pinned', None)
+        if pinned is not None:
+            pinned.discard(self)
 
     def __enter__(self) -> FittedModel:
         return self
@@ -258,6 +265,7 @@ class SDMClient:
             max_retries=max_retries,
         )
         self._adapters: dict[str, ModelAdapter] = {}
+        self._pinned: set[FittedModel] = set()
 
     @property
     def url(self) -> str:
@@ -311,11 +319,16 @@ class SDMClient:
                 Raised before anything is sent.
             NimRequestError: If the endpoint answered with an error.
         """
+        _require_a_request(request)
+        _require_output_names(outputs)
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
-            return _empty_answer(adapter.spec.model_id, fields)
+            return _empty_answer(adapter.spec.model_id, fields, request)
+        # Asked here, where both halves of the request travel together, which
+        # is the only call at which the pairing is a leak.
+        warn_of_rows_scored_from_their_own_answers(request)
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
@@ -426,6 +439,8 @@ class SDMClient:
         Raises:
             UnsupportedRequestError: If the endpoint does not serve sessions.
         """
+        _require_a_request(request)
+        _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
@@ -455,7 +470,7 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        return FittedModel(
+        fitted = FittedModel(
             self,
             adapter,
             str(session_id),
@@ -469,6 +484,8 @@ class SDMClient:
             pinned_over_a_window=request.target_moves_with_time,
             question=request._question,
         )
+        self._pinned.add(fitted)
+        return fitted
 
     def _prepare(
         self,
@@ -482,11 +499,8 @@ class SDMClient:
         request the model cannot answer fails with a message naming the model
         rather than as an opaque 422.
         """
-        if not isinstance(request, Request):
-            raise StructuredDataError(
-                f'request must be a Request, got {type(request).__name__}',
-                code='INVALID_REQUEST',
-            )
+        _require_a_request(request)
+        _require_output_names(outputs)
         spec = self._spec(model)
         adapter = self._adapters.get(spec.model_id)
         if adapter is None:
@@ -519,12 +533,20 @@ class SDMClient:
     def close(self) -> None:
         r"""Release pooled connections and retire this client.
 
-        Adapters are asked to release what they opened first, then the
-        transport is closed even if one of them fails -- the transport's pool
-        is the one that cannot be rebuilt on demand.
+        Contexts this client pinned are released first, because the transport
+        that would release them is about to close and `FittedModel.close()`
+        is the only call that can. Adapters follow, then the transport itself
+        even if one of them fails -- its pool is the one that cannot be
+        rebuilt on demand.
         """
         try:
             error: BaseException | None = None
+            for fitted in list(self._pinned):
+                try:
+                    fitted.close()
+                except BaseException as session_error:  # noqa: BLE001
+                    error = error or session_error
+            self._pinned.clear()
             for adapter in self._adapters.values():
                 try:
                     adapter.close()
@@ -583,7 +605,39 @@ def _report_absent(
     return result
 
 
-def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
+def _names_its_rows(request: Request) -> bool:
+    r"""Whether answers to this request will say which row each one is about.
+
+    An ``id`` is the entity a row names, so it is there when the rows being
+    scored carry one. On the route that builds its own frames that needs both
+    a key in the schema and every one of its columns in the half being sent:
+    asking only the schema gave an empty answer an ``id`` where a full one had
+    none. On the gathered route the entity is what was asked for, and the
+    envelope spells it as a transport reference rather than as the schema's
+    key -- so asking the same question there answered no about requests whose
+    every answer names its entity.
+    """
+    if request.payloads:
+        # A gathered request is about entities by construction: the envelope
+        # carries an entity reference for every row it scores, and the adapter
+        # names each answer with the entity it asked about.
+        return True
+    table = request.entity_table
+    if table is None:
+        return False
+    try:
+        key = _as_key_tuple(request.schema[table].primary_key)
+        if not key:
+            return False
+        scored = request.predict.instance_table.columns
+        return all(name in scored for name in key)
+    except Exception:  # noqa: BLE001 - a schema too partial to ask is a no
+        return False
+
+
+def _empty_answer(
+    model: str, outputs: Sequence[str], request: Request | None = None
+) -> PredictionResult:
     r"""The answer to a request with no rows in it, without asking.
 
     `Request` allows a zero-row `predict` on purpose: the contract sets no
@@ -596,9 +650,11 @@ def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
     the columns the request would have produced, which `to_pandas()` already
     knows how to build with no rows in them.
     """
-    return PredictionResult(
+    built = PredictionResult(
         model=model, request_id='', items=(), outputs=tuple(outputs)
     )
+    built._names_its_rows = request is None or _names_its_rows(request)
+    return built
 
 
 def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
@@ -609,6 +665,13 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     """
     if holdout is None:
         return 0
+    if isinstance(holdout, (str, bytes)):
+        raise StructuredDataError(
+            f'holdout names the rows this session may score, and {holdout!r} '
+            f'is one string rather than a list of keys; pass [{holdout!r}] if '
+            f'that is the key you mean',
+            code='INVALID_REQUEST',
+        )
     keys = frozenset(
         _named_by(key if isinstance(key, (tuple, list)) else [key])
         for key in holdout
@@ -616,6 +679,16 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     if not keys:
         return 0
     removed = without_the_keys(payload, keys)
+    if not removed:
+        warnings.warn(
+            f'none of the {len(keys)} keys named as holdout matched a row of '
+            f'the context about to be pinned, so nothing was held back. The '
+            f'keys are compared as the schema spells them, so a key given as '
+            f'a different type matches nothing -- check they are the same '
+            f'kind of value as the entity column holds.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
     if removed:
         warnings.warn(
             f'{removed} of the rows named as holdout were in the context '
@@ -628,8 +701,29 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     return removed
 
 
+def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
+    r"""The dtypes a session pinned, read back off the envelope it sent.
+
+    The pinned keys were written with these, so the scored ones have to be
+    read with them or the same entity has two names.
+    """
+    columns = ((pinned.get('schema') or {}).get('instance_table') or {}).get(
+        'columns'
+    )
+    if not isinstance(columns, Mapping):
+        return None
+    return {
+        name: str(described['dtype'])
+        for name, described in columns.items()
+        if isinstance(described, Mapping) and described.get('dtype')
+    }
+
+
 def _warn_scoring_what_was_pinned(
-    request: Request, pinned: frozenset[Any], over_a_window: bool = False
+    request: Request,
+    pinned: frozenset[Any],
+    over_a_window: bool = False,
+    dtypes: Mapping[str, str] | None = None,
 ) -> None:
     r"""Say when a call scores rows the pinned context already answers.
 
@@ -654,12 +748,15 @@ def _warn_scoring_what_was_pinned(
     """
     if not pinned:
         return
-    scored = scored_keys(request, with_anchor=over_a_window)
-    shown = scored & pinned
+    # Rows, not the keys among them: two rows asking about one entity are two
+    # rows being scored, and a set had already lost one of them before either
+    # number was taken.
+    scored = scored_rows(request, with_anchor=over_a_window, dtypes=dtypes)
+    shown = sum(1 for named in scored if named in pinned)
     if not shown:
         return
     warnings.warn(
-        f'{len(shown)} of the {len(scored)} rows being scored are in this '
+        f'{shown} of the {len(scored)} rows being scored are in this '
         f"session's pinned context, with their target values, so the model "
         f'is being asked about rows it has already been shown the answers '
         f'for. The context was chosen when fit() ran and cannot be changed '
@@ -813,7 +910,8 @@ def _by_step(
 
     `forecast_step` is the field the contract already carries for this, so a
     reader of the frame gets the series it asked for without knowing that it
-    arrived as several answers. An entity keeps its own row across the steps:
+    arrived as several answers. It is a column of every such answer, so an
+    empty one carries it too. An entity keeps its own row across the steps:
     the pair of row and step is what names a point in the series, which is how
     the contract reads it.
 
@@ -833,13 +931,20 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         if answer.explanation is not None
     }
-    return PredictionResult(
+    built = PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
         explanation={'by_forecast_step': by_step} if by_step else None,
     )
+    # `forecast_step` is put on the items above, so with no items there is
+    # nothing to read it from and an empty forecast lost the column that says
+    # which step an answer is about -- the same as `id` losing the column that
+    # says which row.
+    built._names_its_step = True
+    built._names_its_rows = all(part._names_its_rows for part in answers)
+    return built
 
 
 _WHAT_DIFFERS = (
@@ -878,6 +983,46 @@ def _refuse_a_question_the_session_did_not_pin(
         f'would be answered. Fit again to ask something else',
         code='INVALID_REQUEST',
     )
+
+
+def _require_a_request(request: Any) -> None:
+    """Refuse anything that is not a request, before reading a field off it.
+
+    `errors.py` promises that `except StructuredDataError` catches everything
+    this client reports. `_prepare` held the right message and ran after the
+    first attribute was dereferenced, so the wrong type escaped as an
+    `AttributeError` naming a field the caller never heard of.
+
+    Asked at the entry rather than in `_prepare`, because a rewritten question
+    is answered in parts and never reaches it.
+    """
+    if not isinstance(request, Request):
+        raise StructuredDataError(
+            f'request must be a Request, got {type(request).__name__}; build '
+            f'one with Request(context=..., predict=...) or '
+            f'PredictiveQuery(...).materialize(...)',
+            code='INVALID_REQUEST',
+        )
+
+
+def _require_output_names(outputs: Any) -> None:
+    """Refuse an `outputs` that is not a sequence of field names."""
+    if outputs is None:
+        return
+    if isinstance(outputs, str):
+        raise StructuredDataError(
+            f'outputs must be a sequence of field names, not a single '
+            f'string; pass [{outputs!r}]',
+            code='INVALID_REQUEST',
+        )
+    if not isinstance(outputs, Sequence) or not all(
+        isinstance(name, str) for name in outputs
+    ):
+        raise StructuredDataError(
+            f'outputs must be a sequence of field names, got '
+            f'{type(outputs).__name__}',
+            code='INVALID_REQUEST',
+        )
 
 
 def _refuse_to_pin_a_rewritten_question(request: Request) -> None:

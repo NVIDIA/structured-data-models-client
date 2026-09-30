@@ -14,7 +14,7 @@ rather than sampled, naming the count and the cap.
 model. On `kumo-tabular` it samples to the cap and says how many rows it took.
 On `kumo-relational` the context is gathered rather than handed over, so
 `num_context_samples` past the cap is refused outright and asking for none
-gathers the 1,000-row budget; it never samples down to 10,000.
+gathers the 1,000-row budget and says so; it never samples down to 10,000.
 
 ## Sizes
 
@@ -22,7 +22,7 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 
 | Limit | Model | Value | Checked |
 |---|---|---|---|
-| context rows | relational | 1,000 when explaining, otherwise 10,000 | at `materialize()` |
+| context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
 | rows scored per call | relational | 1,000, or 200 for link prediction | at `materialize()` |
 | an explanation | relational | exactly one entity | before sending |

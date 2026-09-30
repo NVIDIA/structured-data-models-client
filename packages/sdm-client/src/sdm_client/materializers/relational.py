@@ -44,6 +44,31 @@ if TYPE_CHECKING:
     )
 
 
+def _warn_of_a_context_the_default_mode_capped(
+    task: TaskTable, num_context_samples: int | None
+) -> None:
+    r"""Say when the default gathered as many examples as it may, not as many
+    as there are.
+
+    How much of the data the model sees is a choice, and the tabular route
+    already says so when it makes one. Here the choice is made by the run mode
+    a missing ``num_context_samples`` selects, which is quieter but no less a
+    choice.
+    """
+    if num_context_samples is not None:
+        return
+    cap = RELATIONAL_LIMITS['context_rows_fast']
+    if getattr(task, 'num_context_examples', 0) < cap:
+        return
+    warnings.warn(
+        f'{cap:,} context examples were gathered, which is all this route '
+        f'takes by default; pass num_context_samples to ask for up to '
+        f'{RELATIONAL_LIMITS["context_rows_max"]:,}.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 class RelationalMaterializer:
     r"""Materialize resolved PQL against a relational schema."""
 
@@ -90,6 +115,16 @@ class RelationalMaterializer:
             raise StructuredDataError(
                 'run_mode is not a knob here; set num_context_samples and '
                 'the client derives what the endpoint needs',
+                code='INVALID_REQUEST',
+            )
+
+        if len(indices) == 0:
+            raise StructuredDataError(
+                'indices names no entity, and gathering a relational request '
+                'means sampling a neighbourhood around each one, so there is '
+                'nothing here to gather. An empty batch is still answered: '
+                'build it as Request(predict=<no rows>) and predict() returns '
+                'the empty result without sending',
                 code='INVALID_REQUEST',
             )
 
@@ -161,6 +196,7 @@ class RelationalMaterializer:
                 code='INTERNAL_ERROR',
             )
         self._check_entity_count(indices, task.task_type)
+        _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
         task = self._narrow_context(task, num_context_samples)
 
         with self._engine_errors(model):
@@ -422,6 +458,7 @@ class RelationalMaterializer:
             raise StructuredDataError(
                 f'{error}{detail}',
                 code='INVALID_REQUEST',
+                details=_what_the_engine_refused(str(error)),
             ) from error
 
     @staticmethod
@@ -705,6 +742,27 @@ def _holds_text(values: pd.Series) -> bool:
     ):
         return False
     return pd.api.types.infer_dtype(values, skipna=True) == 'string'
+
+
+_A_WINDOW_THAT_OUTRAN_THE_DATA = (
+    'aggregation time range',
+    'we would need data back to',
+    'anchor timestamp is too early',
+)
+
+
+def _what_the_engine_refused(said: str) -> dict[str, Any]:
+    """What the engine's complaint is about, as something to branch on.
+
+    A question asked as several parts appends an account of which part failed,
+    and that account can only name a remedy where it knows the failure is one
+    the remedy addresses. The engine says so in words; this records it so the
+    seam reads a value rather than the words.
+    """
+    lowered = said.lower()
+    if any(mark in lowered for mark in _A_WINDOW_THAT_OUTRAN_THE_DATA):
+        return {'window_outran_the_data': True}
+    return {}
 
 
 def _only_junk_is_unread(present: pd.Series) -> bool:
