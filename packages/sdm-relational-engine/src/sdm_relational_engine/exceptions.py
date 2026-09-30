@@ -7,12 +7,17 @@ from typing import Any
 
 
 class KumoRelationalError(Exception):
-    r"""Base class for every error this package raises.
+    r"""Base class for the errors this package defines.
 
-    ``except KumoRelationalError`` is the one catch that covers the whole client. Each
-    subclass also keeps the built-in base it historically raised
-    (:class:`ValueError`, :class:`RuntimeError`), so code written against the
-    older, rootless hierarchy keeps working unchanged.
+    ``except KumoRelationalError`` covers those, which is every failure
+    that has a name of its own here: a connection that could not be made,
+    a response that could not be read, a graph that could not be built.
+    It is not a catch-all for the package. An argument that is simply
+    wrong still raises the built-in that fits it, and a column this table
+    does not carry still raises :class:`KeyError`.
+
+    Each subclass also inherits the built-in that suits it
+    (:class:`ValueError`, :class:`RuntimeError`), so either catch works.
     """
 
 
