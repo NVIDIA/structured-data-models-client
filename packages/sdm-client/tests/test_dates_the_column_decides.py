@@ -250,7 +250,7 @@ def test_a_column_written_two_ways_is_not_called_ambiguous():
 
 def test_the_row_that_makes_a_column_two_shapes_is_found_wherever_it_is():
     """A column long enough to outrun a sample holds the same thing a short
-    one does, and the sampled shape test used to read only the front."""
+    one does, so the shape test reads past the front."""
     import pandas as pd
 
     from sdm_client.core import dates

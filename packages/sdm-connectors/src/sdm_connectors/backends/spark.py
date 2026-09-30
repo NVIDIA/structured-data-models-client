@@ -8,9 +8,9 @@ backend makes.
 Inside a Databricks notebook the session is already there, already signed in
 as the notebook's user, and already running on compute that is paid for. Going
 through it instead of a SQL warehouse means there is no warehouse to name and
-no second bill. The SQL the Databricks samplers issue -- ``QUALIFY``,
+no second bill. The SQL the Databricks samplers issue – ``QUALIFY``,
 ``TABLESAMPLE ... REPEATABLE``, ``information_schema``, ``posexplode`` over a
-JSON parameter -- is Databricks SQL, which the notebook's Spark runs as it is.
+JSON parameter – is Databricks SQL, which the notebook's Spark runs as it is.
 
 Nothing here imports pyspark. The session is taken as given and only its
 ``sql`` method is called, so the classic and the Spark Connect session behave
@@ -107,7 +107,7 @@ class SparkConnection:
     session would take every other cell down with it.
 
     Args:
-        session: The notebook's ``spark`` -- a classic ``SparkSession`` or a
+        session: The notebook's ``spark`` – a classic ``SparkSession`` or a
             Spark Connect one, as serverless compute provides.
 
     Raises:
@@ -157,8 +157,8 @@ def _dataframe_type(session: Any) -> type | None:
     Read off the class that ``session.sql`` is defined on: a classic session
     lives in ``pyspark.sql.session`` and returns ``pyspark.sql.DataFrame``, a
     Spark Connect one lives in ``pyspark.sql.connect.session`` and returns
-    ``pyspark.sql.connect.dataframe.DataFrame``. Anything else -- a test
-    double -- is not checked here, and is taken at its word.
+    ``pyspark.sql.connect.dataframe.DataFrame``. Anything else – a test
+    double – is not checked here, and is taken at its word.
     """
     module = type(session).__module__
     try:

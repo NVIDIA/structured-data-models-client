@@ -2,14 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The Databricks notebooks must keep matching the shipped API.
-
-They run only inside a workspace, against a serving endpoint and a catalog,
-so this does not execute them. It holds them to the public surface, which is
-what rots: the predecessor's notebooks were deleted because they had drifted
-onto interfaces this client never had. Those interfaces are scanned for across
-every shipped file, notebooks included, by `scripts/check_repo_hygiene.py`.
-"""
+"""The notebooks run only in a workspace, so they are held to the public API
+here."""
 
 from __future__ import annotations
 

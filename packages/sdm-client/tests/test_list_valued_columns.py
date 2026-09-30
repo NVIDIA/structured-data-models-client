@@ -647,7 +647,7 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
 def test_a_binary_column_is_not_diagnosed_as_a_nested_one(value):
     """A warehouse `binary` column arrives as one `bytes` per row. It is not
     nested, not a target, not multi-label, and already one value per row, so
-    the only instruction it used to be given was one already followed."""
+    it is told to decode, not to reshape."""
     with pytest.raises(StructuredDataError) as raised:
         require_scalar_cells(pd.Series([value, value], dtype=object), 'x.BIN')
 

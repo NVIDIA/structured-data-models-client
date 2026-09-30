@@ -467,8 +467,8 @@ def test_a_snapshot_re_points_its_columns_at_itself():
     ids=['append', 'extend', 'insert', 'in-place add'],
 )
 def test_a_bad_link_is_caught_however_it_is_added(add):
-    """`append` is the route this client's own advice prints, and it used to
-    be the one that reached the list without passing any check."""
+    """`append` is the route this client's own advice prints, so it is
+    checked like every other way into the list."""
     schema, link = mismatched()
 
     with pytest.raises(StructuredDataError) as raised:

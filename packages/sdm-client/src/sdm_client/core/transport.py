@@ -34,7 +34,7 @@ _DEFAULT_BACKOFF_FACTOR = 0.5
 #: The transient ones. A 500 is not among them: the payload and the model are
 #: the same on every attempt, so a server fault reproduces, and the caller
 #: mistakes this endpoint reports as a 500 are reclassified from the body as
-#: the caller's -- after three more uploads of the whole gathered context.
+#: the caller's – after three more uploads of the whole gathered context.
 _RETRY_STATUS = (429, 502, 503, 504)
 _RETRY_AFTER_MAX_SECONDS = 60
 _MAX_BODY_SNIPPET = 512

@@ -583,7 +583,7 @@ class SourceTable(_TableShape):
         >>> del schema['orders']['rowguid']
 
         A table in its source cannot be edited to suit a request, and some
-        columns only mislead a model -- a per-row UUID identifies a row and
+        columns only mislead a model – a per-row UUID identifies a row and
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
@@ -880,8 +880,8 @@ class Schema:
         the tables with SQL, a hop at a time, and only the rows it samples
         leave the source.
 
-        A semantic model -- a Databricks metric view, a Snowflake semantic
-        view -- is a source of its own, and already says how its tables join:
+        A semantic model – a Databricks metric view, a Snowflake semantic
+        view – is a source of its own, and already says how its tables join:
 
         >>> schema = Schema.from_source(source.semantic_model('sales_metrics'))
 
@@ -950,13 +950,7 @@ class Schema:
             }
             declared = _model_links(graph, built, as_named)
         else:
-            graph = engine_graph(
-                source,
-                None
-                if tables is None
-                else {name: (named, None) for name, named in tables.items()},
-                infer_metadata=True,
-            )
+            graph = engine_graph(source, tables, infer_metadata=True)
             chosen = (
                 dict(tables)
                 if tables is not None
@@ -1183,8 +1177,8 @@ def _describe_source_table(
 ) -> SourceTable:
     r"""A table in place, described from what the engine read of it.
 
-    A column whose values have no scalar form on the wire -- a list, binary, a
-    duration -- is left out and named, rather than refusing the whole table:
+    A column whose values have no scalar form on the wire – a list, binary, a
+    duration – is left out and named, rather than refusing the whole table:
     the caller cannot change a warehouse table's columns to suit a request, and
     the engine then leaves it unread as well.
     """
@@ -1633,7 +1627,7 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
 
     Only where something could be windowed: a lone table is asked single-table
     questions, which have no window, so there is no refusal ahead to warn of.
-    The column in the remedy is an example -- the first alphabetically -- and
+    The column in the remedy is an example – the first alphabetically – and
     not a nomination.
     """
     tables = schema.tables
@@ -1653,7 +1647,7 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
             f'{name!r} has more than one column that could be its time '
             f'column, {_and_list(stamps)}, so it was given none, and a query '
             f'over a window of it is refused. Name the one that says when a '
-            f'row became true -- time_columns={{{name!r}: {stamps[0]!r}}} '
+            f'row became true – time_columns={{{name!r}: {stamps[0]!r}}} '
             f'names {stamps[0]!r}, which is only the first of them '
             f'alphabetically.',
             category=SDMWarning,
@@ -1829,7 +1823,7 @@ def _warn_repeats_cost_the_table_its_key(
                 f'relationship pointing at {name!r} is dropped, so nothing is '
                 f'gathered through it, and a question about another table '
                 f'reaches it only where {name!r} names that table itself. '
-                f'Keep one row per {column!r} -- '
+                f'Keep one row per {column!r} – '
                 f'frame = frame.drop_duplicates({column!r}) -- and infer '
                 f'again, or name a column that does identify a row with '
                 f'primary_keys={{{name!r}: ...}}.',

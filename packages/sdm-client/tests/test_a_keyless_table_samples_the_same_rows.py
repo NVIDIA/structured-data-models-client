@@ -4,13 +4,11 @@
 
 r"""A table with no key is sampled the same however its rows are stored.
 
-Neighbours are kept in time order, newest first, and a table with no key
-used to have nothing after the timestamp to order by. Rows sharing a
-timestamp -- orders recorded by the day -- then came back in whatever order
-the engine read them, so the same question built a different request on
-Databricks serverless Spark than on a SQL warehouse, and the model answered
-differently. Two copies of one table, stored in opposite row orders, stand in
-for the two engines here.
+Neighbours are kept in time order, newest first, and a keyless table's rows
+that share a timestamp are ordered by their other columns, so Databricks
+serverless Spark and a SQL warehouse build one request for one question. Two
+copies of one table, stored in opposite row orders, stand in for the two
+engines here.
 """
 
 from __future__ import annotations

@@ -22,7 +22,7 @@ from predictive_query.validator.utils import table_name
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.materializers.sources import EngineTables, engine_graph
+from sdm_client.materializers.sources import EngineTables
 from sdm_client.materializers.tabular import _holds_two_whole_numbers
 from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 from sdm_client.request import Request
@@ -215,7 +215,7 @@ class RelationalMaterializer:
         remedy, and nothing about the name being spoken for.
 
         The suggestion is made per column, and by suffixing rather than by
-        substituting a word only one of the two names contains -- which left
+        substituting a word only one of the two names contains – which left
         `__kumo_anchor_time` told to rename itself to `__kumo_anchor_time`.
         """
         taken = sorted(
@@ -257,7 +257,7 @@ class RelationalMaterializer:
 
         The other route recognises two whole numbers as a label and says so.
         Here the task follows the column's stype, so the same question over
-        the same column is asked as a regression and nothing is said -- and
+        the same column is asked as a regression and nothing is said – and
         `task=` is refused on this route, so the warning's own remedy does not
         apply either.
         """
@@ -307,15 +307,13 @@ class RelationalMaterializer:
             # it left out as unsendable is never sampled either.
             if self.schema._engine_tables is None:
                 self.schema._engine_tables = EngineTables()
-            graph = engine_graph(
+            graph = self.schema._engine_tables.graph(
                 self.schema.source,
                 {
                     name: (table.source_name, list(table.columns))
                     for name, table in self.schema.tables.items()
                     if isinstance(table, SourceTable)
                 },
-                infer_metadata=False,
-                cache=self.schema._engine_tables,
             )
         else:
             frames = {
@@ -740,7 +738,7 @@ def _only_junk_is_unread(present: pd.Series) -> bool:
     Asked of each value, by the one function that answers that question. It
     was asked here with the default reading, which leaves most of a day-first
     column unread, so the single value that is genuinely not a date was
-    reported as ambiguity -- while the same column written year-first was
+    reported as ambiguity – while the same column written year-first was
     reported correctly.
     """
     read = dates.reads_as_a_date(present)
@@ -804,7 +802,7 @@ def _refuse_a_column_written_two_ways(
     Said before the values that do not read, where a column has both, and
     saying so. Coercing is what the other message offers, and coercing a
     column written two ways throws away every row of the shape it does not
-    settle on -- so the caller has to know about the shapes first.
+    settle on – so the caller has to know about the shapes first.
     """
     year_first = shapes['year-first']
     other = shapes['day-or-month-first']
@@ -818,8 +816,8 @@ def _refuse_a_column_written_two_ways(
     raise StructuredDataError(
         f'{where} is the time column and is written two ways: {year_first!r} '
         f'leads with its year and {other!r} leads with its day or its month. '
-        f'No one reading covers both -- the call that reads {other!r} reads '
-        f'{year_first!r} as a different date -- so read the halves apart and '
+        f'No one reading covers both – the call that reads {other!r} reads '
+        f'{year_first!r} as a different date – so read the halves apart and '
         f'put them back as one column, or store frame[{column!r}] in one '
         f'shape before naming it as the time column.{also}',
         code='INVALID_REQUEST',

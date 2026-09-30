@@ -1114,7 +1114,7 @@ def _pooled_offset(
     Otherwise none of them does, and the bound is built. A month is shorter
     than thirty days from some anchors and longer from others, so neither is a
     bound for the pair; what bounds both is the extreme of what either can
-    span. That is a rigid span, so it is returned as one -- correct both for
+    span. That is a rigid span, so it is returned as one – correct both for
     the caller that converts it to seconds and the caller that adds it to a
     timestamp.
     """

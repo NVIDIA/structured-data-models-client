@@ -9,8 +9,8 @@ nothing itself: it is what a schema over tables that stay where they are is
 built from, so that sampling can run as SQL against the tables in place.
 
 Everything that differs between warehouses lives here, on a class of its own
-per backend -- how a table is qualified, which sessions stand in for a
-connection, and whether the warehouse keeps semantic models -- so that a schema
+per backend – how a table is qualified, which sessions stand in for a
+connection, and whether the warehouse keeps semantic models – so that a schema
 built from any of them is described the same way.
 """
 
@@ -36,7 +36,7 @@ _DRIVER_MODULES: tuple[tuple[str, str], ...] = (
 _ACCEPTED = (
     'a Databricks SQL connection or a Spark session, a Snowflake connection '
     'or Snowpark session, a psycopg connection, a DuckDB connection, or an '
-    'ADBC SQLite connection -- what sdm_connectors.connect returns'
+    'ADBC SQLite connection – what sdm_connectors.connect returns'
 )
 
 
@@ -207,7 +207,7 @@ class DatabricksSource(Source):
     _BACKEND = 'databricks'
     _NAMESPACE = ('catalog', 'schema')
     _TAKES = (
-        "a Databricks SQL connection -- connect('databricks', ...) -- or a "
+        "a Databricks SQL connection – connect('databricks', ...) – or a "
         "notebook's Spark session"
     )
 
@@ -259,7 +259,7 @@ class SnowflakeSource(Source):
     _BACKEND = 'snowflake'
     _NAMESPACE = ('database', 'schema')
     _TAKES = (
-        "a Snowflake connection -- connect('snowflake', ...) -- or a Snowpark "
+        "a Snowflake connection – connect('snowflake', ...) – or a Snowpark "
         'session'
     )
 
@@ -303,7 +303,7 @@ class PostgresSource(Source):
 
     _BACKEND = 'postgres'
     _NAMESPACE = ('schema',)
-    _TAKES = "a psycopg connection -- connect('postgres', ...)"
+    _TAKES = "a psycopg connection – connect('postgres', ...)"
 
     def __init__(self, connection: Any, *, schema: str | None = None) -> None:
         self._bind(connection, {'schema': schema})
@@ -316,7 +316,7 @@ class DuckDBSource(Source):
     """
 
     _BACKEND = 'duckdb'
-    _TAKES = "a DuckDB connection -- connect('duckdb', ...)"
+    _TAKES = "a DuckDB connection – connect('duckdb', ...)"
 
     def __init__(self, connection: Any) -> None:
         self._bind(connection, {})
@@ -329,7 +329,7 @@ class SQLiteSource(Source):
     """
 
     _BACKEND = 'sqlite'
-    _TAKES = "an ADBC SQLite connection -- connect('sqlite', ...)"
+    _TAKES = "an ADBC SQLite connection – connect('sqlite', ...)"
 
     def __init__(self, connection: Any) -> None:
         self._bind(connection, {})
@@ -342,7 +342,7 @@ class SemanticModel(Source):
     :meth:`SnowflakeSource.semantic_model` (a semantic view). Both are
     what the Open Semantic Interchange and dbt call a semantic model, and a
     schema reads the same thing from each: tables, the links between them, and
-    row-level columns. Their aggregations -- measures, metrics -- are not rows,
+    row-level columns. Their aggregations – measures, metrics – are not rows,
     so a predictive query expresses them instead.
 
     Args:

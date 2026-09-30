@@ -2,14 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A schema over tables in their source, sampled there with SQL.
-
-DuckDB and SQLite stand in for a warehouse: the engine samples all of them
-through the same SQL sampler, and these two need no credentials. What is
-checked is what a caller would notice being wrong -- that nothing is read
-whole, that the source's own sampler runs, and that every label the sampler
-computes is the one the rows say.
-"""
+r"""Schemas over tables left in DuckDB, SQLite and Postgres, sampled there with
+SQL."""
 
 from __future__ import annotations
 
@@ -90,8 +84,7 @@ def sqlite_source(tmp_path: Path) -> Any:
     path = tmp_path / 'sales.sqlite'
     sqlite3.connect(path).close()
     connection = connect('sqlite', str(path))
-    # Ingested through ADBC, which stores a timestamp as ISO text with
-    # fractional seconds -- the spelling whose window edges went wrong.
+    # ADBC stores fractional seconds, which a text window bound must match.
     with connection.cursor() as cursor:
         cursor.adbc_ingest('app_users', USERS, mode='create')
         cursor.adbc_ingest('app_orders', ORDERS, mode='create')
@@ -150,12 +143,8 @@ def test_sampling_runs_in_the_source(source: Any) -> None:
 def test_every_sampled_label_is_the_sum_the_rows_give(
     source: Any, seed: int
 ) -> None:
-    r"""Each context row's label is recomputed from the frames and compared.
-
-    SQLite once lost one label in six hundred here: its window bound was
-    compared as text and lacked the fractional seconds the column stores, so
-    an order exactly on the end of a window fell outside it.
-    """
+    r"""An order exactly on a window edge must count; SQLite compares bounds
+    as text."""
     rows = _payload(_schema(source), seed)['context']['instance_table']['rows']
 
     wrong = []

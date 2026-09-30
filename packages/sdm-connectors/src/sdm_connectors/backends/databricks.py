@@ -101,7 +101,7 @@ def connect(
     r"""Connect to a Databricks SQL warehouse.
 
     ``DATABRICKS_*`` environment variables are used when their corresponding
-    keyword arguments are absent -- including ``DATABRICKS_CATALOG`` and
+    keyword arguments are absent – including ``DATABRICKS_CATALOG`` and
     ``DATABRICKS_SCHEMA``, which decide which table a bare name resolves to.
     Passing one explicitly as ``None`` says to leave it to the workspace
     rather than to the shell.

@@ -264,11 +264,8 @@ def test_the_sampler_runs_through_the_session(
 def test_neighbours_come_back_in_the_order_they_were_chosen(
     session: _Session, graph: Graph
 ) -> None:
-    """``_by_fkey`` returned its rows in whatever order the engine read them,
-    and serverless Spark reads them differently from a SQL warehouse, so the
-    same question built a different request on each. The rows are now returned
-    in the order that chose them, and a table with no key is ordered on every
-    column so that order is total.
+    """Spark and a warehouse read rows in different orders, so neighbours keep
+    the order that chose them.
     """
     graph['orders'].primary_key = None
     sampler = KumoRelational(graph, verbose=False)._sampler

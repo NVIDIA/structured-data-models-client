@@ -382,7 +382,7 @@ class TestTheContextIsWhatDecides:
         self,
     ):
         """Scoring fewer rows cannot help where the column is constant in the
-        whole table, and the message used to name that as the fix."""
+        whole table, so the message does not name that as the fix."""
         data = frame(['n'] * 8)
         with pytest.warns(SDMWarning) as caught:
             PredictiveQuery(QUERY, {'people': data}).materialize(

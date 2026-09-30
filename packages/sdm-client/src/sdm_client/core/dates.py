@@ -44,7 +44,7 @@ PLAUSIBLE_YEARS = (1900, 2100)
 
 
 #: `dd/mm/yyyy` or `mm/dd/yyyy`, whichever it turns out to be, with or without
-#: a time and a zone after it -- a warehouse hands back all of them, in the
+#: a time and a zone after it – a warehouse hands back all of them, in the
 #: same spellings `YEAR_FIRST` takes, because a column is not written in two
 #: shapes just because this client reads a zone on one of them.
 _TWO_PART_PATTERN = (
@@ -100,7 +100,7 @@ def reads_as_a_date(values: pd.Series) -> pd.Series:
     Asked of each value rather than of the column: one inferred format does
     not cover a column zoned on some rows and bare on others, and whether a
     value is a date is not a question about its neighbours. Read to a common
-    zone, and a reading that will not run at all counts as reading nothing --
+    zone, and a reading that will not run at all counts as reading nothing –
     this is asked to find out whether a column reads, so it is the one place
     that must not fail to answer.
     """

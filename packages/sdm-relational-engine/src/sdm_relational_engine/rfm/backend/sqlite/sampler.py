@@ -181,7 +181,7 @@ class SQLiteSampler(SQLSampler):
         ``pandas.to_sql`` write ``YYYY-MM-DD HH:MM:SS``, but an ISO-8601 writer
         emits a ``T``, and ``'...T00:00:00' <= '... 00:00:00'`` is false for
         the same instant because ``T`` sorts after a space. A writer that keeps
-        fractional seconds -- pandas through ADBC writes ``.000000`` -- breaks
+        fractional seconds – pandas through ADBC writes ``.000000`` – breaks
         it the same way: ``'...T14:00:00.000000' <= '...T14:00:00'`` is false,
         so a row on the end of a window was dropped and a row on the anchor
         was counted. Either way, silently: no error, just a different answer.
