@@ -81,6 +81,11 @@ The first release is being assembled. Nothing here has shipped yet.
   other. Its dimensions become columns, an expression dimension computed in
   the warehouse when it is sampled; measures and metrics are left to the
   predictive query. `Schema` itself names no warehouse.
+- `sdm_connectors.databricks`: `warehouse(warehouse_id, workspace=w)` and
+  `lakebase(endpoint, database=..., workspace=w)` open a SQL warehouse or
+  Lakebase connection as your own `WorkspaceClient`, for a source to take and
+  you to close; the new `lakebase` extra brings plain `psycopg` and
+  `databricks-sdk>=0.89`, which the `databricks` extra now brings too.
 - `examples/databricks/`: AdventureWorks over Unity Catalog and over Lakebase,
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a

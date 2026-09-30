@@ -27,7 +27,13 @@ SNAPSHOT = (
     / 'public_api.json'
 )
 
-PACKAGES = ('sdm_api', 'sdm_client', 'sdm_connectors', 'predictive_query')
+PACKAGES = (
+    'sdm_api',
+    'sdm_client',
+    'sdm_connectors',
+    'sdm_connectors.databricks',
+    'predictive_query',
+)
 
 
 def _signature(obj: object) -> str | None:

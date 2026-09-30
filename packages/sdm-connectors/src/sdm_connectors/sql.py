@@ -181,6 +181,8 @@ def check_connect_args(
     backend: str,
     kwargs: dict[str, Any],
     allowed: Collection[str],
+    *,
+    hint: str | None = "pass driver-specific options through 'driver_options'",
 ) -> None:
     r"""Reject connection keywords the driver would silently ignore.
 
@@ -189,7 +191,8 @@ def check_connect_args(
     whatever catalog/schema the connection defaults to: a wrong answer rather
     than an error. ``allowed`` is read off the driver itself so it stays
     accurate across driver upgrades, and ``driver_options`` is the escape hatch
-    for anything genuinely outside it.
+    for anything genuinely outside it. ``hint`` names that hatch, or is
+    ``None`` where the keywords checked are already the driver options.
     """
     unknown = sorted(set(kwargs) - set(allowed))
     if not unknown:
@@ -200,9 +203,9 @@ def check_connect_args(
         named.append(
             f'{name!r} (did you mean {close[0]!r}?)' if close else repr(name)
         )
+    message = f'{backend} connector got unexpected arguments {", ".join(named)}'
     raise ConnectorError(
-        f'{backend} connector got unexpected arguments {", ".join(named)}; '
-        "pass driver-specific options through 'driver_options'",
+        f'{message}; {hint}' if hint else message,
         code='INVALID_CONNECTOR_ARGS',
         details={'arguments': unknown},
     )

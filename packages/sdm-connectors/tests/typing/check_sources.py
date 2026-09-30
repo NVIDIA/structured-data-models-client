@@ -23,6 +23,7 @@ import pyspark.sql
 import pyspark.sql.connect.session
 import snowflake.connector
 import snowflake.snowpark
+from databricks.sdk import WorkspaceClient
 
 from sdm_connectors import (
     DatabricksSource,
@@ -34,6 +35,7 @@ from sdm_connectors import (
     SQLiteSource,
 )
 from sdm_connectors.backends.spark import SparkConnection
+from sdm_connectors.databricks import lakebase, warehouse
 
 
 def source_is_typed_as_the_class_it_returns(
@@ -105,6 +107,30 @@ def each_class_takes_its_driver_and_keeps_its_type(
     )
     assert_type(
         SnowflakeSource(snowpark).semantic_model('SALES'), SemanticModel
+    )
+
+
+def the_databricks_helpers_return_the_drivers_own_connections(
+    workspace: WorkspaceClient,
+) -> None:
+    assert_type(
+        warehouse('abc123', workspace=workspace),
+        databricks.sql.client.Connection,
+    )
+    assert_type(
+        lakebase('projects/p/branches/b/endpoints/e', database='postgres'),
+        psycopg.Connection[Any],
+    )
+    assert_type(
+        Source(warehouse('abc123'), catalog='main', schema='sales'),
+        DatabricksSource,
+    )
+    assert_type(
+        Source(
+            lakebase('e', database='postgres', workspace=workspace),
+            schema='public',
+        ),
+        PostgresSource,
     )
 
 

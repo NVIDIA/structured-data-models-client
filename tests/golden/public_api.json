@@ -1122,5 +1122,21 @@
         "signature": "(*, table: 'str | None', query: 'str | None') -> 'str'"
       }
     }
+  },
+  "sdm_connectors.databricks": {
+    "__all__": [
+      "lakebase",
+      "warehouse"
+    ],
+    "members": {
+      "lakebase": {
+        "kind": "callable",
+        "signature": "(endpoint: 'str', *, database: 'str', workspace: 'WorkspaceClient | None' = None, host: 'str | None' = None, **driver_options: 'Any') -> 'PostgresConnection'"
+      },
+      "warehouse": {
+        "kind": "callable",
+        "signature": "(warehouse_id: 'str', *, workspace: 'WorkspaceClient | None' = None, **driver_options: 'Any') -> 'DatabricksConnection'"
+      }
+    }
   }
 }
