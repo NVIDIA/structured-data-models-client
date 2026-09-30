@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext, suppress
 from numbers import Integral
@@ -212,8 +213,9 @@ def read_table(
 
 def _own_transaction(connection: Any) -> AbstractContextManager[Any]:
     r"""The transaction one read runs in, which only psycopg needs."""
-    # By module name, so reading through any other driver imports no psycopg.
-    if type(connection).__module__.partition('.')[0] != 'psycopg':
+    # Only if already imported, so reading through another driver imports none.
+    psycopg = sys.modules.get('psycopg')
+    if psycopg is None or not isinstance(connection, psycopg.Connection):
         return nullcontext()
     from sdm_connectors.backends.postgres import own_transaction
 

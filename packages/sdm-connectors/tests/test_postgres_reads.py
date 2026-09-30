@@ -71,10 +71,14 @@ def test_a_failed_read_leaves_the_connection_usable(connection: Any) -> None:
     assert frame['one'].tolist() == [1]
 
 
-def test_a_read_inside_the_callers_transaction_leaves_it_open(
+def test_a_failed_read_inside_the_callers_transaction_leaves_it_usable(
     connection: Any,
 ) -> None:
     with connection.transaction():
-        read_table(connection, query='SELECT 1 AS one')
-
+        with pytest.raises(ConnectorError):
+            read_table(connection, table='no_such_table')
         assert connection.info.transaction_status == TransactionStatus.INTRANS
+
+        frame = read_table(connection, query='SELECT 1 AS one')
+
+        assert frame['one'].tolist() == [1]
