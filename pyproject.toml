@@ -75,8 +75,8 @@ exclude = [
 # open-ended -- the counts are what make a growing entry visible.
 [[tool.mypy.overrides]]
 module = [
-    "sdm_client.materializers.relational",   # 15
-    "sdm_client.request",                    #  6
+    "sdm_client.materializers.relational",   # 12
+    "sdm_client.request",                    #  5
     # --- arrived with the ranking/forecast decomposition, 2026-09-17 --------
     # decompose.py's eight are all "Item None of X has no attribute Y" on
     # `Aggregation | None` and `DateOffsetRange | None`. They may each be
@@ -93,18 +93,16 @@ module = [
     "sdm_connectors.sql",                    #  1
     "sdm_connectors.reader",                 #  1
     # --- relational engine: 62 errors across 21 modules --------------------
-    "sdm_relational_engine.rfm.base.table",          # 13
+    "sdm_relational_engine.rfm.base.table",          # 12
     "sdm_relational_engine.rfm.graph",               # 10
     "sdm_relational_engine.rfm.rfm",                 #  9
     "sdm_relational_engine.rfm.relbench",            #  3
     "sdm_relational_engine.rfm.backend.sqlite.sampler",     # 2
     "sdm_relational_engine.rfm.backend.snow.sampler",       # 2
-    "sdm_relational_engine.rfm.backend.duckdb.table",       # 2
+    "sdm_relational_engine.rfm.backend.duckdb.table",       # 1
     "sdm_relational_engine.rfm.backend.duckdb.sampler",     # 2
     "sdm_relational_engine.rfm.backend.databricks.sampler", # 2
-    "sdm_relational_engine.rfm",                     #  2
     "sdm_relational_engine.client.client",           #  2
-    "sdm_relational_engine",                         #  1
     "sdm_relational_engine.client.rfm",              #  1
     "sdm_relational_engine.rfm.backend.sqlite.table",    # 1
     "sdm_relational_engine.rfm.backend.snow.table",      # 1
