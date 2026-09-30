@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
+    driver_guard,
     require_driver,
 )
 
@@ -76,10 +77,15 @@ def warehouse(
         connection = warehouse(warehouse_id, workspace=WorkspaceClient())
         source = DatabricksSource(connection, catalog='main', schema='sales')
 
+    A Real-Time warehouse is refused: the driver serves it through a backend
+    that takes no workspace-client credentials, so connect to it with
+    ``databricks.sql.connect`` and a token or OAuth M2M credentials instead.
+
     Raises:
         ConnectorError: ``INVALID_CONNECTOR_ARGS`` for an option the driver
             does not take or one the workspace already sets, and
-            ``CONNECT_FAILED`` for a warehouse that reports no address.
+            ``CONNECT_FAILED`` when the workspace cannot be reached or does
+            not know the warehouse, or the warehouse refuses the connection.
         MissingBackendError: Without the ``databricks`` extra.
     """
     from sdm_connectors.backends import databricks as backend
@@ -91,7 +97,12 @@ def warehouse(
     if 'user_agent_entry' in driver_options:
         backend._check_user_agent_entry(driver_options['user_agent_entry'])
     client = _workspace(workspace, 'databricks')
-    odbc = client.warehouses.get(warehouse_id).odbc_params
+    with driver_guard(
+        'CONNECT_FAILED',
+        f'could not look up Databricks warehouse {warehouse_id!r}',
+        warehouse_id=warehouse_id,
+    ):
+        odbc = client.warehouses.get(warehouse_id).odbc_params
     if odbc is None or not odbc.hostname or not odbc.path:
         raise ConnectorError(
             f'Databricks warehouse {warehouse_id!r} reports no host or HTTP '
@@ -99,13 +110,55 @@ def warehouse(
             code='CONNECT_FAILED',
             details={'warehouse_id': warehouse_id},
         )
-    # The driver itself, not the backend's connect, which would also read
-    # DATABRICKS_TOKEN from the environment beside the workspace's own auth.
-    return backend.databricks_sql.connect(
-        server_hostname=odbc.hostname,
-        http_path=odbc.path,
-        credentials_provider=lambda: client.config.authenticate,
-        **driver_options,
+    with driver_guard(
+        'CONNECT_FAILED',
+        f'could not connect to Databricks warehouse {warehouse_id!r}',
+        warehouse_id=warehouse_id,
+    ):
+        try:
+            # The driver itself, not the backend's connect, which would also
+            # read DATABRICKS_TOKEN from the environment beside the workspace.
+            connection: DatabricksConnection = backend.databricks_sql.connect(
+                server_hostname=odbc.hostname,
+                http_path=odbc.path,
+                credentials_provider=lambda: client.config.authenticate,
+                **driver_options,
+            )
+        except Exception as error:
+            if not _refused_as_real_time(error):
+                raise
+            raise ConnectorError(
+                f'Databricks warehouse {warehouse_id!r} does not accept a '
+                f"workspace client's credentials: the driver serves its type "
+                f'(a Real-Time warehouse, for instance) through a backend that '
+                f'refuses them. Connect with databricks.sql.connect and a '
+                f'token or OAuth M2M credentials',
+                code='CONNECT_FAILED',
+                details={
+                    'warehouse_id': warehouse_id,
+                    'driver_error': type(error).__name__,
+                },
+            ) from error
+    return connection
+
+
+def _refused_as_real_time(error: Exception) -> bool:
+    r"""Whether the driver's kernel backend, which it falls back to for a
+    Real-Time warehouse, refused the connection.
+
+    With the kernel installed it refuses any ``credentials_provider`` as not
+    supported; without it, the fallback fails to import, caused by the
+    warehouse's rejection of the default protocol.
+    """
+    from databricks.sql import exc
+
+    if isinstance(error, exc.NotSupportedError):
+        return True
+    rejection = getattr(exc, 'ReydenThriftUnsupportedError', None)
+    return (
+        isinstance(error, ImportError)
+        and rejection is not None
+        and isinstance(error.__cause__, rejection)
     )
 
 
@@ -137,14 +190,16 @@ def lakebase(
         )
         source = PostgresSource(connection, schema='public')
 
-    The credential is short-lived: an open connection outlives it, and a new
-    connection needs a fresh call.
+    The credential is valid for at most an hour: an open connection outlives
+    it, and a new connection needs a fresh call. The login user is whatever
+    ``current_user.me().user_name`` reports, for a service principal too.
 
     Raises:
         ConnectorError: ``INVALID_CONNECTOR_ARGS`` for an option libpq does
             not take or one this sets itself, ``MISSING_BACKEND`` for a
-            Databricks SDK older than 0.89, and ``CONNECT_FAILED`` for an
-            endpoint that reports no host.
+            Databricks SDK older than 0.89, and ``CONNECT_FAILED`` when the
+            workspace cannot be reached, cannot say where the endpoint is or
+            mint a credential for it, or the endpoint refuses the login.
         MissingBackendError: Without the ``lakebase`` extra.
     """
     psycopg = require_driver('lakebase', 'psycopg', 'psycopg')
@@ -166,20 +221,32 @@ def lakebase(
         )
     if host is None:
         host = _endpoint_host(api, endpoint)
-    credential = api.generate_database_credential(endpoint=endpoint)
+    with driver_guard(
+        'CONNECT_FAILED',
+        f'could not get a login for Lakebase endpoint {endpoint!r}',
+        endpoint=endpoint,
+    ):
+        token = api.generate_database_credential(endpoint=endpoint).token
+        user = client.current_user.me().user_name
     options = {'sslmode': 'require', 'autocommit': True, **driver_options}
-    connection: PostgresConnection = psycopg.connect(
-        host=host,
-        dbname=database,
-        user=client.current_user.me().user_name,
-        password=credential.token,
-        **options,
-    )
+    with driver_guard(
+        'CONNECT_FAILED',
+        f'could not connect to Lakebase endpoint {endpoint!r}',
+        endpoint=endpoint,
+    ):
+        connection: PostgresConnection = psycopg.connect(
+            host=host, dbname=database, user=user, password=token, **options
+        )
     return connection
 
 
 def _endpoint_host(api: PostgresAPI, endpoint: str) -> str:
-    status = api.get_endpoint(name=endpoint).status
+    with driver_guard(
+        'CONNECT_FAILED',
+        f'could not look up Lakebase endpoint {endpoint!r}',
+        endpoint=endpoint,
+    ):
+        status = api.get_endpoint(name=endpoint).status
     hosts = status.hosts if status is not None else None
     host = hosts.host if hosts is not None else None
     if not host:
@@ -203,7 +270,18 @@ def _workspace(
         'databricks.sdk',
         absent=('databricks', 'databricks.sdk'),
     )
-    client: WorkspaceClient = sdk.WorkspaceClient()
+    try:
+        client: WorkspaceClient = sdk.WorkspaceClient()
+    except Exception as error:
+        # The type only: the SDK's text can quote the configuration it read.
+        raise ConnectorError(
+            f'could not authenticate to Databricks from the ambient '
+            f'configuration ({type(error).__name__}). Run this in a Databricks '
+            f'notebook, set DATABRICKS_HOST and a credential, or pass '
+            f'workspace=',
+            code='CONNECT_FAILED',
+            details={'driver_error': type(error).__name__},
+        ) from None
     return client
 
 

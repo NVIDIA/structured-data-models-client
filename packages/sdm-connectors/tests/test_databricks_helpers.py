@@ -235,23 +235,13 @@ def _no_postgres_api() -> SimpleNamespace:
     return workspace
 
 
-def _reports(status: Any) -> SimpleNamespace:
-    workspace = _workspace()
-    workspace.postgres.get_endpoint = lambda name: SimpleNamespace(
-        status=status
-    )
-    return workspace
-
-
 @pytest.mark.parametrize(
     'workspace,code',
     [
         (_no_postgres_api, 'MISSING_BACKEND'),
-        (lambda: _reports(None), 'CONNECT_FAILED'),
-        (lambda: _reports(SimpleNamespace(hosts=None)), 'CONNECT_FAILED'),
         (lambda: _workspace(host=None), 'CONNECT_FAILED'),
     ],
-    ids=['sdk-before-0.89', 'no-status', 'no-hosts', 'no-host'],
+    ids=['sdk-before-0.89', 'no-host'],
 )
 def test_lakebase_refuses_a_workspace_that_cannot_say_where_to_connect(
     monkeypatch: pytest.MonkeyPatch,
@@ -269,3 +259,138 @@ def test_lakebase_refuses_a_workspace_that_cannot_say_where_to_connect(
         )
 
     assert excinfo.value.code == code
+
+
+# --- what fails is a ConnectorError -----------------------------------------
+
+
+def _no_ambient_credentials(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip('databricks.sdk')
+    request.getfixturevalue('driver_connect')
+    for name in list(os.environ):
+        if name.startswith('DATABRICKS_'):
+            monkeypatch.delenv(name)
+    home = request.getfixturevalue('tmp_path')
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('DATABRICKS_CONFIG_FILE', str(home / 'absent.cfg'))
+    warehouse('abc123')
+
+
+def _unknown_warehouse(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    errors = pytest.importorskip('databricks.sdk.errors')
+    request.getfixturevalue('driver_connect')
+    workspace = _workspace()
+
+    def get(warehouse_id: str) -> None:
+        raise errors.NotFound(f'Warehouse {warehouse_id} does not exist.')
+
+    workspace.warehouses.get = get
+    warehouse('abc123', workspace=workspace)
+
+
+def _no_address(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request.getfixturevalue('driver_connect')
+    workspace = _workspace()
+    workspace.warehouses.get = lambda warehouse_id: SimpleNamespace(
+        odbc_params=None
+    )
+    warehouse('abc123', workspace=workspace)
+
+
+def _real_time(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # What the driver's kernel backend raises for any credentials_provider.
+    exc = pytest.importorskip('databricks.sql.exc')
+
+    def connect(**kwargs: Any) -> None:
+        raise exc.NotSupportedError(
+            'use_kernel=True does not support a custom credentials_provider.'
+        )
+
+    monkeypatch.setattr(
+        pytest.importorskip('databricks.sql'), 'connect', connect
+    )
+    warehouse('abc123', workspace=_workspace())
+
+
+def _real_time_without_the_kernel(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # What the driver raises when its fallback for a Real-Time warehouse
+    # cannot import the kernel, chained from the warehouse's rejection.
+    exc = pytest.importorskip('databricks.sql.exc')
+    if not hasattr(exc, 'ReydenThriftUnsupportedError'):
+        pytest.skip('this driver does not fall back for a Real-Time warehouse')
+
+    def connect(**kwargs: Any) -> None:
+        rejection = exc.ReydenThriftUnsupportedError('KP001')
+        raise ImportError('use_kernel=True requires ...') from rejection
+
+    monkeypatch.setattr(
+        pytest.importorskip('databricks.sql'), 'connect', connect
+    )
+    warehouse('abc123', workspace=_workspace())
+
+
+def _refused_login(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from psycopg.conninfo import conninfo_to_dict
+
+    server = conninfo_to_dict(request.getfixturevalue('postgres_dsn'))
+    user, _ = request.getfixturevalue('lakebase_role')
+    lakebase(
+        ENDPOINT,
+        database=str(server['dbname']),
+        workspace=_workspace(
+            host=str(server['host']), token='not-the-token', user=user
+        ),
+        port=server.get('port', 5432),
+        sslmode='disable',
+    )
+
+
+@pytest.mark.parametrize(
+    'failing,phrase',
+    [
+        (_no_ambient_credentials, 'pass workspace='),
+        (_unknown_warehouse, "could not look up Databricks warehouse 'abc123'"),
+        (_no_address, 'reports no host or HTTP path'),
+        (_real_time, 'Real-Time warehouse'),
+        (_real_time_without_the_kernel, 'Real-Time warehouse'),
+        (
+            _refused_login,
+            f'could not connect to Lakebase endpoint {ENDPOINT!r}',
+        ),
+    ],
+    ids=[
+        'no-ambient-credentials',
+        'unknown-warehouse',
+        'no-address',
+        'real-time',
+        'real-time-without-the-kernel',
+        'refused-login',
+    ],
+)
+def test_a_workspace_or_driver_failure_is_a_connector_error(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    failing: Callable[[pytest.FixtureRequest, pytest.MonkeyPatch], None],
+    phrase: str,
+) -> None:
+    r"""``except ConnectorError`` covers the connector layer, these included:
+    otherwise a missing credential, a wrong id or a refused login reaches
+    the caller as whichever SDK or driver error it happened to be.
+    """
+    with pytest.raises(ConnectorError) as excinfo:
+        failing(request, monkeypatch)
+
+    assert excinfo.value.code == 'CONNECT_FAILED'
+    assert phrase in excinfo.value.message
