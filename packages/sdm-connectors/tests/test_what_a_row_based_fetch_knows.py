@@ -453,10 +453,15 @@ def test_half_a_credential_is_not_a_credential(
 ) -> None:
     """Only the thrift route waits for a human: handed nothing it
     recognises it opens a browser and binds a listening socket, so a script
-    that forgot its token never returns. That is what is refused here.
-    Everything else -- a machine-to-machine credential on the wrong route, a
-    certificate without the flag that turns certificate authentication on --
-    the driver refuses itself, immediately and with a better message."""
+    that forgot its token never returns. That is what is refused here, and
+    the question is narrow: would this call reach that fallthrough?
+
+    A machine-to-machine credential on the wrong route would, and a
+    certificate without the flag that turns certificate authentication on
+    would, so both are refused here rather than sent -- naming a credential
+    is not the same as naming one this route uses. Asking for the browser
+    flow on purpose is allowed through.
+    """
     pytest.importorskip('databricks.sql')
     from sdm_connectors.backends import databricks as backend
     from sdm_connectors.sql import ConnectorError

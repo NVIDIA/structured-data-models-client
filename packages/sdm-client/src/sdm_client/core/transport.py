@@ -421,12 +421,13 @@ def _path_segment(value: str) -> str:
     and those two only -- so ``..`` turned a scoring call against a pinned
     context into a one-shot prediction elsewhere. Those name no session and
     are refused; ``...`` is an ordinary segment and is escaped like any
-    other.
+    other. An empty id is refused for its own reason: it contributes no
+    segment at all, so the path closes up around it.
     """
     if value in {'', '.', '..'}:
         raise StructuredDataError(
-            f'{value!r} is not a session id: a path segment of dots is '
-            f'removed when the URL is resolved, so the call would be made '
+            f'{value!r} is not a session id: it does not survive as a path '
+            f'segment when the URL is resolved, so the call would be made '
             f'against a different route than the one it names',
             code='INVALID_RESPONSE',
         )

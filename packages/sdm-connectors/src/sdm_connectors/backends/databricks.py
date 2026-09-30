@@ -146,10 +146,12 @@ _MACHINE_TO_MACHINE = frozenset(
 
 
 def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
-    r"""Whether this call says how to authenticate.
+    r"""Whether this call reaches an authentication route the driver runs.
 
-    False is the dangerous answer: it means nothing here names a
-    credential, so the driver would fall through to the browser flow.
+    False is the answer that matters: whatever the call names, the driver
+    would fall through to its browser flow. A machine-to-machine secret
+    alone answers False for that reason -- it is a credential, but not one
+    this route uses.
     """
     named = {name for name, value in given.items() if value}
     if 'use_kernel' in named:
@@ -198,10 +200,12 @@ def connect(
     that leaves the choice to the workspace, and for a credential it leaves no
     credential, which is refused rather than sent.
 
-    A connect with no credential at all is refused here. The driver's own
-    answer is to open a browser and wait for a human to finish an OAuth flow,
-    binding a listening socket while it does, so a script that simply forgot
-    the token never returned.
+    A call that would reach the browser flow without asking for it is
+    refused here. The driver's own answer is to open a browser and wait for
+    a human to finish an OAuth flow, binding a listening socket while it
+    does, so a script that simply forgot the token never returned. Asking
+    for that flow deliberately -- naming an OAuth application, or an
+    ``auth_type`` the driver dispatches on -- is allowed through.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)

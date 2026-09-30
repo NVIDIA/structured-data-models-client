@@ -29,13 +29,14 @@ def _path_segment(value: str) -> str:
     route. ``quote`` does not help with a dot -- it is unreserved -- and a
     resolver removes ``.`` and ``..``, those two and no others. They name no
     session and are refused rather than escaped. ``...`` is an ordinary
-    segment and is escaped like any other.
+    segment and is escaped like any other. An empty id is refused for its
+    own reason: it contributes no segment at all.
     """
     if value in {'', '.', '..'}:
         raise InvalidResponseError(
-            f'{value!r} is not a session id: a path segment of dots is '
-            f'removed when the URL is resolved, so the call would be '
-            f'made against a different route than the one it names'
+            f'{value!r} is not a session id: it does not survive as a path '
+            f'segment when the URL is resolved, so the call would be made '
+            f'against a different route than the one it names'
         )
     return quote(value, safe='')
 

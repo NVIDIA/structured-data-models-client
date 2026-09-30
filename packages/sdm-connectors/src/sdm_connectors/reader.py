@@ -509,8 +509,8 @@ def _frame_by_position(
 
     A join returns two columns of one name, and keying by name collapses them:
     same shape, same names, the last one's values, nothing said. Only a driver
-    that answers in rows arrives here -- Databricks and DuckDB answer in Arrow,
-    which refuses such a result before this sees it.
+    that answers in rows arrives here; Databricks and DuckDB answer in Arrow,
+    which keeps both columns on its own.
 
     Built a column at a time for the reason :func:`_integer_columns_exactly`
     exists: pandas promotes a null-bearing integer column as it builds.

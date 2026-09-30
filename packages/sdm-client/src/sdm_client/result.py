@@ -161,9 +161,9 @@ class PredictionResult:
         differently from every other: ``frame['prediction']`` became a
         ``KeyError`` and a join on ``row_index`` could not be written.
 
-        The per-class columns cannot be known with no rows to read them from,
-        so an empty classification result carries ``row_index`` and
-        ``prediction`` but no ``probability_*``.
+        The per-class columns cannot be known with no rows to read them
+        from, so an empty classification result carries the fields that
+        were asked for but never a ``probability_*``.
         """
         rows: list[dict[str, Any]] = []
         for item in self.items:
@@ -198,6 +198,8 @@ class PredictionResult:
         ``row_index`` and ``id`` say which row an answer belongs to rather
         than what the answer is, so they are here whatever was asked for --
         the join a caller writes must not depend on the batch being empty.
+        ``id`` only when this request names its rows at all, which is the
+        same condition a non-empty answer carries it under.
         """
         columns = ['row_index']
         if self._names_its_rows:

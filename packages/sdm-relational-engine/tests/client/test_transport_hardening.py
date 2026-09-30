@@ -89,9 +89,10 @@ def test_path_segment_escapes_server_chosen_ids(
 
 @pytest.mark.parametrize('session_id', ['.', '..', ''])
 def test_a_session_id_of_only_dots_is_refused(session_id: str) -> None:
-    r"""``quote`` leaves a dot alone, because it is unreserved. A segment
-    of nothing but dots is then removed when the URL is resolved, so such
-    an id would send the call to a route other than the one it names.
+    r"""``quote`` leaves a dot alone, because it is unreserved, and a
+    resolver then removes ``.`` and ``..``. An empty id contributes no
+    segment at all. None of the three survives as the segment it was
+    written as, so the call would reach a route other than the one named.
     """
     with pytest.raises(InvalidResponseError):
         _path_segment(session_id)
