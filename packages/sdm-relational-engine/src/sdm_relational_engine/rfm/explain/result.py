@@ -59,10 +59,11 @@ class Explanation:
     Attributes:
         prediction: The prediction this explains.
         summary: The account in prose.
-        details: The explanation payload as the model returned it,
-            structured attribution included where the model provides
-            it. Present even when ``skip_summary`` left ``summary``
-            empty.
+        details: The explanation payload, structured attribution included
+            where the model provides it. An answer that is not a mapping
+            is wrapped as ``{'format': 'unknown', 'value': ...}`` rather
+            than dropped. Present even when ``skip_summary`` left
+            ``summary`` empty.
         warning: What the explanation could not establish, when
             anything; :obj:`None` when nothing stood in the way.
     """

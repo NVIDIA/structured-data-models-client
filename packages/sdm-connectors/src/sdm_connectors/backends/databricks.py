@@ -146,7 +146,11 @@ _MACHINE_TO_MACHINE = frozenset(
 
 
 def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
-    r"""Whether this call can reach the driver's browser flow by accident."""
+    r"""Whether this call says how to authenticate.
+
+    False is the dangerous answer: it means nothing here names a
+    credential, so the driver would fall through to the browser flow.
+    """
     named = {name for name, value in given.items() if value}
     if 'use_kernel' in named:
         return True

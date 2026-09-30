@@ -459,7 +459,7 @@ def test_a_stalled_prediction_is_reported_as_a_timeout_too():
     assert 'timed out after 0.5 seconds' in str(raised.value)
 
 
-@pytest.mark.parametrize('session_id', ['..', '.', '...', ''])
+@pytest.mark.parametrize('session_id', ['..', '.', ''])
 def test_a_session_id_that_is_not_a_segment_is_refused(session_id):
     """`..` turned a scoring call against a pinned context into a one-shot
     prediction on another route, carrying no context at all."""
@@ -470,13 +470,15 @@ def test_a_session_id_that_is_not_a_segment_is_refused(session_id):
     assert 'not a session id' in str(raised.value)
 
 
-@pytest.mark.parametrize('session_id', ['a/../b', 'sess.1', '%2e%2e', 'abc'])
+@pytest.mark.parametrize(
+    'session_id', ['a/../b', 'sess.1', '%2e%2e', 'abc', '...', '....']
+)
 def test_an_ordinary_session_id_is_escaped_and_kept(session_id):
     from sdm_client.core.transport import _path_segment
 
     escaped = _path_segment(session_id)
     assert '/' not in escaped
-    assert escaped.strip('.') != ''
+    assert escaped not in {'', '.', '..'}
 
 
 def test_a_dot_segment_never_reaches_the_wire():

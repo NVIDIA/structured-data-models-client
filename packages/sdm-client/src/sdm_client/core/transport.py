@@ -416,11 +416,14 @@ def _path_segment(value: str) -> str:
     hostile or malformed ``session_id`` cannot redirect the call to another
     route.
 
-    ``quote`` leaves a dot alone, and a segment of nothing but dots is what a
-    URL resolver removes, so ``..`` turned a scoring call against a pinned
-    context into a one-shot prediction elsewhere. Such an id names no session.
+    ``quote`` leaves a dot alone, because it is unreserved. A resolver then
+    removes the two segments that mean something to it -- ``.`` and ``..``,
+    and those two only -- so ``..`` turned a scoring call against a pinned
+    context into a one-shot prediction elsewhere. Those name no session and
+    are refused; ``...`` is an ordinary segment and is escaped like any
+    other.
     """
-    if not value or set(value) == {'.'}:
+    if value in {'', '.', '..'}:
         raise StructuredDataError(
             f'{value!r} is not a session id: a path segment of dots is '
             f'removed when the URL is resolved, so the call would be made '

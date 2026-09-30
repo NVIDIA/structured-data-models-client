@@ -334,9 +334,10 @@ class NimClient:
 
     The transport under the relational engine: it holds the pooled
     session, sends requests with the API key attached when there is one,
-    and retries what is worth retrying. It returns the response whatever
-    its status; deciding that a status is an error belongs to the layer
-    above.
+    and retries what is worth retrying. A contract request comes back
+    whatever its status, because deciding that a status is an error
+    belongs to the layer above; the probes this makes while connecting
+    raise for themselves.
     """
 
     def __init__(

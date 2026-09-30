@@ -16,8 +16,9 @@ class KumoRelationalError(Exception):
     wrong still raises the built-in that fits it, and a column this table
     does not carry still raises :class:`KeyError`.
 
-    Each subclass also inherits the built-in that suits it
-    (:class:`ValueError`, :class:`RuntimeError`), so either catch works.
+    Where a built-in fits a subclass it inherits that too
+    (:class:`ValueError`, :class:`RuntimeError`), so either catch works
+    for those. Not every subclass has one.
     """
 
 

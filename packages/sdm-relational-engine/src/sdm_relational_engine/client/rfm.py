@@ -27,10 +27,11 @@ def _path_segment(value: str) -> str:
     The session id comes back from the NIM, so it is not ours to trust: an
     id carrying a slash would otherwise redirect the call to a different
     route. ``quote`` does not help with a dot -- it is unreserved -- and a
-    segment of nothing but dots is what a URL resolver removes, so such an
-    id is refused rather than escaped. It names no session.
+    resolver removes ``.`` and ``..``, those two and no others. They name no
+    session and are refused rather than escaped. ``...`` is an ordinary
+    segment and is escaped like any other.
     """
-    if not value or set(value) == {'.'}:
+    if value in {'', '.', '..'}:
         raise InvalidResponseError(
             f'{value!r} is not a session id: a path segment of dots is '
             f'removed when the URL is resolved, so the call would be '

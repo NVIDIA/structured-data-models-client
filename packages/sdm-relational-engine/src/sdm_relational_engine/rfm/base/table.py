@@ -325,9 +325,10 @@ class Table(ABC):
 
         The setter marks a column as this table's primary key, accepting
         either one name or a sequence of them for an identity spread
-        across several columns. A name the data frame does not carry
-        raises :class:`KeyError`; a column already serving as a time or
-        end time column raises :class:`ValueError`.
+        across several columns. A single name the data frame does not
+        carry raises :class:`KeyError`; a missing component of a
+        composite one raises :class:`ValueError`, as does naming a column
+        already serving as a time or end time column.
         """
         if self._primary_key is None:
             return None
@@ -552,9 +553,10 @@ class Table(ABC):
         such time column is present.
 
         The setter marks a column as this table's time column. A name the
-        data frame does not carry raises :class:`KeyError`. A column whose
-        values are not timestamps is not refused: its semantic type is
-        rewritten to one, on the reading that naming it was deliberate.
+        data frame does not carry raises :class:`KeyError`, and a dtype
+        that cannot mean a timestamp -- an integer, say -- raises
+        :class:`ValueError`. A column that can carry one, such as text
+        waiting to be parsed, is accepted and its semantic type rewritten.
         """
         if self._time_column is None:
             return None

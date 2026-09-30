@@ -143,10 +143,10 @@ class PredictionResult:
     def to_pandas(self) -> pd.DataFrame:
         r"""The predictions as a frame.
 
-        A column appears when at least one item carries that field, so a
-        classification result asked for ``probabilities`` has them and a
-        regression one does not. Ask for fewer fields and fewer columns
-        come back; nothing is invented to fill a shape. A probability or
+        A column appears when at least one item carries that field, and
+        not otherwise: this reads the answer, not the task or the fields
+        that were asked for, so nothing is invented to fill a shape and
+        nothing carried is dropped. A probability or
         quantile mapping is spread into one column per key, prefixed, so the
         frame stays flat and joinable.
 
