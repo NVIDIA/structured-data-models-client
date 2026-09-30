@@ -57,7 +57,8 @@ read_table(connection, query=f'SELECT * FROM {quote_ident("café")}')
 ```
 
 Failures raised by the sources, `read`, `read_table` and the Databricks helpers surface as `ConnectorError` with a stable `code`: `UNKNOWN_CONNECTOR`, `INVALID_CONNECTOR_ARGS`, `CONNECT_FAILED`, `QUERY_FAILED`, `READ_FAILED`, or `NOT_FOUND`, with the original driver exception chained as `__cause__`.
-Two cases stay unwrapped by design: a missing optional driver raises `MissingBackendError`, and a broken or incompatible driver installation raises `ImportError` (consumers map it to their own broken-install category, e.g. sdm-client's `DRIVER_LOAD_FAILED`).
+A missing driver, or a databricks-sdk too old for `lakebase()`, is refused with code `MISSING_BACKEND`; a missing driver raises it as `MissingBackendError`, which is also a `ModuleNotFoundError`.
+A broken or incompatible driver installation stays unwrapped by design and raises `ImportError` (consumers map it to their own broken-install category, e.g. sdm-client's `DRIVER_LOAD_FAILED`).
 
 Pure-python. Database drivers are optional extras:
 

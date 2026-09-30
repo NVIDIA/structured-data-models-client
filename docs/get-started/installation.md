@@ -45,6 +45,7 @@ Four things differ from a laptop, each found by running on every LTS runtime and
   It brings plain `psycopg`, and the Databricks SDK that `sdm_connectors.databricks.lakebase()` mints the connection's token with.
   The `postgres` extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
   Plain `psycopg` uses the runtime's own libpq, which works on both architectures.
+  For the same reason, do not install `[all]` on a Databricks aarch64 machine: it includes the `postgres` extra, and with it `psycopg[binary]`.
   Reach Lakebase from serverless compute, which connects on a private address; a classic cluster goes over the public internet and connects only if the workspace admits its egress address.
 
 ## Packages
