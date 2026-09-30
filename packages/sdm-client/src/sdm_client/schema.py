@@ -372,6 +372,34 @@ class Table:
         for column in self.columns.values():
             object.__setattr__(column, '_table', self)
 
+    def __eq__(self, other: object) -> bool:
+        r"""Whether two tables describe the same thing.
+
+        Written out because the generated one compares the frames with `==`,
+        which for a DataFrame is a frame of booleans -- so asking whether two
+        tables are equal raised `ValueError: The truth value of a DataFrame is
+        ambiguous` from inside pandas, naming nothing the caller wrote. The
+        rows are compared as rows, and everything else by value, which is what
+        the question means.
+        """
+        if not isinstance(other, Table):
+            return NotImplemented
+        described = (
+            self.name == other.name
+            and self.columns == other.columns
+            and _as_key_tuple(self.primary_key)
+            == _as_key_tuple(other.primary_key)
+            and self.time_column == other.time_column
+        )
+        if not described:
+            return False
+        mine, theirs = self.data, other.data
+        if mine is None or theirs is None:
+            return mine is theirs
+        return bool(mine.equals(theirs))
+
+    __hash__ = None  # type: ignore[assignment]
+
     def __copy__(self) -> Table:
         r"""A shallow copy is still a table of its own columns.
 

@@ -645,3 +645,29 @@ def test_owning_columns_does_not_compare_the_frames_inside() -> None:
     other._own_columns()
 
     assert other.columns['v'] is not one.columns['v']
+
+
+def test_two_tables_can_be_compared_without_raising() -> None:
+    """The generated comparison compares the frames with `==`, which for a
+    DataFrame is a frame of booleans -- so asking whether two tables are equal
+    raised `ValueError: The truth value of a DataFrame is ambiguous` from
+    inside pandas, naming nothing the caller wrote."""
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        one = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+        same = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+        other_rows = _infer_table(
+            't', pd.DataFrame({'id': [1, 3], 'v': [1.0, 2.0]})
+        )
+        other_name = _infer_table(
+            'u', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})
+        )
+
+    assert one == same
+    assert one != other_rows
+    assert one != other_name
+    assert one == one
+    assert one in [one]
+    assert one != 42
