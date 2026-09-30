@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import threading
 from typing import Any
@@ -98,8 +99,10 @@ class DatabricksServingTransport:
         workspace_client: A ``databricks.sdk.WorkspaceClient`` to call through.
             When omitted one is built from the ambient configuration, which is
             how a notebook authenticates without handling a token.
-        timeout: Seconds to wait for one call, applied only to a workspace
-            client built here; an injected one keeps its own configuration.
+        timeout: Seconds one attempt may take, and the longest the SDK keeps
+            retrying; 300 when omitted. Only for a workspace client built
+            here: an injected one keeps its own configuration, so passing both
+            is refused.
         max_request_bytes: The gateway's size limit, checked on the encoded
             envelope before anything is sent.
     """
@@ -111,7 +114,7 @@ class DatabricksServingTransport:
         endpoint: str,
         workspace_client: Any | None = None,
         *,
-        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        timeout: float | None = None,
         max_request_bytes: int = MAX_REQUEST_BYTES,
     ) -> None:
         try:
@@ -120,6 +123,17 @@ class DatabricksServingTransport:
             raise StructuredDataError(
                 str(error), code='INVALID_CONFIGURATION'
             ) from None
+        if timeout is not None and workspace_client is not None:
+            # Silently ignoring it would leave the caller believing a bound
+            # they asked for is in force.
+            raise StructuredDataError(
+                'timeout applies only to a workspace client built here; set '
+                'http_timeout_seconds and retry_timeout_seconds on the Config '
+                'of the one passed as workspace_client instead',
+                code='INVALID_CONFIGURATION',
+            )
+        if timeout is None:
+            timeout = DEFAULT_TIMEOUT_SECONDS
         _validate_limits(timeout, 0)
         if (
             isinstance(max_request_bytes, bool)
@@ -167,7 +181,7 @@ class DatabricksServingTransport:
             described = self._workspace.serving_endpoints.get(
                 name=self._endpoint
             )
-        except Exception as error:
+        except OSError as error:
             raise self._error_from(error) from None
         ready = getattr(getattr(described, 'state', None), 'ready', None)
         return getattr(ready, 'value', ready) == 'READY'
@@ -204,7 +218,9 @@ class DatabricksServingTransport:
             reply = self._workspace.serving_endpoints.query(
                 name=self._endpoint, dataframe_records=records
             )
-        except Exception as error:
+        # The SDK's errors and its retry deadline are all OSError, as are
+        # requests' own; anything else is a bug, and is not dressed as a 503.
+        except OSError as error:
             raise self._error_from(error) from None
         try:
             body = response_body(reply)
@@ -233,7 +249,12 @@ class DatabricksServingTransport:
                 code='TRANSPORT_ERROR',
             )
         status = answer.get('status')
-        if isinstance(status, int) and status >= 400 and 'detail' in answer:
+        # A failure says so by its status alone; a body need not explain it.
+        if (
+            isinstance(status, int)
+            and not isinstance(status, bool)
+            and status >= 400
+        ):
             raise _to_nim_error(status, body.encode('utf-8'))
         return answer
 
@@ -316,7 +337,13 @@ def _ambient_workspace(timeout: float) -> Any:
             'databricks-serving', 'databricks-sdk'
         ) from None
     try:
-        return WorkspaceClient(config=Config(http_timeout_seconds=timeout))
+        # The SDK retries for its own retry_timeout_seconds whatever one
+        # attempt's timeout, so both are bounded by the caller's.
+        config = Config(
+            http_timeout_seconds=timeout,
+            retry_timeout_seconds=math.ceil(timeout),
+        )
+        return WorkspaceClient(config=config)
     except Exception as error:
         raise StructuredDataError(
             f'could not authenticate to Databricks from the ambient '

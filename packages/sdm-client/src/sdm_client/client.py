@@ -265,7 +265,7 @@ class SDMClient:
         endpoint: str,
         *,
         workspace_client: Any | None = None,
-        timeout: float = 300.0,
+        timeout: float | None = None,
     ) -> SDMClient:
         r"""Open a client against a Databricks Model Serving endpoint.
 
@@ -285,14 +285,20 @@ class SDMClient:
                 refused without being repeated, since one can carry a token.
             workspace_client: A ``databricks.sdk.WorkspaceClient`` to call
                 through, for a workspace or credential other than the ambient
-                one. Build it with the ``Config`` you need.
-            timeout: Seconds to wait for one call. Far above a NIM's default,
-                because a serving endpoint that has scaled to zero takes minutes
-                to start. Applies only when ``workspace_client`` is not given.
+                one. Build it with the ``Config`` you need, timeouts included.
+            timeout: Seconds one attempt may take, and the longest the SDK
+                keeps retrying; 300 when omitted. Far above a NIM's default,
+                because a serving endpoint that has scaled to zero takes
+                minutes to start. Only for the ambient workspace client: pass
+                it together with ``workspace_client`` and it is refused.
 
         Raises:
             MissingExtraError: If ``databricks-sdk`` is not installed; install
                 ``sdm-client[databricks-serving]``.
+            StructuredDataError: With code ``INVALID_CONFIGURATION``, if
+                ``endpoint`` is not a name, ``timeout`` is not a positive
+                number of seconds or is passed with ``workspace_client``, or
+                the ambient configuration cannot authenticate.
         """
         from sdm_client.core.databricks_serving import (
             DatabricksServingTransport,

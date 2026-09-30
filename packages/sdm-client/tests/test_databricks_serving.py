@@ -301,23 +301,38 @@ def test_a_gateway_failure_names_the_endpoint_and_nothing_it_said():
 
 
 def test_an_unclassified_failure_is_retryable_rather_than_final():
-    client, _ = opened(raiser=RuntimeError('socket closed'))
+    client, _ = opened(raiser=ConnectionError('socket closed'))
     with pytest.raises(NimRequestError) as error:
         client.predict(asked(), model='kumo-tabular')
     assert error.value.status_code == 503
 
 
-def test_an_error_body_in_the_response_is_an_error():
-    body = {
-        'status': 422,
-        'code': 'UNSUPPORTED_TASK',
-        'detail': 'the requested task is not supported',
-    }
+def test_a_bug_is_not_reported_as_the_endpoint_s_failure():
+    bug = TypeError('unexpected keyword argument')
+    client, _ = opened(raiser=bug)
+    with pytest.raises(TypeError) as error:
+        client.predict(asked(), model='kumo-tabular')
+    assert error.value is bug
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        {
+            'status': 422,
+            'code': 'UNSUPPORTED_TASK',
+            'detail': 'the requested task is not supported',
+        },
+        {'status': 500, 'title': 'the model failed on the requested rows'},
+    ],
+    ids=['with-detail', 'title-only'],
+)
+def test_an_error_body_in_the_response_is_an_error(body):
     client, _ = opened(answer=body)
     with pytest.raises(NimRequestError) as error:
         client.predict(asked(), model='kumo-tabular')
-    assert error.value.status_code == 422
-    assert error.value.code == 'UNSUPPORTED_TASK'
+    assert error.value.status_code == body['status']
+    assert error.value.code == body.get('code')
 
 
 def test_an_oversized_request_is_refused_before_it_is_sent():
@@ -406,10 +421,11 @@ def test_the_debug_log_carries_no_rows(workspace_host, caplog, status, body):
     )
 
     transport = DatabricksServingTransport(ENDPOINT, workspace_client=workspace)
-    try:
+    if status >= 400:
+        with pytest.raises(NimRequestError):
+            transport.predict({'context': {'rows': [[SECRET]]}})
+    else:
         transport.predict({'context': {'rows': [[SECRET]]}})
-    except NimRequestError:
-        assert status >= 400
 
     assert SECRET not in caplog.text
     assert {name: logging.getLogger(name).level for name in loggers} == levels
@@ -453,7 +469,18 @@ def test_without_the_sdk_the_extra_to_install_is_named(monkeypatch):
     assert 'sdm-client[databricks-serving]' in str(error.value)
 
 
-def test_the_ambient_identity_is_used_when_no_client_is_given(monkeypatch):
+@pytest.mark.parametrize(
+    'timeout, config',
+    [
+        (None, {'http_timeout_seconds': 300.0, 'retry_timeout_seconds': 300}),
+        (420.5, {'http_timeout_seconds': 420.5, 'retry_timeout_seconds': 421}),
+    ],
+)
+def test_the_ambient_identity_is_used_when_no_client_is_given(
+    monkeypatch, timeout, config
+):
+    """The SDK keeps retrying for its own deadline whatever one attempt's
+    timeout, so the whole call is bounded only if that deadline is set too."""
     sdk = pytest.importorskip('databricks.sdk')
     built: list[Any] = []
 
@@ -468,8 +495,18 @@ def test_the_ambient_identity_is_used_when_no_client_is_given(monkeypatch):
         'Config',
         lambda **kwargs: kwargs,
     )
-    SDMClient.for_databricks_serving(ENDPOINT, timeout=420)
-    assert built == [{'http_timeout_seconds': 420.0}]
+    SDMClient.for_databricks_serving(ENDPOINT, timeout=timeout)
+    assert built == [config]
+
+
+def test_a_timeout_for_an_injected_workspace_client_is_refused():
+    """That client keeps its own configuration, so the timeout would be
+    silently ignored."""
+    with pytest.raises(StructuredDataError) as error:
+        SDMClient.for_databricks_serving(
+            ENDPOINT, workspace_client=Workspace(), timeout=30
+        )
+    assert error.value.code == 'INVALID_CONFIGURATION'
 
 
 def test_a_workspace_that_cannot_authenticate_says_how_to_fix_it(monkeypatch):
@@ -489,9 +526,7 @@ def test_a_workspace_that_cannot_authenticate_says_how_to_fix_it(monkeypatch):
 @pytest.mark.parametrize('bad', [0, -1.0, float('inf'), True])
 def test_an_unusable_timeout_is_refused_at_construction(bad):
     with pytest.raises(StructuredDataError) as error:
-        SDMClient.for_databricks_serving(
-            ENDPOINT, workspace_client=Workspace(), timeout=bad
-        )
+        SDMClient.for_databricks_serving(ENDPOINT, timeout=bad)
     assert error.value.code == 'INVALID_CONFIGURATION'
 
 
