@@ -271,8 +271,12 @@ def test_readiness_is_the_endpoint_s_own_state():
             'INVALID_SCHEMA',
         ),
         ('BAD_REQUEST: could not parse row NVDA_SECRET: 42', 'BAD_REQUEST'),
+        (
+            "BAD_REQUEST: could not parse row Error 'NVDA_SECRET: 42'",
+            'BAD_REQUEST',
+        ),
     ],
-    ids=['quoted', 'leading', 'value-shaped-like-a-code'],
+    ids=['quoted', 'leading', 'value-shaped-like-a-code', 'value-quoted'],
 )
 def test_the_served_model_s_code_is_repeated_and_its_text_is_not(said, code):
     """A model's error text can quote the rows it was sent, and a value can

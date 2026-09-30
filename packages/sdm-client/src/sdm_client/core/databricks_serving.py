@@ -84,8 +84,12 @@ def _keep_rows_out_of_the_sdk_log() -> None:
 # repeated: the detail is free text, and can quote the rows it was sent.
 _MODEL_DIAGNOSIS = re.compile(r'([A-Z][A-Z0-9_]{2,63}): \S')
 
-# How the gateway quotes the served model's own exception inside its message.
-_QUOTED_MODEL_ERROR = "Error '"
+# The gateway's fixed sentences, then the model's own exception quoted. Only
+# this prefix is trusted: an ``Error '`` further in can be the caller's text.
+_QUOTED_MODEL_ERROR = re.compile(
+    r'Encountered an unexpected error while evaluating the model\.'
+    r"(?: [^'.]*\.)* Error '"
+)
 
 _NO_SESSIONS = (
     'a Databricks Model Serving endpoint has no sessions: it answers one '
@@ -385,8 +389,9 @@ def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
     carried one.
 
     Read only where the model's message begins: at the start, after the
-    provider's own ``CODE: `` prefix, or inside the ``Error '...'`` the gateway
-    quotes it in. An upper-case word anywhere else can be the caller's value.
+    provider's own ``CODE: `` prefix, or in the ``Error '...'`` right after
+    the gateway's fixed wrapper. An upper-case word anywhere else can be the
+    caller's value.
     The provider's code is skipped: ``BAD_REQUEST: ...`` is Databricks
     describing the call, not the model describing the request.
     """
@@ -394,9 +399,9 @@ def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
     if provider_code is not None and text.startswith(prefix):
         text = text[len(prefix) :]
     starts = [text]
-    quoted = text.find(_QUOTED_MODEL_ERROR)
-    if quoted >= 0:
-        starts.append(text[quoted + len(_QUOTED_MODEL_ERROR) :])
+    quoted = _QUOTED_MODEL_ERROR.match(text)
+    if quoted is not None:
+        starts.append(text[quoted.end() :])
     for start in starts:
         code = _leading_code(start)
         if code is not None and code != provider_code:
