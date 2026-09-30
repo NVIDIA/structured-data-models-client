@@ -160,6 +160,8 @@ def generate_code(
         '',
         '@dataclass(frozen=True)',
         'class TFMOperation:',
+        '    r"""One operation the contract defines: where it lives and what it carries."""',
+        '',
         '    operation_id: str',
         '    endpoint: Endpoint',
         '    request_schema: str | None = None',
@@ -172,7 +174,15 @@ def generate_code(
     lines.extend(_constant_lines(constants))
     lines.extend(_response_model_lines(schemas))
     lines.extend(_tuple_constant_lines('TFM_SCHEMA_NAMES', schema_names))
-    lines.extend(['', '', 'class TFMOperations:'])
+    lines.extend(
+        [
+            '',
+            '',
+            'class TFMOperations:',
+            '    r"""Every operation in the contract, one attribute each."""',
+            '',
+        ]
+    )
     if operations:
         for operation in operations:
             lines.extend(_operation_lines(operation))

@@ -17,6 +17,8 @@ from sdm_api.endpoints import Endpoint, HTTPMethod
 
 @dataclass(frozen=True)
 class TFMOperation:
+    r"""One operation the contract defines: where it lives and what it carries."""
+
     operation_id: str
     endpoint: Endpoint
     request_schema: str | None = None
@@ -328,6 +330,8 @@ TFM_SCHEMA_NAMES: Final[tuple[str, ...]] = (
 
 
 class TFMOperations:
+    r"""Every operation in the contract, one attribute each."""
+
     run_prediction: Final[TFMOperation] = TFMOperation(
         operation_id='runPrediction',
         endpoint=Endpoint(

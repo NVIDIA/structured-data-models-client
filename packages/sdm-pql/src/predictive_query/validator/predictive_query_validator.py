@@ -43,9 +43,10 @@ from predictive_query.validator.utils import (
 
 
 class PredictiveQueryValidator:
-    r"""This class contains all the validation and metadata inferral business
-    logic, for turning a :class:`ParsedPredictiveQuery` into a
-    :class:`ValidatedPredictiveQuery`.
+    r"""Turns a :class:`ParsedPredictiveQuery` into a validated one.
+
+    Every schema-dependent check and every piece of inferred metadata
+    lives here, and the result is a :class:`ValidatedPredictiveQuery`.
 
     Args:
         schema: Schema on which the query is defined.
