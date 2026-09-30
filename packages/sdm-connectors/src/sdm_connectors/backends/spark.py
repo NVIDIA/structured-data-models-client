@@ -31,8 +31,8 @@ _NO_ARROW = (
     'cannot return results as Arrow, which sampling through a Spark session '
     'needs: DataFrame.toArrow() arrived in Spark 4.0. Use Databricks Runtime '
     '17.3 LTS or later, or serverless environment 4 or later; on an older '
-    "runtime, connect through a SQL warehouse with connect('databricks', ...) "
-    'instead.'
+    'runtime, pass a SQL warehouse connection – databricks.sql.connect(...) '
+    '– instead.'
 )
 
 

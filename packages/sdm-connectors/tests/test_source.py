@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pickle
-import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +19,6 @@ from sdm_connectors import (
     SnowflakeSource,
     Source,
     SQLiteSource,
-    connect,
 )
 
 
@@ -41,15 +39,13 @@ def _postgres() -> Any:
 
 
 def _duckdb(tmp_path: Path) -> Any:
-    pytest.importorskip('duckdb')
-    return connect('duckdb')
+    duckdb = pytest.importorskip('duckdb')
+    return duckdb.connect()
 
 
 def _sqlite(tmp_path: Path) -> Any:
-    pytest.importorskip('adbc_driver_sqlite')
-    path = tmp_path / 'db.sqlite'
-    sqlite3.connect(path).close()
-    return connect('sqlite', str(path))
+    dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
+    return dbapi.connect(str(tmp_path / 'db.sqlite'))
 
 
 @pytest.mark.parametrize(
@@ -200,9 +196,9 @@ def test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake() -> None:
 
 
 def test_a_source_does_not_pickle_its_connection() -> None:
-    pytest.importorskip('duckdb')
+    duckdb = pytest.importorskip('duckdb')
     with pytest.raises(TypeError, match='cannot be pickled'):
-        pickle.dumps(DuckDBSource(connect('duckdb')))
+        pickle.dumps(DuckDBSource(duckdb.connect()))
 
 
 def test_the_repr_names_where_not_how() -> None:

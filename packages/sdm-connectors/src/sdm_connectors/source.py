@@ -61,7 +61,7 @@ _DRIVER_MODULES: tuple[tuple[str, str], ...] = (
 _ACCEPTED = (
     'a Databricks SQL connection or a Spark session, a Snowflake connection '
     'or Snowpark session, a psycopg connection, a DuckDB connection, or an '
-    'ADBC SQLite connection – what sdm_connectors.connect returns'
+    "ADBC SQLite connection, each opened with its driver's own connect"
 )
 
 
@@ -114,8 +114,8 @@ class Source:
 
     >>> source = DatabricksSource(spark, catalog='main', schema='sales')
     >>> source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
-    >>> source = PostgresSource(connect('postgres', ...), schema='public')
-    >>> source = DuckDBSource(connect('duckdb', 'sales.duckdb'))
+    >>> source = PostgresSource(psycopg.connect(...), schema='public')
+    >>> source = DuckDBSource(duckdb.connect('sales.duckdb', read_only=True))
 
     ``Source(connection, ...)`` works too, and returns the class that fits the
     connection, which is also the type a type checker gives it.
@@ -265,7 +265,7 @@ class DatabricksSource(Source):
     r"""Tables in a Databricks catalog and schema.
 
     >>> source = DatabricksSource(spark, catalog='main', schema='sales')
-    >>> source = DatabricksSource(connect('databricks', ...), catalog='main')
+    >>> source = DatabricksSource(databricks.sql.connect(...), catalog='main')
 
     A notebook's ``spark`` is sampled through ``spark.sql``, so no SQL warehouse
     is needed; that takes ``DataFrame.toArrow()``, which Databricks Runtime
@@ -281,7 +281,7 @@ class DatabricksSource(Source):
     _BACKEND = 'databricks'
     _NAMESPACE = ('catalog', 'schema')
     _TAKES = (
-        "a Databricks SQL connection – connect('databricks', ...) – or a "
+        'a Databricks SQL connection – databricks.sql.connect(...) – or a '
         "notebook's Spark session"
     )
 
@@ -341,8 +341,8 @@ class SnowflakeSource(Source):
     _BACKEND = 'snowflake'
     _NAMESPACE = ('database', 'schema')
     _TAKES = (
-        "a Snowflake connection – connect('snowflake', ...) – or a Snowpark "
-        'session'
+        'a Snowflake connection – snowflake.connector.connect(...) – or a '
+        'Snowpark session'
     )
 
     def __init__(
@@ -381,7 +381,7 @@ class SnowflakeSource(Source):
 class PostgresSource(Source):
     r"""Tables in a PostgreSQL schema, Lakebase included.
 
-    >>> source = PostgresSource(connect('postgres', ...), schema='public')
+    >>> source = PostgresSource(psycopg.connect(...), schema='public')
 
     Args:
         connection: A psycopg connection.
@@ -390,7 +390,7 @@ class PostgresSource(Source):
 
     _BACKEND = 'postgres'
     _NAMESPACE = ('schema',)
-    _TAKES = "a psycopg connection – connect('postgres', ...)"
+    _TAKES = 'a psycopg connection – psycopg.connect(...)'
 
     def __init__(
         self, connection: PostgresConnection, *, schema: str | None = None
@@ -413,11 +413,11 @@ class PostgresSource(Source):
 class DuckDBSource(Source):
     r"""Tables in a DuckDB database.
 
-    >>> source = DuckDBSource(connect('duckdb', 'sales.duckdb'))
+    >>> source = DuckDBSource(duckdb.connect('sales.duckdb', read_only=True))
     """
 
     _BACKEND = 'duckdb'
-    _TAKES = "a DuckDB connection – connect('duckdb', ...)"
+    _TAKES = 'a DuckDB connection – duckdb.connect(...)'
 
     def __init__(self, connection: DuckDBConnection) -> None:
         self._bind(connection, {})
@@ -431,11 +431,11 @@ class DuckDBSource(Source):
 class SQLiteSource(Source):
     r"""Tables in a SQLite database.
 
-    >>> source = SQLiteSource(connect('sqlite', 'sales.sqlite'))
+    >>> source = SQLiteSource(adbc_driver_sqlite.dbapi.connect('sales.sqlite'))
     """
 
     _BACKEND = 'sqlite'
-    _TAKES = "an ADBC SQLite connection – connect('sqlite', ...)"
+    _TAKES = 'an ADBC SQLite connection – adbc_driver_sqlite.dbapi.connect(...)'
 
     def __init__(self, connection: SQLiteConnection) -> None:
         self._bind(connection, {})

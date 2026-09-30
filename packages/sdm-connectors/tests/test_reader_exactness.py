@@ -17,7 +17,7 @@ from decimal import Decimal
 import pandas as pd
 import pytest
 
-from sdm_connectors import connect, read, read_table
+from sdm_connectors import read, read_table
 from sdm_connectors.sql import ConnectorError
 
 BIG = 9_007_199_254_740_993
@@ -105,7 +105,7 @@ def test_a_bool_list_is_not_mistaken_for_integers():
 
 def test_a_sum_over_a_bigint_column_is_exact():
     """`sum(BIGINT)` widens to HUGEINT, which `fetchdf()` rounds."""
-    connection = connect('duckdb')
+    connection = pytest.importorskip('duckdb').connect()
     connection.execute(
         f'create table t as select {BIG}::BIGINT id from range(3)'
     )
@@ -114,13 +114,13 @@ def test_a_sum_over_a_bigint_column_is_exact():
 
 
 def test_a_hugeint_column_is_exact():
-    connection = connect('duckdb')
+    connection = pytest.importorskip('duckdb').connect()
     connection.execute(f'create table h as select {BIG}::HUGEINT h')
     assert wire(read_table(connection, table='h')['h']) == [str(BIG)]
 
 
 def test_a_bigint_column_with_a_null_is_still_exact():
-    connection = connect('duckdb')
+    connection = pytest.importorskip('duckdb').connect()
     connection.execute(
         f'create table n as select * from '
         f'(values ({BIG}::BIGINT, 1.0), (NULL, 2.0)) t(id, v)'
@@ -129,14 +129,14 @@ def test_a_bigint_column_with_a_null_is_still_exact():
 
 
 def test_a_decimal_with_a_scale_keeps_it():
-    connection = connect('duckdb')
+    connection = pytest.importorskip('duckdb').connect()
     connection.execute('create table d as select 12.3456::DECIMAL(38,4) m')
     frame = read_table(connection, query='select * from d')
     assert float(frame['m'].iloc[0]) == pytest.approx(12.3456)
 
 
 def test_an_ordinary_query_is_unchanged():
-    connection = connect('duckdb')
+    connection = pytest.importorskip('duckdb').connect()
     connection.execute('create table t as select 1 a, 2.5 b')
     frame = read_table(connection, table='t')
     assert frame['a'].iloc[0] == 1

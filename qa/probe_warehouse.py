@@ -16,7 +16,7 @@ from decimal import Decimal
 from harness import TABULAR, fail, note, probe, save
 from sdm_client import KumoTabular, Request, SDMClient
 from sdm_client.wire.dtypes import infer_tfm_dtype, serialize_column
-from sdm_connectors import ConnectorError, connect, read_table
+from sdm_connectors import ConnectorError, read_table
 
 AREA = 'warehouse'
 SAFE = 9_007_199_254_740_991
@@ -24,8 +24,9 @@ SUFFIX = os.environ.get('QA_SUFFIX', 'qa1')
 
 
 def snowflake():
-    return connect(
-        'snowflake',
+    from snowflake import connector
+
+    return connector.connect(
         account=os.environ['SNOWFLAKE_ACCOUNT'],
         user=os.environ['SNOWFLAKE_USER'],
         password=os.environ['SNOWFLAKE_PASSWORD'],
@@ -37,8 +38,9 @@ def snowflake():
 
 
 def databricks():
-    return connect(
-        'databricks',
+    from databricks import sql
+
+    return sql.connect(
         server_hostname=os.environ['DATABRICKS_SERVER_HOSTNAME'],
         http_path=os.environ['DATABRICKS_HTTP_PATH'],
         access_token=os.environ['DATABRICKS_TOKEN'],

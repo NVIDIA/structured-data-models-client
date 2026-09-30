@@ -981,7 +981,6 @@
       "SnowflakeSource",
       "Source",
       "__version__",
-      "connect",
       "quote_ident",
       "read",
       "read_table",
@@ -1105,10 +1104,6 @@
       "__version__": {
         "kind": "str",
         "value": "1.0.0"
-      },
-      "connect": {
-        "kind": "callable",
-        "signature": "(backend: 'str', *args: 'Any', **kwargs: 'Any') -> 'Any'"
       },
       "quote_ident": {
         "kind": "callable",

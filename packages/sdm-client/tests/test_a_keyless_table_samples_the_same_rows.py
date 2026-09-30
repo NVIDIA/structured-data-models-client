@@ -14,7 +14,6 @@ engines here.
 from __future__ import annotations
 
 import json
-import sqlite3
 import warnings
 from pathlib import Path
 from typing import Any
@@ -24,10 +23,10 @@ import pyarrow as pa
 import pytest
 
 pytest.importorskip('sdm_relational_engine.relationallib')
-pytest.importorskip('duckdb')
-pytest.importorskip('adbc_driver_sqlite')
+duckdb = pytest.importorskip('duckdb')
+dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
-from sdm_connectors import DuckDBSource, SQLiteSource, connect  # noqa: E402
+from sdm_connectors import DuckDBSource, SQLiteSource  # noqa: E402
 
 from sdm_client import PredictiveQuery, Relationship, Schema  # noqa: E402
 
@@ -51,7 +50,7 @@ QUERY = 'PREDICT COUNT(visits.*, 0, 7, days) FOR EACH users.user_id'
 
 
 def _duckdb(visits: pd.DataFrame, tmp_path: Path) -> Any:
-    connection = connect('duckdb')
+    connection = duckdb.connect()
     # Registered as Arrow: DuckDB cannot read pandas 3's string column in place.
     connection.register('users_frame', pa.Table.from_pandas(USERS))
     connection.register('visits_frame', pa.Table.from_pandas(visits))
@@ -61,9 +60,7 @@ def _duckdb(visits: pd.DataFrame, tmp_path: Path) -> Any:
 
 
 def _sqlite(visits: pd.DataFrame, tmp_path: Path) -> Any:
-    path = tmp_path / f'db-{id(visits)}.sqlite'
-    sqlite3.connect(path).close()
-    connection = connect('sqlite', str(path))
+    connection = dbapi.connect(str(tmp_path / f'db-{id(visits)}.sqlite'))
     with connection.cursor() as cursor:
         cursor.adbc_ingest('users', USERS, mode='create')
         cursor.adbc_ingest('visits', visits, mode='create')

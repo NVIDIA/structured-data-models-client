@@ -143,7 +143,7 @@ def read_table(
     connection offers. The connection stays open and owned by the caller.
 
     Args:
-        connection: An open connection, e.g. from :func:`connect`.
+        connection: An open connection from the driver's own ``connect``.
         table: A table identifier; see :func:`resolve_sql` for what is allowed.
         query: A complete SQL statement. Exactly one of ``table`` / ``query``.
 

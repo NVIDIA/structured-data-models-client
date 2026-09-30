@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
-from sdm_connectors import connect
-from sdm_connectors.backends import mark_owned, owns_connection
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -16,35 +16,6 @@ from sdm_connectors.sql import (
 
 class _Conn:
     pass
-
-
-class _SlottedConn:
-    r"""Weakref-able but rejects arbitrary attribute writes (like a borrowed
-    Snowpark session that only exposes a fixed API)."""
-
-    __slots__ = ('__weakref__',)
-
-
-def test_unmarked_connection_is_treated_as_owned():
-    assert owns_connection(_Conn()) is True
-
-
-def test_marked_owned_connection_is_owned():
-    connection = _Conn()
-    mark_owned(connection, True)
-    assert owns_connection(connection) is True
-
-
-def test_borrowed_connection_is_not_owned():
-    connection = _Conn()
-    mark_owned(connection, False)
-    assert owns_connection(connection) is False
-
-
-def test_borrowed_connection_rejecting_attribute_writes_is_not_owned():
-    connection = _SlottedConn()
-    mark_owned(connection, False)
-    assert owns_connection(connection) is False
 
 
 def test_check_connect_args_suggests_the_intended_name():
@@ -71,8 +42,9 @@ def test_connect_rejects_unknown_kwargs(backend, module, typo, intended):
     so the typo must be rejected before a connection is attempted.
     """
     pytest.importorskip(module)
+    connector = importlib.import_module(f'sdm_connectors.backends.{backend}')
     with pytest.raises(ConnectorError) as excinfo:
-        connect(backend, **{typo: 'X'})
+        connector.connect(**{typo: 'X'})
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
     assert f'did you mean {intended!r}' in excinfo.value.message
 
@@ -111,9 +83,9 @@ def test_driver_options_cannot_restate_a_validated_argument(
     another catalog -- the failure this backend validation exists to prevent.
     """
     pytest.importorskip(module)
+    connector = importlib.import_module(f'sdm_connectors.backends.{backend}')
     with pytest.raises(ConnectorError) as excinfo:
-        connect(
-            backend,
+        connector.connect(
             driver_options={argument: 'from-options'},
             **{argument: 'from-caller'},
         )
@@ -157,7 +129,6 @@ def test_snowflake_borrows_session_when_no_auth_arguments(monkeypatch):
     )
 
     assert backend.connect() is borrowed
-    assert owns_connection(borrowed) is False
 
 
 def test_snowflake_rejects_session_arguments_on_a_borrowed_session(monkeypatch):
@@ -187,7 +158,6 @@ def test_snowflake_credentials_still_open_their_own_connection(monkeypatch):
     )
 
     assert backend.connect(account='a', user='u', password='p') is opened
-    assert owns_connection(opened) is True
 
 
 def test_snowflake_no_arguments_and_no_session_explains_requirements(
@@ -205,7 +175,7 @@ def test_snowflake_no_arguments_and_no_session_explains_requirements(
     monkeypatch.setattr(backend.snowflake_connector, 'connect', _fail)
 
     with pytest.raises(ConnectorError) as excinfo:
-        connect('snowflake')
+        backend.connect()
     assert excinfo.value.code == 'CONNECT_FAILED'
     assert 'Snowpark session' in excinfo.value.message
     assert "'account'" in excinfo.value.message
@@ -269,21 +239,6 @@ def test_databricks_still_rejects_a_misspelled_argument():
 
 
 # --- postgres ---------------------------------------------------------------
-
-
-def test_postgres_is_a_supported_backend():
-    """The list is what `connect` validates against, so an unlisted backend
-    is refused before any driver is imported."""
-    from sdm_connectors.backends import _SQL_BACKENDS
-
-    assert 'postgres' in _SQL_BACKENDS
-
-
-def test_an_unknown_backend_names_postgres_among_the_supported():
-    with pytest.raises(ConnectorError) as error:
-        connect('postgresql', 'postgresql://localhost/db')
-    assert 'postgres' in str(error.value)
-    assert error.value.code == 'UNKNOWN_CONNECTOR'
 
 
 def test_postgres_refuses_a_connect_argument_it_does_not_take():

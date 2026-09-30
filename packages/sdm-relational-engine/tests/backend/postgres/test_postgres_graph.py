@@ -15,7 +15,7 @@ from sdm_relational_engine.rfm import Graph, KumoRelational
 
 try:
     import psycopg
-    from sdm_connectors import connect, read_table
+    from sdm_connectors import read_table
     from sdm_relational_engine.rfm.backend.postgres import PostgresSampler
 except ImportError:
     if os.getenv('SDM_REQUIRE_POSTGRES'):
@@ -30,7 +30,7 @@ def postgres_schema(
     r"""A disposable integration schema when a PostgreSQL DSN is supplied."""
     dsn = postgres_dsn
     schema = f'sdm_test_{uuid.uuid4().hex}'
-    connection = connect('postgres', dsn)
+    connection = psycopg.connect(dsn)
     try:
         with connection.cursor() as cursor:
             cursor.execute(f'CREATE SCHEMA "{schema}"')
@@ -130,7 +130,7 @@ def postgres_schema(
     try:
         yield dsn, schema
     finally:
-        connection = connect('postgres', dsn)
+        connection = psycopg.connect(dsn)
         try:
             with connection.cursor() as cursor:
                 cursor.execute(f'DROP SCHEMA "{schema}" CASCADE')
@@ -328,7 +328,7 @@ def test_composite_postgres_constraints_fail_loudly(
     postgres_schema: tuple[str, str],
 ) -> None:
     dsn, schema = postgres_schema
-    connection = connect('postgres', dsn)
+    connection = psycopg.connect(dsn)
     try:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -397,8 +397,8 @@ def test_reading_leaves_no_transaction_or_locks_behind(
     locks, until a commit, and one failed read then refuses every later one.
     """
     dsn, schema = postgres_schema
-    connection = connect('postgres', dsn)
-    other = connect('postgres', dsn, autocommit=True)
+    connection = psycopg.connect(dsn)
+    other = psycopg.connect(dsn, autocommit=True)
     try:
         graph = Graph.from_postgres(
             connection,
@@ -429,7 +429,7 @@ def test_a_keyless_table_with_json_and_xml_columns_samples(
     and xml read as strings but have no ordering operator.
     """
     dsn, schema = postgres_schema
-    connection = connect('postgres', dsn)
+    connection = psycopg.connect(dsn)
     try:
         with connection.cursor() as cursor:
             cursor.execute(f'CREATE DOMAIN "{schema}".payload AS JSON')

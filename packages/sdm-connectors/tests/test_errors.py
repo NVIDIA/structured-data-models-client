@@ -10,7 +10,7 @@ import sqlite3
 import pandas as pd
 import pytest
 
-from sdm_connectors import connect, read, read_table
+from sdm_connectors import read, read_table
 from sdm_connectors.sql import (
     ConnectorError,
     MissingBackendError,
@@ -25,12 +25,6 @@ def sqlite_db(tmp_path):
     with sqlite3.connect(database) as connection:
         pd.DataFrame({'a': [1, 2, 3]}).to_sql('items', connection, index=False)
     return database
-
-
-def test_connect_unknown_backend_raises_connector_error():
-    with pytest.raises(ConnectorError) as excinfo:
-        connect('mysql')
-    assert excinfo.value.code == 'UNKNOWN_CONNECTOR'
 
 
 @pytest.fixture()
@@ -49,14 +43,10 @@ def test_query_failure_maps_to_query_failed(sqlite_connection):
     assert excinfo.value.__cause__ is not None
 
 
-def test_read_table_direct_query_failure(sqlite_db):
-    connection = connect('sqlite', sqlite_db)
-    try:
-        with pytest.raises(ConnectorError) as excinfo:
-            read_table(connection, query='SELECT nope FROM items')
-        assert excinfo.value.code == 'QUERY_FAILED'
-    finally:
-        connection.close()
+def test_read_table_direct_query_failure(sqlite_connection):
+    with pytest.raises(ConnectorError) as excinfo:
+        read_table(sqlite_connection, query='SELECT nope FROM items')
+    assert excinfo.value.code == 'QUERY_FAILED'
 
 
 def test_invalid_table_identifier_is_not_rewrapped(sqlite_connection):

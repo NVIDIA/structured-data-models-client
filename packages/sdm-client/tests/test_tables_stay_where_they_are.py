@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import uuid
 import warnings
 from pathlib import Path
@@ -21,13 +20,12 @@ import pytest
 
 pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
-pytest.importorskip('adbc_driver_sqlite')
+dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
 from sdm_connectors import (  # noqa: E402
     DuckDBSource,
     PostgresSource,
     SQLiteSource,
-    connect,
 )
 
 from sdm_client import (  # noqa: E402
@@ -74,7 +72,7 @@ USERS, ORDERS = _frames()
 
 @pytest.fixture
 def duckdb_source() -> Any:
-    connection = connect('duckdb')
+    connection = duckdb.connect()
     connection.register('users_frame', USERS)
     connection.register('orders_frame', ORDERS)
     connection.execute('CREATE TABLE app_users AS SELECT * FROM users_frame')
@@ -85,9 +83,7 @@ def duckdb_source() -> Any:
 
 @pytest.fixture
 def sqlite_source(tmp_path: Path) -> Any:
-    path = tmp_path / 'sales.sqlite'
-    sqlite3.connect(path).close()
-    connection = connect('sqlite', str(path))
+    connection = dbapi.connect(str(tmp_path / 'sales.sqlite'))
     # ADBC stores fractional seconds, which a text window bound must match.
     with connection.cursor() as cursor:
         cursor.adbc_ingest('app_users', USERS, mode='create')
@@ -425,7 +421,7 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
             'must be a Relationship',
         ),
         (
-            lambda source: Schema.from_source(DuckDBSource(connect('duckdb'))),
+            lambda source: Schema.from_source(DuckDBSource(duckdb.connect())),
             r'DuckDBSource\(\) holds no table to describe',
         ),
         (lambda source: SourceTable('t', '', {}), 'needs the name it has'),

@@ -68,10 +68,11 @@ Tables too large to read into memory stay where they are.
 Describe them with `Schema.from_source`, and `materialize()` samples them there with SQL: only the rows a prediction needs leave the warehouse.
 
 ```python
+from databricks import sql
 from sdm_client import PredictiveQuery, Schema
-from sdm_connectors import DatabricksSource, connect
+from sdm_connectors import DatabricksSource
 
-source = DatabricksSource(connect('databricks', server_hostname=..., http_path=...), catalog='main', schema='sales')
+source = DatabricksSource(sql.connect(server_hostname=..., http_path=...), catalog='main', schema='sales')
 schema = Schema.from_source(
     source,
     {'users': 'crm_users', 'orders': 'shop_orders'},

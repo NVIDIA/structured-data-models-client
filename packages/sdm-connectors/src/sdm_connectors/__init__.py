@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from sdm_connectors._version import __version__
-from sdm_connectors.backends import connect
 from sdm_connectors.reader import read, read_table
 from sdm_connectors.source import (
     DatabricksSource,
@@ -32,7 +31,6 @@ __all__ = [
     'SnowflakeSource',
     'Source',
     '__version__',
-    'connect',
     'quote_ident',
     'read',
     'read_table',

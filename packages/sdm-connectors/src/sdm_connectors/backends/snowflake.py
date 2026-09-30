@@ -7,7 +7,6 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Any, TypeAlias
 
-from sdm_connectors.backends import mark_owned
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -120,13 +119,10 @@ def connect(
                     code='INVALID_CONNECTOR_ARGS',
                     details={'arguments': sorted(kwargs)},
                 )
-            mark_owned(borrowed, False)
             return borrowed
         if not kwargs:
             return _connect_without_arguments()
-    connection = snowflake_connector.connect(**kwargs)
-    mark_owned(connection, True)
-    return connection
+    return snowflake_connector.connect(**kwargs)
 
 
 def _connect_without_arguments() -> Connection:
@@ -148,5 +144,4 @@ def _connect_without_arguments() -> Connection:
             code='CONNECT_FAILED',
             details={'driver_error': type(error).__name__},
         ) from error
-    mark_owned(connection, True)
     return connection

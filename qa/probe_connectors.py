@@ -14,11 +14,13 @@ import os
 import pathlib
 import sqlite3
 
+import adbc_driver_sqlite.dbapi
 import data
+import duckdb
 import pandas as pd
 from harness import TABULAR, fail, note, probe, save
 from sdm_client import KumoTabular, Request, SDMClient
-from sdm_connectors import ConnectorError, connect, read, read_table
+from sdm_connectors import ConnectorError, read, read_table
 
 AREA = 'connectors'
 SCRATCH = pathlib.Path.home() / 'sdm-qa' / 'scratch'
@@ -34,6 +36,12 @@ def scores(
         Request(context=context, predict=predict, target=target, task=task),
         model=KumoTabular(),
     ).to_pandas()
+
+
+def northwind():
+    # Read-only, so a missing file is an error rather than a new empty database.
+    path = data.DATA / 'northwind.sqlite'
+    return adbc_driver_sqlite.dbapi.connect(f'file:{path}?mode=ro')
 
 
 def run(client):
@@ -111,9 +119,7 @@ def run(client):
     with probe(
         AREA, 'sqlite, a real database', 'a query returns a frame that predicts'
     ) as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         frame = read_table(connection, query='select * from Orders limit 400')
         if len(frame) != 400:
             fail(e, f'{len(frame)} rows')
@@ -126,9 +132,7 @@ def run(client):
     with probe(
         AREA, 'sqlite, a table name with a space', 'quoted, not split into two'
     ) as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         frame = read_table(
             connection, query='select * from "Order Details" limit 50'
         )
@@ -145,7 +149,7 @@ def run(client):
         with sqlite3.connect(path) as raw:
             raw.execute('create table "odd""name" (a integer)')
             raw.execute('insert into "odd""name" values (1), (2)')
-        connection = connect('sqlite', database=str(path))
+        connection = adbc_driver_sqlite.dbapi.connect(str(path))
         try:
             read_table(connection, table='odd"name')
             fail(e, 'a quoted identifier was interpolated into SQL')
@@ -165,7 +169,7 @@ def run(client):
         with sqlite3.connect(path) as raw:
             raw.execute('create table keep (a integer)')
             raw.execute('insert into keep values (1)')
-        connection = connect('sqlite', database=str(path))
+        connection = adbc_driver_sqlite.dbapi.connect(str(path))
         try:
             read_table(connection, table='keep; drop table keep')
             fail(e, 'a second statement was allowed through a table name')
@@ -181,9 +185,7 @@ def run(client):
     with probe(
         AREA, 'sqlite, round trip into a prediction', 'warehouse data scores'
     ) as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         frame = read_table(
             connection,
             query='select ProductID, UnitPrice, '
@@ -200,7 +202,7 @@ def run(client):
         AREA, 'duckdb, a query over a parquet file', 'the frame predicts'
     ) as e:
         path = SCRATCH / 'adult.parquet'
-        connection = connect('duckdb')
+        connection = duckdb.connect()
         frame = read_table(
             connection,
             query=(
@@ -216,7 +218,7 @@ def run(client):
     with probe(
         AREA, 'duckdb, an in-memory table', 'a registered relation is readable'
     ) as e:
-        connection = connect('duckdb')
+        connection = duckdb.connect()
         connection.execute('create table t as select 1 a union all select 2')
         frame = read_table(connection, table='t')
         if len(frame) != 2:
@@ -227,7 +229,7 @@ def run(client):
         'duckdb, a syntax error',
         'a ConnectorError, not a raw driver error',
     ) as e:
-        connection = connect('duckdb')
+        connection = duckdb.connect()
         try:
             read_table(connection, query='select * from')
             fail(e, 'invalid SQL was accepted')
@@ -237,34 +239,19 @@ def run(client):
             if not isinstance(exc, ConnectorError):
                 fail(e, f'{kind} escaped the connector error surface')
 
-    with probe(
-        AREA,
-        'a backend that is not installed',
-        'a MissingBackendError naming the extra',
-    ) as e:
-        try:
-            connect('not-a-backend')
-            fail(e, 'an unknown backend was accepted')
-        except ConnectorError as exc:
-            note(e, str(exc)[:140])
-
     # --- limit and pushdown -------------------------------------------------
     with probe(
         AREA,
         'limit is applied by the warehouse, not after the fact',
         'exactly the asked rows',
     ) as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         frame = read_table(connection, query='select * from Orders limit 7')
         if len(frame) != 7:
             fail(e, f'{len(frame)} rows for limit=7')
 
     with probe(AREA, 'a negative limit', 'refused, not silently reversed') as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         try:
             frame = read_table(
                 connection, query='select * from Orders limit -5'
@@ -274,9 +261,7 @@ def run(client):
             note(e, f'{type(exc).__name__}: {str(exc)[:120]}')
 
     with probe(AREA, 'both a query and a table', 'refused as ambiguous') as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         try:
             read_table(connection, query='select 1', table='Orders')
             fail(e, 'both were accepted')
@@ -286,9 +271,7 @@ def run(client):
     with probe(
         AREA, 'neither a query nor a table', 'refused, saying which to pass'
     ) as e:
-        connection = connect(
-            'sqlite', database=str(data.DATA / 'northwind.sqlite')
-        )
+        connection = northwind()
         try:
             read_table(connection)
             fail(e, 'neither was required')
@@ -342,13 +325,13 @@ def run_exactness(client):  # noqa: ARG001
             raw.execute('create table t (id integer, v real)')
             raw.execute(f'insert into t values ({big}, 1.0), (NULL, 2.0)')
         ok, dtype, cells = exact(
-            read_table(connect('sqlite', database=str(path)), table='t')
+            read_table(adbc_driver_sqlite.dbapi.connect(str(path)), table='t')
         )
         if not ok:
             fail(e, f'{dtype} -> {cells}')
 
     with probe(AREA, 'duckdb, a BIGINT column with a null', 'exact') as e:
-        connection = connect('duckdb')
+        connection = duckdb.connect()
         connection.execute(
             f'create table t as select * from '
             f'(values ({big}::BIGINT, 1.0), (NULL, 2.0)) t(id, v)'
@@ -358,7 +341,7 @@ def run_exactness(client):  # noqa: ARG001
             fail(e, f'{dtype} -> {cells}')
 
     with probe(AREA, 'duckdb, a SUM over a BIGINT column', 'exact') as e:
-        connection = connect('duckdb')
+        connection = duckdb.connect()
         connection.execute(
             f'create table t as select {big}::BIGINT id from range(3)'
         )

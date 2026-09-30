@@ -18,10 +18,11 @@ from typing import Any
 
 import pytest
 
-from sdm_connectors import connect, read_table
+from sdm_connectors import read_table
 from sdm_connectors.sql import ConnectorError
 
 try:
+    import psycopg
     from psycopg.pq import TransactionStatus
 except ImportError:
     if os.getenv('SDM_REQUIRE_POSTGRES'):
@@ -48,7 +49,7 @@ def postgres_dsn() -> str:
 
 @pytest.fixture
 def connection(postgres_dsn: str) -> Iterator[Any]:
-    connection = connect('postgres', postgres_dsn)
+    connection = psycopg.connect(postgres_dsn)
     try:
         yield connection
     finally:

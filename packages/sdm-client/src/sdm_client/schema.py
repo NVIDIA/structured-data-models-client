@@ -1121,7 +1121,7 @@ def _require_a_source(source: object) -> None:
         raise StructuredDataError(
             f'a schema over tables in place needs an sdm_connectors.Source, '
             f'got {type(source).__name__}. Build one from a connection: '
-            f"DatabricksSource(connect('databricks', ...), catalog=..., "
+            f'DatabricksSource(databricks.sql.connect(...), catalog=..., '
             f'schema=...), or DatabricksSource(spark, ...) in a notebook',
             code='INVALID_REQUEST',
         )

@@ -120,7 +120,7 @@ def test_a_spark_without_arrow_is_refused_up_front_with_the_way_out(
     message = str(err.value)
     assert 'Spark 3.5.2' in message
     assert '17.3' in message
-    assert "connect('databricks'" in message
+    assert 'databricks.sql.connect' in message
     assert err.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
