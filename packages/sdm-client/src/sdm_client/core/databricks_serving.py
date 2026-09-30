@@ -542,6 +542,15 @@ def _named_copy(
         return _as_given(workspace_client, timeout)
     config = workspace_client.config.copy()
     if timeout is not None:
+        # Private SDK state: a release that reshapes it must not have the
+        # bound set on the caller's own config instead.
+        if not isinstance(getattr(config, '_inner', None), dict):
+            raise StructuredDataError(
+                'timeout cannot be applied to a copy of this databricks-sdk '
+                "version's WorkspaceClient; set http_timeout_seconds and "
+                "retry_timeout_seconds on the client's own Config instead",
+                code='INVALID_CONFIGURATION',
+            )
         # copy() shares the attribute dict with the caller's config, so a
         # bound set without this would change their client too.
         config._inner = dict(config._inner)

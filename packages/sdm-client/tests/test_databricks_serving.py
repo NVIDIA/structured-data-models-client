@@ -19,6 +19,7 @@ import math
 import os
 import sys
 import time
+import types
 import warnings
 from typing import Any
 
@@ -655,6 +656,35 @@ def test_a_timeout_for_a_client_that_cannot_be_copied_is_refused(
     assert error.value.code == 'INVALID_CONFIGURATION'
     assert type(workspace).__name__ in str(error.value)
     assert 'cannot be copied' in str(error.value)
+    assert answer['headers'] == []
+
+
+def test_a_timeout_is_refused_when_the_sdk_s_config_cannot_be_copied_apart(
+    workspace_host,
+):
+    """Without its own attribute dict, the copy's bound would be set on the
+    caller's config too."""
+    sdk = pytest.importorskip('databricks.sdk')
+    host, answer = workspace_host
+    workspace = sdk.WorkspaceClient(
+        config=sdk.core.Config(host=host, token='dapi-test', auth_type='pat')
+    )
+    # A mapping that is not a dict, as a later SDK might hold its attributes.
+    object.__setattr__(
+        workspace.config,
+        '_inner',
+        types.MappingProxyType(dict(workspace.config.as_dict())),
+    )
+    before = dict(workspace.config.as_dict())
+
+    with pytest.raises(StructuredDataError) as error:
+        SDMClient.for_databricks_serving(
+            ENDPOINT, workspace_client=workspace, timeout=30
+        )
+
+    assert error.value.code == 'INVALID_CONFIGURATION'
+    assert 'databricks-sdk' in str(error.value)
+    assert dict(workspace.config.as_dict()) == before
     assert answer['headers'] == []
 
 
