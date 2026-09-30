@@ -118,9 +118,11 @@ class LocalTable(Table):
         derived: str,
         names: Sequence[str],
     ) -> None:
-        self._data[derived] = composite_key.encode_frame(
-            self._data, list(names)
-        )
+        # A new frame rather than a column added in place: a copy of this
+        # table shares its frame.
+        data = self._data.copy(deep=False)
+        data[derived] = composite_key.encode_frame(data, list(names))
+        self._data = data
         self.__dict__.pop('_source_column_dict', None)
         self.__dict__.pop('_source_sample_df', None)
         if not self.has_column(derived):

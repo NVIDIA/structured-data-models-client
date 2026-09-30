@@ -957,13 +957,10 @@ class Schema:
                 else {name: (named, None) for name, named in tables.items()},
                 infer_metadata=True,
             )
-            # The engine's own name for the table, not `source_name`, which on
-            # Databricks is qualified by catalog and schema and so is not a name
-            # the source can be asked for again under its namespace.
             chosen = (
                 dict(tables)
                 if tables is not None
-                else {name: graph[name]._source_name for name in graph.tables}
+                else {name: name for name in graph.tables}
             )
             read.keep({named: graph[name] for name, named in chosen.items()})
             if not chosen:
@@ -1268,7 +1265,7 @@ def _declared_links(
     by_source_name = {graph[name].source_name.lower(): name for name in tables}
     links = []
     for name in tables:
-        for key in graph[name]._source_foreign_key_dict.values():
+        for key in graph[name].source_foreign_keys:
             target = by_source_name.get(key.dst_table.lower())
             if target is None:
                 continue

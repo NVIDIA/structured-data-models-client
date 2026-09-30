@@ -194,6 +194,22 @@ def test_add_remove_column(sample_df: pd.DataFrame) -> None:
     assert 'user_id' in table
 
 
+def test_copy_leaves_the_original_as_it_was(sample_df: pd.DataFrame) -> None:
+    table = LocalTable(sample_df, name='users', primary_key='user_id')
+
+    copied = table.copy('people')
+    copied.primary_key = 'name'
+    copied.remove_column('is_active')
+    copied['age'].stype = Stype.categorical
+
+    assert copied.name == 'people'
+    assert table.name == 'users'
+    assert [column.name for column in table.columns] == list(sample_df)
+    assert table.primary_key is not None
+    assert table.primary_key.name == 'user_id'
+    assert table['age'].stype == Stype.numerical
+
+
 def test_metadata(sample_df: pd.DataFrame) -> None:
     table = LocalTable(sample_df, name='users').infer_metadata()
     table['name'].stype = Stype.text

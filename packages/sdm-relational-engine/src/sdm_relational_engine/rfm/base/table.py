@@ -2,6 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from functools import cached_property
@@ -139,8 +140,37 @@ class Table(ABC):
         return self._source_name
 
     @property
+    def source_foreign_keys(self) -> tuple[SourceForeignKey, ...]:
+        r"""The foreign keys the source declares on this table.
+
+        Each names its target table the way :attr:`source_name` names this
+        one, not by the name a graph gives that table.
+        """
+        return tuple(self._source_foreign_key_dict.values())
+
+    @property
     def _quoted_source_name(self) -> str:
         return quote_ident(self._source_name)
+
+    def copy(self, name: str | None = None) -> Self:
+        r"""A copy of this table, under ``name`` if given.
+
+        The copy shares what was read from the source, such as its sample
+        rows and the keys the source declares, but not what a later write
+        sets: a column, key or time column set or removed on one leaves the
+        other as it was.
+
+        Args:
+            name: The name of the copy. If set to ``None``, the copy keeps
+                this table's name.
+        """
+        copied = copy.copy(self)
+        copied._column_dict = {
+            key: copy.copy(column) for key, column in self._column_dict.items()
+        }
+        if name is not None:
+            copied._name = name
+        return copied
 
     # Column ##################################################################
 

@@ -11,7 +11,6 @@ it. Both must agree on which columns a table has and where it lives.
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -78,12 +77,7 @@ class EngineTables:
 def _copy_for_one_gather(
     table: Any, name: str, columns: Sequence[str] | None
 ) -> Any:
-    copied = copy.copy(table)
-    copied._column_dict = {
-        key: copy.copy(column) for key, column in table._column_dict.items()
-    }
-    # The engine names a table once, when it is built, and has no rename.
-    copied._name = name
+    copied = table.copy(name)
     copied.end_time_column = None
     copied.time_column = None
     copied.primary_key = None
