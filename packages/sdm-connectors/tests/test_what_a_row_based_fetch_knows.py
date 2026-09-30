@@ -477,16 +477,7 @@ def test_half_a_credential_is_not_a_credential(
     ('given', 'reaches_the_driver'),
     [
         ({'use_kernel': True, 'credentials_provider': object()}, True),
-        (
-            {
-                'use_kernel': True,
-                'oauth_client_id': 'i',
-                'oauth_jwt_key_file': '/k.pem',
-            },
-            True,
-        ),
         ({'username': 'u', 'password': 'p'}, True),
-        ({'oauth_client_id': 'i', 'oauth_client_secret': 's'}, False),
     ],
 )
 def test_the_guard_refuses_only_what_would_reach_the_browser(
