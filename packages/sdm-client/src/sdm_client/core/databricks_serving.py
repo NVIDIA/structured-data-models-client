@@ -221,6 +221,8 @@ class DatabricksServingTransport:
             )
         # The SDK's errors and its retry deadline are all OSError, as are
         # requests' own; anything else is a bug, and is not dressed as a 503.
+        # The SDK's ValueError for a failed OAuth refresh escapes too; it
+        # carries no rows.
         except OSError as error:
             raise self._error_from(error) from None
         return self._decoded(_response_body(reply, self._endpoint))
@@ -228,14 +230,15 @@ class DatabricksServingTransport:
     def _decoded(self, body: str) -> dict[str, Any]:
         try:
             # A deeply nested body raises RecursionError, which is a
-            # RuntimeError and would otherwise escape the error contract.
+            # RuntimeError and would otherwise escape the error contract. Not
+            # chained: a JSONDecodeError holds the whole body, rows and all.
             answer = json.loads(body)
-        except (ValueError, RecursionError) as error:
+        except (ValueError, RecursionError):
             raise StructuredDataError(
                 f'serving endpoint {self._endpoint!r} answered with a '
                 f'response that is not JSON',
                 code='TRANSPORT_ERROR',
-            ) from error
+            ) from None
         if not isinstance(answer, dict):
             raise StructuredDataError(
                 f'expected a JSON object from serving endpoint '
