@@ -221,6 +221,19 @@ def test_an_integer_outside_int64_is_left_to_pandas(label, values):
     assert str(frame['id'].iloc[0]) == str(values[0])
 
 
+def test_a_pandas_na_is_a_null_like_any_other():
+    frame = from_rows(id=[BIG, pd.NA, BIG + 2])
+    assert wire(frame['id']) == [str(BIG), None, str(BIG + 2)]
+
+
+def test_a_numpy_integer_with_a_null_stays_exact():
+    """A numpy scalar is an integer too, and used to round."""
+    import numpy as np
+
+    frame = from_rows(id=[np.int64(BIG), None])
+    assert wire(frame['id']) == [str(BIG), None]
+
+
 def test_an_empty_column_is_left_alone():
     frame = from_rows(id=[], v=[])
     assert len(frame) == 0
@@ -336,27 +349,9 @@ def test_a_driver_without_arrow_still_reads_integers_exactly():
     avoid, so a driver offering neither Arrow nor a pandas fetch lost the
     value before anything could check it.
     """
-    big = 9007199254740993
+    frame = from_rows(id=[BIG, None], v=[1.5, 2.5])
 
-    class Cursor:
-        description = [('id',), ('v',)]
-
-        def execute(self, sql):
-            pass
-
-        def fetchall(self):
-            return [(big, 1.5), (None, 2.5)]
-
-        def close(self):
-            pass
-
-    class Connection:
-        def cursor(self):
-            return Cursor()
-
-    frame = read_table(Connection(), query='select 1')
-
-    assert str(frame['id'].iloc[0]) == str(big)
+    assert str(frame['id'].iloc[0]) == str(BIG)
     assert list(frame.columns) == ['id', 'v']
 
 

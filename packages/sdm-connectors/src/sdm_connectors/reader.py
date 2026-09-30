@@ -260,6 +260,14 @@ def _require_local_path(path: str) -> None:
     not mean what it says.
     """
     parsed = urlparse(path)
+    # `urlparse` lowercases the scheme, so `S3://` lands here, not in S3.
+    if parsed.scheme == 's3':
+        raise ConnectorError(
+            f'read takes an S3 URI with its scheme in lowercase, s3://, got '
+            f'{path!r}',
+            code='INVALID_CONNECTOR_ARGS',
+            details={'path': path},
+        )
     if len(parsed.scheme) > 1 and parsed.scheme != 'file':
         raise ConnectorError(
             f'read takes a local path, a file: URI or an s3:// URI, got a '

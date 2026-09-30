@@ -62,18 +62,20 @@ def test_read_local_does_not_fetch_http_urls():
 
 
 @pytest.mark.parametrize(
-    'path',
+    'path, says',
     [
-        'https://example.invalid/table.csv',
-        'gs://bucket/key.csv',
-        'ftp://example.invalid/table.csv',
+        ('https://example.invalid/table.csv', 'local'),
+        ('gs://bucket/key.csv', 'local'),
+        ('ftp://example.invalid/table.csv', 'local'),
+        # Refused as S3 in the wrong case, not as a scheme read cannot take.
+        ('S3://bucket/key.csv', 'lowercase, s3://'),
     ],
 )
-def test_read_local_rejects_remote_uris(path):
+def test_read_local_rejects_remote_uris(path, says):
     with pytest.raises(ConnectorError) as excinfo:
         read(path)
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
-    assert 'local' in str(excinfo.value)
+    assert says in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
