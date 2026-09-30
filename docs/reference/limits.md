@@ -103,7 +103,6 @@ contract, so an endpoint that does not serve it gives a clear error rather than
 a wrong answer.
 
 There is more than one build of `kumo-relational`. The client declares the
-broader one — six task kinds, seven output fields. A `structured-data-models`
-backed build serves only classification and regression, and refuses the rest
-itself. The contract has no capabilities route to ask with, so declaring the
+broader one — six task kinds, seven output fields. A narrower build serves
+only classification and regression, and refuses the rest itself. The contract has no capabilities route to ask with, so declaring the
 broader set and letting the narrower build say no is the lesser of two wrongs.

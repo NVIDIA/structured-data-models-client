@@ -437,7 +437,8 @@ class SDMClient:
                 out of the pinned context before it is sent.
 
         Raises:
-            UnsupportedRequestError: If the endpoint does not serve sessions.
+            StructuredDataError: If the endpoint does not serve sessions,
+                with code ``'SESSIONS_UNSUPPORTED'``.
         """
         _require_a_request(request)
         _require_output_names(outputs)

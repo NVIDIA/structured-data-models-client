@@ -54,6 +54,17 @@ class ExplainConfig(CastMixin):
 
 @dataclass(repr=False)
 class Explanation:
+    r"""A prediction together with an account of what drove it.
+
+    Attributes:
+        prediction: The prediction this explains.
+        summary: The account in prose.
+        details: The structured attribution the summary was written
+            from, whose shape depends on the model that produced it.
+        warning: What the explanation could not establish, when
+            anything; :obj:`None` when nothing stood in the way.
+    """
+
     prediction: pd.DataFrame
     summary: str
     details: Any

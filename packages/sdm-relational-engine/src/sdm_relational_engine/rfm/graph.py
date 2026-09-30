@@ -312,16 +312,12 @@ class Graph:
         >>> df3 = pd.DataFrame(...)
 
         >>> # Define tables from data frames:
-        >>> table1 = rfm.LocalTable(name="table1", data=df1)
-        >>> table2 = rfm.LocalTable(name="table2", data=df2)
-        >>> table3 = rfm.LocalTable(name="table3", data=df3)
+        >>> table1 = rfm.LocalTable(df1, name="table1")
+        >>> table2 = rfm.LocalTable(df2, name="table2")
+        >>> table3 = rfm.LocalTable(df3, name="table3")
 
-        >>> # Create a graph from a dictionary of tables:
-        >>> graph = rfm.Graph({
-        ...     "table1": table1,
-        ...     "table2": table2,
-        ...     "table3": table3,
-        ... })
+        >>> # Create a graph from its tables:
+        >>> graph = rfm.Graph([table1, table2, table3])
 
         >>> # Infer table metadata:
         >>> graph.infer_metadata()

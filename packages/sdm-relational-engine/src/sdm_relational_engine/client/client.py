@@ -330,6 +330,12 @@ def _raise_init_error(url: str, exc: BaseException) -> NoReturn:
 
 
 class NimClient:
+    r"""Speaks the prediction contract to one endpoint.
+
+    The transport under the relational engine: it signs, sends and
+    retries requests, and raises rather than returning an error body.
+    """
+
     def __init__(
         self,
         url: str,

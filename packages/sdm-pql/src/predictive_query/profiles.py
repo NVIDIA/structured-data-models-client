@@ -17,8 +17,8 @@ aggregate across a relationship; a model without link prediction cannot rank a
 foreign key. Those are not properties of the language, and a query one model
 refuses may be perfectly good for another.
 
-The rules a capability obeys are normative and are stated in ``docs/spec.md``
-§8.1. The one that matters most: **a capability may only reject**. It can turn a
+The rules a capability obeys are normative. The one that matters most:
+**a capability may only reject**. It can turn a
 query the language accepts into one this model will not answer. It can never do
 the reverse, so the set of queries the language accepts is fixed and every model
 accepts a subset of it.

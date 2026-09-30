@@ -14,17 +14,15 @@ carries no state and no configuration -- gathering knobs live on the request,
 output fields on the call -- so constructing one is free and two of the same
 kind are interchangeable.
 
-The declarations below are **read from the deployments**, not from a design
-document: each NIM's adapter publishes its own task and output lists, and
-these mirror what the tabular and relational deployments actually answer.
-Where a source document disagreed, the servers won.
+The declarations below mirror what deployed endpoints actually answer,
+rather than what any design document says they should.
 
-**A runtime contract describes a deployment, and there is more than one.** The
-relational declaration below is the shipping kumoml-backed NIM, which serves
-six task kinds and all seven output fields. A second, structured-data-models
-backed build of the same model id serves only classification and regression,
-and produces only ``prediction``, ``probabilities`` and ``quantiles``. Asking
-that one for a forecast passes the checks here and is refused by the endpoint.
+**A runtime contract describes a deployment, and one model id may have more
+than one.** The relational declaration below is the broader of those in
+service: six task kinds and all seven output fields. A narrower build of the
+same id serves only classification and regression, and produces only
+``prediction``, ``probabilities`` and ``quantiles``. Asking that one for a
+forecast passes the checks here and is refused by the endpoint.
 
 Reading this from the endpoint instead would settle it, but the Universal TFM
 contract has no capabilities route and ``/v1/models`` returns an id and nothing

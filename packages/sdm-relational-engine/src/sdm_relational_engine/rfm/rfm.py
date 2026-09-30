@@ -999,9 +999,10 @@ class KumoRelational:
             verbose: Whether to print verbose output.
 
         Returns:
-            The predictions as a :class:`pandas.DataFrame`.
-            If ``explain`` is provided, returns an :class:`Explanation` object
-            containing the prediction, summary, and details.
+            The predictions as a :class:`pandas.DataFrame` when
+            ``explain`` is falsy, which it is by default. Otherwise an
+            :class:`Explanation`, carrying that frame together with a
+            summary and its details.
         """
         query_def = self._parse_query(query)
 
@@ -1659,9 +1660,10 @@ class KumoRelational:
                 context.
 
         Returns:
-            The predictions as a :class:`pandas.DataFrame`.
-            If ``explain`` is provided, returns an :class:`Explanation` object
-            containing the prediction, summary, and details.
+            The predictions as a :class:`pandas.DataFrame` when
+            ``explain`` is falsy, which it is by default. Otherwise an
+            :class:`Explanation`, carrying that frame together with a
+            summary and its details.
         """
         run_mode, num_neighbors, inference_config = (
             self._resolve_task_request_options(

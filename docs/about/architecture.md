@@ -358,17 +358,16 @@ capabilities, and this mirrors what they answer:
 | `embeddings` | ✅ | ❌ |
 | `explanation` | ✅ | ❌ |
 
-> **The source doc's matrix is wrong here.** It lists `scores` as tabular-only and not supported by
-> the relational model. The relational adapter advertises `scores` and returns it; the tabular adapter
-> advertises only `prediction`, `probabilities`, `quantiles`. We follow the servers. Phase 6 pins this
-> against the live NIMs, and `ModelSpec.runtime` is corrected to whatever they answer.
+> **Read from the servers, not from a specification.** The relational adapter advertises `scores`
+> and returns it; the tabular adapter advertises only `prediction`, `probabilities` and
+> `quantiles`. Where a written matrix disagreed with a running endpoint, the endpoint won, and
+> `ModelSpec.runtime` records what it answered.
 
 Asking a model for a field it does not produce fails client-side, naming what it does produce.
 
-> **A second relational build serves less.** The table above is the shipping
-> kumoml-backed NIM. A `structured-data-models`-backed build of the same model id serves
-> only classification and regression, and produces only `prediction`, `probabilities` and
-> `quantiles`. The client declares the broader one, because the contract has no
+> **A second relational build serves less.** The table above is the broader build. A narrower
+> build of the same model id serves only classification and regression, and produces only
+> `prediction`, `probabilities` and `quantiles`. The client declares the broader one, because the contract has no
 > capabilities route to ask with — `/v1/models` returns an id and nothing else — and
 > refusing locally what one deployment can answer would be worse than letting the other
 > say no. Discovered by running against both.

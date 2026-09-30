@@ -68,6 +68,12 @@ INTERNAL_PATTERNS = (
     # ships either way.
     re.compile(r'\btfm-serving\b', re.IGNORECASE),
     re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
+    # Internal build names for the servers behind a model id. A reader
+    # cannot look either up, and which build answers is not the client
+    # story. The public client repository's own name is spelled
+    # ``structured-data-models-client``, so it has to be excluded here.
+    re.compile(r'\bkumoml', re.IGNORECASE),
+    re.compile(r'\bstructured-data-models\b(?!-client)', re.IGNORECASE),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has
