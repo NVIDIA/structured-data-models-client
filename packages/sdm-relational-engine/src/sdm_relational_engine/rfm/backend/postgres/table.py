@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 from predictive_query.schema.typing import Dtype, Stype
 from sdm_connectors import quote_ident
+from sdm_connectors.backends.postgres import own_transaction
 
 from sdm_relational_engine.rfm.backend.postgres import Connection
 from sdm_relational_engine.rfm.base import (
@@ -34,12 +35,8 @@ def _reading(connection: Connection) -> Iterator[Any]:
     locks, open until a commit, and one failed statement then refuses every
     later one. Inside a transaction the caller opened, this is a savepoint.
     """
-    if connection.autocommit:
-        with connection.cursor() as cursor:
-            yield cursor
-    else:
-        with connection.transaction(), connection.cursor() as cursor:
-            yield cursor
+    with own_transaction(connection), connection.cursor() as cursor:
+        yield cursor
 
 
 def _frame(cursor: Any) -> pd.DataFrame:

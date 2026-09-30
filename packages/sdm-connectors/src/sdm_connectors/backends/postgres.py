@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import AbstractContextManager, nullcontext
 from typing import Any, TypeAlias
 
 from sdm_connectors.sql import (
@@ -149,3 +150,14 @@ def connect(
     if conninfo:
         return psycopg.connect(conninfo, **kwargs)
     return psycopg.connect(**kwargs)
+
+
+def own_transaction(connection: Connection) -> AbstractContextManager[Any]:
+    r"""The transaction one read on ``connection`` runs in: none under
+    autocommit, and a savepoint inside a transaction the caller opened.
+    """
+    # Otherwise psycopg holds the read's transaction, and its locks, until a
+    # commit, and one failed statement refuses every later one.
+    if connection.autocommit:
+        return nullcontext()
+    return connection.transaction()

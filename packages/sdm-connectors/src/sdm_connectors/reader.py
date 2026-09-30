@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping, Sequence
-from contextlib import suppress
+from contextlib import AbstractContextManager, nullcontext, suppress
 from numbers import Integral
 from pathlib import PurePosixPath
 from typing import Any
@@ -173,7 +173,10 @@ def read_table(
             ``QUERY_FAILED`` if the statement does not execute.
     """
     sql = resolve_sql(table=table, query=query)
-    with driver_guard('QUERY_FAILED', 'query execution failed', sql=sql):
+    with (
+        driver_guard('QUERY_FAILED', 'query execution failed', sql=sql),
+        _own_transaction(connection),
+    ):
         cursor, owned = _query_handle(connection)
         try:
             cursor.execute(sql)
@@ -205,6 +208,16 @@ def read_table(
             if owned:
                 with suppress(Exception):
                     cursor.close()
+
+
+def _own_transaction(connection: Any) -> AbstractContextManager[Any]:
+    r"""The transaction one read runs in, which only psycopg needs."""
+    # By module name, so reading through any other driver imports no psycopg.
+    if type(connection).__module__.partition('.')[0] != 'psycopg':
+        return nullcontext()
+    from sdm_connectors.backends.postgres import own_transaction
+
+    return own_transaction(connection)
 
 
 def _arrow_to_pandas(arrow_table: Any) -> pd.DataFrame:

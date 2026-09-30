@@ -102,6 +102,12 @@ The first release is being assembled. Nothing here has shipped yet.
   until a commit, so a graph kept writers to its tables waiting, and one failed
   read made every later one fail too. Each read of the Postgres backend now
   ends its own transaction, and the Lakebase notebook connects with autocommit.
+- **`read_table` over a psycopg connection left it idle in transaction.** The
+  connector's reader ran its query in the transaction psycopg opened for it and
+  never ended that, so the caller's connection held its locks, and after one
+  failed read refused every later statement. A read now ends its own
+  transaction, or a savepoint inside one the caller opened, exactly as the
+  engine's Postgres backend does.
 - **A keyless Postgres table with a json or xml column failed to sample.**
   The tie-break that orders a keyless table on every scalar column included
   json and xml, which Postgres reads as strings but cannot order, so the whole
