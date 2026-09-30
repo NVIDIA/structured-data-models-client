@@ -286,8 +286,9 @@ class SDMClient:
             workspace_client: A ``databricks.sdk.WorkspaceClient`` to call
                 through, for a workspace or credential other than the ambient
                 one. Build it with the ``Config`` you need, timeouts included.
-                Calls go through a copy of it that names sdm-client in the
-                User-Agent, so the client passed is not changed.
+                A ``WorkspaceClient`` itself is called through a copy that
+                names sdm-client in the User-Agent, so it is not changed; a
+                subclass or test double is used as given, without the name.
             timeout: Seconds one attempt may take, and the longest the SDK
                 keeps retrying; 300 when omitted. Far above a NIM's default,
                 because a serving endpoint that has scaled to zero takes

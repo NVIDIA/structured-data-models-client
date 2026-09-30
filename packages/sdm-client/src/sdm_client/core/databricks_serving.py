@@ -110,8 +110,9 @@ class DatabricksServingTransport:
         workspace_client: A ``databricks.sdk.WorkspaceClient`` to call through.
             When omitted one is built from the ambient configuration, which is
             how a notebook authenticates without handling a token. Either
-            way, its requests name sdm-client in the User-Agent; a passed
-            client is copied for that, not changed.
+            way, its requests name sdm-client in the User-Agent. A passed
+            ``WorkspaceClient`` itself is copied for that, not changed; a
+            subclass or test double is used as given, without the name.
         timeout: Seconds one attempt may take, and the longest the SDK keeps
             retrying; 300 when omitted. Only for a workspace client built
             here: an injected one keeps its own configuration, so passing both
@@ -537,6 +538,11 @@ def _named_copy(workspace_client: Any, user_agent: tuple[str, str]) -> Any:
     except ImportError:
         return workspace_client
     if type(workspace_client) is not WorkspaceClient:
+        logger.debug(
+            'workspace_client is a %s, not a WorkspaceClient; its requests '
+            'are sent as given, without the sdm-client User-Agent entry',
+            type(workspace_client).__name__,
+        )
         return workspace_client
     config = workspace_client.config.copy().with_user_agent_extra(*user_agent)
     return WorkspaceClient(config=config)

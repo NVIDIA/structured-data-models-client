@@ -443,9 +443,15 @@ def test_the_size_counted_is_the_wrapped_envelope_not_the_payload():
 
 
 @pytest.fixture
-def workspace_host() -> Any:
+def workspace_host(monkeypatch: pytest.MonkeyPatch) -> Any:
     """A local stand-in for a workspace; set ``answer`` to choose its reply."""
     import threading
+
+    # A proxied runner would otherwise send these local requests to its proxy.
+    for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('NO_PROXY', '127.0.0.1')
+    monkeypatch.setenv('no_proxy', '127.0.0.1')
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
     answer: dict[str, Any] = {
@@ -472,6 +478,7 @@ def workspace_host() -> Any:
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f'http://127.0.0.1:{server.server_port}', answer
     server.shutdown()
+    server.server_close()
 
 
 @pytest.mark.parametrize(
