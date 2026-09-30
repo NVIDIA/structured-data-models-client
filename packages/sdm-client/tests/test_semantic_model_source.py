@@ -273,3 +273,30 @@ def test_the_graph_sampled_is_the_model_cut_to_the_schema(
     assert {(e.src_table, e.fkey, e.dst_table) for e in graph.edges} == {
         ('lines', 'customer_id', 'buyers')
     }
+
+
+def test_a_schema_built_by_hand_reads_the_model_it_names(source: Any) -> None:
+    described = _schema(source)
+    by_hand = Schema(
+        {
+            name: SourceTable(
+                name,
+                table.source_name,
+                dict(table.columns),
+                primary_key=table.primary_key,
+                time_column=table.time_column,
+            )
+            for name, table in described.tables.items()
+        },
+        described.relationships,
+        source=described.source,
+    )
+
+    def shape(schema: Schema) -> Any:
+        graph = RelationalMaterializer(schema)._build_graph()
+        return (
+            {name: list(graph[name].columns) for name in graph.tables},
+            {(e.src_table, e.fkey, e.dst_table) for e in graph.edges},
+        )
+
+    assert shape(by_hand) == shape(described)

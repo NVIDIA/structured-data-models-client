@@ -950,18 +950,20 @@ class Schema:
             }
             declared = _model_links(graph, built, as_named)
         else:
-            graph = engine_graph(source, tables, infer_metadata=True)
+            try:
+                graph = engine_graph(source, tables, infer_metadata=True)
+            except ValueError as error:
+                # The engine's refusal of a missing table, or of a namespace
+                # with none, reaches a caller who catches this client's errors.
+                raise StructuredDataError(
+                    str(error), code='INVALID_REQUEST'
+                ) from error
             chosen = (
                 dict(tables)
                 if tables is not None
                 else {name: name for name in graph.tables}
             )
             read.keep({named: graph[name] for name, named in chosen.items()})
-            if not chosen:
-                raise StructuredDataError(
-                    f'{source!r} holds no table to describe',
-                    code='INVALID_REQUEST',
-                )
             built = {
                 name: _describe_source_table(graph[name], named)
                 for name, named in chosen.items()

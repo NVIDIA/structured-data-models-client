@@ -151,7 +151,7 @@ def postgres_source(postgres: Any) -> Any:
     return PostgresSource(connection, schema=namespace)
 
 
-@pytest.fixture(params=['duckdb', 'sqlite'])
+@pytest.fixture(params=['duckdb', 'sqlite', 'postgres'])
 def source(request: pytest.FixtureRequest) -> Any:
     return request.getfixturevalue(f'{request.param}_source')
 
@@ -170,6 +170,24 @@ def _payload(schema: Any, seed: int = 7) -> dict[str, Any]:
         )
     (payload,) = request._payloads
     return json.loads(json.dumps(payload, default=str))
+
+
+def _by_hand(described: Schema, source: Any, **source_names: str) -> Schema:
+    r"""``described`` rebuilt from its parts, so nothing it read is kept."""
+    return Schema(
+        {
+            name: SourceTable(
+                name,
+                source_names.get(name, table.source_name),
+                dict(table.columns),
+                primary_key=table.primary_key,
+                time_column=table.time_column,
+            )
+            for name, table in described.tables.items()
+        },
+        described.relationships,
+        source=source,
+    )
 
 
 def test_the_tables_are_described_without_being_read(source: Any) -> None:
@@ -237,6 +255,24 @@ def test_a_scored_entity_sees_the_history_it_would_in_memory(
         in_place['predict']['instance_table']
         == in_memory['predict']['instance_table']
     )
+
+
+def test_a_schema_built_by_hand_asks_what_from_source_asks(
+    source: Any,
+) -> None:
+    described = _schema(source)
+    by_hand, read = (_payload(_by_hand(described, source)), _payload(described))
+
+    if source.backend == 'sqlite':
+        # SQLite cannot seed the context's draw, so only its shape compares.
+        for payload in (by_hand, read):
+            context = payload['context']
+            for table in (
+                context['instance_table'],
+                *context['related_tables'].values(),
+            ):
+                del table['rows']
+    assert by_hand == read
 
 
 _KEYED = (
@@ -362,9 +398,36 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
         ),
         (lambda source: Schema.from_source(source, {}), 'leave tables out'),
         (
+            lambda source: Schema.from_source(source, {'': 'app_users'}),
+            'non-empty strings',
+        ),
+        (
+            lambda source: Schema.from_source(source, {'users': 3}),
+            'map to its name',
+        ),
+        (
+            lambda source: Schema.from_source(source, {'users': 'nope'}),
+            'does not exist',
+        ),
+        (
+            lambda source: _payload(
+                _by_hand(_schema(source), source, orders='nope')
+            ),
+            'does not exist',
+        ),
+        (
             lambda source: _schema(source, time_columns={'order': 'ts'}),
             "no table 'order'",
         ),
+        (
+            lambda source: _schema(source, relationships=['x']),
+            'must be a Relationship',
+        ),
+        (
+            lambda source: Schema.from_source(DuckDBSource(connect('duckdb'))),
+            'No tables found',
+        ),
+        (lambda source: SourceTable('t', '', {}), 'needs the name it has'),
         (
             lambda source: Schema(
                 {
@@ -389,7 +452,14 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
     ids=[
         'a connection',
         'no tables',
+        'an empty name',
+        'a name mapped to no name',
+        'a missing table',
+        'a missing table built by hand',
         'an unknown override',
+        'a relationship that is not one',
+        'an empty source',
+        'a table without its source name',
         'frames and tables in place',
         'tables in place without their source',
         'frames with a source',
