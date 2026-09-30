@@ -55,9 +55,11 @@ def test_invalid_table_identifier_is_not_rewrapped(sqlite_connection):
     assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
 
 
-def test_local_missing_file_maps_to_not_found(tmp_path):
+@pytest.mark.parametrize('as_uri', [False, True], ids=['path', 'file-uri'])
+def test_local_missing_file_maps_to_not_found(tmp_path, as_uri):
+    absent = tmp_path / 'absent.csv'
     with pytest.raises(ConnectorError) as excinfo:
-        read(str(tmp_path / 'absent.csv'))
+        read(absent.as_uri() if as_uri else str(absent))
     assert excinfo.value.code == 'NOT_FOUND'
     assert isinstance(excinfo.value.__cause__, FileNotFoundError)
 

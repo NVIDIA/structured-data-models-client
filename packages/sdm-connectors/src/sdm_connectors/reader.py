@@ -91,6 +91,11 @@ def read(
             code='INVALID_CONNECTOR_ARGS',
             details={'path': path},
         )
+    parsed = urlparse(path)
+    if parsed.scheme == 'file':
+        # Read as the path it names: through urllib a missing file is a
+        # URLError, not the FileNotFoundError a plain path gives.
+        path = url2pathname(parsed.path)
     return _read_file(path, format=format)
 
 
@@ -420,7 +425,8 @@ def _frame_by_position(
     )
     frame = pd.DataFrame(built, columns=list(range(len(columns))))
     frame.columns = pd.Index(columns)
-    return frame
+    # A null-free integer column is `int64`, as it is through Arrow.
+    return _narrow_nullable_dtypes(frame)
 
 
 def _integer_columns_exactly(data: Any) -> Any:

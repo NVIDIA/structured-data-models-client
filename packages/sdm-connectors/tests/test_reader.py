@@ -179,6 +179,27 @@ def test_read_table_over_duckdb_by_table(tmp_path):
         connection.close()
 
 
+def test_an_integer_column_has_one_dtype_however_it_is_fetched():
+    """Plain rows (sqlite3) and Arrow (DuckDB) give the same dtypes: `int64`
+    without a null, `Int64` with one."""
+    duckdb = pytest.importorskip('duckdb')
+    by_rows = sqlite3.connect(':memory:')
+    by_rows.execute('CREATE TABLE t (a INTEGER, b INTEGER)')
+    by_rows.execute('INSERT INTO t VALUES (1, 1), (2, NULL)')
+    by_arrow = duckdb.connect()
+    by_arrow.execute('CREATE TABLE t (a BIGINT, b BIGINT)')
+    by_arrow.execute('INSERT INTO t VALUES (1, 1), (2, NULL)')
+    try:
+        rows = read_table(by_rows, table='t')
+        arrow = read_table(by_arrow, table='t')
+    finally:
+        by_rows.close()
+        by_arrow.close()
+
+    assert [str(dtype) for dtype in rows.dtypes] == ['int64', 'Int64']
+    assert rows.dtypes.equals(arrow.dtypes)
+
+
 def test_read_table_over_sqlite_keeps_nullable_integers_exact(tmp_path):
     database = str(tmp_path / 'ids.sqlite')
     with sqlite3.connect(database) as connection:

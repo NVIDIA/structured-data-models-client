@@ -329,10 +329,11 @@ connectors prefer, because it is the path that keeps a wide integer exact -- a
 to the model. It is now named the same way on both paths.
 
 **A CSV column with blanks keeps its type instead of becoming `float64`.**
-`read_table` on a local CSV now reads through pandas' nullable dtypes, so an
+`read` on a local CSV now reads through pandas' nullable dtypes, so an
 integer column containing a blank comes back `Int64` rather than being promoted
 to `float64` and losing exactness past 2**53. Columns with no nulls are
-narrowed back to the plain numpy dtypes, so the common case is unchanged, but a
+narrowed back to the plain numpy dtypes, as `read_table` does whether a driver
+returns Arrow or plain rows, so the common case is unchanged, but a
 column **with** nulls now arrives as `Int64`, `string` or `boolean` where it
 previously arrived as `float64` or `object`. Code that tests `frame.dtypes`
 against numpy types for such a column will see the difference.
