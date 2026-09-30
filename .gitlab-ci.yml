@@ -76,8 +76,8 @@ test:
   script:
     # databricks is here for its driver, not for a server: those tests mock the
     # connection. Without the drivers, importing the backend raises and every
-    # test that covers them skips, including the one holding the partner
-    # attribution Databricks requires.
+    # test that covers them skips, including the one that keeps the partner
+    # tag off sampling connections.
     - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
     # ruff is here for tests/, not for linting: the test that checks the
     # engine's ignore-list note shells out to ruff and skips without it,

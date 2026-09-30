@@ -8,12 +8,6 @@ import inspect
 import os
 from typing import Any, TypeAlias
 
-from sdm_connectors._databricks_telemetry import (
-    DatabricksTelemetryVersionError,
-    DatabricksUserAgentEntryError,
-    databricks_user_agent,
-)
-from sdm_connectors._version import __version__
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -105,6 +99,9 @@ def connect(
     ``DATABRICKS_SCHEMA``, which decide which table a bare name resolves to.
     Passing one explicitly as ``None`` says to leave it to the workspace
     rather than to the shell.
+
+    The connection carries no partner tag of its own: sdm-client names itself
+    on prediction requests only, never on the queries that sample a warehouse.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)
@@ -113,24 +110,40 @@ def connect(
         if arg not in given and arg not in kwargs:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
-    # Databricks requires a partner product to identify every connection it
-    # creates. Set after the caller's options are merged, so a connection we
-    # own cannot quietly lose the attribution, and any tag the caller supplied
-    # is kept after the required identifier rather than replaced.
-    try:
-        kwargs['user_agent_entry'] = databricks_user_agent(
-            __version__, kwargs.get('user_agent_entry')
-        )
-    except DatabricksTelemetryVersionError as error:
-        raise ConnectorError(
-            f'installed version {__version__!r} cannot be expressed as the '
-            f'Databricks telemetry version: {error}',
-            code='INVALID_CONNECTOR_ARGS',
-            details={'package_version': __version__},
-        ) from error
-    except (DatabricksUserAgentEntryError, TypeError) as error:
-        raise ConnectorError(
-            f'invalid Databricks user_agent_entry: {error}',
-            code='INVALID_CONNECTOR_ARGS',
-        ) from error
+    if 'user_agent_entry' in kwargs:
+        _check_user_agent_entry(kwargs['user_agent_entry'])
     return databricks_sql.connect(**kwargs)
+
+
+def _check_user_agent_entry(entry: object) -> None:
+    r"""Refuse a ``user_agent_entry`` that no HTTP header can carry.
+
+    The driver sends it as is, and a bad one fails inside the HTTP layer at
+    send time, where it reads as a network problem rather than a typo.
+    """
+    if not isinstance(entry, str):
+        refusal = 'must be a string'
+    elif not entry.strip():
+        refusal = 'must contain a visible character'
+    elif any(
+        ord(character) < 32 or ord(character) == 127 for character in entry
+    ):
+        refusal = 'must not contain control characters'
+    elif not _latin_1(entry):
+        refusal = (
+            'must be latin-1 encodable, since it is sent as an HTTP header'
+        )
+    else:
+        return
+    raise ConnectorError(
+        f'invalid Databricks user_agent_entry: it {refusal}',
+        code='INVALID_CONNECTOR_ARGS',
+    )
+
+
+def _latin_1(text: str) -> bool:
+    try:
+        text.encode('latin-1')
+    except UnicodeEncodeError:
+        return False
+    return True

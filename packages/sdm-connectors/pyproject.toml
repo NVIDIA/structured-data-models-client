@@ -51,8 +51,8 @@ snowflake = [
 ]
 databricks = [
     # 4.0.1 is the first release that reads `user_agent_entry`. Earlier ones
-    # read `_user_agent_entry` only, so the partner attribution this connector
-    # is required to send would be accepted and silently dropped.
+    # read `_user_agent_entry` only, so a caller's would be accepted and
+    # silently dropped.
     "databricks-sql-connector>=4.0.1",
     # A metric view's definition is YAML, and reading one fails without a
     # parser. Databricks Runtime 14.3 LTS ships none, so the client's

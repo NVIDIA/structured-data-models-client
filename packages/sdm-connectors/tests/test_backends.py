@@ -91,9 +91,6 @@ def test_databricks_driver_options_bypass_the_allow_list(monkeypatch):
 
     backend.connect(catalog='c', driver_options={'use_cloud_fetch': True})
 
-    # The partner attribution is added to every connection this package owns,
-    # so it is expected here alongside what the caller asked for.
-    assert seen.pop('user_agent_entry') == 'nvidia_sdm-client/1.0.0'
     assert seen == {'catalog': 'c', 'use_cloud_fetch': True}
 
 
@@ -467,108 +464,57 @@ def test_postgres_reads_the_standard_environment_variables(monkeypatch):
     assert captured['dbname'] == 'explicit', 'an argument must win over PG*'
 
 
-# --- Databricks partner attribution -----------------------------------------
+# --- Databricks user agent ---------------------------------------------------
 
 
-def test_a_databricks_connection_carries_the_partner_attribution():
-    """Databricks requires a partner product to identify every connection."""
+def _captured_databricks_connect(**kwargs):
+    """What `databricks.sql.connect` is handed for a connection opened with
+    ``kwargs``."""
     from unittest import mock
 
     databricks = pytest.importorskip('sdm_connectors.backends.databricks')
 
     captured: dict = {}
 
-    def _fake_connect(**kwargs):
-        captured.update(kwargs)
-        return object()
-
-    with mock.patch.object(databricks.databricks_sql, 'connect', _fake_connect):
-        databricks.connect(server_hostname='h', http_path='p', access_token='t')
-    assert captured['user_agent_entry'] == 'nvidia_sdm-client/1.0.0'
-
-
-def test_a_caller_tag_is_kept_after_the_required_identifier():
-    """Set after the caller's options are merged, so a connection we own
-    cannot lose the attribution, and the caller's tag is not replaced."""
-    from unittest import mock
-
-    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
-
-    captured: dict = {}
-
-    def _fake_connect(**kwargs):
-        captured.update(kwargs)
+    def _fake_connect(**given):
+        captured.update(given)
         return object()
 
     with mock.patch.object(databricks.databricks_sql, 'connect', _fake_connect):
         databricks.connect(
-            server_hostname='h',
-            http_path='p',
-            access_token='t',
-            user_agent_entry='acme/2.1',
+            server_hostname='h', http_path='p', access_token='t', **kwargs
         )
-    assert captured['user_agent_entry'] == 'nvidia_sdm-client/1.0.0 acme/2.1'
+    return captured
 
 
-def test_an_unsendable_user_agent_entry_is_an_argument_error():
-    """A control character in a header is the caller's mistake, and reporting
-    it as a connection failure sends them to look at the network."""
-    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+def test_a_sampling_connection_carries_no_partner_tag():
+    """sdm-client names itself on prediction requests only, so a query that
+    samples a warehouse does not claim to be one."""
+    assert 'user_agent_entry' not in _captured_databricks_connect()
 
-    with pytest.raises(ConnectorError) as error:
-        databricks.connect(
-            server_hostname='h',
-            http_path='p',
-            access_token='t',
-            user_agent_entry='bad\x01entry',
-        )
-    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
+
+def test_a_caller_s_own_user_agent_entry_is_passed_through_alone():
+    captured = _captured_databricks_connect(user_agent_entry='acme/2.1')
+
+    assert captured['user_agent_entry'] == 'acme/2.1'
+
+
+def test_a_latin_1_user_agent_entry_is_kept():
+    """Refusing what a header cannot carry must not refuse what it can."""
+    captured = _captured_databricks_connect(user_agent_entry='café/1.0')
+
+    assert captured['user_agent_entry'] == 'café/1.0'
 
 
 @pytest.mark.parametrize(
-    ('package_version', 'expected'),
-    [
-        ('1.0.0', '1.0.0'),
-        ('1.2.3', '1.2.3'),
-        ('1.0.0a1', '1.0.0-alpha.1'),
-        ('1.0.0rc2', '1.0.0-rc.2'),
-        ('1.0.0.dev3', '1.0.0-dev.3'),
-        ('1.0.0.post1', '1.0.0+post.1'),
-    ],
+    'entry',
+    ['bad\x01entry', 'acme/☃', '   ', 42],
+    ids=['control-character', 'not-latin-1', 'blank', 'not-a-string'],
 )
-def test_a_python_version_is_translated_to_the_semver_databricks_takes(
-    package_version, expected
-):
-    from sdm_connectors._databricks_telemetry import databricks_product_version
-
-    assert databricks_product_version(package_version) == expected
-
-
-def test_a_version_that_cannot_be_expressed_is_refused_not_invented():
-    """An invented fallback would claim the wrong release."""
-    from sdm_connectors._databricks_telemetry import (
-        DatabricksTelemetryVersionError,
-        databricks_product_version,
-    )
-
-    with pytest.raises(DatabricksTelemetryVersionError):
-        databricks_product_version('1.0')
-
-
-def test_the_attribution_version_is_the_installed_one():
-    """The identifier names this SDK's release, so it has to track it."""
-    import sdm_connectors
-    from sdm_connectors._databricks_telemetry import databricks_user_agent
-
-    assert sdm_connectors.__version__ in databricks_user_agent(
-        sdm_connectors.__version__
-    )
-
-
-def test_a_user_agent_entry_a_header_cannot_carry_is_an_argument_error():
+def test_a_user_agent_entry_a_header_cannot_carry_is_an_argument_error(entry):
     """A header is latin-1 on the wire.
 
-    A character outside it raises a `UnicodeEncodeError` from inside the HTTP
+    A character outside it, or a control character, fails inside the HTTP
     layer at send time, which reads as a connection problem and sends the
     caller to look at the network for something they typed.
     """
@@ -579,19 +525,9 @@ def test_a_user_agent_entry_a_header_cannot_carry_is_an_argument_error():
             server_hostname='h',
             http_path='p',
             access_token='t',
-            user_agent_entry='acme/☃',
+            user_agent_entry=entry,
         )
     assert error.value.code == 'INVALID_CONNECTOR_ARGS'
-
-
-def test_a_latin_1_user_agent_entry_is_kept():
-    """Refusing what a header cannot carry must not refuse what it can."""
-    from sdm_connectors._databricks_telemetry import databricks_user_agent
-
-    agent = databricks_user_agent('1.0.0', 'café/1.0')
-
-    assert agent.endswith('café/1.0')
-    agent.encode('latin-1')
 
 
 def test_every_sql_backend_is_named_in_read_s_own_documentation():
