@@ -140,7 +140,6 @@ class Condition(ASTNode):
                 'the LIKE operator',
             )
 
-        # Remove the '%' to get the original value
         assert isinstance(self.value.value, str)
         new_value = self.value.value.replace('%', '')
 

@@ -610,13 +610,9 @@ class PredictiveQueryValidator:
             ValidationResponse: Errors and warnings encountered.
         """
         response = ValidationResponse()
-        # Get the entity primary key column ast
         entity_name: str = parsed_query.entity_column
 
-        # Check if the target is predicting the entity primary key column
         target_ast: ASTNode = parsed_query.target_ast
-        # Recursively loop through the syntax tree to get all the columns
-        # that equal to entity primary key column
         ast_cols = self._target_not_entity_pkey(
             target_ast,
             entity_name,
