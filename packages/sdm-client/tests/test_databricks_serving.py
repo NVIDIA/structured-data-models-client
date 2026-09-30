@@ -258,27 +258,54 @@ def test_readiness_is_the_endpoint_s_own_state():
 
 
 @pytest.mark.parametrize(
-    'said',
+    'said, code',
     [
-        'Encountered an unexpected error while evaluating the model. '
-        "Error 'INVALID_SCHEMA: the request schema is invalid'",
-        'INVALID_SCHEMA: Failed to parse input: row 3 customer_name=Jane Doe '
-        'ssn=123-45-6789',
+        (
+            'Encountered an unexpected error while evaluating the model. '
+            "Error 'INVALID_SCHEMA: the request schema is invalid'",
+            'INVALID_SCHEMA',
+        ),
+        (
+            'INVALID_SCHEMA: Failed to parse input: row 3 customer_name=Jane '
+            'Doe ssn=123-45-6789',
+            'INVALID_SCHEMA',
+        ),
+        ('BAD_REQUEST: could not parse row NVDA_SECRET: 42', 'BAD_REQUEST'),
     ],
+    ids=['quoted', 'leading', 'value-shaped-like-a-code'],
 )
-def test_the_served_model_s_code_is_repeated_and_its_text_is_not(said):
-    """A model's error text can quote the rows it was sent."""
+def test_the_served_model_s_code_is_repeated_and_its_text_is_not(said, code):
+    """A model's error text can quote the rows it was sent, and a value can
+    look like a code; only one where the model's message begins is read."""
     errors = pytest.importorskip('databricks.sdk.errors')
     client, _ = opened(raiser=errors.BadRequest(said, error_code='BAD_REQUEST'))
     with pytest.raises(NimRequestError) as error:
         client.predict(asked(), model='kumo-tabular')
     assert error.value.status_code == 400
-    assert error.value.code == 'INVALID_SCHEMA'
+    assert error.value.code == code
     assert error.value.details['provider_code'] == 'BAD_REQUEST'
     shown = str(error.value) + json.dumps(error.value.details)
     assert ENDPOINT in shown
-    for detail in ('schema is invalid', 'Jane', '123-45'):
+    for detail in ('schema is invalid', 'Jane', '123-45', 'NVDA_SECRET'):
         assert detail not in shown
+
+
+def test_a_server_error_that_is_the_caller_s_to_fix_is_reported_as_such():
+    """As from a NIM: retrying a request that can only fail the same way
+    does not help."""
+    errors = pytest.importorskip('databricks.sdk.errors')
+    refusal = errors.InternalError(
+        f'failed to collect any context examples for {SECRET}',
+        error_code='INTERNAL_ERROR',
+    )
+    client, _ = opened(raiser=refusal)
+    with pytest.raises(NimRequestError) as error:
+        client.predict(asked(), model='kumo-tabular')
+    assert error.value.status_code >= 500
+    assert error.value.code == 'INVALID_REQUEST'
+    assert error.value.details['diagnosis'] == 'EMPTY_CONTEXT'
+    assert error.value.details['endpoint_code'] == 'INTERNAL_ERROR'
+    assert SECRET not in str(error.value) + json.dumps(error.value.details)
 
 
 def test_a_gateway_failure_names_the_endpoint_and_nothing_it_said():
@@ -316,7 +343,7 @@ def test_a_bug_is_not_reported_as_the_endpoint_s_failure():
 
 
 @pytest.mark.parametrize(
-    'body, code',
+    'body, code, diagnosis',
     [
         (
             {
@@ -325,8 +352,9 @@ def test_a_bug_is_not_reported_as_the_endpoint_s_failure():
                 'detail': f'the requested task is not supported for {SECRET}',
             },
             'UNSUPPORTED_TASK',
+            None,
         ),
-        ({'status': 500, 'title': f'the model failed on {SECRET}'}, None),
+        ({'status': 500, 'title': f'the model failed on {SECRET}'}, None, None),
         (
             {
                 'status': 500,
@@ -334,12 +362,34 @@ def test_a_bug_is_not_reported_as_the_endpoint_s_failure():
                 'detail': f'INVALID_SCHEMA: could not parse row {SECRET}',
             },
             'INVALID_SCHEMA',
+            None,
+        ),
+        (
+            {
+                'status': 500,
+                'code': 'INTERNAL_ERROR',
+                'detail': 'prediction failed: failed to collect any context '
+                f'examples for {SECRET}',
+            },
+            'INVALID_REQUEST',
+            'EMPTY_CONTEXT',
+        ),
+        (
+            {'status': 500, 'detail': 'could not parse row NVDA_SECRET: 42'},
+            None,
+            None,
         ),
     ],
-    ids=['with-detail', 'title-only', 'model-diagnosis'],
+    ids=[
+        'with-detail',
+        'title-only',
+        'model-diagnosis',
+        'callers-fault',
+        'value-shaped-like-a-code',
+    ],
 )
 def test_an_error_body_in_the_response_is_an_error_named_by_its_code(
-    body, code
+    body, code, diagnosis
 ):
     """The body's text can quote the rows it was sent."""
     client, _ = opened(answer=body)
@@ -347,9 +397,11 @@ def test_an_error_body_in_the_response_is_an_error_named_by_its_code(
         client.predict(asked(), model='kumo-tabular')
     assert error.value.status_code == body['status']
     assert error.value.code == code
+    assert error.value.details.get('diagnosis') == diagnosis
     shown = str(error.value) + json.dumps(error.value.details)
     assert ENDPOINT in shown
     assert SECRET not in shown
+    assert 'NVDA_SECRET' not in shown
 
 
 def test_an_oversized_request_is_refused_before_it_is_sent():

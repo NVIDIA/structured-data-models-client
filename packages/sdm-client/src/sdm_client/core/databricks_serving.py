@@ -27,6 +27,7 @@ from typing import Any
 
 from sdm_client.core.transport import (
     _check_encodable,
+    _diagnosis_in,
     _validate_limits,
 )
 from sdm_client.errors import (
@@ -81,7 +82,10 @@ def _keep_rows_out_of_the_sdk_log() -> None:
 
 # The served model reports a failure as ``CODE: detail``. Only the code is
 # repeated: the detail is free text, and can quote the rows it was sent.
-_MODEL_DIAGNOSIS = re.compile(r'\b([A-Z][A-Z0-9_]{2,63}): \S')
+_MODEL_DIAGNOSIS = re.compile(r'([A-Z][A-Z0-9_]{2,63}): \S')
+
+# How the gateway quotes the served model's own exception inside its message.
+_QUOTED_MODEL_ERROR = "Error '"
 
 _NO_SESSIONS = (
     'a Databricks Model Serving endpoint has no sessions: it answers one '
@@ -262,9 +266,13 @@ class DatabricksServingTransport:
             else None
         )
         detail = answer.get('detail')
-        # A 5xx can be the model naming what was wrong with the request.
-        if status >= 500 and isinstance(detail, str):
-            code = _model_diagnosis(detail, code) or code
+        if status >= 500:
+            found = _diagnosis_in(detail or answer.get('title'))
+            if found is not None:
+                return self._callers_fault(status, found[1], code, None)
+            # A 5xx can be the model naming what was wrong with the request.
+            if isinstance(detail, str):
+                code = _leading_code(detail) or code
         return self._refusal(status, code, None)
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -289,9 +297,8 @@ class DatabricksServingTransport:
         status = _status_of(error)
         provider_code = _error_code_of(error)
         said = getattr(error, 'message', None)
-        code = _model_diagnosis(
-            said if isinstance(said, str) else str(error), provider_code
-        )
+        text = said if isinstance(said, str) else str(error)
+        code = _model_diagnosis(text, provider_code)
         logger.debug(
             'serving endpoint %r failed with %s (status %s, code %s)',
             self._endpoint,
@@ -299,8 +306,39 @@ class DatabricksServingTransport:
             status,
             code or provider_code,
         )
+        found = _diagnosis_in(text) if status >= 500 else None
+        if found is not None:
+            return self._callers_fault(
+                status,
+                found[1],
+                code or provider_code,
+                provider_code,
+                provider_error=type(error).__name__,
+            )
         return self._refusal(
             status, code, provider_code, provider_error=type(error).__name__
+        )
+
+    def _callers_fault(
+        self,
+        status: int,
+        diagnosis: str,
+        endpoint_code: str | None,
+        provider_code: str | None,
+        **details: Any,
+    ) -> NimRequestError:
+        r"""A failure the endpoint called its own, reported as the caller's.
+
+        As a NIM's is: retrying one that can only fail the same way does not
+        help, and what the endpoint called it is kept in ``details``.
+        """
+        return self._refusal(
+            status,
+            'INVALID_REQUEST',
+            provider_code,
+            endpoint_code=endpoint_code,
+            diagnosis=diagnosis,
+            **details,
         )
 
     def _refusal(
@@ -333,15 +371,33 @@ class DatabricksServingTransport:
         )
 
 
-def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
-    r"""The code the served model gave in ``text``, if it gave one.
+def _leading_code(text: str) -> str | None:
+    r"""The code ``text`` opens with, as ``CODE: detail``, if it does."""
+    found = _MODEL_DIAGNOSIS.match(text)
+    return found.group(1) if found else None
 
-    The provider's own code is skipped: ``BAD_REQUEST: ...`` is Databricks
+
+def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
+    r"""The code the served model opened its message with, if the SDK
+    carried one.
+
+    Read only where the model's message begins: at the start, after the
+    provider's own ``CODE: `` prefix, or inside the ``Error '...'`` the gateway
+    quotes it in. An upper-case word anywhere else can be the caller's value.
+    The provider's code is skipped: ``BAD_REQUEST: ...`` is Databricks
     describing the call, not the model describing the request.
     """
-    for match in _MODEL_DIAGNOSIS.finditer(text):
-        if match.group(1) != provider_code:
-            return match.group(1)
+    prefix = f'{provider_code}: '
+    if provider_code is not None and text.startswith(prefix):
+        text = text[len(prefix) :]
+    starts = [text]
+    quoted = text.find(_QUOTED_MODEL_ERROR)
+    if quoted >= 0:
+        starts.append(text[quoted + len(_QUOTED_MODEL_ERROR) :])
+    for start in starts:
+        code = _leading_code(start)
+        if code is not None and code != provider_code:
+            return code
     return None
 
 
