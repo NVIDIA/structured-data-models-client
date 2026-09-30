@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -285,3 +288,39 @@ def test_neighbours_come_back_in_the_order_they_were_chosen(
     order_by = sampler._neighbor_order_by('orders', refs['ts'], refs['user_id'])
     assert query.rstrip().endswith(f'ORDER BY TMP.__KUMO_BATCH__, {order_by}')
     assert all(ref in order_by for ref in refs.values())
+
+
+def test_the_session_route_needs_no_sql_connector() -> None:
+    """A notebook samples through its own session, which needs no
+    databricks-sql-connector, so every test above runs again where the
+    connector cannot be imported.
+    """
+    script = (
+        'import sys\n'
+        "sys.modules['databricks.sql'] = None\n"
+        'import pytest\n'
+        'sys.exit(pytest.main(sys.argv[1:]))\n'
+    )
+    here = Path(__file__)
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            script,
+            str(here),
+            '-q',
+            '-p',
+            'no:cacheprovider',
+            '--color=no',
+            '-k',
+            'not needs_no_sql_connector',
+        ],
+        capture_output=True,
+        text=True,
+        cwd=here.parents[3],
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert re.search(r'\b[1-9][0-9]* passed\b', output), output
+    assert 'skipped' not in output, output

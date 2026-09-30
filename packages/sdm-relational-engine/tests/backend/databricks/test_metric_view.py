@@ -1145,7 +1145,7 @@ def test_from_databricks_metric_view_tracks_internal_connection(
     # connection the client opened is a connection the client owns and closes.
     connection = _FakeConnection()
     monkeypatch.setattr(
-        'sdm_relational_engine.rfm.backend.databricks.connect',
+        'sdm_connectors.backends.databricks.connect',
         lambda **kwargs: connection,
     )
 
@@ -1173,7 +1173,7 @@ def test_from_databricks_closes_internal_connection_on_error(
     # constructed and can therefore never take ownership of it:
     connection = _FakeConnection()
     monkeypatch.setattr(
-        'sdm_relational_engine.rfm.backend.databricks.connect',
+        'sdm_connectors.backends.databricks.connect',
         lambda **kwargs: connection,
     )
 
@@ -1209,7 +1209,7 @@ def test_from_databricks_metric_view_closes_internal_connection_on_error(
 ) -> None:
     connection = _FakeConnection()
     monkeypatch.setattr(
-        'sdm_relational_engine.rfm.backend.databricks.connect',
+        'sdm_connectors.backends.databricks.connect',
         lambda **kwargs: connection,
     )
 
@@ -1367,7 +1367,7 @@ def test_escalated_conversion_warning_closes_an_owned_connection(
 
     connection = _FakeConnection()
     monkeypatch.setattr(
-        'sdm_relational_engine.rfm.backend.databricks.connect',
+        'sdm_connectors.backends.databricks.connect',
         lambda **kwargs: connection,
     )
 

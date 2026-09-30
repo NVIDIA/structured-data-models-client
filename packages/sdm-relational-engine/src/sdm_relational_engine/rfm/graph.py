@@ -902,7 +902,7 @@ class Graph:
 
         Args:
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect`,
+                :func:`~sdm_connectors.backends.databricks.connect`,
                 a notebook's Spark session wrapped in
                 :class:`~sdm_connectors.backends.spark.SparkConnection`, or the
                 :class:`databricks.sql` connector keyword arguments to open a
@@ -927,11 +927,12 @@ class Graph:
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
             DatabricksTable,
-            connect,
         )
 
         internal_connection = False
         if not isinstance(connection, CONNECTION_TYPES):
+            from sdm_connectors.backends.databricks import connect
+
             connection = connect(**(connection or {}))
             internal_connection = True
         assert isinstance(connection, CONNECTION_TYPES)
@@ -1175,7 +1176,7 @@ class Graph:
             metric_view_name: The name of the metric view, either fully
                 qualified or resolved against ``catalog`` and ``schema``.
             connection: An open connection from
-                :meth:`~sdm_relational_engine.rfm.backend.databricks.connect` or the
+                :func:`~sdm_connectors.backends.databricks.connect` or the
                 :class:`databricks.sql` connector keyword arguments to open a
                 new connection. If ``None``, will open a connection from
                 credentials stored in environment variables.
@@ -1190,7 +1191,6 @@ class Graph:
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
             DatabricksTable,
-            connect,
         )
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
@@ -1204,6 +1204,8 @@ class Graph:
 
         internal_connection = False
         if not isinstance(connection, CONNECTION_TYPES):
+            from sdm_connectors.backends.databricks import connect
+
             connection = connect(**(connection or {}))
             internal_connection = True
         assert isinstance(connection, CONNECTION_TYPES)

@@ -41,7 +41,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.fixture(scope='session')
 def connection() -> Generator['Connection', None, None]:
     databricks = pytest.importorskip(
-        'sdm_relational_engine.rfm.backend.databricks',
+        'sdm_connectors.backends.databricks',
         reason="'databricks' extension not installed",
     )
 
