@@ -229,6 +229,7 @@ class ModelValidator:
             response = merge(
                 response, self._find_disabled_ops(parsed_query.whatif_ast)
             )
+        # Disable unsupported aggregations
         response = merge(
             response,
             self._find_disabled_aggrs(

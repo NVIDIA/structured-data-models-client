@@ -235,7 +235,6 @@ class ErrorTranslator:
                 f"please use '= const'  instead."
             )
 
-        # If no specific errors were found, use default error
         if not error_parts:
             error_parts.append(self._default_error(err))
 
@@ -339,7 +338,6 @@ class ErrorTranslator:
                 )
 
         maybe_hints_text = ''
-        # avoid repeating hints
         hints = list(set(hints))
         if len(hints) > 0:
             maybe_hints_text = '\nHINTS:\n' + '\n'.join(hints)
