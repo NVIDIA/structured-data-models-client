@@ -114,9 +114,10 @@ class DatabricksServingTransport:
             ``WorkspaceClient`` itself is copied for that, not changed; a
             subclass or test double is used as given, without the name.
         timeout: Seconds one attempt may take, and the longest the SDK keeps
-            retrying; 300 when omitted. Only for a workspace client built
-            here: an injected one keeps its own configuration, so passing both
-            is refused.
+            retrying. Set on the client built here, or on the copy of a
+            passed ``WorkspaceClient``, never on the caller's own. When
+            omitted, a client built here gets 300 and a passed one keeps its
+            own. Refused with a subclass or double, which cannot be copied.
         max_request_bytes: The gateway's size limit, checked on the encoded
             envelope before anything is sent.
     """
@@ -132,18 +133,8 @@ class DatabricksServingTransport:
         max_request_bytes: int = _MAX_REQUEST_BYTES,
     ) -> None:
         self._endpoint = _validate_endpoint_name(endpoint)
-        if timeout is not None and workspace_client is not None:
-            # Silently ignoring it would leave the caller believing a bound
-            # they asked for is in force.
-            raise StructuredDataError(
-                'timeout applies only to a workspace client built here; set '
-                'http_timeout_seconds and retry_timeout_seconds on the Config '
-                'of the one passed as workspace_client instead',
-                code='INVALID_CONFIGURATION',
-            )
-        if timeout is None:
-            timeout = DEFAULT_TIMEOUT_SECONDS
-        _validate_limits(timeout, 0)
+        if timeout is not None:
+            _validate_limits(timeout, 0)
         if (
             isinstance(max_request_bytes, bool)
             or not isinstance(max_request_bytes, int)
@@ -159,9 +150,12 @@ class DatabricksServingTransport:
         _keep_rows_out_of_the_sdk_log()
         user_agent = sdm_client_user_agent()
         self._workspace = (
-            _named_copy(workspace_client, user_agent)
+            _named_copy(workspace_client, user_agent, timeout)
             if workspace_client is not None
-            else _ambient_workspace(float(timeout), user_agent)
+            else _ambient_workspace(
+                float(DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout),
+                user_agent,
+            )
         )
 
     @property
@@ -526,26 +520,58 @@ def _error_code_of(error: BaseException) -> str | None:
     return None
 
 
-def _named_copy(workspace_client: Any, user_agent: tuple[str, str]) -> Any:
-    r"""A client like ``workspace_client`` whose requests name this SDK.
+def _named_copy(
+    workspace_client: Any, user_agent: tuple[str, str], timeout: float | None
+) -> Any:
+    r"""A client like ``workspace_client`` whose requests name this SDK, and
+    are bounded by ``timeout`` when one is given.
 
     The caller's client is left as it was: its config is copied, which shares
     the credentials by reference. Only the SDK's own class is rebuilt, since a
     subclass or a test double would lose what it adds; it is used as given.
+
+    Raises:
+        StructuredDataError: ``INVALID_CONFIGURATION``, if ``timeout`` is
+            given for a client that is used as given.
     """
     try:
         from databricks.sdk import WorkspaceClient
     except ImportError:
-        return workspace_client
+        return _as_given(workspace_client, timeout)
     if type(workspace_client) is not WorkspaceClient:
-        logger.debug(
-            'workspace_client is a %s, not a WorkspaceClient; its requests '
-            'are sent as given, without the sdm-client User-Agent entry',
-            type(workspace_client).__name__,
+        return _as_given(workspace_client, timeout)
+    config = workspace_client.config.copy()
+    if timeout is not None:
+        # copy() shares the attribute dict with the caller's config, so a
+        # bound set without this would change their client too.
+        config._inner = dict(config._inner)
+        # The SDK retries for its own retry_timeout_seconds whatever one
+        # attempt's timeout, so both are bounded by the caller's.
+        config.http_timeout_seconds = float(timeout)
+        config.retry_timeout_seconds = math.ceil(timeout)
+    # Before the client is built: its ApiClient reads both timeouts and the
+    # User-Agent once, then.
+    return WorkspaceClient(config=config.with_user_agent_extra(*user_agent))
+
+
+def _as_given(workspace_client: Any, timeout: float | None) -> Any:
+    kind = type(workspace_client).__name__
+    if timeout is not None:
+        # Ignoring it would leave the caller believing a bound they asked
+        # for is in force.
+        raise StructuredDataError(
+            f'timeout is set on a copy of the workspace client, and a {kind} '
+            f'cannot be copied: only a databricks.sdk.WorkspaceClient itself '
+            f'can. Set http_timeout_seconds and retry_timeout_seconds on its '
+            f'Config instead',
+            code='INVALID_CONFIGURATION',
         )
-        return workspace_client
-    config = workspace_client.config.copy().with_user_agent_extra(*user_agent)
-    return WorkspaceClient(config=config)
+    logger.debug(
+        'workspace_client is a %s, not a WorkspaceClient; its requests are '
+        'sent as given, without the sdm-client User-Agent entry',
+        kind,
+    )
+    return workspace_client
 
 
 def _ambient_workspace(timeout: float, user_agent: tuple[str, str]) -> Any:

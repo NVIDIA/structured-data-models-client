@@ -285,23 +285,26 @@ class SDMClient:
                 refused without being repeated, since one can carry a token.
             workspace_client: A ``databricks.sdk.WorkspaceClient`` to call
                 through, for a workspace or credential other than the ambient
-                one. Build it with the ``Config`` you need, timeouts included.
-                A ``WorkspaceClient`` itself is called through a copy that
-                names sdm-client in the User-Agent, so it is not changed; a
-                subclass or test double is used as given, without the name.
+                one. A ``WorkspaceClient`` itself is called through a copy
+                that names sdm-client in the User-Agent, so it is not changed;
+                a subclass or test double is used as given, without the name.
             timeout: Seconds one attempt may take, and the longest the SDK
-                keeps retrying; 300 when omitted. Far above a NIM's default,
-                because a serving endpoint that has scaled to zero takes
-                minutes to start. Only for the ambient workspace client: pass
-                it together with ``workspace_client`` and it is refused.
+                keeps retrying. When omitted, the ambient workspace client
+                gets 300, far above a NIM's default because a serving
+                endpoint that has scaled to zero takes minutes to start, and
+                a passed ``workspace_client`` keeps its own ``Config``
+                timeouts. Given with a ``WorkspaceClient``, it is set on the
+                copy, never on the caller's client; with a subclass or test
+                double, which cannot be copied, it is refused.
 
         Raises:
             MissingExtraError: If ``databricks-sdk`` is not installed; install
                 ``sdm-client[databricks-serving]``.
             StructuredDataError: With code ``INVALID_CONFIGURATION``, if
                 ``endpoint`` is not a name, ``timeout`` is not a positive
-                number of seconds or is passed with ``workspace_client``, or
-                the ambient configuration cannot authenticate.
+                number of seconds or is passed with a ``workspace_client``
+                that cannot be copied, or the ambient configuration cannot
+                authenticate.
         """
         from sdm_client.core.databricks_serving import (
             DatabricksServingTransport,

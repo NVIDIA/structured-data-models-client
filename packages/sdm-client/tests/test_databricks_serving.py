@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
+import time
 import warnings
 from typing import Any
 
@@ -444,7 +446,8 @@ def test_the_size_counted_is_the_wrapped_envelope_not_the_payload():
 
 @pytest.fixture
 def workspace_host(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """A local stand-in for a workspace; set ``answer`` to choose its reply."""
+    """A local stand-in for a workspace; set ``answer`` to choose its reply,
+    and its ``delay`` to hold that reply back."""
     import threading
 
     # A proxied runner would otherwise send these local requests to its proxy.
@@ -460,12 +463,16 @@ def workspace_host(monkeypatch: pytest.MonkeyPatch) -> Any:
             {'predictions': [{'response_json': json.dumps({'ok': True})}]}
         ),
         'headers': [],
+        'delay': 0.0,
     }
+    # Released at teardown, so a held reply does not keep the server up.
+    released = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             self.rfile.read(int(self.headers.get('Content-Length', 0)))
             answer['headers'].append(dict(self.headers))
+            released.wait(answer['delay'])
             self.send_response(answer['status'])
             self.send_header('Content-Type', 'text/plain')
             self.end_headers()
@@ -477,6 +484,7 @@ def workspace_host(monkeypatch: pytest.MonkeyPatch) -> Any:
     server = HTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f'http://127.0.0.1:{server.server_port}', answer
+    released.set()
     server.shutdown()
     server.server_close()
 
@@ -579,6 +587,78 @@ def test_the_ambient_workspace_s_requests_name_sdm_client(
 
 
 @pytest.mark.parametrize(
+    'caller_seconds, timeout',
+    [(60.0, 0.5), (0.5, None)],
+    ids=['timeout-given', 'caller-s-own'],
+)
+def test_a_passed_workspace_client_s_copy_carries_the_bound(
+    workspace_host, caller_seconds, timeout
+):
+    """A cold endpoint can need a longer bound than the caller's client has,
+    so a timeout given here is set on the copy, and the caller's own
+    configuration is left as it was. Without one, the caller's bound holds."""
+    sdk = pytest.importorskip('databricks.sdk')
+    host, answer = workspace_host
+    answer['delay'] = 30.0
+    workspace = sdk.WorkspaceClient(
+        config=sdk.core.Config(
+            host=host,
+            token='dapi-test',
+            auth_type='pat',
+            http_timeout_seconds=caller_seconds,
+            retry_timeout_seconds=math.ceil(caller_seconds),
+        )
+    )
+    before = dict(workspace.config.as_dict())
+
+    transport = DatabricksServingTransport(
+        ENDPOINT, workspace_client=workspace, timeout=timeout
+    )
+    started = time.monotonic()
+    with pytest.raises(NimRequestError) as error:
+        transport.predict({'context': {}})
+
+    assert time.monotonic() - started < 10
+    assert error.value.status_code == 504
+    assert answer['headers']
+    for sent in answer['headers']:
+        assert sdm_client_entry() in sent['User-Agent'].split()
+        assert sent['Authorization'] == 'Bearer dapi-test'
+    assert workspace.config.as_dict() == before
+
+
+def audited_workspace(host: str) -> Any:
+    sdk = pytest.importorskip('databricks.sdk')
+
+    class Audited(sdk.WorkspaceClient):
+        """What a caller adds to their client, which a copy would lose."""
+
+    return Audited(
+        config=sdk.core.Config(host=host, token='dapi-test', auth_type='pat')
+    )
+
+
+@pytest.mark.parametrize('kind', ['subclass', 'double'])
+def test_a_timeout_for_a_client_that_cannot_be_copied_is_refused(
+    workspace_host, kind
+):
+    """A subclass or a double is used as given, so the timeout could only
+    be ignored, leaving the caller believing a bound is in force."""
+    host, answer = workspace_host
+    workspace = audited_workspace(host) if kind == 'subclass' else Workspace()
+
+    with pytest.raises(StructuredDataError) as error:
+        SDMClient.for_databricks_serving(
+            ENDPOINT, workspace_client=workspace, timeout=30
+        )
+
+    assert error.value.code == 'INVALID_CONFIGURATION'
+    assert type(workspace).__name__ in str(error.value)
+    assert 'cannot be copied' in str(error.value)
+    assert answer['headers'] == []
+
+
+@pytest.mark.parametrize(
     ('package_version', 'expected'),
     [
         ('1.0.0', '1.0.0'),
@@ -676,16 +756,6 @@ def test_the_ambient_identity_is_used_when_no_client_is_given(
     monkeypatch.setattr(sdk.core, 'Config', Settings)
     SDMClient.for_databricks_serving(ENDPOINT, timeout=timeout)
     assert built == [config]
-
-
-def test_a_timeout_for_an_injected_workspace_client_is_refused():
-    """That client keeps its own configuration, so the timeout would be
-    silently ignored."""
-    with pytest.raises(StructuredDataError) as error:
-        SDMClient.for_databricks_serving(
-            ENDPOINT, workspace_client=Workspace(), timeout=30
-        )
-    assert error.value.code == 'INVALID_CONFIGURATION'
 
 
 def test_a_workspace_that_cannot_authenticate_says_how_to_fix_it(monkeypatch):
