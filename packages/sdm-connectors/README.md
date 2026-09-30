@@ -49,8 +49,10 @@ read('duckdb', database='w.db', query=f'SELECT * FROM {quote_ident("café")}')
 Failures raised by `connect` / `read` / `read_table` surface as
 `ConnectorError` with a stable `code`: `UNKNOWN_CONNECTOR`,
 `INVALID_CONNECTOR_ARGS`, `CONNECT_FAILED`, `QUERY_FAILED`, `READ_FAILED`, or
-`NOT_FOUND`, with the original driver exception chained as `__cause__`. Two
-cases stay unwrapped by design: a missing optional driver raises
+`NOT_FOUND`. Where a driver raised, its exception is chained as `__cause__`;
+an unknown connector, and an argument refused before any driver is reached,
+have none. Two cases stay unwrapped by design: a missing optional driver
+raises
 `MissingBackendError`, and a broken or incompatible driver installation raises
 `ImportError` (consumers map it to their own broken-install category, e.g.
 sdm-client's `DRIVER_LOAD_FAILED`).

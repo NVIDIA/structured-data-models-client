@@ -1,0 +1,130 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Every gate a change has to pass, run where a contributor can see it.
+#
+# The internal pipeline runs these too, but a public repository cannot ask an
+# outside contributor to trust a result they cannot open. One job is missing
+# here on purpose: the contract check clones the canonical OpenAPI spec from an
+# internal project, so it stays where that clone is possible, and the generated
+# bindings are pinned by SHA-256 in PROVENANCE.json either way.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --upgrade pip 'ruff==0.16.*'
+      - run: ruff check .
+      - run: ruff format --check .
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/check_repo_hygiene.py all
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # The engine needs its runtime dependencies present to be checked at all,
+      # and a toolchain to install. It ships py.typed exactly like the other
+      # four, so leaving it out would make the gate narrower than the promise.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      - run: pip install --upgrade pip mypy
+      - run: |
+          pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
+            -e './packages/sdm-client' \
+            -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]' \
+            -e './packages/sdm-relational-engine'
+      - run: |
+          mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src \
+            packages/sdm-connectors/src packages/sdm-relational-engine/src
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # postgres and databricks are here for their drivers, not for a server:
+      # those tests mock the connection. Without the drivers, importing the
+      # backend raises and every test covering them skips.
+      - run: |
+          pip install --upgrade pip 'ruff==0.16.*'
+          pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' \
+            -e './packages/sdm-client[test]' \
+            -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
+      - run: |
+          python -m pytest packages/sdm-api/tests packages/sdm-pql/tests \
+            packages/sdm-client/tests packages/sdm-connectors/tests tests -q \
+            -m 'not live_nim and not live_warehouse'
+
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      - run: |
+          pip install --upgrade pip
+          pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
+            -e './packages/sdm-connectors[sqlite,duckdb]'
+          pip install -e './packages/sdm-relational-engine[test]'
+      - run: |
+          cd packages/sdm-relational-engine
+          python -m pytest tests -q -m 'not live_nim and not live_warehouse'
+      # The client's suite again, with an engine present. The test job installs
+      # none, so every client test that needs one skips there and runs nowhere.
+      - run: |
+          pip install -e './packages/sdm-client[test]'
+          python -m pytest packages/sdm-client/tests -q \
+            -m 'not live_nim and not live_warehouse'
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --upgrade pip build
+      # Each of the four pure-python distributions builds in an isolated
+      # environment holding only the build backend. That catches what no test
+      # can, because it fails before a test could run.
+      - run: |
+          for package in sdm-api sdm-pql sdm-client sdm-connectors; do
+            ( cd "packages/$package" && python -m build --wheel --outdir "$GITHUB_WORKSPACE/dist" . )
+          done
+      - run: python -m pip install --upgrade twine && twine check dist/*

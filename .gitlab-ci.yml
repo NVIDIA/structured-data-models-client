@@ -222,9 +222,14 @@ sbom:
   script:
     - pip install -q cyclonedx-bom
     - VERSION=$(cat dist/VERSION)
-    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
+    - pip install -q --find-links "$CI_PROJECT_DIR/dist"
+        "sdm-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
     - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
-    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json'));
+        names={c['name'] for c in d.get('components', [])};
+        missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors'} - names;
+        print(f'{len(names)} components');
+        sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
   artifacts:
     paths:
       - dist/sbom.cyclonedx.json

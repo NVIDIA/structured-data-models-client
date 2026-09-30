@@ -122,9 +122,10 @@ jobs:
           # exact sibling pins resolve to the wheels just built, not to whatever
           # happens to be on PyPI. Without it this describes a previous release,
           # or fails outright before the first one.
-          python -m pip install --find-links dist "./packages/sdm-client[sqlite,duckdb]"
+          python -m pip install --find-links dist \
+            "./packages/sdm-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors','sdm-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
       - uses: actions/upload-artifact@v4
         with:

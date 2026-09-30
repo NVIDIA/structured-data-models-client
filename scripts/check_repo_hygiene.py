@@ -85,8 +85,10 @@ INTERNAL_ALLOWLIST = {
     # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
     'scripts/generate_sdm_api.py',
-    # Runs on the internal instance, and has to keep naming it to work. It
-    # goes when the public repository has its own pipeline.
+    # Runs on the internal instance, and has to keep naming it to work.
+    # `.github/workflows/ci.yml` now runs the same gates in the open; this
+    # file stays only for the contract job, which clones a project that is
+    # not public, and goes when that clone no longer has to happen here.
     '.gitlab-ci.yml',
 }
 

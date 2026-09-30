@@ -56,7 +56,7 @@ Five distributions, released together on one version.
 
 | Distribution | Import | Kind | What it is |
 |---|---|---|---|
-| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, transport, sessions, results |
+| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, sessions and results |
 | `sdm-api` | `sdm_api` | pure python | The Universal TFM wire types. No third-party dependencies |
 | `sdm-pql` | `predictive_query` | pure python | The Predictive Query Language: grammar, parser, validator, AST, model profiles |
 | `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |

@@ -22,7 +22,7 @@ document's `model="some-future-model"` escape hatch therefore cannot be sent.
 The response's `model` field *is* an open string (`maxLength: 1024`), so the
 contract contradicts itself.
 
-Verified on `structured-data-api@main`, current as of today.
+Verified on `structured-data-api@main` as of 2026-09-30.
 
 **This does not affect anything shipping.** `kumo-tabular` and
 `kumo-relational` are both in the enum, so both work today and neither needs a
@@ -608,9 +608,11 @@ rule below is cheap on day one and expensive later.
 
 Both have since landed. The release workflow publishes through Trusted
 Publishing, with no upload token, and attaches PEP 740 attestations. A
-generated **SBOM** covering direct, optional, transitive, build, native and
-connector dependencies is produced and validated in CI; a hand-maintained
-dependency table would not have counted.
+generated **SBOM** is produced and validated on the release, covering every
+distribution and every connector extra, the native engine included. The
+build-time pipeline generates one too, without the native extra, because no
+toolchain is present there. A hand-maintained dependency table would not have
+counted as either.
 
 The **Apache-2.0** license matches the predecessor client, the source of most
 copied code. Nothing carried across needs relicensing.
@@ -670,7 +672,6 @@ than an audit.
 |---|---|---|
 | Timeseries, anomaly, Tesseract models | Not asked for yet | A NIM serves one; profiles already exist, plus a contract MR (§6) |
 | Warehouse push-down | The wire requires embedded data | The contract gains source references |
-| Public OSS release | Internal first, written OSS-clean from commit 1 (§10) | A release decision; the retrofit is form-filling, not an audit |
 | Arrow IPC | The wire is JSON-arrays-only everywhere | The contract activates it |
 
 ---
