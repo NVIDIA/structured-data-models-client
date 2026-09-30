@@ -235,9 +235,9 @@ class ParsedPredictiveQuery:
         """
         out = copy.copy(self)
 
-        out.whatif_ast = None  # Remove what-if clauses.
+        out.whatif_ast = None
 
-        if isinstance(out.entity_ast, Filter):  # Remove entity filters:
+        if isinstance(out.entity_ast, Filter):
             assert out.entity_ast is not None
             out.entity_ast = out.entity_ast.target  # type: ignore
 
@@ -248,7 +248,7 @@ class ParsedPredictiveQuery:
             out.target_ast = out.target_ast.left  # type: ignore
 
         if (
-            isinstance(out.target_ast, Condition)  # Remove target condition:
+            isinstance(out.target_ast, Condition)
             and isinstance(out.target_ast.target, Aggregation)
             and isinstance(out.target_ast.op, RelOp)
         ):

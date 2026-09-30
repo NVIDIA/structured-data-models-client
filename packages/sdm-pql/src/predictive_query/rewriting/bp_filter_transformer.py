@@ -227,7 +227,7 @@ class BPFilterTransformer(FilterSplitter):
                 f' WHERE {editable_field.text}'
             )
             editable_field.text = ''
-            editable_field.bold_text_position = (0, 0)  # No bold text
+            editable_field.bold_text_position = (0, 0)
         elif split_filter.non_applicable_filter is None:
             # If there's no bp_non_applicable_filter, we just use the original
             # untouched text instead of the possibly-rewritten version in
