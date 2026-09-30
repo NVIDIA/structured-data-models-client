@@ -356,10 +356,14 @@ class Table:
         there. The back-reference itself is set directly: it is not a field,
         and must stay out of equality and `repr`.
         """
+        # By identity. A `Table` is a dataclass, so `in (None, self)` asks
+        # `==`, which compares the frames inside and raises on any table that
+        # holds one.
         borrowed = [
             name
             for name, column in self.columns.items()
-            if getattr(column, '_table', None) not in (None, self)
+            if (owner := getattr(column, '_table', None)) is not None
+            and owner is not self
         ]
         if borrowed:
             object.__setattr__(self, 'columns', dict(self.columns))
@@ -963,12 +967,17 @@ class Schema:
         borrowed = [
             name
             for name, table in self._tables.items()
-            if getattr(table, '_schema', None) not in (None, self)
+            if (owner := getattr(table, '_schema', None)) is not None
+            and owner is not self
         ]
         for name in borrowed:
             self._tables[name] = _copy_table(self._tables[name])
         for table in self._tables.values():
             object.__setattr__(table, '_schema', self)
+            # And the columns inside them, for the same reason: a column
+            # inserted through `table.columns` arrives still belonging to the
+            # table it came from, and typing it here typed it there.
+            table._own_columns()
 
     def _mark_key_columns(self) -> None:
         r"""Say which columns this schema joins on, and which it no longer does.
