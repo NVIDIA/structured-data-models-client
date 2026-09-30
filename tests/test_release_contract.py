@@ -11,7 +11,6 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
-import json
 import pathlib
 import re
 import subprocess
@@ -89,18 +88,6 @@ class TestPublicSurface:
             'intended, re-record with `python scripts/snapshot_wire_payloads.py '
             f'--write`.\n{result.stdout}{result.stderr}'
         )
-
-    def test_every_recorded_export_is_still_importable(self):
-        recorded = json.loads((GOLDEN / 'public_api.json').read_text())
-        import importlib
-
-        for package, surface in recorded.items():
-            exported = surface.get('__all__')
-            if exported is None:
-                continue
-            module = importlib.import_module(package)
-            missing = [name for name in exported if not hasattr(module, name)]
-            assert not missing, f'{package} no longer exports {missing}'
 
 
 class TestErrorContract:

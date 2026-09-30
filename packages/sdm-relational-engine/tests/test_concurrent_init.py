@@ -132,6 +132,13 @@ def test_a_reader_never_sees_half_of_each_deployment(
     A reader that took url, then api_key, could still have a reconfiguration
     land between the two. Reading the whole deployment once is what closes it,
     so this samples what the client would actually be built from.
+
+    The compatibility accessors `_url` and `_api_key` are still one read each,
+    so a reconfiguration landing between them yields one deployment's URL with
+    another's key. That is recorded rather than fixed: they exist for callers
+    that predate the deployment value, and a shared lock would not help, since
+    the caller has already returned from the first call. `global_state.client`
+    reads the whole value once, which is what this covers.
     """
     monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
     mixed: list[Any] = []
@@ -290,47 +297,6 @@ def test_a_reader_never_sees_an_uninitialized_deployment_mid_reinit(
 
     assert seen, 'the watcher never observed the state'
     assert all(seen), f'{seen.count(False)} of {len(seen)} reads saw no client'
-
-
-def test_reading_the_settings_one_at_a_time_can_still_straddle_a_change(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The compatibility accessors are one read each, not one read together.
-
-    `_url` and `_api_key` each take the current deployment and return one field
-    of it, so a reconfiguration landing between the two calls yields one
-    deployment's URL with another's key. Holding the deployment immutable does
-    not change that; reading it once is what does, which is what
-    `global_state.client` does before building anything.
-
-    Recorded rather than fixed: these accessors exist for callers that predate
-    the deployment value, and giving them a shared lock would not help, since
-    the caller has already returned from the first one.
-    """
-    monkeypatch.setattr(initialization, 'NimClient', _slow_client([]))
-    torn = 0
-    done = threading.Event()
-
-    def watch() -> None:
-        nonlocal torn
-        while not done.is_set():
-            url, key = global_state._url, global_state._api_key
-            if url and key and url[len('https://')] != key[-1]:
-                torn += 1
-
-    observer = threading.Thread(target=watch)
-    observer.start()
-    try:
-        for _ in range(40):
-            for url, key in DEPLOYMENTS:
-                kre.init(url=url, api_key=key)
-    finally:
-        done.set()
-        observer.join(5)
-
-    # Reading the whole value never tears, which is the point of the pairing.
-    deployment = global_state._deployment
-    assert deployment.url[len('https://')] == deployment.api_key[-1]
 
 
 def test_init_client_resolves_under_the_shared_initialization_lock(

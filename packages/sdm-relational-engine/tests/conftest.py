@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Generator
 from typing import TYPE_CHECKING
 
@@ -64,8 +65,8 @@ def mock_api() -> Generator[requests_mock.Mocker, None, None]:
         yield m
 
 
-@pytest.fixture()
-def user_store_graph() -> rfm.Graph:
+@pytest.fixture(scope='session')
+def _user_store_graph_template() -> rfm.Graph:
     import sdm_relational_engine.rfm as rfm
 
     df_dict = {}
@@ -142,8 +143,8 @@ def user_store_graph() -> rfm.Graph:
     return graph
 
 
-@pytest.fixture()
-def string_user_graph() -> rfm.Graph:
+@pytest.fixture(scope='session')
+def _string_user_graph_template() -> rfm.Graph:
     import sdm_relational_engine.rfm as rfm
 
     df_dict = {}
@@ -168,6 +169,23 @@ def string_user_graph() -> rfm.Graph:
     )
 
     return rfm.Graph.from_data(df_dict, verbose=False)
+
+
+@pytest.fixture()
+def user_store_graph(_user_store_graph_template: rfm.Graph) -> rfm.Graph:
+    r"""A copy of the graph, which is built once for the session.
+
+    Building it costs about thirty times what copying it does, and 139 cases
+    ask for one. Every test still gets its own, which is why this is
+    function-scoped: several of them mutate what they are given.
+    """
+    return copy.deepcopy(_user_store_graph_template)
+
+
+@pytest.fixture()
+def string_user_graph(_string_user_graph_template: rfm.Graph) -> rfm.Graph:
+    r"""A copy of the graph, for the reason above."""
+    return copy.deepcopy(_string_user_graph_template)
 
 
 @pytest.fixture()

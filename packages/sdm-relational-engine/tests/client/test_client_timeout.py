@@ -65,7 +65,13 @@ def _serve(delay: float = 0.0) -> Iterator[str]:
         '/v1/health/ready': _READY_BODY,
         '/v1/models': _MODELS_BODY,
     }
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        # `shutdown()` blocks until the serving loop notices, and the
+        # default poll interval is half a second. Every server in this
+        # file is torn down per test.
+        target=lambda: server.serve_forever(poll_interval=0.01),
+        daemon=True,
+    )
     thread.start()
     try:
         yield f'http://127.0.0.1:{server.server_address[1]}'

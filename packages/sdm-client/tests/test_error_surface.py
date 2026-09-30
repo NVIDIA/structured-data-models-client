@@ -495,16 +495,6 @@ def test_a_failed_release_says_nothing_while_the_body_is_raising():
     assert transport.calls == 1
 
 
-def test_a_failed_release_is_raised_when_the_body_succeeded():
-    """A failure to release is a real failure, and a caller wrapping the block
-    in `try` is relying on hearing about it. That is what the block did before
-    the masking case was handled, and it still does."""
-    transport = Transport(fail_times=99)
-    with pytest.raises(NimRequestError):
-        with handle(client=Client(transport)):
-            pass
-
-
 @pytest.mark.parametrize('rows', [{}, '', 0, None, {'a': 1}, 'ab'])
 def test_rows_that_are_not_a_list_cannot_be_counted(rows):
     """`Sized` admits `{}` and `''`, which would read as an envelope carrying

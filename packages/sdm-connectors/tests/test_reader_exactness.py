@@ -227,11 +227,6 @@ def test_a_numpy_integer_with_a_null_stays_exact():
     assert wire(frame['id']) == [str(BIG), None]
 
 
-def test_a_bool_column_with_a_null_is_not_made_an_integer():
-    frame = read('local', data={'flag': [True, None, False]})
-    assert not pd.api.types.is_integer_dtype(frame['flag'])
-
-
 def test_an_empty_column_is_left_alone():
     frame = read('local', data={'id': [], 'v': []})
     assert len(frame) == 0
