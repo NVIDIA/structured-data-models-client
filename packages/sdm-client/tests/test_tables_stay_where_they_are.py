@@ -317,10 +317,11 @@ def test_overrides_mean_what_they_mean_on_from_data(
 ) -> None:
     schema = _schema(
         duckdb_source,
-        primary_keys={'orders': 'order_id'},
-        time_columns={'orders': 'ts'},
+        primary_keys={'orders': ('user_id', 'order_id')},
         relationships=[],
     )
+
+    assert tuple(schema['orders'].primary_key) == ('user_id', 'order_id')
     assert schema.relationships == []
 
 
