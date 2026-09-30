@@ -100,7 +100,7 @@ def test_a_window_bound_is_spelled_the_way_the_column_is(
     ``'...14:00:00.000000' <= '...14:00:00'``: a shorter string with the same
     prefix sorts first. A column written by an ISO-8601 writer, or by pandas
     through ADBC, therefore dropped every row landing exactly on a window's
-    end and counted every row landing exactly on its anchor -- no error, just
+    end and counted every row landing exactly on its anchor – no error, just
     a different answer. A non-UTC offset spells another instant, so it is not
     copied onto a UTC bound.
     """

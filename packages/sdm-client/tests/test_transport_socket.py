@@ -377,7 +377,7 @@ def test_a_request_is_sent_again_only_for_what_sending_it_again_can_fix():
     """A 500 is not retried. The payload and the model are the same on every
     attempt, so a server fault reproduces, and the caller mistakes this
     endpoint reports as a 500 are reclassified from the body as the caller's
-    -- after three more uploads of the whole gathered context. Overload,
+    – after three more uploads of the whole gathered context. Overload,
     gateway and timeout are the transient ones and are still retried."""
     for status, sends in (
         (500, 1),
@@ -437,7 +437,7 @@ def test_an_unusable_timeout_is_named_on_every_route_that_takes_one(timeout):
 
 def test_a_server_that_stalls_is_reported_as_a_timeout_not_as_retries():
     """urllib3 wraps a read timeout in MaxRetryError, which requests surfaces
-    as ConnectionError, so the branch naming the knob never ran -- and the
+    as ConnectionError, so the branch naming the knob never ran – and the
     message said retries were exceeded when none had been asked for."""
     with _serve(_Reply(delay=5.0)) as (_, url):
         transport = Transport(url, timeout=0.5, max_retries=0)

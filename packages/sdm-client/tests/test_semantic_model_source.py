@@ -2,11 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""A semantic model -- here a Databricks metric view -- as a schema's source.
+r"""A semantic model – here a Databricks metric view – as a schema's source.
 
 The connection is faked: it answers the metadata and preview queries a
 metric view is read with, the way a SQL warehouse would. Sampling over a real
-view is exercised against a workspace, not here -- the samplers' SQL is
+view is exercised against a workspace, not here – the samplers' SQL is
 Databricks SQL, which nothing local runs.
 """
 

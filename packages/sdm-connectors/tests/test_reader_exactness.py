@@ -422,7 +422,7 @@ def joined_tables() -> sqlite3.Connection:
 
 def test_two_result_columns_of_one_name_keep_their_own_values():
     """Keyed by name the last one wins, the repeated name is given back, and
-    every earlier column of it holds the last one's values -- same shape, same
+    every earlier column of it holds the last one's values – same shape, same
     names, different data, nothing said."""
     connection = joined_tables()
     sql = 'select * from users join orders on users.id = orders.user_id'

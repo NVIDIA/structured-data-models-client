@@ -499,7 +499,7 @@ class TestBothRoutesSayWhatTheyDecided:
     """The rule is about the column, so both routes have to speak of it.
 
     One recognised two whole numbers as a label and said so; the other asked
-    the same column of the same schema as a regression and said nothing -- and
+    the same column of the same schema as a regression and said nothing – and
     `task=`, the remedy the first names, is refused on the second.
     """
 
@@ -562,8 +562,8 @@ class TestBothRoutesSayWhatTheyDecided:
 
 
 def test_a_constant_target_is_remarked_on_however_the_request_was_built():
-    """The notice sat in the materializer, so a request built from frames --
-    the route with no gathering to warn during -- was answered in silence."""
+    """The notice sat in the materializer, so a request built from frames –
+    the route with no gathering to warn during – was answered in silence."""
     from sdm_client import Request
 
     def said(build):

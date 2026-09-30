@@ -477,7 +477,7 @@ def sent(request):
 
 def test_scoring_every_entity_is_refused_rather_than_sent_with_no_context():
     """A row carrying the answer is kept out of the context, so scoring every
-    row takes every row out of it -- and zero distinct answers is not one, so
+    row takes every row out of it – and zero distinct answers is not one, so
     the guard for a context of one row did not see this."""
     request = gathered_scoring(60)
     assert request.context_rows == 0
