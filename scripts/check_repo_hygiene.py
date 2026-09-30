@@ -135,13 +135,24 @@ RETIRED_INTERFACES = (
     ),
 )
 
-# Where a retired name is legitimately mentioned: the checks that forbid it,
-# and the record of what changed.
+# Where a retired name is legitimately mentioned, and which names: the checks
+# that forbid them, and the record of what changed. Per name, so a file exempt
+# for one retired interface is still checked for every other.
 RETIRED_ALLOWLIST = {
-    'scripts/check_repo_hygiene.py',
-    'packages/sdm-client/tests/test_quickstart_notebook.py',
-    'CHANGELOG.md',
-    'docs/about/architecture.md',
+    'scripts/check_repo_hygiene.py': frozenset(RETIRED_INTERFACES),
+    'packages/sdm-client/tests/test_quickstart_notebook.py': frozenset(
+        {
+            'RelationalClient',
+            'PredictClient',
+            'client.relational(',
+            'client.tabular(',
+            'nemotron_predict',
+        }
+    ),
+    # Why the engine's ported examples were removed.
+    'CHANGELOG.md': frozenset({'RelationalClient', 'client.relational('}),
+    # The design rule that the model is an argument, never a method.
+    'docs/about/architecture.md': frozenset({'client.relational('}),
 }
 
 
@@ -233,13 +244,14 @@ def check_retired() -> int:
     findings = []
     for path in tracked_files():
         relative = str(path.relative_to(REPO_ROOT))
-        if relative in RETIRED_ALLOWLIST or path.suffix not in SHIPPED_SUFFIXES:
+        if path.suffix not in SHIPPED_SUFFIXES:
             continue
         if 'grammar' in Path(relative).parts:
             continue
+        allowed = RETIRED_ALLOWLIST.get(relative, frozenset())
         text = path.read_text(encoding='utf-8', errors='replace')
         for retired in RETIRED_INTERFACES:
-            if retired in text:
+            if retired in text and retired not in allowed:
                 findings.append(f'{relative}: {retired}')
 
     for finding in findings:
