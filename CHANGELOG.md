@@ -67,12 +67,12 @@ The first release is being assembled. Nothing here has shipped yet.
   returns, with no driver imported to say so. Leaving `tables` out takes
   every table the source holds. The engine could always do this; nothing on
   `Schema` reached it, so a warehouse table had to be read whole into pandas
-  first. A notebook's `spark` samples on the
-  notebook's own compute, as its user, with no warehouse to name; it needs
-  `DataFrame.toArrow()`, so Databricks Runtime 17.3 LTS or serverless
-  environment 4, and an older session is refused with the warehouse route
-  named instead. One source per schema, and `Table.data` stays a DataFrame:
-  tables in place are a `SourceTable`, which holds none.
+  first. A notebook's `spark` samples on the notebook's own compute, as its
+  user, with no warehouse to name; it needs `DataFrame.toArrow()`, so
+  Databricks Runtime 17.3 LTS or serverless environment 4, and an older
+  session is refused with the warehouse route named instead. One source per
+  schema, and `Table.data` stays a DataFrame: tables in place are a
+  `SourceTable`, which holds none.
   `del schema['t']['column']` leaves a column of a table in place out of both
   the read and the request.
 - `source.semantic_model(name)` on `DatabricksSource` (a metric view) and
