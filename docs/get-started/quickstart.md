@@ -65,10 +65,19 @@ reversing either edge changes every number.
 Use `fit` to upload a context once and score against it repeatedly.
 
 ```python
-with client.fit(request, model=KumoRelational()) as fitted:
+with client.fit(
+    request, model=KumoRelational(), holdout=every_key_you_will_score
+) as fitted:
     first = fitted.predict(request)
     second = fitted.predict(other_request)
 ```
+
+**Name every row the session will score in `holdout`.** The context is
+chosen once, when you call `fit`, and it excludes only the rows `request`
+itself names. Any row a later call scores that was not held back is sitting
+in that context with its answer attached, and the answer comes back
+flattered. Unlike the one-shot route, nothing can be done about it
+afterwards, because the context cannot be changed once pinned.
 
 ## Which rows get scored
 

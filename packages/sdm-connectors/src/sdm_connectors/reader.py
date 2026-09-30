@@ -73,10 +73,11 @@ def read(source: str, **kwargs: Any) -> pd.DataFrame:
         The rows as a ``pd.DataFrame``.
 
     Raises:
-        ConnectorError: With the driver exception chained as ``__cause__``
-            and a stable ``code``: ``UNKNOWN_CONNECTOR``,
+        ConnectorError: With a stable ``code``: ``UNKNOWN_CONNECTOR``,
             ``INVALID_CONNECTOR_ARGS``, ``CONNECT_FAILED``, ``QUERY_FAILED``,
-            ``READ_FAILED`` or ``NOT_FOUND``.
+            ``READ_FAILED`` or ``NOT_FOUND``. Where a driver raised, that
+            exception is kept as ``__cause__``; an argument this refuses
+            before reaching a driver has none.
         MissingBackendError: If the source's optional driver is not installed.
     """
     if source == 'local':

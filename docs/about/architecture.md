@@ -117,7 +117,7 @@ Five distributions in one repo, released together on one version.
 
 | Distribution | Import | Kind | Holds |
 |---|---|---|---|
-| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, `PredictiveQuery`, model handles, adapters, transport, sessions, results. |
+| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, `PredictiveQuery`, model handles, sessions and results. Adapters and transport live here too, as implementation details rather than public API. |
 | `sdm-api` | `sdm_api` | pure python | The wire only: OpenAPI-generated bindings and the types the NIM speaks. |
 | `sdm-pql` | `predictive_query` | pure python | The language: grammar, parser, validator, AST, model profiles, and the schema types PQL speaks. |
 | `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables: SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3. |
@@ -344,8 +344,9 @@ fitted.predict(more_rows)  # reuses the pinned context
 fitted.close()  # DELETE /v1/sessions/{id}
 ```
 
-`client.predict()` still works statelessly in one call, and falls back to the
-stateless route if a NIM does not serve sessions.
+`client.predict()` works statelessly in one call and never opens a session.
+A NIM that does not serve sessions is reported by `fit()`, with the code
+`SESSIONS_UNSUPPORTED`.
 
 ### One return type
 
@@ -361,8 +362,8 @@ result.to_pandas()  # always a DataFrame
 result.explanation  # None unless you asked for it
 ```
 
-Explanations are an **output field**, not a method. `explain=True` remains
-sugar for `outputs=[…, "explanation"]`.
+Explanations are an **output field**, not a method. Ask for one with
+`outputs=[..., "explanation"]`; there is no `explain=` argument.
 
 The DataFrame's shape depends on the **task**, not the model. Verified against
 a live endpoint: classification and multiclass both give **one row per
@@ -592,10 +593,9 @@ blocked on the contract: both shipping models are already in its enum (§0).
 
 ## 10. This gets open-sourced
 
-It ships internal first, but public release is the destination, not a maybe.
-The predecessor client reached public by **retrofit**, requiring a full audit
-and OSRB pass after the code existed. We are not repeating that. Every rule
-below is cheap on day one and expensive later.
+Public release was the destination from the first commit, not a maybe. Making
+a codebase publishable after the fact means auditing it after the fact. Every
+rule below is cheap on day one and expensive later.
 
 **Written OSS-clean from commit 1, and now carrying the rest:**
 
@@ -606,11 +606,11 @@ below is cheap on day one and expensive later.
 | Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public issue policy, and the repository URL every package publishes to, checked by the hygiene script |
 | An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | None |
 
-Two things in the right-hand column are still open, and neither is a
-nice-to-have. Public CI and publishing provenance land when the repository
-does. A generated **SBOM** covering direct, optional, transitive, build, native
-and connector dependencies is not written yet, and a hand-maintained dependency
-table is not one; treat it as a gate on the release.
+Both have since landed. The release workflow publishes through Trusted
+Publishing, with no upload token, and attaches PEP 740 attestations. A
+generated **SBOM** covering direct, optional, transitive, build, native and
+connector dependencies is produced and validated in CI; a hand-maintained
+dependency table would not have counted.
 
 The **Apache-2.0** license matches the predecessor client, the source of most
 copied code. Nothing carried across needs relicensing.
@@ -623,7 +623,7 @@ a licensing defect in this family of repos: a repo-wide rename silently rewrote
 two identifiers **inside** the minified `mermaid.min.js`, turning a vendored
 artifact into a modified one while the LICENSE still described it as upstream's
 bytes. Six bytes in a 3.3 MB file. No test caught it, and it invalidated the
-component enumeration OSRB had already validated.
+component enumeration the licence review had already accepted.
 
 So, as a rule, not a suggestion:
 
@@ -658,10 +658,9 @@ The predecessor client already ships this test; we copy it.
 | `mermaid.min.js` (vendored) | MIT bundle; its components are enumerated in `LICENSE` | `sdm-relational-engine` assets | **Kept.** `visualize()` draws offline. Snowflake and Databricks notebooks block external scripts, so a CDN-fetched diagram would not draw. Upstream bytes, SHA-256 pinned, digest asserted by a test. `to_mermaid()` returns the source for external rendering. |
 | pandas, numpy, requests, pydantic | BSD / Apache-2.0 | dependencies | Resolved at install, not vendored |
 
-OSRB needs the provenance records and the inventory above. The existing ticket
-was approved against the *old* repo, so a new repo is a new submission
-regardless. Writing these from commit 1 makes that a form-filling exercise
-rather than an audit.
+Any licence review needs the provenance records and the inventory above.
+Writing them from the first commit makes that a form-filling exercise rather
+than an audit.
 
 ---
 

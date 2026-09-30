@@ -239,8 +239,9 @@ render it themselves.
 **The relational engine's example scripts and notebooks were removed.** They
 came across with the port written against `RelationalClient` and
 `client.relational(...)`, an interface this client does not export, and they
-set a `run_mode` that is no longer a knob. `scripts/check_repo_hygiene.py
-retired` now fails on any shipped file naming a retired interface, notebooks
+set a `run_mode` that is no longer a knob. `python
+scripts/check_repo_hygiene.py retired` now fails on any shipped file
+naming a retired interface, notebooks
 and per-package example directories included. The one quickstart this
 repository ships was written against the shipped API and every cell was
 executed against a live `kumo-tabular` and `kumo-relational` NIM.

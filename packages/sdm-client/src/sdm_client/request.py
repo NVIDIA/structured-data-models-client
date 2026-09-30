@@ -942,8 +942,9 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
 
     An `instance_id` that is not a number is left exactly as it is. There is
     no arithmetic that moves it past another, so two envelopes using the same
-    one stay indistinguishable here. They already were indistinguishable, and
-    is a malformed envelope rather than something this can repair.
+    one stay indistinguishable here, as they already were. Two envelopes
+    sharing an `instance_id` are a malformed envelope, not something this
+    can repair.
     """
     instances: list[pd.DataFrame] = []
     related: dict[str, list[pd.DataFrame]] = {}

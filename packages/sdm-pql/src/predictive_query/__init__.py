@@ -67,7 +67,7 @@ from predictive_query.validator import PredictiveQueryValidator
 #: when the language accepts something it did not before, so every query valid
 #: under an earlier MINOR is still valid. MAJOR goes up only when a query stops
 #: being valid or changes meaning. Neither moves for a new capability or
-#: profile. See ``docs/stability.md``.
+#: profile. See ``docs/reference/stability.md``.
 LANGUAGE_VERSION = '1.1'
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
