@@ -104,6 +104,8 @@ SHIPPED_SUFFIXES = {
 # reference should survive.
 SHIPPED_NAMES = {'LICENSE', 'NOTICE'}
 
+_OLD_BACKENDS = ('databricks', 'snowflake', 'postgres', 'sqlite', 'duckdb')
+
 # Interfaces earlier generations of this client had. An example naming one sends
 # a reader to an API that does not exist, which is why this is scanned for
 # rather than left to review. The scan covers every tracked shipped file,
@@ -116,6 +118,21 @@ RETIRED_INTERFACES = (
     'client.relational(',
     'client.tabular(',
     'nemotron_predict',
+    # The old sdm_connectors spellings, which named a backend first:
+    # connect('<backend>', ...) opened a connection for the caller, and
+    # read('<backend>', ...) read a table or a file. A source now takes the
+    # driver's own connection, `read` a file's path, and `read_table` an open
+    # connection. The engine's per-backend `connect` functions take no backend
+    # name, so they never match.
+    *(
+        f'{call}({quote}{backend}{quote}'
+        for call, backends in (
+            ('connect', _OLD_BACKENDS),
+            ('read', (*_OLD_BACKENDS, 'local', 's3')),
+        )
+        for backend in backends
+        for quote in ("'", '"')
+    ),
 )
 
 # Where a retired name is legitimately mentioned: the checks that forbid it,
