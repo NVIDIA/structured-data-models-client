@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import warnings
 from typing import Any
@@ -447,16 +448,18 @@ def workspace_host() -> Any:
     import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
-    answer = {
+    answer: dict[str, Any] = {
         'status': 200,
         'body': json.dumps(
             {'predictions': [{'response_json': json.dumps({'ok': True})}]}
         ),
+        'headers': [],
     }
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             self.rfile.read(int(self.headers.get('Content-Length', 0)))
+            answer['headers'].append(dict(self.headers))
             self.send_response(answer['status'])
             self.send_header('Content-Type', 'text/plain')
             self.end_headers()
@@ -506,6 +509,98 @@ def test_the_debug_log_carries_no_rows(workspace_host, caplog, status, body):
 
     assert SECRET not in caplog.text
     assert {name: logging.getLogger(name).level for name in loggers} == levels
+
+
+# --- what a prediction request calls itself ----------------------------------
+
+
+def sdm_client_entry() -> str:
+    import sdm_client
+    from sdm_client.core.databricks_user_agent import (
+        databricks_product_version,
+    )
+
+    version = databricks_product_version(sdm_client.__version__)
+    return f'nvidia_sdm-client/{version}'
+
+
+def test_a_passed_workspace_client_s_requests_name_sdm_client(workspace_host):
+    """Databricks attributes partner traffic by the User-Agent, and the
+    caller's own client is theirs: it is copied to carry the entry, not
+    changed, and still authenticates as they set it up."""
+    sdk = pytest.importorskip('databricks.sdk')
+    host, answer = workspace_host
+    workspace = sdk.WorkspaceClient(
+        config=sdk.core.Config(
+            host=host,
+            token='dapi-test',
+            auth_type='pat',
+            retry_timeout_seconds=5,
+        )
+    )
+    before = workspace.config.user_agent
+
+    transport = DatabricksServingTransport(ENDPOINT, workspace_client=workspace)
+    transport.predict({'context': {}})
+
+    [sent] = answer['headers']
+    assert sdm_client_entry() in sent['User-Agent'].split()
+    assert sent['Authorization'] == 'Bearer dapi-test'
+    assert workspace.config.user_agent == before
+    assert 'nvidia_sdm-client' not in workspace.config.user_agent
+
+
+def test_the_ambient_workspace_s_requests_name_sdm_client(
+    workspace_host, monkeypatch, tmp_path
+):
+    pytest.importorskip('databricks.sdk')
+    host, answer = workspace_host
+    for name in list(os.environ):
+        if name.startswith(('DATABRICKS_', 'ARM_', 'GOOGLE_')):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv('DATABRICKS_CONFIG_FILE', str(tmp_path / 'absent.cfg'))
+    monkeypatch.setenv('DATABRICKS_HOST', host)
+    monkeypatch.setenv('DATABRICKS_TOKEN', 'dapi-ambient')
+    monkeypatch.setenv('DATABRICKS_AUTH_TYPE', 'pat')
+
+    transport = DatabricksServingTransport(ENDPOINT, timeout=5)
+    transport.predict({'context': {}})
+
+    [sent] = answer['headers']
+    assert sdm_client_entry() in sent['User-Agent'].split()
+    assert sent['Authorization'] == 'Bearer dapi-ambient'
+
+
+@pytest.mark.parametrize(
+    ('package_version', 'expected'),
+    [
+        ('1.0.0', '1.0.0'),
+        ('1.2.3', '1.2.3'),
+        ('1.0.0a1', '1.0.0-alpha.1'),
+        ('1.0.0rc2', '1.0.0-rc.2'),
+        ('1.0.0.dev3', '1.0.0-dev.3'),
+        ('1.0.0rc2.dev3', '1.0.0-rc.2.dev.3'),
+        ('1.0.0.post1', '1.0.0+post.1'),
+    ],
+)
+def test_a_python_version_is_translated_to_the_semver_databricks_takes(
+    package_version, expected
+):
+    from sdm_client.core.databricks_user_agent import (
+        databricks_product_version,
+    )
+
+    assert databricks_product_version(package_version) == expected
+
+
+def test_a_version_that_cannot_be_expressed_is_refused_not_invented():
+    """An invented fallback would claim the wrong release."""
+    from sdm_client.core.databricks_user_agent import (
+        databricks_product_version,
+    )
+
+    with pytest.raises(ValueError):
+        databricks_product_version('1.0')
 
 
 @pytest.mark.parametrize(
@@ -566,12 +661,12 @@ def test_the_ambient_identity_is_used_when_no_client_is_given(
             built.append(config)
             self.serving_endpoints = Endpoints()
 
+    class Settings(dict):
+        def with_user_agent_extra(self, key: str, value: str) -> Settings:
+            return self
+
     monkeypatch.setattr(sdk, 'WorkspaceClient', Recorded)
-    monkeypatch.setattr(
-        sdk.core,
-        'Config',
-        lambda **kwargs: kwargs,
-    )
+    monkeypatch.setattr(sdk.core, 'Config', Settings)
     SDMClient.for_databricks_serving(ENDPOINT, timeout=timeout)
     assert built == [config]
 

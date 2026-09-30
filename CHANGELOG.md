@@ -53,6 +53,8 @@ The first release is being assembled. Nothing here has shipped yet.
   has no sessions. Needs the new `databricks-serving` extra. It sends the
   same `request_json`/`response_json` envelope as the relational engine's
   serving client.
+- Prediction requests on Databricks name sdm-client in their User-Agent
+  (`nvidia_sdm-client/<version>`); queries that sample a warehouse do not.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a

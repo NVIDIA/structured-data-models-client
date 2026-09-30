@@ -25,6 +25,7 @@ import threading
 from collections.abc import Mapping
 from typing import Any
 
+from sdm_client.core.databricks_user_agent import sdm_client_user_agent
 from sdm_client.core.transport import (
     _check_encodable,
     _diagnosis_in,
@@ -108,7 +109,9 @@ class DatabricksServingTransport:
         endpoint: The serving endpoint's **name**, not its URL.
         workspace_client: A ``databricks.sdk.WorkspaceClient`` to call through.
             When omitted one is built from the ambient configuration, which is
-            how a notebook authenticates without handling a token.
+            how a notebook authenticates without handling a token. Either
+            way, its requests name sdm-client in the User-Agent; a passed
+            client is copied for that, not changed.
         timeout: Seconds one attempt may take, and the longest the SDK keeps
             retrying; 300 when omitted. Only for a workspace client built
             here: an injected one keeps its own configuration, so passing both
@@ -153,10 +156,11 @@ class DatabricksServingTransport:
         self._max_request_bytes = max_request_bytes
         self._closed = False
         _keep_rows_out_of_the_sdk_log()
+        user_agent = sdm_client_user_agent()
         self._workspace = (
-            workspace_client
+            _named_copy(workspace_client, user_agent)
             if workspace_client is not None
-            else _ambient_workspace(float(timeout))
+            else _ambient_workspace(float(timeout), user_agent)
         )
 
     @property
@@ -521,7 +525,24 @@ def _error_code_of(error: BaseException) -> str | None:
     return None
 
 
-def _ambient_workspace(timeout: float) -> Any:
+def _named_copy(workspace_client: Any, user_agent: tuple[str, str]) -> Any:
+    r"""A client like ``workspace_client`` whose requests name this SDK.
+
+    The caller's client is left as it was: its config is copied, which shares
+    the credentials by reference. Only the SDK's own class is rebuilt, since a
+    subclass or a test double would lose what it adds; it is used as given.
+    """
+    try:
+        from databricks.sdk import WorkspaceClient
+    except ImportError:
+        return workspace_client
+    if type(workspace_client) is not WorkspaceClient:
+        return workspace_client
+    config = workspace_client.config.copy().with_user_agent_extra(*user_agent)
+    return WorkspaceClient(config=config)
+
+
+def _ambient_workspace(timeout: float, user_agent: tuple[str, str]) -> Any:
     try:
         from databricks.sdk import WorkspaceClient
         from databricks.sdk.core import Config
@@ -536,7 +557,8 @@ def _ambient_workspace(timeout: float) -> Any:
             http_timeout_seconds=timeout,
             retry_timeout_seconds=math.ceil(timeout),
         )
-        return WorkspaceClient(config=config)
+        # Before the client is built: it reads the User-Agent once, then.
+        return WorkspaceClient(config=config.with_user_agent_extra(*user_agent))
     except Exception as error:
         raise StructuredDataError(
             f'could not authenticate to Databricks from the ambient '
