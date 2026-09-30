@@ -35,6 +35,10 @@ def storage_options():
         patcher.setenv('AWS_SHARED_CREDENTIALS_FILE', '/dev/null')
         patcher.setenv('AWS_DEFAULT_REGION', 'us-east-1')
         patcher.setenv('AWS_REGION', 'us-east-1')
+        # A profile named in the environment is looked up in the empty config
+        # above, and fails there before the explicit key is ever read.
+        patcher.delenv('AWS_PROFILE', raising=False)
+        patcher.delenv('AWS_DEFAULT_PROFILE', raising=False)
         server = moto_server.ThreadedMotoServer(ip_address='127.0.0.1', port=0)
         server.start()
         try:
