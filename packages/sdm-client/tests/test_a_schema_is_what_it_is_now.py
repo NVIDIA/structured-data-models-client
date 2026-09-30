@@ -561,3 +561,37 @@ def test_a_released_key_that_means_a_timestamp_orders_its_table_again() -> None:
     assert schema['t'].time_column == 'when'
     schema.check_consistent()
     assert schema['t'].time_column == 'when'
+
+
+def test_a_schema_owns_a_table_that_arrives_from_another_one() -> None:
+    """`tables` hands back the live dictionary, so a table can arrive from a
+    schema that is still using it -- and typing its key columns for this
+    schema retyped them for that one. The same rule a table applies to the
+    columns it is handed."""
+    from sdm_client.schema import _infer_table
+
+    def tables():
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return {
+                'p': _infer_table('p', pd.DataFrame({'id': [1, 2, 3]})),
+                'c': _infer_table(
+                    'c', pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
+                ),
+            }
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        donor = Schema(tables(), [Relationship('c', 'pid', 'p', 'id')])
+        taker = Schema(tables(), [])
+
+    taker.tables['c'] = donor['c']
+    taker.check_consistent()
+
+    assert donor['c']['pid'].stype == 'ID'
+    assert taker['c']['pid'].stype == 'numerical'
+    assert donor['c'] is not taker['c']
+
+    donor.check_consistent()
+    assert donor['c']['pid'].stype == 'ID'
+    assert taker['c']['pid'].stype == 'numerical'

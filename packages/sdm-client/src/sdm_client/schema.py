@@ -952,6 +952,24 @@ class Schema:
     def __len__(self) -> int:
         return len(self._tables)
 
+    def _own_tables(self) -> None:
+        r"""Take a copy of any table that still belongs to another schema.
+
+        `tables` hands back the live dictionary, so a table can arrive from a
+        schema that is still using it -- and typing its key columns for this
+        schema would retype them for that one. The same rule a table applies
+        to the columns it is handed.
+        """
+        borrowed = [
+            name
+            for name, table in self._tables.items()
+            if getattr(table, '_schema', None) not in (None, self)
+        ]
+        for name in borrowed:
+            self._tables[name] = _copy_table(self._tables[name])
+        for table in self._tables.values():
+            object.__setattr__(table, '_schema', self)
+
     def _mark_key_columns(self) -> None:
         r"""Say which columns this schema joins on, and which it no longer does.
 
@@ -962,9 +980,9 @@ class Schema:
         a regression, the other a multiclass classification -- according to a
         link only one of them had ever had.
         """
+        self._own_tables()
         keys: dict[str, set[str]] = {}
         for name, table in self._tables.items():
-            object.__setattr__(table, '_schema', self)
             keys[name] = {
                 column
                 for column in _as_key_tuple(table.primary_key)
