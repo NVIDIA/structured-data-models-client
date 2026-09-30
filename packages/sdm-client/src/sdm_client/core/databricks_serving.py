@@ -27,7 +27,6 @@ from typing import Any
 
 from sdm_client.core.transport import (
     _check_encodable,
-    _to_nim_error,
     _validate_limits,
 )
 from sdm_client.errors import (
@@ -258,8 +257,27 @@ class DatabricksServingTransport:
             and not isinstance(status, bool)
             and status >= 400
         ):
-            raise _to_nim_error(status, body.encode('utf-8'))
+            raise self._refused_in_band(status, answer)
         return answer
+
+    def _refused_in_band(
+        self, status: int, answer: dict[str, Any]
+    ) -> NimRequestError:
+        r"""A failure the served model answered with, named by its code alone.
+
+        The body's text is not repeated: it can quote the rows it was sent.
+        """
+        said = answer.get('code')
+        code = (
+            said
+            if isinstance(said, str) and _ERROR_CODE_RE.match(said)
+            else None
+        )
+        detail = answer.get('detail')
+        # A 5xx can be the model naming what was wrong with the request.
+        if status >= 500 and isinstance(detail, str):
+            code = _model_diagnosis(detail, code) or code
+        return self._refusal(status, code, None)
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         raise StructuredDataError(_NO_SESSIONS, code='SESSIONS_UNSUPPORTED')
@@ -282,7 +300,10 @@ class DatabricksServingTransport:
         """
         status = _status_of(error)
         provider_code = _error_code_of(error)
-        code = _model_diagnosis(error, provider_code)
+        said = getattr(error, 'message', None)
+        code = _model_diagnosis(
+            said if isinstance(said, str) else str(error), provider_code
+        )
         logger.debug(
             'serving endpoint %r failed with %s (status %s, code %s)',
             self._endpoint,
@@ -290,10 +311,19 @@ class DatabricksServingTransport:
             status,
             code or provider_code,
         )
-        details: dict[str, Any] = {
-            'endpoint': self._endpoint,
-            'provider_error': type(error).__name__,
-        }
+        return self._refusal(
+            status, code, provider_code, provider_error=type(error).__name__
+        )
+
+    def _refusal(
+        self,
+        status: int,
+        code: str | None,
+        provider_code: str | None,
+        **details: Any,
+    ) -> NimRequestError:
+        r"""The error for a failure known only by its status and codes."""
+        details = {'endpoint': self._endpoint, **details}
         if provider_code is not None:
             details['provider_code'] = provider_code
         if code is not None:
@@ -315,16 +345,12 @@ class DatabricksServingTransport:
         )
 
 
-def _model_diagnosis(
-    error: BaseException, provider_code: str | None
-) -> str | None:
-    r"""The code the served model gave, if the SDK carried one.
+def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
+    r"""The code the served model gave in ``text``, if it gave one.
 
     The provider's own code is skipped: ``BAD_REQUEST: ...`` is Databricks
     describing the call, not the model describing the request.
     """
-    said = getattr(error, 'message', None)
-    text = said if isinstance(said, str) else str(error)
     for match in _MODEL_DIAGNOSIS.finditer(text):
         if match.group(1) != provider_code:
             return match.group(1)

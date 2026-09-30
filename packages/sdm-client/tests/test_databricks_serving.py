@@ -316,23 +316,40 @@ def test_a_bug_is_not_reported_as_the_endpoint_s_failure():
 
 
 @pytest.mark.parametrize(
-    'body',
+    'body, code',
     [
-        {
-            'status': 422,
-            'code': 'UNSUPPORTED_TASK',
-            'detail': 'the requested task is not supported',
-        },
-        {'status': 500, 'title': 'the model failed on the requested rows'},
+        (
+            {
+                'status': 422,
+                'code': 'UNSUPPORTED_TASK',
+                'detail': f'the requested task is not supported for {SECRET}',
+            },
+            'UNSUPPORTED_TASK',
+        ),
+        ({'status': 500, 'title': f'the model failed on {SECRET}'}, None),
+        (
+            {
+                'status': 500,
+                'code': 'INTERNAL_ERROR',
+                'detail': f'INVALID_SCHEMA: could not parse row {SECRET}',
+            },
+            'INVALID_SCHEMA',
+        ),
     ],
-    ids=['with-detail', 'title-only'],
+    ids=['with-detail', 'title-only', 'model-diagnosis'],
 )
-def test_an_error_body_in_the_response_is_an_error(body):
+def test_an_error_body_in_the_response_is_an_error_named_by_its_code(
+    body, code
+):
+    """The body's text can quote the rows it was sent."""
     client, _ = opened(answer=body)
     with pytest.raises(NimRequestError) as error:
         client.predict(asked(), model='kumo-tabular')
     assert error.value.status_code == body['status']
-    assert error.value.code == body.get('code')
+    assert error.value.code == code
+    shown = str(error.value) + json.dumps(error.value.details)
+    assert ENDPOINT in shown
+    assert SECRET not in shown
 
 
 def test_an_oversized_request_is_refused_before_it_is_sent():
