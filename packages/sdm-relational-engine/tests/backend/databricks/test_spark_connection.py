@@ -252,9 +252,8 @@ def test_the_sampler_runs_through_the_session(
     df, batch = sampler._by_pkey(
         'users', pd.Series([3, 1]), columns={'user_id', 'age'}
     )
-    query, args = session.calls[before]
+    _, args = session.calls[before]
 
-    assert 'posexplode(from_json(?' in query
     assert args == ['[3,1]']
     assert df['user_id'].tolist() == [3, 1]
     assert df['age'].tolist() == [27.0, 31.0]

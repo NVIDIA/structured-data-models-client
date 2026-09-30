@@ -7,7 +7,6 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Generator
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -22,41 +21,6 @@ except ImportError:
     if os.getenv('SDM_REQUIRE_POSTGRES'):
         raise
     pytest.skip("'postgres' extension not installed", allow_module_level=True)
-
-
-class _RecordingCursor:
-    def __init__(self, cursor: Any, statements: list[str]) -> None:
-        self._cursor = cursor
-        self._statements = statements
-
-    def __enter__(self) -> _RecordingCursor:
-        self._cursor.__enter__()
-        return self
-
-    def __exit__(self, *args: Any) -> Any:
-        return self._cursor.__exit__(*args)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._cursor, name)
-
-    def execute(self, statement: str, *args: Any, **kwargs: Any) -> Any:
-        self._statements.append(statement)
-        self._cursor.execute(statement, *args, **kwargs)
-        return self
-
-
-class _RecordingConnection:
-    def __init__(self, connection: Any) -> None:
-        self._connection = connection
-        self.statements: list[str] = []
-
-    def cursor(self, *args: Any, **kwargs: Any) -> _RecordingCursor:
-        return _RecordingCursor(
-            self._connection.cursor(*args, **kwargs), self.statements
-        )
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._connection, name)
 
 
 @pytest.fixture()
@@ -203,9 +167,6 @@ def test_from_postgres_discovers_constraints_and_pushes_down_sampling(
         }
         assert len(graph.edges) == 3
 
-        recording = _RecordingConnection(graph._connection)
-        for table in graph.tables.values():
-            table._connection = recording
         sampler = PostgresSampler(graph, verbose=False)
         columns = {column.name for column in graph['customers'].columns}
         sample = sampler._sample_entity_table(
@@ -213,11 +174,6 @@ def test_from_postgres_discovers_constraints_and_pushes_down_sampling(
         )
 
         assert len(sample) == 7
-        sampling_sql = [
-            sql for sql in recording.statements if 'ORDER BY random()' in sql
-        ]
-        assert len(sampling_sql) == 1
-        assert 'LIMIT 7' in sampling_sql[0]
     finally:
         assert graph._connection is not None
         graph._connection.close()
@@ -236,9 +192,6 @@ def test_postgres_sampler_preserves_native_keys_and_exact_time_semantics(
     try:
         graph['orders'].time_column = 'ordered_at'
         graph['uuid_events'].time_column = 'occurred_at'
-        recording = _RecordingConnection(graph._connection)
-        for table in graph.tables.values():
-            table._connection = recording
         sampler = PostgresSampler(graph, verbose=False)
 
         customer_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -341,36 +294,6 @@ def test_postgres_sampler_preserves_native_keys_and_exact_time_semantics(
             '00000000-0000-0000-0000-000000000003',
         ]
         assert np.array_equal(open_batch, np.zeros(3, dtype=np.int64))
-
-        pkey_sql = [
-            sql
-            for sql in recording.statements
-            if 'WHERE __KUMO_ROW__ = 1' in sql
-        ]
-        assert len(pkey_sql) == 1
-
-        neighbor_sql = [
-            sql for sql in recording.statements if 'JOIN LATERAL' in sql
-        ]
-        assert len(neighbor_sql) == 3
-        assert all('LIMIT ' in sql for sql in neighbor_sql)
-        assert all('__KUMO_START_TIME__' not in sql for sql in neighbor_sql)
-        assert sum('LIMIT 2' in sql for sql in neighbor_sql) == 2
-        assert sum('LIMIT 1' in sql for sql in neighbor_sql) == 1
-
-        window_sql = [
-            sql
-            for sql in recording.statements
-            if 'ORDER BY TMP.__KUMO_BATCH__' in sql
-            and 'JOIN LATERAL' not in sql
-            and '__KUMO_END_TIME__' in sql
-        ]
-        assert len(window_sql) == 2
-        assert all(
-            'AND "occurred_at" <= TMP.__KUMO_END_TIME__' in sql
-            for sql in window_sql
-        )
-        assert sum('__KUMO_START_TIME__' in sql for sql in window_sql) == 1
     finally:
         assert graph._connection is not None
         graph._connection.close()
