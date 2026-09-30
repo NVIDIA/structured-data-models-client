@@ -75,17 +75,19 @@ The first release is being assembled. Nothing here has shipped yet.
   `SourceTable`, which holds none.
   `del schema['t']['column']` leaves a column of a table in place out of both
   the read and the request.
+  Every source takes the driver's own connection, or a Spark or Snowpark session, and never closes it: the caller opens it and closes it.
+  `read(path)` reads a CSV or Parquet file, from a local path, a `file:` URI or an `s3://` URI, and `read_table(connection, ...)` reads a table over an open connection.
+  `warehouse()` and `lakebase()` in `sdm_connectors.databricks`, below, open a Databricks connection with the caller's `WorkspaceClient`.
 - `source.semantic_model(name)` on `DatabricksSource` (a metric view) and
   `SnowflakeSource` (a semantic view): a source whose tables, keys and
   relationships the model declares, read by `Schema.from_source` like any
   other. Its dimensions become columns, an expression dimension computed in
   the warehouse when it is sampled; measures and metrics are left to the
   predictive query. `Schema` itself names no warehouse.
-- `sdm_connectors.databricks`: `warehouse(warehouse_id, workspace=w)` and
-  `lakebase(endpoint, database=..., workspace=w)` open a SQL warehouse or
-  Lakebase connection as your own `WorkspaceClient`, for a source to take and
-  you to close; the new `lakebase` extra brings plain `psycopg` and
-  `databricks-sdk>=0.89`, which the `databricks` extra now brings too.
+- `sdm_connectors.databricks`: `warehouse(warehouse_id, workspace=w)` and `lakebase(endpoint, database=..., workspace=w)` open a SQL warehouse or Lakebase connection as your own `WorkspaceClient`, and return the driver's native connection for a source to take and you to close.
+  Each authenticates only through that client, so a `DATABRICKS_TOKEN` in the environment cannot override it.
+  `lakebase()` mints the short-lived password and looks up the endpoint's host itself; an open connection outlives the password, and a new one needs a fresh call.
+  The new `lakebase` extra brings `databricks-sdk>=0.89` and plain `psycopg`, which uses the system's libpq: the `postgres` extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
 - `examples/databricks/`: AdventureWorks over Unity Catalog and over Lakebase,
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a
@@ -93,8 +95,9 @@ The first release is being assembled. Nothing here has shipped yet.
 - What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
   rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
   and Databricks Runtime 14.3 LTS ships 8; `sdm-connectors[databricks]` brings
-  `pyyaml`, which a metric view's definition is parsed with; and the engine
-  has a `postgres` extra for its PostgreSQL backend.
+  `pyyaml`, which a metric view's definition is parsed with, and
+  `databricks-sdk>=0.89`, which `warehouse()` looks a warehouse up with; and
+  the engine has a `postgres` extra for its PostgreSQL backend.
 - A schema over tables in their source reads each table's columns, keys and
   preview once, not once per question. Each question samples through fresh
   copies of what was read, so what one writes onto its tables cannot reach
@@ -112,7 +115,7 @@ The first release is being assembled. Nothing here has shipped yet.
   autocommit, psycopg keeps the first statement's transaction, and its locks,
   until a commit, so a graph kept writers to its tables waiting, and one failed
   read made every later one fail too. Each read of the Postgres backend now
-  ends its own transaction, and the Lakebase notebook connects with autocommit.
+  ends its own transaction, and `lakebase()` connects with autocommit by default.
 - **`read_table` over a psycopg connection left it idle in transaction.** The
   connector's reader ran its query in the transaction psycopg opened for it and
   never ended that, so the caller's connection held its locks, and after one

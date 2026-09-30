@@ -68,11 +68,18 @@ Tables too large to read into memory stay where they are.
 Describe them with `Schema.from_source`, and `materialize()` samples them there with SQL: only the rows a prediction needs leave the warehouse.
 
 ```python
-from databricks import sql
+from databricks.sdk import WorkspaceClient
 from sdm_client import PredictiveQuery, Schema
 from sdm_connectors import DatabricksSource
+from sdm_connectors.databricks import warehouse
 
-source = DatabricksSource(sql.connect(server_hostname=..., http_path=...), catalog='main', schema='sales')
+# In a Databricks notebook this is the notebook's own identity. Elsewhere it is
+# whatever the Databricks SDK finds: a profile in ~/.databrickscfg, chosen with
+# WorkspaceClient(profile=...), or DATABRICKS_HOST and a credential in the
+# environment.
+workspace = WorkspaceClient()
+connection = warehouse(warehouse_id, workspace=workspace)
+source = DatabricksSource(connection, catalog='main', schema='sales')
 schema = Schema.from_source(
     source,
     {'users': 'crm_users', 'orders': 'shop_orders'},
@@ -83,8 +90,13 @@ request = PredictiveQuery(
 ).materialize(indices=[7, 12, 3])
 ```
 
+`warehouse()` looks the SQL warehouse up by its id and returns the `databricks.sql` driver's own connection, authenticated as `workspace`.
+It reads no credential from the environment itself, so how `workspace` authenticates is the one place to look.
+The connection is yours: the source never closes it, so close it once you are done sampling.
+`warehouse()` comes with the `databricks` extra.
 In a Databricks notebook, `DatabricksSource(spark, catalog=..., schema=...)` samples through the notebook's own session instead of a SQL warehouse (Databricks Runtime 17.3 LTS or serverless environment 4 and later).
-`SnowflakeSource`, `PostgresSource` (Lakebase included), `DuckDBSource` and `SQLiteSource` work the same way, each naming its own namespace.
+`SnowflakeSource`, `PostgresSource`, `DuckDBSource` and `SQLiteSource` work the same way, each taking its driver's own connection and naming its own namespace.
+For Lakebase, `lakebase(endpoint, database='databricks_postgres', workspace=workspace)`, from the same module, opens a `psycopg` connection for `PostgresSource` as `workspace` too; it comes with the `lakebase` extra.
 Leave `tables` out to take every table the source holds.
 Each is described from the catalog, which on a warehouse costs seconds per table, so on a large schema name the ones you need.
 A schema's tables all come from one source.

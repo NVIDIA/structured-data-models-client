@@ -222,10 +222,10 @@ Each warehouse has a class of its own, named for it, so what only one warehouse 
 
 | Source | Built from | Names | Notes |
 |---|---|---|---|
-| `DatabricksSource` | `connect('databricks', ...)`, or the notebook's `spark` | `catalog`, `schema` | A SQL warehouse on any runtime; `spark` needs no warehouse and uses the notebook's own compute and identity, on DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()`. Offers `semantic_model()` |
-| `SnowflakeSource` | `connect('snowflake', ...)`, or a Snowpark `session` | `database`, `schema` | A Snowpark session is reached through its own connector connection. Offers `semantic_model()` |
-| `PostgresSource` | `connect('postgres', ...)` | `schema` | Lakebase authenticates with a short-lived OAuth token as the password, minted with the Databricks SDK; the connection outlives the token once it is open |
-| `DuckDBSource`, `SQLiteSource` | a connection | – | What lets CI run the whole path, SQL sampling included, with no credentials |
+| `DatabricksSource` | a `databricks.sql` connection, `sdm_connectors.databricks.warehouse(warehouse_id, workspace=w)` for one opened as your `WorkspaceClient`, or the notebook's `spark` | `catalog`, `schema` | A SQL warehouse on any runtime; `spark` needs no warehouse and uses the notebook's own compute and identity, on DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()`. Offers `semantic_model()` |
+| `SnowflakeSource` | a `snowflake.connector` connection, or a Snowpark `session` | `database`, `schema` | A Snowpark session is reached through its own connector connection. Offers `semantic_model()` |
+| `PostgresSource` | a `psycopg` connection, or `sdm_connectors.databricks.lakebase(endpoint, database=..., workspace=w)` for Lakebase | `schema` | Lakebase authenticates with a short-lived OAuth token as the password, which `lakebase()` mints with your `WorkspaceClient`; the connection outlives the token once it is open |
+| `DuckDBSource`, `SQLiteSource` | a `duckdb` or ADBC SQLite connection | – | What lets CI run the whole path, SQL sampling included, with no credentials |
 
 `Source(connection, ...)` still works, and returns the class that fits the connection; the classes are the spelling to reach for, because they are what a type checker and an editor can see.
 
@@ -256,7 +256,9 @@ Code that needs rows takes a `Table`, and a `SourceTable` reaching it is refused
 
 **The caller owns the connection.**
 The source holds it and never closes it.
-A warehouse connection is the object `sdm_connectors.connect` returns, which is the driver's own type and the one the engine already accepts, so there is no second connection type to convert between.
+A warehouse connection is the driver's own object, opened with the driver's own `connect`.
+It is the type the engine already accepts, so there is no second connection type to convert between.
+On Databricks, `sdm_connectors.databricks.warehouse()` and `lakebase()` open one as the caller's `WorkspaceClient` and hand back that same native connection, for the caller to close.
 A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
 A schema over a source does not pickle.
 

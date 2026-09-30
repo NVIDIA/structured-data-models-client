@@ -4,7 +4,7 @@
 |---|---|
 | `pip install sdm-client` | The client, the language, and the tabular model. Runs anywhere. |
 | `pip install sdm-client[relational]` | Adds the relational model, pulling in the native engine. **Python 3.10–3.13 only** — see [prerequisites](prerequisites.md). |
-| `pip install sdm-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[s3]`. |
+| `pip install sdm-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]`. |
 | `pip install sdm-client[all]` | The relational model and every warehouse backend. |
 | `pip install sdm-client[databricks-serving]` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
 
@@ -40,9 +40,10 @@ Four things differ from a laptop, each found by running on every LTS runtime and
   A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
 - **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**
   `DatabricksSource(spark, ...)` reads results with `DataFrame.toArrow()`, which arrived in Spark 4.
-  On an older runtime, name a SQL warehouse instead: `DatabricksSource(connect('databricks', ...), ...)`.
-- **For Lakebase, install plain `psycopg` rather than the `postgres` extra.**
-  The extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
+  On an older runtime, name a SQL warehouse instead: `DatabricksSource(warehouse(warehouse_id, workspace=WorkspaceClient()), ...)`, with `warehouse` from `sdm_connectors.databricks`.
+- **For Lakebase, install the `lakebase` extra rather than `postgres`: `sdm-client[relational,lakebase,databricks-serving]`.**
+  It brings plain `psycopg`, and the Databricks SDK that `sdm_connectors.databricks.lakebase()` mints the connection's token with.
+  The `postgres` extra's `psycopg[binary]` bundles an OpenSSL that fails its FIPS self-test on Databricks' aarch64 machines and aborts the process.
   Plain `psycopg` uses the runtime's own libpq, which works on both architectures.
   Reach Lakebase from serverless compute, which connects on a private address; a classic cluster goes over the public internet and connects only if the workspace admits its egress address.
 
