@@ -8,7 +8,7 @@ reviewed, and fixes ship in the next release of all five packages.
 
 It is not a supported NVIDIA product under a commercial agreement. There is no
 response-time commitment, and nothing here changes the warranty terms of the
-OpenMDW-1.1 licence the code is released under.
+Apache-2.0 licence the code is released under.
 
 ## Getting help
 

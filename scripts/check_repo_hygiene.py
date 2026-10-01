@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 
 """Three checks this repository has to pass before it can be published.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-SPDX_LINE = 'SPDX-License-Identifier: LicenseRef-OpenMDW-1.1'
+SPDX_LINE = 'SPDX-License-Identifier: Apache-2.0'
 
 # Every tracked file that can carry the header is checked, rather than a list
 # of directories. A root list has to be remembered, and the files it forgot

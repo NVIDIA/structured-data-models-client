@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 
 [project]
 name = "sdm-connectors"
@@ -11,7 +11,7 @@ authors = [
 description = "Shared data-source connectors (connect, read, SQL quoting) for the sdm-client and its engines"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "LicenseRef-OpenMDW-1.1"
+license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 keywords = [
     "structured-data",

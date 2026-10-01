@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 
 exclude: ^(packages/sdm-pql/src/predictive_query/|packages/sdm-api/src/sdm_api/generated/tfm_api\.py$|packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid\.min\.js$)
 

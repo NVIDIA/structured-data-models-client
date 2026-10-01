@@ -1,8 +1,7 @@
 # Contributing to sdm-client
 
 Thanks for your interest in contributing. This project is licensed under the
-[OpenMDW License Agreement, version 1.1](./LICENSE), and we welcome external
-contributions.
+[Apache License 2.0](./LICENSE), and we welcome external contributions.
 
 ## Developer Certificate of Origin (DCO)
 

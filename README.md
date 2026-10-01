@@ -132,11 +132,9 @@ first-party source maintained in this repository.
 
 ## License
 
-OpenMDW License Agreement, version 1.1. Each package carries its own copy of
-`LICENSE` so its `pyproject.toml` can reference it; those copies are the same
-terms as the root file, not additional ones. The identifier is written
-`LicenseRef-OpenMDW-1.1`, because version 1.1 is not yet on the SPDX License
-List; version 1.0 is, as `OpenMDW-1.0`.
+Apache-2.0. Each package carries its own copy of `LICENSE` so its
+`pyproject.toml` can reference it; those copies are the same terms as the root
+file, not additional ones.
 
 ## Documentation
 
