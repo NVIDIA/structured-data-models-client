@@ -62,6 +62,13 @@ RELATIONAL_LIMITS = {
     'classes_max': 10,
 }
 
+# A relational regression is answered from a predicted distribution, and the
+# endpoint reports its mean unless told otherwise; the engine and
+# kumo-relational-client report the median, so that is asked for by default.
+DEFAULT_PREDICTION_STATISTIC = 'median'
+PREDICTION_STATISTICS = frozenset({'mean', 'median'})
+SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
+
 # The tabular endpoint refuses a context past this, exactly:
 #
 #   [422 UNSUPPORTED_SHAPE] N_train 10001 exceeds limit 10000.

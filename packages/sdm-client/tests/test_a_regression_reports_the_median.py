@@ -42,17 +42,24 @@ def shop() -> Schema:
         {
             'order_id': range(240),
             'user_id': [i % 12 for i in range(240)],
+            'item': [i % 5 for i in range(240)],
             'ordered_at': pd.date_range('2026-01-01', periods=240, freq='D'),
         }
     )
+    items = pd.DataFrame({'item': range(5), 'kind': list('abcab')})
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         return Schema.from_data(
-            {'people': people, 'orders': orders},
-            primary_keys={'people': 'user_id', 'orders': 'order_id'},
+            {'people': people, 'orders': orders, 'items': items},
+            primary_keys={
+                'people': 'user_id',
+                'orders': 'order_id',
+                'items': 'item',
+            },
             time_columns={'orders': 'ordered_at'},
             relationships=[
-                Relationship('orders', 'user_id', 'people', 'user_id')
+                Relationship('orders', 'user_id', 'people', 'user_id'),
+                Relationship('orders', 'item', 'items', 'item'),
             ],
         )
 
@@ -161,10 +168,16 @@ def test_output_type_is_refused_and_points_at_the_option(requests_mock):
         (
             'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH people.user_id',
             'mean',
-            'ask it without prediction_statistic',
+            'this question is a binary_classification',
+        ),
+        (
+            'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2 '
+            'FOR EACH people.user_id',
+            'mean',
+            'applies only to a regression, and this question is a ranking',
         ),
     ],
-    ids=['an unknown statistic', 'a classification'],
+    ids=['an unknown statistic', 'a classification', 'a ranking'],
 )
 def test_a_statistic_that_cannot_be_reported_is_refused(query, statistic, said):
     with pytest.raises(StructuredDataError, match=said) as error:

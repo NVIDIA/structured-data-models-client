@@ -91,6 +91,15 @@ def parts_of(
 
     kind = str(getattr(query, 'problem_type', ''))
     if kind.endswith('RANK'):
+        if 'prediction_statistic' in options:
+            # Said here: each part is a classification, and refusing there
+            # would name a binary_classification the caller never wrote.
+            raise StructuredDataError(
+                'prediction_statistic applies only to a regression, and this '
+                'question is a ranking, ordered by how likely each candidate '
+                'is; ask it without prediction_statistic',
+                code='INVALID_REQUEST',
+            )
         return Decomposition(
             RANKING,
             tuple(_per_candidate(query, candidates, schema)),

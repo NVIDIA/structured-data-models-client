@@ -35,7 +35,11 @@ from sdm_client.errors import (
     StructuredDataError,
     UnsupportedRequestError,
 )
-from sdm_client.models import KUMO_RELATIONAL
+from sdm_client.models import (
+    DEFAULT_PREDICTION_STATISTIC,
+    KUMO_RELATIONAL,
+    SUMMARISED_TASK_KINDS,
+)
 from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import as_declared
@@ -52,13 +56,6 @@ _DEFAULT_OUTPUTS = {
     'forecasting': ('prediction',),
     'temporal_link_prediction': ('rankings',),
 }
-
-# A regression is answered from a predicted distribution, and the endpoint
-# reports its mean unless told otherwise; the engine and kumo-relational-client
-# report the median, so that is what is asked for when the caller names none.
-_DEFAULT_PREDICTION_STATISTIC = 'median'
-_PREDICTION_STATISTICS = frozenset({'mean', 'median'})
-_SUMMARISED_KINDS = frozenset({'regression', 'forecasting'})
 
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
 _SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
@@ -479,9 +476,9 @@ def _output_for(
     r"""The output section of one call: its fields, and for a regression the
     statistic its point prediction reports, the median unless one was chosen."""
     output: dict[str, Any] = {'fields': list(outputs)}
-    if str(payload.get('task', {}).get('kind', '')) in _SUMMARISED_KINDS:
+    if str(payload.get('task', {}).get('kind', '')) in SUMMARISED_TASK_KINDS:
         chosen = (payload.get('output') or {}).get('prediction_statistic')
-        output['prediction_statistic'] = chosen or _DEFAULT_PREDICTION_STATISTIC
+        output['prediction_statistic'] = chosen or DEFAULT_PREDICTION_STATISTIC
     return output
 
 
@@ -492,7 +489,7 @@ def _where_the_statistic_is_chosen(refused: list[str]) -> str:
     return (
         f". A regression's statistic is chosen with materialize(..., "
         f'prediction_statistic=...) instead: '
-        f"{_DEFAULT_PREDICTION_STATISTIC!r}, the default, or 'mean'"
+        f"{DEFAULT_PREDICTION_STATISTIC!r}, the default, or 'mean'"
     )
 
 

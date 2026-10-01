@@ -19,16 +19,17 @@ from predictive_query.validator.model_validator import (
 )
 from predictive_query.validator.utils import table_name
 
-from sdm_client.adapters.relational import (
-    _PREDICTION_STATISTICS,
-    _SUMMARISED_KINDS,
-)
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers.sources import EngineTables
 from sdm_client.materializers.tabular import _holds_two_whole_numbers
-from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
+from sdm_client.models import (
+    KUMO_RELATIONAL,
+    PREDICTION_STATISTICS,
+    RELATIONAL_LIMITS,
+    SUMMARISED_TASK_KINDS,
+)
 from sdm_client.request import Request
 from sdm_client.schema import (
     Relationship,
@@ -1034,10 +1035,10 @@ def _statistic_asked_for(options: Mapping[str, Any]) -> str | None:
     if 'prediction_statistic' not in options:
         return None
     given = options['prediction_statistic']
-    if not isinstance(given, str) or given not in _PREDICTION_STATISTICS:
+    if not isinstance(given, str) or given not in PREDICTION_STATISTICS:
         raise StructuredDataError(
             f'prediction_statistic is {given!r}, and a regression reports '
-            f'{" or ".join(repr(name) for name in sorted(_PREDICTION_STATISTICS))} '
+            f'{" or ".join(repr(name) for name in sorted(PREDICTION_STATISTICS))} '
             f'of its predicted distribution',
             code='INVALID_REQUEST',
         )
@@ -1051,11 +1052,11 @@ def _record_the_statistic(
     has no distribution to summarise."""
     for payload in payloads:
         kind = str(payload.get('task', {}).get('kind', ''))
-        if kind not in _SUMMARISED_KINDS:
+        if kind not in SUMMARISED_TASK_KINDS:
             raise StructuredDataError(
-                f'prediction_statistic chooses what a regression reports of '
-                f'its predicted distribution, and this question is a {kind}; '
-                f'ask it without prediction_statistic',
+                f'prediction_statistic applies only to a regression, and '
+                f'this question is a {kind}; ask it without '
+                f'prediction_statistic',
                 code='INVALID_REQUEST',
             )
         output = payload.setdefault('output', {})
