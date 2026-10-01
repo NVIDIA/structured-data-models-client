@@ -13,6 +13,7 @@ pins one thing the rewrite could quietly drop.
 
 from __future__ import annotations
 
+import warnings
 from decimal import Decimal
 
 import numpy as np
@@ -978,29 +979,142 @@ def test_a_forecast_failure_unrelated_to_its_window_is_not_told_to_shorten():
     assert 'ask for fewer than 10 steps' in str(outran.value)
 
 
-def test_a_ranking_with_cold_candidates_sends_nothing_and_names_them_all(
-    requests_mock,
-):
-    """The endpoint refuses a one-class context, and finding each such
-    candidate while sending spent every call before it and named only one."""
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client import KumoRelational, SDMClient
-    from sdm_client.errors import UnsupportedRequestError
+# --- a candidate no context can teach is left out, and said to be ----------
 
-    route = requests_mock.post('http://127.0.0.1:9/v1/predictions', json={})
-    request = PredictiveQuery(
-        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+ENDPOINT = 'http://127.0.0.1:9'
+
+
+def an_endpoint_that_scores(requests_mock, *scores):
+    """Answer the n-th call with `scores[n]` as how sure it is, for every row.
+
+    The calls carry no candidate, so the order they arrive in is what tells
+    them apart: one per candidate asked about, in the order they were named.
+    """
+    calls = iter(scores)
+
+    def answer(call, _):
+        sure = next(calls)
+        rows = call.json()['predict']['instance_table']['rows']
+        return {
+            'object': 'prediction.response',
+            'id': 'pred',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {
+                    'id': str(row[0]),
+                    'row_index': position,
+                    'prediction': 'true' if sure > 0.5 else 'false',
+                    'probabilities': {'true': sure, 'false': 1 - sure},
+                }
+                for position, row in enumerate(rows)
+            ],
+        }
+
+    return requests_mock.post(f'{ENDPOINT}/v1/predictions', json=answer)
+
+
+def ranked(candidates, top=3):
+    return PredictiveQuery(
+        f'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP {top} '
         'FOR EACH users.uid',
         shop(),
-    ).materialize(indices=[1, 2, 3], candidates=[10, 13, 11, 14])
+    ).materialize(indices=[1, 2, 3], candidates=candidates)
+
+
+def answered(request, **how):
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.core.warnings import SDMWarning
+
+    with warnings.catch_warnings(record=True) as said:
+        warnings.simplefilter('always')
+        with SDMClient(ENDPOINT) as client:
+            result = client.predict(request, model=KumoRelational(), **how)
+    return result, [
+        str(warning.message)
+        for warning in said
+        if issubclass(warning.category, SDMWarning)
+    ]
+
+
+def test_a_ranking_leaves_out_the_candidates_no_context_teaches(
+    requests_mock,
+):
+    """Nobody in the shop buys 13 or 14, so the endpoint would refuse their
+    questions. Refusing the whole ranking for them gave back nothing about
+    the candidates that could be ranked."""
+    pytest.importorskip('sdm_relational_engine')
+    route = an_endpoint_that_scores(requests_mock, 0.2, 0.9)
+
+    result, said = answered(ranked([10, 13, 11, 14]))
+
+    # One call each for 10 and 11, and none for the two left out.
+    assert route.call_count == 2
+    assert result.unscored_candidates == (13, 14)
+    for item in result.items:
+        assert item.prediction == [11, 10]
+        assert [entry['candidate'] for entry in item.rankings] == [11, 10]
+        assert [entry['score'] for entry in item.rankings] == [0.9, 0.2]
+    frame = result.to_pandas()
+    assert len(frame) == 3
+    named = {c for row in frame['prediction'] for c in row}
+    assert named == {10, 11}
+    (warned,) = [message for message in said if 'unscored' in message]
+    assert 'candidates 13 and 14 are left out of this ranking' in warned
+    assert 'no entity in it linked to the candidate' in warned
+    assert 'num_context_samples' in warned
+    assert '(entity, candidate) pairs' in warned
+
+
+def test_a_ranking_with_no_candidate_left_is_refused_before_any_call(
+    requests_mock,
+):
+    """With every candidate left out there is nothing to rank, and leaving
+    them all out would answer with empty rows that look like an answer."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client.errors import UnsupportedRequestError
+
+    route = an_endpoint_that_scores(requests_mock)
 
     with pytest.raises(UnsupportedRequestError) as error:
-        with SDMClient('http://127.0.0.1:9') as client:
-            client.predict(request, model=KumoRelational())
+        answered(ranked([13, 14]))
 
     assert not route.called
     assert error.value.details['candidates'] == [13, 14]
-    assert 'candidates 13 and 14 each hold one answer only' in str(error.value)
+    said = str(error.value)
+    assert 'candidates 13 and 14 each hold one answer only' in said
+    assert 'nothing to rank' in said
+    assert 'Rank without' not in said
+
+
+def test_the_unscored_candidates_survive_a_merge_and_are_empty_elsewhere(
+    requests_mock,
+):
+    """A ranking split across calls is merged, and dropping the candidates it
+    left out there would make every one of them look ranked and lost."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client.result import PredictionResult
+
+    an_endpoint_that_scores(requests_mock, 0.2, 0.9, 0.4, 0.5, 0.6)
+    first, _ = answered(ranked([10, 13, 11]))
+    second, _ = answered(ranked([14, 10, 11]))
+    assert first.unscored_candidates == (13,)
+    assert second.unscored_candidates == (14,)
+
+    merged = PredictionResult.merge([first, second])
+    assert merged.unscored_candidates == (13, 14)
+    assert len(merged) == len(first) + len(second)
+
+    # The question a ranking asks of candidate 10, asked on its own.
+    ordinary, _ = answered(
+        PredictiveQuery(
+            'PREDICT COUNT(buys.* WHERE buys.iid=10, 0, 30, days) > 0 '
+            'FOR EACH users.uid',
+            shop(),
+        ).materialize(indices=[1, 2, 3])
+    )
+    assert len(ordinary) == 3
+    assert ordinary.unscored_candidates == ()
 
 
 def test_an_ordinary_ranking_failure_is_not_told_to_drop_the_candidate():

@@ -107,12 +107,16 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
-- **A ranking with a candidate whose context holds one answer is refused
-  before any call.** The endpoint refuses such a candidate's question, so the
-  ranking failed only after every call before it had been sent, and named
-  that one candidate. Every candidate is now checked first, and one refusal
-  names all of them. It no longer claims no context of any size could help: a
-  sampled context can miss the entities that do reach a candidate.
+- **A ranking leaves out the candidates no sampled context can teach, and
+  ranks the rest.** The endpoint refuses a candidate whose context holds one
+  answer, usually because no entity in it linked to the candidate in the
+  window, so the ranking failed after every call before that candidate had
+  been sent. Every candidate is now checked first. Those that cannot be
+  scored get no call and no score: they are named on the new
+  `PredictionResult.unscored_candidates` and in one `SDMWarning`, and each
+  row may rank fewer than `k`. A ranking with no candidate left is refused
+  before any call. `docs/reference/prediction-output.md` explains why, and
+  how a table of (entity, candidate) pairs scores every candidate.
 - **A relational regression now reports the median, so its values change.**
   The endpoint reports the mean of the predicted distribution unless told
   otherwise, and this client dropped the engine's `output_type`, so answers

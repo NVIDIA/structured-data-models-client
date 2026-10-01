@@ -18,7 +18,9 @@ multiclass both give one row per entity -- multiclass carries a probability per
 class as columns rather than a row per class -- while forecasting gives one row per
 step. Ranking is the exception to the row-per-answer rule: the ``k`` ranked
 candidates arrive as a **list in one row**, under ``rankings``, because
-expanding them would make the frame's key no longer identify a row.
+expanding them would make the frame's key no longer identify a row. A
+candidate a ranking could not score is in no row, and is named on
+``unscored_candidates`` instead.
 
 Every row carries ``row_index``. It also carries ``id`` when the model has an
 entity key -- a single-table request may have none. **Join on the key when it
@@ -80,6 +82,7 @@ class PredictionResult:
         metadata: dict[str, Any] | None = None,
         explanation: dict[str, Any] | None = None,
         outputs: Sequence[str] = (),
+        unscored_candidates: Sequence[Any] = (),
     ) -> None:
         self.model = model
         self.request_id = request_id
@@ -87,6 +90,7 @@ class PredictionResult:
         self.outputs = tuple(outputs)
         self.metadata = dict(metadata or {})
         self._explanation = explanation
+        self._unscored_candidates = tuple(unscored_candidates)
 
     def absent(self, requested: Sequence[str]) -> tuple[str, ...]:
         r"""Which of ``requested`` the answer does not carry.
@@ -132,6 +136,22 @@ class PredictionResult:
         ``None`` otherwise, rather than a different return type.
         """
         return self._explanation
+
+    @property
+    def unscored_candidates(self) -> tuple[Any, ...]:
+        r"""The candidates a ranking left out, in the order they were named.
+
+        A candidate is left out when the context sampled for it holds one
+        answer only, which nearly always means no entity in it linked to the
+        candidate in the window. The endpoint refuses that question, so no
+        call is made for it and it is in no row's ``prediction`` or
+        ``rankings``: a score of any kind would be invented. Each row may
+        therefore rank fewer than ``k`` candidates.
+
+        Empty when every candidate was scored, and on any result that is not
+        a ranking.
+        """
+        return self._unscored_candidates
 
     def to_pandas(self) -> pd.DataFrame:
         r"""The predictions as a frame.
@@ -242,6 +262,15 @@ class PredictionResult:
                 f'({sorted(shapes)}), so they are not slices of one request',
                 code='INTERNAL_ERROR',
             )
+        # A candidate left out of any part was ranked for none of its rows, so
+        # it is left out of the whole.
+        unscored: list[Any] = []
+        for part in parts:
+            unscored += [
+                candidate
+                for candidate in part.unscored_candidates
+                if candidate not in unscored
+            ]
         return cls(
             model=first.model,
             request_id=first.request_id,
@@ -249,6 +278,7 @@ class PredictionResult:
             metadata=metadata,
             explanation=explanation,
             outputs=first.outputs,
+            unscored_candidates=unscored,
         )
 
     def __len__(self) -> int:
@@ -259,7 +289,13 @@ class PredictionResult:
 
     def __repr__(self) -> str:
         explained = ', explained' if self._explanation is not None else ''
+        left_out = len(self._unscored_candidates)
+        unscored = (
+            f', {left_out} candidate{"s" if left_out > 1 else ""} unscored'
+            if left_out
+            else ''
+        )
         return (
             f'PredictionResult({self.model!r}, {len(self.items)} rows'
-            f'{explained})'
+            f'{explained}{unscored})'
         )

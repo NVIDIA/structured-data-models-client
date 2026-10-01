@@ -784,14 +784,15 @@
         "bases": [],
         "kind": "class",
         "public_attributes": [
-          "explanation"
+          "explanation",
+          "unscored_candidates"
         ],
         "public_methods": {
           "absent": "(self, requested: 'Sequence[str]') -> 'tuple[str, ...]'",
           "merge": "(parts: 'Sequence[PredictionResult]') -> 'PredictionResult'",
           "to_pandas": "(self) -> 'pd.DataFrame'"
         },
-        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanation: 'dict[str, Any] | None' = None, outputs: 'Sequence[str]' = ()) -> 'None'"
+        "signature": "(*, model: 'str', request_id: 'str', items: 'Sequence[PredictionItem]', metadata: 'dict[str, Any] | None' = None, explanation: 'dict[str, Any] | None' = None, outputs: 'Sequence[str]' = (), unscored_candidates: 'Sequence[Any]' = ()) -> 'None'"
       },
       "PredictiveQuery": {
         "bases": [],

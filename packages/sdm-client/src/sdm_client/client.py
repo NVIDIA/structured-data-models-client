@@ -16,6 +16,7 @@ the endpoint and credential of the client that started it.
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 from collections.abc import Iterable, Sequence
 from types import TracebackType
@@ -415,44 +416,59 @@ class SDMClient:
         rewritten = request.decomposition
         assert rewritten is not None
         ranking = rewritten.kind == RANKING
+        unscored: frozenset[int] = frozenset()
         if ranking:
             _refuse_outputs_a_ranking_cannot_give(outputs)
-            self._refuse_candidates_no_context_teaches(request, model)
+            unscored = self._candidates_no_context_teaches(request, model)
         # A ranking needs how sure each answer was, which is what orders the
         # candidates, and the fields it gives back are the merge's own. A step
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
         answers = []
-        for part, (_, about) in zip(
-            request.parts or (), rewritten.parts, strict=True
+        for position, (part, (_, about)) in enumerate(
+            zip(request.parts or (), rewritten.parts, strict=True)
         ):
+            if position in unscored:
+                continue
             try:
                 answers.append(self.predict(part, model=model, outputs=wanted))
             except StructuredDataError as error:
                 raise about_the_part(error, rewritten, about) from error
         if ranking:
-            return _ranked(answers, rewritten, outputs)
+            parts = rewritten.parts
+            scored = [part for i, part in enumerate(parts) if i not in unscored]
+            return _ranked(
+                answers,
+                dataclasses.replace(rewritten, parts=tuple(scored)),
+                outputs,
+                unscored=[parts[i][1] for i in sorted(unscored)],
+            )
         merged = _by_step(answers, rewritten)
         _warn_of_steps_that_carry_no_explanation(
             answers, rewritten, outputs, spec_for(model).model_id
         )
         return _report_absent(merged, outputs, spec_for(model).model_id)
 
-    def _refuse_candidates_no_context_teaches(
+    def _candidates_no_context_teaches(
         self, request: Request, model: str | Model
-    ) -> None:
-        r"""Refuse a ranking with a one-class candidate before any call.
+    ) -> frozenset[int]:
+        r"""Which of a ranking's parts ask about a one-class candidate.
 
         The endpoint refuses a classification whose context holds one class,
-        so finding such a candidate while sending spent every call before it,
-        and named only the first of several.
+        so such a candidate cannot be scored. Every part is checked before any
+        call, so the rest are ranked without those and the caller is told
+        once, and a ranking with nothing left is refused before it spends one.
+
+        A candidate's context is gathered once for every entity in the
+        ranking, so a candidate that cannot be scored for one cannot be scored
+        for any.
         """
         rewritten = request.decomposition
         assert rewritten is not None
-        cold = []
-        for part, (_, about) in zip(
-            request.parts or (), rewritten.parts, strict=True
+        positions = []
+        for position, (part, (_, about)) in enumerate(
+            zip(request.parts or (), rewritten.parts, strict=True)
         ):
             try:
                 adapter, fields = self._prepare(part, model, _RANKING_PARTS)
@@ -462,29 +478,47 @@ class SDMClient:
                 details = getattr(error, 'details', None) or {}
                 if details.get('classes_in_context') != 1:
                     raise about_the_part(error, rewritten, about) from error
-                cold.append(about)
-        if not cold:
-            return
+                positions.append(position)
+        if not positions:
+            return frozenset()
+        cold = [rewritten.parts[position][1] for position in positions]
         many = len(cold) > 1
         named = ', '.join(repr(candidate) for candidate in cold[:-1])
+        if len(cold) == len(rewritten.parts):
+            which = (
+                f'the contexts gathered for candidates {named} and '
+                f'{cold[-1]!r} each hold'
+                if many
+                else f'the context gathered for candidate {cold[0]!r} holds'
+            )
+            raise UnsupportedRequestError(
+                f'{which} one answer only, and a classification needs at '
+                f'least two classes to learn from, so there is nothing to '
+                f'rank and nothing was sent. {_SCORE_THE_UNSCORED}',
+                details={
+                    'model': spec_for(model).model_id,
+                    'candidates': cold,
+                    'classes_in_context': 1,
+                },
+            )
         which = (
-            f'the contexts gathered for candidates {named} and {cold[-1]!r} '
-            f'each hold'
+            f'candidates {named} and {cold[-1]!r} are'
             if many
-            else f'the context gathered for candidate {cold[0]!r} holds'
+            else f'candidate {cold[0]!r} is'
         )
-        raise UnsupportedRequestError(
-            f'{which} one answer only, and a classification needs at least '
-            f'two classes to learn from, so nothing was sent. Rank without '
-            f'{"them" if many else "it"}, or gather a wider context with '
-            f'num_context_samples if other entities in the data answer '
-            f'differently.',
-            details={
-                'model': spec_for(model).model_id,
-                'candidates': cold,
-                'classes_in_context': 1,
-            },
+        them = 'them' if many else 'it'
+        warnings.warn(
+            f'{which} left out of this ranking, unscored: the context '
+            f'sampled for {"each" if many else "it"} holds one answer only, '
+            f'nearly always because no entity in it linked to the candidate '
+            f'in the window, and a classification needs two to learn from. '
+            f'No call was sent for {them}, so each row ranks only the rest, '
+            f"and the result's unscored_candidates names {them}. "
+            f'{_SCORE_THE_UNSCORED}',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
         )
+        return frozenset(positions)
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""
@@ -796,12 +830,19 @@ def _warn_scoring_what_was_pinned(
 #: orders the candidates, not which side of the line it fell.
 _RANKING_PARTS = ('prediction', 'probabilities')
 _RANKING_OUTPUTS = ('prediction', 'rankings')
+#: What can still rank a candidate whose sampled context holds one answer.
+_SCORE_THE_UNSCORED = (
+    'Gather a wider context with num_context_samples if other entities in '
+    'the data answer differently, or ask over a table of (entity, '
+    'candidate) pairs, which scores every candidate from its features.'
+)
 
 
 def _ranked(
     answers: list[PredictionResult],
     rewritten: Decomposition,
     outputs: Sequence[str] | None,
+    unscored: Sequence[Any] = (),
 ) -> PredictionResult:
     r"""The candidates each entity reached, likeliest first.
 
@@ -812,6 +853,10 @@ def _ranked(
     Each entity keeps the row it was asked about on, so the answer joins back
     onto the frame the caller scored. The candidates are the values the caller
     named, not what they looked like once written into a query.
+
+    `rewritten` holds only the parts that were asked. The candidates that were
+    not are carried beside the ranking, never in it, since any score given
+    them would be invented.
     """
 
     from sdm_api.generated.tfm_api import PredictionItem
@@ -863,6 +908,7 @@ def _ranked(
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=wanted,
+        unscored_candidates=unscored,
     )
 
 
@@ -942,8 +988,6 @@ def _by_step(
     step they belong to. Dropping them left the result saying it carried an
     explanation while holding none.
     """
-    import dataclasses
-
     items = [
         dataclasses.replace(item, forecast_step=step)
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
