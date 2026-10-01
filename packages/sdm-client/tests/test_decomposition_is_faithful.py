@@ -1037,8 +1037,20 @@ def answered(request, **how):
     ]
 
 
+@pytest.mark.parametrize(
+    ('candidates', 'cold', 'left_out'),
+    [
+        (
+            [10, 13, 11, 14],
+            (13, 14),
+            'candidates 13 and 14 are left out of this ranking',
+        ),
+        ([10, 13, 11], (13,), 'candidate 13 is left out of this ranking'),
+    ],
+    ids=['two cold', 'one cold'],
+)
 def test_a_ranking_leaves_out_the_candidates_no_context_teaches(
-    requests_mock,
+    requests_mock, candidates, cold, left_out
 ):
     """Nobody in the shop buys 13 or 14, so the endpoint would refuse their
     questions. Refusing the whole ranking for them gave back nothing about
@@ -1046,11 +1058,11 @@ def test_a_ranking_leaves_out_the_candidates_no_context_teaches(
     pytest.importorskip('sdm_relational_engine')
     route = an_endpoint_that_scores(requests_mock, 0.2, 0.9)
 
-    result, said = answered(ranked([10, 13, 11, 14]))
+    result, said = answered(ranked(candidates))
 
-    # One call each for 10 and 11, and none for the two left out.
+    # One call each for 10 and 11, and none for those left out.
     assert route.call_count == 2
-    assert result.unscored_candidates == (13, 14)
+    assert result.unscored_candidates == cold
     for item in result.items:
         assert item.prediction == [11, 10]
         assert [entry['candidate'] for entry in item.rankings] == [11, 10]
@@ -1060,7 +1072,7 @@ def test_a_ranking_leaves_out_the_candidates_no_context_teaches(
     named = {c for row in frame['prediction'] for c in row}
     assert named == {10, 11}
     (warned,) = [message for message in said if 'unscored' in message]
-    assert 'candidates 13 and 14 are left out of this ranking' in warned
+    assert left_out in warned
     assert 'no entity in it linked to the candidate' in warned
     assert 'num_context_samples' in warned
     assert '(entity, candidate) pairs' in warned

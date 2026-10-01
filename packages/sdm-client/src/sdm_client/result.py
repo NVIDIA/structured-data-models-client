@@ -144,9 +144,13 @@ class PredictionResult:
         A candidate is left out when the context sampled for it holds one
         answer only, which nearly always means no entity in it linked to the
         candidate in the window. The endpoint refuses that question, so no
-        call is made for it and it is in no row's ``prediction`` or
-        ``rankings``: a score of any kind would be invented. Each row may
-        therefore rank fewer than ``k`` candidates.
+        call is made for it and no score is invented for it: a row asked about
+        in that ranking does not hold it in ``prediction`` or ``rankings``,
+        and may therefore rank fewer than ``k`` candidates.
+
+        On a merge of rankings asked separately, a candidate is named here when
+        it was left out of at least one part's rows, and may be scored in the
+        rows of another part.
 
         Empty when every candidate was scored, and on any result that is not
         a ranking.
@@ -262,8 +266,8 @@ class PredictionResult:
                 f'({sorted(shapes)}), so they are not slices of one request',
                 code='INTERNAL_ERROR',
             )
-        # A candidate left out of any part was ranked for none of its rows, so
-        # it is left out of the whole.
+        # A candidate left out of at least one part's rows is named, so the
+        # rows that were ranked without it can still be told apart.
         unscored: list[Any] = []
         for part in parts:
             unscored += [
