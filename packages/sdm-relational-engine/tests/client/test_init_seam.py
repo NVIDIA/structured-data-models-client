@@ -77,14 +77,14 @@ def test_repeated_init_does_not_rebuild_the_client() -> None:
 
 def test_changed_arguments_still_rebuild_the_client() -> None:
     """The fast path must key on the arguments, not merely on being
-    initialized, or a caller could never switch service or session.
+    initialized, or a caller could never switch service or session. One
+    session for both, so only the service name tells the two apart.
     """
-    sdm_relational_engine.init_snowflake_serving(SERVICE, session=_Session())
+    session = _Session()
+    sdm_relational_engine.init_snowflake_serving(SERVICE, session=session)
     first_client = sdm_relational_engine.global_state.client
 
-    sdm_relational_engine.init_snowflake_serving(
-        'DB.SC.SVC_2', session=_Session()
-    )
+    sdm_relational_engine.init_snowflake_serving('DB.SC.SVC_2', session=session)
     assert sdm_relational_engine.global_state.client is not first_client
     assert sdm_relational_engine.global_state.client.service == 'DB.SC.SVC_2'
 
@@ -135,8 +135,10 @@ def test_serving_reinit_replaces_cached_clients_in_other_threads() -> None:
 
     ``GlobalState.clear()`` can only delete the current thread's cache. Other
     threads rely on the cache key changing when the process is reconfigured.
+    One session for both, so the session alone cannot change the key.
     """
-    sdm_relational_engine.init_snowflake_serving(SERVICE, session=_Session())
+    session = _Session()
+    sdm_relational_engine.init_snowflake_serving(SERVICE, session=session)
     first_ready = threading.Event()
     reconfigured = threading.Event()
     seen: list[Any] = []
@@ -157,9 +159,7 @@ def test_serving_reinit_replaces_cached_clients_in_other_threads() -> None:
     assert first_ready.wait(timeout=5)
     assert not errors
 
-    sdm_relational_engine.init_snowflake_serving(
-        'DB.SC.SVC_2', session=_Session()
-    )
+    sdm_relational_engine.init_snowflake_serving('DB.SC.SVC_2', session=session)
     reconfigured.set()
     thread.join(timeout=5)
 
