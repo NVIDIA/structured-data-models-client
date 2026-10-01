@@ -19,6 +19,10 @@ from predictive_query.validator.model_validator import (
 )
 from predictive_query.validator.utils import table_name
 
+from sdm_client.adapters.relational import (
+    _PREDICTION_STATISTICS,
+    _SUMMARISED_KINDS,
+)
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
@@ -63,6 +67,7 @@ class RelationalMaterializer:
             'exclude_cols_dict',
             'return_embeddings',
             'top_k',
+            'prediction_statistic',
         }
     )
 
@@ -95,11 +100,14 @@ class RelationalMaterializer:
                 code='INVALID_REQUEST',
             )
 
+        statistic = _statistic_asked_for(options)
         self._refuse_a_name_the_wire_reserves()
         self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
         _warn_the_filter_chose_only_the_examples(query, indices)
         _warn_of_relationships_that_join_nothing(self.schema)
         payloads = self._gather(query, indices, num_context_samples, options)
+        if statistic is not None:
+            _record_the_statistic(payloads, statistic)
         sent = _tables_sent(payloads, self.schema)
         _warn_of_tables_left_out(
             self.schema, sent, table_name(query.entity_column)
@@ -1018,6 +1026,40 @@ def _candidates_to_rank(
             code='INVALID_REQUEST',
         )
     return int(given)
+
+
+def _statistic_asked_for(options: Mapping[str, Any]) -> str | None:
+    r"""The regression statistic the caller chose, refused if it is not one
+    the endpoint reports."""
+    if 'prediction_statistic' not in options:
+        return None
+    given = options['prediction_statistic']
+    if not isinstance(given, str) or given not in _PREDICTION_STATISTICS:
+        raise StructuredDataError(
+            f'prediction_statistic is {given!r}, and a regression reports '
+            f'{" or ".join(repr(name) for name in sorted(_PREDICTION_STATISTICS))} '
+            f'of its predicted distribution',
+            code='INVALID_REQUEST',
+        )
+    return str(given)
+
+
+def _record_the_statistic(
+    payloads: tuple[dict[str, Any], ...], statistic: str
+) -> None:
+    r"""Carry the chosen statistic on each call, or refuse a question that
+    has no distribution to summarise."""
+    for payload in payloads:
+        kind = str(payload.get('task', {}).get('kind', ''))
+        if kind not in _SUMMARISED_KINDS:
+            raise StructuredDataError(
+                f'prediction_statistic chooses what a regression reports of '
+                f'its predicted distribution, and this question is a {kind}; '
+                f'ask it without prediction_statistic',
+                code='INVALID_REQUEST',
+            )
+        output = payload.setdefault('output', {})
+        output['prediction_statistic'] = statistic
 
 
 def _warn_rows_the_graph_dropped(model: KumoRelational) -> None:

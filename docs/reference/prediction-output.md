@@ -27,6 +27,12 @@ would make `row_index` no longer identify a row, so they arrive under
 `rankings`, and under `prediction` when that is asked for, as a list per entity.
 Three entities ranked `TOP 3` come back as three rows, not nine.
 
+## What a regression reports
+
+The relational model predicts a distribution for a regression, and `prediction` is its median.
+That matches what the engine and kumo-relational-client return.
+Pass `materialize(..., prediction_statistic='mean')` for the mean instead.
+
 ## Joining
 
 Every row carries `row_index`. It also carries `id` — the entity — when the

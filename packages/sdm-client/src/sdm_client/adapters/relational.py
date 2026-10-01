@@ -53,6 +53,13 @@ _DEFAULT_OUTPUTS = {
     'temporal_link_prediction': ('rankings',),
 }
 
+# A regression is answered from a predicted distribution, and the endpoint
+# reports its mean unless told otherwise; the engine and kumo-relational-client
+# report the median, so that is what is asked for when the caller names none.
+_DEFAULT_PREDICTION_STATISTIC = 'median'
+_PREDICTION_STATISTICS = frozenset({'mean', 'median'})
+_SUMMARISED_KINDS = frozenset({'regression', 'forecasting'})
+
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
 _SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
 
@@ -107,7 +114,7 @@ class RelationalAdapter:
         for payload in payloads:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
-            envelope['output'] = {'fields': list(outputs)}
+            envelope['output'] = _output_for(payload, outputs)
             envelope.setdefault('metadata', {})['request_id'] = _request_id()
             inference = self._inference(envelope.get('inference'), request)
             if inference is None:
@@ -121,12 +128,13 @@ class RelationalAdapter:
     ) -> dict[str, Any] | None:
         """Send only the inference options this model reads.
 
-        The engine was written against a different backend and fills in an
-        inference config on every request, including keys this one refuses
-        outright. Dropping them is safe because they are the engine's defaults
-        rather than anything asked for -- but if the *caller* asked for one, it
-        is named rather than silently discarded, because a dropped request for
-        four estimators is a different prediction than the one that was wanted.
+        The engine fills in an inference config on every request, including
+        keys this client does not forward: `output_type`, whose choice travels
+        as ``output.prediction_statistic`` instead, and `target_transforms`.
+        Dropping the engine's defaults is safe -- but if the *caller* asked for
+        one, it is named rather than silently discarded, because a dropped
+        request for four estimators is a different prediction than the one
+        that was wanted.
 
         Forwarding a key is not a promise that the endpoint serves it. This is
         a name-level filter over what the engine sends; whether a deployment
@@ -150,7 +158,8 @@ class RelationalAdapter:
                 f'{refused}; drop them from inference_config to send the '
                 f'request without them. The keys this client forwards are '
                 f'{sorted(forwarded)}, and the endpoint decides for itself '
-                f'whether it serves the value given for one',
+                f'whether it serves the value given for one'
+                + _where_the_statistic_is_chosen(refused),
                 details={
                     'model': self.spec.model_id,
                     'unsupported': refused,
@@ -462,6 +471,29 @@ class RelationalAdapter:
                 details={'model': KUMO_RELATIONAL.model_id},
             )
         return payloads
+
+
+def _output_for(
+    payload: Mapping[str, Any], outputs: tuple[str, ...]
+) -> dict[str, Any]:
+    r"""The output section of one call: its fields, and for a regression the
+    statistic its point prediction reports, the median unless one was chosen."""
+    output: dict[str, Any] = {'fields': list(outputs)}
+    if str(payload.get('task', {}).get('kind', '')) in _SUMMARISED_KINDS:
+        chosen = (payload.get('output') or {}).get('prediction_statistic')
+        output['prediction_statistic'] = chosen or _DEFAULT_PREDICTION_STATISTIC
+    return output
+
+
+def _where_the_statistic_is_chosen(refused: list[str]) -> str:
+    r"""Point an `output_type` at the option that replaced it."""
+    if 'output_type' not in refused:
+        return ''
+    return (
+        f". A regression's statistic is chosen with materialize(..., "
+        f'prediction_statistic=...) instead: '
+        f"{_DEFAULT_PREDICTION_STATISTIC!r}, the default, or 'mean'"
+    )
 
 
 _UNSUPPORTED_STYPE = re.compile(r"semantic type '([^']+)' is unsupported")

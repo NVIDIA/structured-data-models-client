@@ -184,13 +184,9 @@ def test_the_relational_model_declares_the_deployment_it_was_read_from():
     assert 'num_estimators' in runtime.inference_options
 
 
-def test_an_inference_option_the_endpoint_refuses_is_named_locally():
-    """The engine defaults to sending more than this deployment accepts.
-
-    Dropping its defaults is safe; dropping something the caller asked for is
-    not, so that case is named. This needs no endpoint, which is why it lives
-    here rather than in the live suite.
-    """
+def test_an_inference_option_the_caller_set_is_named_rather_than_dropped():
+    """Dropping the engine's defaults is safe; dropping something the caller
+    asked for is not, so that case is named."""
     request = _Gathered(payload(predict_rows=1, context_rows=10))
     request.inference = {'inference_config': {'output_type': 'quantiles'}}
     request.requested_inference = {
@@ -202,17 +198,23 @@ def test_an_inference_option_the_endpoint_refuses_is_named_locally():
     with pytest.raises(UnsupportedRequestError) as error:
         list(RelationalAdapter().prediction_plan(request, ('prediction',)))
     assert 'output_type' in str(error.value)
+    assert 'prediction_statistic=' in str(error.value)
 
 
-def test_an_engine_default_the_endpoint_refuses_is_dropped_quietly():
-    """It was never asked for, so trimming it changes nothing the caller wanted."""
+def test_the_engine_s_statistic_travels_on_the_output_instead():
+    """Trimming `output_type` once dropped the median the engine asks for,
+    and the endpoint answered with its own default, the mean."""
     request = _Gathered(payload(predict_rows=1, context_rows=10))
     request.payloads[0]['inference'] = {
-        'inference_config': {'output_type': 'quantiles', 'num_estimators': 1}
+        'inference_config': {
+            'output_type': 'median',
+            'target_transforms': ['quantile'],
+            'num_estimators': 1,
+        }
     }
-    plans = list(RelationalAdapter().prediction_plan(request, ('prediction',)))
-    config = plans[0]['inference']['inference_config']
-    assert config == {'num_estimators': 1}
+    (plan,) = RelationalAdapter().prediction_plan(request, ('prediction',))
+    assert plan['inference']['inference_config'] == {'num_estimators': 1}
+    assert plan['output']['prediction_statistic'] == 'median'
 
 
 def test_the_preflight_runs_through_a_real_materialized_request():

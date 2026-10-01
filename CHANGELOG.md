@@ -107,6 +107,15 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **A relational regression now reports the median, so its values change.**
+  The endpoint reports the mean of the predicted distribution unless told
+  otherwise, and this client dropped the engine's `output_type`, so answers
+  were the mean where the engine and kumo-relational-client give the median.
+  On a right-skewed target such as a count the mean is higher. Requests now
+  carry `output.prediction_statistic`, `'median'` by default; pass
+  `materialize(..., prediction_statistic='mean')` for the mean.
+  `inference_config={'output_type': ...}` is still refused, and now names the
+  option to use instead.
 - **Foreign keys a PostgreSQL or Databricks catalog declares now link the
   tables.** `Schema.from_source` compared the engine's qualified name for the
   referenced table with the caller's bare one, so no declared key matched and

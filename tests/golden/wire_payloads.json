@@ -7033,7 +7033,8 @@
       "output": {
         "fields": [
           "prediction"
-        ]
+        ],
+        "prediction_statistic": "median"
       },
       "predict": {
         "instance_table": {

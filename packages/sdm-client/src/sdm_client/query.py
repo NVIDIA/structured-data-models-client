@@ -125,7 +125,9 @@ class PredictiveQuery:
                 settle it. Authoritative, and single-table only: passing it
                 with a relational or decomposed query is refused.
             **options: Relational sampling options, such as ``num_neighbors``
-                and ``anchor_time``.
+                and ``anchor_time``, and ``prediction_statistic``: what a
+                regression's prediction reports of its predicted distribution,
+                ``'median'`` (the default) or ``'mean'``.
 
         Returns:
             A :class:`~sdm_client.Request` carrying the data.

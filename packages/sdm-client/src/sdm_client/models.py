@@ -121,12 +121,14 @@ KUMO_RELATIONAL = ModelSpec(
         limits=RELATIONAL_LIMITS,
         unread_feature_stypes=frozenset({'text'}),
         # Inference-config keys this client forwards, rather than keys the
-        # deployment is known to serve: the engine was written against a
-        # different backend and defaults to sending `output_type` and
-        # `target_transforms` as well, which this one refuses outright. A
-        # deployment may still refuse a value given for a key that is
-        # forwarded, and the shipping one refuses every shuffle and every
-        # `num_estimators` but its own, so this list is not a menu.
+        # deployment is known to serve. The engine also sends `output_type`,
+        # whose choice travels as `output.prediction_statistic` instead, and
+        # `target_transforms`, which does nothing on this model: the endpoint
+        # accepts only `quantile`, reads it nowhere, and says the model emits
+        # its quantiles natively. A deployment may still refuse a value given
+        # for a key that is forwarded, and the shipping one refuses every
+        # shuffle and every `num_estimators` but its own, so this list is not
+        # a menu.
         inference_options=frozenset(
             {
                 'kind',
