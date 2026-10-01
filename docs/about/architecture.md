@@ -490,9 +490,9 @@ and the resource limits in §7. A profile cannot know whether *this deployment*
 has a regressor checkpoint; that is a runtime fact and lives beside it, never
 duplicated into it.
 
-> **Cost, stated plainly.** The predecessor client deleted its registry on
-> purpose. We are re-opening it, and that buys back an adapter protocol to keep
-> stable and conformance tests to maintain. That is the price of serving more
+> **Cost, stated plainly.** The code this came from deleted its registry on
+> purpose. Re-opening it buys back an adapter protocol to keep stable and
+> conformance tests to maintain. That is the price of serving more
 > than one model, and it is the price the doc asks for.
 
 A model with no heavy client-side work (tabular) is an adapter alone. A model
@@ -547,30 +547,28 @@ reference and not here, so the two pages disagreed about what the client does.
 
 ---
 
-## 8. What we copy
+## 8. Where this code came from
 
-Most of this client is not new. An earlier internal NVIDIA relational client,
-at 1.0.0, is post-QA, hardened and live-tested, and a separate internal client
-carried the tabular surface. We copy both rather than rewrite them.
+Most of this client is not new. It consolidates implementations that already
+existed at NVIDIA, were in production, and had been hardened and tested
+against live endpoints. Consolidating them was preferred to rewriting: a
+rewrite would have traded working code for new code and kept none of what
+those implementations had learned.
 
-What came from where, and what changed on the way:
+What changed on the way, for anyone reading code that looks familiar:
 
-| From | To | Change |
-|---|---|---|
-| The predecessor client's connectors package | `sdm-connectors` | names only |
-| ⟂ its relational engine, `rfm/` | `sdm-relational-engine` | `Graph`→`Schema`; PQL types from `predictive_query` |
-| ⟂ its C++ neighbour sampler, `csrc/neighbor_sampler.cpp` | `sdm-relational-engine` | none |
-| ⟂ its relational adapter | `sdm_client/adapters/relational.py` | returns the unified `Request`/`PredictionResult` |
-| ⟂ its transport | `sdm_client/core/transport.py` | none |
-| The earlier tabular client's adapter | `sdm_client/adapters/tabular.py` | model id renamed to `kumo-tabular` |
-| ⟂ its wire types | `sdm-client` | none (see §2: not `sdm-api`, which stays dependency-free) |
-| A separate internal Predictive Query Language repository, now retired | `sdm-pql` | none; the tree is maintained here from this point on |
+| Area | Change |
+|---|---|
+| Connectors | Moved into `sdm-connectors` under new names |
+| Relational engine, including the C++ neighbour sampler | Moved into `sdm-relational-engine`. `Graph` became `Schema`, and the PQL types now come from `predictive_query` |
+| Relational adapter | Returns the unified `Request` and `PredictionResult` |
+| Tabular adapter | Model id renamed to `kumo-tabular` |
+| Wire types | Live in `sdm-client`, not `sdm-api`, which stays dependency-free (see §2) |
+| Predictive Query Language | Maintained here from this point on, in `sdm-pql` |
 
-Two hard-won behaviours to carry over deliberately: every redirect hop is
-closed rather than drained, and credentials in a URL are stripped everywhere
-the URL is rendered.
-
----
+Two behaviours were carried over deliberately, because each cost something to
+learn: every redirect hop is closed rather than drained, and credentials in a
+URL are stripped everywhere the URL is rendered.
 
 ## 9. Phases
 
@@ -614,8 +612,8 @@ build-time pipeline generates one too, without the native extra, because no
 toolchain is present there. A hand-maintained dependency table would not have
 counted as either.
 
-The **Apache-2.0** license matches the predecessor client, the source of most
-copied code. Nothing carried across needs relicensing.
+The **Apache-2.0** license matches the code this consolidates, so nothing
+carried across needs relicensing.
 
 ### Vendored code is the risk, and we already know how it breaks
 
@@ -649,7 +647,7 @@ So, as a rule, not a suggestion:
    new release's manifest**. A version bump silently moves sub-component
    versions too.
 
-The predecessor client already ships this test; we copy it.
+This test came across with the rest.
 
 ### What ships that we did not write
 

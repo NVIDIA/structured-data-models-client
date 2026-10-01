@@ -210,7 +210,36 @@ audit:
   script:
     - pip install -q pip-audit
     - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
-    - pip-audit --progress-spinner off
+    # The one finding we cannot act on, and a check that says when we can.
+    # `oauthlib` 4.0.0 fixes CVE-2026-49265, and `databricks-sql-connector`
+    # pins `oauthlib<4.0.0`, so installing the fix breaks the driver. Ignoring
+    # it keeps this job green, which is the point: a job that is always red
+    # reports nothing, and the next vulnerability would arrive into a result
+    # nobody reads. This fails the moment the pin is relaxed, so the ignore
+    # cannot outlive its reason.
+    - |
+      python - <<'EOF'
+      from importlib.metadata import requires
+      from packaging.requirements import Requirement
+      from packaging.version import Version
+      import sys
+
+      for raw in requires('databricks-sql-connector') or []:
+          requirement = Requirement(raw)
+          if requirement.name != 'oauthlib':
+              continue
+          if requirement.specifier.contains(Version('4.0.0')):
+              sys.exit(
+                  f'databricks-sql-connector now allows oauthlib 4.0.0 ({raw}). '
+                  f'Drop --ignore-vuln CVE-2026-49265 and let the fix install.'
+              )
+          print(f'oauthlib fix still blocked upstream by {raw}')
+          break
+      else:
+          sys.exit('databricks-sql-connector no longer requires oauthlib; '
+                   'recheck whether the ignore below is still needed')
+      EOF
+    - pip-audit --progress-spinner off --ignore-vuln CVE-2026-49265
 
 # The dependency inventory a consumer needs to accept this into their own
 # supply chain, covering the base install and every extra that resolves without
