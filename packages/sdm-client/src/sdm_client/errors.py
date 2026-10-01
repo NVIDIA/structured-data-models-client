@@ -17,9 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-#: What to do about a context that teaches nothing. Named here because a
-#: question asked as several has to take it back: a candidate nothing in the
-#: data reaches has no example to learn from at any context size.
+#: What to do about a context that teaches nothing.
 WIDEN_THE_CONTEXT = (
     'Gather a wider context with num_context_samples, or ask about entities '
     'whose answers differ'

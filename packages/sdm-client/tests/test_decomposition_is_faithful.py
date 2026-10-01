@@ -954,34 +954,29 @@ def test_a_forecast_part_names_the_step_that_failed():
     assert 'fewer than 40' not in said
 
 
-def test_a_cold_candidate_is_not_told_to_widen_a_context_that_cannot_help():
-    from sdm_client.decompose import about_the_part
-    from sdm_client.errors import WIDEN_THE_CONTEXT, UnsupportedRequestError
+def test_a_ranking_with_cold_candidates_sends_nothing_and_names_them_all(
+    requests_mock,
+):
+    """The endpoint refuses a one-class context, and finding each such
+    candidate while sending spent every call before it and named only one."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import UnsupportedRequestError
 
-    cold = UnsupportedRequestError(
-        f'every context row has the same answer, and a classification needs '
-        f'at least two classes to learn from. {WIDEN_THE_CONTEXT}',
-        details={'classes_in_context': 1},
-    )
-    said = str(about_the_part(cold, parts('ranking', 3), 11))
+    route = requests_mock.post('http://127.0.0.1:9/v1/predictions', json={})
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(indices=[1, 2, 3], candidates=[10, 13, 11, 14])
 
-    assert 'ask without it rather than for a wider context' in said
-    assert WIDEN_THE_CONTEXT not in said
-    assert 'num_context_samples' not in said
+    with pytest.raises(UnsupportedRequestError) as error:
+        with SDMClient('http://127.0.0.1:9') as client:
+            client.predict(request, model=KumoRelational())
 
-
-def test_any_other_ranking_failure_keeps_the_remedy_it_was_given():
-    from sdm_client.decompose import about_the_part
-    from sdm_client.errors import WIDEN_THE_CONTEXT, UnsupportedRequestError
-
-    raised = UnsupportedRequestError(
-        f'every context row has the same answer, and a classification needs '
-        f'at least two classes to learn from. {WIDEN_THE_CONTEXT}'
-    )
-    said = str(about_the_part(raised, parts('ranking', 3), 11))
-
-    assert WIDEN_THE_CONTEXT in said
-    assert 'ask without it' not in said
+    assert not route.called
+    assert error.value.details['candidates'] == [13, 14]
+    assert 'candidates 13 and 14 each hold one answer only' in str(error.value)
 
 
 def test_an_ordinary_ranking_failure_is_not_told_to_drop_the_candidate():

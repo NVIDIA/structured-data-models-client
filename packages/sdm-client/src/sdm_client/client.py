@@ -31,7 +31,11 @@ from sdm_client.base import (
 from sdm_client.core.transport import Transport, WireTransport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import RANKING, Decomposition, about_the_part
-from sdm_client.errors import StructuredDataError, UnknownModelError
+from sdm_client.errors import (
+    StructuredDataError,
+    UnknownModelError,
+    UnsupportedRequestError,
+)
 from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import Question, Request
 from sdm_client.result import PredictionResult
@@ -413,6 +417,7 @@ class SDMClient:
         ranking = rewritten.kind == RANKING
         if ranking:
             _refuse_outputs_a_ranking_cannot_give(outputs)
+            self._refuse_candidates_no_context_teaches(request, model)
         # A ranking needs how sure each answer was, which is what orders the
         # candidates, and the fields it gives back are the merge's own. A step
         # of a forecast is an ordinary regression, so the caller's fields are
@@ -433,6 +438,53 @@ class SDMClient:
             answers, rewritten, outputs, spec_for(model).model_id
         )
         return _report_absent(merged, outputs, spec_for(model).model_id)
+
+    def _refuse_candidates_no_context_teaches(
+        self, request: Request, model: str | Model
+    ) -> None:
+        r"""Refuse a ranking with a one-class candidate before any call.
+
+        The endpoint refuses a classification whose context holds one class,
+        so finding such a candidate while sending spent every call before it,
+        and named only the first of several.
+        """
+        rewritten = request.decomposition
+        assert rewritten is not None
+        cold = []
+        for part, (_, about) in zip(
+            request.parts or (), rewritten.parts, strict=True
+        ):
+            try:
+                adapter, fields = self._prepare(part, model, _RANKING_PARTS)
+                for _ in adapter.prediction_plan(part, fields):
+                    pass
+            except StructuredDataError as error:
+                details = getattr(error, 'details', None) or {}
+                if details.get('classes_in_context') != 1:
+                    raise about_the_part(error, rewritten, about) from error
+                cold.append(about)
+        if not cold:
+            return
+        many = len(cold) > 1
+        named = ', '.join(repr(candidate) for candidate in cold[:-1])
+        which = (
+            f'the contexts gathered for candidates {named} and {cold[-1]!r} '
+            f'each hold'
+            if many
+            else f'the context gathered for candidate {cold[0]!r} holds'
+        )
+        raise UnsupportedRequestError(
+            f'{which} one answer only, and a classification needs at least '
+            f'two classes to learn from, so nothing was sent. Rank without '
+            f'{"them" if many else "it"}, or gather a wider context with '
+            f'num_context_samples if other entities in the data answer '
+            f'differently.',
+            details={
+                'model': spec_for(model).model_id,
+                'candidates': cold,
+                'classes_in_context': 1,
+            },
+        )
 
     def _send(self, adapter: Any, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Post one payload, letting the adapter explain a refusal."""

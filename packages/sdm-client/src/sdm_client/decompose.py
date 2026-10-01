@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from sdm_client.errors import WIDEN_THE_CONTEXT, StructuredDataError
+from sdm_client.errors import StructuredDataError
 from sdm_client.wire.dtypes import _decimal_dtype, _is_missing
 
 if TYPE_CHECKING:
@@ -135,9 +135,6 @@ def about_the_part(
 
     The step named is the one that failed: anything at or above it fails alike.
     The type is kept, because it is what `predict` documents.
-
-    A remedy this is about to contradict is taken out rather than left to be
-    read first: no context size reaches a candidate the data does not.
     """
     how_many = len(rewritten.parts)
     first = _ended(error.args[0])
@@ -146,15 +143,6 @@ def about_the_part(
             f'This is the question asked for candidate {about!r}, one of '
             f'{how_many} this ranking is asked as.'
         )
-        if (getattr(error, 'details', None) or {}).get(
-            'classes_in_context'
-        ) == 1:
-            first = first.replace(f' {WIDEN_THE_CONTEXT}.', '')
-            said += (
-                ' Nothing in the data reaches that candidate, so no context '
-                'holds an example of an entity that did, at any size; ask '
-                'without it rather than for a wider context.'
-            )
     else:
         said = (
             f'This is forecast step {about} of {how_many}, and the window '

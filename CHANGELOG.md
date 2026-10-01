@@ -107,6 +107,12 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Fixed
 
+- **A ranking with a candidate whose context holds one answer is refused
+  before any call.** The endpoint refuses such a candidate's question, so the
+  ranking failed only after every call before it had been sent, and named
+  that one candidate. Every candidate is now checked first, and one refusal
+  names all of them. It no longer claims no context of any size could help: a
+  sampled context can miss the entities that do reach a candidate.
 - **A relational regression now reports the median, so its values change.**
   The endpoint reports the mean of the predicted distribution unless told
   otherwise, and this client dropped the engine's `output_type`, so answers
