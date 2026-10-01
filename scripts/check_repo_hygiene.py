@@ -45,6 +45,11 @@ SPDX_ROOTS = (
     'packages/sdm-connectors/tests',
     'packages/sdm-relational-engine/src',
     'packages/sdm-relational-engine/tests',
+    # Not shipped in a wheel, but public in the repository, and the licence
+    # change reached them only because a person remembered. The gate looks
+    # here now so the next one does not depend on that.
+    'qa',
+    '.github',
 )
 SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
 

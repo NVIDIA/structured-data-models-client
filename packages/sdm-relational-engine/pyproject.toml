@@ -6,7 +6,7 @@ authors=[
 ]
 license = "LicenseRef-OpenMDW-1.1"
 license-files=["LICENSE", "NOTICE"]
-description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Kumo Relational Client"
+description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Structured Data Models client"
 readme="README.md"
 # This package ships binary wheels only (no sdist), so a version with no wheel
 # must fail resolution rather than fail to find a distribution. The bound and
