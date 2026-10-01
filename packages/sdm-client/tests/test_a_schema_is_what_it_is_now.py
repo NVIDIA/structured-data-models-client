@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sdm_client import Relationship, Schema
+from sdm_client import Column, Relationship, Schema, SourceTable, Table
 from sdm_client.errors import StructuredDataError
 
 RNG = np.random.default_rng(0)
@@ -671,3 +671,58 @@ def test_two_tables_can_be_compared_without_raising() -> None:
     assert one == one
     assert one in [one]
     assert one != 42
+
+
+def _in_place(source_name: str) -> SourceTable:
+    return SourceTable(
+        't',
+        source_name,
+        {
+            'id': Column('id', 'int64', 'ID'),
+            'v': Column('v', 'float64', 'numerical'),
+        },
+        primary_key='id',
+    )
+
+
+def test_a_table_in_its_source_is_compared_by_where_it_is() -> None:
+    """A table that stays in its source holds no rows, so where it is in that
+    source is part of what it describes: two that agree on every column but
+    name different source tables are two tables."""
+    one = _in_place('sales.orders')
+
+    assert one == _in_place('sales.orders')
+    assert one != _in_place('archive.orders')
+    assert one == one
+    assert one in [one]
+
+
+def test_a_table_of_rows_never_equals_a_table_in_its_source() -> None:
+    """Even one that agrees on the name, the columns and the key: one holds
+    rows and the other reads them from a source, so a request built from
+    either is not the request built from the other."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        rows = Table(
+            't',
+            pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}),
+            {
+                'id': Column('id', 'int64', 'ID'),
+                'v': Column('v', 'float64', 'numerical'),
+            },
+            primary_key='id',
+        )
+    in_place = _in_place('sales.orders')
+
+    assert rows != in_place
+    assert in_place != rows
+
+
+def test_a_copied_table_in_its_source_is_still_one() -> None:
+    one = _in_place('sales.orders')
+
+    for copied in (copy.copy(one), copy.deepcopy(one)):
+        assert type(copied) is SourceTable
+        assert copied == one
+        assert copied.source_name == 'sales.orders'
+        assert copied.columns['v'] is not one.columns['v']
