@@ -35,7 +35,7 @@ Pass `materialize(..., prediction_statistic='mean')` for the mean instead.
 
 ## Joining
 
-Every row carries `row_index`. It also carries `id` — the entity — when the
+Every row carries `row_index`. It also carries `id` – the entity – when the
 model has one; a single-table request may have none.
 
 **Join on the key when it is there, otherwise on `row_index`. Never on row
