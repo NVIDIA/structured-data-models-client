@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 
 r"""A name for the shape of a graph, stable enough to key a cache on.
 

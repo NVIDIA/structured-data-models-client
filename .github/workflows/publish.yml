@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 
 # Publishing to PyPI, without a credential that can be stolen.
 #
@@ -37,6 +37,41 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A tag can be put on any commit, including one that never reached a
+      # pull request. The gates run on `main` and on pull requests, so a tag
+      # off `main` is a tag nothing has tested. Checked before the build,
+      # because the upload decision is made from these artifacts.
+      #
+      # This check is not the whole control and cannot be. A tag runs the
+      # workflow as it existed at the tagged commit, so a tag placed on a
+      # commit from before this step existed would not run it. What stops
+      # that is outside the repository: a tag ruleset restricting who may
+      # create `v*`, and required reviewers on the `pypi` environment, which
+      # gate the upload itself. This step makes the common mistake
+      # impossible; those settings make the deliberate one hard.
+      - name: The tag is on main, and main has passed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main. Tag a commit that has been reviewed and merged."
+            exit 1
+          fi
+          # --branch main --event push, because a pull-request run of CI on
+          # this same commit says the branch passed, not that main did.
+          conclusion=$(gh run list --workflow CI --commit "$GITHUB_SHA" \
+            --branch main --event push \
+            --json conclusion --jq '[.[].conclusion] | first // "none"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI for $GITHUB_SHA is '$conclusion', not success. Publishing a commit whose gates did not pass is the one thing this workflow must not do."
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main and its CI passed"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

@@ -7,7 +7,9 @@ these packages. All five distributions share one version and one entry.
 
 ## Unreleased
 
-The first release is being assembled. Nothing here has shipped yet.
+Everything below is the first release, which all five distributions
+declare as `1.0.0` and none has published. The heading becomes
+`## 1.0.0 - <date>` when the tag is cut, and nothing else moves.
 
 ### Added
 

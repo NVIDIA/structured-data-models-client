@@ -156,7 +156,7 @@ exactly one owner and nothing has to translate between two spellings of the
 same enum.
 
 The tree is first-party source of this repository, maintained here under
-OpenMDW-1.1. It was briefly carried as a vendored copy of a separate internal
+Apache-2.0. It was briefly carried as a vendored copy of a separate internal
 repository; that repository is being retired, so there is no upstream to track,
 no manifest to re-record, and no dependency swap pending. It imports as
 `predictive_query`, which is a name inherited from that period rather than one
@@ -612,10 +612,10 @@ build-time pipeline generates one too, without the native extra, because no
 toolchain is present there. A hand-maintained dependency table would not have
 counted as either.
 
-The repository is released under the **OpenMDW License Agreement, version
-1.1**. Because version 1.1 is not yet on the SPDX License List, source files
-carry `SPDX-License-Identifier: LicenseRef-OpenMDW-1.1`, which is the form
-SPDX defines for a licence it does not list.
+The repository is released under **Apache-2.0**, which matches the code this
+consolidates, so nothing carried across needs relicensing. The models these
+packages talk to are released under OpenMDW, a licence NVIDIA drafted for
+models. The two sit side by side and stay distinct: this is software.
 
 ### Vendored code is the risk, and we already know how it breaks
 

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 
 """The context must not contain the question's own answer.
 

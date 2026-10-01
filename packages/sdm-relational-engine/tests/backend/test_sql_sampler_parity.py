@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+# SPDX-License-Identifier: Apache-2.0
 r"""Behaviour the four SQL samplers must share.
 
 Each test here covers a fix that had landed on some of the backends but not

@@ -46,9 +46,11 @@ Breaking changes are avoided within a major version. Where one is unavoidable,
 it is called out in [CHANGELOG.md](CHANGELOG.md) under a heading that says so,
 with the migration in the same entry.
 
-Publishing is not yet automated in this repository, and no version has been
-published to an index. The release process will be written here when the
-publishing path exists, rather than described in advance.
+Publishing is automated. A version tag on a commit that is on `main` and
+whose CI passed builds every distribution and uploads it through PyPI
+Trusted Publishing, with no stored token. [RELEASING.md](RELEASING.md)
+describes what a maintainer does; `.github/workflows/publish.yml` is what
+actually runs. No version has reached an index yet.
 
 ## Changing this document
 
