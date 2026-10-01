@@ -72,7 +72,7 @@ _OBJECT_CONTENT_DTYPES = {
 
 @dataclass(frozen=True)
 class PayloadTables:
-    r"""The frames a request is built from, plus the wire dtype of every column.
+    r"""Hold request frames and each column's wire dtype.
 
     ``instance_column_dtypes`` and ``related_table_column_dtypes`` are the
     single authority for how a column travels: the schema declares them and the
@@ -171,8 +171,8 @@ def validate_payload_table_rows(
 ) -> None:
     r"""Validate instance-table row limits in serialized requests.
 
-    The KumoRelational NIM row-caps only context/predict instance tables. Related
-    tables are bounded by the overall payload-size limit instead.
+    The KumoRelational NIM caps rows only in context and predict instance
+    tables. The overall payload-size limit bounds related tables instead.
     """
     for section_name in ('context', 'predict'):
         table = payload[section_name]['instance_table']
@@ -1105,8 +1105,8 @@ def _decimal_dtype_name(data: pd.Series) -> str | None:
 
     Neither an Arrow-backed ``decimal128`` nor an object column of
     ``Decimal`` satisfies ``is_integer_dtype``/``is_float_dtype``, so without
-    this a decimal column is announced as ``string`` -- and an ID column
-    announced as a string stops being an ID to the model.
+    this, a decimal column is announced as ``string``. An ID column announced
+    as a string stops being an ID to the model.
 
     An integral decimal is only named ``int64`` when it fits: ``decimal(38,
     0)`` allows 38 digits and ``int64`` holds 19, so anything wider is named

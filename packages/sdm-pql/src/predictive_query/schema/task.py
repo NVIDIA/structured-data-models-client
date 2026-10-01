@@ -7,6 +7,12 @@ from predictive_query.schema.common import StrEnum
 
 
 class TaskType(StrEnum):
+    r"""What a predictive query asks the model to do.
+
+    The ``get_*`` staticmethods name the families these fall into, and
+    each has a matching ``is_*`` property for asking about one task.
+    """
+
     BINARY_CLASSIFICATION = 'binary_classification'
     MULTICLASS_CLASSIFICATION = 'multiclass_classification'
     MULTILABEL_CLASSIFICATION = 'multilabel_classification'
@@ -20,6 +26,7 @@ class TaskType(StrEnum):
 
     @staticmethod
     def get_node_pred_tasks() -> list['TaskType']:
+        r"""Every task that predicts a property of one entity."""
         return [
             TaskType.BINARY_CLASSIFICATION,
             TaskType.MULTICLASS_CLASSIFICATION,
@@ -35,6 +42,7 @@ class TaskType(StrEnum):
 
     @staticmethod
     def get_link_pred_tasks() -> list['TaskType']:
+        r"""Every task that predicts a link between two entities."""
         return [
             TaskType.TEMPORAL_LINK_PREDICTION,
             TaskType.STATIC_LINK_PREDICTION,
@@ -47,6 +55,7 @@ class TaskType(StrEnum):
 
     @staticmethod
     def get_classification_tasks() -> list['TaskType']:
+        r"""Every task whose answer is a class rather than a number."""
         return [
             TaskType.BINARY_CLASSIFICATION,
             TaskType.MULTICLASS_CLASSIFICATION,
@@ -59,6 +68,7 @@ class TaskType(StrEnum):
 
     @staticmethod
     def get_multilabel_tasks() -> list['TaskType']:
+        r"""Every task that may answer with more than one label at once."""
         return [
             TaskType.MULTILABEL_CLASSIFICATION,
             TaskType.MULTILABEL_RANKING,
@@ -70,6 +80,7 @@ class TaskType(StrEnum):
 
     @staticmethod
     def get_ranking_tasks() -> list['TaskType']:
+        r"""Every task that answers with an ordered list rather than one value."""
         return TaskType.get_link_pred_tasks() + [TaskType.MULTILABEL_RANKING]
 
     @property

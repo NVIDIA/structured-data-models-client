@@ -37,9 +37,9 @@ class SplitFilter:
             part of the filter that meets the applicability criteria.
         non_applicable_filter (Optional[ASTNode]): If not :obj:`None`, the
             part of the filter that does not meet the applicability criteria.
-            Should be ignored with `non_applicable_is_valid` is :obj:`True`
-            because it experienced an exponential blow-up during rewriting and
-            was set to :obj:`None`.
+            Should be ignored when `non_applicable_is_valid` is :obj:`False`:
+            rewriting it blew up exponentially, so it was abandoned and set
+            to :obj:`None`.
         rewritten (bool): Indicates if any rewriting took place.
         n_applicable_conditions (int): Number of conditions in the applicable
             part of the query. Here to prevent an exponential blow-up.
@@ -47,11 +47,13 @@ class SplitFilter:
             non-applicable part of the query. Here to prevent an exponential
             blow-up.
         non_applicable_is_valid (bool): :obj:`False` if the non-applicable part
-            of the query had to be ommitted because of an exponential blow-up
+            of the query had to be omitted because of an exponential blow-up
             in its size. That happens when the total number of conditions in
             both applicable and non-applicable side exceed MAX_N_CONDITIONS.
             :obj:`True` otherwise. The applicable part of the filter does
             not grow during rewriting and is thus not tracked.
+        original_filter (Optional[ASTNode]): The filter as it stood before
+            any rewriting, or :obj:`None` if there was none.
     """
 
     applicable_filter: Condition | LogicalOperation | None
@@ -64,16 +66,12 @@ class SplitFilter:
 
 
 class FilterSplitter:
-    """Base class to generate a filter splitter that splits a Filter AST node
-    into a subset of conditions that are applicable and a subset that is not
-    based on the `_condition_base_case` method which is the only required
-    method to implement for subclasses.
+    """Split a Filter AST into applicable and non-applicable conditions.
 
-    If the `_condition_base_case` needs extra information, you can pass
-    in additional kwargs from `_recursively_split_filter`.
-
-    It is recommended but not required to implement a public entry method
-    that calls `_recursively_split_filter` internally.
+    Subclasses need only implement `_condition_base_case`; pass any extra
+    information it needs as kwargs from `_recursively_split_filter`. A public
+    entry method that calls `_recursively_split_filter` is recommended but not
+    required.
 
     Example Usage:
 

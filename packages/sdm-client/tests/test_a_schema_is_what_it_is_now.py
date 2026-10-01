@@ -1,0 +1,673 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""A schema asks the question its present state describes, not its history.
+
+Two schemas with the same tables and no relationships asked different
+questions: one a regression, the other a multiclass classification, because
+one of them had once had a link. Key columns were typed `ID` when the
+schema was built and never re-derived, and the marking went through the same
+assignment a caller uses, so it set `stype_declared` and became
+indistinguishable from a meaning the caller chose, with nothing recorded to
+restore.
+"""
+
+from __future__ import annotations
+
+import copy
+import pickle
+import warnings
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from sdm_client import Relationship, Schema
+from sdm_client.errors import StructuredDataError
+
+RNG = np.random.default_rng(0)
+USERS = pd.DataFrame({'user_id': range(60), 'age': RNG.integers(20, 70, 60)})
+ORDERS = pd.DataFrame(
+    {
+        'order_id': range(300),
+        'user_id': RNG.integers(0, 60, 300),
+        'price': RNG.random(300) * 100,
+    }
+)
+LINK = Relationship('orders', 'user_id', 'users', 'user_id')
+
+
+def build(links: list[Relationship]) -> Schema:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {'users': USERS, 'orders': ORDERS},
+            primary_keys={'users': 'user_id', 'orders': 'order_id'},
+            relationships=links,
+        )
+
+
+def test_a_link_that_is_gone_no_longer_types_the_column_it_joined_on() -> None:
+    linked = build([LINK])
+    assert linked['orders']['user_id'].stype == 'ID'
+
+    linked.relationships = []
+    assert (
+        linked['orders']['user_id'].stype
+        == build([])['orders']['user_id'].stype
+    )
+
+
+@pytest.mark.parametrize(
+    'drop',
+    [
+        lambda links: links.clear(),
+        lambda links: links.pop(),
+        lambda links: links.remove(LINK),
+        lambda links: links.__delitem__(0),
+    ],
+    ids=['clear', 'pop', 'remove', 'del'],
+)
+def test_every_way_of_dropping_a_link_re_derives_the_key_columns(drop) -> None:
+    schema = build([LINK])
+    drop(schema.relationships)
+    assert not schema.relationships
+    assert schema['orders']['user_id'].stype == 'numerical'
+
+
+def test_a_link_added_later_types_its_column_as_a_key() -> None:
+    schema = build([])
+    assert schema['orders']['user_id'].stype == 'numerical'
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema.relationships.append(LINK)
+
+    assert schema['orders']['user_id'].stype == 'ID'
+
+
+def test_the_schema_s_own_marking_is_not_recorded_as_the_caller_s_choice() -> (
+    None
+):
+    linked = build([LINK])
+    assert linked['orders']['user_id'].stype == 'ID'
+    assert not linked['orders']['user_id'].stype_declared
+
+
+def test_a_meaning_the_caller_chose_survives_a_link_coming_and_going() -> None:
+    schema = build([])
+    schema['orders']['user_id'].stype = 'ID'
+    assert schema['orders']['user_id'].stype_declared
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema.relationships = [LINK]
+    schema.relationships = []
+
+    assert schema['orders']['user_id'].stype == 'ID'
+    assert schema['orders']['user_id'].stype_declared
+
+
+def test_a_primary_key_stays_an_identifier_with_no_relationships_at_all() -> (
+    None
+):
+    schema = build([])
+    assert schema['users']['user_id'].stype == 'ID'
+    assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_a_copy_carries_what_the_marking_had_to_restore() -> None:
+    linked = build([LINK])
+
+    for copied in (copy.deepcopy(linked), pickle.loads(pickle.dumps(linked))):
+        assert copied['orders']['user_id'].stype == 'ID'
+        copied.relationships = []
+        assert copied['orders']['user_id'].stype == 'numerical'
+
+
+ALT = pd.DataFrame(
+    {
+        'order_id': range(300),
+        'alt_id': range(1_000, 1_300),
+        'user_id': RNG.integers(0, 60, 300),
+    }
+)
+
+
+def with_alt(links: list[Relationship]) -> Schema:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_data(
+            {'users': USERS, 'orders': ALT},
+            primary_keys={'users': 'user_id', 'orders': 'order_id'},
+            relationships=links,
+        )
+
+
+def test_a_primary_key_that_was_replaced_stops_typing_its_old_column() -> None:
+    schema = with_alt([])
+    assert schema['orders']['order_id'].stype == 'ID'
+
+    schema['orders'].primary_key = 'alt_id'
+
+    assert schema['orders']['alt_id'].stype == 'ID'
+    assert schema['orders']['order_id'].stype == 'numerical'
+
+
+def test_a_replaced_key_a_link_still_joins_on_stays_an_identifier() -> None:
+    schema = with_alt([Relationship('orders', 'order_id', 'users', 'user_id')])
+
+    schema['orders'].primary_key = 'alt_id'
+
+    assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_clearing_the_primary_key_releases_the_column_it_named() -> None:
+    schema = with_alt([])
+    schema['orders'].primary_key = None
+    assert schema['orders']['order_id'].stype == 'numerical'
+
+
+def test_a_table_on_its_own_answers_for_its_own_key() -> None:
+    schema = with_alt([])
+    table = schema['orders']
+    object.__setattr__(table, '_schema', None)
+    assert table['order_id'].stype == 'ID'
+
+    table.primary_key = 'alt_id'
+
+    assert table['alt_id'].stype == 'ID'
+    assert table['order_id'].stype == 'numerical'
+
+
+def test_a_declared_meaning_does_not_survive_becoming_a_key() -> None:
+    """What a key column means is settled by its being a key. Honouring a
+    declared `numerical` there sent a join key as a float, which is the
+    failure the marking exists to prevent."""
+    schema = with_alt([])
+    schema['orders']['alt_id'].stype = 'numerical'
+
+    schema['orders'].primary_key = 'alt_id'
+    assert schema['orders']['alt_id'].stype == 'ID'
+
+    schema['orders'].primary_key = 'order_id'
+    assert schema['orders']['alt_id'].stype == 'numerical'
+
+
+def test_a_declared_meaning_does_not_survive_a_link_either() -> None:
+    schema = with_alt([])
+    schema['orders']['user_id'].stype = 'numerical'
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema.relationships = [
+            Relationship('orders', 'user_id', 'users', 'user_id')
+        ]
+    assert schema['orders']['user_id'].stype == 'ID'
+
+    schema.relationships = []
+    assert schema['orders']['user_id'].stype == 'numerical'
+
+
+def test_a_key_column_replaced_through_the_columns_dict_is_asked_again() -> (
+    None
+):
+    """`tables` and a table's `columns` are ordinary dictionaries, so a table
+    or a column replaced through one arrives never having been asked, and
+    `check_consistent()` is where a caller asks whether their schema holds."""
+    from sdm_client.schema import Column
+
+    schema = with_alt([Relationship('orders', 'user_id', 'users', 'user_id')])
+    schema['orders'].columns['user_id'] = Column(
+        'user_id', 'int64', 'numerical'
+    )
+    assert schema['orders']['user_id'].stype == 'numerical'
+
+    schema.check_consistent()
+
+    assert schema['orders']['user_id'].stype == 'ID'
+
+
+def test_a_key_this_cannot_read_is_refused_before_the_table_takes_it() -> None:
+    """The refusal ran after the assignment, leaving a table that could not be
+    copied or sent and a `check_consistent()` that passed anyway."""
+    schema = with_alt([])
+    before = schema['orders'].primary_key
+
+    with pytest.raises(StructuredDataError):
+        schema['orders'].primary_key = {'alt_id'}
+
+    assert schema['orders'].primary_key == before
+    schema.snapshot()
+
+
+def test_declaring_a_meaning_on_a_live_key_does_not_change_what_it_is() -> None:
+    """A key's meaning is settled by its being a key, and the schema said so
+    wherever it was asked, but only re-derived when the keys changed, so
+    between declaring a meaning on a live key and the next such moment the
+    column described itself as whatever was declared."""
+    schema = with_alt([Relationship('orders', 'user_id', 'users', 'user_id')])
+
+    schema['orders']['user_id'].stype = 'categorical'
+    assert schema['orders']['user_id'].stype == 'ID'
+
+    schema['orders']['order_id'].stype = 'categorical'
+    assert schema['orders']['order_id'].stype == 'ID'
+
+    schema.relationships = []
+    assert schema['orders']['user_id'].stype == 'categorical'
+
+
+def test_a_meaning_declared_on_an_ordinary_column_is_kept() -> None:
+    schema = with_alt([])
+    schema['orders']['alt_id'].stype = 'categorical'
+    assert schema['orders']['alt_id'].stype == 'categorical'
+    assert schema['orders']['alt_id'].stype_declared
+
+
+def test_declaring_id_on_a_key_leaves_nothing_to_hand_back() -> None:
+    """The declaration replaces what there was to give back. Recorded beside
+    it, the meaning inference had found was handed back over the caller's own
+    word when the key moved elsewhere."""
+    schema = with_alt([])
+    schema['orders']['order_id'].stype = 'ID'
+
+    schema['orders'].primary_key = 'alt_id'
+
+    assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_a_key_the_caller_never_spoke_for_is_still_handed_back() -> None:
+    schema = with_alt([])
+    schema['orders'].primary_key = 'alt_id'
+    assert schema['orders']['order_id'].stype == 'numerical'
+
+
+def test_a_replacement_column_learns_which_table_it_is_in() -> None:
+    """`_mark_key_columns` bound each table to its schema but not each column
+    to its table, so a column replaced through the ordinary dictionary could
+    be repaired once and never asked again."""
+    from sdm_client.schema import Column
+
+    schema = with_alt([])
+    schema['orders'].columns['order_id'] = Column(
+        'order_id', 'int64', 'numerical'
+    )
+    schema.check_consistent()
+    assert schema['orders']['order_id'].stype == 'ID'
+
+    schema['orders']['order_id'].stype = 'categorical'
+    assert schema['orders']['order_id'].stype == 'ID'
+
+
+def test_a_shallow_copy_is_a_schema_of_its_own() -> None:
+    """`copy.copy` shared the tables and their columns, which was always a
+    trap and became a destructive one once key columns were re-derived:
+    clearing the copy's relationships retyped a column of a schema that still
+    had them."""
+    import copy as copying
+
+    original = build([LINK])
+    copied = copying.copy(original)
+
+    copied.relationships = []
+
+    assert original.relationships
+    assert original['orders']['user_id'].stype == 'ID'
+    assert copied['orders']['user_id'].stype == 'numerical'
+
+
+def test_editing_a_shallow_copy_leaves_the_original_alone() -> None:
+    import copy as copying
+
+    original = build([])
+    copied = copying.copy(original)
+
+    copied['orders']['price'].stype = 'categorical'
+
+    assert original['orders']['price'].stype != 'categorical'
+
+
+@pytest.mark.parametrize(
+    'named',
+    [['tenant', 'id'], ('tenant', 'id'), pd.Index(['tenant', 'id'])],
+    ids=['list', 'tuple', 'Index'],
+)
+def test_a_composite_key_can_be_named_the_way_the_frame_names_it(named) -> None:
+    """`frame.columns` is a `pd.Index`, which is the most natural way to name a
+    composite key from the data it came from and is not a
+    `collections.abc.Sequence`, so asking that question rejected it."""
+    frame = pd.DataFrame({'tenant': [1, 1], 'id': [1, 2], 'v': [0.1, 0.2]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'t': frame}, primary_keys={'t': 'id'})
+
+    schema['t'].primary_key = named
+
+    assert schema['t']['tenant'].stype == 'ID'
+    assert schema['t']['id'].stype == 'ID'
+
+
+@pytest.mark.parametrize('named', [{'a', 'b'}, {'a': 1}, 42, b'ab'])
+def test_a_key_that_is_not_an_ordered_list_of_names_is_refused(named) -> None:
+    """A set is excluded on purpose: a composite key's columns are in an
+    order, and a set has none."""
+    schema = with_alt([])
+    with pytest.raises(StructuredDataError):
+        schema['orders'].primary_key = named
+
+
+def test_a_shallow_copy_of_a_table_is_a_table_of_its_own_columns() -> None:
+    """Sharing them left the copy unable to answer for itself. Its columns
+    pointed at the table they came from, so changing the copy's key typed
+    nothing."""
+    import copy as copying
+
+    schema = with_alt([])
+    copied = copying.copy(schema['orders'])
+
+    copied.primary_key = 'alt_id'
+
+    assert copied['alt_id'].stype == 'ID'
+    assert copied['order_id'].stype == 'numerical'
+    assert schema['orders']['order_id'].stype == 'ID'
+    assert schema['orders']['alt_id'].stype == 'numerical'
+
+
+class _ReadableOnce:
+    """An iterable whose second read is empty, as a generator's is."""
+
+    def __init__(self, names):
+        self._names = iter(names)
+
+    def __iter__(self):
+        return self._names
+
+
+@pytest.mark.parametrize(
+    'named',
+    [
+        lambda: (name for name in ['order_id', 'alt_id']),
+        lambda: _ReadableOnce(['order_id', 'alt_id']),
+    ],
+    ids=['generator', 'one-shot-iterable'],
+)
+def test_a_key_is_read_once_and_what_was_read_is_kept(named) -> None:
+    """A key is consulted many times after it is set: to check it, to type
+    its columns, and to copy the table. An iterable that empties on the
+    first read arrived as "was given an empty primary key" about a key that
+    named two columns."""
+    schema = with_alt([])
+
+    schema['orders'].primary_key = named()
+
+    assert schema['orders'].primary_key == ('order_id', 'alt_id')
+    assert schema['orders']['order_id'].stype == 'ID'
+    assert schema['orders']['alt_id'].stype == 'ID'
+    assert schema.snapshot()['orders'].primary_key == ('order_id', 'alt_id')
+
+
+@pytest.mark.parametrize(
+    'named',
+    [
+        lambda: (name for name in ['tenant', 'id']),
+        lambda: _ReadableOnce(['tenant', 'id']),
+    ],
+    ids=['generator', 'one-shot-iterable'],
+)
+def test_the_constructor_reads_a_key_once_as_the_setter_does(named) -> None:
+    """`from_data` read the key to check its columns exist and then handed the
+    original along, emptying it exactly as the setter used to."""
+    frame = pd.DataFrame(
+        {'tenant': [1, 1, 2], 'id': [1, 2, 1], 'v': [1.0, 2.0, 3.0]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'t': frame}, primary_keys={'t': named()})
+
+    assert schema['t'].primary_key == ('tenant', 'id')
+    assert schema['t']['tenant'].stype == 'ID'
+    assert schema['t']['id'].stype == 'ID'
+
+
+def test_a_single_name_is_kept_as_the_name_it_is() -> None:
+    schema = with_alt([])
+    schema['orders'].primary_key = 'alt_id'
+    assert schema['orders'].primary_key == 'alt_id'
+
+
+@pytest.mark.parametrize(
+    'how',
+    ['copy', 'deepcopy', 'pickle', 'snapshot'],
+)
+def test_every_way_of_copying_a_schema_keeps_the_same_things(how: str) -> None:
+    import copy as copying
+    import pickle
+
+    frame = pd.DataFrame(
+        {
+            'a': [1, 2, 3],
+            'b': [3, 4, 5],
+            'ts': pd.date_range('2024-01-01', periods=3),
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        base = Schema.from_data(
+            {'t': frame}, primary_keys={'t': 'a'}, time_columns={'t': 'ts'}
+        )
+    base['t']['b'].stype = 'categorical'
+
+    made = {
+        'copy': copying.copy,
+        'deepcopy': copying.deepcopy,
+        'pickle': lambda one: pickle.loads(pickle.dumps(one)),
+        'snapshot': lambda one: one.snapshot(),
+    }[how](base)
+
+    table = made['t']
+    assert len(table.data) == 3
+    assert table.primary_key == 'a'
+    assert table.time_column == 'ts'
+    assert table['b'].stype == 'categorical'
+    assert table['b'].stype_declared
+    assert table['a'].stype == 'ID'
+    assert table['a']._stype_before_key == 'numerical'
+
+
+def test_two_schemas_over_the_same_tables_do_not_fight_over_them() -> None:
+    """A schema types the key columns of its own tables, and two handed the
+    same ones fought: building an unlinked schema retyped a linked schema's
+    join key, and checking the linked one retyped the unlinked one's back."""
+    from sdm_client.schema import _infer_table
+
+    parent = pd.DataFrame({'id': [1, 2, 3]})
+    child = pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        tables = {
+            'p': _infer_table('p', parent),
+            'c': _infer_table('c', child),
+        }
+        linked = Schema(tables, [Relationship('c', 'pid', 'p', 'id')])
+        unlinked = Schema(tables, [])
+
+    assert linked['c']['pid'].stype == 'ID'
+    assert unlinked['c']['pid'].stype == 'numerical'
+
+    linked.check_consistent()
+    unlinked.check_consistent()
+
+    assert linked['c']['pid'].stype == 'ID'
+    assert unlinked['c']['pid'].stype == 'numerical'
+    assert tables['c']['pid'].stype == 'numerical'
+
+
+def test_a_table_owns_its_columns_before_it_marks_any_of_them() -> None:
+    """Ownership was taken in `__post_init__`, which runs after the fields are
+    assigned, so a table built on another's columns typed *those* first, and
+    left the table it borrowed them from changed."""
+    from sdm_client import Table
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        lent = _infer_table(
+            'lent', pd.DataFrame({'rid': [1, 2, 3], 'v': [10, 20, 30]})
+        )
+    assert lent['v'].stype == 'numerical'
+
+    borrowed = Table(
+        name='borrowed',
+        columns=lent.columns,
+        data=pd.DataFrame({'rid': [1, 2, 3], 'v': [10, 20, 30]}),
+        primary_key='v',
+    )
+
+    assert borrowed['v'].stype == 'ID'
+    assert lent['v'].stype == 'numerical'
+    assert lent.columns['v'] is not borrowed.columns['v']
+
+
+def test_a_released_key_that_means_a_timestamp_orders_its_table_again() -> None:
+    """A column that means `timestamp` orders the table it belongs to, and
+    restoring the meaning around that assignment left a table saying it held a
+    timestamp while naming no time column, which `check_consistent()`
+    accepted and every temporal query then failed on."""
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        table = _infer_table(
+            't',
+            pd.DataFrame(
+                {
+                    'when': ['2024-01-01', '2024-01-02', '2024-01-03'],
+                    'v': [1.0, 2.0, 3.0],
+                }
+            ),
+        )
+        schema = Schema({'t': table}, [])
+
+    schema['t'].primary_key = 'when'
+    schema['t']['when'].dtype = 'timestamp[us]'
+    schema['t']['when'].stype = 'timestamp'
+    assert schema['t']['when'].stype == 'ID'
+
+    schema['t'].primary_key = None
+
+    assert schema['t']['when'].stype == 'timestamp'
+    assert schema['t'].time_column == 'when'
+    schema.check_consistent()
+    assert schema['t'].time_column == 'when'
+
+
+def test_a_schema_owns_a_table_that_arrives_from_another_one() -> None:
+    """`tables` hands back the live dictionary, so a table can arrive from a
+    schema that is still using it, and typing its key columns for this
+    schema retyped them for that one. The same rule a table applies to the
+    columns it is handed."""
+    from sdm_client.schema import _infer_table
+
+    def tables():
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return {
+                'p': _infer_table('p', pd.DataFrame({'id': [1, 2, 3]})),
+                'c': _infer_table(
+                    'c', pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
+                ),
+            }
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        donor = Schema(tables(), [Relationship('c', 'pid', 'p', 'id')])
+        taker = Schema(tables(), [])
+
+    taker.tables['c'] = donor['c']
+    taker.check_consistent()
+
+    assert donor['c']['pid'].stype == 'ID'
+    assert taker['c']['pid'].stype == 'numerical'
+    assert donor['c'] is not taker['c']
+
+    donor.check_consistent()
+    assert donor['c']['pid'].stype == 'ID'
+    assert taker['c']['pid'].stype == 'numerical'
+
+
+def test_a_column_inserted_from_another_schema_is_owned_too() -> None:
+    """Owning whole tables did not cover a column inserted through
+    `table.columns`: it arrives still belonging to the table it came from, so
+    typing it for this schema typed it for that one."""
+    from sdm_client.schema import _infer_table
+
+    def tables():
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            return {
+                'p': _infer_table('p', pd.DataFrame({'id': [1, 2, 3]})),
+                'c': _infer_table(
+                    'c', pd.DataFrame({'cid': [1, 2, 3], 'pid': [1, 2, 3]})
+                ),
+            }
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        donor = Schema(tables(), [Relationship('c', 'pid', 'p', 'id')])
+        taker = Schema(tables(), [])
+
+    taker['c'].columns['pid'] = donor['c'].columns['pid']
+
+    taker.check_consistent()
+    assert donor['c']['pid'].stype == 'ID'
+    assert taker['c']['pid'].stype == 'numerical'
+
+    donor.check_consistent()
+    assert donor['c']['pid'].stype == 'ID'
+    assert taker['c']['pid'].stype == 'numerical'
+    assert donor['c'].columns['pid'] is not taker['c'].columns['pid']
+
+
+def test_owning_columns_does_not_compare_the_frames_inside() -> None:
+    """`Table` is a dataclass, so asking `table in (None, self)` asks `==`,
+    which compares the frames it holds and raises on any table that has
+    one."""
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        one = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+        other = _infer_table('u', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+
+    other.columns['v'] = one.columns['v']
+    other._own_columns()
+
+    assert other.columns['v'] is not one.columns['v']
+
+
+def test_two_tables_can_be_compared_without_raising() -> None:
+    """The generated comparison compares the frames with `==`, which for a
+    DataFrame is a frame of booleans, so asking whether two tables are equal
+    raised `ValueError: The truth value of a DataFrame is ambiguous` from
+    inside pandas, naming nothing the caller wrote."""
+    from sdm_client.schema import _infer_table
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        one = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+        same = _infer_table('t', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]}))
+        other_rows = _infer_table(
+            't', pd.DataFrame({'id': [1, 3], 'v': [1.0, 2.0]})
+        )
+        other_name = _infer_table(
+            'u', pd.DataFrame({'id': [1, 2], 'v': [1.0, 2.0]})
+        )
+
+    assert one == same
+    assert one != other_rows
+    assert one != other_name
+    assert one == one
+    assert one in [one]
+    assert one != 42

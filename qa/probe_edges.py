@@ -414,7 +414,7 @@ def run(client, relational):
     with probe(
         AREA, 'a url with userinfo', 'refused over plaintext to a remote host'
     ) as e:
-        # localhost is exempt on purpose -- the traffic never leaves the box.
+        # localhost is exempt on purpose: the traffic never leaves the box.
         try:
             SDMClient(url='http://user:secret@example.com')
             fail(e, 'userinfo over plaintext was accepted')

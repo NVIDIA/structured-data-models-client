@@ -5,7 +5,7 @@ r"""A RelBench dataset is identified by its archive name.
 
 Only some published archives carry the ``rel-`` family prefix. Stripping a
 fixed number of leading characters therefore mangles every name that does not
-have it -- ``'stackex'`` became ``'hex'`` -- and the download went looking for
+have it, ``'stackex'`` became ``'hex'``, and the download went looking for
 an archive nobody publishes. The registry's own name is the canonical one; a
 prefix the caller omits is added, never assumed.
 

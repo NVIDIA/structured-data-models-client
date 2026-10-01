@@ -243,7 +243,7 @@ def test_read_table_falls_back_to_pandas_fetch_without_arrow_result():
 
 def test_read_local_accepts_a_path_object(tmp_path):
     """``_require_local_path`` ran ``urlparse`` on the raw argument, so a
-    ``pathlib.Path`` -- which ``pandas`` reads -- raised ``AttributeError``
+    ``pathlib.Path``, which ``pandas`` reads, raised ``AttributeError``
     from inside ``urllib``, escaping the connector's error contract entirely.
     """
     path = tmp_path / 'rows.csv'

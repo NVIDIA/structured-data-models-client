@@ -3,8 +3,8 @@ Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
 
-This distribution is first-party NVIDIA source -- the Predictive Query
-Language: grammar, parser, validator, AST and model profiles -- and vendors no
+This distribution is first-party NVIDIA source, the Predictive Query
+Language (grammar, parser, validator, AST and model profiles). It vendors no
 third-party source. The ANTLR-generated parser under src/predictive_query/
 grammar is generated from PQLGrammar.g4 in the same tree.
 

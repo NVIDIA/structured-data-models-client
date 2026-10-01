@@ -12,13 +12,14 @@ candidate, *will this entity reach this one?*, whose probability orders them;
 a forecast is, per step, *what does this window hold?*, which is the question
 already being asked with its window moved along.
 
-Each part needs its own context, because the labels differ -- what was true in
-the second window is not what was true in the first -- so the split happens
+Each part needs its own context because the labels differ. What was true in
+the second window is not what was true in the first, so the split happens
 where contexts are gathered.
 """
 
 from __future__ import annotations
 
+import copy
 import warnings
 
 import numpy as np
@@ -87,25 +88,34 @@ def test_a_ranking_is_one_question_per_candidate():
     )
 
 
-def test_a_forecast_is_one_question_per_step():
+@pytest.fixture(scope='module')
+def _forecast_template():
     pytest.importorskip('sdm_relational_engine')
+    return built(FORECAST, indices=[3])
 
-    request = built(FORECAST, indices=[3])
 
-    assert len(request.parts) == 4
-    windows = [part.query for part in request.parts]
+@pytest.fixture()
+def forecast_request(_forecast_template):
+    """A copy of the gathered forecast both checks below are about.
+
+    Gathering it is the expensive part of each, and they were each doing it.
+    Copied rather than shared, so neither can reach the other's.
+    """
+    return copy.deepcopy(_forecast_template)
+
+
+def test_a_forecast_is_one_question_per_step(forecast_request):
+    assert len(forecast_request.parts) == 4
+    windows = [part.query for part in forecast_request.parts]
     assert '0, 30, days' in windows[0]
     assert '30, 60, days' in windows[1]
     assert '90, 120, days' in windows[3]
 
 
-def test_each_part_gathers_its_own_context():
+def test_each_part_gathers_its_own_context(forecast_request):
     """The labels differ between parts, so a shared context would answer the
     wrong question for all but one of them."""
-    pytest.importorskip('sdm_relational_engine')
-
-    request = built(FORECAST, indices=[3])
-    contexts = [part.payloads[0]['context'] for part in request.parts]
+    contexts = [part.payloads[0]['context'] for part in forecast_request.parts]
 
     assert all(context is not contexts[0] for context in contexts[1:])
 

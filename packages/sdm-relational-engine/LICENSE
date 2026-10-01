@@ -226,10 +226,11 @@ enumerated by mermaid's own bundled license manifest.
 
   DOMPurify 3.4.0
   Copyright (c) Cure53 and other contributors
-  License: dual-licensed under the Apache License 2.0 AND the Mozilla Public
-  License 2.0. This distribution relies on the Apache License 2.0 option, whose
-  full text appears above. The Mozilla Public License 2.0 option is called out
-  here explicitly; its text is at https://mozilla.org/MPL/2.0/.
+  License: dual-licensed under the Apache License 2.0 OR the Mozilla Public
+  License 2.0, at the recipient's option. This distribution relies on the
+  Apache License 2.0 option, whose full text appears above. The Mozilla
+  Public License 2.0 option is called out here explicitly; its text is at
+  https://mozilla.org/MPL/2.0/.
   https://github.com/cure53/DOMPurify/blob/3.4.0/LICENSE
 
   js-yaml 4.1.1

@@ -1,20 +1,18 @@
 # Limits
 
-The endpoint enforces several sizes. `materialize()` knows them: it checks
-before anything is sent, and refuses or samples while naming the limit — a
-rejected request otherwise comes back as a 500 or a 422 that names neither the
-limit nor how to get under it.
+The endpoint enforces several size limits. `materialize()` checks them before
+sending, then refuses or samples while naming the limit. Otherwise, a rejected
+request returns a 500 or 422 that names neither the limit nor how to meet it.
 
-`Request(context=..., predict=...)` differs in one way: it is handed the frames
-to use and does not trim them. Discarding rows that were named row by row would
-be the worse of the two answers, so a context past the model's cap is refused
-rather than sampled, naming the count and the cap.
+`Request(context=..., predict=...)` receives exact frames and does not trim
+them. It refuses a context above the model's cap instead of discarding named
+rows, and reports the count and cap.
 
-`materialize()` keeps the context under the cap, by a different route on each
-model. On `kumo-tabular` it samples to the cap and says how many rows it took.
-On `kumo-relational` the context is gathered rather than handed over, so
-`num_context_samples` past the cap is refused outright and asking for none
-gathers the 1,000-row budget; it never samples down to 10,000.
+`materialize()` keeps the context under each model's cap. On `kumo-tabular`, it
+samples to the cap and reports the row count. On `kumo-relational`, it gathers
+the context. It refuses `num_context_samples` above the cap. Omitting the
+argument gathers and reports the 1,000-row budget; it never samples down to
+10,000.
 
 ## Sizes
 
@@ -22,7 +20,7 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 
 | Limit | Model | Value | Checked |
 |---|---|---|---|
-| context rows | relational | 1,000 when explaining, otherwise 10,000 | at `materialize()` |
+| context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
 | rows scored per call | relational | 1,000, or 200 for link prediction | at `materialize()` |
 | an explanation | relational | exactly one entity | before sending |
@@ -36,14 +34,14 @@ The tabular cap was measured at the boundary rather than read from a document:
 
 ## Aggregation windows open after the anchor and close on their last day
 
-A window written `0, 30, days` covers `(anchor, anchor + 30 days]`. A row at the
-anchor itself does not count; one a day later does; one exactly thirty days
+A window written `0, 30, days` covers `(anchor, anchor + 30 days]`. A row at
+the anchor itself does not count; one a day later does; one exactly thirty days
 later does; one thirty-one days later does not.
 
-Measured against the engine's own labels rather than read off the grammar, with
-the context anchor pinned and a single row placed at each offset in turn — and
-read per anchor, because the engine samples several and pooling them answers a
-different question.
+This behavior was measured against the engine's labels, not read from the
+grammar. The test pinned the context anchor and placed one row at each offset
+in turn. Results were read per anchor because the engine samples several;
+pooling them answers a different question.
 
 ## There is no `run_mode`
 
@@ -56,17 +54,16 @@ silently gave you `best`. Set the number you want instead:
 query.materialize(indices=[...], num_context_samples=500)
 ```
 
-**The number is honoured, not rounded up to a bucket.** Ask for 500 and 500
-labelled examples are gathered, even though the budget that admits them holds
-1,000 — a count that only chose a bucket would be as decorative as the two
-preset values that did nothing.
+**The number is honoured, not rounded up to a bucket.** Asking for 500 gathers
+500 labelled examples, although the admitting budget holds 1,000. A count that
+only selected a bucket would be as decorative as the two ineffective preset
+values.
 
-Omit it on a relational request and you get the smaller budget — up to 1,000
-examples — which is the default the endpoint has always had. Omit it on a
-single-table `materialize()`, either `indices=` or `predict=`, and you get every
-labelled row, up to the 10,000 the endpoint accepts; past that a sample of
-10,000 is taken and you are told. Ask for more and say so; that is what the
-argument is for.
+Omit it on a relational request to use the smaller budget, up to 1,000
+examples. This is the endpoint's long-standing default. Omit it on a
+single-table `materialize()` with either `indices=` or `predict=` to use every
+labelled row, up to the endpoint's 10,000-row limit. Above that, it samples
+10,000 rows and reports doing so. Use the argument to request more.
 
 Ask for more than exists and you get what exists; there are only so many
 labelled examples, and that is not an error. Ask for more than 10,000 and you
@@ -82,8 +79,8 @@ anchors, in full, and the older ones are absent entirely. Measured on a
 two-year history gathered over seventeen monthly anchors:
 `num_context_samples=50` returned fifty rows carrying a single anchor date, the
 newest; 200 returned the newest four anchors. Neither changed with
-`random_seed`. A forecast narrows the same way, each of its steps around its own
-anchor.
+`random_seed`. A forecast narrows the same way, each of its steps around its
+own anchor.
 
 Entities *are* sampled, within each anchor block, and that part does follow
 `random_seed`. It is the anchor dates that are not shuffled, so narrowing
@@ -94,7 +91,7 @@ anchors.
 
 ## What a deployment serves
 
-`capabilities()` describes **this client**, and says so — `source='sdk'`. It is
+`capabilities()` describes **this client** and reports `source='sdk'`. It is
 not read from the endpoint.
 
 `models()` *is* read from the endpoint, so it is the endpoint's own answer. The
@@ -103,7 +100,7 @@ contract, so an endpoint that does not serve it gives a clear error rather than
 a wrong answer.
 
 There is more than one build of `kumo-relational`. The client declares the
-broader one — six task kinds, seven output fields. A `structured-data-models`
-backed build serves only classification and regression, and refuses the rest
-itself. The contract has no capabilities route to ask with, so declaring the
-broader set and letting the narrower build say no is the lesser of two wrongs.
+broader build with six task kinds and seven output fields. A narrower build
+serves only classification and regression, refusing the rest itself. The
+contract has no capabilities route, so the client declares the broader set
+and lets the narrower build reject unsupported requests.

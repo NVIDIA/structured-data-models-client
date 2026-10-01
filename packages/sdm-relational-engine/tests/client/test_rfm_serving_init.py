@@ -9,10 +9,10 @@ sdm_relational_engine.relationallib`` at module scope and turns any failure into
 ``import sdm_relational_engine.rfm`` is impossible wherever the compiled extension is absent.
 
 That guard exists for the *local* sampler. The Snowflake serving path never
-touches it -- inference happens in the model service. Satisfying the guard with
-a stub is therefore not papering over a real dependency; it demonstrates that
-the dependency is not real for this path, which is the argument for making the
-import lazy.
+touches it, because inference happens in the model service. Satisfying the
+guard with a stub is therefore not papering over a real dependency; it
+demonstrates that the dependency is not real for this path, which is the
+argument for making the import lazy.
 """
 
 from __future__ import annotations
@@ -145,9 +145,10 @@ def test_the_serving_path_never_needs_the_native_sampler(
 ) -> None:
     """Nothing on the serving path calls into relationallib.
 
-    Scope, stated plainly: this observes access *after* ``sdm_relational_engine.rfm`` is
-    already imported. Import-time use -- the bare ``import sdm_relational_engine.relationallib`` in
-    ``backend/local/__init__.py`` -- happens before the recorder can see it and
+    Scope, stated plainly: this observes access *after*
+    ``sdm_relational_engine.rfm`` is already imported. Import-time use (the bare
+    ``import sdm_relational_engine.relationallib`` in
+    ``backend/local/__init__.py``) happens before the recorder can see it and
     is not covered. What is covered is that initializing against a serving
     endpoint and obtaining a client touch no symbol on the extension, which is
     the claim that matters: the one real use site is

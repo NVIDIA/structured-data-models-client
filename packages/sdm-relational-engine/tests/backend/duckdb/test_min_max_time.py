@@ -4,8 +4,8 @@
 r"""The time-range probe labels each ``UNION ALL`` branch by integer position
 rather than by pasting the graph table name into a string literal.
 
-The name is not necessarily one the caller chose -- discovery adopts whatever
-the schema holds -- and doubling the quote character does not neutralise the
+The name is not necessarily one the caller chose, discovery adopts whatever
+the schema holds, and doubling the quote character does not neutralise the
 backslash form on Snowflake or Databricks, where the injection lives; see
 ``test_snow_min_max_probe_keeps_table_names_out_of_the_sql``. This test covers
 the other half: an exotic name must still come back as the dictionary key.

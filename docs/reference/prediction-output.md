@@ -1,7 +1,7 @@
 # Prediction output
 
-`predict()` always returns a `PredictionResult`. Never a DataFrame sometimes
-and an explanation other times.
+`predict()` always returns a `PredictionResult`, not a DataFrame or an
+explanation.
 
 ```python
 result = client.predict(request, model=KumoRelational())
@@ -24,13 +24,13 @@ The shape depends on the **task**, not the model.
 
 Ranking is the exception to the row-per-answer rule: expanding the candidates
 would make `row_index` no longer identify a row, so they arrive under
-`rankings`, and under `prediction` when that is asked for, as a list per entity.
-Three entities ranked `TOP 3` come back as three rows, not nine.
+`rankings`, and under `prediction` when that is asked for, as a list per
+entity. Three entities ranked `TOP 3` come back as three rows, not nine.
 
 ## Joining
 
-Every row carries `row_index`. It also carries `id` — the entity — when the
-model has one; a single-table request may have none.
+Every row carries `row_index`. It also carries the entity `id` when the model
+has one; a single-table request may have none.
 
 **Join on the key when it is there, otherwise on `row_index`. Never on row
 order.** The endpoint is not required to return rows in the order they were

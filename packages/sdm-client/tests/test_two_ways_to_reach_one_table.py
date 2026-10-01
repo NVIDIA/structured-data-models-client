@@ -6,7 +6,7 @@
 
 A sales line names the customer it was sold to and the one it ships to, and
 those are different facts. But an aggregation across a pair of tables has to
-resolve to one column, so a query crossing an ambiguous pair is refused -- and
+resolve to one column, so a query crossing an ambiguous pair is refused, and
 it was refused at the moment the query was asked, which reads as a problem
 with the query rather than with the graph it was written against. Worse, the
 one instruction that would fix it named `graph.unlink`, which a caller holding

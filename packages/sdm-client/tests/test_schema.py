@@ -177,7 +177,7 @@ def test_a_contradictory_column_is_refused_before_anything_is_sent():
 
     Assigning a meaning the values cannot carry was refused, but reaching the
     same pair by assigning the storage instead was not, and nothing asked
-    again before the request was built -- so a column could say it holds
+    again before the request was built, so a column could say it holds
     timestamps and means a quantity, and be sent.
 
     Checked when the caller has finished rather than as they assign, because

@@ -9,8 +9,8 @@ environment. Run with ``-m live_warehouse``.
 
 These cover what the offline suite cannot: that the SQL this package generates
 is accepted by the real engines, that identifiers needing quotes survive the
-round trip, and that the two governed object types -- a Snowflake **semantic
-view** and a Databricks **metric view** -- are reachable. Those two are worth
+round trip, and that the two governed object types, a Snowflake **semantic
+view** and a Databricks **metric view**, are reachable. Those two are worth
 testing precisely because neither behaves like a table.
 """
 
@@ -137,7 +137,7 @@ def test_snowflake_row_counts_agree_between_a_table_read_and_a_count(
 def test_snowflake_semantic_view_is_described_and_queried(snowflake):
     """A semantic view is not a table: it is read through ``SEMANTIC_VIEW()``.
 
-    Reaching one at all is the thing worth proving -- the connector passes SQL
+    Reaching one at all is the thing worth proving, the connector passes SQL
     through rather than assuming every object can be ``SELECT *``-ed.
     """
     described = read_table(

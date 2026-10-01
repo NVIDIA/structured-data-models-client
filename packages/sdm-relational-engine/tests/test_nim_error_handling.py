@@ -64,23 +64,43 @@ def test_rejected_request_is_not_retried(
     assert 'create an issue' not in message
 
 
+@pytest.fixture()
+def waited(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """What the retry loop would have slept, without sleeping it.
+
+    These tests slept through the production `1s, 2s` backoff to assert a call
+    count, which cost four seconds and checked nothing about the schedule.
+    Recording it instead is faster and says more: the delays are now part of
+    what is asserted.
+    """
+    from sdm_relational_engine.rfm import rfm as module
+
+    delays: list[float] = []
+    monkeypatch.setattr(module.time, 'sleep', delays.append)
+    return delays
+
+
 def test_unavailable_nim_is_retried(
     user_store_graph: Graph,
     ltv: ValidatedPredictiveQuery,
+    waited: list[float],
 ) -> None:
     api = FailingAPI(503)
     message = _predict(_model(user_store_graph, api), ltv, num_retries=2)
     assert api.n_predict == 3
     assert 'could not complete' in message
+    assert waited == [1, 2]
 
 
 def test_rate_limit_is_retried(
     user_store_graph: Graph,
     ltv: ValidatedPredictiveQuery,
+    waited: list[float],
 ) -> None:
     api = FailingAPI(429)
     _predict(_model(user_store_graph, api), ltv, num_retries=1)
     assert api.n_predict == 2
+    assert waited == [1]
 
 
 def test_oversized_request_is_not_retried_and_carries_the_remedy(
@@ -92,7 +112,7 @@ def test_oversized_request_is_not_retried_and_carries_the_remedy(
 
     Asserting the remedy and not merely the failure is the point: the retry
     classifier already treats 413 as non-transient, so deleting this branch
-    would still raise -- just as a RuntimeError with no batch_size advice, and
+    would still raise, just as a RuntimeError with no batch_size advice, and
     nothing would fail.
     """
     api = FailingAPI(413, 'request entity too large')

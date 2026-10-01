@@ -299,7 +299,7 @@ def test_training_mode_still_names_the_static_aggregation_it_has():
 
 def test_a_wildcard_aggregation_is_not_told_to_drop_the_aggregation():
     """The advice was to ask for the target column by name, which renders
-    `PREDICT ratings.*` -- and a wildcard is only legal inside COUNT, so the
+    `PREDICT ratings.*`, and a wildcard is only legal inside COUNT, so the
     remedy for one refusal was a second refusal."""
     message = refuse(
         'PREDICT COUNT(ratings.*, 0, 30, days) FOR EACH users.USERID',

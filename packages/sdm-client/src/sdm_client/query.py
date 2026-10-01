@@ -5,7 +5,7 @@
 r"""Asking a question in PQL, and gathering the data that answers it.
 
 A predictive query says *what* to predict. It never says *which rows* to
-predict for -- that is always an explicit argument, because a query can only
+predict for. That is always an explicit argument because a query can only
 enumerate rows that are already in the tables:
 
 >>> query = PredictiveQuery(
@@ -17,7 +17,7 @@ enumerate rows that are already in the tables:
 :meth:`~PredictiveQuery.materialize` is the gathering step, and it is explicit
 because it is the expensive one: it parses the query, finds labelled examples
 in history, samples the neighbourhood of each entity, and encodes the result.
-Nothing is sent -- what comes back is a :class:`~sdm_client.Request` gathered
+Nothing is sent. What comes back is a :class:`~sdm_client.Request` gathered
 for one model. Which one follows the schema's shape unless ``model`` says
 otherwise, and the model asked to answer it has to be that same one.
 """
@@ -39,7 +39,7 @@ from sdm_client.decompose import (
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
-from sdm_client.models import Model, spec_for
+from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
 from sdm_client.schema import Schema
@@ -51,7 +51,8 @@ if TYPE_CHECKING:
 class PredictiveQuery:
     r"""A question expressed in PQL and answered from the tables in its schema.
 
-    The query is resolved and validated when :meth:`materialize` builds a request.
+    The query is resolved and validated when :meth:`materialize` builds a
+    request.
 
     Args:
         query: PQL query text.
@@ -101,7 +102,7 @@ class PredictiveQuery:
         :attr:`~sdm_client.Request.is_relational` reports: a relationship sends
         a schema relationally as surely as a second table does, so a lone table
         that points at itself is gathered as the graph it is. Name a model when
-        that default is not what you want -- a single table with no
+        that default is not what you want. A single table with no
         relationships is a graph of one node, and the relational model answers
         it.
 
@@ -263,7 +264,7 @@ class PredictiveQuery:
         if indices is not None and predict is not None:
             raise StructuredDataError(
                 'pass either indices=[...] to score rows the tables already '
-                'contain, or predict=<frame> to score rows they do not—not both',
+                'contain, or predict=<frame> to score rows they do not, not both',
                 code='INVALID_REQUEST',
             )
 
@@ -424,7 +425,8 @@ class PredictiveQuery:
             )
             raise StructuredDataError(
                 f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {reasons}{self._why_the_target_is_text(reasons)}'
+                f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
+                f'{self._why_the_target_is_text(reasons, profile)}'
                 f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
                 code='INVALID_REQUEST',
             )
@@ -456,7 +458,7 @@ class PredictiveQuery:
         if not ambiguous:
             return ''
         # Which pair the query crossed is in the refusal and nowhere else, so
-        # the tables are read from it -- but only to choose among pairs the
+        # the tables are read from it, but only to choose among pairs the
         # schema already knows about. Advising the first pair found sent a
         # caller to edit a relationship their query never touched.
         crossed = [
@@ -478,7 +480,7 @@ class PredictiveQuery:
             f'== {target!r} and link.source_column in {rest!r})].'
         )
 
-    def _why_the_target_is_text(self, reasons: str) -> str:
+    def _why_the_target_is_text(self, reasons: str, profile: Profile) -> str:
         r"""Say why a target is `text`, when that is what refused the query.
 
         Inference types a string column by how many distinct values it holds,
@@ -507,16 +509,31 @@ class PredictiveQuery:
         if column is None or column.stype != 'text' or column.stype_declared:
             return ''
         frame = getattr(self.schema[table], 'data', None)
+        distinct = frame[name].nunique() if frame is not None else None
         holds = (
-            f'holds {frame[name].nunique():,} distinct values'
-            if frame is not None
+            f'holds {distinct:,} distinct values'
+            if distinct is not None
             else 'was read as prose'
         )
-        return (
+        said = (
             f'. {table}.{name} {holds}, and a '
             f'string column with more than {_MAX_CATEGORICAL} is typed text '
-            f'rather than categorical -- a fair rule for a feature and a poor '
-            f'one for a label. If it is a label, say so with '
+            f'rather than categorical. That is fair for a feature and a poor '
+            f'one for a label'
+        )
+        ceiling = (
+            RELATIONAL_LIMITS['classes_max'] if profile == RELATIONAL else None
+        )
+        if ceiling is not None and distinct is not None and distinct > ceiling:
+            return (
+                f'{said}. Typing it categorical would not help here, though: '
+                f'{profile.capabilities.model} classifies at most {ceiling} '
+                f'classes and this column holds {distinct:,}, so the send '
+                f'would be refused. Predict a column with fewer classes, or '
+                f'group these into that many first'
+            )
+        return (
+            f'{said}. If it is a label, say so with '
             f"schema[{table!r}][{name!r}].stype = 'categorical'"
         )
 
@@ -538,7 +555,7 @@ class PredictiveQuery:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
 
 
-#: `PREDICT <table>.<column>` -- the plain column target, which is the only
+#: `PREDICT <table>.<column>` is the plain column target, which is the only
 #: shape a semantic type can be refused for.
 _PREDICTED_COLUMN = re.compile(
     r'PREDICT\s+([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s', re.IGNORECASE
@@ -549,10 +566,32 @@ _PREDICTED_COLUMN = re.compile(
 _VALIDATOR_SENTENCE = re.compile(r'Value error, (.+?)(?= \[type=)', re.DOTALL)
 
 
+_A_REMEDY_IN_THE_LANGUAGE_S_OWN_WORDS = re.compile(
+    r'\s*(?:Keep the one this query means and drop the rest, for example:'
+    r'|You can drop the extra foreign keys? with:)'
+    r'[^.]*?(?:schema|graph)\.unlink\([^)]*\)'
+    r'(?:\s*;\s*(?:schema|graph)\.unlink\([^)]*\))*\.?'
+)
+
+
+def _without_a_remedy_this_caller_cannot_run(reasons: str) -> str:
+    r"""The refusal without the repair written in the language's vocabulary.
+
+    The query language advises `schema.unlink(...)`, a call on its own
+    `SchemaDefinition` and not on the `Schema` a caller holds, and it chooses
+    which link to keep by position. This object restates both in terms the
+    caller can run, and two remedies that disagree about which link to keep
+    are worse than one: followed in order they keep the wrong one. So the one
+    that cannot be run is removed rather than printed beside it.
+    """
+    return _A_REMEDY_IN_THE_LANGUAGE_S_OWN_WORDS.sub('', reasons)
+
+
 def _without_the_validator_trace(message: str) -> str:
     r"""The sentence a refusal is making, without the trace around it.
 
-    A few window errors -- a zero-width one, an inverted one -- are raised by
+    A few window errors, including zero-width and inverted windows, are raised
+    by
     the grammar's own models rather than by its parser, so they arrive as a
     pydantic trace: an error count, the internal type that raised, the repr of
     the arguments it was given, and a link to pydantic's documentation. The

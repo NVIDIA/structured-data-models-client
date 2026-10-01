@@ -4,8 +4,8 @@
 
 """A schema edit is checked when it is made, not several cells later.
 
-The engine this client is built on already validates these on assignment --
-`rfm/base/table.py` and `rfm/base/column.py` -- and the client's `Table` was a
+The engine this client is built on already validates these on assignment
+(`rfm/base/table.py` and `rfm/base/column.py`), and the client's `Table` was a
 plain dataclass, so a wrong edit was stored and only failed at `materialize()`,
 as a bare `KeyError` or a `ValueError` outside the documented error surface.
 
@@ -66,7 +66,7 @@ def test_an_empty_composite_key_is_refused():
 
 
 def test_the_time_column_cannot_also_be_the_primary_key():
-    # A string column, so it *could* be a key -- otherwise the dtype check
+    # A string column, so it *could* be a key, otherwise the dtype check
     # fires first and this would not reach the question being asked.
     frame = users()
     frame['when'] = [f'2024-01-0{index + 1}' for index in range(len(frame))]
@@ -177,7 +177,7 @@ def test_a_composite_key_is_checked_across_its_columns():
     )
     built = Schema.from_data({'t': frame}, relationships=[])
     built['t'].primary_key = ['a', 'b']
-    assert built['t'].primary_key == ['a', 'b']
+    assert built['t'].primary_key == ('a', 'b')
     with pytest.raises(StructuredDataError):
         built['t'].primary_key = ['a']
 
@@ -284,7 +284,7 @@ def test_the_constructor_takes_a_composite_key_as_the_setter_does():
     built = Schema.from_data(
         {'t': frame}, primary_keys={'t': ['a', 'b']}, relationships=[]
     )
-    assert built['t'].primary_key == ['a', 'b']
+    assert built['t'].primary_key == ('a', 'b')
 
 
 def test_a_composite_key_naming_a_missing_column_is_refused():
@@ -429,7 +429,7 @@ def test_a_single_null_key_is_refused_rather_than_passing_silently():
 
 def test_many_null_keys_are_reported_as_nulls_not_as_duplicates():
     """`duplicated()` treats null as equal to null, so these looked like
-    repeats -- and 'repeats a value already used, e.g. nan' sends the reader
+    repeats, and 'repeats a value already used, e.g. nan' sends the reader
     to fix the wrong thing."""
     frame = pd.DataFrame({'id': [None, None, None], 'v': [1.0, 2.0, 3.0]})
     table = _table(frame)

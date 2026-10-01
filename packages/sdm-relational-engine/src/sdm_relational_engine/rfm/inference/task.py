@@ -127,8 +127,8 @@ class TaskTable:
         context examples.
 
         Args:
-            start: Index of the prediction examples to start narrowing.
-            length: Length of the prediction examples.
+            start: First context row to keep.
+            length: How many context rows to keep.
         """
         out = copy.copy(self)
         df = out._context_df.iloc[start : start + length].reset_index(drop=True)

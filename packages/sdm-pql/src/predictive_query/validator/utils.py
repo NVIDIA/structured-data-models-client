@@ -88,7 +88,6 @@ def get_rhs_lp_table(
     for col_group in schema.col_groups:
         if ColumnKey(edge_table, edge_col) not in col_group.columns:
             continue
-        # identify the primary key
         for col in col_group.columns:
             if schema.tables[col.table_name].pkey == col.col_name:
                 return col.table_name

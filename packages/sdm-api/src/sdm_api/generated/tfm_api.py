@@ -17,6 +17,8 @@ from sdm_api.endpoints import Endpoint, HTTPMethod
 
 @dataclass(frozen=True)
 class TFMOperation:
+    r"""One operation the contract defines: where it lives and what it carries."""
+
     operation_id: str
     endpoint: Endpoint
     request_schema: str | None = None
@@ -147,7 +149,7 @@ def _whole(value: Any, field: str, model: str) -> int:
     r"""``value`` as an int, refusing anything that is not already one.
 
     ``int()`` accepts a bool and truncates a float, so a `row_index` of
-    ``1.2`` used to become ``1`` -- attaching a prediction meant for no
+    ``1.2`` used to become ``1``, attaching a prediction meant for no
     row to row 1, which a join on `row_index` would then honour.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -215,7 +217,7 @@ def _finite(value: Any) -> float:
         # A number spelled as a string is accepted: servers do send
         # one, and refusing a value that parses exactly would be a
         # regression with nothing gained. What must not escape is a
-        # raw error from the conversion itself -- `float(10**400)`
+        # raw error from the conversion itself: `float(10**400)`
         # raises OverflowError, which no caller catches.
         raise ResponseContractError(
             f'response carries {value!r} where the contract requires a '
@@ -328,6 +330,8 @@ TFM_SCHEMA_NAMES: Final[tuple[str, ...]] = (
 
 
 class TFMOperations:
+    r"""Every operation in the contract, one attribute each."""
+
     run_prediction: Final[TFMOperation] = TFMOperation(
         operation_id='runPrediction',
         endpoint=Endpoint(

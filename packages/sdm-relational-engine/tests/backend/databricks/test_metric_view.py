@@ -1225,7 +1225,7 @@ def test_from_databricks_metric_view_closes_internal_connection_on_error(
 @pytest.fixture(scope='session')
 def metric_view_graph(connection: 'Connection') -> Graph:
     # A live view that converts only partly is the normal case, not a failure,
-    # and `error::UserWarning` would turn it into one -- failing these tests
+    # and `error::UserWarning` would turn it into one, failing these tests
     # for a reason that has nothing to do with what they assert. Suppressed
     # here rather than in `filterwarnings`, which cannot name a warning class
     # without importing it before the session starts.
@@ -1356,8 +1356,8 @@ def test_escalated_conversion_warning_closes_an_owned_connection(
     Same contract as every other failure path here.
 
     ``Graph.__del__`` does close it eventually, so this is a matter of *when*:
-    a caller that holds the exception -- which any ``except ... as error`` does
-    -- keeps the constructor's frame, and therefore the unreachable graph,
+    a caller that holds the exception, which any ``except ... as error`` does,
+    keeps the constructor's frame, and therefore the unreachable graph,
     alive with it. The connection then stays open for as long as the exception
     is held rather than being released where it was opened.
     """
@@ -1428,7 +1428,7 @@ def test_conversion_warning_is_attributed_to_the_caller() -> None:
 def test_information_schema_lookups_stay_pushdown_friendly() -> None:
     """Folding the *column* is case-insensitive but not sargable: Unity Catalog
     cannot push the predicate down, so a metadata point look-up degrades into a
-    scan of every column of every table in the catalog -- measured live at 31s
+    scan of every column of every table in the catalog, measured live at 31s
     per table against 0.5s, growing with catalog size. Fold the literal
     instead; identifiers are stored lower-cased.
     """

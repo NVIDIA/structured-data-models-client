@@ -6,7 +6,7 @@
 
 Four ways the object a caller holds did not say what it appeared to. The same
 relationship was refused when passed to `from_data` and accepted when assigned
-afterwards, and `check_consistent()` -- which a caller runs to ask exactly this
+afterwards, and `check_consistent()`, which a caller runs to ask exactly this
 -- passed it. A materialized request kept the caller's schema by reference, so
 editing the schema afterwards changed what was sent. A relational request named
 its entity table by dict insertion order. And the `predict=<frame>` route left
@@ -222,7 +222,7 @@ def test_a_single_table_request_still_names_its_table():
 
 def test_rows_supplied_for_scoring_are_taken_out_of_the_context():
     """`indices=` removed them and this route did not, so scoring rows you
-    already hold -- which is how anyone checks a model against known answers --
+    already hold (which is how anyone checks a model against known answers)
     handed the model those answers and returned what reads like accuracy."""
     schema = single()
     frame = schema['t'].data
@@ -296,7 +296,7 @@ def test_a_predict_frame_request_keeps_its_schema_too():
 
 def test_a_column_is_typed_from_one_reading_of_its_values():
     """`infer_tfm_dtype` walks every cell of an object column, and it was
-    asked three times per column -- for the dtype, again inside the stype, and
+    asked three times per column, for the dtype, again inside the stype, and
     again to record that there was no type. On a million rows of warehouse
     `Decimal` that was five seconds before anything was sent."""
     import sdm_client.schema as schema_module
@@ -367,8 +367,8 @@ def test_typing_still_answers_the_same_for_every_shape():
 
 
 def test_a_snapshot_keeps_a_key_inference_tolerated():
-    """Inference accepts a key with a null in it -- it warns and goes on,
-    because refusing would break frames that worked -- and assignment refuses
+    """Inference accepts a key with a null in it: it warns and goes on,
+    because refusing would break frames that worked, and assignment refuses
     one. Copying through the setter turned a schema `from_data` had accepted
     into a request that could not be materialized."""
     frame = pd.DataFrame({'user_id': [*range(199), None], 'v': [1.0] * 200})

@@ -8,7 +8,7 @@
 path already made that true: entity values never travel, so it puts the
 caller's own key back on each row before returning. The tabular path returned
 whatever the endpoint echoed, and the endpoint echoes the stringified list of
-primary-key values -- `'[1]'` where the caller asked about `1`. Same client,
+primary-key values, `'[1]'` where the caller asked about `1`. Same client,
 same schema, same query, and an identity column that only joins on one of the
 two models.
 """
@@ -298,7 +298,7 @@ def test_an_answer_carrying_another_rows_key_is_refused():
 
 def test_an_answer_carrying_another_rows_bare_key_is_refused():
     """The endpoint may answer under the key itself rather than under a list of
-    one -- that is the shape the relational endpoint uses. Both are keys this
+    one. That is the shape the relational endpoint uses. Both are keys this
     batch can be checked against."""
     schema = schema_for(list(range(1, 21)))
     payload = payload_for(schema, [3, 7])
@@ -319,8 +319,8 @@ def test_an_id_in_a_shape_this_client_does_not_recognise_is_left_to_row_index():
 
 
 def test_rows_sharing_a_key_are_each_answered_under_it():
-    """Several rows can carry the same entity value -- the key is inferred and
-    warned about, not refused -- and all of them are scored. The endpoint
+    """Several rows can carry the same entity value. The key is inferred and
+    warned about rather than refused, and all of them are scored. The endpoint
     answers each under that shared key, and none of them is a mismatch."""
     frame = pd.DataFrame(
         {

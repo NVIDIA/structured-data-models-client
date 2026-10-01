@@ -30,20 +30,19 @@ with SDMClient(url='http://localhost:8000') as client:
     print(result.to_pandas())
 ```
 
-**The model is an argument, not a method.** Either model answers through the
-same call; the request is gathered for one of them, and `materialize(model=...)`
-says which when the schema's shape is not the answer you want.
+**The model is an argument, not a method.** Either model uses the same call.
+The request is gathered for one model, and `materialize(model=...)` selects it
+when the schema's shape gives the wrong default.
 
 ## Status
 
 All seven phases are built and tested end to end against live NIMs. The
-architecture is written down in
-[`docs/about/architecture.md`](docs/about/architecture.md), and the packages follow it.
+packages follow [`docs/about/architecture.md`](docs/about/architecture.md).
 Nothing has been released yet.
 
 | Phase | | |
 |---|---|---|
-| 1 | Foundation — `sdm-api`, `sdm-pql`, CI | ✅ |
+| 1 | Foundation: `sdm-api`, `sdm-pql`, CI | ✅ |
 | 2 | Client and the tabular model | ✅ |
 | 3 | Connectors | ✅ |
 | 4 | The relational model | ✅ |
@@ -57,7 +56,7 @@ Five distributions, released together on one version.
 
 | Distribution | Import | Kind | What it is |
 |---|---|---|---|
-| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, transport, sessions, results |
+| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, sessions and results |
 | `sdm-api` | `sdm_api` | pure python | The Universal TFM wire types. No third-party dependencies |
 | `sdm-pql` | `predictive_query` | pure python | The Predictive Query Language: grammar, parser, validator, AST, model profiles |
 | `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
@@ -66,12 +65,12 @@ Five distributions, released together on one version.
 Only `sdm-relational-engine` is native. The other four are pure Python and
 install anywhere, on 3.10 through 3.14.
 
-The engine publishes wheels for Linux x86-64 and aarch64 on 3.10–3.13 and **no source
-distribution**, so `pip install sdm-client[relational]` resolves there and
-nowhere else — on any other platform pip has nothing to fall back to and the
-extra does not install. It does build on other platforms from a checkout, given
-a compiler and CMake, which is what the development instructions below do; that
-is a path for contributors, not something `pip` can do for a user.
+The engine publishes wheels for Linux x86-64 and aarch64 on 3.10 through 3.13
+and **no source distribution**, so `pip install sdm-client[relational]` resolves
+there and nowhere else. On other platforms, pip has nothing to fall back to, so
+the extra does not install. It builds from a checkout on other platforms with a
+compiler and CMake, as described below. This path is for contributors; `pip`
+cannot use it for users.
 
 ## Development
 
@@ -108,9 +107,9 @@ Lint and format with `ruff`; the formatter owns line length. Type-check with
                packages/sdm-client/src packages/sdm-connectors/src
 ```
 
-Changing anything a caller can observe — an exported name, a signature, or the
-shape of a request on the wire — means re-recording the snapshot in the same
-commit, which is what makes it visible in review:
+Changing anything a caller can observe, such as an exported name, signature,
+or wire request shape, requires recording a new snapshot in the same commit.
+This makes the change visible in review:
 
 ```bash
 .venv/bin/python scripts/snapshot_public_api.py --write
@@ -141,10 +140,14 @@ file, not additional ones.
 
 Full documentation is under [`docs/`](docs/index.md):
 
-- [Overview](docs/about/overview.md) and [Architecture](docs/about/architecture.md)
-- [Prerequisites](docs/get-started/prerequisites.md), [Installation](docs/get-started/installation.md), [Quickstart](docs/get-started/quickstart.md)
-- [Prediction output](docs/reference/prediction-output.md) and [Limits](docs/reference/limits.md)
-- [Stability](docs/reference/stability.md) — what is public, and what a version bump means
+- [Overview](docs/about/overview.md) and
+  [Architecture](docs/about/architecture.md)
+- [Prerequisites](docs/get-started/prerequisites.md),
+  [Installation](docs/get-started/installation.md),
+  [Quickstart](docs/get-started/quickstart.md)
+- [Prediction output](docs/reference/prediction-output.md) and
+  [Limits](docs/reference/limits.md)
+- [Stability](docs/reference/stability.md): public APIs and version bumps
 
 ## Testing
 

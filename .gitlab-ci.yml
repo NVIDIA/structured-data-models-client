@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Every job here is offline and fast. Nothing reaches a NIM, a warehouse, or a
 # package index beyond the wheels it installs.
 #
@@ -149,7 +153,7 @@ engine:
     - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
     # And root tests/ again, with the engine present. The `test` job runs them
     # without one, and the wire-payload snapshot deliberately excludes the
-    # relational case when the engine cannot build it -- so that case was
+    # relational case when the engine cannot build it, so that case was
     # recorded and then compared nowhere. Here it is compared.
     - python -m pytest tests -q
 
@@ -327,7 +331,7 @@ installed-wheel:
           location = pathlib.Path(module.__file__).resolve()
           assert 'site-packages' in location.parts, (
               f'{module.__name__} was imported from {location}, not from the '
-              f'installed wheel -- this job is testing the checkout again'
+              f'installed wheel, so this job is testing the checkout again'
           )
           marker = location.parent / 'py.typed'
           assert marker.is_file(), (
@@ -348,7 +352,33 @@ audit:
   script:
     - pip install -q pip-audit
     - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
-    - pip-audit --progress-spinner off
+    # `oauthlib` 4.0.0 fixes CVE-2026-49265 and `databricks-sql-connector`
+    # pins `oauthlib<4.0.0`, so the fix cannot be installed. It is ignored so
+    # that a red result still means a new finding. The check below fails when
+    # the pin is relaxed, so the ignore cannot outlive its reason.
+    - |
+      python - <<'EOF'
+      from importlib.metadata import requires
+      from packaging.requirements import Requirement
+      from packaging.version import Version
+      import sys
+
+      for raw in requires('databricks-sql-connector') or []:
+          requirement = Requirement(raw)
+          if requirement.name != 'oauthlib':
+              continue
+          if requirement.specifier.contains(Version('4.0.0')):
+              sys.exit(
+                  f'databricks-sql-connector now allows oauthlib 4.0.0 ({raw}). '
+                  f'Drop --ignore-vuln CVE-2026-49265 and let the fix install.'
+              )
+          print(f'oauthlib fix still blocked upstream by {raw}')
+          break
+      else:
+          sys.exit('databricks-sql-connector no longer requires oauthlib; '
+                   'recheck whether the ignore below is still needed')
+      EOF
+    - pip-audit --progress-spinner off --ignore-vuln CVE-2026-49265
 
 # The dependency inventory a consumer needs to accept this into their own
 # supply chain, covering the base install and every extra that resolves without
@@ -360,9 +390,14 @@ sbom:
   script:
     - pip install -q cyclonedx-bom
     - VERSION=$(cat dist/VERSION)
-    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
+    - pip install -q --find-links "$CI_PROJECT_DIR/dist"
+        "sdm-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
     - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
-    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json'));
+        names={c['name'] for c in d.get('components', [])};
+        missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors'} - names;
+        print(f'{len(names)} components');
+        sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
   artifacts:
     paths:
       - dist/sbom.cyclonedx.json

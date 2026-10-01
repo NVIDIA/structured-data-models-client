@@ -6,7 +6,7 @@
 
 Two silences. The tabular endpoint caps a context at 10,000 rows and the client
 did not know it, so a caller could encode and transmit a table of any size to
-be refused at the far end -- while the identical overage on the other model was
+be refused at the far end, while the identical overage on the other model was
 refused locally with a message naming the limit.
 
 And a field a caller names is validated against the model and never against
@@ -279,7 +279,13 @@ def test_a_fit_time_output_list_is_not_read_again_later():
 # --- what the relational endpoint enforces, read the way it reads it --------
 
 
-def gathered(*, context_rows: int, run_mode: str | None, target=None) -> object:
+def gathered(
+    *,
+    context_rows: int,
+    run_mode: str | None,
+    target=None,
+    predict_rows: int = 1,
+) -> object:
     values = target if target is not None else list(range(context_rows))
     payload = {
         'task': {'kind': 'regression', 'target': {'column_name': 'TARGET'}},
@@ -290,7 +296,12 @@ def gathered(*, context_rows: int, run_mode: str | None, target=None) -> object:
                 'rows': [[value] for value in values],
             }
         },
-        'predict': {'instance_table': {'columns': ['TARGET'], 'rows': [[0]]}},
+        'predict': {
+            'instance_table': {
+                'columns': ['TARGET'],
+                'rows': [[0]] * predict_rows,
+            }
+        },
     }
     if run_mode is not None:
         payload['inference'] = {'run_mode': run_mode}
@@ -477,7 +488,7 @@ def sent(request):
 
 def test_scoring_every_entity_is_refused_rather_than_sent_with_no_context():
     """A row carrying the answer is kept out of the context, so scoring every
-    row takes every row out of it – and zero distinct answers is not one, so
+    row takes every row out of it, and zero distinct answers is not one, so
     the guard for a context of one row did not see this."""
     request = gathered_scoring(60)
     assert request.context_rows == 0
@@ -518,3 +529,45 @@ def test_the_cap_refusal_does_not_promise_a_sampling_the_model_does_not_do():
     assert 'reads at most 10,000' in message
     assert 'sampled to that' not in message
     assert 'gather it with materialize()' in message
+
+
+# --- a judgement is about the rows the call sends ---------------------------
+
+
+def single_class_relational():
+    """A gathered payload whose context teaches nothing."""
+    request = gathered(context_rows=50, run_mode='fast', target=[7] * 50)
+    request.payloads[0]['task']['kind'] = 'binary_classification'
+    request.query = None
+    return request
+
+
+def test_a_session_scoring_call_is_not_judged_on_a_context_it_discards():
+    """The context was pinned at fit(); a scoring call carries only rows, so
+    judging its context refuses a request over rows that are thrown away."""
+    from sdm_client.adapters.relational import RelationalAdapter
+
+    adapter = RelationalAdapter()
+    request = single_class_relational()
+
+    with pytest.raises(StructuredDataError, match='two classes'):
+        list(adapter.prediction_plan(request, ('prediction',)))
+
+    sent = list(adapter.session_prediction_plan(request, ('prediction',)))
+    assert sent and 'context' not in sent[0]
+
+
+def test_pinning_a_context_is_not_judged_on_rows_it_does_not_send():
+    """A session payload carries no predict rows, so the one-entity
+    explanation rule has nothing to count."""
+    from sdm_client.adapters.relational import RelationalAdapter
+
+    adapter = RelationalAdapter()
+    request = gathered(context_rows=50, run_mode='fast', predict_rows=3)
+    request.query = None
+
+    with pytest.raises(StructuredDataError, match='exactly 1 entity'):
+        list(adapter.prediction_plan(request, ('prediction', 'explanation')))
+
+    pinned = adapter.session_plan(request, ('prediction', 'explanation'))
+    assert 'predict' not in pinned

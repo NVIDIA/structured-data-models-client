@@ -22,6 +22,7 @@ class Endpoint:
     method: HTTPMethod = HTTPMethod.GET
 
     def get_path(self) -> str:
+        r"""The path, refusing an endpoint that was never given one."""
         if self.path is None:
             raise ValueError('Endpoint requires a path')
         return self.path

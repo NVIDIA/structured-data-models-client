@@ -20,13 +20,14 @@ from pydantic.dataclasses import dataclass
 class RunMode(StrEnum):
     r"""How much in-context data a prediction is given.
 
-    The mode caps the number of in-context examples the client collects and also
+    The mode caps the number of in-context examples the client collects and
     selects the per-hop neighbour fanout, trading accuracy against latency and
     payload size. It is sent as ``inference.run_mode``.
 
     The caps are 100 (``debug``), 1,000 (``fast``), 5,000 (``normal``) and
-    10,000 (``best``); the exact counts live in ``sdm_relational_engine.rfm.rfm``. Temporal
-    link prediction always uses the ``fast`` budget regardless of the mode.
+    10,000 (``best``). The exact counts live in
+    ``sdm_relational_engine.rfm.rfm``. Temporal link prediction always uses the
+    ``fast`` budget regardless of the mode.
     """
 
     FAST = 'fast'
@@ -40,8 +41,8 @@ RegressionOutput = Literal['mean', 'median', 'quantiles']
 
 # Pydantic's default is `extra='ignore'`, which drops a misspelled key without
 # a word and silently substitutes the default: `output_typ='mean'` returns the
-# median. Nothing forwards an unknown key -- the wire payload is built from the
-# declared fields alone -- so there is no forward compatibility to preserve,
+# median. Nothing forwards an unknown key. The wire payload is built from the
+# declared fields alone, so there is no forward compatibility to preserve,
 # and a bad *value* for a known key is already rejected.
 _CONFIG = ConfigDict(extra='forbid')
 

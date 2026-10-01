@@ -45,9 +45,9 @@ class TimeRangeValidator:
         r"""What to ask instead, when the aggregated table has no time column.
 
         The advice was to drop the aggregation and ask for the target column
-        by name. For `COUNT(ratings.*)` that renders `PREDICT ratings.*`,
-        which the grammar refuses -- a wildcard is legal only inside `COUNT` --
-        so the remedy for one refusal was a second refusal. And for a
+        by name. For `COUNT(ratings.*)` that renders `PREDICT ratings.*`, which
+        the grammar refuses because a wildcard is legal only inside `COUNT`.
+        The remedy for one refusal was therefore a second refusal. For a
         foundation model the rewrite is wrong even when it renders: a column of
         a table the entity points at has many values per entity and is refused
         for that instead.

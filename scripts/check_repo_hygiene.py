@@ -10,7 +10,7 @@ added without one is otherwise invisible until a release audit finds it.
 
 ``retired`` asserts no shipped file sends a reader to an interface this client
 dropped. An example naming one is worse than no example, and a sweep that
-chooses its own roots will miss a tree -- so this enumerates from
+chooses its own roots will miss a tree, so this enumerates from
 ``git ls-files``.
 
 ``internal`` asserts no internal-only reference reaches a *shipped* file. The
@@ -31,22 +31,38 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SPDX_LINE = 'SPDX-License-Identifier: Apache-2.0'
 
-# Generated files get their header from the generator, so they are excluded
-# below rather than listed here.
-SPDX_ROOTS = (
-    'scripts',
-    'packages/sdm-api/src',
-    'packages/sdm-api/tests',
-    'packages/sdm-pql/src',
-    'packages/sdm-pql/tests',
-    'packages/sdm-client/src',
-    'packages/sdm-client/tests',
-    'packages/sdm-connectors/src',
-    'packages/sdm-connectors/tests',
-    'packages/sdm-relational-engine/src',
-    'packages/sdm-relational-engine/tests',
+# Every tracked file that can carry the header is checked, rather than a list
+# of directories. A root list has to be remembered, and the files it forgot
+# look exactly like the files it cleared.
+SPDX_SUFFIXES = {
+    '.cfg',
+    '.cpp',
+    '.g4',
+    '.h',
+    '.hpp',
+    '.in',
+    '.py',
+    '.pyi',
+    '.sh',
+    '.toml',
+    '.yaml',
+    '.yml',
+}
+
+# Third-party bytes and build output. A directory of our own is not listed
+# here: `grammar/` and `generated/` each hold hand-maintained files beside the
+# produced ones, and excluding the directory excused those too.
+SPDX_EXCLUDE_PARTS = {'__pycache__', '_vendor', 'assets', 'build'}
+
+# A produced file says so on a line of its own, near the top, in the form the
+# tool that wrote it uses. Anchoring to the start of the line matters: a
+# docstring that merely mentions being generated from something would
+# otherwise excuse itself from the licence check.
+SPDX_GENERATED = re.compile(
+    r'^[\s#/*\'"]*(?:code\s+)?generated\s+(?:by|from)\b',
+    re.IGNORECASE,
 )
-SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
+SPDX_GENERATED_LINES = 8
 
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
@@ -68,6 +84,12 @@ INTERNAL_PATTERNS = (
     # ships either way.
     re.compile(r'\btfm-serving\b', re.IGNORECASE),
     re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
+    # Internal build names for the servers behind a model id. A reader
+    # cannot look either up, and which build answers is not the client
+    # story. The public client repository's own name is spelled
+    # ``structured-data-models-client``, so it has to be excluded here.
+    re.compile(r'\bkumoml', re.IGNORECASE),
+    re.compile(r'\bstructured-data-models\b(?!-client)', re.IGNORECASE),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has
@@ -79,8 +101,10 @@ INTERNAL_ALLOWLIST = {
     # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
     'scripts/generate_sdm_api.py',
-    # Runs on the internal instance, and has to keep naming it to work. It
-    # goes when the public repository has its own pipeline.
+    # Runs on the internal instance, and has to keep naming it to work.
+    # `.github/workflows/ci.yml` now runs the same gates in the open; this
+    # file stays only for the contract job, which clones a project that is
+    # not public, and goes when that clone no longer has to happen here.
     '.gitlab-ci.yml',
 }
 
@@ -109,7 +133,7 @@ _OLD_BACKENDS = ('databricks', 'snowflake', 'postgres', 'sqlite', 'duckdb')
 # Interfaces earlier generations of this client had. An example naming one sends
 # a reader to an API that does not exist, which is why this is scanned for
 # rather than left to review. The scan covers every tracked shipped file,
-# including notebooks and per-package example directories -- a sweep that
+# including notebooks and per-package example directories. A sweep that
 # looked only at `src/` and the top-level `examples/` missed a whole tree.
 RETIRED_INTERFACES = (
     'RelationalClient',
@@ -178,13 +202,15 @@ def check_spdx() -> int:
     missing = []
     for path in tracked_files():
         relative = path.relative_to(REPO_ROOT)
-        if path.suffix != '.py':
-            continue
-        if not any(str(relative).startswith(root) for root in SPDX_ROOTS):
+        if path.suffix not in SPDX_SUFFIXES:
             continue
         if set(relative.parts) & SPDX_EXCLUDE_PARTS:
             continue
-        if SPDX_LINE not in path.read_text(encoding='utf-8', errors='replace'):
+        body = path.read_text(encoding='utf-8', errors='replace')
+        opening = body.splitlines()[:SPDX_GENERATED_LINES]
+        if any(SPDX_GENERATED.match(line) for line in opening):
+            continue
+        if SPDX_LINE not in body:
             missing.append(str(relative))
 
     for name in missing:

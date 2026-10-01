@@ -98,8 +98,9 @@ def _asking(request: Request, query: Any) -> Request:
 class TabularMaterializer:
     r"""Materialize resolved PQL against a single-table schema.
 
-    The ``TABULAR`` profile has already refused anything this cannot honour --
-    a filtered entity, an ``ASSUMING`` clause, a windowed or derived target --
+    The ``TABULAR`` profile has already refused anything this cannot honour
+    (a filtered entity, an ``ASSUMING`` clause, a windowed or derived
+    target),
     so the target here is a real column of the one table.
     """
 
@@ -156,7 +157,7 @@ class TabularMaterializer:
         num_context_samples: int | None,
         task: str | None = None,
     ) -> Request:
-        r"""Build a single-table request for rows the one table does contain."""
+        r"""Build a single-table request for rows in the table."""
         entity_table_name = table_name(query.entity_column)
         entity_table = _rows(self.schema[entity_table_name])
         entity_col = col_name(query.entity_column)
@@ -253,7 +254,7 @@ def _context_within_limit(
     r"""The context rows, never more than the endpoint will take.
 
     The endpoint refuses a context above its limit, and refuses it *after* the
-    whole thing has been encoded into JSON and transmitted -- a table of
+    whole thing has been encoded into JSON and transmitted. A table of
     hundreds of thousands of rows sent in full to be told the limit is ten
     thousand. The relational side has declared its limits and refused locally
     all along; this is the same thing on the other model.
@@ -307,8 +308,8 @@ def _without_the_rows_being_scored(
 
     The `indices=` route does this and this one did not, so the two
     single-table routes disagreed about whether a row may be both scored and
-    shown. Rows supplied separately are often rows the table already holds --
-    that is how anyone checks a model against answers they have -- and leaving
+    shown. Rows supplied separately are often rows the table already holds,
+    which is how anyone checks a model against answers they have. Leaving
     them in the context hands the model those answers, labelled, and returns
     what reads like accuracy.
 

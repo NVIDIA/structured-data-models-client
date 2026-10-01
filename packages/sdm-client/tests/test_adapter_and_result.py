@@ -116,7 +116,7 @@ def test_an_empty_result_carries_the_columns_the_request_implies():
         outputs=('prediction',),
     )
     frame = result.to_pandas()
-    assert list(frame.columns) == ['row_index', 'prediction']
+    assert list(frame.columns) == ['row_index', 'id', 'prediction']
     assert frame.empty
 
 
@@ -264,7 +264,7 @@ def test_merging_keeps_the_columns_the_request_implied():
     """A split request that scored nothing must still be joinable."""
     merged = PredictionResult.merge([empty('a'), empty('b')])
     assert merged.outputs == ('prediction',)
-    assert list(merged.to_pandas().columns) == ['row_index', 'prediction']
+    assert list(merged.to_pandas().columns) == ['row_index', 'id', 'prediction']
 
 
 def test_merging_parts_that_wanted_different_outputs_is_refused():

@@ -80,7 +80,7 @@ broken.
 
 ## Release shape
 
-Not a probe suite — a check that the thing users install is the thing that was
+Not a probe suite, but a check that the thing users install is the thing that was
 tested. Run after building, from a venv with no source tree on `sys.path`:
 
 ```bash
