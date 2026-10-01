@@ -357,7 +357,7 @@ class _TableShape:
         rows are compared as rows, and everything else by value, which is what
         the question means.
         """
-        if not isinstance(other, Table):
+        if not isinstance(other, _TableShape) or type(other) is not type(self):
             return NotImplemented
         described = (
             self.name == other.name
@@ -365,17 +365,20 @@ class _TableShape:
             and _as_key_tuple(self.primary_key)
             == _as_key_tuple(other.primary_key)
             and self.time_column == other.time_column
+            and getattr(self, 'source_name', None)
+            == getattr(other, 'source_name', None)
         )
         if not described:
             return False
-        mine, theirs = self.data, other.data
+        mine = getattr(self, 'data', None)
+        theirs = getattr(other, 'data', None)
         if mine is None or theirs is None:
             return mine is theirs
         return bool(mine.equals(theirs))
 
     __hash__ = None  # type: ignore[assignment]
 
-    def __copy__(self) -> Table:
+    def __copy__(self: _T) -> _T:
         r"""A shallow copy is still a table of its own columns.
 
         Sharing them left the copy unable to answer for itself. Its columns
@@ -645,7 +648,9 @@ class _TableShape:
         return len(self.columns)
 
 
-@dataclass
+# `eq=False` on both, so the comparison above is the one they use: a
+# generated one would compare the frames with `==`.
+@dataclass(eq=False)
 class Table(_TableShape):
     r"""One table: its rows, its columns, and which column identifies a row.
 
@@ -703,7 +708,7 @@ class Table(_TableShape):
         )
 
 
-@dataclass
+@dataclass(eq=False)
 class SourceTable(_TableShape):
     r"""One table that stays in its source: its columns, and its keys.
 
