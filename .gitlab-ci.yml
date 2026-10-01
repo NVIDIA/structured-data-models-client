@@ -210,13 +210,10 @@ audit:
   script:
     - pip install -q pip-audit
     - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
-    # The one finding we cannot act on, and a check that says when we can.
-    # `oauthlib` 4.0.0 fixes CVE-2026-49265, and `databricks-sql-connector`
-    # pins `oauthlib<4.0.0`, so installing the fix breaks the driver. Ignoring
-    # it keeps this job green, which is the point: a job that is always red
-    # reports nothing, and the next vulnerability would arrive into a result
-    # nobody reads. This fails the moment the pin is relaxed, so the ignore
-    # cannot outlive its reason.
+    # `oauthlib` 4.0.0 fixes CVE-2026-49265 and `databricks-sql-connector`
+    # pins `oauthlib<4.0.0`, so the fix cannot be installed. It is ignored so
+    # that a red result still means a new finding. The check below fails when
+    # the pin is relaxed, so the ignore cannot outlive its reason.
     - |
       python - <<'EOF'
       from importlib.metadata import requires

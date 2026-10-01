@@ -45,17 +45,15 @@ SPDX_ROOTS = (
     'packages/sdm-connectors/tests',
     'packages/sdm-relational-engine/src',
     'packages/sdm-relational-engine/tests',
-    # Not shipped in a wheel, but public in the repository, and the licence
-    # change reached them only because a person remembered. The gate looks
-    # here now so the next one does not depend on that.
+    # Public in the repository though not shipped in a wheel, so a header
+    # here is as visible as one in a package.
     'qa',
     '.github',
 )
 SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
 
-# A comment syntax that starts with `#` is the only thing the header needs,
-# which is every suffix here. Checking only `.py` meant adding a root full of
-# YAML and shell changed nothing, and looked like it had.
+# The header needs only a `#` comment syntax, which every suffix here has.
+# Checking `.py` alone left a root of YAML and shell unexamined.
 SPDX_SUFFIXES = {'.py', '.yml', '.yaml', '.sh', '.toml', '.cfg'}
 
 # Anything matching these must not appear in a file that ships to a user.
