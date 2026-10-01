@@ -66,12 +66,15 @@ jobs:
           mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src \
             packages/sdm-connectors/src packages/sdm-relational-engine/src
 
+  # Every interpreter the four pure-python distributions classify. The
+  # internal pipeline runs one of them, so a defect specific to any other
+  # reached a release through a promise nothing checked.
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
