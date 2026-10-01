@@ -12,7 +12,7 @@ name = "sdm-api"
 dynamic = ["version"]
 description = "Universal TFM API wire types for the NVIDIA Structured Data Models client"
 readme = "README.md"
-license = "Apache-2.0"
+license = "LicenseRef-OpenMDW-1.1"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 authors = [{ name = "NVIDIA" }]

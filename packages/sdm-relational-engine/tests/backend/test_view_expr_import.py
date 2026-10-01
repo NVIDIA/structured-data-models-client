@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 r"""Column expressions lifted out of a semantic/metric view definition run as
 SQL under the caller's warehouse role, so a hostile view definition must not
 reach the sampler.

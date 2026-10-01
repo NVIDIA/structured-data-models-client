@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 
 """Cross-package checks that no single distribution's suite can make.
 
@@ -186,7 +186,7 @@ class TestDistributionCoherence:
             name: _pyproject(name)['project'].get('license')
             for name in _distributions()
         }
-        assert set(licences.values()) == {'Apache-2.0'}, licences
+        assert set(licences.values()) == {'LicenseRef-OpenMDW-1.1'}, licences
 
     def test_every_distribution_ships_its_licence_files(self):
         for name in _distributions():

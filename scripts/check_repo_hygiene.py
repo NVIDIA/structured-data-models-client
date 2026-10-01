@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 
 """Three checks this repository has to pass before it can be published.
 
@@ -29,7 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-SPDX_LINE = 'SPDX-License-Identifier: Apache-2.0'
+SPDX_LINE = 'SPDX-License-Identifier: LicenseRef-OpenMDW-1.1'
 
 # Generated files get their header from the generator, so they are excluded
 # below rather than listed here.

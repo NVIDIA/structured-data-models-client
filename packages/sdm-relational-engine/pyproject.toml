@@ -4,7 +4,7 @@ dynamic=["dependencies", "version"]
 authors=[
     {name="NVIDIA"},
 ]
-license = "Apache-2.0"
+license = "LicenseRef-OpenMDW-1.1"
 license-files=["LICENSE", "NOTICE"]
 description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Kumo Relational Client"
 readme="README.md"

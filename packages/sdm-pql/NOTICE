@@ -1,7 +1,8 @@
 sdm-pql
 Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
-Licensed under the Apache License, Version 2.0. See LICENSE.
+Licensed under the OpenMDW License Agreement, version 1.1.
+See LICENSE.
 
 This distribution is first-party NVIDIA source, the Predictive Query
 Language (grammar, parser, validator, AST and model profiles). It vendors no
