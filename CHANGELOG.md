@@ -39,7 +39,7 @@ declare as `1.0.0` and none has published. The heading becomes
   manylinux_2_28 baseline. Databricks serverless runs on either architecture
   and classic clusters on Graviton, so an x86-64-only wheel left
   `sdm-client[relational]` uninstallable there. A GitLab `wheels` job builds the
-  full cp310–cp313 matrix from the same `[tool.cibuildwheel]` table the
+  full cp310 to cp313 matrix from the same `[tool.cibuildwheel]` table the
   release reads.
 - A PostgreSQL backend for the relational engine, so Lakebase and any other
   PostgreSQL can be sampled where the tables live. It came across after the
@@ -132,7 +132,7 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A table with no key was sampled in whatever order the engine read it.**
   Neighbours are kept newest first, and a keyless table had nothing after the
   timestamp to order by, while the rows kept came back unordered. Rows sharing
-  a timestamp – AdventureWorks order headers, recorded by the day – then
+  a timestamp, such as AdventureWorks order headers recorded by the day, then
   reached the request in a different order on Databricks serverless Spark than
   on a SQL warehouse, and the model's answer moved with it. A keyless table is
   now ordered on every scalar column after its timestamp, and the SQL samplers

@@ -243,7 +243,7 @@ Each warehouse has a class of its own, named for it, so what only one warehouse 
 | `DatabricksSource` | a `databricks.sql` connection, `sdm_connectors.databricks.warehouse(warehouse_id, workspace=w)` for one opened as your `WorkspaceClient`, or the notebook's `spark` | `catalog`, `schema` | A SQL warehouse on any runtime; `spark` needs no warehouse and uses the notebook's own compute and identity, on DBR 17.3+ or serverless environment 4+, which have `DataFrame.toArrow()`. Offers `semantic_model()` |
 | `SnowflakeSource` | a `snowflake.connector` connection, or a Snowpark `session` | `database`, `schema` | A Snowpark session is reached through its own connector connection. Offers `semantic_model()` |
 | `PostgresSource` | a `psycopg` connection, or `sdm_connectors.databricks.lakebase(endpoint, database=..., workspace=w)` for Lakebase | `schema` | Lakebase authenticates with a short-lived OAuth token as the password, which `lakebase()` mints with your `WorkspaceClient`; the connection outlives the token once it is open |
-| `DuckDBSource`, `SQLiteSource` | a `duckdb` or ADBC SQLite connection | – | What lets CI run the whole path, SQL sampling included, with no credentials |
+| `DuckDBSource`, `SQLiteSource` | a `duckdb` or ADBC SQLite connection | none | What lets CI run the whole path, SQL sampling included, with no credentials |
 
 `Source(connection, ...)` still works, and returns the class that fits the connection; the classes are the spelling to reach for, because they are what a type checker and an editor can see.
 
@@ -313,7 +313,7 @@ It wins where a table does not fit in memory, or where reading it whole takes lo
 The engine was carried across before the predecessor gained a Postgres backend, so the Postgres source brings that backend over too: the table, the `JOIN LATERAL` sampler, and key discovery from `pg_catalog`.
 
 **A semantic model is a source, not an argument to `Schema`.**
-A Databricks metric view and a Snowflake semantic view each already say which tables a question is about and how they join, and the engine reads both into the same thing: tables, the links between them, and row-level columns, with their aggregations – measures, metrics – left out.
+A Databricks metric view and a Snowflake semantic view each already say which tables a question is about and how they join, and the engine reads both into the same thing: tables, the links between them, and row-level columns, with their aggregations (measures, metrics) left out.
 The industry's own name for that is a semantic model: the Open Semantic Interchange, which Databricks and Snowflake both back, and dbt use it.
 So `source.semantic_model('sales_metrics')` is a source of its own, and `Schema.from_source` reads it like any other; `tables`, if given, selects and renames among the model's tables.
 Only `DatabricksSource` and `SnowflakeSource` offer it, because only those warehouses keep one, and `Schema` names no warehouse at all.

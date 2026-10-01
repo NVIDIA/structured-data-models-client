@@ -752,7 +752,7 @@ class SourceTable(_TableShape):
         >>> del schema['orders']['rowguid']
 
         A table in its source cannot be edited to suit a request, and some
-        columns only mislead a model – a per-row UUID identifies a row and
+        columns only mislead a model: a per-row UUID identifies a row and
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
@@ -1079,8 +1079,9 @@ class Schema:
         the tables with SQL, a hop at a time, and only the rows it samples
         leave the source.
 
-        A semantic model – a Databricks metric view, a Snowflake semantic
-        view – is a source of its own, and already says how its tables join:
+        A semantic model, such as a Databricks metric view or a Snowflake
+        semantic view, is a source of its own, and already says how its
+        tables join:
 
         >>> schema = Schema.from_source(source.semantic_model('sales_metrics'))
 
@@ -1417,8 +1418,9 @@ def _describe_source_table(
 ) -> SourceTable:
     r"""A table in place, described from what the engine read of it.
 
-    A column whose values have no scalar form on the wire – a list, binary, a
-    duration – is left out and named, rather than refusing the whole table:
+    A column whose values have no scalar form on the wire, such as a list,
+    binary or a duration, is left out and named, rather than refusing the
+    whole table:
     the caller cannot change a warehouse table's columns to suit a request, and
     the engine then leaves it unread as well.
     """

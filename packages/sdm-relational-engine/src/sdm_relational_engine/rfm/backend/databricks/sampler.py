@@ -475,7 +475,7 @@ class DatabricksSampler(SQLSampler):
         sql += f') <= {num_neighbors}\n'
         # Returned in that order too. Without it the rows came back in the
         # order each engine read them, which serverless Spark does differently
-        # from a SQL warehouse, and the request – and the answer – differed.
+        # from a SQL warehouse, and both the request and the answer differed.
         # Chunks are stitched in batch order, so ordering each keeps the whole.
         sql += f'ORDER BY TMP.__KUMO_BATCH__, {order_by}'
 

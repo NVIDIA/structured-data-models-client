@@ -129,7 +129,7 @@ engine:
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
     # The Databricks and Snowflake drivers are here for the offline tests of
     # those backends, which import the driver and skipped whole modules without
-    # it – eleven of them, fakes included, ran nowhere. Taken through
+    # it: eleven of them, fakes included, ran nowhere. Taken through
     # sdm-connectors rather than the engine's `snowflake` extra, which pins
     # numpy<2 and would move every other test here onto numpy 1. pyyaml is what
     # the semantic-view tests read their fixtures with.

@@ -89,7 +89,7 @@ jobs:
       # environment resolves from PyPI unless told otherwise, so without this
       # the smoke test fails with "sdm-api was not found" and the release stops
       # before it can publish anything. cibuildwheel copies the directory it
-      # runs from – the repository root – into the container as /project, and
+      # runs from, the repository root, into the container as /project, and
       # the engine's `[tool.cibuildwheel.linux]` points pip at
       # /project/_sibling_wheels.
       - name: Stage the sibling wheels where the engine's test env can see them

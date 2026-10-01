@@ -21,7 +21,7 @@ Concretely, the public surface is:
 | `sdm_api` | Everything in `sdm_api.__all__`: the wire vocabulary |
 | `predictive_query` | Everything in `predictive_query.__all__`: the parser, AST, validators and profiles |
 | `sdm_connectors` | Everything in `sdm_connectors.__all__` |
-| `sdm_connectors.databricks` | Everything in `sdm_connectors.databricks.__all__` – `warehouse` and `lakebase` |
+| `sdm_connectors.databricks` | Everything in `sdm_connectors.databricks.__all__`: `warehouse` and `lakebase` |
 | `sdm_relational_engine` | Reached through `sdm_client`. Import it directly at your own risk |
 
 Not public, and free to change in any release:
