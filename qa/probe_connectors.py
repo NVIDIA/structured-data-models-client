@@ -187,7 +187,7 @@ def run(client):
                 "select count(*) from sqlite_master where name='keep'"
             ).fetchone()[0]
         if not still:
-            fail(e, 'the table was dropped -- the identifier was not escaped')
+            fail(e, 'the table was dropped: the identifier was not escaped')
 
     with probe(
         AREA, 'sqlite, round trip into a prediction', 'warehouse data scores'
@@ -310,8 +310,8 @@ def run(client):
 def run_exactness(client):  # noqa: ARG001
     """Every route a large integer can take into the SDK.
 
-    The wire layer's rule -- an integer float64 cannot hold exactly must not
-    travel as a number -- is only as strong as the weakest reader.
+    The wire layer's rule, that an integer a float64 cannot hold exactly must
+    not travel as a number, is only as strong as the weakest reader.
     """
     import sqlite3 as sqlite3_module
 

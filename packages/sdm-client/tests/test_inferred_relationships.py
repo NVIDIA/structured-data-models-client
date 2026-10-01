@@ -5,8 +5,8 @@
 """A key name two tables share names no one table, so it links nothing.
 
 `_infer_relationships` matched a column against a dict keyed by primary-key
-*column name*. Tables whose keys are spelled alike -- `ID`, `business_id`,
-`LOAN_ID` -- overwrote one another, so every foreign key of that name pointed
+*column name*. Tables whose keys are spelled alike, `ID`, `business_id`,
+`LOAN_ID`, overwrote one another, so every foreign key of that name pointed
 at whichever table the mapping happened to hold last. The result moved with
 dict insertion order, joined nothing in the cases that mattered, and invented
 edges between tables that have no relationship at all.

@@ -535,7 +535,7 @@ def test_validate_names_the_edge_left_behind_by_remove_column(
 ) -> None:
     """``Table.remove_column`` has no back-reference to the graph, so dropping a
     linked foreign key leaves the edge behind. The column lookup in
-    ``validate`` then raised ``KeyError`` -- the wrong type for a graph
+    ``validate`` then raised ``KeyError``, the wrong type for a graph
     consistency failure, and uncatchable by the ``except ValueError`` the
     documented failure mode implies.
     """
@@ -576,7 +576,7 @@ def test_empty_edges_suppress_catalog_foreign_keys_too(
     the heuristic ``infer_links`` pass but not the one in ``Graph.__init__``
     that reads foreign keys straight out of the source catalog, so on any
     warehouse that declares them an explicit edge list still picked up edges
-    the caller did not ask for -- and edges change what the model sees.
+    the caller did not ask for, and edges change what the model sees.
     """
     pytest.importorskip('adbc_driver_sqlite')
 

@@ -11,7 +11,7 @@ The first release is being assembled. Nothing here has shipped yet.
 
 ### Added
 
-- `docs/reference/stability.md`: the compatibility contract — what is public,
+- `docs/reference/stability.md`: the compatibility contract, saying what is public,
   what a version bump means, and the deprecation path. Enforced rather than
   stated: `tests/golden/` records the exported surface of every distribution and
   the wire payloads of four canonical requests, and `tests/test_release_contract.py`
@@ -115,24 +115,24 @@ The first release is being assembled. Nothing here has shipped yet.
 - **A binary target asked through a predictive query is a classification.**
   `PREDICT users.churn FOR EACH users.user_id`, over a column of 0 and 1, was
   gathered as a regression: 0 and 1 are integers, integers are numerical, and a
-  numerical target meant regression. The endpoint answered it — with continuous
+  numerical target meant regression. The endpoint answered it with continuous
   values near 0.5, which read like probabilities and are not. Nothing warned.
 
   A target holding exactly two whole numbers is now asked as a classification,
   and the client says so. It is the values that decide, not how pandas holds
-  them — a 0/1 column with one missing value arrives as `float64` and is still
+  them: a 0/1 column with one missing value arrives as `float64` and is still
   a label. Only that case changes: three whole numbers may be a count, and a
   fractional pair like 0.5/1.5 is not a label, so both remain regressions.
 
-  **This changes what goes over the wire** for such a request — `task.kind`
+  **This changes what goes over the wire** for such a request. `task.kind`
   becomes `classification`, and the target column is declared `categorical`
   rather than `numerical`, which is the correction the tabular adapter already
   made for classification targets and could not make while the task was wrong.
   If you were relying on the old reading, pass `task='regression'` to keep it.
 
   **Say plainly what this costs:** the rule is two whole numbers, so a genuine
-  count that happens to hold two — `items_bought` in {0, 1}, `visits` in
-  {1, 2}, `rating` in {7, 9} — is now asked as a classification and its request
+  count that happens to hold two (`items_bought` in {0, 1}, `visits` in
+  {1, 2}, `rating` in {7, 9}) is now asked as a classification and its request
   moves on the wire. That is a change of default rather than a repair: those
   targets were being read correctly before. The warning names the other
   reading and `task='regression'` restores it, and the judgement is that
@@ -160,7 +160,7 @@ The first release is being assembled. Nothing here has shipped yet.
   places. There is now one literal per distribution, in `_version.py`, and a
   test that the five agree.
 - The four pure-Python distributions admitted Python 3.14 through
-  `requires-python` but did not classify it. They now do — and the narrower
+  `requires-python` but did not classify it. They now do, and the narrower
   range of the `[relational]` extra, which is a native build, is documented
   where users meet it rather than surfacing as an unexplained pip resolver
   error.
@@ -175,7 +175,7 @@ refused it and no argument could say otherwise. `materialize(model=…)` now tak
 the same handle or id `predict()` does. Left unsaid, the shape still decides,
 so existing calls are unchanged: one table with no relationships is tabular, and
 anything wider is relational. That now counts a relationship as well as a second
-table, matching `Request.is_relational` — a lone table pointing at itself used to
+table, matching `Request.is_relational`. A lone table pointing at itself used to
 be gathered tabularly and then refused by the model for needing relationships.
 
 Gathering and sending for different models is now refused where it used to raise
@@ -185,7 +185,7 @@ gathered for.
 
 **`id` holds the key you asked about, on both models.** The relational path
 already returned the caller's own key; the tabular path returned what the
-endpoint echoed, which is the stringified list of primary-key values — `'[1]'`
+endpoint echoed, which is the stringified list of primary-key values, `'[1]'`
 where you asked about `1`. Both now return `'1'`, so a result joins back onto
 your rows whichever model answered. As with the relational path, a response that
 names a row outside the batch, or answers one twice, is refused rather than
@@ -196,7 +196,7 @@ A session answers the same way, which needed the adapter to be handed the whole
 request rather than the half that just went over the wire. That also settles a
 latent one: a relational session could not tell a forecast's repeated rows from
 a duplicate answer, because the task kind was pinned at fit time and the adapter
-only ever saw the scoring call. The wire is unchanged -- a session's scoring
+only ever saw the scoring call. The wire is unchanged: a session's scoring
 call still carries only what the contract allows there.
 
 **A `DECIMAL` column travels as the number it is, and a fractional one rounds.**
@@ -209,8 +209,8 @@ accepted silently. Above it a float cannot hold even the integer part, so the
 value is refused rather than quietly mangled. If you need a fractional decimal
 kept exactly, send the column as strings.
 
-This applies however the column reaches us. Read through Arrow -- which the
-connectors prefer, because it is the path that keeps a wide integer exact -- a
+This applies however the column reaches us. Read through Arrow (which the
+connectors prefer, because it is the path that keeps a wide integer exact) a
 `DECIMAL` used to be announced as `string`, so an id column stopped being an id
 to the model. It is now named the same way on both paths.
 
@@ -227,7 +227,7 @@ against numpy types for such a column will see the difference.
 
 **Graph visualization is kept, and so is its provenance.** `Graph.visualize()`
 renders a diagram offline because the notebook environments this client is used
-from -- Snowflake and Databricks -- block external scripts, so a diagram that
+from, Snowflake and Databricks, block external scripts, so a diagram that
 fetched from a CDN would not draw at all. The mermaid bundle that makes that
 possible is vendored as upstream bytes with its SHA-256 pinned, its components
 enumerated in `LICENSE`, and a test that re-checks the digest. That test exists
@@ -239,8 +239,9 @@ render it themselves.
 **The relational engine's example scripts and notebooks were removed.** They
 came across with the port written against `RelationalClient` and
 `client.relational(...)`, an interface this client does not export, and they
-set a `run_mode` that is no longer a knob. `scripts/check_repo_hygiene.py
-retired` now fails on any shipped file naming a retired interface, notebooks
+set a `run_mode` that is no longer a knob. `python
+scripts/check_repo_hygiene.py retired` now fails on any shipped file
+naming a retired interface, notebooks
 and per-package example directories included. The one quickstart this
 repository ships was written against the shipped API and every cell was
 executed against a live `kumo-tabular` and `kumo-relational` NIM.

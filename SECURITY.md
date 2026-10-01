@@ -29,8 +29,9 @@ disclosure policy. See the
 
 ## Supported versions
 
-The client is distributed as five packages — `sdm-client`, `sdm-api`,
-`sdm-pql`, `sdm-connectors` and `sdm-relational-engine` — released together.
+The client is distributed as five packages: `sdm-client`, `sdm-api`,
+`sdm-pql`, `sdm-connectors` and `sdm-relational-engine`. They are released
+together.
 Only the latest released version of each receives security fixes; there are no
 long-term-support branches. Fixes ship in a new release rather than as patches
 to older ones.
@@ -50,8 +51,8 @@ Please read them before filing.
 - **Two paths reach a third party, and both are opt-in.** The `[explain]` extra
   posts row data to an OpenAI-compatible endpoint you configure. `visualize()`
   renders locally from a bundled copy of mermaid and reaches nothing; only
-  exporting to PNG or SVG sends the graph *structure* — table, column and
-  relationship names, never cell values — to the public `mermaid.ink` service.
+  exporting to PNG or SVG sends the graph *structure* (table, column and
+  relationship names, never cell values) to the public `mermaid.ink` service.
 - **Data-source arguments are trusted input.** Connection settings, table names,
   `query=`, `path=` and `storage_options=` are executed or resolved as written,
   with the credentials you supply, as is a `ColumnSpec(expr=...)` you write

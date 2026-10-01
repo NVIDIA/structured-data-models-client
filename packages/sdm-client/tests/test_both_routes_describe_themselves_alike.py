@@ -515,7 +515,7 @@ def test_an_envelope_with_no_instance_column_is_left_alone():
 def test_an_id_that_is_not_a_number_is_left_as_it_is():
     """There is no arithmetic that moves it past another, and replacing it
     with the nothing it coerces to would lose the value rather than relocate
-    it -- so it stays, still tying its related rows to the instance it named.
+    it, so it stays, still tying its related rows to the instance it named.
     """
     context = _split_from(
         (keyed_envelope([], [0, 1]), keyed_envelope([], [0, 'x'])), 'context'
@@ -607,7 +607,7 @@ def test_rows_with_no_number_reserve_no_numbers():
 
 def test_an_infinite_id_is_not_something_to_move_past():
     """It is a number that no other can be moved past, and rounding one has
-    no answer at all -- `math.ceil` raises on it."""
+    no answer at all: `math.ceil` raises on it."""
     context = _split_from(
         (keyed_envelope([], [float('inf')]), keyed_envelope([], [0])),
         'context',

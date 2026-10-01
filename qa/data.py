@@ -50,7 +50,7 @@ def adult() -> pd.DataFrame:
 
 @functools.cache
 def wine() -> pd.DataFrame:
-    """Numeric features, an ordinal 3..9 target -- a real multiclass case."""
+    """Numeric features and an ordinal 3..9 target: a real multiclass case."""
     red = pd.read_csv(DATA / 'wine' / 'winequality-red.csv', sep=';')
     red['colour'] = 'red'
     white = pd.read_csv(DATA / 'wine' / 'winequality-white.csv', sep=';')

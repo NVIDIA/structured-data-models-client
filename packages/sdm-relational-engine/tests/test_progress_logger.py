@@ -24,7 +24,7 @@ class _FakeTTY(io.StringIO):
         (io.StringIO, True, False),
         (_FakeTTY, True, True),
         # `verbose=False` is the only control a caller has over this output, so it
-        # has to reach the taskbar sequences as well -- they are written outside
+        # has to reach the taskbar sequences as well, they are written outside
         # `on_enter`/`on_exit` and were previously unconditional on a TTY.
         (_FakeTTY, False, False),
     ],

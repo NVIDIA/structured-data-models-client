@@ -6,7 +6,7 @@
 
 `PREDICT users.churn FOR EACH users.user_id`, where churn is 0 or 1, was
 gathered as a regression: 0 and 1 are integers, integers are numerical, and a
-numerical target meant regression. The endpoint answered it -- with continuous
+numerical target meant regression. The endpoint returned a continuous answer.
 """
 
 from __future__ import annotations
@@ -223,7 +223,7 @@ class TestTheWireStillSaysWhatItSaid:
 class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
     """`task=` settles a single-table question, and only a single-table one.
 
-    A relational query does not have its kind derived here at all -- the engine
+    A relational query does not have its kind derived here at all. The engine
     resolves the query and states it in the payload. So there is nothing for an
     override to override, and the first version of this accepted the argument
     """
@@ -297,7 +297,7 @@ class TestTheRelationalPathSaysSoRatherThanIgnoringIt:
         """A ranking and a forecast leave through their own branch.
 
         The first refusal sat beside the relational call, which those two never
-        reach -- so they went on accepting the argument and dropping it, the
+        reach, so they went on accepting the argument and dropping it, the
         very thing the refusal was added to stop.
         """
         pytest.importorskip('sdm_relational_engine')
@@ -424,7 +424,7 @@ class TestTheContextIsWhatDecides:
     def test_stating_a_task_does_not_hide_a_context_that_teaches_nothing(self):
         """The warning is about the rows, not about which task was asked.
 
-        It sat below the `stated` branch, so naming a task silenced it -- and a
+        It sat below the `stated` branch, so naming a task silenced it, and a
         regression over a constant column is exactly as meaningless as the
         classification the endpoint would have refused.
         """
@@ -448,7 +448,7 @@ class TestTheContextIsWhatDecides:
         """One problem gets one message.
 
         The task is decided while the request is still being assembled, so this
-        warning ran before ``Request`` could refuse the empty context -- and
+        warning ran before ``Request`` could refuse the empty context, and
         "every context row has the same value" is a confusing thing to say
         """
         data = frame(target)
@@ -482,7 +482,7 @@ class TestTheContextIsWhatDecides:
         """A caller's mistake outranks an observation about their rows.
 
         The warning ran before `task=` was validated, so an unserved task over
-        a one-valued context raised the warning -- and for anyone running with
+        a one-valued context raised the warning, and for anyone running with
         SDMWarning as an error, the real complaint never surfaced.
         """
         data = self.one_sided()
@@ -499,7 +499,7 @@ class TestBothRoutesSayWhatTheyDecided:
     """The rule is about the column, so both routes have to speak of it.
 
     One recognised two whole numbers as a label and said so; the other asked
-    the same column of the same schema as a regression and said nothing -- and
+    the same column of the same schema as a regression and said nothing, and
     `task=`, the remedy the first names, is refused on the second.
     """
 
@@ -562,8 +562,8 @@ class TestBothRoutesSayWhatTheyDecided:
 
 
 def test_a_constant_target_is_remarked_on_however_the_request_was_built():
-    """The notice sat in the materializer, so a request built from frames --
-    the route with no gathering to warn during -- was answered in silence."""
+    """The notice sat in the materializer, so a request built from frames
+    (the route with no gathering to warn during) was answered in silence."""
     from sdm_client import Request
 
     def said(build):

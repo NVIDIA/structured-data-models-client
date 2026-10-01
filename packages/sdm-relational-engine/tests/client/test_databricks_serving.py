@@ -257,7 +257,7 @@ def test_rejects_an_oversized_request_before_egress() -> None:
 
 
 def test_the_cap_measures_the_escaped_wire_body_not_the_inner_payload() -> None:
-    """A pad of ``"x" * N`` escapes 1:1 -- the one payload shape that cannot
+    """A pad of ``"x" * N`` escapes 1:1, the one payload shape that cannot
     detect this bug. Quote-dense rows inflate ~1.15x once nested inside
     request_json, so a request measured on the inner payload alone passes every
     local check and is refused at the gateway as a bare "request failed".
@@ -330,7 +330,7 @@ def test_the_default_cap_is_the_platform_limit_not_the_contract_cap() -> None:
     Databricks refuses a serving request above 16 MB at the gateway; the
     dispatcher's own cap is 30 MiB. Defaulting to 30 MiB would let a request in
     between pass every local check and be rejected by the platform, coming back
-    as a generic failure naming neither the size nor the limit -- observed on a
+    as a generic failure naming neither the size nor the limit, observed on a
     real endpoint, and indistinguishable from the endpoint being broken.
     """
     from sdm_relational_engine.client.databricks_serving import (
@@ -556,7 +556,7 @@ def test_an_injected_workspace_client_is_never_reconfigured() -> None:
 @pytest.mark.parametrize('bad', [0, -1, '60', None, True])
 def test_rejects_an_invalid_timeout(bad: Any) -> None:
     """True is the one that matters: bool is an int, so it would otherwise
-    pass and become a one-second timeout -- the cold start this guards.
+    pass and become a one-second timeout, the cold start this guards.
     """
     with pytest.raises(ValueError):
         DatabricksServingClient('kumo-relational', _Workspace(), timeout=bad)

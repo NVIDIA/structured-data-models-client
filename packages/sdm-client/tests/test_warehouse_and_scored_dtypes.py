@@ -12,8 +12,8 @@ or Snowflake table is `DECIMAL`, that was the first question anyone asked of a
 warehouse through this SDK's own connector.
 
 And the rows being scored could re-type a column the schema had already typed.
-Widening exists for the opposite case -- an all-null context column carries no
-type and must not turn the scored half's integers into text -- but nothing
+Widening exists for the opposite case, an all-null context column carries no
+type and must not turn the scored half's integers into text, but nothing
 bounded it, so text in a `float64` column widened the column to `string` while
 its `stype` stayed `numerical`, and the request went out declaring a column that
 means a number and holds a string.
@@ -201,7 +201,7 @@ def warehouse_schema(**overrides) -> Schema:
 
 def test_the_relational_path_takes_a_decimal_frame():
     """It refused with `dtype '<class 'decimal.Decimal'>' not understood`,
-    naming no table, no column and no remedy -- on the same frame the tabular
+    naming no table, no column and no remedy, on the same frame the tabular
     path had already answered."""
     pytest.importorskip('sdm_relational_engine')
 
@@ -291,7 +291,7 @@ def test_an_untyped_column_does_not_contradict_anything():
     """An all-null context column is typed `string`/`categorical` because a
     schema has to say something, and `untyped` records that it is a placeholder
     rather than a finding. Timestamps in the scored rows cannot mean
-    `categorical`, so without that record they would be refused -- against a
+    `categorical`, so without that record they would be refused, against a
     column whose declared meaning was never a claim about the values."""
     frame = pd.DataFrame(
         {
@@ -339,7 +339,7 @@ def test_a_column_that_was_typed_still_refuses_a_contradiction():
 def test_a_whole_decimal_too_wide_for_an_int_keeps_every_digit():
     """The schema types these `string` precisely so the digits survive.
     Reading "not an int" as "a float" put 9223372036854775808 back as
-    9.223372036854776e+18 -- the corruption this exists to prevent,
+    9.223372036854776e+18, the corruption this exists to prevent,
     reintroduced one branch over."""
     from sdm_client.materializers.relational import _to_declared
     from sdm_client.wire.dtypes import infer_tfm_dtype
@@ -382,7 +382,7 @@ def test_a_null_is_a_null_whichever_way_the_column_was_read():
 
 
 def test_a_request_built_by_hand_is_checked_too():
-    """It carries no schema, so one is inferred from the context -- which
+    """It carries no schema, so one is inferred from the context, which
     happens after the column checks, so checking there left the request with
     no query to have validated it as the only one uncovered."""
     from sdm_client.request import Request
@@ -475,7 +475,7 @@ def test_a_placeholder_never_goes_out_contradicting_itself(
     values, dtype, stype
 ):
     """The placeholder `categorical` cannot carry a timestamp, so the column
-    went out as `timestamp[us]` meaning `categorical` -- the same
+    went out as `timestamp[us]` meaning `categorical`, the same
     self-contradiction on the wire that a re-typed column used to produce."""
     schema = placeholder_schema()
     request = PredictiveQuery(
@@ -723,7 +723,7 @@ def test_a_whole_number_is_typed_by_whether_it_fits_not_by_how_it_arrives(
     column, expected
 ):
     """The too-wide rule was applied to a decimal column and not the integer
-    column beside it, so a `uint64` past the range was announced as `int64` --
+    column beside it, so a `uint64` past the range was announced as `int64`,
     a dtype the values provably cannot hold."""
     from sdm_client.wire import infer_tfm_dtype
 

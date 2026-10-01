@@ -10,7 +10,7 @@ added without one is otherwise invisible until a release audit finds it.
 
 ``retired`` asserts no shipped file sends a reader to an interface this client
 dropped. An example naming one is worse than no example, and a sweep that
-chooses its own roots will miss a tree -- so this enumerates from
+chooses its own roots will miss a tree, so this enumerates from
 ``git ls-files``.
 
 ``internal`` asserts no internal-only reference reaches a *shipped* file. The
@@ -68,6 +68,12 @@ INTERNAL_PATTERNS = (
     # ships either way.
     re.compile(r'\btfm-serving\b', re.IGNORECASE),
     re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
+    # Internal build names for the servers behind a model id. A reader
+    # cannot look either up, and which build answers is not the client
+    # story. The public client repository's own name is spelled
+    # ``structured-data-models-client``, so it has to be excluded here.
+    re.compile(r'\bkumoml', re.IGNORECASE),
+    re.compile(r'\bstructured-data-models\b(?!-client)', re.IGNORECASE),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has
@@ -79,8 +85,10 @@ INTERNAL_ALLOWLIST = {
     # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
     'scripts/generate_sdm_api.py',
-    # Runs on the internal instance, and has to keep naming it to work. It
-    # goes when the public repository has its own pipeline.
+    # Runs on the internal instance, and has to keep naming it to work.
+    # `.github/workflows/ci.yml` now runs the same gates in the open; this
+    # file stays only for the contract job, which clones a project that is
+    # not public, and goes when that clone no longer has to happen here.
     '.gitlab-ci.yml',
 }
 
@@ -107,7 +115,7 @@ SHIPPED_NAMES = {'LICENSE', 'NOTICE'}
 # Interfaces earlier generations of this client had. An example naming one sends
 # a reader to an API that does not exist, which is why this is scanned for
 # rather than left to review. The scan covers every tracked shipped file,
-# including notebooks and per-package example directories -- a sweep that
+# including notebooks and per-package example directories. A sweep that
 # looked only at `src/` and the top-level `examples/` missed a whole tree.
 RETIRED_INTERFACES = (
     'RelationalClient',

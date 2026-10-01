@@ -10,7 +10,7 @@ a window or a join resolved, and it cannot accept anything resolution rejected,
 because it never runs unless resolution succeeded.
 
 That is what keeps "add a model" from meaning "edit the analyzer". See
-``docs/spec.md`` §8.1, and ``predictive_query.profiles`` for the capabilities
+``predictive_query.profiles`` for the capabilities
 themselves.
 """
 

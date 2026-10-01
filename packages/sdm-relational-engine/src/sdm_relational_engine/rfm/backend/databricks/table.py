@@ -110,7 +110,7 @@ class DatabricksTable(Table):
         return cast(DataBackend, DataBackend.DATABRICKS)
 
     def _get_source_columns(self) -> list[SourceColumn]:
-        r"""Reads this table's columns and key constraints from Unity Catalog.
+        r"""Read this table's columns and key constraints from Unity Catalog.
 
         Databricks resolves identifiers case-insensitively, while
         ``information_schema`` compares them as case-sensitive string literals.
@@ -119,11 +119,11 @@ class DatabricksTable(Table):
         caller used, and the canonical names read back here are adopted for
         every subsequent look-up.
 
-        Folding the column instead -- ``lower(table_schema) = lower(:schema)``
-        -- is logically equivalent but not a sargable predicate: it cannot be
-        pushed down, so the point look-up degrades into a scan of every column
-        of every table in the catalog. Measured on a 27k-column catalog that is
-        31s per table against 0.5s, and it grows with catalog size.
+        Folding the column with ``lower(table_schema) = lower(:schema)`` is
+        logically equivalent but not sargable. It cannot be pushed down, so
+        the point look-up scans every column of every table in the catalog. On
+        a 27k-column catalog, this took 31 seconds per table instead of 0.5
+        seconds, and it grows with catalog size.
         """
         with self._connection.cursor() as cursor:
             sql = (

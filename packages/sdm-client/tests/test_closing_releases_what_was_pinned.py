@@ -6,7 +6,7 @@
 answered in the shape every other batch has.
 
 `SDMClient.close()` closed the transport while its handles were still open, so
-the one call that releases a session -- `FittedModel.close()` -- was the call
+the one call that releases a session, `FittedModel.close()`, was the call
 that stopped working, and the endpoint held the context until its own expiry.
 
 Separately, an answer with no rows in it dropped the `id` column every other

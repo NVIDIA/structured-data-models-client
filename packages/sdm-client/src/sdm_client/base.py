@@ -8,7 +8,7 @@ A model is described by two things that are deliberately kept apart.
 
 A **profile** says what the model may be *asked*. It comes from
 ``predictive_query`` and is data, not code: a frozen set of flags obeying one
-normative rule -- a capability may only reject. The language accepts a fixed
+normative rule: a capability may only reject. The language accepts a fixed
 set of queries and every model accepts a subset of it, so declaring a model can
 never widen what the language allows.
 
@@ -19,7 +19,7 @@ those facts live beside it and are never duplicated into it.
 
 An **adapter** does what neither can describe: shape the wire request,
 normalize the response, choose a session strategy, release resources. It does
-not own query-shape validation -- the profile does.
+not own query-shape validation. The profile does.
 """
 
 from __future__ import annotations
@@ -177,7 +177,7 @@ class ModelAdapter(Protocol):
 
         A NIM sometimes reports a rule without saying which column broke it.
         The request that was just refused knows, and the adapter is holding it,
-        so the answer is one lookup away. Returns the error to raise -- the one
+        so the answer is one lookup away. Returns the error to raise, the one
         it was given, unless it has something to add.
         """
         return error

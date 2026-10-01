@@ -45,7 +45,7 @@ jobs:
           done
 
       # The engine pins its four siblings by exact version, and at this point in
-      # a release those versions exist only in dist/ -- they are not on PyPI
+      # a release those versions exist only in dist/, not on PyPI
       # yet, and will not be until the publish job runs. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
       # the smoke test fails with "No matching distribution found for
@@ -122,9 +122,10 @@ jobs:
           # exact sibling pins resolve to the wheels just built, not to whatever
           # happens to be on PyPI. Without it this describes a previous release,
           # or fails outright before the first one.
-          python -m pip install --find-links dist "./packages/sdm-client[sqlite,duckdb]"
+          python -m pip install --find-links dist \
+            "./packages/sdm-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors','sdm-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -154,7 +155,7 @@ jobs:
 
   # The SBOM is generated during the build and stripped from the upload,
   # because PyPI takes distributions and nothing else. Without this job it
-  # lived only in the Actions artifact, which expires -- so the inventory a
+  # lived only in the Actions artifact, which expires, so the inventory a
   # consumer needs to accept this into their own supply chain existed for
   # ninety days and then did not. Attached to the release, where it lasts as
   # long as the release does.
@@ -169,7 +170,7 @@ jobs:
           name: distributions
           path: dist/
 
-      # Pushing a tag creates a tag, not a Release -- and `gh release upload`
+      # Pushing a tag creates a tag, not a Release, and `gh release upload`
       # needs the Release to exist. Creating it here rather than asking the
       # releaser to do it by hand keeps RELEASING.md's promise that the tag is
       # the only manual step. `--verify-tag` refuses to invent a release for a

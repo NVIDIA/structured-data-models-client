@@ -725,7 +725,7 @@ def test_a_rejected_query_writes_nothing_to_stdout(
     """Two grammar actions raise a bare ``RecognitionException``, which ANTLR's
     default error strategy does not recognise and announces with a ``print``
     before notifying the listeners. Removing the error *listeners*, as the
-    parser does, leaves that line in place, so ``IN (1)`` -- an easy mistake --
+    parser does, leaves that line in place, so ``IN (1)``, an easy mistake,
     wrote ``unknown recognition error type: RecognitionException`` to stdout
     even under ``verbose=False``.
     """

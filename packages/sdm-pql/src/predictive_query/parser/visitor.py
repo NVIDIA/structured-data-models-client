@@ -105,7 +105,6 @@ class PQLVisitor(PQLGrammarVisitor):
         assert str(for_each).upper() in ['FOR EACH', 'FOR']
         complete_dict = {}
 
-        # Process entity
         assert entity is not None
         entity_maybe_tuple = entity.accept(self)
         if isinstance(entity_maybe_tuple, tuple):
@@ -115,11 +114,9 @@ class PQLVisitor(PQLGrammarVisitor):
         else:
             complete_dict[ENTITY] = entity_maybe_tuple
 
-        # Process target
         assert target is not None
         complete_dict[TARGET] = target.accept(self)
 
-        # Process problem_spec
         complete_dict[PROBLEM_TYPE] = None
         complete_dict[TOP_K] = None
         complete_dict[FORECAST] = None
@@ -128,11 +125,9 @@ class PQLVisitor(PQLGrammarVisitor):
         if spec is not None:
             complete_dict.update(spec)
 
-        # Process whatif
         assert whatif is not None
         complete_dict[WHAT_IF] = whatif.accept(self)
 
-        # Process for_each
         assert for_each is not None
         complete_dict[FOR_EACH] = str(for_each).upper()
 

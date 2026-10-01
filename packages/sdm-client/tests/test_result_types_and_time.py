@@ -7,7 +7,7 @@
 `id` and `prediction` both came back as text. The values were right; the types
 were not, and they differed between the two models for the same question. The
 documented one-line join raised, and `row.prediction == 0` counted nothing on
-one model -- silently, and in the direction of "this class never occurs".
+one model, silently, and in the direction of "this class never occurs".
 
 And a string time column was read with `pd.to_datetime`'s defaults, which take
 an ambiguous slash date month-first. A day-first column was silently re-dated:
@@ -302,7 +302,7 @@ def test_a_value_past_the_sample_that_is_written_another_way_is_still_found():
 
 
 def test_a_number_that_is_not_whole_is_never_read_as_an_integer():
-    """`int(1.9)` does not raise, so the guard has to be a comparison -- and it
+    """`int(1.9)` does not raise, so the guard has to be a comparison, and it
     has to be asked of the value, not of its type: a Decimal and a numpy float
     truncate as quietly as a Python one."""
     import decimal
@@ -400,7 +400,7 @@ def test_a_time_column_of_date_objects_materializes():
 
 
 def test_the_relational_path_reads_a_wide_key_back_exactly():
-    """The reference column is declared `string` -- it is a transport key --
+    """The reference column is declared `string` because it is a transport key,
     so the dtype has to come from the table it points at."""
     import dataclasses
 

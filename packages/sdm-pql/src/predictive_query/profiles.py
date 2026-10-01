@@ -17,8 +17,8 @@ aggregate across a relationship; a model without link prediction cannot rank a
 foreign key. Those are not properties of the language, and a query one model
 refuses may be perfectly good for another.
 
-The rules a capability obeys are normative and are stated in ``docs/spec.md``
-§8.1. The one that matters most: **a capability may only reject**. It can turn a
+The rules a capability obeys are normative. The one that matters most:
+**a capability may only reject**. It can turn a
 query the language accepts into one this model will not answer. It can never do
 the reverse, so the set of queries the language accepts is fixed and every model
 accepts a subset of it.
@@ -56,10 +56,10 @@ class Capabilities:
     A field belongs to exactly one group; if a new one seems to belong to both,
     it is two fields.
 
-    Every field defaults to permitting. That is a **compatibility** default, for
-    a caller adapting existing code, and it is the wrong default for a model
-    declaring itself: a model that forgets ``forecasting=False`` would silently
-    accept forecasts it cannot answer. Declare a new model with
+    Every field defaults to permitting. That is a **compatibility** default,
+    for a caller adapting existing code. It is the wrong default for a model
+    declaring itself: a model that forgets ``forecasting=False`` would
+    silently accept forecasts it cannot answer. Declare a new model with
     :meth:`nothing` and switch on what it supports.
 
     Args:
@@ -80,8 +80,8 @@ class Capabilities:
             wrong, and on a schema with no time column that is most of them.
         entity_filters: *Shape.* May the entity carry a ``WHERE`` filter?
         counterfactuals: *Shape.* May a query carry an ``ASSUMING`` clause?
-        derived_targets: *Shape.* May the target be anything other than a
-            single column -- a condition, an aggregation, a logical operation?
+        derived_targets: *Shape.* May the target be a condition, aggregation or
+            logical operation instead of a single column?
         link_prediction: *Task.* May a target rank a foreign key?
         forecasting: *Task.* May a query carry a ``FORECAST`` clause?
     """
@@ -131,7 +131,7 @@ class Capabilities:
         )
 
     def also(self, **supported: bool) -> 'Capabilities':
-        r"""The same capabilities, with *supported* switched on."""
+        r"""The same capabilities, with each named one set as given."""
         unknown = set(supported) - {
             field for field in vars(self) if field != 'model'
         }

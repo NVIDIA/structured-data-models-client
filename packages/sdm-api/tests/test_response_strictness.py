@@ -4,8 +4,8 @@
 
 """A response that does not match the contract is refused, not coerced.
 
-`_require_int` was `int(value)`, which accepts a bool and truncates a float --
-so a `row_index` of 1.2 became 1, attaching a prediction meant for no row to
+`_require_int` was `int(value)`, which accepts a bool and truncates a float.
+Thus a `row_index` of 1.2 became 1, attaching a prediction meant for no row to
 row 1, which a join on `row_index` would then honour. The client is careful in
 the other direction: it refuses to *send* a float that cannot be an int64, or a
 non-finite number. Accepting those on the way back was the inconsistency.

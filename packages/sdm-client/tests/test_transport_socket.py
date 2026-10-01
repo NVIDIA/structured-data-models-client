@@ -99,7 +99,13 @@ def _serve(*script: _Reply) -> Iterator[tuple[ThreadingHTTPServer, str]]:
     server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
     server.script = list(script)
     server.received = []
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        # `shutdown()` blocks until the serving loop notices, and the
+        # default poll interval is half a second. Every server in this
+        # file is torn down per test.
+        target=lambda: server.serve_forever(poll_interval=0.01),
+        daemon=True,
+    )
     thread.start()
     try:
         yield server, f'http://127.0.0.1:{server.server_address[1]}'
@@ -216,8 +222,8 @@ def test_oversized_error_body_is_refused_before_it_becomes_a_message():
 
 
 def test_deeply_nested_json_stays_inside_the_error_contract():
-    r"""``json`` raises ``RecursionError`` -- a ``RuntimeError``, not a
-    ``ValueError`` -- so ``except StructuredDataError`` used to miss it entirely.
+    r"""``json`` raises ``RecursionError``, a ``RuntimeError``, not a
+    ``ValueError``, so ``except StructuredDataError`` used to miss it entirely.
     """
     depth = 200_000
     nested = b'[' * depth + b']' * depth
@@ -269,7 +275,7 @@ def test_a_slow_session_create_is_not_retried():
 def test_the_replayable_session_routes_keep_the_retry_policy():
     r"""Only the create is held out. Scoring against a pinned context is
     replayable, and must not lose its resilience to the narrower policy mounted
-    on the prefix above it -- nor may the plain prediction route, which shares
+    on the prefix above it, nor may the plain prediction route, which shares
     no prefix with either.
     """
     with _serve(_Reply(status=503), _Reply()) as (server, url):
@@ -301,26 +307,27 @@ _EMPTY_CONTEXT = (
 )
 
 
-def test_a_500_naming_the_callers_mistake_is_reported_as_theirs():
-    """The status says server, the code says internal, and only the sentence
-    says otherwise. An orchestrator branching on the code retries a request
-    that can only fail the same way."""
+def _empty_context_failure() -> NimRequestError:
+    """The corrected error the three checks below are each about."""
     with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
         transport = Transport(url, max_retries=0, backoff_factor=0.0)
         with pytest.raises(NimRequestError) as raised:
             transport.predict({'model': 'kumo-relational'})
-    assert raised.value.code == 'INVALID_REQUEST'
+    return raised.value
+
+
+def test_a_500_naming_the_callers_mistake_is_reported_as_theirs():
+    """The status says server, the code says internal, and only the sentence
+    says otherwise. An orchestrator branching on the code retries a request
+    that can only fail the same way."""
+    assert _empty_context_failure().code == 'INVALID_REQUEST'
 
 
 def test_the_python_exception_the_server_leaked_is_not_shown():
     """``RuntimeError`` is a type from inside the endpoint. It names nothing
     the caller can act on and reads as a crash, which is the impression this
     whole path is being corrected for."""
-    with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
-        transport = Transport(url, max_retries=0, backoff_factor=0.0)
-        with pytest.raises(NimRequestError) as raised:
-            transport.predict({'model': 'kumo-relational'})
-    message = raised.value.message
+    message = _empty_context_failure().message
     assert 'RuntimeError' not in message
     assert 'failed unexpectedly' not in message
     assert message.startswith('Failed to collect any context examples')
@@ -328,11 +335,7 @@ def test_the_python_exception_the_server_leaked_is_not_shown():
 
 
 def test_what_the_endpoint_called_it_is_kept_beside_the_correction():
-    with _serve(_Reply(status=500, body=_EMPTY_CONTEXT)) as (_, url):
-        transport = Transport(url, max_retries=0, backoff_factor=0.0)
-        with pytest.raises(NimRequestError) as raised:
-            transport.predict({'model': 'kumo-relational'})
-    error = raised.value
+    error = _empty_context_failure()
     assert error.status_code == 500
     assert error.details['endpoint_code'] == 'INTERNAL_ERROR'
     assert error.details['diagnosis'] == 'EMPTY_CONTEXT'
@@ -375,9 +378,9 @@ def test_a_detail_that_is_not_text_names_no_diagnosis():
 
 def test_a_request_is_sent_again_only_for_what_sending_it_again_can_fix():
     """A 500 is not retried. The payload and the model are the same on every
-    attempt, so a server fault reproduces, and the caller mistakes this
-    endpoint reports as a 500 are reclassified from the body as the caller's
-    -- after three more uploads of the whole gathered context. Overload,
+    attempt, so a server fault reproduces. Caller mistakes this endpoint
+    reports as a 500 are reclassified from the body, but only after three more
+    uploads of the whole gathered context. Overload,
     gateway and timeout are the transient ones and are still retried."""
     for status, sends in (
         (500, 1),
@@ -437,7 +440,7 @@ def test_an_unusable_timeout_is_named_on_every_route_that_takes_one(timeout):
 
 def test_a_server_that_stalls_is_reported_as_a_timeout_not_as_retries():
     """urllib3 wraps a read timeout in MaxRetryError, which requests surfaces
-    as ConnectionError, so the branch naming the knob never ran -- and the
+    as ConnectionError, so the branch naming the knob never ran, and the
     message said retries were exceeded when none had been asked for."""
     with _serve(_Reply(delay=5.0)) as (_, url):
         transport = Transport(url, timeout=0.5, max_retries=0)
@@ -456,7 +459,7 @@ def test_a_stalled_prediction_is_reported_as_a_timeout_too():
     assert 'timed out after 0.5 seconds' in str(raised.value)
 
 
-@pytest.mark.parametrize('session_id', ['..', '.', '...', ''])
+@pytest.mark.parametrize('session_id', ['..', '.', ''])
 def test_a_session_id_that_is_not_a_segment_is_refused(session_id):
     """`..` turned a scoring call against a pinned context into a one-shot
     prediction on another route, carrying no context at all."""
@@ -467,13 +470,15 @@ def test_a_session_id_that_is_not_a_segment_is_refused(session_id):
     assert 'not a session id' in str(raised.value)
 
 
-@pytest.mark.parametrize('session_id', ['a/../b', 'sess.1', '%2e%2e', 'abc'])
+@pytest.mark.parametrize(
+    'session_id', ['a/../b', 'sess.1', '%2e%2e', 'abc', '...', '....']
+)
 def test_an_ordinary_session_id_is_escaped_and_kept(session_id):
     from sdm_client.core.transport import _path_segment
 
     escaped = _path_segment(session_id)
     assert '/' not in escaped
-    assert escaped.strip('.') != ''
+    assert escaped not in {'', '.', '..'}
 
 
 def test_a_dot_segment_never_reaches_the_wire():

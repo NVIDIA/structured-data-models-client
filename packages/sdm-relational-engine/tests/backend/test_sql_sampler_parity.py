@@ -143,7 +143,7 @@ def _related_payload(graph: rfm.Graph) -> tuple[dict, dict]:
 def test_nullable_integer_column_survives_subgraph_traversal(sql_graph):
     """``_by_pkey``/``_by_fkey`` converted their Arrow result with a bare
     ``to_pandas()``, so one NULL widened the whole integer column to
-    ``float64`` and rounded every value past 2**53 -- silently, because the
+    ``float64`` and rounded every value past 2**53, silently, because the
     declared dtype was rewritten to match the corrupted values.
     """
     schema, table = _related_payload(sql_graph)

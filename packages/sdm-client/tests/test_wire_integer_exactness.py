@@ -98,7 +98,7 @@ def test_a_wide_decimal_travels_as_digits_not_scientific_notation():
     """The whole point of routing these through `string` is keeping the digits.
 
     `str(Decimal)` switches to an exponent as soon as the exponent is
-    positive, so this column used to go out as `'1E+400'` -- which no consumer
+    positive, so this column used to go out as `'1E+400'`, which no consumer
     reading it as an integer can parse, and which this test previously
     asserted was correct.
     """
@@ -169,7 +169,7 @@ def test_a_uint64_past_int64_is_refused_when_int64_is_declared(dtype):
 @pytest.mark.parametrize('dtype', ['uint64', 'UInt64'])
 def test_a_uint64_past_int64_is_not_declared_int64_in_the_first_place(dtype):
     """It used to be, and the request then failed at serialization rather than
-    being described correctly at inference -- which is what the same column of
+    being described correctly at inference, which is what the same column of
     `Decimal` has always done."""
     series = pd.Series([2**64 - 1, 1], dtype=dtype)
     assert infer_tfm_dtype(series) == 'string'
@@ -357,8 +357,8 @@ def test_a_float_wider_than_float64_is_refused_where_one_exists():
 class TestInferenceValuesAreHeldToTheSameRule:
     """`inference=` is hand-written payload, not a typed column.
 
-    The rule that made this branch necessary -- an integer a float64 cannot
-    hold exactly must not travel as a JSON number -- was enforced on table
+    The rule that made this branch necessary, an integer a float64 cannot
+    hold exactly must not travel as a JSON number, was enforced on table
     cells and not here, so `inference={'seed': 2**53 + 1}` reached the wire as
     a number and a reader on a float64 JSON stack got a different seed.
     """

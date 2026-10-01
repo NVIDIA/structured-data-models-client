@@ -80,8 +80,8 @@ class FittedModel:
     on the endpoint until it is released or expires.
 
     ``pinned`` is what the session pinned, minus the context itself. Reading an
-    answer needs the task and the schema -- the key an id stands for is named
-    there -- but the rows have been uploaded and live on the endpoint, so
+    answer needs the task and the schema, where the key an id stands for is
+    named. The rows have been uploaded and live on the endpoint, so
     keeping a second encoded copy for the lifetime of the handle would hold a
     whole dataset for nothing.
     """
@@ -125,8 +125,8 @@ class FittedModel:
         r"""Score ``request``'s rows against the pinned context.
 
         Only the rows travel: the context, schema and task were pinned when
-        this handle was created. Reading the answer needs both halves, though
-        -- the key an id stands for is named in the pinned schema -- so the
+        this handle was created. Reading the answer needs both halves because
+        the key an id stands for is named in the pinned schema. The
         adapter is handed the whole request while the wire gets only the half
         the contract allows on a scoring call.
         """
@@ -197,8 +197,7 @@ class FittedModel:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        r"""Release the context, raising as it did before -- unless the block
-        is already failing.
+        r"""Release the context without masking an active block exception.
 
         A failure to release is a real failure and is raised, which is what a
         caller wrapping the block in `try` relies on.
@@ -285,7 +284,7 @@ class SDMClient:
         r"""What ``model`` supports, as far as this client knows.
 
         Describes the client side and is tagged ``source='sdk'``. It needs no
-        live connection, and it is not the endpoint's own answer -- use
+        live connection, and it is not the endpoint's own answer. Use
         :meth:`models` for that.
         """
         return describe(self._spec(model))
@@ -310,7 +309,7 @@ class SDMClient:
                 produces for this task kind.
 
         Returns:
-            A :class:`~sdm_client.result.PredictionResult`, always -- never a
+            Always a :class:`~sdm_client.result.PredictionResult`, never a
             frame-or-explanation union.
 
         Raises:
@@ -355,8 +354,8 @@ class SDMClient:
 
         A ranking and a forecast have no task on the endpoint. Each is asked
         as questions it does serve, and what comes back has to be put together
-        as the answer that was actually asked for -- an order over candidates,
-        or a value per step -- rather than handed back as the several answers
+        as the answer that was actually asked for: an order over candidates
+        or a value per step, rather than handed back as the several answers
         it took.
         """
         rewritten = request.decomposition
@@ -415,7 +414,7 @@ class SDMClient:
         `holdout` names every row the session will go on to score. The context
         is chosen once, here, and `request` only excludes the rows *it* names,
         so every later call scores rows that are sitting in the pinned context
-        with their answers -- and unlike the one-shot path there is nothing the
+        with their answers. Unlike the one-shot path, there is nothing the
         caller can do about it afterwards, because the context cannot be
         changed once it is pinned. Naming the population up front is what lets
         it be excluded while there is still a context to exclude it from.
@@ -437,7 +436,8 @@ class SDMClient:
                 out of the pinned context before it is sent.
 
         Raises:
-            UnsupportedRequestError: If the endpoint does not serve sessions.
+            StructuredDataError: If the endpoint does not serve sessions,
+                with code ``'SESSIONS_UNSUPPORTED'``.
         """
         _require_a_request(request)
         _require_output_names(outputs)
@@ -536,7 +536,7 @@ class SDMClient:
         Contexts this client pinned are released first, because the transport
         that would release them is about to close and `FittedModel.close()`
         is the only call that can. Adapters follow, then the transport itself
-        even if one of them fails -- its pool is the one that cannot be
+        even if one of them fails. Its pool is the one that cannot be
         rebuilt on demand.
         """
         try:
@@ -614,7 +614,7 @@ def _names_its_rows(request: Request) -> bool:
     asking only the schema gave an empty answer an ``id`` where a full one had
     none. On the gathered route the entity is what was asked for, and the
     envelope spells it as a transport reference rather than as the schema's
-    key -- so asking the same question there answered no about requests whose
+    key. Asking the same question there answered no about requests whose
     every answer names its entity.
     """
     if request.payloads:
@@ -642,7 +642,7 @@ def _empty_answer(
 
     `Request` allows a zero-row `predict` on purpose: the contract sets no
     minimum and an empty batch inside a loop is a reasonable no-op. Sent, it
-    was not a no-op -- the endpoint cannot encode zero rows and answered
+    was not a no-op. The endpoint cannot encode zero rows and answered
     `500 Unexpected server error`, so the one shape documented as harmless was
     the one that failed, and failed opaquely.
 
@@ -684,7 +684,7 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
             f'none of the {len(keys)} keys named as holdout matched a row of '
             f'the context about to be pinned, so nothing was held back. The '
             f'keys are compared as the schema spells them, so a key given as '
-            f'a different type matches nothing -- check they are the same '
+            f'a different type matches nothing. Check they are the same '
             f'kind of value as the entity column holds.',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
@@ -735,7 +735,7 @@ def _warn_scoring_what_was_pinned(
     scored one-shot came back 0.455, against a chance rate of 0.5.
 
     It cannot be fixed here: the context lives on the endpoint and the rows
-    cannot be taken out of it. Nor can the caller fix it after the fact -- the
+    cannot be taken out of it. Nor can the caller fix it after the fact. The
     equivalent of the one-shot remedy is to blank the targets before `fit()`,
     which means knowing every row the session will ever score, and a caller who
     knows that has no reason to open a session. So it is reported, with the two
@@ -940,7 +940,7 @@ def _by_step(
     )
     # `forecast_step` is put on the items above, so with no items there is
     # nothing to read it from and an empty forecast lost the column that says
-    # which step an answer is about -- the same as `id` losing the column that
+    # which step an answer is about, just as `id` loses the column that
     # says which row.
     built._names_its_step = True
     built._names_its_rows = all(part._names_its_rows for part in answers)
@@ -959,7 +959,7 @@ _WHAT_DIFFERS = (
 def _refuse_a_question_the_session_did_not_pin(
     pinned: Question, asked: Question
 ) -> None:
-    r"""Only rows travel on a scoring call, so the question has to be the pinned one.
+    r"""Require a scoring call to use the pinned question.
 
     Said field by field: the rest of the request is identical, so printing both
     whole does not show which one differs.
@@ -1028,8 +1028,8 @@ def _require_output_names(outputs: Any) -> None:
 def _refuse_to_pin_a_rewritten_question(request: Request) -> None:
     r"""A session pins one context, and a rewritten question has several.
 
-    A ranking's parts each carry their own labels -- whether an entity reached
-    *this* candidate -- and a forecast's parts each cover their own window. One
+    A ranking's parts each carry their own labels for whether an entity reached
+    *this* candidate. A forecast's parts each cover their own window. One
     pinned context can only be one of them, so pinning would answer the first
     part and give back something shaped like the whole question. Refusing says
     what to do instead.

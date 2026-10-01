@@ -136,7 +136,7 @@ def init_databricks_serving(
 
     The counterpart to :func:`init`, which addresses a Universal TFM NIM by
     base URL. A serving endpoint is addressed by **name** through a workspace
-    client, so there is no URL, no ``api_key``, and no readiness probe -- the
+    client, so there is no URL, no ``api_key``, and no readiness probe. The
     endpoint does not advertise one.
 
     Re-initializing with identical arguments is a no-op, as for :func:`init`.

@@ -95,7 +95,7 @@ def test_a_unique_foreign_key_is_not_reported_as_a_missing_primary_key() -> (
 ):
     r"""The reason this diagnosis waits for link inference.
 
-    ``RETURNS.ORDER_ID`` is unique -- one return per order -- and is an
+    ``RETURNS.ORDER_ID`` is unique, one return per order, and is an
     ordinary foreign key. Reported at inference time it is indistinguishable
     from a declined primary key, so warning there fires on every table that
     holds only foreign keys.
@@ -142,7 +142,7 @@ def test_a_sampled_declined_key_says_so(tmp_path: Any) -> None:
     """Every SQL backend caps the sample at ``Table._NUM_SAMPLE_ROWS``, so a
     foreign key that merely happens to be distinct in the rows read looks
     exactly like a key candidate. ``basket_id`` here is unique across the first
-    1,000 rows and repeats afterwards -- 1,500 distinct values in 5,000 rows --
+    1,000 rows and repeats afterwards (1,500 distinct values in 5,000 rows),
     and the diagnostic must not state its uniqueness as a fact about the table.
     """
     pytest.importorskip('adbc_driver_sqlite')

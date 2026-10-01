@@ -11,6 +11,8 @@ from sdm_relational_engine.exceptions import KumoRelationalError
 
 
 class SanitizationStatus(str, Enum):
+    r"""Whether a graph kept the counts of the rows it dropped."""
+
     AVAILABLE = 'available'
     NOT_AVAILABLE = 'not_available'
 

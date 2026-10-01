@@ -5,7 +5,7 @@
 
 a typo in it used to
 delete straight out of the sampler's stype map and raise a bare ``KeyError``,
-which the client could only classify as ``INTERNAL_ERROR`` -- telling the user to
+which the client could only classify as ``INTERNAL_ERROR``, telling the user to
 file a bug against the client for their own typo. Raising ``ValueError`` here puts
 it in the ``INVALID_REQUEST`` branch and names what is wrong.
 """
@@ -73,7 +73,7 @@ def test_a_primary_key_is_reported_as_not_excludable(
     sampler: LocalSampler,
 ) -> None:
     r"""Primary and foreign keys never travel as features, so excluding one is
-    a no-op the caller almost certainly did not intend -- and it raised the
+    a no-op the caller almost certainly did not intend, and it raised the
     same bare ``KeyError``.
     """
     with pytest.raises(ValueError, match='feature columns'):

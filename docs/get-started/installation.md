@@ -3,14 +3,13 @@
 | Command | You get |
 |---|---|
 | `pip install sdm-client` | The client, the language, and the tabular model. Runs anywhere. |
-| `pip install sdm-client[relational]` | Adds the relational model, pulling in the native engine. **Python 3.10–3.13 only** — see [prerequisites](prerequisites.md). |
+| `pip install sdm-client[relational]` | Adds the relational model and native engine. **Python 3.10 through 3.13 only**. See [prerequisites](prerequisites.md). |
 | `pip install sdm-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[s3]`. |
 | `pip install sdm-client[all]` | The relational model and every warehouse backend. |
 
-What ships in the base wheel is decided by **dependency weight, not
-preference**. A model that does heavy client-side work — the relational one,
-with its graph building, native sampling and query resolution — is an opt-in
-extra. Warehouse drivers are opt-in the same way.
+**Dependency weight determines what ships in the base wheel.** The relational
+model does heavy client-side work: graph building, native sampling and query
+resolution. It is an opt-in extra, as are warehouse drivers.
 
 ## Packages
 

@@ -55,10 +55,9 @@ class Span:
 
 @dataclass(frozen=True)
 class ValidationInfo:
-    r"""Represents non-critical information about automatic actions or decisions
-    taken during validation that the user should be aware of, but do not
-    require
-    immediate attention or action.
+    r"""A decision validation made on the author's behalf.
+
+    Worth knowing about, but nothing is wrong and nothing needs doing.
     """
 
     # Short (< 1 line) title
@@ -71,6 +70,8 @@ class ValidationInfo:
 
 @dataclass(frozen=True)
 class ValidationWarning:
+    r"""Something questionable about a query that does not stop it running."""
+
     # Short (< 1 line) description of what is wrong
     title: str
 
@@ -91,6 +92,8 @@ class ValidationWarning:
 
 @dataclass(frozen=True)
 class ValidationError:
+    r"""A reason a query cannot run, phrased for the person who wrote it."""
+
     title: str
     message: str
 
@@ -105,15 +108,22 @@ class ValidationError:
 
 @dataclass
 class ValidationResponse:
+    r"""Everything validation has to say about one query.
+
+    Errors mean the query cannot run. Warnings and info items do not.
+    """
+
     warnings: list[ValidationWarning] = field(default_factory=list)
     errors: list[ValidationError] = field(default_factory=list)
     info_items: list[ValidationInfo] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
+        r"""Whether the query can run, which is to say it drew no errors."""
         return len(self.errors) == 0
 
     def empty(self) -> bool:
+        r"""Whether validation had nothing at all to say."""
         return (
             len(self.errors) == 0
             and len(self.warnings) == 0

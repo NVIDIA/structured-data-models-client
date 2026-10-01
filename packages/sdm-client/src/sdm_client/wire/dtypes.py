@@ -79,12 +79,12 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
 
     Answered by naming what is *safe to skip* rather than what must be walked.
     Listing the unsafe types is how a list view, then Arrow binary, then a
-    binary view each got through in turn -- every new Arrow type defaulted to
+    binary view each got through in turn. Every new Arrow type defaulted to
     the fast path, and the fast path is the one that can be wrong. This way an
     unfamiliar type is walked: slower, and correct.
 
-    The types that wrap another -- a dictionary, a run-end encoding, an
-    extension -- are unwrapped first, since a dictionary of lists is still a
+    Types that wrap another, including dictionaries, run-end encodings, and
+    extensions, are unwrapped first because a dictionary of lists is still a
     column of lists.
     """
     import pyarrow as pa
@@ -103,7 +103,7 @@ def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
     # Each of these gives pandas a scalar cell: a number, a `str`, a
     # `Timestamp`, a `timedelta`, `None`. Two are deliberately absent. Binary,
     # because pandas hands those back as `bytes`. And `month_day_nano_interval`,
-    # because its cell is a `MonthDayNano` -- a NamedTuple, and so a `tuple` --
+    # because its cell is a `MonthDayNano` (a NamedTuple and thus a `tuple`),
     # which the cell rule refuses, correctly: it has no scalar form on the wire.
     checks = (
         'is_integer',
@@ -131,12 +131,12 @@ def require_scalar_cells(series: pd.Series, described: str) -> None:
 
     The contract carries a `stringlist` dtype, and says what it is for: array
     cells exist "so that the stringlist dtype can carry JSON arrays **without
-    permitting array-valued prediction scalars**" -- temporal link prediction
+    permitting array-valued prediction scalars**": temporal link prediction
     labels, which no model reachable from here serves.
 
     Nothing in this client sends one. `pandas.api.types.infer_dtype` reports a
-    list column as `mixed`, which falls through to `string`, and `serialize_cell`
-    ends in `str(value)` -- so a column of lists used to travel as the *repr* of
+    list column as `mixed`, which falls through to `string`. `serialize_cell`
+    ends in `str(value)`. A column of lists used to travel as the *repr* of
     a Python list, `"['a', 'b']"`, as an ordinary category. That is silent, and
     the model is asked about text that was never in the data.
 
@@ -182,13 +182,13 @@ def is_container(value: Any) -> bool:
 
     Asked as a property, not as a list of types. Enumerating them is how a
     tuple, then a mapping, then a `range`, then a nested Series each turned out
-    to be missing -- and every one of them would have been written by
+    to be missing. Every one of them would have been written by
     :func:`serialize_cell`'s `str()` fallback as its *repr*: `"[1, 2]"`,
     `"{'a': 1}"`, `"range(0, 2)"`.
 
     A `str` is iterable and is exactly what a text column holds, so it is the
-    one exception. Everything a scalar column legitimately carries -- a number,
-    a `Decimal`, a `UUID`, a timestamp -- is not iterable at all.
+    one exception. Legitimate scalar values, including numbers, `Decimal`,
+    `UUID`, and timestamps, are not iterable.
     """
     if isinstance(value, str):
         return False
@@ -208,8 +208,8 @@ def infer_tfm_dtype(series: pd.Series) -> str:
     missing a feature entirely cannot re-type the same column in another frame.
 
     Every integer width is reported as ``int64``, narrow ones included. The
-    two model paths used to disagree here -- one reported the true width, the
-    other always ``int64`` -- which meant identical data was described two
+    two model paths used to disagree here: one reported the true width and the
+    other always reported ``int64``. Identical data was described two
     ways. The server decodes both through ``int()`` and cannot tell them
     apart, so the choice is about which description to standardize on, and
     ``int64`` is the one that is never wrong: every narrower value fits it,
@@ -254,9 +254,9 @@ def arrow_decimal_type(dtype: Any) -> Any | None:
     r"""``dtype``'s Arrow decimal type, or ``None`` if it is not one.
 
     A warehouse ``DECIMAL`` reaches us two ways. Read through pandas it is an
-    ``object`` column of :class:`~decimal.Decimal`; read through Arrow -- which
-    the connectors now prefer, because it is the path that keeps a wide integer
-    exact -- it is an ``ArrowDtype``, which satisfies none of the pandas dtype
+    ``object`` column of :class:`~decimal.Decimal`. Read through Arrow, which
+    the connectors now prefer because it keeps a wide integer exact, it is an
+    ``ArrowDtype``, which satisfies none of the pandas dtype
     predicates and so used to be announced as ``string``. An id column
     announced as a string stops being an id to the model.
 
@@ -273,12 +273,12 @@ def arrow_decimal_type(dtype: Any) -> Any | None:
 
 
 def _whole_numbers_dtype(series: pd.Series, dtype: Any) -> str:
-    r"""``int64`` for a column of whole numbers, ``string`` where they do not fit.
+    r"""Use ``int64`` for fitting whole numbers and ``string`` otherwise.
 
     The rule that a whole number too wide for an ``int64`` travels as its
     digits was applied to a decimal column and not to the integer column
     beside it. A ``uint64`` or a Python ``int`` past the range was announced as
-    ``int64`` -- a dtype the values provably cannot hold -- and the request
+    ``int64``, a dtype the values provably cannot hold, and the request
     failed at serialization instead of being described correctly here.
 
     Only the two that can exceed are read. Every signed numpy width fits an
@@ -310,7 +310,7 @@ def _decimal_dtype(series: pd.Series, arrow_type: Any | None = None) -> str:
     ``DECIMAL`` and ``NUMBER`` are how a warehouse spells an exact number, and
     a driver hands them back as ``Decimal`` objects. Calling the column
     ``float64`` because that is what floats are made of loses every value past
-    2**53 -- which is most warehouse ids -- so a column whose values are whole
+    2**53, which includes most warehouse ids. A column whose values are whole
     is reported as the integer it is, and travels under the rule that keeps
     those exact.
 
@@ -407,7 +407,8 @@ def json_ready(
     r"""``value`` with numpy scalars replaced by their Python equivalents.
 
     Anything a caller reads out of their own frame is a numpy scalar, and the
-    JSON encoder has no rule for one -- so ``inference={'seed': df['seed'][0]}``
+    JSON encoder has no rule for one. Thus,
+    ``inference={'seed': df['seed'][0]}``
     used to die inside ``requests`` as a ``TypeError`` naming neither the key
     nor this client. Applied to the small hand-written parts of a payload;
     table cells go through :func:`serialize_cell`, which types them properly.
@@ -513,7 +514,7 @@ def _integral_value(value: Any) -> int | None:
 
     Asked of the value, not of its type. ``numbers.Integral`` covers ``int``
     and ``np.integer`` but not ``Decimal``, and a numpy integer compares equal
-    to the ``float`` it rounds to -- so a type test and an ``!=`` each let a
+    to the ``float`` it rounds to. A type test and an ``!=`` each let a
     different unrepresentable value through the guard below.
     """
     if isinstance(value, bool):
@@ -617,8 +618,8 @@ def serialize_cell(value: Any, dtype: str) -> Any:
         return bool(value)
     if isinstance(value, Decimal):
         # `str` switches to scientific notation once the exponent is positive,
-        # so a whole number too wide for int64 -- the reason this column is a
-        # string at all -- would travel as '1E+400' rather than its digits.
+        # so a whole number too wide for int64 (the reason this column is a
+        # string at all) would travel as '1E+400' rather than its digits.
         return format(value, 'f')
     return str(value)
 
@@ -663,7 +664,7 @@ def as_declared(value: Any, dtype: str | None) -> Any:
     than a double travels as a base-10 string by contract, and one endpoint
     renders a class label as a string where the other sends the number. Both
     are legal, and both leave the caller holding a different type depending on
-    which model answered -- so `result.prediction == 0` counted nothing on one
+    which model answered. Thus, `result.prediction == 0` counted nothing on one
     of them, silently and in the direction of "this class never occurs".
 
     Reading it back is a cast, not a parse: anything that does not convert
@@ -671,12 +672,14 @@ def as_declared(value: Any, dtype: str | None) -> Any:
 
     A bool is an int in Python and is not a number the caller wrote, so it is
     excluded from the numeric branches. From text, `int` accepts only an exact
-    integer literal, so reaching the conversion means it was one. From a number,
+    integer literal, so reaching the conversion means it was one. From a
+    number,
     `int(1.9)` does not raise and a value that is not whole is not this integer
     under another name, which is true of a float, a numpy float and a `Decimal`
     alike and so is asked of the value rather than of its type.
 
-    A declared `bool` is read from the spellings the wire actually uses, because
+    A declared `bool` is read from the spellings the wire actually uses,
+    because
     `bool('false')` is True and would invert the answer.
     """
     if value is None or dtype is None:

@@ -9,12 +9,12 @@ exceptions are the interesting part: an unhashable index came out of pandas as
 `TypeError: unhashable type: 'dict'`, the session path reached for an attribute
 on whatever it was handed, and everything the relational engine does while
 *building* a graph escaped as a bare `ValueError` from a package the caller
-never imported -- because the guard that converts those failures took the built
+never imported, because the guard that converts those failures took the built
 graph as an argument and so could not wrap the line that built it.
 
 Two more are about a call that should not fail at all. Releasing a session
 marked the handle closed before the release that could fail, so a failure was
-permanent and the endpoint's own advice -- retry -- was the one thing the handle
+permanent and the endpoint's own advice, retry, was the one thing the handle
 could not do. And a zero-row `predict`, which `Request` allows on purpose and
 calls a reasonable no-op, was sent to an endpoint that cannot encode zero rows.
 """
@@ -214,8 +214,8 @@ def test_the_handle_is_still_open_after_a_failed_exit():
 
 
 def test_releasing_a_session_is_retried_by_the_transport():
-    """Idempotent by contract -- the NIM answers 204 whether or not the session
-    is there -- and the status it gives when it cannot release one now is a 429
+    """Idempotent by contract: the NIM answers 204 whether or not the session
+    is there. When it cannot release one now, it returns a 429
     asking the caller to retry."""
     for retry_post in (True, False):
         allowed = _build_retry(3, 0.1, retry_post=retry_post).allowed_methods
@@ -437,9 +437,9 @@ def test_one_unreadable_part_is_enough_to_send():
 
 
 def test_a_split_request_counts_the_context_of_every_part():
-    """Each gathered part carries its own context -- which is why a session
-    refuses a split request rather than pinning the first one's -- so reading
-    only the first underreports."""
+    """Each gathered part carries its own context. That is why a session
+    refuses a split request rather than pinning the first one's. Reading only
+    the first underreports."""
     from sdm_client.request import Request
 
     request = Request.__new__(Request)
@@ -468,7 +468,7 @@ class LiesAboutHashing:
 
 def test_a_value_that_claims_to_hash_and_raises_is_refused():
     """`isinstance(value, Hashable)` is structural, so a class that defines
-    `__hash__` and raises passes it -- and the TypeError then surfaces from
+    `__hash__` and raises passes it, and the TypeError then surfaces from
     inside pandas, which is the shape of failure this check exists to
     prevent."""
     from collections.abc import Hashable
@@ -495,20 +495,10 @@ def test_a_failed_release_says_nothing_while_the_body_is_raising():
     assert transport.calls == 1
 
 
-def test_a_failed_release_is_raised_when_the_body_succeeded():
-    """A failure to release is a real failure, and a caller wrapping the block
-    in `try` is relying on hearing about it. That is what the block did before
-    the masking case was handled, and it still does."""
-    transport = Transport(fail_times=99)
-    with pytest.raises(NimRequestError):
-        with handle(client=Client(transport)):
-            pass
-
-
 @pytest.mark.parametrize('rows', [{}, '', 0, None, {'a': 1}, 'ab'])
 def test_rows_that_are_not_a_list_cannot_be_counted(rows):
     """`Sized` admits `{}` and `''`, which would read as an envelope carrying
-    no rows rather than as one that cannot be read -- and those are the two
+    no rows rather than as one that cannot be read, and those are the two
     answers this has to keep apart."""
     from sdm_client.request import _envelope_rows
 

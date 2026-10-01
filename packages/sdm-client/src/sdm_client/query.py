@@ -5,7 +5,7 @@
 r"""Asking a question in PQL, and gathering the data that answers it.
 
 A predictive query says *what* to predict. It never says *which rows* to
-predict for -- that is always an explicit argument, because a query can only
+predict for. That is always an explicit argument because a query can only
 enumerate rows that are already in the tables:
 
 >>> query = PredictiveQuery(
@@ -17,7 +17,7 @@ enumerate rows that are already in the tables:
 :meth:`~PredictiveQuery.materialize` is the gathering step, and it is explicit
 because it is the expensive one: it parses the query, finds labelled examples
 in history, samples the neighbourhood of each entity, and encodes the result.
-Nothing is sent -- what comes back is a :class:`~sdm_client.Request` gathered
+Nothing is sent. What comes back is a :class:`~sdm_client.Request` gathered
 for one model. Which one follows the schema's shape unless ``model`` says
 otherwise, and the model asked to answer it has to be that same one.
 """
@@ -51,7 +51,8 @@ if TYPE_CHECKING:
 class PredictiveQuery:
     r"""A question expressed in PQL and answered from the tables in its schema.
 
-    The query is resolved and validated when :meth:`materialize` builds a request.
+    The query is resolved and validated when :meth:`materialize` builds a
+    request.
 
     Args:
         query: PQL query text.
@@ -101,7 +102,7 @@ class PredictiveQuery:
         :attr:`~sdm_client.Request.is_relational` reports: a relationship sends
         a schema relationally as surely as a second table does, so a lone table
         that points at itself is gathered as the graph it is. Name a model when
-        that default is not what you want -- a single table with no
+        that default is not what you want. A single table with no
         relationships is a graph of one node, and the relational model answers
         it.
 
@@ -244,7 +245,7 @@ class PredictiveQuery:
         if indices is not None and predict is not None:
             raise StructuredDataError(
                 'pass either indices=[...] to score rows the tables already '
-                'contain, or predict=<frame> to score rows they do not—not both',
+                'contain, or predict=<frame> to score rows they do not, not both',
                 code='INVALID_REQUEST',
             )
 
@@ -438,7 +439,7 @@ class PredictiveQuery:
         if not ambiguous:
             return ''
         # Which pair the query crossed is in the refusal and nowhere else, so
-        # the tables are read from it -- but only to choose among pairs the
+        # the tables are read from it, but only to choose among pairs the
         # schema already knows about. Advising the first pair found sent a
         # caller to edit a relationship their query never touched.
         crossed = [
@@ -492,7 +493,7 @@ class PredictiveQuery:
         said = (
             f'. {table}.{name} holds {distinct:,} distinct values, and a '
             f'string column with more than {_MAX_CATEGORICAL} is typed text '
-            f'rather than categorical -- a fair rule for a feature and a poor '
+            f'rather than categorical. That is fair for a feature and a poor '
             f'one for a label'
         )
         ceiling = (
@@ -529,7 +530,7 @@ class PredictiveQuery:
         return f'PredictiveQuery({self.text!r}, {self.schema!r})'
 
 
-#: `PREDICT <table>.<column>` -- the plain column target, which is the only
+#: `PREDICT <table>.<column>` is the plain column target, which is the only
 #: shape a semantic type can be refused for.
 _PREDICTED_COLUMN = re.compile(
     r'PREDICT\s+([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s', re.IGNORECASE
@@ -564,7 +565,8 @@ def _without_a_remedy_this_caller_cannot_run(reasons: str) -> str:
 def _without_the_validator_trace(message: str) -> str:
     r"""The sentence a refusal is making, without the trace around it.
 
-    A few window errors -- a zero-width one, an inverted one -- are raised by
+    A few window errors, including zero-width and inverted windows, are raised
+    by
     the grammar's own models rather than by its parser, so they arrive as a
     pydantic trace: an error count, the internal type that raised, the repr of
     the arguments it was given, and a link to pydantic's documentation. The

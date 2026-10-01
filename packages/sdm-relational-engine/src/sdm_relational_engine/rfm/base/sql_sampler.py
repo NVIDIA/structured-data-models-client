@@ -41,7 +41,7 @@ def _reject_reserved_columns(graph: 'Graph') -> None:
     The generated joins select the temporary key table's ``__kumo_*`` columns
     beside the caller's own projections. A source column of the same name makes
     the reference ambiguous, which the warehouse reports as a binder error
-    naming only the column -- and nothing in that message points back here.
+    naming only the column, with nothing in that message pointing back here.
     Saying so up front, with the table and column, costs one pass over the
     schema.
     """
@@ -123,14 +123,13 @@ class SQLSampler(Sampler):
         table_name: str,
         columns: Iterable[str],
     ) -> list[str]:
-        r"""Orders a set of column names by their position in the table
-        schema.
+        r"""Order column names by their position in the table schema.
 
         Callers pass ``columns`` as a :class:`set`, whose iteration order
         depends on the per-process string hash seed. Projecting a ``SELECT``
-        straight from that set makes the column order of every sampled frame
-        -- and therefore the serialised request and the prediction derived
-        from it -- differ between interpreters, which defeats ``random_seed``.
+        straight from that set makes every sampled frame's column order differ
+        between interpreters. The serialised request and derived prediction
+        also differ, defeating ``random_seed``.
         Ordering by schema position instead is stable across processes and
         matches the column order the in-memory backend produces from a
         dataframe. Names absent from the schema sort last, by name, so an
@@ -161,10 +160,10 @@ class SQLSampler(Sampler):
 
         ``_by_fkey`` keeps the first ``num_neighbors`` rows of each partition,
         so the ordering decides which rows reach the model. Ordering on the
-        time column alone leaves repeated timestamps -- common in fact tables
-        recorded at day granularity -- to be broken arbitrarily by the engine,
-        which changes the sampled rows between runs of an otherwise identical
-        request. Appending the primary key makes the choice total and stable.
+        time column alone lets the engine arbitrarily break repeated
+        timestamps, which are common in fact tables recorded at day
+        granularity. This changes the sampled rows between otherwise identical
+        requests. Appending the primary key makes the choice total and stable.
 
         Ordering on ``key_ref`` alone cannot serve as that tie-break: it is the
         foreign key the partition is keyed by, so it holds one value per

@@ -20,16 +20,16 @@ def _name_the_identity(
     parsed_query: Any,
     graph_definition: SchemaDefinition,
 ) -> None:
-    r"""Lets a query name a table whose identity spans several columns.
+    r"""Let a query name a table whose identity spans several columns.
 
-    Such a table is keyed on a column this client derives, and asking a caller to
-    spell that is asking them to know an implementation detail. Any column of
-    the identity therefore names the identity, and the derived column keeps
-    working for a query already written against it.
+    Such a table is keyed on a column this client derives. Asking callers to
+    spell it exposes an implementation detail. Any identity column therefore
+    names the identity, while the derived column continues to work in existing
+    queries.
 
     The identity is read back out of the derived column's own name, so a
     caller validating a query holds nothing but the graph definition the
-    service is given -- the rule here and the rule there cannot drift apart.
+    service receives. The two rules therefore cannot drift apart.
     """
     entity = getattr(parsed_query, 'entity_column_obj', None)
     if entity is None or not isinstance(getattr(entity, 'fqn', None), str):

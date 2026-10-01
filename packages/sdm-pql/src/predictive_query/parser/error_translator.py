@@ -107,7 +107,7 @@ class ErrorTranslator:
             # DEBUG, not WARNING: the caller raises a ValueError carrying
             # `error_message` and the query on the very next line, so this
             # record is a duplicate for everyone except a grammar maintainer.
-            # The raw query is deliberately omitted -- PQL embeds literal
+            # The raw query is deliberately omitted. PQL embeds literal
             # filter values, and WARNING-and-above records are typically
             # shipped to a central log store.
             logger.debug(
@@ -122,8 +122,8 @@ class ErrorTranslator:
 
         An aggregation whose unit the grammar has no token for fails inside the
         target clause, so it used to be reported as "The target (PREDICT)
-        clause in this query is empty or invalid" -- pointing at the start of
-        the query rather than at the one word that was wrong.
+        clause in this query is empty or invalid". That pointed at the start of
+        the query rather than the incorrect word.
         """
         symbol = getattr(err, 'offending_symbol', None)
         text = (getattr(symbol, 'text', None) or '').strip().lower()
@@ -215,12 +215,10 @@ class ErrorTranslator:
 
         error_parts = []
 
-        # Add error summary if available
         error_summary = self._summarize_error(err)
         if error_summary is not None:
             error_parts.append(error_summary)
 
-        # Add specific error messages
         if isinstance(err.e, NoViableAltException):
             error_parts.append('Specific error: ')
             error_parts.extend(self._handle_no_viable_alt_exception(err))
@@ -237,11 +235,9 @@ class ErrorTranslator:
                 f"please use '= const'  instead."
             )
 
-        # If no specific errors were found, use default error
         if not error_parts:
             error_parts.append(self._default_error(err))
 
-        # Join all error parts with newlines
         return '\n'.join(error_parts)
 
     def _invalid_time_unit_error(
@@ -342,7 +338,6 @@ class ErrorTranslator:
                 )
 
         maybe_hints_text = ''
-        # avoid repeating hints
         hints = list(set(hints))
         if len(hints) > 0:
             maybe_hints_text = '\nHINTS:\n' + '\n'.join(hints)

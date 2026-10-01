@@ -65,7 +65,13 @@ def _serve(delay: float = 0.0) -> Iterator[str]:
         '/v1/health/ready': _READY_BODY,
         '/v1/models': _MODELS_BODY,
     }
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        # `shutdown()` blocks until the serving loop notices, and the
+        # default poll interval is half a second. Every server in this
+        # file is torn down per test.
+        target=lambda: server.serve_forever(poll_interval=0.01),
+        daemon=True,
+    )
     thread.start()
     try:
         yield f'http://127.0.0.1:{server.server_address[1]}'
@@ -110,7 +116,7 @@ def test_max_retries_reaches_the_transport_policy():
     `NimClient(max_retries=...)` is documented without a model qualifier, next
     to `timeout`, which was made to reach both paths. This client used to
     hardcode `total=10, connect=3, read=3, status=5` regardless, so `0` still
-    retried and a raised value changed nothing -- and its prediction `POST` was
+    retried and a raised value changed nothing, and its prediction `POST` was
     not retried on a 5xx at all, because urllib3's default `allowed_methods`
     excludes `POST`.
     """

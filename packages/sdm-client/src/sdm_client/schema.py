@@ -5,7 +5,7 @@
 r"""The tables a request is about, and what the model should make of them.
 
 A :class:`Schema` holds your tables, what each column means, and how the tables
-relate. One table or many is the same object -- a single-table model is the
+relate. One table or many is the same object. A single-table model is the
 degenerate case of the same shape, not a second system, which is why this is
 not called a graph.
 
@@ -17,8 +17,8 @@ Everything is inferred. You override only where inference is wrong:
 
 **Inference reads values, so a code stored as a number reads as a number.** A
 postcode, a store number or a status code is ``numerical`` here, and the model
-will treat its distances as meaningful. No amount of inference settles that --
-only you know the column is a label. Correct it:
+will treat its distances as meaningful. No amount of inference settles that.
+Only you know the column is a label. Correct it:
 
 >>> schema['users']['zip_code'].stype = 'categorical'
 
@@ -85,13 +85,13 @@ _KEY_SUFFIXES = ('_id', '_key', 'id', 'key')
 
 @dataclass
 class Column:
-    r"""One column, and what the model should treat it as.
+    r"""Describe one column and how the model should treat it.
 
     Attributes:
         name: The column name, as it appears in the frame.
-        dtype: The wire dtype, e.g. ``'int64'`` or ``'timestamp[us]'``. Inferred
-            from the values; correcting it is rarely necessary.
-        stype: What the column *means* -- ``'numerical'``, ``'categorical'``,
+        dtype: The wire dtype, e.g. ``'int64'`` or ``'timestamp[us]'``.
+            Inferred from the values; correcting it is rarely necessary.
+        stype: What the column *means*: ``'numerical'``, ``'categorical'``,
             ``'ID'``, ``'text'``, ``'timestamp'``. This is the one worth
             correcting: it decides how the model encodes the column.
         stype_declared: Whether the meaning was assigned rather than inferred.
@@ -100,7 +100,7 @@ class Column:
             values; a meaning the caller assigned is. Recorded so the two can
             be told apart, since only the second is worth refusing a
             contradiction against.
-        untyped: Whether the values carried no type at all -- an all-null
+        untyped: Whether the values carried no type at all, as in an all-null
             object column. ``dtype`` is ``'string'`` for those, because a
             schema has to name something and a string round-trips whatever
             arrives, but the frame being scored may hold real values and
@@ -127,7 +127,7 @@ class Column:
         downstream. That is true of a column the caller called ``numerical``
         too: what a key means is settled by its being a key, not by a
         preference, so a declared meaning is overridden here rather than
-        honoured -- and, like an inferred one, recorded so it comes back if
+        honoured. Like an inferred meaning, it is recorded so it returns if
         the column stops being a key.
 
         This goes around ``__setattr__``: routed through it the schema's own
@@ -141,14 +141,13 @@ class Column:
         object.__setattr__(self, 'stype', 'ID')
 
     def _release_as_key(self) -> None:
-        r"""Give back the meaning this column had, the schema no longer joining
-        on it.
+        r"""Restore a column's meaning after the schema stops joining on it.
 
         Through the same adoption an assignment goes through: a column that
         means `timestamp` orders the table it belongs to, and restoring the
         meaning around that left a table saying it held a timestamp while
-        naming no time column -- which `check_consistent()` accepted and every
-        temporal query then failed on.
+        naming no time column. `check_consistent()` accepted that state, and
+        every temporal query then failed on.
         """
         if self._stype_before_key is None:
             return
@@ -193,7 +192,7 @@ class Column:
         r"""Put ``ID`` back if this column is one the schema joins on.
 
         A key's meaning is settled by its being a key, and the schema says so
-        wherever it is asked -- but the answer was only re-derived when the
+        wherever it is asked. The answer was only re-derived when the
         keys changed, so between declaring a meaning on a live key and the
         next such moment the column read as whatever was declared. Nothing was
         sent that way, because a request re-derives as it takes its copy; the
@@ -223,7 +222,7 @@ class Column:
         `Table._check_time_column` already sets a column's stype when the
         column is named as the time column. Only that direction was wired, so
         a caller correcting an inferred schema the way the SDK's own error
-        messages teach -- ``schema[table][column].stype = 'timestamp'`` -- got
+        messages teach, ``schema[table][column].stype = 'timestamp'``, got
         a table reporting `stype='timestamp'` and `time_column=None` at the
         same time, and every temporal query on it was refused for want of a
         time column the schema said was there.
@@ -275,7 +274,7 @@ class Column:
         r"""Refuse a meaning the values cannot carry.
 
         The language already decides this, and used to decide it at
-        ``materialize()`` -- several cells after the assignment that caused it,
+        ``materialize()``, several cells after the assignment that caused it,
         as a bare ``ValueError``. Asking the same question here changes only
         when the answer arrives. Nothing is refused that was going to be
         accepted.
@@ -376,7 +375,7 @@ class Table:
         r"""Whether two tables describe the same thing.
 
         Written out because the generated one compares the frames with `==`,
-        which for a DataFrame is a frame of booleans -- so asking whether two
+        which for a DataFrame is a frame of booleans. Asking whether two
         tables are equal raised `ValueError: The truth value of a DataFrame is
         ambiguous` from inside pandas, naming nothing the caller wrote. The
         rows are compared as rows, and everything else by value, which is what
@@ -403,9 +402,9 @@ class Table:
     def __copy__(self) -> Table:
         r"""A shallow copy is still a table of its own columns.
 
-        Sharing them left the copy unable to answer for itself -- its columns
+        Sharing them left the copy unable to answer for itself. Its columns
         pointed at the table they came from, so changing the copy's key typed
-        nothing -- and able to retype the original once the copy was put in a
+        nothing. It could also retype the original once the copy was put in a
         schema.
         """
         return _copy_table(self)
@@ -414,14 +413,14 @@ class Table:
         if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
-            # `__post_init__` -- which runs after the fields are assigned, so
+            # `__post_init__` (which runs after the fields are assigned), so
             # a table built on another's columns typed *those* first and left
             # the table it borrowed them from changed.
             self._own_columns()
         if key == 'primary_key':
             # Read once, here, and what was read is what is kept. A key is
-            # consulted many times afterwards -- to check it, to type its
-            # columns, to copy the table -- and an iterable that empties on
+            # consulted many times afterwards: to check it, to type its
+            # columns, and to copy the table. An iterable that empties on
             # the first read arrived as "was given an empty primary key"
             # about a key that named two columns. Reading it before anything
             # is assigned also stops a key this cannot read from being taken
@@ -464,8 +463,8 @@ class Table:
     def _adopt_key(self, value: str | Sequence[str]) -> None:
         r"""Make the rest of the table agree with the key it was just given.
 
-        A key identifies a row, so its columns mean ``ID`` -- the engine's own
-        setter does the same thing -- and whatever imperfection the uniqueness
+        A key identifies a row, so its columns mean ``ID``. The engine's own
+        setter does the same thing. Any imperfection in the uniqueness
         check tolerated is recorded and said out loud. Inference does all three
         after nominating a key; assignment has to as well, or the two routes
         describe the same table differently.
@@ -479,8 +478,8 @@ class Table:
 
         Which is why only a column `_check_key` would take is offered. The
         search filtered nothing, and the column that distinguishes two rows of
-        the same entity is very often the time column -- the ordinary "two
-        snapshots of one account" shape -- so the composite key the warning
+        the same entity is very often the time column, as in the ordinary "two
+        snapshots of one account" shape. The composite key the warning
         recommended was the one the next line refuses. Where the only
         disambiguating column is one a key cannot hold, that is said instead
         of recommending it.
@@ -540,7 +539,7 @@ class Table:
         The conditions it refuses on that a column carries on its own: a dtype
         no identifier can be made of, being the table's time column, and
         holding a null. Asked here so that what is recommended is what is
-        accepted -- a column with one null was offered as half of a composite
+        accepted. A column with one null was offered as half of a composite
         key and refused by `_check_key` on the very next call.
 
         Uniqueness is not asked here. It is a property of the combination, and
@@ -585,7 +584,7 @@ class Table:
         Inference deliberately tolerates a nearly-unique column, because a
         single duplicated row is common in an extract and still the column the
         caller means. An explicit key is an assertion rather than a guess, so
-        it is held to the same standard the inference applies -- and a caller
+        it is held to the same standard the inference applies. A caller
         who states something false should hear so.
 
         A null is refused however few there are. It is not a near miss on
@@ -729,7 +728,7 @@ class Schema:
         The relationships are asked about here as well as on assignment.
         `relationships` is an ordinary list, so `schema.relationships.append(
         link)` reaches it without passing the setter, and this is the question
-        a caller runs to find out whether their schema holds together -- it
+        a caller runs to find out whether their schema holds together. It
         should not be the one place that does not look.
 
         Which columns are keys is re-derived first. `tables` and a table's
@@ -764,7 +763,7 @@ class Schema:
         `Schema.from_data(relationships=[link])` checks that both columns exist
         and that their dtypes can join; `schema.relationships = [link]` is the
         same statement and checked nothing, so a link that one route refuses
-        the other accepted -- and `check_consistent()`, which a caller runs to
+        the other accepted. `check_consistent()`, which a caller runs to
         ask exactly this, passed it.
         """
         if key == 'relationships' and hasattr(self, '_tables'):
@@ -778,7 +777,7 @@ class Schema:
         r"""A shallow copy is still a schema of its own tables.
 
         `copy.copy` shared the tables and their columns, so editing the copy
-        edited the original -- which was always a trap, and became a
+        edited the original. This was always a trap, and became a
         destructive one once key columns were re-derived: clearing the copy's
         relationships retyped a column of a schema that still had them.
 
@@ -833,7 +832,7 @@ class Schema:
 
         `materialize()` is the gathering step and what it returns is read as
         finished, but the request kept the caller's schema by reference and the
-        adapter reads it again at send time -- so editing a column's meaning
+        adapter reads it again at send time. Editing a column's meaning
         after materializing changed what was sent, silently, and an agent
         reusing one schema across several questions had no way to see it.
 
@@ -988,7 +987,7 @@ class Schema:
         r"""Take a copy of any table that still belongs to another schema.
 
         `tables` hands back the live dictionary, so a table can arrive from a
-        schema that is still using it -- and typing its key columns for this
+        schema that is still using it. Typing its key columns for this
         schema would retype them for that one. The same rule a table applies
         to the columns it is handed.
         """
@@ -1008,13 +1007,13 @@ class Schema:
             table._own_columns()
 
     def _mark_key_columns(self) -> None:
-        r"""Say which columns this schema joins on, and which it no longer does.
+        r"""Mark columns this schema joins on or no longer joins on.
 
         Derived from the schema as it stands rather than applied once when it
         was built. Marking only on the way in meant a relationship dropped
         afterwards left its source column typed ``ID``, so two schemas with
-        the same tables and no relationships asked different questions -- one
-        a regression, the other a multiclass classification -- according to a
+        the same tables and no relationships asked different questions: one
+        a regression and the other a multiclass classification, according to a
         link only one of them had ever had.
         """
         self._own_tables()
@@ -1072,7 +1071,7 @@ def _require_column(
 def _as_key_tuple(key: Any) -> tuple[str, ...]:
     r"""A primary key as the tuple of column names it is.
 
-    A single name, or any ordered iterable of them -- including a `pd.Index`,
+    A single name, or any ordered iterable of them, including a `pd.Index`,
     which is what `frame.columns` is and so the most natural way to name a
     composite key from the data it came from. `pd.Index` is not a
     `collections.abc.Sequence`, so asking that question rejected it.
@@ -1135,7 +1134,7 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
         # Tolerated here and refused on assignment, the same way a nearly
         # unique column is: inference is a guess and a caller's key is an
         # assertion. Refusing would break `Schema.from_data` on frames that
-        # worked before, including any relationship pointing at this table --
+        # worked before, including any relationship pointing at this table,
         # but the engine drops these rows without a word, so the guess is
         # said out loud.
         missing = int(frame[inferred].isna().sum())
@@ -1163,8 +1162,8 @@ def _copy_table(table: Table) -> Table:
     r"""The same table again, field for field, judging nothing.
 
     Built without the constructor and without the checked setters, for two
-    reasons. Inference deliberately accepts a key with a null in it -- it warns
-    and goes on, because refusing would break frames that worked -- and
+    reasons. Inference deliberately accepts a key with a null in it. It warns
+    and continues because refusing would break frames that worked. However,
     assignment refuses one, so copying through the setter turned a schema
     `from_data` had accepted into a request that could not be materialized.
     And `Table.__post_init__` walks every cell of every column, which on a
@@ -1189,8 +1188,8 @@ def _copy_column(column: Column) -> Column:
     r"""The same column again, without re-judging it.
 
     Built field by field rather than through the constructor: a schema is
-    allowed to be inconsistent between two assignments -- that is what
-    `check_consistent` exists to ask about later -- so copying one must not be
+    allowed to be inconsistent between two assignments. That is what
+    `check_consistent` checks later, so copying one must not be
     the moment its storage and meaning are held against each other.
     """
     made = Column.__new__(Column)
@@ -1214,8 +1213,8 @@ def _column(series: pd.Series, name: str) -> Column:
     have none, which is the state the adapter resolves by discarding the dtype.
 
     The values are read once and the answer passed down. `infer_tfm_dtype` on
-    an object column walks every cell, and asking it three times -- for the
-    dtype, again inside the stype, and again for `untyped` -- is what made
+    an object column walks every cell. Asking it three times for the dtype,
+    again inside the stype, and again for `untyped` is what made
     describing a million rows of warehouse `Decimal` take five seconds before
     anything was sent. The same data already typed takes three hundredths.
     """
@@ -1273,7 +1272,8 @@ def _infer_primary_key(
         if not lowered.endswith(_KEY_SUFFIXES):
             continue
         if not supports_dtype('ID', column.dtype):
-            # A key-shaped name on values that cannot identify a row -- a bool
+            # A key-shaped name on values that cannot identify a row, such as a
+            # bool
             # column called `id`, say. Nominating it would refuse the frame at
             # construction for a key nobody asked for.
             continue
@@ -1303,8 +1303,8 @@ def _warn_stype_was_decided_by_the_rows_read(
     values and `text` otherwise, and the count is taken from the frame handed
     in. For a column whose values repeat that is the same answer at any size:
     `state` holds 27 values in ten thousand rows and in a hundred thousand.
-    For one that does not, the count is not a property of the column at all --
-    it is a property of how many rows were read, and reading more rows moves
+    For one that does not, the count is not a property of the column at all.
+    It is a property of how many rows were read, and reading more rows moves
     it. So a request written against `df.head(100)` and then pointed at the
     table describes a column two different ways, with nothing in between to
     say the description changed.
@@ -1313,7 +1313,7 @@ def _warn_stype_was_decided_by_the_rows_read(
     measures. The first is whether the values have run out: a column whose
     distinct count tracks its row count has not shown how many values it has,
     only how many rows were looked at. The second is whether there is anything
-    within reach -- two values in four rows have not saturated either, and are
+    within reach. Two values in four rows have not saturated either, and are
     nowhere near becoming sixty-five, so saying so is noise on every small
     frame. Nearness to the threshold alone is not the signal, because 53
     distinct in 100 rows is not near 64 by any measure and still flips.
@@ -1374,8 +1374,8 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
     reads it as a date, which is deliberate: a parser loose enough to read a
     warehouse `DATE` column also reads part codes as dates and dies later, on
     a value it should not have touched. The cost is that a wholly temporal
-    dataset -- a warehouse that hands back `DATE` as `STRING`, which is
-    ordinary -- infers to a schema with no time in it, and the caller learns
+    dataset, such as a warehouse that ordinarily returns `DATE` as `STRING`,
+    infers to a schema with no time in it. The caller learns
     only when a temporal query is refused, or never, if the query they wrote
     happened to be static.
 
@@ -1408,8 +1408,8 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
         warnings.warn(
             f'{table.name}.{name} holds dates but is stored as text, so it is '
             f'not the time column and no temporal query can use it. Convert '
-            f'it before inferring -- '
-            f'frame[{name!r}] = pd.to_datetime(frame[{name!r}]{how}) -- or '
+            f'it before inferring: '
+            f'frame[{name!r}] = pd.to_datetime(frame[{name!r}]{how}), or '
             f'set schema[{table.name!r}][{name!r}].stype = {"timestamp"!r} '
             f'afterwards.',
             category=SDMWarning,
@@ -1434,7 +1434,7 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
 
     Only where something could be windowed: a lone table is asked single-table
     questions, which have no window, so there is no refusal ahead to warn of.
-    The column in the remedy is an example -- the first alphabetically -- and
+    The column in the remedy is an example, the first alphabetically, and
     not a nomination.
     """
     tables = schema.tables
@@ -1454,7 +1454,7 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
             f'{name!r} has more than one column that could be its time '
             f'column, {_and_list(stamps)}, so it was given none, and a query '
             f'over a window of it is refused. Name the one that says when a '
-            f'row became true -- time_columns={{{name!r}: {stamps[0]!r}}} '
+            f'row became true: time_columns={{{name!r}: {stamps[0]!r}}} '
             f'names {stamps[0]!r}, which is only the first of them '
             f'alphabetically.',
             category=SDMWarning,
@@ -1471,8 +1471,8 @@ def _warn_table_cannot_be_linked_to(
 
     `_infer_primary_key` requires a key-shaped name, and rightly: uniqueness
     alone would nominate any high-cardinality measurement. But a great many
-    real keys are domain codes -- `IATA_CODE`, `SKU`, `ISBN`, `VIN` -- and no
-    suffix rule will cover them.
+    real keys are domain codes such as `IATA_CODE`, `SKU`, `ISBN`, and `VIN`.
+    No suffix rule will cover them.
 
     That is not merely a missing key. `_infer_relationships` can only point an
     edge at a *declared* key, so a table that has none is not a candidate
@@ -1482,8 +1482,8 @@ def _warn_table_cannot_be_linked_to(
 
     Nominating a key here was tried and withdrawn. Uniqueness within one frame
     does not distinguish a key from a foreign key that happens not to repeat in
-    the rows to hand -- a two-row extract of `line_items` has a unique
-    `ORDER_NO` -- so nominating turns a child into a parent and invents an edge
+    the rows to hand. A two-row extract of `line_items` has a unique
+    `ORDER_NO`, so nominating turns a child into a parent and invents an edge
     between two facts. Worse, a second table keyed on a name makes that name
     ambiguous, and `_infer_relationships` then declines *every* edge using it:
     the guess does not merely risk a wrong link, it can delete the right ones
@@ -1491,7 +1491,7 @@ def _warn_table_cannot_be_linked_to(
 
     So the caller is asked instead, and only where the question is real. A
     keyless table no other table names loses no edges. Nor does one whose
-    candidate column is already another table's key -- that column is a
+    candidate column is already another table's key. That column is a
     foreign key, naming it here would make the name ambiguous, and ambiguity
     deletes the edges that were working. A warning that talks a caller into
     the failure it was written to prevent is worse than silence.
@@ -1572,7 +1572,7 @@ def _warn_repeats_cost_the_table_its_key(
     tolerance has an edge, and the behaviour either side of it is the wrong way
     round. One duplicated row nominates the key and warns; two nominate
     nothing, and a table with no key is not a candidate target for any edge, so
-    every relationship pointing at it disappears -- with nothing said, at
+    every relationship pointing at it disappears, with nothing said at
     inference or at materialization. The louder outcome is the smaller
     problem.
 
@@ -1630,8 +1630,8 @@ def _warn_repeats_cost_the_table_its_key(
                 f'relationship pointing at {name!r} is dropped, so nothing is '
                 f'gathered through it, and a question about another table '
                 f'reaches it only where {name!r} names that table itself. '
-                f'Keep one row per {column!r} -- '
-                f'frame = frame.drop_duplicates({column!r}) -- and infer '
+                f'Keep one row per {column!r}: '
+                f'frame = frame.drop_duplicates({column!r}), and infer '
                 f'again, or name a column that does identify a row with '
                 f'primary_keys={{{name!r}: ...}}.',
                 category=SDMWarning,
@@ -1650,7 +1650,7 @@ def _warn_one_key_name_keys_several_tables(
     `_infer_relationships` declines every edge naming a key that more than one
     table is keyed by, and rightly: `id` on four tables identifies a row in
     each of them and names a parent in none, so choosing one would be a guess.
-    What was missing is that the declining was silent -- four frames infer to
+    What was missing is that the declining was silent. Four frames infer to
     four tables and no relationships at all, and the only thing on screen is
     whatever unrelated notice some column happened to earn, which then reads
     as the whole account of what inference did.
@@ -1676,9 +1676,9 @@ def _warn_one_key_name_keys_several_tables(
             f'ambiguous name, so nothing can point at any of those tables: '
             f"none of them is gathered as another table's related rows, and "
             f'a question about one of them is answered from that table alone. '
-            f'Say what the graph is '
-            f'-- relationships=[Relationship(child, column, {shared[0]!r}, '
-            f'{key!r}), ...] -- or give each table a key of its own name, so '
+            f'Say what the graph is: '
+            f'relationships=[Relationship(child, column, {shared[0]!r}, '
+            f'{key!r}), ...], or give each table a key of its own name, so '
             f'that the column naming it can be matched to it.',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
@@ -1693,7 +1693,7 @@ def _unlinkable_table_reads(
     Kept apart from the search that found it, because the two are different
     kinds of difficult. Deciding which columns could be the key is about the
     data; saying so is about English, and the sentence has to agree with the
-    graph on two counts that move independently -- how many columns could be
+    graph on two counts that move independently: how many columns could be
     the key, and how many tables they are shared with. Several columns can be
     shared with one table, and one column with several.
     """
@@ -1724,7 +1724,7 @@ def _unlinkable_table_reads(
 def _each_link_once(
     links: Sequence[Relationship],
 ) -> list[Relationship]:
-    """The same relationship given twice is one edge, in the order it was given.
+    """Deduplicate relationships while preserving their order.
 
     The materializer already sends one edge for it, so keeping two here made
     the two halves of the client disagree about what the graph is, and the
@@ -1753,7 +1753,7 @@ def _warn_of_a_pair_joined_both_ways(links: Sequence[Relationship]) -> None:
     schema takes it. The sampler walks an edge in both directions, so a
     declared reverse edge is a second way across the same pair, and every
     aggregation between them is then refused for a foreign key it says it
-    cannot find uniquely -- when there is exactly one, and the reverse edge is
+    cannot find uniquely when there is exactly one. The reverse edge is
     what made it two.
 
     A table pointing at itself is one link, not two: the test for a reverse
@@ -1860,7 +1860,7 @@ def _warn_two_ways_to_reach_one_table(
     the customer it was sold to and the one it ships to, and they are
     different facts. But an aggregation across a pair of tables has to be
     resolved to one column, and a query that crosses an ambiguous pair is
-    refused -- at the moment it is asked, which reads as a problem with the
+    refused when it is asked, which reads as a problem with the
     query rather than with the graph it was written against.
 
     Said here so that it is read where the cause is. Nothing is dropped: which
@@ -1922,7 +1922,8 @@ def _infer_relationships(tables: Mapping[str, Table]) -> list[Relationship]:
 
     Which is why a name more than one table is keyed by links nothing. `ID` on
     four tables identifies a row in each of them and names a parent in none, so
-    choosing one would be a guess in the direction this is supposed to avoid. Value overlap cannot break the tie either: a
+    choosing one would be a guess in the direction this is supposed to avoid.
+    Value overlap cannot break the tie either: a
     fabricated edge has been measured joining 97% of rows and a real one 91%,
     so no threshold separates them.
     """
@@ -1980,8 +1981,8 @@ def _warn_of_a_name_match_that_cannot_join(
 def _require_joinable(tables: Mapping[str, Table], link: Relationship) -> None:
     r"""A relationship has to be one the engine can actually build.
 
-    An edge joins a foreign key to the *primary key* of the table it points at
-    -- that is the only shape the graph has -- so a link naming some other
+    An edge joins a foreign key to the *primary key* of the table it points at.
+    That is the only shape the graph has, so a link naming some other
     column is not narrower, it is different: the language would resolve one
     graph while the engine built another. And the two columns have to hold
     comparable values, or the join matches nothing.

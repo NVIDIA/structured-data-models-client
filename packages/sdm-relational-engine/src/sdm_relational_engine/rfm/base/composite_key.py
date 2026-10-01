@@ -211,15 +211,15 @@ MAX_DERIVED_NAME = 200
 
 
 def encode_identity(columns: Sequence[str]) -> str:
-    r"""Names the identity *columns* describe, recoverably and safely.
+    r"""Name the identity *columns* describe, recoverably and safely.
 
     Each name is written as hexadecimal and the parts are joined with
     underscores. Hexadecimal cannot contain an underscore, so the join is
-    unambiguous, and the result holds only ``[0-9a-f_]`` -- which matters
-    because this name is written into predictive queries, split back out of a
-    fully qualified name, and created as a warehouse column. Carrying the
-    names as themselves let a dot break the split, a backtick break the
-    quoting, and a space force every reference to be quoted.
+    unambiguous. The result contains only ``[0-9a-f_]``, which matters because
+    this name is written into predictive queries, split from a fully qualified
+    name, and created as a warehouse column. Carrying the names directly let a
+    dot break the split, a backtick break the quoting, and a space force every
+    reference to be quoted.
 
     Args:
         columns: The key columns, in the order the key declares them.

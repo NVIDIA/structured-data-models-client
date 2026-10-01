@@ -113,7 +113,7 @@ engine:
     - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
     # And root tests/ again, with the engine present. The `test` job runs them
     # without one, and the wire-payload snapshot deliberately excludes the
-    # relational case when the engine cannot build it -- so that case was
+    # relational case when the engine cannot build it, so that case was
     # recorded and then compared nowhere. Here it is compared.
     - python -m pytest tests -q
 
@@ -189,7 +189,7 @@ installed-wheel:
           location = pathlib.Path(module.__file__).resolve()
           assert 'site-packages' in location.parts, (
               f'{module.__name__} was imported from {location}, not from the '
-              f'installed wheel -- this job is testing the checkout again'
+              f'installed wheel, so this job is testing the checkout again'
           )
           marker = location.parent / 'py.typed'
           assert marker.is_file(), (
@@ -222,9 +222,14 @@ sbom:
   script:
     - pip install -q cyclonedx-bom
     - VERSION=$(cat dist/VERSION)
-    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
+    - pip install -q --find-links "$CI_PROJECT_DIR/dist"
+        "sdm-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
     - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
-    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+    - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json'));
+        names={c['name'] for c in d.get('components', [])};
+        missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors'} - names;
+        print(f'{len(names)} components');
+        sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
   artifacts:
     paths:
       - dist/sbom.cyclonedx.json

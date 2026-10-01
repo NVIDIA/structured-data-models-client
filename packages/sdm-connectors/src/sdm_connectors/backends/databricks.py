@@ -91,23 +91,23 @@ _DOCUMENTED_KWARGS = frozenset(
 
 # What this guard is for: the driver's thrift route, handed nothing it
 # recognises, falls through to an OAuth flow that opens a browser and waits for
-# a human, binding a listening socket while it does -- so a script that simply
+# a human, binding a listening socket while it does. A script that simply
 # forgot its token never returns. Everything else the driver refuses itself,
 # immediately and with a better message than this one could give.
 #
 # So the question is narrow: would this call reach that fallthrough? The names
 # below are the branches the installed driver dispatches on before it, each
 # with the names it reads together. Anything that matches one of them, and
-# anything on the kernel route -- which raises rather than waiting -- is left
+# anything on the kernel route (which raises rather than waiting) is left
 # to the driver.
 _WAYS_THE_THRIFT_ROUTE_AUTHENTICATES = (
     frozenset({'access_token'}),
     frozenset({'credentials_provider'}),
     frozenset({'auth_type'}),
     frozenset({'_use_cert_as_auth', '_tls_client_cert_file'}),
-    # Refused by the driver before it reaches any flow, and its sentence --
-    # that this is no longer supported, use OAuth or an access token -- says
-    # more than this one could.
+    # Refused by the driver before it reaches any flow. Its sentence says that
+    # this is no longer supported and to use OAuth or an access token, which is
+    # more than this one could say.
     frozenset({'username'}),
     frozenset({'password'}),
 )
@@ -132,8 +132,8 @@ _KNOWN_AUTH_TYPES = _an_auth_type_the_driver_knows()
 
 
 #: Naming an OAuth application is choosing the browser flow on purpose. The
-#: driver resolves to it for anything it does not recognise -- including an
-#: empty call -- so the driver cannot tell a deliberate U2M setup from a
+#: driver resolves to it for anything it does not recognise, including an
+#: empty call. The driver cannot tell a deliberate U2M setup from a
 #: forgotten token, and this is the only thing that can: one of them says the
 #: word `oauth`. Not beside a machine-to-machine secret, which asks for
 #: something else and would be quietly downgraded to a browser.
@@ -146,7 +146,13 @@ _MACHINE_TO_MACHINE = frozenset(
 
 
 def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
-    r"""Whether this call can reach the driver's browser flow by accident."""
+    r"""Check whether the call reaches a supported authentication route.
+
+    False is the answer that matters: whatever the call names, the driver
+    would fall through to its browser flow. A machine-to-machine secret
+    alone returns False for that reason. It is a credential, but this route
+    does not use it.
+    """
     named = {name for name, value in given.items() if value}
     if 'use_kernel' in named:
         return True
@@ -187,17 +193,19 @@ def connect(
     r"""Connect to a Databricks SQL warehouse.
 
     ``DATABRICKS_*`` environment variables are used when their corresponding
-    keyword arguments are absent -- including ``DATABRICKS_CATALOG`` and
+    keyword arguments are absent, including ``DATABRICKS_CATALOG`` and
     ``DATABRICKS_SCHEMA``, which decide which table a bare name resolves to.
     Passing one explicitly as ``None`` stops this function reading the variable
     for it, and the key is then not sent at all; for ``catalog`` and ``schema``
     that leaves the choice to the workspace, and for a credential it leaves no
     credential, which is refused rather than sent.
 
-    A connect with no credential at all is refused here. The driver's own
-    answer is to open a browser and wait for a human to finish an OAuth flow,
-    binding a listening socket while it does, so a script that simply forgot
-    the token never returned.
+    A call that would reach the browser flow without asking for it is
+    refused here. The driver's own answer is to open a browser and wait for
+    a human to finish an OAuth flow, binding a listening socket while it
+    does, so a script that simply forgot the token never returned. Asking
+    for that flow deliberately is allowed through. Such a request names an
+    OAuth application or an ``auth_type`` the driver dispatches on.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)

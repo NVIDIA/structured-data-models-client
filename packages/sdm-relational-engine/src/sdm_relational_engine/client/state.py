@@ -64,7 +64,7 @@ class GlobalState:
 
     A deployment is addressed either by base URL (``_url``, the raw-NIM mode)
     or by ``_client_factory``, which builds a transport addressed some other
-    way -- a named Databricks Model Serving endpoint, say. The two never
+    way, such as a named Databricks Model Serving endpoint. The two never
     coexist: every mode switch goes through :meth:`clear`, which resets both
     before the new mode installs its own. The ``_serving_*`` fields record what
     :func:`init_databricks_serving` was last called with, so repeating the call
@@ -222,12 +222,13 @@ class GlobalState:
         Cached per thread and keyed by the configuration it was built from.
         ``init()`` returns early when re-initialized with identical settings
         and only ``clear()`` evicts, and ``clear()`` reaches just the thread
-        that called it -- so without the key a thread that had cached a client
+        that called it. Without the key, a thread that had cached a client
         for one endpoint would keep using it after another thread pointed the
         process at a second endpoint, sending that thread's requests, and its
         API key, to the wrong deployment. A superseded client is dropped
-        rather than closed: another thread's :class:`~sdm_relational_engine.rfm.KumoRelational` may
-        still hold it for an in-flight prediction.
+        rather than closed. Another thread's
+        :class:`~sdm_relational_engine.rfm.KumoRelational` may still hold it
+        for an in-flight prediction.
 
         Auto-init from an ambient ``KUMO_RELATIONAL_API_ENDPOINT`` is gated on
         ``initialized`` rather than on ``_url``, because a serving deployment

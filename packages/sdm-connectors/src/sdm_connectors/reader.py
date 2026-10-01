@@ -56,13 +56,13 @@ _NULLABLE_INTEGER_DTYPES = {
 
 
 def read(source: str, **kwargs: Any) -> pd.DataFrame:
-    r"""Reads one flat table from any supported source.
+    r"""Read one flat table from any supported source.
 
     Args:
         source: ``'local'`` (``data=`` a DataFrame/dict, or ``path=`` a CSV or
             Parquet file), ``'s3'`` (``path='s3://...'``, optional
-            ``storage_options=``), or a SQL backend -- ``'sqlite'``,
-            ``'duckdb'``, ``'postgres'``, ``'snowflake'``, ``'databricks'``.
+            ``storage_options=``), or a SQL backend: ``'sqlite'``,
+            ``'duckdb'``, ``'postgres'``, ``'snowflake'``, or ``'databricks'``.
         **kwargs: For a SQL source, exactly one of ``table=`` / ``query=`` plus
             the connection arguments :func:`connect` takes for that backend
             (``sqlite`` / ``duckdb`` also accept the database path as
@@ -73,10 +73,11 @@ def read(source: str, **kwargs: Any) -> pd.DataFrame:
         The rows as a ``pd.DataFrame``.
 
     Raises:
-        ConnectorError: With a stable ``code`` -- ``UNKNOWN_CONNECTOR``,
+        ConnectorError: With a stable ``code``: ``UNKNOWN_CONNECTOR``,
             ``INVALID_CONNECTOR_ARGS``, ``CONNECT_FAILED``, ``QUERY_FAILED``,
-            ``READ_FAILED`` or ``NOT_FOUND`` -- and the driver exception
-            chained as ``__cause__``.
+            ``READ_FAILED`` or ``NOT_FOUND``. Where a driver raised, that
+            exception is kept as ``__cause__``; an argument this refuses
+            before reaching a driver has none.
         MissingBackendError: If the source's optional driver is not installed.
     """
     if source == 'local':
@@ -197,7 +198,7 @@ def read_table(
         ):
             # Arrow first, every time. A driver's own pandas conversion decides
             # for itself what a wide integer becomes, and DuckDB's `fetchdf`
-            # turns a HUGEINT -- which is what `sum(BIGINT)` widens to -- into a
+            # turns a HUGEINT (which is what `sum(BIGINT)` widens to) into a
             # float64, rounding it. Arrow carries the exact value through to
             # `_arrow_to_pandas`, which knows not to widen it.
             for method in (
@@ -375,16 +376,15 @@ def _read_s3(
 def _is_directory(
     path: str, storage_options: dict[str, Any] | None = None
 ) -> tuple[bool, Exception | None]:
-    r"""Whether ``path`` names a directory, local or remote.
+    r"""Check whether ``path`` names a local or remote directory.
 
     Built with the caller's ``storage_options``, so a private endpoint or an
     explicit credential is used here as it is for the read itself.
 
-    ``os.path.isdir`` answers only for the local filesystem, so an ``s3://``
-    prefix was never a directory to it and a partitioned Parquet dataset --
-    which is how tabular data lands in object storage -- was refused unless the
-    caller happened to write a trailing slash. The filesystem that owns the
-    path is asked instead.
+    ``os.path.isdir`` handles only the local filesystem. It therefore rejected
+    ``s3://`` partitioned Parquet datasets, which is how tabular data lands in
+    object storage, unless the caller added a trailing slash. This function
+    asks the filesystem that owns the path instead.
 
     Reached only for a path whose name gives no answer. A failure to reach the
     store is not an answer either, and there is no read afterwards to report
@@ -460,10 +460,10 @@ def _resolve_format(
 def _narrow_nullable_dtypes(frame: pd.DataFrame) -> pd.DataFrame:
     r"""Put columns with no nulls back into their plain numpy dtype.
 
-    A null-aware dtype is only needed where a null actually is. Narrowing the
-    rest keeps an ordinary frame looking ordinary -- ``int64`` rather than
-    ``Int64``, ``object`` rather than ``string`` -- which is what a caller
-    comparing dtypes expects, and what the Arrow path already does.
+    A null-aware dtype is needed only where a null exists. Narrowing the rest
+    keeps an ordinary frame looking ordinary, with ``int64`` rather than
+    ``Int64`` and ``object`` rather than ``string``. Callers comparing dtypes
+    expect this, and the Arrow path already does it.
     """
     for position, dtype in enumerate(frame.dtypes):
         if not isinstance(dtype, pd.api.extensions.ExtensionDtype):
@@ -505,26 +505,25 @@ def _frame_by_position(
     columns: Sequence[str],
     description: Sequence[Any] = (),
 ) -> pd.DataFrame:
-    r"""The rows as a frame, keyed by where a value sits rather than by its name.
+    r"""Build a frame by value position rather than column name.
 
     A join returns two columns of one name, and keying by name collapses them:
     same shape, same names, the last one's values, nothing said. Only a driver
-    that answers in rows arrives here -- Databricks and DuckDB answer in Arrow,
-    which refuses such a result before this sees it.
+    that answers in rows arrives here; Databricks and DuckDB answer in Arrow,
+    which keeps both columns on its own.
 
     Built a column at a time for the reason :func:`_integer_columns_exactly`
     exists: pandas promotes a null-bearing integer column as it builds.
 
-    A row factory that hands back a mapping -- psycopg's ``dict_row``, which
-    the connector's own allow-list admits -- has no positions to read, and
-    indexing one raised ``KeyError: 0``, surfacing as a query failure naming
-    only ``0``. Those are read by name, which is all such a row has; a driver
-    that collapsed two columns of one name before this saw them is said so
-    rather than guessed at.
+    A mapping row factory such as psycopg's allowed ``dict_row`` has no
+    positions to read. Indexing it raised ``KeyError: 0``, reported as a query
+    failure naming only ``0``. Mapping rows are read by name, the only access
+    they provide. If the driver already collapsed two columns with one name,
+    the error says so instead of guessing.
 
-    A result set of no columns still has rows -- ``SELECT FROM
-    generate_series(1, 2)`` is legal -- and returning an empty frame lost
-    them, so a caller counting rows counted none.
+    A result set with no columns can still have rows. ``SELECT FROM
+    generate_series(1, 2)`` is legal. Returning an empty frame lost those rows,
+    so a caller counting them counted none.
     """
     if not columns:
         return pd.DataFrame(index=pd.RangeIndex(len(rows)))
@@ -592,13 +591,13 @@ _A_LENGTH = re.compile(r'\(\d+(?:,\s*\d+)?\)$')
 def _typed_from_the_server(
     frame: pd.DataFrame, description: Sequence[Any]
 ) -> pd.DataFrame:
-    r"""Type a column of nothing but nulls from what the server declared it to be.
+    r"""Type an all-null column from its declared server type.
 
-    Values decide every other column, and a column with no values decides
-    nothing, so an all-null ``bigint`` was built as ``object`` and described to
-    the model as text -- and so was an all-null ``float8``, ``bool``, ``date``
-    or ``timestamp``. Every other backend reaches this frame through Arrow,
-    which carries the declared type, so postgres was the only one that lost it.
+    Values decide every other column, but a column with no values decides
+    nothing. An all-null ``bigint``, ``float8``, ``bool``, ``date`` or
+    ``timestamp`` was built as ``object`` and described to the model as text.
+    Every other backend reaches this frame through Arrow, which carries the
+    declared type, so postgres was the only one that lost it.
 
     Read only where the driver offers a name for the type and that name is one
     this knows; where it does not, nothing is claimed.
@@ -620,15 +619,15 @@ def _typed_from_the_server(
 def _integer_columns_exactly(data: Any) -> Any:
     r"""Build integer columns as ``Int64`` before pandas can widen them.
 
-    ``pd.DataFrame({'id': [big, None]})`` promotes to ``float64``, which rounds
-    every value past 2**53 as the frame is built. By then the value is gone --
-    casting back to an integer afterwards cannot recover it -- so the column
-    has to be constructed with a dtype that holds a null.
+    ``pd.DataFrame({'id': [big, None]})`` promotes to ``float64``, rounding
+    every value past 2**53 as the frame is built. Casting back to an integer
+    cannot recover the lost value, so the column must be constructed with a
+    dtype that holds a null.
 
     Only columns that ``Int64`` can hold are converted. A column holding a
-    whole number wider than that is built as ``object`` instead, which is what
-    pandas does for it anyway when nothing is missing -- but not when something
-    is: ``[2 ** 63 + 1, None]`` becomes ``float64`` and the value is gone.
+    whole number wider than that is built as ``object`` instead. Pandas does
+    the same when nothing is missing, but ``[2 ** 63 + 1, None]`` becomes
+    ``float64`` and loses the value.
     """
     if not isinstance(data, Mapping):
         return data

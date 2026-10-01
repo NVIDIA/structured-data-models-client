@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "sdm-pql"
 # The version lives in exactly one place per distribution: `_version.py`, a
 # module holding a single literal and importing nothing. setuptools reads it
-# statically, so building the wheel never imports the package -- which matters
+# statically, so building the wheel never imports the package, which matters
 # because importing these roots pulls pandas, and a build backend that has to
 # import pandas to learn a version number cannot produce a wheel at all.
 dynamic = ["version"]

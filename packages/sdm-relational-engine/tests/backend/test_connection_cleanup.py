@@ -4,7 +4,7 @@
 r"""A constructor that opens its own connection must not leak it.
 
 ``Graph.__del__`` closes the connection the graph owns, so the only window in
-which one can escape is a failure *before* the graph exists to own it -- an
+which one can escape is a failure *before* the graph exists to own it, an
 unknown table name, an edge to a table that was not selected, a database with
 nothing in it. A caller who passed their own connection keeps it: the
 constructor closes only what it opened itself.

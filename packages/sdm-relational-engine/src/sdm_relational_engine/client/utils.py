@@ -11,8 +11,8 @@ from sdm_relational_engine.exceptions import (
 
 
 def raise_on_error(response: TransportResponse) -> None:
-    r"""Raises an :class:`~sdm_relational_engine.exceptions.HTTPException` if a response does
-    not return with an OK status code.
+    r"""Raise an :class:`~sdm_relational_engine.exceptions.HTTPException` for
+    a non-OK response.
 
     The body is capped: a NIM behind a proxy can answer an error with a large
     HTML page, and the whole of it used to become the exception message. The

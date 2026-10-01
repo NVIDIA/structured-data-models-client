@@ -10,7 +10,7 @@ the four words did nothing, which is why it went.
 
 Replacing it with a number is only an improvement if the number is honoured.
 Deriving the wire value from it and then gathering whatever the bucket allows
-would repeat the same defect in a new shape -- ask for 500, get 4,000 -- so
+would repeat the same defect in a new shape (ask for 500, get 4,000), so
 these cover both halves: which value goes on the wire, and how many examples
 are actually gathered.
 """
