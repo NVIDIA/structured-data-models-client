@@ -153,12 +153,13 @@ jobs:
             -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
             pyyaml
           pip install -e './packages/sdm-relational-engine[test,explain]'
-      # The same marker filter as the internal pipeline. The live warehouse
-      # tests are deselected by name, so a skip left in this job's report is
-      # a test that meant to run here and could not.
+      # The same marker filter as the internal pipeline. The live NIM and live
+      # warehouse tests need credentials this job does not have, so they are
+      # deselected by name rather than left to skip. A skip that remains is a
+      # test that checked its own environment and stood down, and is reported.
       - run: |
           cd packages/sdm-relational-engine
-          python -m pytest tests -q -m 'not live_warehouse'
+          python -m pytest tests -q -m 'not live_nim and not live_warehouse'
       # The client's suite again, with an engine present. The test job installs
       # none, so every client test that needs one skips there and runs nowhere.
       - run: |
