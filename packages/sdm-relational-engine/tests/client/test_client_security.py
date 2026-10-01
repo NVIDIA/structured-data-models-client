@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 r"""``NimClient`` carries every Kumo Relational prediction, so it must enforce the
 credential guards the other client documents, and importing the package must
 not reach the network.

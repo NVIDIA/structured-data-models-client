@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 r"""A metadata statement must fall through to the row-based fetch.
 
 Snowflake answers ``SHOW``, ``DESC`` and ``LIST`` with a result set it cannot

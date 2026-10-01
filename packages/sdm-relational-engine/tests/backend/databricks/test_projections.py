@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 r"""``_projections`` decides SELECT-list column order, and the model is
 order-sensitive: driving it from the ``columns`` set left order at the mercy of
 ``PYTHONHASHSEED``, so one graph predicted anywhere between 117 and 237 for a

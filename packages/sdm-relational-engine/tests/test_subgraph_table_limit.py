@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 r"""The subgraph table ceiling restates a server limit, so it must agree with
 it exactly: a subgraph of precisely ``_MAX_SUBGRAPH_TABLES`` tables is what
 the NIM accepts, and refusing it locally would deny a supported graph.

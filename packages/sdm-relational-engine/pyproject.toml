@@ -1,12 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+
 [project]
 name = "sdm-relational-engine"
 dynamic=["dependencies", "version"]
 authors=[
     {name="NVIDIA"},
 ]
-license = "Apache-2.0"
+license = "LicenseRef-OpenMDW-1.1"
 license-files=["LICENSE", "NOTICE"]
-description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Kumo Relational Client"
+description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Structured Data Models client"
 readme="README.md"
 # This package ships binary wheels only (no sdist), so a version with no wheel
 # must fail resolution rather than fail to find a distribution. The bound and

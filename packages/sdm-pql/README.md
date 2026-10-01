@@ -11,5 +11,5 @@ reads no data and opens no socket.
 
 It installs the `predictive_query` import package. The name is inherited from
 the separate repository this tree was first carried from, which has since been
-retired; the language is maintained here now, under the same Apache-2.0 licence
-as the rest of the repository.
+retired; the language is maintained here now, under the same OpenMDW-1.1
+licence as the rest of the repository.

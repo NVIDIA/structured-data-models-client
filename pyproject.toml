@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
+
 # Workspace root for the sdm-client monorepo. This builds no package; each
 # independently released distribution lives under packages/ with its own
 # pyproject.toml:

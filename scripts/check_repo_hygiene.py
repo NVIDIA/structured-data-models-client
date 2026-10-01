@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-OpenMDW-1.1
 
 """Three checks this repository has to pass before it can be published.
 
@@ -29,24 +29,40 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-SPDX_LINE = 'SPDX-License-Identifier: Apache-2.0'
+SPDX_LINE = 'SPDX-License-Identifier: LicenseRef-OpenMDW-1.1'
 
-# Generated files get their header from the generator, so they are excluded
-# below rather than listed here.
-SPDX_ROOTS = (
-    'scripts',
-    'packages/sdm-api/src',
-    'packages/sdm-api/tests',
-    'packages/sdm-pql/src',
-    'packages/sdm-pql/tests',
-    'packages/sdm-client/src',
-    'packages/sdm-client/tests',
-    'packages/sdm-connectors/src',
-    'packages/sdm-connectors/tests',
-    'packages/sdm-relational-engine/src',
-    'packages/sdm-relational-engine/tests',
+# Every tracked file that can carry the header is checked, rather than a list
+# of directories. A root list has to be remembered, and the files it forgot
+# look exactly like the files it cleared.
+SPDX_SUFFIXES = {
+    '.cfg',
+    '.cpp',
+    '.g4',
+    '.h',
+    '.hpp',
+    '.in',
+    '.py',
+    '.pyi',
+    '.sh',
+    '.toml',
+    '.yaml',
+    '.yml',
+}
+
+# Third-party bytes and build output. A directory of our own is not listed
+# here: `grammar/` and `generated/` each hold hand-maintained files beside the
+# produced ones, and excluding the directory excused those too.
+SPDX_EXCLUDE_PARTS = {'__pycache__', '_vendor', 'assets', 'build'}
+
+# A produced file says so on a line of its own, near the top, in the form the
+# tool that wrote it uses. Anchoring to the start of the line matters: a
+# docstring that merely mentions being generated from something would
+# otherwise excuse itself from the licence check.
+SPDX_GENERATED = re.compile(
+    r'^[\s#/*\'"]*(?:code\s+)?generated\s+(?:by|from)\b',
+    re.IGNORECASE,
 )
-SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
+SPDX_GENERATED_LINES = 8
 
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
@@ -158,13 +174,15 @@ def check_spdx() -> int:
     missing = []
     for path in tracked_files():
         relative = path.relative_to(REPO_ROOT)
-        if path.suffix != '.py':
-            continue
-        if not any(str(relative).startswith(root) for root in SPDX_ROOTS):
+        if path.suffix not in SPDX_SUFFIXES:
             continue
         if set(relative.parts) & SPDX_EXCLUDE_PARTS:
             continue
-        if SPDX_LINE not in path.read_text(encoding='utf-8', errors='replace'):
+        body = path.read_text(encoding='utf-8', errors='replace')
+        opening = body.splitlines()[:SPDX_GENERATED_LINES]
+        if any(SPDX_GENERATED.match(line) for line in opening):
+            continue
+        if SPDX_LINE not in body:
             missing.append(str(relative))
 
     for name in missing:
