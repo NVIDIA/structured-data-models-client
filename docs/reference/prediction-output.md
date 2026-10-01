@@ -33,6 +33,13 @@ The relational model predicts a distribution for a regression, and `prediction` 
 That matches what the engine and kumo-relational-client return.
 Pass `materialize(..., prediction_statistic='mean')` for the mean instead.
 
+Choose `'mean'` when predictions will be added up across entities, such as total demand over products.
+Means add up and medians don't, so on a right-skewed target the sum of the medians understates the total.
+The mean is approximate: the NIM averages the model's 999 predicted quantiles, which trims the tails.
+On a zero-inflated target the median is exactly 0 for every entity the model predicts to be zero at least half the time.
+
+A regression on the tabular model reports the mean, that model's default, and doesn't take `prediction_statistic`.
+
 ## Joining
 
 Every row carries `row_index`. It also carries `id` – the entity – when the
