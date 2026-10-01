@@ -944,7 +944,10 @@ def test_a_forecast_part_names_the_step_that_failed():
 
     said = str(
         about_the_part(
-            StructuredDataError('too far.', code='INVALID_REQUEST'),
+            StructuredDataError(
+                "we would need data back to '2025-05-31'.",
+                code='INVALID_REQUEST',
+            ),
             parts('forecast', 40),
             16,
         )
@@ -952,6 +955,27 @@ def test_a_forecast_part_names_the_step_that_failed():
     assert 'step 16 of 40' in said
     assert 'fewer than 16 steps' in said
     assert 'fewer than 40' not in said
+
+
+def test_a_forecast_failure_unrelated_to_its_window_is_not_told_to_shorten():
+    """An unknown option failed at step 1 and was told to ask for fewer than
+    1 steps. A window that outruns the data, as the engine words it, is still
+    told to."""
+    pytest.importorskip('sdm_relational_engine')
+    forecast = (
+        'PREDICT COUNT(buys.*, 0, 30, days) FORECAST {} TIMEFRAMES '
+        'FOR EACH users.uid'
+    )
+    with pytest.raises(StructuredDataError) as unrelated:
+        PredictiveQuery(forecast.format(2), shop()).materialize(
+            indices=[1, 2], num_neighbours=[4]
+        )
+    with pytest.raises(StructuredDataError) as outran:
+        PredictiveQuery(forecast.format(40), shop()).materialize(indices=[1, 2])
+
+    assert 'This is forecast step 1 of 2.' in str(unrelated.value)
+    assert 'fewer than' not in str(unrelated.value)
+    assert 'ask for fewer than 10 steps' in str(outran.value)
 
 
 def test_a_ranking_with_cold_candidates_sends_nothing_and_names_them_all(

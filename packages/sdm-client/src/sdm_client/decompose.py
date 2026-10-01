@@ -133,6 +133,10 @@ def _ended(message: Any) -> str:
     return text if not text or text[-1] in '.!?' else f'{text}.'
 
 
+#: How the engine says a window reaches back past the data's earliest row.
+_OUTRUNS_THE_DATA = 'we would need data back to'
+
+
 def about_the_part(
     error: StructuredDataError, rewritten: Decomposition, about: Any
 ) -> StructuredDataError:
@@ -152,13 +156,17 @@ def about_the_part(
             f'This is the question asked for candidate {about!r}, one of '
             f'{how_many} this ranking is asked as.'
         )
-    else:
+    elif _OUTRUNS_THE_DATA in first:
         said = (
             f'This is forecast step {about} of {how_many}, and the window '
             f"named above is that step's rather than the one written; ask "
             f'for fewer than {about} steps if the data does not reach that '
             f'far.'
         )
+    else:
+        # Fewer steps only helps when this step's window outran the data; an
+        # unknown option fails at step 1 alike, and "fewer than 1" is no remedy.
+        said = f'This is forecast step {about} of {how_many}.'
     said = f'{first} {said}'
     carried = error.__class__.__new__(error.__class__)
     carried.__dict__.update(error.__dict__)
