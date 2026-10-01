@@ -2,14 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""``sdm_relational_engine.rfm.init_databricks_serving``, without the native extension.
+"""``sdm_relational_engine.rfm.init_snowflake_serving``, without the native extension.
 
 ``sdm_relational_engine/rfm/backend/local/__init__.py`` does a bare ``import
 sdm_relational_engine.relationallib`` at module scope and turns any failure into a RuntimeError, so
 ``import sdm_relational_engine.rfm`` is impossible wherever the compiled extension is absent.
 
-That guard exists for the *local* sampler. The Databricks Model Serving path
-never touches it -- inference happens on the endpoint. Satisfying the guard with
+That guard exists for the *local* sampler. The Snowflake serving path never
+touches it -- inference happens in the model service. Satisfying the guard with
 a stub is therefore not papering over a real dependency; it demonstrates that
 the dependency is not real for this path, which is the argument for making the
 import lazy.
@@ -24,27 +24,19 @@ from typing import Any
 import pytest
 
 
-class _Endpoints:
-    @staticmethod
-    def query(**kwargs: Any) -> Any:
-        return {'predictions': [{'response_json': '{}'}]}
+class _Session:
+    """A Snowpark session, which the transport does not touch until it predicts."""
 
 
-class _Workspace:
-    serving_endpoints = _Endpoints()
-
-
-def _init(
-    rfm_engine: Any, endpoint: str = 'kumo-relational', **kwargs: Any
-) -> None:
+def _init(rfm_engine: Any, service: str = 'DB.SC.SVC', **kwargs: Any) -> None:
     """Initialize the way ``NimClient`` does, token included.
 
     Every test below stands in for that caller; a bare call is refused, which
     ``test_a_direct_call_is_refused`` covers.
     """
-    rfm_engine.init_databricks_serving(
-        endpoint,
-        workspace_client=_Workspace(),
+    rfm_engine.init_snowflake_serving(
+        service,
+        session=_Session(),
         _token=rfm_engine._CLIENT_TOKEN,
         **kwargs,
     )
@@ -105,27 +97,27 @@ def rfm_engine(monkeypatch: pytest.MonkeyPatch) -> Any:
     sdm_relational_engine.global_state.clear()
 
 
-def test_initializes_against_a_named_endpoint(rfm_engine: Any) -> None:
+def test_initializes_against_a_named_service(rfm_engine: Any) -> None:
     _init(rfm_engine)
     assert rfm_engine.global_state._initialized
 
 
-def test_records_the_endpoint_rather_than_a_stale_url(rfm_engine: Any) -> None:
+def test_records_the_service_rather_than_a_stale_url(rfm_engine: Any) -> None:
     """There is no URL in this mode. Leaving the previous deployment's URL in
     place would make the state read as if a NIM were still configured.
     """
     _init(rfm_engine)
-    assert rfm_engine.global_state._url == 'databricks-serving:kumo-relational'
+    assert rfm_engine.global_state._url == 'snowflake-serving:DB.SC.SVC'
 
 
 def test_the_client_is_the_serving_transport(rfm_engine: Any) -> None:
-    from sdm_relational_engine.client.databricks_serving import (
-        DatabricksServingClient,
+    from sdm_relational_engine.client.snowflake_serving import (
+        SnowflakeServingClient,
     )
 
     _init(rfm_engine)
     client = rfm_engine.global_state.client
-    assert isinstance(client, DatabricksServingClient)
+    assert isinstance(client, SnowflakeServingClient)
 
 
 def test_a_direct_call_is_refused(rfm_engine: Any) -> None:
@@ -135,17 +127,15 @@ def test_a_direct_call_is_refused(rfm_engine: Any) -> None:
     around the boundary the other enforces.
     """
     with pytest.raises(RuntimeError):
-        rfm_engine.init_databricks_serving(
-            'kumo-relational', workspace_client=_Workspace()
-        )
+        rfm_engine.init_snowflake_serving('DB.SC.SVC', session=_Session())
     assert not rfm_engine.global_state._initialized
 
 
-def test_a_url_shaped_endpoint_is_rejected(rfm_engine: Any) -> None:
+def test_a_url_shaped_service_is_rejected(rfm_engine: Any) -> None:
     with pytest.raises(ValueError):
         _init(
             rfm_engine,
-            'https://workspace/serving-endpoints/kumo-relational',
+            'https://acct.snowflakecomputing.com/svc',
         )
     assert not rfm_engine.global_state._initialized
 
