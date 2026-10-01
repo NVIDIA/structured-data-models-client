@@ -3,6 +3,10 @@
 Five distributions, one version, published together. A release is a tag; the
 tag is the only manual step.
 
+The tag has to sit on a commit that is on `main` and whose CI run passed.
+The publish workflow checks both before it builds anything, so a tag on an
+unmerged or failing commit stops there rather than reaching the index.
+
 ## Before tagging
 
 ```bash

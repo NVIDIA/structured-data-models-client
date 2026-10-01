@@ -37,6 +37,30 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A tag can be put on any commit, including one that never reached a
+      # pull request. The gates run on `main` and on pull requests, so a tag
+      # off `main` is a tag nothing has tested. Checked before the build,
+      # because the upload decision is made from these artifacts.
+      - name: The tag is on main, and main has passed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main. Tag a commit that has been reviewed and merged."
+            exit 1
+          fi
+          conclusion=$(gh run list --workflow CI --commit "$GITHUB_SHA" \
+            --json conclusion --jq '[.[].conclusion] | first // "none"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI for $GITHUB_SHA is '$conclusion', not success. Publishing a commit whose gates did not pass is the one thing this workflow must not do."
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main and its CI passed"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
