@@ -31,30 +31,32 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 SPDX_LINE = 'SPDX-License-Identifier: LicenseRef-OpenMDW-1.1'
 
-# Generated files get their header from the generator, so they are excluded
-# below rather than listed here.
-SPDX_ROOTS = (
-    'scripts',
-    'packages/sdm-api/src',
-    'packages/sdm-api/tests',
-    'packages/sdm-pql/src',
-    'packages/sdm-pql/tests',
-    'packages/sdm-client/src',
-    'packages/sdm-client/tests',
-    'packages/sdm-connectors/src',
-    'packages/sdm-connectors/tests',
-    'packages/sdm-relational-engine/src',
-    'packages/sdm-relational-engine/tests',
-    # Public in the repository though not shipped in a wheel, so a header
-    # here is as visible as one in a package.
-    'qa',
-    '.github',
-)
-SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
+# Every tracked file that can carry the header is checked, rather than a list
+# of directories. A root list has to be remembered, and the files it forgot
+# look exactly like the files it cleared.
+SPDX_SUFFIXES = {
+    '.py',
+    '.pyi',
+    '.cpp',
+    '.h',
+    '.hpp',
+    '.yml',
+    '.yaml',
+    '.sh',
+    '.toml',
+    '.cfg',
+}
 
-# The header needs only a `#` comment syntax, which every suffix here has.
-# Checking `.py` alone left a root of YAML and shell unexamined.
-SPDX_SUFFIXES = {'.py', '.yml', '.yaml', '.sh', '.toml', '.cfg'}
+# Generated and vendored trees take their header from whatever produced them,
+# and `assets` holds third-party bundles that carry their own notices.
+SPDX_EXCLUDE_PARTS = {
+    'grammar',
+    '__pycache__',
+    'generated',
+    '_vendor',
+    'assets',
+    'build',
+}
 
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
@@ -167,8 +169,6 @@ def check_spdx() -> int:
     for path in tracked_files():
         relative = path.relative_to(REPO_ROOT)
         if path.suffix not in SPDX_SUFFIXES:
-            continue
-        if not any(str(relative).startswith(root) for root in SPDX_ROOTS):
             continue
         if set(relative.parts) & SPDX_EXCLUDE_PARTS:
             continue
