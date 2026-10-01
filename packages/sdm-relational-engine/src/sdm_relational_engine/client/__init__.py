@@ -3,10 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from .client import NimClient
-from .databricks_serving import DatabricksServingClient, ServingResponse
+from .transport import ServingResponse
 
 __all__ = [
-    'DatabricksServingClient',
     'NimClient',
     'ServingResponse',
 ]

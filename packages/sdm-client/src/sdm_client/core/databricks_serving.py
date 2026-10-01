@@ -7,9 +7,8 @@ r"""A client's requests, carried to a Databricks Model Serving endpoint.
 The model is served by name inside a workspace rather than at a URL, and is
 reached with the workspace's own identity, so a notebook needs no token. Each
 request travels as the one ``request_json`` row the served model reads, and
-the answer comes back as one ``response_json`` row: the frozen envelope the
-relational engine's serving client sends too, which every deployed endpoint
-reads and writes.
+the answer comes back as one ``response_json`` row: the frozen envelope every
+deployed endpoint reads and writes.
 
 What a NIM serves and this does not: sessions, and a list of models. A
 serving endpoint hosts one model and answers one request at a time.
@@ -164,7 +163,7 @@ class DatabricksServingTransport:
 
     @property
     def url(self) -> str:
-        r"""Where requests go, said the way the engine says it."""
+        r"""Where requests go: the endpoint's name, since it has no URL."""
         return f'databricks-serving:{self._endpoint}'
 
     def close(self) -> None:

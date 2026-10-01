@@ -132,9 +132,9 @@ engine:
     - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' pyyaml
     # The test extra, not a hand-written list beside it: naming these twice
     # is how the documented install came to be missing pytest-mock while this
-    # job had it. `databricks-serving` and `explain` carry the SDKs that the
-    # serving and explanation tests fake around; without them those skipped too.
-    - pip install -q -e './packages/sdm-relational-engine[test,databricks-serving,explain]'
+    # job had it. `explain` carries the SDK that the explanation tests fake
+    # around; without it those skipped too.
+    - pip install -q -e './packages/sdm-relational-engine[test,explain]'
     # Deselected by name, so a skip left in this job's report is a test that
     # meant to run here and could not.
     - cd packages/sdm-relational-engine && python -m pytest tests -q -m 'not live_warehouse'

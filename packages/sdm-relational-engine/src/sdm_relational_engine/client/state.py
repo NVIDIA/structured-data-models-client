@@ -64,11 +64,11 @@ class GlobalState:
 
     A deployment is addressed either by base URL (``_url``, the raw-NIM mode)
     or by ``_client_factory``, which builds a transport addressed some other
-    way -- a named Databricks Model Serving endpoint, say. The two never
-    coexist: every mode switch goes through :meth:`clear`, which resets both
-    before the new mode installs its own. The ``_serving_*`` fields record what
-    :func:`init_databricks_serving` was last called with, so repeating the call
-    returns early rather than re-resolving credentials.
+    way -- a named Snowflake model service, say. The two never coexist: every
+    mode switch goes through :meth:`clear`, which resets both before the new
+    mode installs its own. The ``_serving_*`` fields record what
+    :func:`init_snowflake_serving` was last called with, so repeating the call
+    returns early rather than resolving a session again.
 
     The fields are views onto one :class:`Deployment` value. Reading any of
     them takes the whole of it once, so a reader cannot see half of one

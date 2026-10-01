@@ -807,16 +807,3 @@ def test_an_unusable_timeout_is_refused_at_construction(bad):
     with pytest.raises(StructuredDataError) as error:
         SDMClient.for_databricks_serving(ENDPOINT, timeout=bad)
     assert error.value.code == 'INVALID_CONFIGURATION'
-
-
-def test_the_envelope_is_the_one_the_engine_sends():
-    """The client and the engine each wrap a request for the same deployed
-    endpoints, so they have to agree on the envelope."""
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_relational_engine.client import databricks_serving as engine
-
-    from sdm_client.core import databricks_serving as client
-
-    assert client._REQUEST_COLUMN == engine.REQUEST_COLUMN
-    assert client._RESPONSE_COLUMN == engine.RESPONSE_COLUMN
-    assert client._MAX_REQUEST_BYTES == engine.MAX_REQUEST_BYTES

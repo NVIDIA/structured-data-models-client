@@ -162,38 +162,6 @@ def init_client(
         return client
 
 
-def init_databricks_serving(
-    endpoint: str,
-    *,
-    workspace_client: object | None = None,
-    max_request_bytes: int | None = None,
-    timeout: float | None = None,
-    log_level: str = 'INFO',
-    _token: object | None = None,
-) -> None:
-    r"""Initialize against a Databricks Model Serving endpoint.
-
-    The counterpart to :func:`init`, which resolves a NIM base URL from its
-    argument or the environment; there is no URL to resolve here.
-
-    Gated like :func:`init`: the engine is reachable only through
-    ``SDMClient``, so both entry points must refuse a direct call rather than
-    leaving one of them as a way around the boundary.
-    """
-    if _token is not _CLIENT_TOKEN:
-        raise RuntimeError(_DIRECT_USE_MESSAGE)
-    with global_state._lock:
-        sdm_relational_engine.init_databricks_serving(
-            endpoint,
-            workspace_client=workspace_client,
-            max_request_bytes=max_request_bytes,
-            timeout=timeout,
-            log_level=log_level,
-        )
-        global_state._url = f'databricks-serving:{endpoint}'
-        global_state._initialized = True
-
-
 def init_snowflake_serving(
     service: str,
     *,
@@ -206,8 +174,9 @@ def init_snowflake_serving(
 ) -> None:
     """Initialize against a model served on Snowpark Container Services.
 
-    The Snowflake counterpart to :func:`init_databricks_serving`. A service is
-    invoked as a SQL method over a session, so there is no URL to resolve.
+    The counterpart to :func:`init`, which resolves a NIM base URL from its
+    argument or the environment. A service is invoked as a SQL method over a
+    session, so there is no URL to resolve.
 
     Gated like :func:`init`: the engine is reachable only through
     ``SDMClient``, so both entry points must refuse a direct call rather than

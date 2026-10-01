@@ -51,11 +51,11 @@ The first release is being assembled. Nothing here has shipped yet.
   workspace's own identity, so a notebook supplies no URL or key. `predict()`
   works as it does against a NIM; `fit()` is refused, since a serving endpoint
   has no sessions. Needs the new `databricks-serving` extra. It sends the
-  same `request_json`/`response_json` envelope as the relational engine's
-  serving client.
+  frozen `request_json`/`response_json` envelope every deployed endpoint
+  reads and writes.
 - Prediction requests from `SDMClient.for_databricks_serving` name sdm-client
   in their User-Agent (`nvidia_sdm-client/<version>`); queries that sample a
-  warehouse do not, nor does the engine's own `init_databricks_serving` client.
+  warehouse do not.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a

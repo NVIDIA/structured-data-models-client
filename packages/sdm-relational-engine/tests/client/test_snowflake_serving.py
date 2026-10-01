@@ -4,10 +4,9 @@
 
 """The Snowflake serving transport: naming, the payload cap, and the reply.
 
-The shared boundary is covered once against the Databricks transport; what is
-tested here is what Snowflake decides differently -- a service is named rather
-than addressed by URL, the payload travels as a bind parameter, and the reply
-arrives as a SQL row rather than a prediction envelope.
+A service is named rather than addressed by URL, the payload travels as a bind
+parameter, and the reply arrives as a SQL row rather than a prediction
+envelope.
 """
 
 from __future__ import annotations

@@ -4,9 +4,8 @@
 
 """Invoke Kumo Relational through a Snowpark Container Services model service.
 
-The peer of :mod:`sdm_relational_engine.client.databricks_serving`, and the same contract:
-one ``request_json`` row in, one ``response_json`` row out. What differs is how
-the service is reached.
+The boundary is the frozen v1 contract: one ``request_json`` row in, one
+``response_json`` row out.
 
 A Snowflake model service is invoked as a SQL method on the service,
 ``SELECT <service>!PREDICT(?)``, over a Snowpark session or a Snowflake

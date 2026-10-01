@@ -42,13 +42,8 @@ Source = "https://github.com/NVIDIA/structured-data-models-client"
 Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
 
 [project.optional-dependencies]
-# Invoking a served model. Separate from the `databricks` extra below, which
-# reads Unity Catalog over SQL; either is useful without the other.
-databricks-serving=[
-    "databricks-sdk>=0.68.0,<1.0",
-]
-# The Snowflake counterpart, separate from the `snowflake` extra below for the
-# same reason: reading a warehouse and invoking a served model are unrelated.
+# Invoking a model served on Snowflake. Separate from the `snowflake` extra
+# below, which reads a warehouse; either is useful without the other.
 snowflake-serving=[
     "snowflake-snowpark-python>=1.20",
 ]

@@ -10,7 +10,6 @@ from sdm_relational_engine.client.engine_access import (
     global_state as global_state,
     init,
     init_client,
-    init_databricks_serving,
     init_snowflake_serving,
 )
 
@@ -48,7 +47,6 @@ __all__ = [
     'close_client',
     'init',
     'init_client',
-    'init_databricks_serving',
     'init_snowflake_serving',
 ]
 
@@ -58,10 +56,10 @@ def __getattr__(name: str) -> object:
 
     Importing it here would pull in ``backend.local``, which requires the
     compiled neighbour sampler at import time. That made every path through
-    this package depend on the extension, including the Databricks and
-    Snowflake serving paths, which run inference on the endpoint and never
-    sample locally. Deferring the import keeps the requirement where the
-    requirement actually is.
+    this package depend on the extension, including the Snowflake serving
+    path, which runs inference on the service and never samples locally.
+    Deferring the import keeps the requirement where the requirement actually
+    is.
     """
     if name == 'LocalTable':
         from .backend.local import LocalTable

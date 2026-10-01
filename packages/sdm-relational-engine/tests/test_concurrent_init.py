@@ -235,7 +235,7 @@ def test_every_setting_is_still_writable() -> None:
         ('_timeout', 30.0),
         ('_max_retries', 5),
         ('_client_factory', None),
-        ('_serving_kind', 'databricks'),
+        ('_serving_kind', 'snowflake'),
         ('_serving_endpoint', 'an-endpoint'),
         ('_serving_platform_client', None),
         ('_serving_overrides', {'a': 1}),

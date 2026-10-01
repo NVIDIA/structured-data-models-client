@@ -8,7 +8,6 @@ from sdm_relational_engine._version import __version__
 from sdm_relational_engine.client.client import NimClient
 from sdm_relational_engine.client.initialization import (
     init,
-    init_databricks_serving,
     init_snowflake_serving as init_snowflake_serving,
     set_log_level,
 )
@@ -57,6 +56,5 @@ __all__ = [
     '__version__',
     'global_state',
     'init',
-    'init_databricks_serving',
     'set_log_level',
 ]

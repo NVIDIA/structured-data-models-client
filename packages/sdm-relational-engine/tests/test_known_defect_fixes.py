@@ -32,8 +32,8 @@ def test_the_package_root_does_not_import_the_local_backend() -> None:
 
     ``backend.local`` raises at import unless the extension is present, so a
     module-scope import here made every path through the package depend on it,
-    including the Databricks and Snowflake serving paths that run inference on
-    the endpoint and never sample locally. Asserted structurally because the
+    including the Snowflake serving path that runs inference in the service
+    and never samples locally. Asserted structurally because the
     extension is present wherever these tests run, so importing it cannot be
     observed here.
     """
