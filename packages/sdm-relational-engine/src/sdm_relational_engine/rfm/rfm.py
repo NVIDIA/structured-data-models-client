@@ -895,16 +895,18 @@ class KumoRelational:
 
         * ``target_transforms``: Target preprocessing transforms to vary
           across estimators. Supported values are ``"clip"``, ``"power"``,
-          ``"quantile"``, and ``None``. Defaults to ``["quantile"]``.
+          ``"quantile"``, and ``None``. Defaults to ``["quantile"]``. The
+          SDM-backed NIM accepts only ``["quantile"]``, which it does not
+          apply: its model standardizes targets itself.
         * ``output_type``: How to summarize the output distribution. Supported
           values are ``"median"``, ``"mean"`` and ``"quantiles"``. Defaults to
           ``"median"``. ``"quantiles"`` returns the full distribution as
           additional ``Q_<level>`` columns alongside the point prediction.
-          ``"mean"`` is unreliable on **zero-inflated regression targets**:
-          once roughly 40% of the predicted quantile grid sits at zero, the
-          NIM returns exactly ``0.0`` for every entity, with no error --
-          which is precisely the data shape a mean is chosen for. Prefer
-          ``"median"`` or ``"quantiles"`` there.
+          The SDM-backed NIM takes ``"median"`` (the 50th of its 999 predicted
+          quantiles) or ``"mean"`` (their average). On a **zero-inflated
+          regression target** the median is exactly ``0.0`` once half of that
+          grid sits at zero, while the mean stays above it: ask for the mean,
+          or for the quantiles, when that difference matters.
 
         A key other than those listed above is rejected, naming the offending
         key: nothing forwards an unknown key to the NIM, so accepting one could
