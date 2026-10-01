@@ -60,11 +60,16 @@ jobs:
       - run: |
           pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
             -e './packages/sdm-client' \
-            -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]' \
+            -e './packages/sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
             -e './packages/sdm-relational-engine'
+      # Every session a source takes too, so each driver's types are its own
+      # rather than Any. pyspark-client is pyspark's Python without its jars.
+      - run: pip install snowflake-snowpark-python pyspark-client
       - run: |
           mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src \
             packages/sdm-connectors/src packages/sdm-relational-engine/src
+      # What a caller's type checker infers for a source, and what it refuses.
+      - run: mypy packages/sdm-connectors/tests/typing/check_sources.py
 
   # Every interpreter the four pure-python distributions classify. The
   # internal pipeline runs one of them, so a defect specific to any other
@@ -75,14 +80,31 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
+    # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
+    # missing DSN or driver into a failure, where a skip would read as a pass.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: sdm_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      # postgres and databricks are here for their drivers, not for a server:
-      # those tests mock the connection. Without the drivers, importing the
-      # backend raises and every test covering them skips.
+      # databricks is here for its driver, not for a server: those tests mock
+      # the connection. Without the driver, importing the backend raises and
+      # every test covering it skips.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*'
           pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' \
@@ -95,6 +117,23 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
+    # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
+    # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
+    # missing DSN or driver into a failure, where a skip would read as a pass.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: sdm_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -104,17 +143,22 @@ jobs:
       # ruff is here for the root suite, not for linting: the test that
       # checks the engine ignore-list note shells out to it and skips
       # without it, which would make that check vacuous here.
+      # The Databricks and Snowflake drivers are for the offline tests of those
+      # backends, which skip whole modules without them; pyyaml reads the
+      # semantic-view fixtures, and `explain` carries the SDK the explanation
+      # tests fake around.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*'
           pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
-            -e './packages/sdm-connectors[sqlite,duckdb]'
-          pip install -e './packages/sdm-relational-engine[test]'
-      # No marker filter, exactly as the internal pipeline runs it. The
-      # live suites skip themselves when their credentials are absent, so
-      # excluding them here would only hide a test that stopped skipping.
+            -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
+            pyyaml
+          pip install -e './packages/sdm-relational-engine[test,explain]'
+      # The same marker filter as the internal pipeline. The live warehouse
+      # tests are deselected by name, so a skip left in this job's report is
+      # a test that meant to run here and could not.
       - run: |
           cd packages/sdm-relational-engine
-          python -m pytest tests -q
+          python -m pytest tests -q -m 'not live_warehouse'
       # The client's suite again, with an engine present. The test job installs
       # none, so every client test that needs one skips there and runs nowhere.
       - run: |
