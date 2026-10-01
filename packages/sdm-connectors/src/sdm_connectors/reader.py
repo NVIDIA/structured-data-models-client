@@ -159,7 +159,8 @@ def read_table(
 
     Raises:
         ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a bad argument pair,
-            ``QUERY_FAILED`` if the statement does not execute.
+            ``QUERY_FAILED`` if the statement does not execute, its result
+            cannot be read, or its transaction cannot be ended.
     """
     sql = resolve_sql(table=table, query=query)
     # The transaction is inside the outer guard, so a commit or rollback that
