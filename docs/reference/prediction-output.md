@@ -27,6 +27,60 @@ would make `row_index` no longer identify a row, so they arrive under
 `rankings`, and under `prediction` when that is asked for, as a list per entity.
 Three entities ranked `TOP 3` come back as three rows, not nine.
 
+## A ranking can hold fewer than k candidates
+
+A ranking is asked as one yes-or-no question per candidate: will this entity link to it in the window?
+Each question learns from a sampled context of other entities, and if none of them linked to a candidate in the window, that context holds one answer only.
+The endpoint refuses such a question, so the client leaves that candidate out rather than refusing the whole ranking.
+No call is sent for it, and it gets no score: it is in no row's `prediction` or `rankings`.
+
+The result names the candidates it left out, in the order you passed them:
+
+```python
+result = client.predict(request, model=KumoRelational())
+result.unscored_candidates  # (13, 14), or () when every candidate was scored
+```
+
+Each row then ranks only the scored candidates, so it can hold fewer than `k`.
+The client warns once, naming the candidates it left out.
+A candidate's context is shared by every entity in the ranking, so a candidate left out for one entity is left out for all.
+If every candidate is left out there is nothing to rank, and `predict()` raises `UnsupportedRequestError` before sending anything.
+
+A larger `num_context_samples` can reach entities that did link to a candidate.
+On sparse data, such as a catalogue where most products sell rarely, it often can't.
+
+**Recommended pattern: rank over a table of pairs.**
+When you can provide a table, or a view, with one row per (entity, candidate) pair, ask one classification over the pairs instead.
+Each pair is scored from the features of its entity and its candidate, and the context pools every pair, so a candidate nobody linked to recently is still scored.
+It is one call rather than one per candidate.
+The events table needs a `pair_id` column linking each event to its pair.
+The pairs table should hold the pairs you want scored, plus enough other pairs, some that linked and some that didn't, for the context to learn from.
+
+```python
+schema = Schema.from_source(
+    source,
+    primary_keys={
+        'customers': 'customer_id',
+        'products': 'product_id',
+        'orders': 'order_id',
+        'pairs': 'pair_id',
+    },
+    time_columns={'orders': 'ordered_at'},
+    relationships=[
+        Relationship('orders', 'pair_id', 'pairs', 'pair_id'),
+        Relationship('pairs', 'customer_id', 'customers', 'customer_id'),
+        Relationship('pairs', 'product_id', 'products', 'product_id'),
+    ],
+)
+# Here a pair_id is '<customer_id>_<product_id>'; rank customer 42's candidates.
+request = PredictiveQuery(
+    'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH pairs.pair_id',
+    schema,
+).materialize(indices=[f'42_{product}' for product in candidates])
+scores = client.predict(request, model=KumoRelational()).to_pandas()
+ranking = scores.sort_values('probability_True', ascending=False)
+```
+
 ## What a regression reports
 
 The relational model predicts a distribution for a regression, and `prediction` is its median.

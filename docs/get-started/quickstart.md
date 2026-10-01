@@ -190,6 +190,12 @@ has to be a relationship into the table whose rows you want ordered; ranking an
 ordinary column is refused, because which labels a column takes is a different
 question.
 
+A candidate that no entity in its sampled context reached in the window cannot
+be scored, so it is left out of every row and named on
+`result.unscored_candidates`, and a row can hold fewer than `k`.
+[Prediction output](../reference/prediction-output.md) says why, and how a
+table of (entity, candidate) pairs scores every candidate.
+
 A forecast is asked once per step, each over the window moved along by its own
 span. Every entity comes back once per step, and `forecast_step` numbers them
 from one:
