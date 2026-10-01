@@ -256,13 +256,25 @@ class SDMClient:
                 a re-sent create would orphan a pinned context on the
                 endpoint.
         """
-        self._transport: WireTransport = Transport(
-            url,
-            api_key,
-            verify_ssl=verify_ssl,
-            timeout=timeout,
-            max_retries=max_retries,
+        self._start(
+            Transport(
+                url,
+                api_key,
+                verify_ssl=verify_ssl,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
         )
+
+    def _start(self, transport: WireTransport) -> None:
+        r"""Set everything a client holds, given what carries its requests.
+
+        The one place a client's state is set. :meth:`for_databricks_serving`
+        builds its client without ``__init__``, so state set only there was
+        missing from a serving client until something reached for it. Add
+        new state here, not to ``__init__``.
+        """
+        self._transport: WireTransport = transport
         self._adapters: dict[str, ModelAdapter] = {}
         self._pinned: set[FittedModel] = set()
 
@@ -318,11 +330,11 @@ class SDMClient:
         )
 
         client = cls.__new__(cls)
-        client._transport = DatabricksServingTransport(
-            endpoint, workspace_client, timeout=timeout
+        client._start(
+            DatabricksServingTransport(
+                endpoint, workspace_client, timeout=timeout
+            )
         )
-        client._adapters = {}
-        client._pinned = set()
         return client
 
     @property

@@ -115,6 +115,18 @@ def opened(**kwargs: Any) -> tuple[SDMClient, Endpoints]:
     return client, workspace.serving_endpoints
 
 
+def test_a_serving_client_holds_what_an_http_client_holds():
+    """A serving client is built without ``__init__``, so state added only
+    there was missing from it until a call reached for it: ``close()`` raised
+    ``AttributeError`` on the set of pinned contexts. Both now set their
+    state in one place, and this holds them to the same attributes.
+    """
+    client, _ = opened()
+    with SDMClient('http://localhost:8000') as nim:
+        assert set(vars(client)) == set(vars(nim))
+    client.close()
+
+
 def asked() -> Any:
     return PredictiveQuery(QUERY, schema()).materialize(indices=[3, 7])
 
