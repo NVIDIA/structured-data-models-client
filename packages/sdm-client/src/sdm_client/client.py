@@ -322,6 +322,7 @@ class SDMClient:
             endpoint, workspace_client, timeout=timeout
         )
         client._adapters = {}
+        client._pinned = set()
         return client
 
     @property
