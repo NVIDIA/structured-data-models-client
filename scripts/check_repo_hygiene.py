@@ -53,6 +53,11 @@ SPDX_ROOTS = (
 )
 SPDX_EXCLUDE_PARTS = {'grammar', '__pycache__'}
 
+# A comment syntax that starts with `#` is the only thing the header needs,
+# which is every suffix here. Checking only `.py` meant adding a root full of
+# YAML and shell changed nothing, and looked like it had.
+SPDX_SUFFIXES = {'.py', '.yml', '.yaml', '.sh', '.toml', '.cfg'}
+
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
     re.compile(r'gitlab-master\.nvidia\.com'),
@@ -163,7 +168,7 @@ def check_spdx() -> int:
     missing = []
     for path in tracked_files():
         relative = path.relative_to(REPO_ROOT)
-        if path.suffix != '.py':
+        if path.suffix not in SPDX_SUFFIXES:
             continue
         if not any(str(relative).startswith(root) for root in SPDX_ROOTS):
             continue
