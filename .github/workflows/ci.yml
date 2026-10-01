@@ -101,8 +101,11 @@ jobs:
         with:
           python-version: '3.12'
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # ruff is here for the root suite, not for linting: the test that
+      # checks the engine ignore-list note shells out to it and skips
+      # without it, which would make that check vacuous here.
       - run: |
-          pip install --upgrade pip
+          pip install --upgrade pip 'ruff==0.16.*'
           pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
             -e './packages/sdm-connectors[sqlite,duckdb]'
           pip install -e './packages/sdm-relational-engine[test]'
