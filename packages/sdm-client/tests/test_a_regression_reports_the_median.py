@@ -136,6 +136,31 @@ def test_the_mean_is_sent_when_it_is_asked_for(requests_mock):
     assert body['output']['prediction_statistic'] == 'mean'
 
 
+@pytest.mark.parametrize(
+    'options, statistic',
+    [({}, 'median'), ({'prediction_statistic': 'mean'}, 'mean')],
+    ids=['by default', 'when asked'],
+)
+def test_a_session_scores_with_the_statistic_asked_for(
+    options, statistic, requests_mock
+):
+    """A session pins the context and leaves the output to each scoring call,
+    so that call is where the statistic has to travel."""
+    requests_mock.post(f'{URL}/v1/sessions', json={'session_id': 's1'})
+    scored = requests_mock.post(
+        f'{URL}/v1/sessions/s1/predictions',
+        json=lambda call, _: answer(call.json()),
+    )
+    requests_mock.delete(f'{URL}/v1/sessions/s1', status_code=204)
+
+    with SDMClient(URL) as client:
+        with client.fit(asked(**options), model=KumoRelational()) as fitted:
+            fitted.predict(asked(**options))
+
+    (body,) = [call.json() for call in scored.request_history]
+    assert body['output']['prediction_statistic'] == statistic
+
+
 def test_every_step_of_a_forecast_reports_the_statistic_asked_for():
     request = asked(
         'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 2 TIMEFRAMES '
