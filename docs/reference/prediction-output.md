@@ -36,7 +36,7 @@ Pass `materialize(..., prediction_statistic='mean')` for the mean instead.
 Choose `'mean'` when predictions will be added up across entities, such as total demand over products.
 Means add up and medians don't, so on a right-skewed target the sum of the medians understates the total.
 The mean is approximate: the NIM averages the model's 999 predicted quantiles, which trims the tails.
-On a zero-inflated target the median is exactly 0 for every entity the model predicts to be zero at least half the time.
+On a zero-inflated target neither statistic is pinned to 0, and both can land slightly below it, because the predicted quantiles are not clipped to the target's range.
 
 A regression on the tabular model reports the mean, that model's default, and doesn't take `prediction_statistic`.
 
