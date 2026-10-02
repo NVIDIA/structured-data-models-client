@@ -40,7 +40,11 @@ class _TimeSpelling(NamedTuple):
     def spell(self, times: pd.Series) -> pd.Series:
         spelled = times.dt.strftime(f'%Y-%m-%d{self.separator}%H:%M:%S')
         if self.digits:
-            fraction = times.dt.strftime('%f').str.ljust(self.digits, '0')
+            # `%f` stops at microseconds, and a stored nanosecond sorts after
+            # a bound padded with zeros, so the last three digits are added.
+            nanos = times.dt.nanosecond.astype(str).str.zfill(3)
+            fraction = times.dt.strftime('%f') + nanos
+            fraction = fraction.str.ljust(self.digits, '0')
             spelled = spelled + '.' + fraction.str[: self.digits]
         return spelled + self.suffix
 

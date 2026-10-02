@@ -136,6 +136,9 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A declared foreign key to a unique column, not the primary key, was dropped with a warning that blamed the dtypes.**
   When the referenced table has no primary key, `Schema.from_source` now keys it by that column, as the catalog says it identifies a row, and checks it like any other key.
   When the table has another primary key, the warning says so and names the `primary_keys=` that would let the key join.
+- **SQLite timestamps stored with nanoseconds put a row on a window's edge on the wrong side of it.**
+  A window bound was spelled with microseconds and zeros after them, so `.123456000` sorted before a stored `.123456789`, dropping the row at the window's end and keeping the one at its start.
+  The bound now carries all nine digits before it is cut to the stored length.
 - **Reading a Postgres database held a transaction open.** Without
   autocommit, psycopg keeps the first statement's transaction, and its locks,
   until a commit, so a graph kept writers to its tables waiting, and one failed
