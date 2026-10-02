@@ -42,7 +42,9 @@ class _TimeSpelling(NamedTuple):
         if self.digits:
             # `%f` stops at microseconds, and a stored nanosecond sorts after
             # a bound padded with zeros, so the last three digits are added.
-            nanos = times.dt.nanosecond.astype(str).str.zfill(3)
+            # A NaT turns the column to floats, which would print as `0.0`.
+            nanos = times.dt.nanosecond.fillna(0).astype('int64')
+            nanos = nanos.astype(str).str.zfill(3)
             fraction = times.dt.strftime('%f') + nanos
             fraction = fraction.str.ljust(self.digits, '0')
             spelled = spelled + '.' + fraction.str[: self.digits]

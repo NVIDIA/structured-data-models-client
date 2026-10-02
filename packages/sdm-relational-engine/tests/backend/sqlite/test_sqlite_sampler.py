@@ -131,6 +131,37 @@ def test_a_table_without_a_time_column_falls_back() -> None:
     assert spelling.separator == ' ' and spelling.digits == 0
 
 
+@pytest.mark.parametrize(
+    ('stored', 'spelled'),
+    [
+        ('2024-05-01 00:00:00.000', ['14:00:00.123', '14:00:00.123']),
+        ('2024-05-01 00:00:00.000000', ['14:00:00.123456', '14:00:00.123456']),
+        (
+            '2024-05-01 00:00:00.000000000',
+            ['14:00:00.123456000', '14:00:00.123456007'],
+        ),
+    ],
+)
+def test_a_missing_time_leaves_the_others_spelled_as_they_are(
+    stored: str, spelled: list[str]
+) -> None:
+    r"""A NaT among the times, as an entity's own time column with NULLs
+    gives, turns the nanoseconds to floats, which printed as ``0.0``.
+    """
+    times = pd.Series(
+        pd.to_datetime(
+            [
+                '2024-12-30 14:00:00.123456',
+                '2024-12-30 14:00:00.123456007',
+                None,
+            ]
+        )
+    )
+    got = _sampler((stored,))._time_spelling('t').spell(times)
+    assert got[:2].tolist() == [f'2024-12-30 {time}' for time in spelled]
+    assert pd.isna(got[2])
+
+
 def test_a_window_edge_keeps_its_nanoseconds(tmp_path: Any) -> None:
     r"""``%f`` stops at microseconds, so a bound on a nanosecond edge was
     spelled ``.123456000``, which sorts before the stored ``.123456789``: the
