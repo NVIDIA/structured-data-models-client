@@ -11,6 +11,7 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import json
 import os
@@ -18,7 +19,8 @@ import pathlib
 import re
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from types import ModuleType
 
 import pytest
 
@@ -78,37 +80,26 @@ def _run(script: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _predictive_query_types_exposed() -> list[str]:
-    """Where a public package names or hands out a ``predictive_query`` type.
-
-    The public packages are the ones the snapshot records. A type is caught by
-    its module when an annotation is an object, and by name when it is a
-    string: every capitalised name ``predictive_query`` exports that no public
-    package exports itself, so ``sdm_client.Column`` is not mistaken for
-    ``predictive_query.Column``.
-    """
-    import dataclasses
-    import importlib
-    import inspect
-
-    internal = importlib.import_module('predictive_query')
-    public = [
+def _public_packages() -> list[ModuleType]:
+    """The packages the snapshot records, which are the public ones."""
+    return [
         importlib.import_module(name)
         for name in json.loads((GOLDEN / 'public_api.json').read_text())
     ]
-    own = {name for module in public for name in module.__all__}
-    names = sorted(
-        name
-        for name in internal.__all__
-        if name[:1].isupper() and name not in own
-    )
-    pattern = re.compile(
-        r'\bpredictive_query\b|\b(?:' + '|'.join(map(re.escape, names)) + r')\b'
-    )
 
-    def internal_module(obj: object) -> bool:
-        module = getattr(obj, '__module__', None) or ''
-        return module.split('.')[0] == 'predictive_query'
+
+def _exposed(
+    pattern: re.Pattern[str], internal: Callable[[object], bool]
+) -> list[str]:
+    """Where a public package names or hands out an internal type.
+
+    A type is caught by ``internal`` when an annotation is an object, and by
+    ``pattern`` when it is a string. Every public name is read: its signature,
+    a dataclass field, a property's return, a base class, or an attribute
+    value, following first-party values one level at a time.
+    """
+    import dataclasses
+    import inspect
 
     def signature(where: str, function: object) -> list[str]:
         try:
@@ -130,13 +121,13 @@ def _predictive_query_types_exposed() -> list[str]:
     seen: set[type] = set()
 
     def walk(where: str, owner: type) -> None:
-        if owner in seen or internal_module(owner):
+        if owner in seen or internal(owner):
             return
         seen.add(owner)
         found.extend(
             f'{where} inherits {base.__module__}.{base.__qualname__}'
             for base in owner.__mro__
-            if internal_module(base)
+            if internal(base)
         )
         hints = dict(vars(owner).get('__annotations__', {}))
         if dataclasses.is_dataclass(owner):
@@ -157,24 +148,66 @@ def _predictive_query_types_exposed() -> list[str]:
                 found.extend(signature(f'{where}.{name}', member.__func__))
             elif callable(member):
                 found.extend(signature(f'{where}.{name}', member))
-            elif internal_module(type(member)):
+            elif internal(type(member)):
                 found.append(f'{where}.{name} holds a {type(member)!r}')
             elif (getattr(type(member), '__module__', '') or '').startswith(
                 'sdm_'
             ):
                 walk(f'{where}.{name}', type(member))
 
-    for module in public:
+    for module in _public_packages():
         for name in module.__all__:
             obj = getattr(module, name)
             where = f'{module.__name__}.{name}'
-            if internal_module(obj) or internal_module(type(obj)):
-                found.append(f'{where} is from predictive_query')
+            if internal(obj) or internal(type(obj)):
+                found.append(f'{where} is internal')
             elif inspect.isclass(obj):
                 walk(where, obj)
             elif callable(obj):
                 found.extend(signature(where, obj))
     return found
+
+
+def _predictive_query_types_exposed() -> list[str]:
+    """Where a public package names or hands out a ``predictive_query`` type.
+
+    Caught by its module when an annotation is an object, and by name when it
+    is a string: every capitalised name ``predictive_query`` exports that no
+    public package exports itself, so ``sdm_client.Column`` is not mistaken for
+    ``predictive_query.Column``.
+    """
+    internal = importlib.import_module('predictive_query')
+    own = {name for module in _public_packages() for name in module.__all__}
+    names = sorted(
+        name
+        for name in internal.__all__
+        if name[:1].isupper() and name not in own
+    )
+    pattern = re.compile(
+        r'\bpredictive_query\b|\b(?:' + '|'.join(map(re.escape, names)) + r')\b'
+    )
+
+    def from_predictive_query(obj: object) -> bool:
+        module = getattr(obj, '__module__', None) or ''
+        return module.split('.')[0] == 'predictive_query'
+
+    return _exposed(pattern, from_predictive_query)
+
+
+def _model_descriptions_exposed() -> list[str]:
+    """Where a public package names or hands out a ``ModelSpec`` or the
+    ``RuntimeContract`` it carries.
+
+    They are how the client describes a model to itself. A model's public
+    description is ``Model.name`` and ``SDMClient.capabilities()``.
+    """
+    from sdm_client.base import ModelSpec, RuntimeContract
+
+    described = (ModelSpec, RuntimeContract)
+    pattern = re.compile(
+        r'\b(?:' + '|'.join(kind.__name__ for kind in described) + r')\b'
+    )
+    return _exposed(pattern, lambda obj: any(obj is kind for kind in described))
 
 
 class TestPublicSurface:
@@ -200,6 +233,21 @@ class TestPublicSurface:
         assert not exposed, (
             '`predictive_query` is not public (docs/reference/stability.md), '
             'but these public names expose its types:\n' + '\n'.join(exposed)
+        )
+
+    def test_no_public_name_hands_out_a_model_s_internal_description(self):
+        """``ModelSpec`` and ``RuntimeContract`` are internal, so nothing
+        public may expose them.
+
+        ``RuntimeContract`` carries no ``predictive_query`` type, so the test
+        above does not see it, and the snapshot would record a property that
+        returned one as an attribute name and nothing more.
+        """
+        exposed = _model_descriptions_exposed()
+        assert not exposed, (
+            '`ModelSpec` and `RuntimeContract` are not public '
+            '(docs/reference/stability.md), but these public names expose '
+            'them:\n' + '\n'.join(exposed)
         )
 
     def test_the_wire_payloads_match_the_recorded_snapshot(self):
