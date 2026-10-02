@@ -191,7 +191,8 @@ class _Session:
 
     @staticmethod
     def _by_primary_key(query: str, args: Any) -> pa.Table:
-        (payload,) = args
+        # A window's time bounds follow the payload.
+        payload = args[0]
         ids = json.loads(payload)
         table = _TABLES[_source(query)]
         key = _PRIMARY_KEYS[_source(query)]
@@ -314,6 +315,46 @@ def test_neighbours_come_back_in_the_order_they_were_chosen(
     order_by = sampler._neighbor_order_by('orders', refs['ts'], refs['user_id'])
     assert query.rstrip().endswith(f'ORDER BY TMP.__KUMO_BATCH__, {order_by}')
     assert all(ref in order_by for ref in refs.values())
+
+
+def test_the_time_bounds_of_a_window_are_bound_values(
+    session: _Session, graph: Graph
+) -> None:
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    anchor = pd.Series(pd.to_datetime(['2024-02-01', '2024-03-01']))
+
+    before = len(session.calls)
+    sampler._by_time(
+        'orders',
+        'user_id',
+        pd.Series([1, 2]),
+        anchor_time=anchor,
+        min_offset=pd.DateOffset(days=-30),
+        max_offset=pd.DateOffset(days=0),
+        columns={'user_id', 'ts'},
+    )
+    sampler._by_fkey(
+        'orders',
+        'user_id',
+        pd.Series([1, 2]),
+        num_neighbors=2,
+        anchor_time=anchor,
+        columns={'user_id', 'ts'},
+    )
+    windows = [
+        (query, args)
+        for query, args in session.calls[before:]
+        if 'posexplode' in query
+    ]
+
+    assert len(windows) == 2
+    by_time, by_fkey = windows
+    assert by_time[1][1:] == ['2024-03-01 00:00:00', '2024-01-02 00:00:00']
+    assert by_fkey[1][1] == '2024-03-01 00:00:00'
+    for query, args in windows:
+        assert len(args) == 3
+        assert "'2024" not in query
+        assert query.count('?') == 3
 
 
 def test_every_key_is_counted_in_one_statement(

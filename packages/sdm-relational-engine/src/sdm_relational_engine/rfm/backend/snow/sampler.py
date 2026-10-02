@@ -338,15 +338,17 @@ class SnowSampler(SQLSampler):
             f'JOIN {self.source_name_dict[table_name]}\n'
             f'  ON {key_ref} = TMP.__KUMO_ID__\n'
         )
+        bounds: list[str] = []
         if end_time is not None and start_time is not None:
             assert time_column is not None
             time_ref = self.table_column_ref_dict[table_name][time_column]
             sql += (
                 f' AND {time_ref} <= TMP.__KUMO_END_TIME__\n'
                 f' AND {time_ref} > TMP.__KUMO_START_TIME__\n'
-                f"WHERE {time_ref} <= '{end_time.max()}'\n"
-                f"  AND {time_ref} > '{start_time.min()}'\n"
+                f'WHERE {time_ref} <= ?\n'
+                f'  AND {time_ref} > ?\n'
             )
+            bounds = [end_time.max(), start_time.min()]
         sql += (
             'QUALIFY ROW_NUMBER() OVER (\n  PARTITION BY TMP.__KUMO_BATCH__\n'
         )
@@ -363,7 +365,7 @@ class SnowSampler(SQLSampler):
         sql += f'ORDER BY TMP.__KUMO_BATCH__, {order_by}'
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:
-            cursor.execute(sql, (payload,))
+            cursor.execute(sql, (payload, *bounds))
             table = cursor.fetch_arrow_all(force_return_table=True)
 
         batch = table['__KUMO_BATCH__'].cast(pa.int64()).to_numpy()
@@ -430,13 +432,16 @@ class SnowSampler(SQLSampler):
         )
         if start_time is not None:
             sql += f'AND {time_ref} > TMP.__KUMO_START_TIME__\n'
-        # Add global time bounds to enable partition pruning:
-        sql += f"WHERE {time_ref} <= '{end_time.max()}'"
+        # Add global time bounds to enable partition pruning, bound like
+        # every other value rather than written into the SQL as a literal:
+        sql += f'WHERE {time_ref} <= ?'
+        bounds = [end_time.max()]
         if start_time is not None:
-            sql += f"\nAND {time_ref} > '{start_time.min()}'"
+            sql += f'\nAND {time_ref} > ?'
+            bounds.append(start_time.min())
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:
-            cursor.execute(sql, (payload,))
+            cursor.execute(sql, (payload, *bounds))
             table = cursor.fetch_arrow_all(force_return_table=True)
 
         batch = table['__KUMO_BATCH__'].cast(pa.int64()).to_numpy()
