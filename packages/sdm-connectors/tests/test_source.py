@@ -126,6 +126,14 @@ def test_a_source_is_the_class_that_fits_its_connection(
             'needs its name',
             'INVALID_CONNECTOR_ARGS',
         ),
+        (
+            lambda: DatabricksSource(_databricks(), catalog='c').semantic_model(
+                'm',
+                trust_expressions='yes',  # type: ignore[arg-type]
+            ),
+            'trust_expressions is True or False',
+            'INVALID_CONNECTOR_ARGS',
+        ),
     ],
 )
 def test_what_a_source_cannot_be_is_refused(
@@ -207,3 +215,13 @@ def test_the_repr_names_where_not_how() -> None:
     assert repr(source.semantic_model('m')) == (
         "SemanticModel('m' in DatabricksSource(catalog='main', schema='sales'))"
     )
+    assert repr(source.semantic_model('m', trust_expressions=True)) == (
+        "SemanticModel('m' in DatabricksSource(catalog='main', schema='sales'), "
+        'trust_expressions=True)'
+    )
+
+
+def test_a_semantic_model_trusts_only_built_in_functions_by_default() -> None:
+    source = DatabricksSource(_databricks(), catalog='main', schema='sales')
+    assert source.semantic_model('m').trust_expressions is False
+    assert source.semantic_model('m', trust_expressions=True).trust_expressions

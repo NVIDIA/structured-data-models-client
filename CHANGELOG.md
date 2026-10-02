@@ -404,6 +404,23 @@ A semantic model's tables are not counted, since the model derives them.
 `SourceTable.duplicate_keys` now holds what the count found, and `None` where nothing was counted, rather than always zero.
 Sampling holds the line too, whatever was checked: an id asked to be scored that more than one row holds is refused, and context sampling keeps one row per key, so no entity appears twice at one anchor time.
 
+**A semantic model's expressions may call only standard SQL functions, unless you trust it.**
+A metric view or semantic view is written by someone else, and its expressions run as SQL under your credentials every time a request is gathered.
+Any function call used to pass, so a view could make sdm-client call a user-defined function, `secret()`, `http_request()`, `ai_query()` or `SYSTEM$WAIT()` as you.
+Now a column whose expression calls anything but a pure, deterministic built-in function is left out, with a conversion message naming the function.
+Qualified and quoted function names, `IDENTIFIER()`, and session values such as `current_user` and `current_date` are left out the same way.
+`source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
+Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
+It also refuses parentheses that do not balance outside quoted text, since a stray `)` could close the query the expression is spliced into.
+Some allowed built-ins are costly or read the session time zone; `docs/about/architecture.md` lists them.
+
+**A metric view's `filter` is applied, or the view is refused.**
+The filter decides which rows a metric view holds, and it used to be reported as unrepresentable and dropped, so a schema and every request read rows the view leaves out.
+A filter on the source table's own columns now limits every read of that table: its preview, its row count, its time range, entity sampling and each lookup read `(SELECT * FROM <source> AS source WHERE (<filter>))` instead of the table.
+A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
+The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
+`parameters` and `materialization` are still left out with a message.
+
 ### Notes for a reviewer
 
 **Graph visualization is kept, and so is its provenance.** `Graph.visualize()`

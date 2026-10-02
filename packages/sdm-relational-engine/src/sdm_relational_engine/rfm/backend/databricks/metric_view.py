@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from sdm_relational_engine.exceptions import KumoRelationalError
+from sdm_relational_engine.rfm.view_expr import (
+    _unsafe_expr_reason,
+    _untrusted_call_reason,
+)
 
 if TYPE_CHECKING:
     from sdm_relational_engine.rfm.backend.databricks import AnyConnection
@@ -28,11 +32,21 @@ _TABLE_REFERENCE_RE = re.compile(
 _CHAIN = rf'(?:{_IDENT})(?:\s*\.\s*(?:{_IDENT}))*'
 _JOIN_CONDITION_RE = re.compile(rf'\s*({_CHAIN})\s*=\s*({_CHAIN})\s*$')
 _IDENT_RE = re.compile(_IDENT)
+# Double quotes delimit a string, not a name, in Databricks SQL.
+_STRING_LITERAL_RE = re.compile(
+    r"'(?:''|\\[\s\S]|[^'\\])*'|\"(?:\"\"|\\[\s\S]|[^\"\\])*\""
+)
 
 
 class UnsupportedJoinError(KumoRelationalError, ValueError):
     r"""Raised when a metric view join cannot be converted into a graph
     edge.
+    """
+
+
+class UnsupportedFilterError(KumoRelationalError, ValueError):
+    r"""Raised when a metric view's filter cannot be applied to its source
+    table.
     """
 
 
@@ -99,12 +113,15 @@ class MetricViewSpec:
         joins: All convertible joins, parents before children.
         columns: All dimensions resolved onto a single table.
         messages: Human-readable messages for every dropped element.
+        filter: The view's ``filter``, a condition on the source table's
+            columns, if it has one.
     """
 
     source: tuple[str, ...]
     joins: list[MetricViewJoin]
     columns: list[MetricViewColumn]
     messages: list[str]
+    filter: str | None = None
 
 
 def unquote_ident(name: str) -> str:
@@ -199,19 +216,31 @@ def strip_alias_qualifier(expr: str, alias: str | Sequence[str]) -> str:
     return _path_pattern(_to_path(alias)).sub('', expr).strip()
 
 
-def parse_metric_view(definition: str) -> MetricViewSpec:
+def parse_metric_view(
+    definition: str, *, trust_expressions: bool = False
+) -> MetricViewSpec:
     r"""Parses a metric view YAML definition into its graph-relevant parts.
 
     Measures define aggregations rather than row-level values, and are
     therefore never part of the returned specification. Elements that cannot
     be represented in a graph (SQL query join sources, composite or
     non-equality join conditions, dimensions referencing multiple tables,
-    filters, parameters, and materializations) are dropped and reported in
+    parameters, and materializations) are dropped and reported in
     :attr:`MetricViewSpec.messages`.
+
+    The ``filter`` decides which rows the view holds, so it is never dropped:
+    it is returned to be applied to the source table, or the view is refused.
+
+    Args:
+        definition: The YAML definition.
+        trust_expressions: Whether the filter may call functions other than
+            pure built-ins.
 
     Raises:
         ValueError: If the definition is not a YAML mapping, misses a source,
             or defines a SQL query as its source.
+        UnsupportedFilterError: If the filter references a joined table, or
+            is not a safe scalar condition.
     """
     import yaml
 
@@ -231,7 +260,7 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
         )
 
     messages: list[str] = []
-    for key in ('filter', 'parameters', 'materialization'):
+    for key in ('parameters', 'materialization'):
         if key in cfg:
             messages.append(
                 f"Ignored the '{key}' section since it cannot "
@@ -335,6 +364,10 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
     candidates.append(((SOURCE_ALIAS,), SOURCE_ALIAS))
     candidates.sort(key=lambda candidate: len(candidate[0]), reverse=True)
 
+    row_filter = _check_filter(
+        cfg.get('filter'), candidates, trust_expressions=trust_expressions
+    )
+
     columns: list[MetricViewColumn] = []
     defined: dict[str, str] = {}
     dim_cfgs = list(cfg.get('dimensions') or []) + list(cfg.get('fields') or [])
@@ -393,7 +426,55 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
         joins=joins,
         columns=columns,
         messages=messages,
+        filter=row_filter,
     )
+
+
+def _check_filter(
+    row_filter: Any,
+    candidates: Sequence[tuple[tuple[str, ...], str]],
+    *,
+    trust_expressions: bool,
+) -> str | None:
+    r"""Returns the filter if it can be applied to the source table alone.
+
+    The graph keeps each join as a table of its own, so a condition on a
+    joined table has no single table to apply to. Dropping it instead would
+    let predictions read rows the view leaves out.
+
+    Args:
+        row_filter: The ``filter`` section, if any.
+        candidates: Every join path or alias a column can be qualified by,
+            with the alias it resolves to.
+        trust_expressions: Whether the filter may call functions other than
+            pure built-ins.
+    """
+    if row_filter is None:
+        return None
+
+    reason: str | None = None
+    if not isinstance(row_filter, str) or not row_filter.strip():
+        reason = 'it is not a SQL condition'
+    else:
+        reason = _unsafe_expr_reason(row_filter, 'databricks')
+    if reason is None:
+        assert isinstance(row_filter, str)
+        masked = _STRING_LITERAL_RE.sub("''", row_filter)
+        for path, alias in candidates:
+            if alias != SOURCE_ALIAS and references_alias(masked, path):
+                reason = f"it references the joined table '{alias}'"
+                break
+    if reason is None and not trust_expressions:
+        assert isinstance(row_filter, str)
+        reason = _untrusted_call_reason(row_filter, 'databricks')
+    if reason is not None:
+        raise UnsupportedFilterError(
+            f'Cannot apply the metric view filter {row_filter!r} since '
+            f'{reason}. The graph would otherwise read rows the view leaves '
+            f'out. Create a regular view with this WHERE clause and point the '
+            f"metric view's source at it"
+        )
+    return row_filter.strip()
 
 
 def resolve_join_keys(

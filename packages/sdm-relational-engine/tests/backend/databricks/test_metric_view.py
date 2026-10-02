@@ -2,7 +2,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import re
+import warnings
 from typing import Any
 
 import pandas as pd
@@ -11,7 +13,7 @@ from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
 )
-from sdm_relational_engine.rfm import Edge, Graph
+from sdm_relational_engine.rfm import Edge, Graph, ViewConversionWarning
 
 try:
     import pyarrow as pa
@@ -20,6 +22,7 @@ try:
         SOURCE_ALIAS,
         JoinKeyRef,
         MetricViewJoin,
+        UnsupportedFilterError,
         UnsupportedJoinError,
         parse_join_condition,
         parse_metric_view,
@@ -378,9 +381,8 @@ dimensions:
     assert [(c.name, c.alias) for c in spec.columns] == [
         ('valid', 'source'),
     ]
+    assert spec.filter == "source.status = 'VALID'"
     assert spec.messages == [
-        "Ignored the 'filter' section since it cannot be represented in a "
-        'graph',
         "Failed to add join 'promos' since only plain table names are "
         'supported as join sources',
         "Failed to add join 'composite' since only single-column equality "
@@ -390,6 +392,108 @@ dimensions:
         "Failed to add dimension 'nested_name' since it references the "
         "skipped join 'nested'",
     ]
+
+
+_FILTERED_YAML = """
+source: cat.sch.facts
+filter: {filter}
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+    joins:
+      - name: regions
+        source: cat.sch.regions
+        on: customers.region_id = regions.region_id
+  - name: promos
+    source: SELECT * FROM cat.sch.promos
+    on: source.promo_id = promos.promo_id
+dimensions:
+  - name: amount
+    expr: source.amount
+"""
+
+
+@pytest.mark.parametrize(
+    'row_filter',
+    [
+        "source.status = 'VALID'",
+        "status = 'VALID' AND amount > 0",
+        "`source`.`status` = 'VALID'",
+        "`order status` IN ('a', 'b')",
+        "source.note <> 'customers.segment'",
+        "UPPER(source.status) = 'VALID' AND source.amount BETWEEN 1 AND 9",
+    ],
+)
+def test_parse_metric_view_source_filter(row_filter: str) -> None:
+    spec = parse_metric_view(
+        _FILTERED_YAML.format(filter=json.dumps(row_filter))
+    )
+
+    assert spec.filter == row_filter
+    assert not any('filter' in message for message in spec.messages)
+
+
+@pytest.mark.parametrize(
+    ('row_filter', 'reason'),
+    [
+        ("customers.segment = 'gold'", "the joined table 'customers'"),
+        ("`customers`.`segment` = 'gold'", "the joined table 'customers'"),
+        ("customers.regions.name = 'EMEA'", "the joined table 'regions'"),
+        ("regions.name = 'EMEA'", "the joined table 'regions'"),
+        ('promos.kind IS NULL', "the joined table 'promos'"),
+        (
+            'source.customer_id IN (SELECT customer_id FROM cat.sch.vip)',
+            "keyword 'SELECT'",
+        ),
+        ('source.customer_id IN (TABLE cat.sch.vip)', "keyword 'TABLE'"),
+        ("secret('scope', 'key') = source.token", "calls 'secret'"),
+        ('my_udf(source.amount) > 0', "calls 'my_udf'"),
+        ('source.amount > 0; DROP TABLE x', "contains ';'"),
+        ('current_date > source.order_date', 'current_date'),
+        ('source.note = $$x$$', "'$$'"),
+        ('escape(source.note)', "calls 'escape'"),
+    ],
+)
+def test_parse_metric_view_refuses_a_filter(
+    row_filter: str, reason: str
+) -> None:
+    definition = _FILTERED_YAML.format(filter=json.dumps(row_filter))
+
+    with pytest.raises(UnsupportedFilterError) as caught:
+        parse_metric_view(definition)
+
+    message = str(caught.value)
+    assert reason in message
+    assert (
+        'Create a regular view with this WHERE clause and point the metric '
+        "view's source at it"
+    ) in message
+    assert isinstance(caught.value, ValueError)
+
+
+def test_parse_metric_view_refuses_a_filter_that_is_not_sql() -> None:
+    with pytest.raises(UnsupportedFilterError, match='not a SQL condition'):
+        parse_metric_view(_FILTERED_YAML.format(filter='true'))
+
+
+def test_a_trusted_filter_may_call_a_udf_but_not_read_a_join() -> None:
+    def parse(row_filter: str) -> Any:
+        return parse_metric_view(
+            _FILTERED_YAML.format(filter=json.dumps(row_filter)),
+            trust_expressions=True,
+        )
+
+    assert parse('my_udf(source.amount) > 0').filter == (
+        'my_udf(source.amount) > 0'
+    )
+    with pytest.raises(UnsupportedFilterError, match='joined table'):
+        parse("customers.segment = 'gold'")
+    with pytest.raises(UnsupportedFilterError, match='SELECT'):
+        parse('source.amount > (SELECT 1)')
+    # A stray `)` would close the filtered subquery and append to it:
+    with pytest.raises(UnsupportedFilterError, match="closes a '\\('"):
+        parse('source.amount > 0) OR (1 = 1')
 
 
 def test_parse_metric_view_duplicate_aliases() -> None:
@@ -910,7 +1014,9 @@ def test_from_databricks_metric_view() -> None:
     assert set(graph.tables) == linked
 
     message = str(caught[0].message)
-    assert "Ignored the 'filter' section" in message
+    assert 'filter' not in message
+    assert fact.row_filter == "source.status = 'VALID'"
+    assert graph['customers'].row_filter is None
     assert "Failed to add join 'promos'" in message
     assert "Failed to add dimension 'promo_kind'" in message
     assert "Failed to add join 'payments'" in message
@@ -1094,6 +1200,75 @@ def test_from_databricks_metric_view_drops_a_hostile_expression() -> None:
     fact = graph['order_lines']
     assert not fact.has_column('leaked')
     assert {column.name for column in fact.columns} == {'product_line'}
+
+
+_UDF_EXPR_YAML = """
+version: "1.1"
+source: cat.sch.order_lines
+dimensions:
+  - name: product_line
+    expr: UPPER(source.product_line)
+  - name: masked
+    expr: my_udf(source.product_line)
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+"""
+
+
+def _udf_metric_view(**kwargs: Any) -> tuple[Graph, list[str]]:
+    connection = _FakeConnection(
+        _metric_view(
+            _UDF_EXPR_YAML, {'product_line': 'string', 'masked': 'string'}
+        )
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv', connection=connection, verbose=False, **kwargs
+        )
+    return graph, connection.sql_log
+
+
+def test_a_dimension_calling_a_udf_is_dropped_before_it_runs() -> None:
+    graph, sql_log = _udf_metric_view()
+
+    fact = graph['order_lines']
+    assert not fact.has_column('masked')
+    assert str(fact['product_line'].expr) == 'UPPER(product_line)'
+    assert not any('my_udf' in sql for sql in sql_log)
+    (message,) = [m for m in graph.conversion_messages if "'masked'" in m]
+    assert "calls 'my_udf'" in message
+    assert 'trust_expressions=True' in message
+
+
+def test_a_trusted_metric_view_keeps_its_udf_dimension(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expr_df = _EXPR_DATA['order_lines'].assign(masked='x')
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+
+    graph, sql_log = _udf_metric_view(trust_expressions=True)
+
+    assert str(graph['order_lines']['masked'].expr) == 'my_udf(product_line)'
+    assert any('my_udf' in sql for sql in sql_log)
+    assert graph.conversion_messages == ()
+
+
+def test_a_trusted_metric_view_still_refuses_a_sub_query() -> None:
+    describe_rows = _metric_view(
+        _HOSTILE_EXPR_YAML, {'product_line': 'string', 'leaked': 'double'}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(describe_rows),
+            verbose=False,
+            trust_expressions=True,
+        )
+
+    assert not graph['order_lines'].has_column('leaked')
 
 
 def test_from_databricks_case_insensitive_identifiers() -> None:
@@ -1296,6 +1471,55 @@ def test_live_metric_view_qualified_name(
     }
 
 
+@pytest.mark.live_warehouse
+def test_live_filtered_metric_view_counts_the_rows_it_holds(
+    connection: 'Connection',
+) -> None:
+    r"""Names a persistent metric view with a source-only ``filter`` and a
+    ``COUNT(1)`` measure through ``DATABRICKS_FILTERED_METRIC_VIEW``. The
+    graph's fact table holds as many rows as the view counts itself.
+    """
+    import os
+
+    import yaml
+
+    name = os.getenv('DATABRICKS_FILTERED_METRIC_VIEW')
+    if not name:
+        pytest.skip('DATABRICKS_FILTERED_METRIC_VIEW names no metric view')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            name, connection=connection, verbose=False
+        )
+
+    from sdm_connectors import quote_ident
+
+    parts = parse_table_reference(name)
+    assert parts is not None
+    quoted = '.'.join(quote_ident(part, '`') for part in parts)
+    definition, *_ = read_metric_view_definition(connection, quoted)
+    cfg = yaml.safe_load(definition)
+    counts = [
+        measure['name']
+        for measure in cfg.get('measures') or []
+        if re.fullmatch(r'COUNT\(\s*(?:1|\*)\s*\)', measure['expr'], re.I)
+    ]
+    if not cfg.get('filter') or not counts:
+        pytest.skip(f'{name} has no filter or no COUNT(1) measure')
+
+    fact = next(
+        table
+        for table in graph.tables.values()
+        if getattr(table, 'row_filter', None) is not None
+    )
+    with connection.cursor() as cursor:
+        cursor.execute(f'SELECT MEASURE(`{counts[0]}`) FROM {quoted}')
+        (expected,) = cursor.fetchone()
+
+    assert fact._get_num_rows() == expected
+
+
 def test_conversion_messages_survive_a_warnings_as_errors_policy() -> None:
     """Partial conversion is the normal outcome for a metric view, and the
     diagnostics used to exist only as one aggregated ``UserWarning``: under
@@ -1323,7 +1547,8 @@ def test_conversion_messages_survive_a_warnings_as_errors_policy() -> None:
     assert issubclass(ViewConversionWarning, UserWarning)
     assert len(graph.conversion_messages) > 0
     assert any(
-        'Ignored the' in message for message in graph.conversion_messages
+        "Failed to add join 'promos'" in message
+        for message in graph.conversion_messages
     )
 
 
@@ -1536,3 +1761,49 @@ def test_from_databricks_wraps_a_driver_exception() -> None:
     assert isinstance(caught.value, KumoRelationalError)
     assert isinstance(caught.value.__cause__, _ServerOperationError)
     assert 'Databricks' in str(caught.value)
+
+
+def test_the_filter_wraps_every_read_of_the_fact_table() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'sales_mv', connection=_FakeConnection(), verbose=False
+        )
+
+    fact = graph['order_lines']
+    filtered = (
+        '(SELECT * FROM `cat`.`sch`.`order_lines` AS source '
+        "WHERE (source.status = 'VALID'))"
+    )
+    assert fact._quoted_source_name == filtered
+    assert fact.source_name == 'cat.sch.order_lines'
+    assert graph['customers']._quoted_source_name == '`cat`.`sch`.`customers`'
+
+    # A shallow copy, as every gathering takes, keeps the filter:
+    copied = fact.copy('lines')
+    assert copied.row_filter == fact.row_filter
+    assert copied._quoted_source_name == filtered
+
+    # Reading other rows is another graph to anything that caches by name:
+    from sdm_relational_engine.rfm.graph_fingerprint import graph_fingerprint
+
+    name = graph_fingerprint(graph)
+    fact._row_filter = None
+    assert graph_fingerprint(graph) != name
+
+
+def test_a_join_filter_refuses_the_metric_view() -> None:
+    definition = _METRIC_VIEW_YAML.replace(
+        "filter: source.status = 'VALID'", "filter: customers.segment = 'gold'"
+    )
+    describe_rows = [
+        ('View Text', definition, None) if row[0] == 'View Text' else row
+        for row in _DESCRIBE_ROWS
+    ]
+    connection = _FakeConnection(describe_rows)
+
+    with pytest.raises(UnsupportedFilterError, match='regular view'):
+        Graph.from_databricks_metric_view(
+            'sales_mv', connection=connection, verbose=False
+        )
+    assert not any('order_lines' in sql for sql in connection.sql_log)

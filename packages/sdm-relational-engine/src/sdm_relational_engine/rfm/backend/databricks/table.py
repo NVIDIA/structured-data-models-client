@@ -13,6 +13,9 @@ from sdm_connectors import quote_ident
 
 from sdm_relational_engine.exceptions import TableNotFoundError
 from sdm_relational_engine.rfm.backend.databricks import AnyConnection
+from sdm_relational_engine.rfm.backend.databricks.metric_view import (
+    SOURCE_ALIAS,
+)
 from sdm_relational_engine.rfm.base import (
     Column,
     ColumnSpec,
@@ -43,6 +46,9 @@ class DatabricksTable(Table):
         time_column: The name of the time column of this table, if it exists.
         end_time_column: The name of the end time column of this table, if it
             exists.
+        row_filter: A condition on this table's columns, such as a metric
+            view's ``filter``. Every read of the table's rows sees only the
+            rows it holds for. Columns may be qualified by ``source``.
     """
 
     _SQL_TEXT_TYPE = 'STRING'
@@ -61,6 +67,7 @@ class DatabricksTable(Table):
         primary_key: MissingType | str | None = MissingType.VALUE,
         time_column: str | None = None,
         end_time_column: str | None = None,
+        row_filter: str | None = None,
     ) -> None:
 
         if catalog is None or schema is None:
@@ -82,6 +89,7 @@ class DatabricksTable(Table):
         self._connection = connection
         self._catalog = catalog
         self._schema = schema
+        self._row_filter = row_filter
 
         super().__init__(
             name=name,
@@ -98,9 +106,24 @@ class DatabricksTable(Table):
         return '.'.join(names)
 
     @property
+    def row_filter(self) -> str | None:
+        r"""The condition every read of this table's rows is limited to."""
+        return self._row_filter
+
+    @property
     def _quoted_source_name(self) -> str:
+        r"""What every read of this table's rows names in its ``FROM`` or
+        ``JOIN``: the table, or the rows of it its filter holds for.
+        """
         names = [self._catalog, self._schema, self._source_name]
-        return '.'.join([quote_ident(name, BACKTICK) for name in names])
+        name = '.'.join([quote_ident(name, BACKTICK) for name in names])
+        if self._row_filter is None:
+            return name
+        # Left unaliased, since Databricks refuses `(...) AS x TABLESAMPLE`.
+        return (
+            f'(SELECT * FROM {name} AS {SOURCE_ALIAS} '
+            f'WHERE ({self._row_filter}))'
+        )
 
     @property
     def _quoted_catalog(self) -> str:

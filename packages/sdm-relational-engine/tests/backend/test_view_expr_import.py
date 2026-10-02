@@ -287,11 +287,12 @@ def snow_graph(monkeypatch):
 
     from sdm_relational_engine.rfm import Graph
 
-    def build(extra: str = ''):
+    def build(extra: str = '', **kwargs: Any):
         return Graph.from_snowflake_semantic_view(
             'MY_VIEW',
             connection=_Connection(scalar=_SEMANTIC_VIEW.format(extra=extra)),
             verbose=False,
+            **kwargs,
         )
 
     return build
@@ -360,3 +361,38 @@ def test_a_literal_holding_the_table_name_survives_conversion(snow_graph):
         data_type: VARCHAR
 """)
     assert str(graph['USERS']['TAGGED'].expr) == "CONCAT('USERS.', NAME)"
+
+
+_WAIT_DIMENSION = """      - name: WAITED
+        expr: SYSTEM$WAIT(10)
+        data_type: NUMBER
+"""
+
+
+def test_semantic_view_drops_a_column_calling_a_system_function(snow_graph):
+    import warnings
+
+    from sdm_relational_engine.rfm import ViewConversionWarning
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = snow_graph(_WAIT_DIMENSION)
+
+    assert not graph['USERS'].has_column('WAITED')
+    (message,) = graph.conversion_messages
+    assert "'WAITED'" in message and "calls 'SYSTEM$WAIT'" in message
+    assert 'trust_expressions=True' in message
+
+
+def test_a_trusted_semantic_view_keeps_the_column(snow_graph):
+    graph = snow_graph(_WAIT_DIMENSION, trust_expressions=True)
+
+    assert str(graph['USERS']['WAITED'].expr) == 'SYSTEM$WAIT(10)'
+    assert graph.conversion_messages == ()
+
+
+def test_a_trusted_semantic_view_still_refuses_a_sub_query(snow_graph):
+    with pytest.warns(UserWarning, match='LEAKED'):
+        graph = snow_graph(_LEAKED_DIMENSION, trust_expressions=True)
+
+    assert not graph['USERS'].has_column('LEAKED')
