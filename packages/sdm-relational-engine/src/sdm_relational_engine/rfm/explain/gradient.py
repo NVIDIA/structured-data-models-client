@@ -78,10 +78,11 @@ class GraphGradientScore:
         return out
 
     def to_pandas(self) -> pd.DataFrame:
-        r"""Converts table-column scores into a :class:`pandas.DataFrame`.
+        r"""Table and column scores, highest first.
 
-        Args:
-            normalize: If set to :obj:`True`, will normalize the scores.
+        Returns:
+            A frame of ``table``, ``column`` and ``score``, sorted by
+            descending score.
         """
         data: list[tuple[str, str, float]] = []
 

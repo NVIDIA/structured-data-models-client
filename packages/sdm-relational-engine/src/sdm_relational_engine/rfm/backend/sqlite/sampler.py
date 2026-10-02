@@ -69,8 +69,8 @@ class SQLiteSampler(SQLSampler):
 
         # Per table, decided once on first use by `_time_spelling`. Held on
         # the instance rather than in a `functools.cache`, which would key on
-        # `self` and so keep every sampler -- and its graph and its open
-        # connection -- alive for the life of the process.
+        # `self` and so keep every sampler, its graph, and its open connection
+        # alive for the life of the process.
         self._time_spelling_dict: dict[str, _TimeSpelling] = {}
 
         if optimize:
@@ -181,10 +181,11 @@ class SQLiteSampler(SQLSampler):
         ``pandas.to_sql`` write ``YYYY-MM-DD HH:MM:SS``, but an ISO-8601 writer
         emits a ``T``, and ``'...T00:00:00' <= '... 00:00:00'`` is false for
         the same instant because ``T`` sorts after a space. A writer that keeps
-        fractional seconds – pandas through ADBC writes ``.000000`` – breaks
-        it the same way: ``'...T14:00:00.000000' <= '...T14:00:00'`` is false,
-        so a row on the end of a window was dropped and a row on the anchor
-        was counted. Either way, silently: no error, just a different answer.
+        fractional seconds, as pandas through ADBC does with ``.000000``,
+        breaks it the same way: ``'...T14:00:00.000000' <= '...T14:00:00'`` is
+        false, so a row on the end of a window was dropped and a row on the
+        anchor was counted. Either way, silently: no error, just a different
+        answer.
 
         One stored value decides it, and the answer is remembered per table.
         Anything unreadable falls back to ``YYYY-MM-DD HH:MM:SS``, which is

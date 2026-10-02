@@ -163,7 +163,7 @@ def test_binary_prediction_target_rejects_invalid_numeric_value() -> None:
 # Databricks returns DECIMAL as Python `Decimal`, which neither
 # `is_integer_dtype` nor `is_float_dtype` recognises. Before this was handled,
 # such a column was announced as `string` and then killed the request at
-# `json.dumps` with "Object of type Decimal is not JSON serializable" --
+# `json.dumps` with "Object of type Decimal is not JSON serializable",
 # reproduced against a real warehouse on a `decimal(38,0)` id column, at every
 # batch size.
 #

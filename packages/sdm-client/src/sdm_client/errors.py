@@ -91,7 +91,7 @@ class UnknownModelError(StructuredDataError):
     r"""A request named a model this client cannot send.
 
     The contract's ``model`` field is a closed enum, so an id it does not carry
-    cannot be sent at all -- the message names the change that would allow it
+    cannot be sent at all. The message names the change that would allow it
     rather than letting the request fail at the endpoint. Code:
     ``UNKNOWN_MODEL``.
     """
@@ -111,9 +111,10 @@ class UnknownModelError(StructuredDataError):
 class UnsupportedRequestError(StructuredDataError):
     r"""The model cannot answer this request, and says so before sending it.
 
-    Raised when a request asks for something the model's profile rejects --
+    Raised when a request asks for something the model's profile rejects, such
+    as
     related tables for a single-table model, an output field it does not
-    produce -- or exceeds a limit the endpoint enforces. Code:
+    produce, or exceeds a limit the endpoint enforces. Code:
     ``UNSUPPORTED_REQUEST``.
     """
 
@@ -148,7 +149,8 @@ class NimRequestError(StructuredDataError):
 
     Branch on :attr:`code`, not on the status. ``INVALID_REQUEST`` means the
     request has to change and sending it again cannot help; ``429``, ``502``,
-    ``503`` and ``504`` are worth retrying, and this client retries them. The two can disagree: the
+    ``503`` and ``504`` are worth retrying, and this client retries them. The
+    two can disagree: the
     endpoint reports some caller mistakes with a ``500`` and an internal code,
     in a sentence that names exactly what the caller got wrong, and this client
     reports those as the caller's. Where it does, the endpoint's own

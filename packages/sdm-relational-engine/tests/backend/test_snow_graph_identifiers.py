@@ -8,7 +8,7 @@ Doubling the quote character is not sufficient escaping on Snowflake, which
 also honours backslash escapes inside a single-quoted literal, so a name
 containing ``\'`` closes the literal early and the rest executes. Names in a
 value position are therefore bound; a name in an identifier position, which no
-bind can stand in for, is double-quoted -- a form a backslash cannot escape out
+bind can stand in for, is double-quoted, a form a backslash cannot escape out
 of.
 """
 

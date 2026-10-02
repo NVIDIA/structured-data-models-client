@@ -120,13 +120,33 @@ _SIZE_LIMIT_MSG = (
 _SESSION_UNSUPPORTED_STATUS = frozenset({404, 405, 501})
 
 
+def _a_conversion_that_works(value: object) -> str:
+    """Return a suggested conversion only when it succeeds.
+
+    `try pd.Timestamp('not a date')` was printed for any string, including the
+    ones that make that call raise. The remedy therefore wrapped input in a
+    constructor that could not take it.
+    """
+    if not isinstance(value, str):
+        return ''
+    try:
+        converted = pd.Timestamp(value)
+    except Exception:
+        return ''
+    if converted is pd.NaT:
+        return ''
+    return f'; try pd.Timestamp({value!r})'
+
+
 def _sessions_unsupported(error: HTTPException) -> bool:
     return error.status_code in _SESSION_UNSUPPORTED_STATUS
 
 
 def _sessions_disabled_by_env() -> bool:
-    r"""Opt-out kill switch: set ``KUMO_RELATIONAL_DISABLE_SESSIONS`` to force the
-    stateless per-batch path even for multi-batch jobs.
+    r"""Force stateless batches when session use is disabled by environment.
+
+    Set ``KUMO_RELATIONAL_DISABLE_SESSIONS`` to use the stateless per-batch
+    path even for multi-batch jobs.
     """
     value = os.environ.get('KUMO_RELATIONAL_DISABLE_SESSIONS') or ''
     return value.strip().lower() in (
@@ -230,10 +250,10 @@ def _first_uncastable(
     r"""The first ``(position, value)`` that will not cast to ``dtype``.
 
     Lets a rejected ``indices`` name the element responsible. Passing the whole
-    sequence to pandas reports only its own internals -- "int() argument must
-    be a string, a bytes-like object or a real number, not 'NoneType'" -- which
-    names neither the argument, the offending position, nor the key type the
-    entity table actually uses.
+    sequence to pandas reports only its own internals: "int() argument must be
+    a string, a bytes-like object or a real number, not 'NoneType'". This names
+    neither the argument, the offending position, nor the entity table's key
+    type.
     """
     for position, value in enumerate(values):
         try:
@@ -367,10 +387,10 @@ def _nim_failure_error(
     detail is quoted rather than guessed at. Naming GPU memory pressure here
     was a guess, and a measured counter-example had the GPU at one percent
     while six identical retries failed and only a smaller neighbourhood sample
-    succeeded -- so both remedies are named, in the order that distinguishes
-    them. Explanations are the most GPU-intensive request (they hold the
-    model's gradient graph on the device), so their message adds a
-    one-at-a-time hint.
+    succeeded. Both remedies are therefore named in the order that
+    distinguishes them. Explanations are the most GPU-intensive request
+    because they hold the model's gradient graph on the device, so their
+    message adds a one-at-a-time hint.
 
     A 4xx is by definition about the request the caller sent, so it is reported
     as such, quoting the NIM's per-field ``invalid_params`` diagnosis without
@@ -449,14 +469,14 @@ def _check_anchor_time(value: Any, name: str) -> Any:
 
     A date *string* is what most pandas users reach for first, and it used to
     land on a bare ``assert`` with an empty message, and under ``python -O``
-    on no check at all. A timezone-*aware* ``Timestamp`` is what the client's own
-    ``predict`` output carries, so it is converted rather than refused.
+    on no check at all. The client's own ``predict`` output carries a
+    timezone-*aware* ``Timestamp``, so it is converted rather than refused.
     """
     if value is None or isinstance(value, pd.Timestamp):
         return to_naive_utc(value)
     if isinstance(value, str) and value == 'entity':
         return value
-    hint = f'; try pd.Timestamp({value!r})' if isinstance(value, str) else ''
+    hint = _a_conversion_that_works(value)
     raise TypeError(
         f"'{name}' must be a pandas.Timestamp or the literal 'entity' (got "
         f'{type(value).__name__} {value!r}){hint}'
@@ -497,8 +517,8 @@ def _encode_composite_indices(
 ) -> list[str]:
     r"""Folds tuple seeds into the identity the entity table is keyed on.
 
-    A caller names an entity the way the data does -- ``('AB-10015',
-    'Central')`` -- rather than by the derived value that carries it.
+    A caller names an entity as the data does, such as ``('AB-10015',
+    'Central')``, rather than by the derived value that carries it.
     """
     encoded: list[str] = []
     for index in indices:
@@ -564,11 +584,10 @@ def _decode_composite_entities(
 
 
 class KumoRelational:
-    r"""Run Kumo Relational predictions over a relational graph.
+    r""":class:`KumoRelational` is the prediction interface for a pre-trained
+    relational foundation model.
 
-    :class:`KumoRelational` provides the prediction interface for a pre-trained
-    relational foundation model. Build it from a :class:`Graph`, then issue PQL
-    queries with :meth:`predict`.
+    Build it from a :class:`Graph`, then pass PQL queries to :meth:`predict`.
 
     .. code-block:: python
 
@@ -602,11 +621,10 @@ class KumoRelational:
             the data backend. Only the :obj:`"sqlite"` and :obj:`"duckdb"`
             backends implement this; passing it on any other backend warns.
         _client: Internal. The already-resolved endpoint this instance predicts
-            against, from :func:`sdm_relational_engine.rfm.init_client`. Binding it here
-            pins the instance to one deployment for its whole lifetime;
-            leaving it ``None`` falls back to resolving the process-wide
-            engine configuration lazily, which is last-writer-wins across
-            threads.
+            against, from :func:`sdm_relational_engine.rfm.init_client`.
+            Binding it here pins the instance to one deployment for its whole
+            lifetime. Leaving it ``None`` resolves the process-wide engine
+            configuration lazily, which is last-writer-wins across threads.
     """
 
     def __init__(
@@ -759,8 +777,9 @@ class KumoRelational:
         Note:
             A multi-batch prediction uploads its context once, into a session
             the batches share, unless ``random_seed=None`` or
-            ``KUMO_RELATIONAL_DISABLE_SESSIONS`` rules that out -- in which case every
-            batch re-uploads the context and says so in the progress output.
+            ``KUMO_RELATIONAL_DISABLE_SESSIONS`` rules that out. In that case,
+            every batch re-uploads the context and says so in the progress
+            output.
         """
         if batch_size != 'max' and (
             not isinstance(batch_size, int)
@@ -864,53 +883,40 @@ class KumoRelational:
         random_seed: int | None = _RANDOM_SEED,
         verbose: bool | ProgressLogger = True,
     ) -> pd.DataFrame | Explanation:
-        r"""Returns predictions for a predictive query.
+        r"""Return predictions for a predictive query.
 
         Inference Configuration
         -----------------------
-        The ``inference_config`` argument controls inference-time model
-        behavior, including ensembling. Pass either a dictionary or a config
-        object from ``sdm_relational_engine.rfm.inference.config``. Dictionary inputs
-        are cast based on the task type: classification tasks use
-        ``ClassificationInferenceConfig`` and regression or forecasting tasks
-        use ``RegressionInferenceConfig``. If omitted, defaults are selected
-        automatically based on the task type.
+        ``inference_config`` controls inference-time behavior and ensembling.
+        It accepts a config from ``sdm_relational_engine.rfm.inference.config``
+        or a dictionary, which becomes a ``ClassificationInferenceConfig`` for
+        classification or a ``RegressionInferenceConfig`` for regression and
+        forecasting. Omitting it selects task-specific defaults.
 
-        Common options:
-
-        * ``num_estimators``: Number of estimators to ensemble. Defaults to
-          ``1`` and must be between ``1`` and ``4``.
-        * ``column_shuffle``: Whether to shuffle column order across
+        * ``num_estimators``: Ensemble ``1`` (default) to ``4`` estimators.
+        * ``column_shuffle``: Shuffle column order across estimators.
+        * ``category_shuffle``: Shuffle categorical-column categories across
           estimators.
-        * ``category_shuffle``: Whether to shuffle categories within
-          categorical columns across estimators.
-        * ``hop_shuffle``: Whether to shuffle subgraph depth across
-          estimators.
+        * ``hop_shuffle``: Shuffle subgraph depth across estimators.
+        * ``class_shuffle``: Shuffle class order across estimators
+          (classification only).
+        * ``target_transforms``: Vary regression and forecasting target
+          preprocessing across estimators. Supports ``"clip"``, ``"power"``,
+          ``"quantile"``, and ``None``; defaults to ``["quantile"]``. The
+          SDM-backed NIM accepts only ``["quantile"]`` and does not apply it,
+          because its model standardizes targets itself.
+        * ``output_type``: Summarize regression and forecasting distributions
+          with ``"median"`` (default), ``"mean"``, or ``"quantiles"``. The
+          last adds the full distribution as ``Q_<level>`` columns beside the
+          point prediction. The SDM-backed NIM takes ``"median"``, the 50th
+          of its 999 predicted quantiles, or ``"mean"``, their average. On a
+          **zero-inflated regression target** the median is exactly ``0.0``
+          once half of that grid sits at zero, while the mean stays above it.
+          Ask for the mean, or for the quantiles, when that difference
+          matters.
 
-        Classification option:
-
-        * ``class_shuffle``: Whether to shuffle class order across estimators.
-
-        Regression and forecasting options:
-
-        * ``target_transforms``: Target preprocessing transforms to vary
-          across estimators. Supported values are ``"clip"``, ``"power"``,
-          ``"quantile"``, and ``None``. Defaults to ``["quantile"]``. The
-          SDM-backed NIM accepts only ``["quantile"]``, which it does not
-          apply: its model standardizes targets itself.
-        * ``output_type``: How to summarize the output distribution. Supported
-          values are ``"median"``, ``"mean"`` and ``"quantiles"``. Defaults to
-          ``"median"``. ``"quantiles"`` returns the full distribution as
-          additional ``Q_<level>`` columns alongside the point prediction.
-          The SDM-backed NIM takes ``"median"`` (the 50th of its 999 predicted
-          quantiles) or ``"mean"`` (their average). On a **zero-inflated
-          regression target** the median is exactly ``0.0`` once half of that
-          grid sits at zero, while the mean stays above it: ask for the mean,
-          or for the quantiles, when that difference matters.
-
-        A key other than those listed above is rejected, naming the offending
-        key: nothing forwards an unknown key to the NIM, so accepting one could
-        only ever mean silently substituting the default.
+        Any other key is rejected by name rather than forwarded to the NIM,
+        where it would silently substitute the default.
 
         .. code-block:: python
 
@@ -936,62 +942,47 @@ class KumoRelational:
 
         Args:
             query: The predictive query.
-            indices: The entity primary keys to predict for. Will override the
-                indices given as part of the predictive query. Predictions will
-                be generated for all indices, independent of whether they
-                fulfill entity filter constraints.
-            explain: Configuration for explainability.
-                If set to ``True``, will additionally explain the prediction.
-                Passing in an :class:`ExplainConfig` instance provides control
-                over which parts of explanation are generated.
-                Explainability is currently only supported for single entity
-                predictions with ``run_mode="FAST"``.
-                Note that the natural-language summary is built by an external
-                LLM endpoint (OpenAI by default) and sends the query,
-                predictions and raw subgraph cell values off the machine --
-                see :class:`ExplainConfig` for what is transmitted and pass
+            indices: Entity primary keys. They override query indices and are
+                all predicted, regardless of entity filter constraints.
+            explain: Explainability configuration. ``True`` adds an
+                explanation; an :class:`ExplainConfig` selects its parts. Only
+                single entity predictions with ``run_mode="FAST"`` currently
+                support explanations. The natural-language summary sends the
+                query, predictions, and raw subgraph cell values off-machine to
+                an external LLM endpoint (OpenAI by default). See
+                :class:`ExplainConfig` for what is transmitted, and pass
                 ``explain=dict(skip_summary=True)`` to disable it.
-            return_embeddings: Whether to also return the embeddings for each
-                prediction example.
-            anchor_time: The anchor timestamp for the prediction, as a
-                :class:`pandas.Timestamp`; a date string is not coerced. If set
-                to ``None``, will use the maximum timestamp in the data.
-                If set to ``"entity"``, will use the timestamp of the entity.
-            context_anchor_time: The maximum anchor timestamp for context
-                examples. If set to ``None``, ``anchor_time`` will
-                determine the anchor time for context examples.
+            return_embeddings: Whether to return embeddings for each example.
+            anchor_time: Prediction anchor as a :class:`pandas.Timestamp`.
+                Date strings are not coerced. ``None`` uses the maximum data
+                timestamp. ``"entity"`` uses the entity timestamp.
+            context_anchor_time: Maximum anchor timestamp for context
+                examples. ``None`` lets ``anchor_time`` determine it.
             run_mode: The :class:`RunMode` for the query.
-            num_neighbors: The number of neighbors to sample for each hop.
-                If specified, the ``num_hops`` option will be ignored.
-            use_prediction_time: Whether to use the anchor timestamp as an
-                additional feature during prediction.
-            lag_timesteps: The number of past timesteps included as lagged
-                features.
+            num_neighbors: Neighbors to sample per hop. When specified, this
+                overrides ``num_hops``.
+            use_prediction_time: Whether to add the anchor timestamp as a
+                prediction feature.
+            lag_timesteps: Past timesteps to include as lagged features.
             inference_config: Optional inference-time model configuration. See
-                the inference configuration section above for supported
-                dictionary keys.
-            num_hops: The number of hops to sample when generating the
-                context, between 1 and 6. Deprecated in favor of
-                ``num_neighbors``.
-            max_pq_iterations: The maximum number of iterations to perform to
-                collect valid labels, at least 1. It is advised to increase the
-                number of
-                iterations in case the predictive query has strict entity
-                filters, in which case, :class:`KumoRelational` needs to sample more
-                entities to find valid labels.
-            random_seed: A manual seed for generating pseudo-random numbers.
-                The :obj:`"sqlite"` and :obj:`"snowflake"` backends cannot
-                seed their random row sampling and warn once when a seed is
-                given. Passing :obj:`None` re-samples neighborhoods for every
-                batch, which rules out the shared-context session a
-                multi-batch prediction otherwise opens, so each batch
-                re-uploads the full context.
+                above for supported dictionary keys.
+            num_hops: Context sampling hops, between 1 and 6. Deprecated in
+                favor of ``num_neighbors``.
+            max_pq_iterations: Iterations for collecting valid labels, at least
+                1. Increase this when strict entity filters require
+                :class:`KumoRelational` to sample more entities for valid
+                labels.
+            random_seed: Pseudo-random seed. The :obj:`"sqlite"` and
+                :obj:`"snowflake"` backends cannot seed random row sampling and
+                warn once when given a seed. :obj:`None` resamples every batch,
+                preventing the shared-context session otherwise used for a
+                multi-batch prediction. Each batch then re-uploads all context.
             verbose: Whether to print verbose output.
 
         Returns:
-            The predictions as a :class:`pandas.DataFrame`.
-            If ``explain`` is provided, returns an :class:`Explanation` object
-            containing the prediction, summary, and details.
+            A :class:`pandas.DataFrame` when ``explain`` is ``False``, the
+            default. Any other value, including an empty mapping, returns an
+            :class:`Explanation` containing that frame, a summary, and details.
         """
         query_def = self._parse_query(query)
 
@@ -1608,7 +1599,7 @@ class KumoRelational:
         top_k: int | None = None,
         random_seed: int | None = _RANDOM_SEED,
     ) -> pd.DataFrame | Explanation:
-        r"""Returns predictions for a custom task specification.
+        r"""Return predictions for a custom task specification.
 
         Args:
             task: The custom :class:`TaskTable`.
@@ -1620,8 +1611,8 @@ class KumoRelational:
                 predictions with ``run_mode="FAST"``.
                 Note that the natural-language summary is built by an external
                 LLM endpoint (OpenAI by default) and sends the query,
-                predictions and raw subgraph cell values off the machine --
-                see :class:`ExplainConfig` for what is transmitted and pass
+                predictions and raw subgraph cell values off the machine. See
+                :class:`ExplainConfig` for what is transmitted and pass
                 ``explain=dict(skip_summary=True)`` to disable it.
             return_embeddings: Whether to also return the embeddings for each
                 prediction example.
@@ -1649,9 +1640,11 @@ class KumoRelational:
                 context.
 
         Returns:
-            The predictions as a :class:`pandas.DataFrame`.
-            If ``explain`` is provided, returns an :class:`Explanation` object
-            containing the prediction, summary, and details.
+            The predictions as a :class:`pandas.DataFrame` when
+            ``explain`` is ``False``, which it is by default. Anything
+            any other value, including an empty mapping, asks for an
+            :class:`Explanation`, which carries that frame with a summary and
+            its details.
         """
         run_mode, num_neighbors, inference_config = (
             self._resolve_task_request_options(

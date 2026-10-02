@@ -1,0 +1,290 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Every gate a change has to pass, run where a contributor can see it.
+#
+# The internal pipeline runs these too, but a public repository cannot ask an
+# outside contributor to trust a result they cannot open. Every blocking gate
+# on that pipeline has a counterpart here, with one exception: the contract
+# check clones the canonical OpenAPI spec from an internal project, so it stays
+# where that clone is possible. The generated bindings are pinned by SHA-256 in
+# PROVENANCE.json either way, and a drifted copy fails the build it ships in.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --upgrade pip 'ruff==0.16.*'
+      - run: ruff check .
+      - run: ruff format --check .
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/check_repo_hygiene.py all
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # The engine needs its runtime dependencies present to be checked at all,
+      # and a toolchain to install. It ships py.typed exactly like the other
+      # four, so leaving it out would make the gate narrower than the promise.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      - run: pip install --upgrade pip mypy
+      - run: |
+          pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
+            -e './packages/sdm-client' \
+            -e './packages/sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
+            -e './packages/sdm-relational-engine'
+      # Every session a source takes too, so each driver's types are its own
+      # rather than Any. pyspark-client is pyspark's Python without its jars.
+      - run: pip install snowflake-snowpark-python pyspark-client
+      - run: |
+          mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src \
+            packages/sdm-connectors/src packages/sdm-relational-engine/src
+      # What a caller's type checker infers for a source, and what it refuses.
+      - run: mypy packages/sdm-connectors/tests/typing/check_sources.py
+
+  # Every interpreter the four pure-python distributions classify. The
+  # internal pipeline runs one of them, so a defect specific to any other
+  # reached a release through a promise nothing checked.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
+    # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
+    # missing DSN or driver into a failure, where a skip would read as a pass.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: sdm_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # databricks is here for its driver, not for a server: those tests mock
+      # the connection. Without the driver, importing the backend raises and
+      # every test covering it skips.
+      - run: |
+          pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
+          pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' \
+            -e './packages/sdm-client[test]' \
+            -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
+      - run: |
+          python -m pytest packages/sdm-api/tests packages/sdm-pql/tests \
+            packages/sdm-client/tests packages/sdm-connectors/tests tests -q \
+            -m 'not live_nim and not live_warehouse'
+
+  engine:
+    runs-on: ubuntu-latest
+    # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
+    # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
+    # missing DSN or driver into a failure, where a skip would read as a pass.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: sdm_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # ruff is here for the root suite, not for linting: the test that
+      # checks the engine ignore-list note shells out to it and skips
+      # without it, which would make that check vacuous here.
+      # The Databricks and Snowflake drivers are for the offline tests of those
+      # backends, which skip whole modules without them; pyyaml reads the
+      # semantic-view fixtures, and `explain` carries the SDK the explanation
+      # tests fake around.
+      - run: |
+          pip install --upgrade pip 'ruff==0.16.*'
+          pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
+            -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
+            pyyaml
+          pip install -e './packages/sdm-relational-engine[test,explain]'
+      # The same marker filter as the internal pipeline. The live NIM and live
+      # warehouse tests need credentials this job does not have, so they are
+      # deselected by name rather than left to skip. A skip that remains is a
+      # test that checked its own environment and stood down, and is reported.
+      - run: |
+          cd packages/sdm-relational-engine
+          python -m pytest tests -q -m 'not live_nim and not live_warehouse'
+      # The client's suite again, with an engine present. The test job installs
+      # none, so every client test that needs one skips there and runs nowhere.
+      - run: |
+          pip install -e './packages/sdm-client[test]'
+          python -m pytest packages/sdm-client/tests -q \
+            -m 'not live_nim and not live_warehouse'
+      # And the root suite, which holds the relational wire snapshots. They
+      # only exercise anything with an engine installed, so running them in
+      # the test job would prove nothing.
+      - run: python -m pytest tests -q
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      - run: pip install --upgrade pip build
+      # Each distribution builds in an isolated environment holding only the
+      # build backend. That catches what no test can, because it fails before a
+      # test could run: a version resolved by importing the package root cannot
+      # produce a wheel at all.
+      - run: |
+          for package in sdm-api sdm-pql sdm-client sdm-connectors sdm-relational-engine; do
+            echo "building $package"
+            ( cd "packages/$package" && python -m build --wheel --outdir "$GITHUB_WORKSPACE/dist" . )
+          done
+      # Every distribution carries the one version they are released together
+      # at, read from what was just built rather than written here.
+      - run: |
+          python - <<'EOF'
+          import pathlib, re, sys
+          names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+          versions = {re.match(r'[^-]+-([^-]+)-', n).group(1) for n in names}
+          print('\n'.join(names))
+          if len(names) != 5:
+              sys.exit(f'expected 5 wheels, built {len(names)}')
+          if len(versions) != 1:
+              sys.exit(f'distributions disagree on the version: {sorted(versions)}')
+          pathlib.Path('dist/VERSION').write_text(versions.pop())
+          EOF
+      # Building each one proves nothing about installing them together. A pin
+      # only one distribution carries makes the set unsatisfiable, and the
+      # resolver is the only thing that says so.
+      - run: |
+          VERSION=$(cat dist/VERSION)
+          pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
+            "sdm-client[relational,sqlite,duckdb]==$VERSION"
+      - run: pip install --upgrade twine && twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels
+          path: dist/
+
+  # The suite has only ever run against the source tree. What users install is
+  # a wheel, and the difference is where packaging bugs live: a module left out
+  # of `packages.find`, a `py.typed` that never shipped. This runs from a
+  # directory where the source tree is not importable.
+  installed-wheel:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels
+          path: dist
+      - run: |
+          pip install --upgrade pip pytest requests-mock
+          VERSION=$(cat dist/VERSION)
+          pip install --find-links "$GITHUB_WORKSPACE/dist" \
+            "sdm-client[sqlite,duckdb]==$VERSION"
+      - name: The installed distribution is what gets imported, and it is typed
+        working-directory: /tmp
+        run: |
+          python - <<'EOF'
+          import pathlib
+          import predictive_query, sdm_api, sdm_client, sdm_connectors
+
+          for module in (sdm_api, sdm_client, sdm_connectors, predictive_query):
+              location = pathlib.Path(module.__file__).resolve()
+              assert 'site-packages' in location.parts, (
+                  f'{module.__name__} was imported from {location}, not from '
+                  f'the installed wheel, so this job is testing the checkout'
+              )
+              marker = location.parent / 'py.typed'
+              assert marker.is_file(), (
+                  f'{module.__name__} ships no py.typed in the built wheel, so '
+                  f'a downstream type checker ignores its annotations entirely'
+              )
+          print('four distributions imported from site-packages, all typed')
+          EOF
+      - working-directory: /tmp
+        run: |
+          python -m pytest "$GITHUB_WORKSPACE/packages/sdm-client/tests" -q \
+            -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+
+  # The dependency inventory a consumer needs before accepting this into their
+  # own supply chain, covering every connector extra that resolves without a
+  # native toolchain.
+  sbom:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels
+          path: dist
+      - run: |
+          pip install --upgrade pip cyclonedx-bom
+          VERSION=$(cat dist/VERSION)
+          pip install --find-links "$GITHUB_WORKSPACE/dist" \
+            "sdm-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+          cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: dist/sbom.cyclonedx.json

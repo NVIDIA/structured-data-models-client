@@ -390,3 +390,51 @@ def test_merge_raises_the_clients_own_error_type():
     with pytest.raises(StructuredDataError) as error:
         PredictionResult.merge([])
     assert error.value.code == 'INTERNAL_ERROR'
+
+
+def test_a_data_field_that_is_not_a_list_is_refused_however_falsy():
+    """`.get('data') or []` normalised every falsy value before the check, so
+    an empty object, an empty string, `0` and `False` were all reported as
+    "no models" rather than as the malformed body they are."""
+    import json as _json
+
+    from sdm_client.core.transport import Transport
+    from sdm_client.errors import StructuredDataError
+
+    class Response:
+        status_code = 200
+
+        def __init__(self, body):
+            self._body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def iter_content(self, size):
+            yield self._body
+
+    class Session:
+        def __init__(self, body):
+            self._body = body
+
+        def get(self, *args, **kwargs):
+            return Response(self._body)
+
+        def close(self):
+            return None
+
+    def models_for(data):
+        transport = Transport('http://x.invalid', max_retries=0)
+        transport._session = Session(_json.dumps({'data': data}).encode())
+        return transport.list_models()
+
+    for data in ({}, '', 0, False, 'abc', 5):
+        with pytest.raises(StructuredDataError) as raised:
+            models_for(data)
+        assert 'Expected a list of models' in str(raised.value)
+
+    assert models_for([]) == []
+    assert models_for(None) == []

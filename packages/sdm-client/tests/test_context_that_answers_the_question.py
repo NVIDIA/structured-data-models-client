@@ -11,8 +11,8 @@ scored entities came back 0.660 correct where chance is 0.500; with those rows
 removed, 0.440.
 
 The distinction that makes this safe to fix is the anchor. An entity appearing
-in the context at an *earlier* anchor is not a leak -- it is an earlier
-example, and it is what temporal in-context learning runs on. Dropping those
+in the context at an *earlier* anchor is not a leak. It is an earlier example,
+which is what temporal in-context learning runs on. Dropping those
 would delete the examples an aggregation target depends on, to fix a leak that
 is not there.
 """
@@ -393,7 +393,7 @@ def test_the_window_opens_after_the_anchor_and_closes_on_its_last_day(
     `target_time > start` and `target_time <= end`.
 
     Read per anchor. The engine samples several context anchors, and pooling
-    their labels answers a different question -- a row at the anchor looks
+    their labels answers a different question: a row at the anchor looks
     counted because it is exactly thirty days after the *previous* anchor,
     which is the right edge of that window rather than the left edge of this
     one.

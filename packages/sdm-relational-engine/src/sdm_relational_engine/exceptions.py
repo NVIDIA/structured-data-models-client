@@ -7,12 +7,18 @@ from typing import Any
 
 
 class KumoRelationalError(Exception):
-    r"""Base class for every error this package raises.
+    r"""Base class for the errors this package defines.
 
-    ``except KumoRelationalError`` is the one catch that covers the whole client. Each
-    subclass also keeps the built-in base it historically raised
-    (:class:`ValueError`, :class:`RuntimeError`), so code written against the
-    older, rootless hierarchy keeps working unchanged.
+    ``except KumoRelationalError`` covers those, which is every failure
+    that has a name of its own here: a connection that could not be made,
+    a response that could not be read, a graph that could not be built.
+    It is not a catch-all for the package. An argument that is simply
+    wrong still raises the built-in that fits it, and a column this table
+    does not carry still raises :class:`KeyError`.
+
+    Where a built-in fits a subclass it inherits that too
+    (:class:`ValueError`, :class:`RuntimeError`), so either catch works
+    for those. Not every subclass has one.
     """
 
 
@@ -58,11 +64,11 @@ class GraphConstructionError(KumoRelationalError):
     r"""A data source could not be read while building a graph.
 
     The driver's own exception is kept as ``__cause__``. Without this, reading
-    a warehouse raised whatever that driver raises -- a
+    a warehouse raised whatever that driver raises, such as a
     ``databricks.sql.exc.ServerOperationError``, a
-    ``snowflake.connector.errors.ProgrammingError`` -- none of which share a
-    base with anything else this client raises, so building a graph could not be
-    guarded by the same ``except`` as using one.
+    ``snowflake.connector.errors.ProgrammingError``. These exceptions share no
+    base with anything else this client raises, so building a graph could not
+    be guarded by the same ``except`` as using one.
     """
 
 
@@ -77,7 +83,7 @@ class InvalidResponseError(KumoRelationalError, ValueError):
 
 
 class NimFailureError(KumoRelationalError, RuntimeError):
-    r"""A failed KumoRelational NIM prediction, classified and ready to re-wrap.
+    r"""Represent a classified KumoRelational NIM prediction failure.
 
     Subclasses :class:`RuntimeError` so existing callers keep working, and
     carries the structured facts a caller (or the ``sdm-client`` adapter) needs

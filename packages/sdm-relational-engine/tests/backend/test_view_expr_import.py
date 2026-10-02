@@ -156,7 +156,7 @@ def test_scalar_functions_and_qualified_names_are_accepted(expr):
 )
 def test_statements_that_look_like_calls_are_still_reported(expr):
     r"""``SELECT`` may legally be followed by ``(``, so only ``INSERT`` and
-    ``TRUNCATE`` -- which as statements are always followed by a keyword --
+    ``TRUNCATE``, which as statements are always followed by a keyword,
     are exempt when they are called.
     """
     assert _unsafe_expr_reason(expr) is not None

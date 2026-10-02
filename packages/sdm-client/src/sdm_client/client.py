@@ -17,7 +17,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -37,12 +37,17 @@ from sdm_client.errors import (
     UnsupportedRequestError,
 )
 from sdm_client.models import MODELS, Model, spec_for
-from sdm_client.request import Question, Request
+from sdm_client.request import (
+    Question,
+    Request,
+    warn_of_rows_scored_from_their_own_answers,
+)
 from sdm_client.result import PredictionResult
+from sdm_client.schema import _as_key_tuple
 from sdm_client.wire.keys import (
     _named_by,
     keys_in,
-    scored_keys,
+    scored_rows,
     without_the_keys,
 )
 
@@ -79,8 +84,8 @@ class FittedModel:
     on the endpoint until it is released or expires.
 
     ``pinned`` is what the session pinned, minus the context itself. Reading an
-    answer needs the task and the schema -- the key an id stands for is named
-    there -- but the rows have been uploaded and live on the endpoint, so
+    answer needs the task and the schema, where the key an id stands for is
+    named. The rows have been uploaded and live on the endpoint, so
     keeping a second encoded copy for the lifetime of the handle would hold a
     whole dataset for nothing.
     """
@@ -124,16 +129,12 @@ class FittedModel:
         r"""Score ``request``'s rows against the pinned context.
 
         Only the rows travel: the context, schema and task were pinned when
-        this handle was created. Reading the answer needs both halves, though
-        -- the key an id stands for is named in the pinned schema -- so the
+        this handle was created. Reading the answer needs both halves because
+        the key an id stands for is named in the pinned schema. The
         adapter is handed the whole request while the wire gets only the half
         the contract allows on a scoring call.
         """
-        if not isinstance(request, Request):
-            raise StructuredDataError(
-                f'request must be a Request, got {type(request).__name__}',
-                code='INVALID_REQUEST',
-            )
+        _require_a_request(request)
         if self._closed:
             raise StructuredDataError(
                 'this fitted model is closed; fit again to score more rows',
@@ -151,9 +152,12 @@ class FittedModel:
         if self._question is not None and asked is not None:
             _refuse_a_question_the_session_did_not_pin(self._question, asked)
         if request.nothing_to_score:
-            return _empty_answer(self.model, self._outputs)
+            return _empty_answer(self.model, self._outputs, request)
         _warn_scoring_what_was_pinned(
-            request, self._pinned_keys, self._pinned_over_a_window
+            request,
+            self._pinned_keys,
+            self._pinned_over_a_window,
+            _pinned_dtypes(self._pinned),
         )
         parts = [
             self._adapter.normalize(
@@ -164,7 +168,7 @@ class FittedModel:
                 {**self._pinned, **payload},
             )
             for payload in self._adapter.session_prediction_plan(
-                request, self._outputs
+                request, self._outputs, self._pinned
             )
         ]
         if not parts:
@@ -189,13 +193,15 @@ class FittedModel:
             return
         self._client._transport.delete_session(self._session_id)
         self._closed = True
+        pinned = getattr(self._client, '_pinned', None)
+        if pinned is not None:
+            pinned.discard(self)
 
     def __enter__(self) -> FittedModel:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        r"""Release the context, raising as it did before -- unless the block
-        is already failing.
+        r"""Release the context without masking an active block exception.
 
         A failure to release is a real failure and is raised, which is what a
         caller wrapping the block in `try` relies on.
@@ -254,14 +260,27 @@ class SDMClient:
                 a re-sent create would orphan a pinned context on the
                 endpoint.
         """
-        self._transport: WireTransport = Transport(
-            url,
-            api_key,
-            verify_ssl=verify_ssl,
-            timeout=timeout,
-            max_retries=max_retries,
+        self._start(
+            Transport(
+                url,
+                api_key,
+                verify_ssl=verify_ssl,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
         )
+
+    def _start(self, transport: WireTransport) -> None:
+        r"""Set everything a client holds, given what carries its requests.
+
+        The one place a client's state is set. :meth:`for_databricks_serving`
+        builds its client without ``__init__``, so state set only there was
+        missing from a serving client until something reached for it. Add
+        new state here, not to ``__init__``.
+        """
+        self._transport: WireTransport = transport
         self._adapters: dict[str, ModelAdapter] = {}
+        self._pinned: set[FittedModel] = set()
 
     @classmethod
     def for_databricks_serving(
@@ -315,10 +334,11 @@ class SDMClient:
         )
 
         client = cls.__new__(cls)
-        client._transport = DatabricksServingTransport(
-            endpoint, workspace_client, timeout=timeout
+        client._start(
+            DatabricksServingTransport(
+                endpoint, workspace_client, timeout=timeout
+            )
         )
-        client._adapters = {}
         return client
 
     @property
@@ -343,7 +363,7 @@ class SDMClient:
         r"""What ``model`` supports, as far as this client knows.
 
         Describes the client side and is tagged ``source='sdk'``. It needs no
-        live connection, and it is not the endpoint's own answer -- use
+        live connection, and it is not the endpoint's own answer. Use
         :meth:`models` for that.
         """
         return describe(self._spec(model))
@@ -368,7 +388,7 @@ class SDMClient:
                 produces for this task kind.
 
         Returns:
-            A :class:`~sdm_client.result.PredictionResult`, always -- never a
+            Always a :class:`~sdm_client.result.PredictionResult`, never a
             frame-or-explanation union.
 
         Raises:
@@ -377,11 +397,16 @@ class SDMClient:
                 Raised before anything is sent.
             NimRequestError: If the endpoint answered with an error.
         """
+        _require_a_request(request)
+        _require_output_names(outputs)
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
-            return _empty_answer(adapter.spec.model_id, fields)
+            return _empty_answer(adapter.spec.model_id, fields, request)
+        # Asked here, where both halves of the request travel together, which
+        # is the only call at which the pairing is a leak.
+        warn_of_rows_scored_from_their_own_answers(request)
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
@@ -408,8 +433,8 @@ class SDMClient:
 
         A ranking and a forecast have no task on the endpoint. Each is asked
         as questions it does serve, and what comes back has to be put together
-        as the answer that was actually asked for -- an order over candidates,
-        or a value per step -- rather than handed back as the several answers
+        as the answer that was actually asked for: an order over candidates
+        or a value per step, rather than handed back as the several answers
         it took.
         """
         rewritten = request.decomposition
@@ -516,7 +541,7 @@ class SDMClient:
         `holdout` names every row the session will go on to score. The context
         is chosen once, here, and `request` only excludes the rows *it* names,
         so every later call scores rows that are sitting in the pinned context
-        with their answers -- and unlike the one-shot path there is nothing the
+        with their answers. Unlike the one-shot path, there is nothing the
         caller can do about it afterwards, because the context cannot be
         changed once it is pinned. Naming the population up front is what lets
         it be excluded while there is still a context to exclude it from.
@@ -538,7 +563,8 @@ class SDMClient:
                 out of the pinned context before it is sent.
 
         Raises:
-            UnsupportedRequestError: If the endpoint does not serve sessions.
+            StructuredDataError: If the endpoint does not serve sessions,
+                with code ``'SESSIONS_UNSUPPORTED'``.
         """
         if not getattr(self._transport, 'serves_sessions', True):
             raise StructuredDataError(
@@ -547,6 +573,8 @@ class SDMClient:
                 f'with every call',
                 code='SESSIONS_UNSUPPORTED',
             )
+        _require_a_request(request)
+        _require_output_names(outputs)
         _refuse_to_pin_a_rewritten_question(request)
         adapter, fields = self._prepare(request, model, outputs)
         payload = adapter.session_plan(request, fields)
@@ -576,7 +604,7 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        return FittedModel(
+        fitted = FittedModel(
             self,
             adapter,
             str(session_id),
@@ -590,6 +618,8 @@ class SDMClient:
             pinned_over_a_window=request.target_moves_with_time,
             question=request._question,
         )
+        self._pinned.add(fitted)
+        return fitted
 
     def _prepare(
         self,
@@ -603,11 +633,8 @@ class SDMClient:
         request the model cannot answer fails with a message naming the model
         rather than as an opaque 422.
         """
-        if not isinstance(request, Request):
-            raise StructuredDataError(
-                f'request must be a Request, got {type(request).__name__}',
-                code='INVALID_REQUEST',
-            )
+        _require_a_request(request)
+        _require_output_names(outputs)
         spec = self._spec(model)
         adapter = self._adapters.get(spec.model_id)
         if adapter is None:
@@ -640,12 +667,20 @@ class SDMClient:
     def close(self) -> None:
         r"""Release pooled connections and retire this client.
 
-        Adapters are asked to release what they opened first, then the
-        transport is closed even if one of them fails -- the transport's pool
-        is the one that cannot be rebuilt on demand.
+        Contexts this client pinned are released first, because the transport
+        that would release them is about to close and `FittedModel.close()`
+        is the only call that can. Adapters follow, then the transport itself
+        even if one of them fails. Its pool is the one that cannot be
+        rebuilt on demand.
         """
         try:
             error: BaseException | None = None
+            for fitted in list(self._pinned):
+                try:
+                    fitted.close()
+                except BaseException as session_error:  # noqa: BLE001
+                    error = error or session_error
+            self._pinned.clear()
             for adapter in self._adapters.values():
                 try:
                     adapter.close()
@@ -704,12 +739,44 @@ def _report_absent(
     return result
 
 
-def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
+def _names_its_rows(request: Request) -> bool:
+    r"""Whether answers to this request will say which row each one is about.
+
+    An ``id`` is the entity a row names, so it is there when the rows being
+    scored carry one. On the route that builds its own frames that needs both
+    a key in the schema and every one of its columns in the half being sent:
+    asking only the schema gave an empty answer an ``id`` where a full one had
+    none. On the gathered route the entity is what was asked for, and the
+    envelope spells it as a transport reference rather than as the schema's
+    key. Asking the same question there answered no about requests whose
+    every answer names its entity.
+    """
+    if request.payloads:
+        # A gathered request is about entities by construction: the envelope
+        # carries an entity reference for every row it scores, and the adapter
+        # names each answer with the entity it asked about.
+        return True
+    table = request.entity_table
+    if table is None:
+        return False
+    try:
+        key = _as_key_tuple(request.schema[table].primary_key)
+        if not key:
+            return False
+        scored = request.predict.instance_table.columns
+        return all(name in scored for name in key)
+    except Exception:  # noqa: BLE001 - a schema too partial to ask is a no
+        return False
+
+
+def _empty_answer(
+    model: str, outputs: Sequence[str], request: Request | None = None
+) -> PredictionResult:
     r"""The answer to a request with no rows in it, without asking.
 
     `Request` allows a zero-row `predict` on purpose: the contract sets no
     minimum and an empty batch inside a loop is a reasonable no-op. Sent, it
-    was not a no-op -- the endpoint cannot encode zero rows and answered
+    was not a no-op. The endpoint cannot encode zero rows and answered
     `500 Unexpected server error`, so the one shape documented as harmless was
     the one that failed, and failed opaquely.
 
@@ -717,9 +784,11 @@ def _empty_answer(model: str, outputs: Sequence[str]) -> PredictionResult:
     the columns the request would have produced, which `to_pandas()` already
     knows how to build with no rows in them.
     """
-    return PredictionResult(
+    built = PredictionResult(
         model=model, request_id='', items=(), outputs=tuple(outputs)
     )
+    built._names_its_rows = request is None or _names_its_rows(request)
+    return built
 
 
 def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
@@ -730,6 +799,13 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     """
     if holdout is None:
         return 0
+    if isinstance(holdout, (str, bytes)):
+        raise StructuredDataError(
+            f'holdout names the rows this session may score, and {holdout!r} '
+            f'is one string rather than a list of keys; pass [{holdout!r}] if '
+            f'that is the key you mean',
+            code='INVALID_REQUEST',
+        )
     keys = frozenset(
         _named_by(key if isinstance(key, (tuple, list)) else [key])
         for key in holdout
@@ -737,6 +813,16 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     if not keys:
         return 0
     removed = without_the_keys(payload, keys)
+    if not removed:
+        warnings.warn(
+            f'none of the {len(keys)} keys named as holdout matched a row of '
+            f'the context about to be pinned, so nothing was held back. The '
+            f'keys are compared as the schema spells them, so a key given as '
+            f'a different type matches nothing. Check they are the same '
+            f'kind of value as the entity column holds.',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
     if removed:
         warnings.warn(
             f'{removed} of the rows named as holdout were in the context '
@@ -749,8 +835,29 @@ def _held_back(payload: dict[str, Any], holdout: Iterable[Any] | None) -> int:
     return removed
 
 
+def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
+    r"""The dtypes a session pinned, read back off the envelope it sent.
+
+    The pinned keys were written with these, so the scored ones have to be
+    read with them or the same entity has two names.
+    """
+    columns = ((pinned.get('schema') or {}).get('instance_table') or {}).get(
+        'columns'
+    )
+    if not isinstance(columns, Mapping):
+        return None
+    return {
+        name: str(described['dtype'])
+        for name, described in columns.items()
+        if isinstance(described, Mapping) and described.get('dtype')
+    }
+
+
 def _warn_scoring_what_was_pinned(
-    request: Request, pinned: frozenset[Any], over_a_window: bool = False
+    request: Request,
+    pinned: frozenset[Any],
+    over_a_window: bool = False,
+    dtypes: Mapping[str, str] | None = None,
 ) -> None:
     r"""Say when a call scores rows the pinned context already answers.
 
@@ -762,7 +869,7 @@ def _warn_scoring_what_was_pinned(
     scored one-shot came back 0.455, against a chance rate of 0.5.
 
     It cannot be fixed here: the context lives on the endpoint and the rows
-    cannot be taken out of it. Nor can the caller fix it after the fact -- the
+    cannot be taken out of it. Nor can the caller fix it after the fact. The
     equivalent of the one-shot remedy is to blank the targets before `fit()`,
     which means knowing every row the session will ever score, and a caller who
     knows that has no reason to open a session. So it is reported, with the two
@@ -775,12 +882,15 @@ def _warn_scoring_what_was_pinned(
     """
     if not pinned:
         return
-    scored = scored_keys(request, with_anchor=over_a_window)
-    shown = scored & pinned
+    # Rows, not the keys among them: two rows asking about one entity are two
+    # rows being scored, and a set had already lost one of them before either
+    # number was taken.
+    scored = scored_rows(request, with_anchor=over_a_window, dtypes=dtypes)
+    shown = sum(1 for named in scored if named in pinned)
     if not shown:
         return
     warnings.warn(
-        f'{len(shown)} of the {len(scored)} rows being scored are in this '
+        f'{shown} of the {len(scored)} rows being scored are in this '
         f"session's pinned context, with their target values, so the model "
         f'is being asked about rows it has already been shown the answers '
         f'for. The context was chosen when fit() ran and cannot be changed '
@@ -934,7 +1044,8 @@ def _by_step(
 
     `forecast_step` is the field the contract already carries for this, so a
     reader of the frame gets the series it asked for without knowing that it
-    arrived as several answers. An entity keeps its own row across the steps:
+    arrived as several answers. It is a column of every such answer, so an
+    empty one carries it too. An entity keeps its own row across the steps:
     the pair of row and step is what names a point in the series, which is how
     the contract reads it.
 
@@ -954,13 +1065,20 @@ def _by_step(
         for (_, step), answer in zip(rewritten.parts, answers, strict=True)
         if answer.explanation is not None
     }
-    return PredictionResult(
+    built = PredictionResult(
         model=answers[0].model if answers else '',
         request_id=answers[0].request_id if answers else '',
         items=items,
         outputs=tuple(answers[0].outputs) if answers else (),
         explanation={'by_forecast_step': by_step} if by_step else None,
     )
+    # `forecast_step` is put on the items above, so with no items there is
+    # nothing to read it from and an empty forecast lost the column that says
+    # which step an answer is about, just as `id` loses the column that
+    # says which row.
+    built._names_its_step = True
+    built._names_its_rows = all(part._names_its_rows for part in answers)
+    return built
 
 
 _WHAT_DIFFERS = (
@@ -975,7 +1093,7 @@ _WHAT_DIFFERS = (
 def _refuse_a_question_the_session_did_not_pin(
     pinned: Question, asked: Question
 ) -> None:
-    r"""Only rows travel on a scoring call, so the question has to be the pinned one.
+    r"""Require a scoring call to use the pinned question.
 
     Said field by field: the rest of the request is identical, so printing both
     whole does not show which one differs.
@@ -1001,11 +1119,51 @@ def _refuse_a_question_the_session_did_not_pin(
     )
 
 
+def _require_a_request(request: Any) -> None:
+    """Refuse anything that is not a request, before reading a field off it.
+
+    `errors.py` promises that `except StructuredDataError` catches everything
+    this client reports. `_prepare` held the right message and ran after the
+    first attribute was dereferenced, so the wrong type escaped as an
+    `AttributeError` naming a field the caller never heard of.
+
+    Asked at the entry rather than in `_prepare`, because a rewritten question
+    is answered in parts and never reaches it.
+    """
+    if not isinstance(request, Request):
+        raise StructuredDataError(
+            f'request must be a Request, got {type(request).__name__}; build '
+            f'one with Request(context=..., predict=...) or '
+            f'PredictiveQuery(...).materialize(...)',
+            code='INVALID_REQUEST',
+        )
+
+
+def _require_output_names(outputs: Any) -> None:
+    """Refuse an `outputs` that is not a sequence of field names."""
+    if outputs is None:
+        return
+    if isinstance(outputs, str):
+        raise StructuredDataError(
+            f'outputs must be a sequence of field names, not a single '
+            f'string; pass [{outputs!r}]',
+            code='INVALID_REQUEST',
+        )
+    if not isinstance(outputs, Sequence) or not all(
+        isinstance(name, str) for name in outputs
+    ):
+        raise StructuredDataError(
+            f'outputs must be a sequence of field names, got '
+            f'{type(outputs).__name__}',
+            code='INVALID_REQUEST',
+        )
+
+
 def _refuse_to_pin_a_rewritten_question(request: Request) -> None:
     r"""A session pins one context, and a rewritten question has several.
 
-    A ranking's parts each carry their own labels -- whether an entity reached
-    *this* candidate -- and a forecast's parts each cover their own window. One
+    A ranking's parts each carry their own labels for whether an entity reached
+    *this* candidate. A forecast's parts each cover their own window. One
     pinned context can only be one of them, so pinning would answer the first
     part and give back something shaped like the whole question. Refusing says
     what to do instead.

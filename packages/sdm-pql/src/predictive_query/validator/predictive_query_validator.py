@@ -43,9 +43,10 @@ from predictive_query.validator.utils import (
 
 
 class PredictiveQueryValidator:
-    r"""This class contains all the validation and metadata inferral business
-    logic, for turning a :class:`ParsedPredictiveQuery` into a
-    :class:`ValidatedPredictiveQuery`.
+    r"""Turns a :class:`ParsedPredictiveQuery` into a validated one.
+
+    Every schema-dependent check and every piece of inferred metadata
+    lives here, and the result is a :class:`ValidatedPredictiveQuery`.
 
     Args:
         schema: Schema on which the query is defined.
@@ -87,9 +88,6 @@ class PredictiveQueryValidator:
             Validated `parsed_query` with metadata and validation response
             if no errors were encountered. If errors were encountered,
             a tuple of :obj:`None` and a validation response are returned.
-
-        Raises:
-            ValueError: if the query is not valid.
         """
         response = ValidationResponse()
         # A stripped `EXPLAIN` or `EVALUATE` prefix moves every column, so
@@ -103,7 +101,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # infer and validate types
         self.type_validator = TypeValidator(
             self.schema,
             allow_array_targets=self.allow_array_targets,
@@ -122,7 +119,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # validate problem type
         self.problem_type_validator = ProblemTypeValidator()
         response = merge(
             response,
@@ -131,7 +127,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # validate time ranges
         self.time_range_validator = TimeRangeValidator(self.schema, self.mode)
         response = merge(
             response,
@@ -140,12 +135,10 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # target filter validation
         response = merge(response, self.validate_target_filters(parsed_query))
         if not response.ok:
             return None, response
 
-        # infer and validate joins
         self.join_validator = JoinValidator(self.schema)
         response = merge(
             response, self.join_validator.infer_and_validate_joins(parsed_query)
@@ -153,7 +146,6 @@ class PredictiveQueryValidator:
         if not response.ok:
             return None, response
 
-        # list distinct special rules validation
         response = merge(response, self.validate_list_distinct(parsed_query))
         if not response.ok:
             return None, response
@@ -497,7 +489,6 @@ class PredictiveQueryValidator:
                     valid_entities.append(
                         f'FOR EACH {col.table_name}.{col.col_name}'
                     )
-            # Show the error message to the user
             error_msg = (
                 f'{target_ast.get_location().message_start}: '
                 f'Target {target_fqn} creates a loop by pointing to the '
@@ -617,13 +608,9 @@ class PredictiveQueryValidator:
             ValidationResponse: Errors and warnings encountered.
         """
         response = ValidationResponse()
-        # Get the entity primary key column ast
         entity_name: str = parsed_query.entity_column
 
-        # Check if the target is predicting the entity primary key column
         target_ast: ASTNode = parsed_query.target_ast
-        # Recursively loop through the syntax tree to get all the columns
-        # that equal to entity primary key column
         ast_cols = self._target_not_entity_pkey(
             target_ast,
             entity_name,

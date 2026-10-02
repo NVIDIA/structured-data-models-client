@@ -61,9 +61,17 @@ def test_databricks_driver_options_bypass_the_allow_list(monkeypatch):
     )
     monkeypatch.setattr(backend.os, 'getenv', lambda name: None)
 
-    backend.connect(catalog='c', driver_options={'use_cloud_fetch': True})
+    backend.connect(
+        catalog='c',
+        access_token='t',
+        driver_options={'use_cloud_fetch': True},
+    )
 
-    assert seen == {'catalog': 'c', 'use_cloud_fetch': True}
+    assert seen == {
+        'catalog': 'c',
+        'access_token': 't',
+        'use_cloud_fetch': True,
+    }
 
 
 @pytest.mark.parametrize(
@@ -80,7 +88,7 @@ def test_driver_options_cannot_restate_a_validated_argument(
 
     ``driver_options`` bypasses the allow-list by design, so silently letting
     either side win would let it replace a credential or redirect a read to
-    another catalog -- the failure this backend validation exists to prevent.
+    another catalog, the failure this backend validation exists to prevent.
     """
     pytest.importorskip(module)
     connector = importlib.import_module(f'sdm_connectors.backends.{backend}')
@@ -187,7 +195,7 @@ def test_snowflake_no_arguments_and_no_session_explains_requirements(
 def test_snowflake_allows_named_connection_arguments(argument):
     """``DEFAULT_CONFIGURATION`` is the driver's config-parameter table and omits
     the two constructor-only parameters that select a named connection from a
-    TOML file -- the secrets-file-free auth path. The guard rejected them as
+    TOML file, the secrets-file-free auth path. The guard rejected them as
     typos, and ``connection_name`` was already listed in the connector's own
     ``_AUTH_ARGS``, so the allow-list contradicted the auth logic behind it.
     """

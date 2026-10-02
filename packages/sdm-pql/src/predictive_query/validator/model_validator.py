@@ -285,7 +285,6 @@ class ModelValidator:
                 ),
             )
 
-        # Check the correct use of FOR
         if parsed_query.for_each == FOR:
             if parsed_query.rfm_entity_ids is None:
                 response.errors.append(

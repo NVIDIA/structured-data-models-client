@@ -80,7 +80,7 @@ def test_client_cache_follows_the_current_endpoint(monkeypatch):
     just the thread that called it, and `init()` returns early when the
     settings it is given already match the globals. A thread that had resolved
     a client for one endpoint therefore kept using it once another thread had
-    pointed the process at a second endpoint -- deterministically, with no
+    pointed the process at a second endpoint, deterministically, with no
     race, which is exactly what a thread pool serving one client per tenant
     does.
     """

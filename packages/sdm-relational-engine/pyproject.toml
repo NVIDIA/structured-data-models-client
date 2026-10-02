@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 [project]
 name = "sdm-relational-engine"
 dynamic=["dependencies", "version"]
@@ -6,7 +10,7 @@ authors=[
 ]
 license = "Apache-2.0"
 license-files=["LICENSE", "NOTICE"]
-description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Kumo Relational Client"
+description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Structured Data Models client"
 readme="README.md"
 # This package ships binary wheels only (no sdist), so a version with no wheel
 # must fail resolution rather than fail to find a distribution. The bound and
@@ -189,8 +193,8 @@ ignore = [
     "D102",  # Missing docstring in public method
     "D103",  # Missing docstring in public function
     "D104",  # Missing docstring in public package
-    "D105",  # Missing docstring in magic method -- intentional
-    "D107",  # Missing docstring in __init__ -- documented on the class
+    "D105",  # Missing docstring in magic method, intentional
+    "D107",  # Missing docstring in __init__, documented on the class
     "D205",  # Blank line required between summary line and description
     "D415",  # First line should end with a period
 
@@ -200,7 +204,7 @@ ignore = [
     # separated from the block below because the two are not the same kind of
     # debt, and a comment that lumps them together is wrong about half of it --
     # which an earlier version of this note was.
-    "B028",    # 13x warnings.warn without stacklevel -- changes the reported
+    "B028",    # 13x warnings.warn without stacklevel, changes the reported
                #     call site, so it is a behaviour change for callers
                #     filtering on it
     "B905",    # 13x zip() without strict=; several zip unequal-length inputs
@@ -211,17 +215,17 @@ ignore = [
 
     # --- Recorded backlog -------------------------------------------------
     # None of the rules below is selected by the shared baseline, so listing
-    # them here silences nothing today -- they are a record, not an exemption.
+    # them here silences nothing today. They are a record, not an exemption.
     # An earlier note claimed they were "on in sdm-client and sdm-connectors,
     # which pass clean"; neither half was true, and nothing read the comment to
     # find out. What is true, and is asserted by
     # tests/test_release_contract.py, is that those two packages report zero
-    # findings under this exact list -- so the families can be promoted to the
+    # findings under this exact list, so the families can be promoted to the
     # root `select` as soon as this tree and the test suites are clean too.
     # Each is listed with its count in this tree at the time of writing. None
     # of them can be auto-fixed without changing behaviour.
     "C408",    # 34x dict()/list() call instead of a literal
-    "TRY004",  #  8x raise TypeError for a type check -- would change the
+    "TRY004",  #  8x raise TypeError for a type check, would change the
                #     exception type callers see, so it belongs with the
                #     exception-hierarchy work
     "SIM105",  #  7x try/except/pass -> contextlib.suppress

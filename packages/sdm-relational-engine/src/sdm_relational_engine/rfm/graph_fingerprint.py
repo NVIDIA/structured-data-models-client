@@ -4,12 +4,11 @@
 
 r"""A name for the shape of a graph, stable enough to key a cache on.
 
-A caller that reuses a built graph needs to know when the one it holds is still
-the graph the question would produce. ``hash()`` cannot answer that: Python salts
-string hashing per process, so the same graph names itself differently in two
-workers, and the built-in covers only table names and edges, so a column that
-changed type, a key that moved and a time column that appeared all leave the
-name untouched.
+A caller that reuses a built graph needs to know whether it still matches the
+graph a question would produce. ``hash()`` cannot answer that because Python
+salts string hashes per process, so the same graph gets different names in two
+workers. The built-in covers only table names and edges, so changed column
+types, moved keys, and new time columns leave the name untouched.
 
 This walks the whole shape a prediction depends on, writes it in a fixed order,
 and hashes the bytes. Two graphs that would behave identically get one name;

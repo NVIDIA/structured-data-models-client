@@ -7,7 +7,7 @@
 Two notices are easy to get subtly wrong. The one about context rows that
 carry the answer being asked for is issued before those rows are removed, so
 that a caller running with warnings as errors gets the raise with the
-payloads still whole -- which means it must describe the rule rather than an
+payloads still whole, which means it must describe the rule rather than an
 edit already made. And the one about a column that could be a key has to
 agree with the graph it is describing, for one candidate and for several, and
 for one table it is shared with and for several.
@@ -28,7 +28,7 @@ from sdm_client.materializers.relational import (
 
 def payload_with_a_shared_row() -> dict:
     """One entity scored at an anchor, and that same entity in the context at
-    the same anchor -- the shape the drop exists to catch."""
+    the same anchor: the shape the drop exists to catch."""
     return {
         'task': {'anchor_time_column': '__kumo_anchor_time'},
         'context': {

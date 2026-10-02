@@ -5,8 +5,8 @@
 """A key name two tables share names no one table, so it links nothing.
 
 `_infer_relationships` matched a column against a dict keyed by primary-key
-*column name*. Tables whose keys are spelled alike -- `ID`, `business_id`,
-`LOAN_ID` -- overwrote one another, so every foreign key of that name pointed
+*column name*. Tables whose keys are spelled alike, `ID`, `business_id`,
+`LOAN_ID`, overwrote one another, so every foreign key of that name pointed
 at whichever table the mapping happened to hold last. The result moved with
 dict insertion order, joined nothing in the cases that mattered, and invented
 edges between tables that have no relationship at all.
@@ -18,8 +18,10 @@ missing one. Ambiguity is therefore resolved by declining to guess.
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from sdm_client import Schema
+from sdm_client.errors import StructuredDataError
 
 
 def edges(schema: Schema) -> set[tuple[str, str, str, str]]:
@@ -344,3 +346,47 @@ def test_the_shared_key_name_warning_does_not_leave_out_the_entity_table(
     said = ' '.join(str(w.message) for w in recwarn)
     assert 'each of them is left out of the request' not in said
     assert 'answered from that table alone' in said
+
+
+def test_the_composite_key_offered_is_one_that_would_be_accepted(recwarn):
+    """The recommender omitted the null check the acceptor enforces, so a
+    column with one null was offered and refused on the very next call."""
+    frame = pd.DataFrame(
+        {'uid': list(range(200)), 'line': [1] * 200, 'v': [1.0] * 200}
+    )
+    frame.loc[[7, 8], 'uid'] = 6
+    frame.loc[[7, 8], 'line'] = [2, 3]
+    frame['maybe'] = [None] + [f'x{i}' for i in range(199)]
+
+    Schema.from_data({'t': frame})
+
+    said = ' '.join(str(item.message) for item in recwarn)
+    assert "'maybe'" not in said
+    if 'unique together with' in said:
+        offered = said.split('unique together with')[1].split("'")[1]
+        Schema.from_data({'t': frame}, primary_keys={'t': ['uid', offered]})
+
+
+def test_a_composite_key_is_named_as_the_columns_it_is():
+    """Joining the parts with a dot rendered ['a','b'] of table 't' as
+    't.a.b', which reads as one column named 'a.b'."""
+    frame = pd.DataFrame(
+        {'a': [1, 2, None, 4] * 5, 'b': range(20), 'v': [1.0] * 20}
+    )
+
+    with pytest.raises(StructuredDataError) as raised:
+        Schema.from_data({'t': frame}, primary_keys={'t': ['a', 'b']})
+
+    said = str(raised.value)
+    assert 't.a.b' not in said
+    assert "the primary key of 't'" in said
+    assert "in 'a'" in said
+
+
+def test_a_single_column_key_is_still_named_plainly():
+    frame = pd.DataFrame({'a': [1, 2, None, 4] * 5, 'v': [1.0] * 20})
+
+    with pytest.raises(StructuredDataError) as raised:
+        Schema.from_data({'t': frame}, primary_keys={'t': 'a'})
+
+    assert 't.a has' in str(raised.value)

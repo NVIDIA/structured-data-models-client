@@ -44,9 +44,10 @@ from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 from sdm_client.schema import Schema, supports_dtype
 from sdm_client.wire import UNTYPED, infer_tfm_dtype, is_container
+from sdm_client.wire.keys import key_dtypes, keys_from_a_frame
 
-# Task kinds the contract carries. A model narrows this further -- a tabular
-# model takes only the coarse 'classification' -- and its adapter says so.
+# Task kinds the contract carries. A model narrows this further: a tabular
+# model takes only the coarse 'classification', and its adapter says so.
 TASK_KINDS = (
     'classification',
     'binary_classification',
@@ -194,6 +195,92 @@ def _judge_a_context_that_teaches_nothing(
     )
 
 
+def warn_of_rows_scored_from_their_own_answers(request: Request) -> None:
+    r"""Say when the rows being scored sit in the context with their answers.
+
+    Both gathered routes take such rows out of the context they send, and a
+    session says so when it cannot. A request built from frames is handed both
+    halves and did neither, so the model was shown the answer to the question
+    it was being asked, which every other route here prevents.
+
+    Asked where both halves travel together rather than where the request is
+    built, because that is the only call at which the pairing is a leak. A
+    request built to score against a *session's* context sends only its rows,
+    and warning about a context that never travels made a correct call fail
+    under warnings-as-errors.
+    """
+    if request.payloads:
+        return
+    schema, entity_table = request.schema, request.entity_table
+    target = request.task.target.column_name
+    if schema is None or entity_table is None or not target:
+        return
+    try:
+        context = request.context.instance_table
+        predict = request.predict.instance_table
+    except Exception:  # noqa: BLE001 - a warning is never worth a failure
+        return
+    if target not in context.columns:
+        return
+    _warn_of_rows_scored_from_their_own_answers(
+        context, predict, schema, entity_table, target
+    )
+
+
+def _warn_of_rows_scored_from_their_own_answers(
+    context: pd.DataFrame,
+    predict: pd.DataFrame,
+    schema: Schema,
+    entity_table: str,
+    target: str,
+) -> None:
+    r"""The comparison itself, given both halves as frames."""
+    key = _as_key_tuple(schema[entity_table].primary_key)
+    # Every component or none. Reducing a composite key to the columns both
+    # frames happen to carry compares a part of an identity, and two rows that
+    # share a part are not the same row: one tenant's entity 1 was reported as
+    # another tenant's, scored from an answer that is not its own.
+    if not key or any(
+        column not in context.columns or column not in predict.columns
+        for column in key
+    ):
+        return
+    key = list(key)
+    answered = context[context[target].notna()]
+    if answered.empty:
+        return
+    # Compared as the wire spells them, through the encoder that writes them:
+    # a key column whose two halves hold different python types is one column
+    # written one way, so values that differ here are the same value by the
+    # time the model reads them. One dtype for the whole request, not one per
+    # half. Settled per half, the same entity came out `1.0` on the side
+    # read from the context and `1` on the side being scored, and the
+    # comparison reported overlaps the encoded request does not have.
+    table = schema[entity_table]
+    dtypes = key_dtypes(table, key, predict)
+    answers = set(keys_from_a_frame(answered, key, dtypes))
+    if not answers:
+        return
+    # Rows, not keys: the sentence counts rows being scored, and two rows
+    # asking about one entity are two rows whose answer is being shown.
+    shown = sum(
+        1
+        for named in keys_from_a_frame(predict, key, dtypes)
+        if named in answers
+    )
+    if not shown:
+        return
+    warnings.warn(
+        f'{shown} of the {len(predict)} rows being scored are also in '
+        f'context, carrying the {target!r} being asked for, so the model is '
+        f'being shown the answers to rows it is being asked about. Drop them '
+        f'from context, or gather the request with materialize(), which '
+        f'leaves the rows it scores out of the context it sends.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
 @dataclass(frozen=True)
 class Split:
     r"""One half of a request: the instance rows, plus any related tables.
@@ -246,7 +333,7 @@ class Request:
                 has never seen.
             target: The column being predicted.
             task: One of :data:`TASK_KINDS`. Stated, never inferred from the
-                target's cardinality -- guessing there is what turns a
+                target's cardinality. Guessing there is what turns a
                 two-class target into a multiclass one.
             related_tables: Refused. A relational request is gathered by
                 ``PredictiveQuery(...).materialize(...)``; no model can be
@@ -291,7 +378,7 @@ class Request:
                 code='UNSUPPORTED_REQUEST',
             )
         if len(context) == 0:
-            # A zero-row `predict` is legal -- the contract sets no minimum on
+            # A zero-row `predict` is legal. The contract sets no minimum on
             # rows, and an empty batch inside a loop is a reasonable no-op.
             # A zero-row context is not: a model that predicts from labelled
             # examples cannot be given none, and the endpoint answers a 500.
@@ -493,8 +580,8 @@ class Request:
         would copy every row of every request on the path where nothing looks
         at them.
 
-        Not held between reads. The envelopes are edited in place -- leaked
-        context rows are taken out of them -- so a kept frame would go on
+        Not held between reads. The envelopes are edited in place when leaked
+        context rows are taken out of them, so a kept frame would go on
         describing rows the request no longer sends, and a cache correct only
         for the edits made today is a trap for the ones made later. Reading is
         a few milliseconds per thousand rows, against a call that spends
@@ -523,9 +610,9 @@ class Request:
         r"""Refuse to replace a half of a request that is already gathered.
 
         A gathered request holds finished wire envelopes, and the adapter
-        sends those. An envelope carries what a frame cannot -- the entity
+        sends those. An envelope carries what a frame cannot: the entity
         references the rows are addressed by, and the anchor each is asked
-        at -- so a `Split` put here could not be turned back into one. It
+        at. A `Split` put here could not be turned back into one. It
         would change what the request reports and not what it sends, which is
         worse than not being allowed: the object would describe rows the model
         never sees.
@@ -548,7 +635,7 @@ class Request:
         r"""The requests this one is asked as, when it is asked as several.
 
         A ranking and a forecast have no task on the endpoint, so each is
-        asked as a set of questions it does serve -- one per candidate, one
+        asked as a set of questions it does serve, one per candidate and one
         per step. They are kept together here because the answer that was
         asked for is the one they make between them, not any one of them.
         """
@@ -559,7 +646,7 @@ class Request:
         r"""How this question was rewritten, if it had to be.
 
         Holds the kind of question that was asked, what each part asks after
-        -- a candidate, or a step -- as the caller gave it, and how many
+        (a candidate or a step) as the caller gave it, and how many
         candidates a ranking keeps. Re-deriving any of this from the query
         text would read a key as a string, and would call a forecast over a
         table named ``rank_events`` a ranking.
@@ -625,7 +712,7 @@ class Request:
 
         A relational request keeps its rows in the gathered envelopes rather
         than in ``context``, which stays an empty frame. Reading the frame
-        reported nought for every graph request -- and these two counts are the
+        reported nought for every graph request. These two counts are the
         only description of a request there is before it is sent, so the one
         shape whose size is worth checking was the one that would not say.
 
@@ -694,8 +781,8 @@ def _require_frame(value: Any, name: str) -> pd.DataFrame:
     r"""Reject a table argument that is not a frame, naming the parameter.
 
     Every table here is used as a frame immediately, so a dict, a list of
-    records or a Series -- the shapes a pandas user reaches for before building
-    a frame -- would otherwise surface as an ``AttributeError`` from inside an
+    records or a Series, the shapes a pandas user reaches for before building
+    a frame, would otherwise surface as an ``AttributeError`` from inside an
     adapter, which ``except StructuredDataError`` does not catch and which
     names neither the argument nor the type it should have been.
     """
@@ -719,8 +806,8 @@ def _refuse_tables_no_model_can_be_given(
     r"""Refuse related tables handed to the builder that cannot carry them.
 
     Neither model can be sent a request built this way. The relational one is
-    sent gathered envelopes -- neighbourhoods sampled around each entity, with
-    the columns folded onto the instance table -- and refuses frames; the
+    sent gathered envelopes, which contain neighbourhoods sampled around each
+    entity with columns folded onto the instance table, and refuses frames. The
     tabular one reads one table and would drop these without saying so. So the
     argument took frames, built an object, and every path that could have sent
     it said no, one call later than the mistake.
@@ -827,7 +914,7 @@ def _past(frame: pd.DataFrame | None, shift: int) -> pd.DataFrame | None:
 
     Only the numbers move. An id that is not one cannot be moved past
     anything, and replacing it with the nothing it coerces to would lose the
-    value rather than relocate it -- so it is left where it is, still tying
+    value rather than relocate it. It is left where it is, still tying
     its related rows to the instance it always named.
     """
     if frame is None or not shift or INSTANCE_ID not in frame:
@@ -855,8 +942,9 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
 
     An `instance_id` that is not a number is left exactly as it is. There is
     no arithmetic that moves it past another, so two envelopes using the same
-    one stay indistinguishable here -- which is what they already were, and
-    is a malformed envelope rather than something this can repair.
+    one stay indistinguishable here, as they already were. Two envelopes
+    sharing an `instance_id` are a malformed envelope, not something this
+    can repair.
     """
     instances: list[pd.DataFrame] = []
     related: dict[str, list[pd.DataFrame]] = {}
@@ -880,7 +968,7 @@ def _split_from(payloads: Sequence[Mapping[str, Any]], half: str) -> Split:
         # join that was exact within one envelope silently crosses between
         # them. The first envelope is left as it arrived; each one after has
         # its lowest id put where the numbers so far ran out, which an offset
-        # alone did not do -- an envelope numbering from below zero landed
+        # alone did not do: an envelope numbering from below zero landed
         # back among ids already taken however far the offset had advanced.
         numbered = [frame, *(table for _, table in parts)]
         bounds = [_instance_bounds(t) for t in numbered]
@@ -922,7 +1010,8 @@ def _envelope_rows(payload: Mapping[str, Any], half: str) -> int | None:
 
     Read defensively, and report not knowing as not knowing. These counts are
     what `repr` shows, so a request that cannot describe itself is worse than
-    one that describes itself roughly -- but `nothing_to_score` decides whether
+    one that describes itself roughly. However, `nothing_to_score` decides
+    whether
     to answer without sending, and there `None` and `0` are opposite answers.
 
     A list, specifically: `Sized` admits `{}` and `''`, which would read as an
@@ -948,7 +1037,7 @@ def _check_scored_values_mean_what_the_schema_says(
 
     The columns of the two halves are already checked against each other, by
     name, each with a message naming the fix. The values were not, and the
-    adapter widens a column's dtype to cover both halves -- rightly, for the
+    adapter rightly widens a column's dtype to cover both halves for the
     case it was written for: an all-null context column carries no type, and
     taking the context's answer alone would send the scored half's integers as
     text.
@@ -957,7 +1046,7 @@ def _check_scored_values_mean_what_the_schema_says(
     `numerical` could be widened to `string` by scored rows holding text, and
     `stype` is read from the schema on another path and is not widened with it,
     so the request went out declaring a column that is `string` and
-    `numerical` at once -- which is not a thing a column can be. It was
+    `numerical` at once, which is not a thing a column can be. It was
     answered rather than refused: measured against the live endpoint on a
     target that is exactly three times a feature, the scored rows came back
     300.0, 329.9 and 299.7 where the truth is 300, 330 and 360. Plausible
@@ -969,8 +1058,8 @@ def _check_scored_values_mean_what_the_schema_says(
     Runs after the schema is settled rather than beside the column checks it
     belongs with: a request built by hand may carry no schema at all, and one
     is inferred from the context a few lines below. Checking before that ran
-    left the hand-built request -- the one with no query to have validated it
-    -- as the only one not covered.
+    left the hand-built request, which has no query to validate it, as the only
+    one not covered.
 
     A column is not skipped merely for holding nothing. `pd.Series([],
     dtype='int64')` still says int64, and a zero-row batch declaring a type
@@ -1000,8 +1089,8 @@ def _check_scored_values_mean_what_the_schema_says(
             f'{column.stype!r}, which {arriving!r} cannot mean. Sent, the '
             f'column would be described as both at once and answered with '
             f'numbers that are wrong without saying so. Convert it before '
-            f'scoring -- predict[{name!r}] = pd.to_numeric(predict[{name!r}]) '
-            f'-- or say what the column really is with '
+            f'scoring: predict[{name!r}] = pd.to_numeric(predict[{name!r}]) '
+            f'or say what the column really is with '
             f'schema[{entity_table!r}][{name!r}].stype = ...',
             code='INVALID_REQUEST',
         )

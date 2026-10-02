@@ -401,16 +401,17 @@ def test_a_zone_on_every_row_is_still_one_shape():
 def test_a_year_first_column_reads_when_only_some_rows_carry_a_zone(values):
     """A warehouse writes a zone on the rows that have one. Every row here
     leads with its year, so calling the column ambiguous describes none of
-    them – it needs a per-row format, not a choice of reading."""
+    them. It needs a per-row format, not a choice of reading."""
     assert time_column(values * 45) is not None
 
 
 def test_reading_each_value_on_its_own_terms_is_not_offered_to_inference():
     """It also reads part codes, which is the guess the plausible-year window
-    exists to refuse."""
+    exists to refuse. The year is one pandas 2 can hold in nanoseconds, so
+    the code reads as a date on every supported pandas."""
     from sdm_client.core import dates
 
-    codes = pd.Series(['4711-01-02'] * 20)
+    codes = pd.Series(['2201-01-02'] * 20)
     assert dates.conversion_that_works(codes) is None
     assert dates.conversion_that_works(codes, only_plausible_years=False)
 
@@ -510,7 +511,7 @@ def test_asking_whether_a_column_reads_cannot_itself_fail():
 )
 def test_space_around_a_value_is_not_part_of_its_shape(values):
     """A column of these matched no shape, so it was refused by the arm that
-    counts what does not read – which then said `0 of 20` of them did not."""
+    counts what does not read, which then said `0 of 20` of them did not."""
     assert which_arm(values * 14) == 'read'
 
 
@@ -609,7 +610,7 @@ def test_the_arm_a_column_lands_on_follows_from_what_it_holds(
 def test_a_column_with_both_faults_is_told_about_both():
     """Coercing is what the unreadable-values message offers, and coercing a
     column written two ways throws away every row of the shape it does not
-    settle on – measured at 10 of 30 here – so the shapes are named first,
+    settle on, measured at 10 of 30 here, so the shapes are named first,
     and the values that do not read are named too."""
     from sdm_client.materializers.relational import _to_time
 

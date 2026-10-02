@@ -12,7 +12,7 @@ set of labels has no shape to come back in.
 Before this, the same input produced two different wrong answers. Building a
 schema raised `TypeError: unhashable type: 'list'` from inside pandas, because
 `_stype_of` counts distinct values. And a list that reached the wire without a
-schema -- the rows being scored are not described by one -- was written by
+schema (the rows being scored are not described by one) was written by
 `serialize_cell`'s `str(value)` fallback as the repr of a Python list, so the
 model was asked about the text `"['a', 'b']"`.
 """
@@ -230,7 +230,7 @@ def test_an_arrow_backed_list_column_is_refused_too():
 
     The guard skips a column whose dtype cannot hold a sequence. Asking
     "is it object?" instead would let this one through, because an Arrow list
-    dtype is not object -- and the cells would go out as `"['a', 'b']"` again.
+    dtype is not object, and the cells would go out as `"['a', 'b']"` again.
     """
     pa = pytest.importorskip('pyarrow')
     series = pd.Series(
@@ -292,7 +292,7 @@ def test_every_arrow_type_that_can_hold_a_sequence_is_walked(arrow):
     """Enumerating the nested types let a list *view* through once already.
 
     `pa.types.is_nested` answers for the containers. The encodings that wrap
-    one -- a dictionary or a run-end encoding of a list -- are still columns of
+    one, a dictionary or a run-end encoding of a list, are still columns of
     lists, so they are unwrapped before the question is asked.
     """
     pa = pytest.importorskip('pyarrow')
@@ -395,9 +395,12 @@ def test_a_canonical_arrow_extension_over_a_scalar_is_not_walked():
 def test_a_uuid_column_is_walked_and_passes():
     """`pa.uuid()` stores a fixed-size binary, which the gate cannot clear.
 
-    So it is walked -- and its cells are `uuid.UUID` objects, not bytes, so
+    So it is walked, and its cells are `uuid.UUID` objects, not bytes, so
     they pass. The gate is conservative and the cell rule is the authority;
     the cost of that is one walk over a column that turns out to be fine.
+
+    Built from the Arrow array itself: casting the converted values to
+    `ArrowDtype(pa.uuid())` asks for a numpy dtype pandas 2 cannot give.
     """
     pa = pytest.importorskip('pyarrow')
     import uuid as uuid_module
@@ -407,8 +410,7 @@ def test_a_uuid_column_is_walked_and_passes():
 
     value = uuid_module.uuid4()
     series = pd.Series(
-        pa.array([value.bytes], type=pa.uuid()).to_pandas(),
-        dtype=pd.ArrowDtype(pa.uuid()),
+        pd.arrays.ArrowExtensionArray(pa.array([value.bytes], type=pa.uuid()))
     )
     assert not _holds_only_scalars(series.dtype)
     assert serialize_column(series, 'string') == [str(value)]
@@ -536,8 +538,8 @@ def test_a_frozenset_is_refused():
 def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
     """The invariant, checked against Arrow's own type taxonomy.
 
-    Enumerating types is what went wrong four times -- a list view, then binary,
-    then a binary view, then an interval -- so this asserts the property: for
+    Enumerating types is what went wrong four times: a list view, then binary,
+    then a binary view, then an interval. This asserts the property: for
     every type the gate lets past, no cell it can hold may be one the cell rule
     would refuse. A type the gate walks is safe by construction and is skipped.
 

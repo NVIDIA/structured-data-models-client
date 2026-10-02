@@ -56,7 +56,8 @@ connection = duckdb.connect('w.db', read_only=True)
 read_table(connection, query=f'SELECT * FROM {quote_ident("café")}')
 ```
 
-Failures raised by the sources, `read`, `read_table` and the Databricks helpers surface as `ConnectorError` with a stable `code`: `UNKNOWN_CONNECTOR`, `INVALID_CONNECTOR_ARGS`, `CONNECT_FAILED`, `QUERY_FAILED`, `READ_FAILED`, or `NOT_FOUND`, with the original driver exception chained as `__cause__`.
+Failures raised by the sources, `read`, `read_table` and the Databricks helpers surface as `ConnectorError` with a stable `code`: `UNKNOWN_CONNECTOR`, `INVALID_CONNECTOR_ARGS`, `CONNECT_FAILED`, `QUERY_FAILED`, `READ_FAILED`, or `NOT_FOUND`.
+Where a driver raised, its exception is chained as `__cause__`; an unknown connector, and an argument refused before any driver is reached, have none.
 A missing driver, or a databricks-sdk too old for `lakebase()`, is refused with code `MISSING_BACKEND`; a missing driver raises it as `MissingBackendError`, which is also a `ModuleNotFoundError`.
 A broken or incompatible driver installation stays unwrapped by design and raises `ImportError` (consumers map it to their own broken-install category, e.g. sdm-client's `DRIVER_LOAD_FAILED`).
 

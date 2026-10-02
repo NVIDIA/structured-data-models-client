@@ -52,9 +52,9 @@ def _declared_connect_args() -> frozenset[str]:
 
     ``DEFAULT_CONFIGURATION`` is the driver's *config-parameter* table, which
     omits the constructor-only parameters ``connection_name`` and
-    ``connections_file_path`` -- the named-connection auth path, and the one
-    way to authenticate without inlining credentials. Taking the union with
-    ``SnowflakeConnection.__init__`` restores them, and folding in
+    ``connections_file_path``. These provide the named-connection auth path,
+    the one way to authenticate without inlining credentials. Taking the union
+    with ``SnowflakeConnection.__init__`` restores them, and folding in
     ``_AUTH_ARGS`` keeps the allow-list from ever contradicting the
     borrow logic that runs after it.
     """

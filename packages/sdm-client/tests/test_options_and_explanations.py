@@ -231,31 +231,36 @@ def refusal(message: str, status: int = 422) -> NimRequestError:
     return NimRequestError(status, code='UNSUPPORTED_SHAPE', message=message)
 
 
-def test_a_cardinality_refusal_names_the_columns_that_are_over():
-    """The deployments word this two ways and only one was matched, so on the
-    one that counts, the hook never ran."""
+def _counted_refusal():
+    """The explained cardinality refusal the three checks below are about."""
     pytest.importorskip('sdm_relational_engine')
-
-    explained = RelationalAdapter().explain_error(
+    return RelationalAdapter().explain_error(
         refusal('categorical cardinality 120 exceeds limit 100.'),
         counted_payload(),
     )
-    assert 'biz.addr (120 values)' in str(explained)
-    assert 'biz.city' not in str(explained)
-    assert 'biz.bid' not in str(explained)
+
+
+def test_a_cardinality_refusal_names_the_columns_that_are_over():
+    """The deployments word this two ways and only one was matched, so on the
+    one that counts, the hook never ran."""
+    explained = str(_counted_refusal())
+    assert 'biz.addr (120 values)' in explained
+    assert 'biz.city' not in explained
+    assert 'biz.bid' not in explained
 
 
 def test_a_cardinality_refusal_advises_something_that_helps():
     """These columns are already categorical, so telling their owner to make
     them categorical would change nothing."""
-    pytest.importorskip('sdm_relational_engine')
+    explained = str(_counted_refusal())
+    assert 'exclude_cols_dict' in explained
+    assert "stype = 'categorical'" not in explained
 
-    explained = RelationalAdapter().explain_error(
-        refusal('categorical cardinality 120 exceeds limit 100.'),
-        counted_payload(),
-    )
-    assert 'exclude_cols_dict' in str(explained)
-    assert "stype = 'categorical'" not in str(explained)
+
+def test_a_refusal_keeps_its_status_and_code():
+    explained = _counted_refusal()
+    assert explained.status_code == 422
+    assert explained.code == 'UNSUPPORTED_SHAPE'
 
 
 def test_the_stype_wording_still_names_its_columns():
@@ -269,15 +274,6 @@ def test_the_stype_wording_still_names_its_columns():
 def test_an_unrelated_error_is_returned_untouched():
     error = refusal('Unexpected server error.', status=500)
     assert RelationalAdapter().explain_error(error, counted_payload()) is error
-
-
-def test_a_refusal_keeps_its_status_and_code():
-    explained = RelationalAdapter().explain_error(
-        refusal('categorical cardinality 120 exceeds limit 100.'),
-        counted_payload(),
-    )
-    assert explained.status_code == 422
-    assert explained.code == 'UNSUPPORTED_SHAPE'
 
 
 # --- a key above the basic plane -------------------------------------------

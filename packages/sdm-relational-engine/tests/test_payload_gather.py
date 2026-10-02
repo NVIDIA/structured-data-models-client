@@ -71,7 +71,7 @@ def _frame(n: int) -> pd.DataFrame:
 def test_entity_values_matches_the_row_at_a_time_reference() -> None:
     df = _frame(12)
     cases = [
-        # (batch, batch_size, row) -- sorted, unsorted, gaps, repeats, empty,
+        # (batch, batch_size, row), sorted, unsorted, gaps, repeats, empty,
         # a row remap, and a remap pointing past the frame.
         (np.array([0, 0, 1, 1, 2]), 3, None),
         (np.array([2, 0, 1, 0, 2]), 3, None),

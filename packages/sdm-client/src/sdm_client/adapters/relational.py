@@ -12,12 +12,13 @@ are already finished.
 
 That split is why this adapter is short. It sends what was gathered, and reads
 the answer back. It does not reimplement the gathering, which would duplicate
-point-in-time correctness logic that already lives -- and is tested -- in the
-engine.
+point-in-time correctness logic that already lives in the engine and is tested
+there.
 """
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import re
 import uuid
@@ -58,6 +59,12 @@ _DEFAULT_OUTPUTS = {
 }
 
 _SESSION_PINNED = ('model', 'task', 'schema', 'context')
+#: Which halves of a request a call puts on the wire. Every judgement made
+#: before sending asks only about a half that travels.
+_SENDS_EVERYTHING = frozenset({'context', 'predict'})
+_SENDS_A_CONTEXT = frozenset({'context'})
+_SENDS_ROWS_TO_SCORE = frozenset({'predict'})
+
 _SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
 
 
@@ -104,15 +111,25 @@ class RelationalAdapter:
         return _DEFAULT_OUTPUTS.get(request.task.kind, ('prediction',))
 
     def prediction_plan(
-        self, request: Request, outputs: tuple[str, ...]
+        self,
+        request: Request,
+        outputs: tuple[str, ...],
+        sends: frozenset[str] = _SENDS_EVERYTHING,
     ) -> Iterator[dict[str, Any]]:
         payloads = self._payloads(request)
-        self._preflight(payloads, outputs, request.query)
+        self._preflight(payloads, outputs, request.query, sends)
         for payload in payloads:
             envelope = dict(payload)
             envelope['model'] = self.spec.model_id
             envelope['output'] = _output_for(payload, outputs)
-            envelope.setdefault('metadata', {})['request_id'] = _request_id()
+            # The gathered payload's own metadata, copied. Shared, writing the
+            # call's id into it wrote it into the request. Thus, planning the
+            # same request twice changed the id of the envelope already handed
+            # out, and the one a caller had recorded named a different call.
+            envelope['metadata'] = {
+                **(payload.get('metadata') or {}),
+                'request_id': _request_id(),
+            }
             inference = self._inference(envelope.get('inference'), request)
             if inference is None:
                 envelope.pop('inference', None)
@@ -128,10 +145,10 @@ class RelationalAdapter:
         The engine fills in an inference config on every request, including
         keys this client does not forward: `output_type`, whose choice travels
         as ``output.prediction_statistic`` instead, and `target_transforms`.
-        Dropping the engine's defaults is safe -- but if the *caller* asked for
-        one, it is named rather than silently discarded, because a dropped
-        request for four estimators is a different prediction than the one
-        that was wanted.
+        Dropping the engine's defaults is safe. If the *caller* asked for one,
+        it is named rather than silently discarded, because a dropped request
+        for four estimators is a different prediction than the one that was
+        wanted.
 
         Forwarding a key is not a promise that the endpoint serves it. This is
         a name-level filter over what the engine sends; whether a deployment
@@ -182,17 +199,30 @@ class RelationalAdapter:
                 f'pins one context; use predict() instead',
                 details={'batches': len(payloads)},
             )
-        envelope = next(iter(self.prediction_plan(request, outputs)))
+        envelope = next(
+            iter(self.prediction_plan(request, outputs, _SENDS_A_CONTEXT))
+        )
         pinned = {
             key: envelope[key] for key in _SESSION_PINNED if key in envelope
         }
         pinned['metadata'] = envelope['metadata']
+        # The gathered envelopes are the request's own, and a plan built by
+        # naming their keys shares them. A holdout edits the pinned context in
+        # place, so it was editing the request: a second fit of the same
+        # request, with no holdout, pinned the already-reduced context.
+        if 'context' in pinned:
+            pinned['context'] = copy.deepcopy(pinned['context'])
         return pinned
 
     def session_prediction_plan(
-        self, request: Request, outputs: tuple[str, ...]
+        self,
+        request: Request,
+        outputs: tuple[str, ...],
+        pinned: Mapping[str, Any] | None = None,
     ) -> Iterator[dict[str, Any]]:
-        for envelope in self.prediction_plan(request, outputs):
+        for envelope in self.prediction_plan(
+            request, outputs, _SENDS_ROWS_TO_SCORE
+        ):
             yield {
                 key: envelope[key]
                 for key in _SESSION_SCORING
@@ -268,8 +298,8 @@ class RelationalAdapter:
                 f'with something coarser.'
             )
             return _reworded(error, message)
-        # The payload does not carry the entity table's real name --
-        # `instance_table` is what the wire calls it -- so an example naming
+        # The payload does not carry the entity table's real name,
+        # `instance_table` is what the wire calls it. Thus, an example naming
         # it would render a line the caller cannot run. Prefer a related
         # table, whose name did survive, and fall back to naming no table at
         # all rather than a made-up one.
@@ -300,17 +330,25 @@ class RelationalAdapter:
         payloads: tuple[dict[str, Any], ...],
         outputs: tuple[str, ...],
         asked: str | None = None,
+        sends: frozenset[str] = _SENDS_EVERYTHING,
     ) -> None:
         """Refuse what the endpoint enforces, before spending the round trip.
 
         An explanation is the narrow case: the model explains one entity at a
         time, and only in the mode the smaller context budget selects. Sending
         more gets a 500 that names neither limit, so both are checked here.
+
+        `sends` names the halves this call puts on the wire. A session pins its
+        context at `fit()` and a scoring call carries only rows, so judging the
+        context there refuses a request over rows that are thrown away, while
+        judging the rows when pinning refuses over rows that are not sent at
+        all. Every check below asks only about a half that travels.
         """
         limits = self.spec.runtime.limits
-        self._check_context_is_not_empty(payloads)
-        self._check_class_count(payloads, limits)
-        self._check_target_varies(payloads, asked)
+        if 'context' in sends:
+            self._check_context_is_not_empty(payloads)
+            self._check_class_count(payloads, limits)
+            self._check_target_varies(payloads, asked)
         if 'explanation' not in outputs:
             return
 
@@ -323,7 +361,7 @@ class RelationalAdapter:
             for payload in payloads
         )
         allowed = limits['explanation_predict_rows']
-        if scored != allowed:
+        if 'predict' in sends and scored != allowed:
             raise UnsupportedRequestError(
                 f'an explanation covers exactly {allowed} entity, and this '
                 f'request scores {scored}; ask for one at a time',
@@ -331,7 +369,7 @@ class RelationalAdapter:
             )
 
         cap = limits['context_rows_fast']
-        if _asks_for_the_larger_context(payloads, cap):
+        if 'context' in sends and _asks_for_the_larger_context(payloads, cap):
             raise UnsupportedRequestError(
                 f'an explanation is only produced in the mode the smaller '
                 f'context budget selects, and this request was gathered with '
@@ -349,8 +387,8 @@ class RelationalAdapter:
         r"""A classification target the model cannot represent is a size too.
 
         The endpoint answers ``422 UNSUPPORTED_FEATURE`` with both numbers in
-        it, which is a decent message -- but it arrives after the context has
-        been gathered, encoded and sent, and the count is knowable here.
+        it, which is a decent message. However, it arrives after gathering,
+        encoding, and sending the context, and the count is knowable here.
         """
         ceiling = limits.get('classes_max')
         if not ceiling:
@@ -401,7 +439,7 @@ class RelationalAdapter:
     def _check_target_varies(
         self, payloads: tuple[dict[str, Any], ...], asked: str | None = None
     ) -> None:
-        r"""Refuse, or remark on, a context whose every row says the same thing.
+        r"""Refuse or note a context whose every row says the same thing.
 
         The tabular route judges this before it sends and the relational one
         said nothing, so the same unlearnable question was refused by one model
@@ -461,9 +499,9 @@ class RelationalAdapter:
                 'a relational request has to be gathered first, and this '
                 'one was not. Build it with '
                 'PredictiveQuery(...).materialize(indices=[...], '
-                "model='kumo-relational') -- a schema of one table is "
+                "model='kumo-relational'). A schema of one table is "
                 'gathered for the tabular model unless the relational one is '
-                'named -- rather than with Request(context=..., '
+                'named, rather than with Request(context=..., '
                 'predict=...), which is the single-table form',
                 details={'model': KUMO_RELATIONAL.model_id},
             )
@@ -545,7 +583,7 @@ def _columns_over(payload: Mapping[str, Any], limit: int) -> list[str]:
 
     Counted by the engine's own helper rather than here. What the guard counts
     is not every cell: it is string cells only, across the predict half as well
-    as the context, reduced to the larger of the two -- and a text cell travels
+    as the context, reduced to the larger of the two. A text cell travels
     as a list of tokens, which it counts individually. Counting it a second way
     here would name columns the endpoint was not talking about, a numeric key
     among them.
@@ -656,7 +694,7 @@ def _columns_with_stype(payload: Mapping[str, Any], stype: str) -> list[str]:
     r"""Every ``table.column`` in the payload declared as ``stype``.
 
     The endpoint refuses an unsupported semantic type without saying which
-    column carries it, and a real dataset acquires them in bulk -- Northwind
+    column carries it, and a real dataset acquires them in bulk. Northwind
     produces fifteen. The payload that was just refused knows.
 
     A relational schema is ``instance_table`` plus ``related_tables``, so both
@@ -806,8 +844,8 @@ def _key_dtype(payload: dict[str, Any], reference: str) -> str | None:
 
     An integer wider than a double travels as a base-10 string by contract, so
     a key past 2**53 comes back as text unless what it was is looked up. The
-    reference column itself is declared `string` -- it is a transport key --
-    so the answer is on the table it points at.
+    reference column itself is declared `string` because it is a transport key.
+    The answer is therefore on the table it points at.
     """
     schema = payload.get('schema', {})
     for link in schema.get('relationships', []):

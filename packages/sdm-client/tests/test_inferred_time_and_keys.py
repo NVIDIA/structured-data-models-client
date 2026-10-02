@@ -6,9 +6,9 @@
 
 Three faults that compose into one bad sequence. Inference never reads a string
 as a date, so a warehouse `DATE` column arrives as text and the table gets no
-time column -- silently. The caller who spots that and reaches for the repair
-the SDK's own error messages teach, `schema[t][c].stype = 'timestamp'`, found it
-set the stype and not the time column, so the schema then said the column was a
+time column without warning. The caller who spots that can use the repair the
+SDK's own error messages teach: `schema[t][c].stype = 'timestamp'`. Yet it set
+the stype and not the time column, so the schema then said the column was a
 timestamp and that the table had none. And a table keyed on a domain code got no
 key at all, which costs every relationship pointing at it, also silently.
 """
@@ -283,7 +283,7 @@ def test_a_table_that_found_its_time_column_is_not_told_about_text():
 
 def test_a_keyless_table_another_table_names_says_it_cannot_be_linked_to():
     """`IATA_CODE` and `SKU` are keys no suffix rule will cover, so the tables
-    get none -- and a table with no key is not a candidate target for any
+    get none, and a table with no key is not a candidate target for any
     edge, so the whole graph silently collapses to one table."""
     frames = {
         'airports': pd.DataFrame(
@@ -347,7 +347,7 @@ def test_a_unique_foreign_key_is_not_made_into_a_parent():
 
 def test_a_declared_parent_key_is_not_undone_by_a_unique_child_column():
     """The costlier half of the same mistake. A second table keyed on a name
-    makes it ambiguous, and ambiguity deletes *every* edge using it -- so
+    makes it ambiguous, and ambiguity deletes *every* edge using it, so
     guessing here can destroy a graph whose keys were declared correctly."""
     frames = {
         'orders': pd.DataFrame({'ORDER_NO': ['O1', 'O2'], 'total': [1.0, 2.0]}),
@@ -434,8 +434,8 @@ def test_a_table_that_has_a_key_is_not_asked_about_one():
 
 def test_the_time_column_is_not_offered_as_a_key():
     """A string date declared as the time column is unique, is named by the
-    child, and is a string -- it clears every other test, and a column cannot
-    be both."""
+    child, and is a string. It clears every other test, and a column cannot be
+    both."""
     frames = {
         'parent': pd.DataFrame(
             {'day': ['2021-01-01', '2021-01-02'], 'n': [1.0, 2.0]}
@@ -456,8 +456,8 @@ def test_the_time_column_is_not_offered_as_a_key():
 def test_a_child_of_a_declared_parent_is_not_told_to_claim_the_key():
     """`line_items.ORDER_NO` is unique in these rows and is a foreign key.
     Telling its owner to name it the primary key would make `ORDER_NO`
-    ambiguous and delete the two edges that are working -- the warning would
-    talk the caller into the failure it exists to prevent."""
+    ambiguous and delete the two edges that are working. The warning would
+    cause the failure it exists to prevent."""
     frames = {
         'orders': pd.DataFrame({'ORDER_NO': ['O1', 'O2'], 'total': [1.0, 2.0]}),
         'line_items': pd.DataFrame(
@@ -545,7 +545,7 @@ def account_and_trans(duplicates: int) -> dict[str, pd.DataFrame]:
 
 def test_a_key_with_repeats_past_the_tolerance_says_the_edges_it_cost():
     """One duplicated row nominates the key and warns; two nominated nothing,
-    which drops every relationship into the table -- the worse outcome was the
+    which drops every relationship into the table. The worse outcome was the
     quieter one."""
     schema, said = warnings_from(
         lambda: Schema.from_data(account_and_trans(duplicates=2))
@@ -677,7 +677,7 @@ def snapshots(*, distinguished_by_value: bool) -> pd.DataFrame:
 
 
 def test_the_composite_key_the_warning_names_is_one_the_client_takes():
-    """The search filtered nothing, so it recommended the time column -- and
+    """The search filtered nothing, so it recommended the time column, and
     a timestamp cannot identify a row, so `_check_key` refused the very key
     `_adopt_key` had just asked for."""
     schema, said = warnings_from(

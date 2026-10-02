@@ -37,10 +37,17 @@ PACKAGES = (
 
 
 def _signature(obj: object) -> str | None:
+    r"""The signature as this project wrote it, on any supported Python.
+
+    3.10 takes ``Self`` from ``typing_extensions`` and renders it with that
+    module's name, where later interpreters write ``Self``. The same source
+    must record the same surface wherever the suite runs.
+    """
     try:
-        return str(inspect.signature(obj))  # type: ignore[arg-type]
+        written = str(inspect.signature(obj))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+    return written.replace('typing_extensions.', '')
 
 
 FIRST_PARTY_ROOTS = frozenset(
@@ -93,7 +100,11 @@ def _describe(obj: object) -> dict[str, object]:
             for base in obj.__bases__
             if base is not object
         ]
-        described['signature'] = _signature(obj)
+        # An enum is called through the interpreter's own `EnumType`, whose
+        # signature changed in 3.12; its members, recorded below, are the
+        # surface this project defines.
+        if not issubclass(obj, enum.Enum):
+            described['signature'] = _signature(obj)
         owned = _first_party_attributes(obj)
         described['public_methods'] = {
             name: _signature(getattr(obj, name, value))

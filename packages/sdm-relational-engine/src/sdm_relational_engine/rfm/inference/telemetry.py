@@ -4,18 +4,16 @@
 
 r"""What a prediction has to say about itself afterwards.
 
-A prediction that comes back wrong days later can only be explained if the run
-that produced it can be reconstructed: which graph, under which engine, for which
-query, at which anchor. Predictions are not deterministic and the data underneath
-them moves, so re-running the question does not reveal what happened the first
-time.
+A prediction that appears wrong days later can be explained only if its run can
+be reconstructed: the graph, engine, query, and anchor. Predictions are not
+deterministic, and the underlying data moves, so rerunning the question does
+not reveal what happened the first time.
 
-One record is emitted per prediction, whether it returned, refused, or raised. It
-names the run rather than describing it: a graph fingerprint, versions, counts and
-timings. No entity identifiers and no cell values, since both are the caller's
-data. It goes to the ``sdm_relational_engine`` logger rather than to the progress
-display, which belongs to whoever is watching the call rather than to whoever has
-to explain it later.
+One record is emitted per prediction, whether it returned, refused, or raised.
+It names the run with a graph fingerprint, versions, counts, and timings. It
+includes no entity identifiers or cell values because both are caller data. It
+goes to the ``sdm_relational_engine`` logger instead of the progress display.
+That display belongs to the call's observer, not whoever explains it later.
 """
 
 import json
@@ -110,8 +108,8 @@ def emit(record: PredictionRecord) -> None:
 # message to say where one ends, and it does not: a backslash before a closing
 # quote is either an escaped quote inside the value or the end of a value that
 # ends in a backslash, and an apostrophe in prose is indistinguishable from an
-# opening quote. Every rule tried for those cases left some value in the log --
-# reading the escape one way leaks the rest of that value, the other way leaks
+# opening quote. Every rule tried for those cases left some value in the log.
+# Reading the escape one way leaks the rest of that value, the other way leaks
 # the next one, and requiring a non-word character before an opening quote
 # leaks `entity'alice@example.com'`. Taking the whole span cannot: nothing
 # between the outer quotes survives, whatever the quoting meant.
@@ -129,7 +127,7 @@ def emit(record: PredictionRecord) -> None:
 # means naming every character in Unicode and costs about a tenth of a second
 # every time this module loads. A test re-derives the set and fails if this
 # literal no longer matches, so a form added by a newer Unicode cannot go in
-# unnoticed -- which is the whole reason it is not a hand-kept list.
+# unnoticed. That is the whole reason it is not a hand-kept list.
 #
 # Categories were the obvious alternative and are wrong twice: `Pi`/`Pf` miss
 # the low-9 forms, which Unicode classes as opening punctuation, and adding
