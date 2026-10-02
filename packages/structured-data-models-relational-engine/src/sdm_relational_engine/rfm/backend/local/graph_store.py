@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from importlib import import_module
-from importlib.util import find_spec
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -355,10 +354,14 @@ class LocalGraphStore:
 
 
 def _argsort(input: np.ndarray) -> np.ndarray:
-    if find_spec('torch') is None:
-        return np.argsort(input)
-    torch = import_module('torch')
-    return torch.from_numpy(input).argsort().numpy()
+    r"""Sorts stably, so equal keys keep their source row order.
+
+    Equal keys are neighbors sharing a parent and a timestamp, and their order
+    decides which of them the sampler picks. An unstable sort leaves that to
+    the algorithm, which differed between numpy and ``torch``, so whether
+    ``torch`` was installed changed the sampled neighbors.
+    """
+    return np.argsort(input, kind='stable')
 
 
 def _lexsort(inputs: list[np.ndarray]) -> np.ndarray:
