@@ -40,6 +40,14 @@ NO_DAY = pd.Series([pd.NaT] * 4)
         'ETLLoadedAt',
         'refreshed_on',
         'DeletedDate',
+        'deletion_date',
+        'ingested_at',
+        '_sdc_batched_at',
+        '_airbyte_extracted_at',
+        'refresh_date',
+        'REFRESHDATE',
+        'reload_ts',
+        'reloadedAt',
     ],
 )
 def test_a_stamp_of_the_last_change_is_refused(name):
@@ -57,6 +65,7 @@ def test_a_stamp_of_the_last_change_is_refused(name):
         'shipped_at',
         'SellStartDate',
         'download_time',
+        'lastingDate',
     ],
 )
 def test_a_stamp_of_when_a_row_began_is_kept(name):

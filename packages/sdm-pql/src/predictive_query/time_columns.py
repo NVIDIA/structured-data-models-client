@@ -36,9 +36,17 @@ EDIT_STAMP_TOKENS = frozenset(
         'sync',
         'loaded',
         'load',
+        'reload',
+        'reloaded',
+        'ingested',
+        'batched',
+        'extracted',
         'etl',
+        'refresh',
+        'refreshdate',
         'refreshed',
         'deleted',
+        'deletion',
     }
 )
 
@@ -65,8 +73,9 @@ def is_edit_stamp(name: str) -> bool:
     modification, update, or one of :data:`EDIT_STAMP_TOKENS` is refused.
     """
     lowered = name.lower()
-    if 'modif' in lowered or 'updat' in lowered or lowered.startswith('last'):
+    if 'modif' in lowered or 'updat' in lowered:
         return True
+    # By token, so `last_seen` is refused and `lastingDate` is kept.
     return not EDIT_STAMP_TOKENS.isdisjoint(name_tokens(name))
 
 
