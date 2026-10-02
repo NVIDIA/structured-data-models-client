@@ -867,7 +867,7 @@ class _FakeCursor:
                 _COLUMN_TYPES.get(table, {}) if schema == _SCHEMA else {}
             )
             self._rows = [
-                (name, dtype, 'YES', _CATALOG, _SCHEMA, table)
+                (name, dtype, 'YES', _CATALOG, _SCHEMA, table, 'MANAGED')
                 for name, dtype in column_types.items()
             ]
             return

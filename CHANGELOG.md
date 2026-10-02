@@ -347,6 +347,10 @@ declare as `1.0.0` and none has published. The heading becomes
   The loader now reads the tables from those Hugging Face repositories at a commit pinned in the package, and checks each against a SHA-256 recorded with it, so what loads cannot change upstream unseen.
   `scripts/pin_relbench.py` writes the pins, and `rfm/assets/VENDORED.md` says how the digests were obtained.
   Downloads land in a new cache directory, so a dataset fetched before is fetched once more.
+- **A Databricks metric view named as a table failed with the warehouse's `METRIC_VIEW_MISSING_MEASURE_FUNCTION`.**
+  `Schema.from_source(DatabricksSource(...), {'m': '<metric view>'})` read its rows like a table's, and Databricks refuses that for a measure.
+  The column look-up now reads the relation's type from `information_schema` too, so a metric view is refused before any row is read, with a `StructuredDataError` (`INVALID_REQUEST`) that says to use `source.semantic_model('<metric view>')`.
+  The engine raises the new `MetricViewAsTableError`, a `ValueError`, pointing to `Graph.from_databricks_metric_view`.
 
 ### Behaviour worth knowing before you rely on it
 

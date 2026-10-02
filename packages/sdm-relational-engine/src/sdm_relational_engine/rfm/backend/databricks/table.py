@@ -11,7 +11,10 @@ import pandas as pd
 from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
-from sdm_relational_engine.exceptions import TableNotFoundError
+from sdm_relational_engine.exceptions import (
+    MetricViewAsTableError,
+    TableNotFoundError,
+)
 from sdm_relational_engine.rfm.backend.databricks import AnyConnection
 from sdm_relational_engine.rfm.backend.databricks.metric_view import (
     SOURCE_ALIAS,
@@ -150,13 +153,20 @@ class DatabricksTable(Table):
         seconds, and it grows with catalog size.
         """
         with self._connection.cursor() as cursor:
+            # The relation's type rides along so that a metric view is named
+            # as one here, rather than failing on its first read of rows.
             sql = (
-                f'SELECT column_name, full_data_type, is_nullable,\n'
-                f'       table_catalog, table_schema, table_name\n'
-                f'FROM {self._quoted_catalog}.information_schema.columns\n'
-                f'WHERE table_schema = lower(?)\n'
-                f'  AND table_name = lower(?)\n'
-                f'ORDER BY ordinal_position'
+                f'SELECT c.column_name, c.full_data_type, c.is_nullable,\n'
+                f'       c.table_catalog, c.table_schema, c.table_name,\n'
+                f'       t.table_type\n'
+                f'FROM {self._quoted_catalog}.information_schema.columns c\n'
+                f'JOIN {self._quoted_catalog}.information_schema.tables t\n'
+                f'  ON t.table_catalog = c.table_catalog\n'
+                f' AND t.table_schema = c.table_schema\n'
+                f' AND t.table_name = c.table_name\n'
+                f'WHERE c.table_schema = lower(?)\n'
+                f'  AND c.table_name = lower(?)\n'
+                f'ORDER BY c.ordinal_position'
             )
             cursor.execute(sql, parameters=[self._schema, self._source_name])
             rows = cursor.fetchall()
@@ -165,6 +175,16 @@ class DatabricksTable(Table):
                 raise TableNotFoundError(
                     f"Table '{self.source_name}' does not exist "
                     f'in the remote data backend'
+                )
+
+            if rows[0][6] == 'METRIC_VIEW':
+                raise MetricViewAsTableError(
+                    f"'{self.source_name}' is a metric view, not a table. "
+                    f'Its measures are aggregations with no value per row, '
+                    f'so it cannot be read as a table. Load it with '
+                    f"Graph.from_databricks_metric_view('{self._source_name}', "
+                    f'connection) instead.',
+                    name=self._source_name,
                 )
 
             self._catalog, self._schema, self._source_name = rows[0][3:6]
