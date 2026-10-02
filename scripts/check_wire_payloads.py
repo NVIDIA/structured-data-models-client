@@ -15,11 +15,12 @@ refused by a deployment.
 This closes that over the payloads in ``tests/golden/wire_payloads.json``,
 which are recorded from real calls and already pinned against drift.
 
-It catches what the contract declares and no more. Four request schemas set
-``additionalProperties: true``, so a key invented inside ``output``,
-``inference``, ``task`` or ``target`` is contractual by construction and is
-not reported here. Tightening those is a change to the contract, not to this
-check.
+It reads what the contract declares and no more. Six of the seventeen schemas
+a request reaches set ``additionalProperties: true``, so a key invented inside
+``output``, ``inference``, ``task``, ``target``, ``metadata`` or a column is
+contractual by construction. Rules the spec states in prose, such as which
+columns a prediction may name, are not expressible as a schema and are not
+read either.
 """
 
 from __future__ import annotations
@@ -38,13 +39,13 @@ ANNOTATIONS = frozenset(
     {'discriminator', 'example', 'externalDocs', 'xml', 'deprecated'}
 )
 
-#: The request schema a recorded body is read against, by the route it was
-#: sent to. A body with no session id is a one-shot prediction.
-BY_SHAPE = (
-    ('session_id', 'SessionPredictionRequest'),
-    ('predict', 'PredictionRequest'),
-    ('context', 'SessionCreateRequest'),
-)
+#: The three request schemas, told apart by the sections only one of them has.
+#: A session id is in the path rather than the body, so it cannot be used.
+BY_SHAPE = {
+    ('context', 'predict'): 'PredictionRequest',
+    ('context',): 'SessionCreateRequest',
+    ('predict',): 'SessionPredictionRequest',
+}
 
 
 def as_json_schema(node: Any) -> Any:
@@ -78,11 +79,16 @@ def as_json_schema(node: Any) -> Any:
     return converted
 
 
-def schema_for(body: dict[str, Any]) -> str:
-    for key, name in BY_SHAPE:
-        if key in body:
-            return name
-    return 'PredictionRequest'
+def schema_for(body: dict[str, Any]) -> str | None:
+    r"""Which request this body is, or ``None`` if it is none of them.
+
+    Guessing would read a body against a schema it was never sent as, and
+    report every field that schema wants as missing.
+    """
+    sections = tuple(
+        section for section in ('context', 'predict') if section in body
+    )
+    return BY_SHAPE.get(sections)
 
 
 def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
@@ -112,7 +118,7 @@ def main() -> int:
 
     try:
         import yaml
-        from jsonschema import Draft202012Validator
+        from jsonschema import Draft202012Validator, FormatChecker
     except ImportError as error:  # pragma: no cover - a CI setup mistake
         print(f'needs pyyaml and jsonschema: {error}', file=sys.stderr)
         return 1
@@ -128,11 +134,29 @@ def main() -> int:
         for name, schema in spec['components']['schemas'].items()
     }
 
-    failed = 0
     bodies = recorded_bodies(args.payloads)
+    if not bodies:
+        print(
+            f'{args.payloads} records no request bodies, so nothing was '
+            f'read. An empty recording passes every check there is.',
+            file=sys.stderr,
+        )
+        return 1
+
+    failed = 0
     for name, body in bodies:
         wanted = schema_for(body)
-        validator = Draft202012Validator({**defs[wanted], '$defs': defs})
+        if wanted is None:
+            failed += 1
+            print(
+                f'{name} is none of {", ".join(sorted(BY_SHAPE.values()))}: '
+                f'it carries neither a context nor rows to predict.',
+                file=sys.stderr,
+            )
+            continue
+        validator = Draft202012Validator(
+            {**defs[wanted], '$defs': defs}, format_checker=FormatChecker()
+        )
         errors = sorted(validator.iter_errors(body), key=lambda e: list(e.path))
         if not errors:
             continue
@@ -152,7 +176,12 @@ def main() -> int:
         )
         return 1
 
-    print(f'{len(bodies)} recorded request bodies match the contract')
+    counted = (
+        '1 recorded request body matches'
+        if len(bodies) == 1
+        else f'{len(bodies)} recorded request bodies match'
+    )
+    print(f'{counted} the contract')
     return 0
 
 

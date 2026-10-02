@@ -29,10 +29,12 @@ declare as `1.0.0` and none has published. The heading becomes
   digests and the response models, so nothing read what the client actually
   sends. The recorded payloads in `tests/golden/` are now validated against the
   pinned spec, which catches a renamed key, a dropped section, a value off an
-  enum, and an invented key in any section the contract declares closed. Four
-  request schemas set `additionalProperties: true`, so a key invented inside
-  `output`, `inference`, `task` or `target` stays contractual and is not
-  reported; a test pins that limit so it is not mistaken for coverage.
+  enum, and an invented key in any section the contract declares closed. Six of
+  the seventeen schemas a request reaches set `additionalProperties: true`, so
+  a key invented inside one of those stays contractual and is not reported, and
+  rules the spec states in prose rather than in a schema are not read either.
+  Tests pin both limits, so the check is not mistaken for the coverage it does
+  not give.
 - `RuntimeContract.unread_feature_stypes`: the semantic types a deployment
   accepts and its model never reads. The relational model has no text
   processor, so a `text` column is carried, dropped at the model, and
