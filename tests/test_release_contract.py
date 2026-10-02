@@ -70,9 +70,9 @@ def _distributions() -> list[str]:
     )
 
 
-def _run(script: str) -> subprocess.CompletedProcess[str]:
+def _run(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(REPO / 'scripts' / script)],
+        [sys.executable, str(REPO / 'scripts' / script), *arguments],
         capture_output=True,
         text=True,
     )
@@ -322,6 +322,17 @@ class TestTheRequestBodiesAreContractual:
 
 
 _ENGINE_LICENSE = 'packages/sdm-relational-engine/LICENSE'
+_COMPONENTS = (
+    PACKAGES
+    / 'sdm-relational-engine'
+    / 'src'
+    / 'sdm_relational_engine'
+    / 'rfm'
+    / 'assets'
+    / 'MERMAID_COMPONENTS.json'
+)
+#: Mirrors scripts/mermaid_notices.py, where the reason for each is written.
+_WITHOUT_A_NOTICE = frozenset({'chevrotain', 'robust-predicates'})
 
 
 class TestTheNoticesAreComplete:
@@ -332,80 +343,37 @@ class TestTheNoticesAreComplete:
     that.
     """
 
-    #: Every component the third-party section enumerates, in the order it
-    #: lists them. Written out rather than parsed: the section is prose, and a
-    #: pattern loose enough to read all of its shapes was loose enough to pass
-    #: entries whose notice had been deleted. A component added to the bundle
-    #: has to be added here, which is the point.
-    BUNDLED = (
-        'mermaid',
-        'DOMPurify',
-        'js-yaml',
-        'Lodash',
-        'Cytoscape',
-        'Promises/A+',
-        'jQuery',
-        'Bezier curve',
-        'Runge-Kutta',
-        '@braintree/sanitize-url',
-        '@iconify/utils',
-        '@mermaid-js/parser',
-        'chevrotain',
-        'langium',
-        '@upsetjs/venn.js',
-        'cytoscape-cose-bilkent',
-        'cytoscape-fcose',
-        'cose-base',
-        'layout-base',
-        'd3',
-        'd3-sankey',
-        'dagre-d3-es',
-        'dayjs',
-        'es-toolkit',
-        'katex',
-        'khroma',
-        'marked',
-        'Markdown',
-        'roughjs',
-        'stylis',
-        'ts-dedent',
-        'uuid',
-    )
+    def test_the_license_files_carry_what_was_recorded(self):
+        """The attribution is generated, so it cannot drift from its source.
 
-    #: The one component with no notice to reproduce. It ships the stock
-    #: Apache-2.0 text, no NOTICE file and no copyright line, so requiring one
-    #: here would mean inventing it.
-    WITHOUT_A_NOTICE = frozenset({'chevrotain'})
+        Hand-enumeration of the bundle did not converge: three rounds of it
+        each missed more components, and the ones missed last were reached
+        through other bundles rather than declared.
+        """
+        result = _run('mermaid_notices.py', '--check')
 
-    def _entries(self, path: str) -> dict[str, str]:
-        """Each enumerated component, with the text that attributes it."""
-        licence = (REPO / path).read_text()
-        section = licence[licence.index('THIRD-PARTY SOFTWARE BUNDLED') :]
-        section = section[: section.index('MIT License, as it applies')]
+        assert result.returncode == 0, (
+            'The license files no longer carry the attribution rendered from '
+            'MERMAID_COMPONENTS.json. Run `python scripts/mermaid_notices.py '
+            f'--write`.\n{result.stdout}{result.stderr}'
+        )
 
-        marks = []
-        for name in self.BUNDLED:
-            at = section.find(name)
-            assert at != -1, f'{path} no longer enumerates {name}'
-            marks.append((at, name))
-        marks.sort()
-        return {
-            name: section[at : marks[i + 1][0] if i + 1 < len(marks) else None]
-            for i, (at, name) in enumerate(marks)
+    def test_every_recorded_component_has_a_notice_or_a_reason(self):
+        """A license name is not a notice, and silence is not either."""
+        recorded = json.loads(_COMPONENTS.read_text())['components']
+        without = {
+            name
+            for name, component in recorded.items()
+            if not component['notices']
         }
 
-    @pytest.mark.parametrize('path', ['LICENSE', _ENGINE_LICENSE])
-    def test_every_bundled_component_carries_a_copyright(self, path):
-        """A license name is not a notice."""
-        missing = [
-            name
-            for name, entry in self._entries(path).items()
-            if name not in self.WITHOUT_A_NOTICE and 'opyright' not in entry
-        ]
-
-        assert not missing, (
-            f'{path}: {missing} are enumerated but carry no copyright notice, '
-            f'which their licenses require to be reproduced'
+        assert without <= _WITHOUT_A_NOTICE, (
+            f'{sorted(without - _WITHOUT_A_NOTICE)} are attributed but carry '
+            f'no copyright notice and are not recorded as having none'
+        )
+        assert len(recorded) > 50, (
+            f'only {len(recorded)} components recorded, which is fewer than '
+            f"mermaid's closure reaches; the refresh may have been truncated"
         )
 
     def test_the_readme_links_every_package_license(self):

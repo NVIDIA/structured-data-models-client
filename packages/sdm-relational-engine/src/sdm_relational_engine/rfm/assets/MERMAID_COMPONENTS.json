@@ -1,0 +1,611 @@
+{
+  "components": {
+    "@antfu/install-pkg": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2021 Anthony Fu <https://github.com/antfu>"
+      ],
+      "version": "2.1.0"
+    },
+    "@braintree/sanitize-url": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2017 Braintree"
+      ],
+      "version": "7.1.2"
+    },
+    "@chevrotain/cst-dts-gen": {
+      "license": "Apache-2.0",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "13.2.0"
+    },
+    "@chevrotain/gast": {
+      "license": "Apache-2.0",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "13.2.0"
+    },
+    "@chevrotain/regexp-to-ast": {
+      "license": "Apache-2.0",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "13.2.0"
+    },
+    "@chevrotain/types": {
+      "license": "Apache-2.0",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "11.1.2"
+    },
+    "@chevrotain/utils": {
+      "license": "Apache-2.0",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "13.2.0"
+    },
+    "@iconify/types": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2021 - 2022 Vjacheslav Trushkin / Iconify O\u00dc"
+      ],
+      "version": "2.0.0"
+    },
+    "@iconify/utils": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2021-PRESENT Vjacheslav Trushkin"
+      ],
+      "version": "3.1.7"
+    },
+    "@mermaid-js/parser": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2023 Yokozuna59"
+      ],
+      "version": "1.2.1"
+    },
+    "@upsetjs/venn.js": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2013 Ben Frederickson",
+        "Copyright (c) 2021 Samuel Gratzl"
+      ],
+      "version": "2.0.0"
+    },
+    "argparse": {
+      "license": "Python-2.0",
+      "notices": [
+        "Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,"
+      ],
+      "version": "2.0.1"
+    },
+    "chevrotain": {
+      "license": "Apache-2.0",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "13.2.0"
+    },
+    "chevrotain-allstar": {
+      "license": "MIT",
+      "notices": [
+        "Copyright 2022 TypeFox GmbH"
+      ],
+      "version": "0.5.0"
+    },
+    "commander": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2011 TJ Holowaychuk <tj@vision-media.ca>"
+      ],
+      "version": "15.0.0"
+    },
+    "cose-base": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2019 - present, iVis@Bilkent."
+      ],
+      "version": "2.2.0"
+    },
+    "cytoscape": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2016-2026, The Cytoscape Consortium."
+      ],
+      "version": "3.34.3"
+    },
+    "cytoscape-cose-bilkent": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2016-2018, The Cytoscape Consortium."
+      ],
+      "version": "4.1.0"
+    },
+    "cytoscape-fcose": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2018 - present, iVis-at-Bilkent."
+      ],
+      "version": "2.2.0"
+    },
+    "d3": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2023 Mike Bostock"
+      ],
+      "version": "7.9.0"
+    },
+    "d3-array": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2023 Mike Bostock"
+      ],
+      "version": "3.2.4"
+    },
+    "d3-axis": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.0"
+    },
+    "d3-brush": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.0"
+    },
+    "d3-chord": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-color": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2022 Mike Bostock"
+      ],
+      "version": "3.1.0"
+    },
+    "d3-contour": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2012-2023 Mike Bostock"
+      ],
+      "version": "4.0.2"
+    },
+    "d3-delaunay": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2018-2021 Observable, Inc.",
+        "Copyright 2021 Mapbox"
+      ],
+      "version": "6.0.4"
+    },
+    "d3-dispatch": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-drag": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.0"
+    },
+    "d3-dsv": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2013-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-ease": {
+      "license": "BSD-3-Clause",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock",
+        "Copyright 2001 Robert Penner"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-fetch": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2016-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-force": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.0"
+    },
+    "d3-format": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2026 Mike Bostock"
+      ],
+      "version": "3.1.2"
+    },
+    "d3-geo": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2024 Mike Bostock",
+        "Copyright 2008-2012 Charles Karney"
+      ],
+      "version": "3.1.1"
+    },
+    "d3-hierarchy": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.1.2"
+    },
+    "d3-interpolate": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-path": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2015-2022 Mike Bostock"
+      ],
+      "version": "3.1.0"
+    },
+    "d3-polygon": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-quadtree": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-random": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-sankey": {
+      "license": "BSD-3-Clause",
+      "notices": [
+        "Copyright 2015, Mike Bostock"
+      ],
+      "version": "0.12.3"
+    },
+    "d3-scale": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "4.0.2"
+    },
+    "d3-scale-chromatic": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2024 Mike Bostock",
+        "Copyright 2002 Cynthia Brewer, Mark Harrower, and The Pennsylvania State University"
+      ],
+      "version": "3.1.0"
+    },
+    "d3-selection": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.0"
+    },
+    "d3-shape": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2022 Mike Bostock"
+      ],
+      "version": "3.2.0"
+    },
+    "d3-time": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2022 Mike Bostock"
+      ],
+      "version": "3.1.0"
+    },
+    "d3-time-format": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "4.1.0"
+    },
+    "d3-timer": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-transition": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.1"
+    },
+    "d3-zoom": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2010-2021 Mike Bostock"
+      ],
+      "version": "3.0.0"
+    },
+    "dagre-d3-es": {
+      "license": "MIT",
+      "notices": [
+        "Original dagre-d3 copyright: Copyright (c) 2013 Chris Pettitt",
+        "Original dagre copyright: Copyright (c) 2012-2014 Chris Pettitt",
+        "Original graphlib copyright: Copyright (c) 2012-2014 Chris Pettitt",
+        "Copyright (c) 2022-2024 Thibaut Lassalle, David Newell, Alois Klink, Sidharth Vinod and dagre-es contributors"
+      ],
+      "version": "7.0.14"
+    },
+    "dayjs": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2018-present, iamkun"
+      ],
+      "version": "1.11.23"
+    },
+    "delaunator": {
+      "license": "ISC",
+      "notices": [
+        "Copyright (c) 2026, Mapbox"
+      ],
+      "version": "5.1.0"
+    },
+    "dompurify": {
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "notices": [
+        "copyright license to reproduce, prepare Derivative Works of,"
+      ],
+      "version": "3.4.16"
+    },
+    "es-toolkit": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2024 Viva Republica, Inc."
+      ],
+      "version": "1.52.0"
+    },
+    "hachure-fill": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2023 Preet Shihn"
+      ],
+      "version": "0.5.2"
+    },
+    "iconv-lite": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2011 Alexander Shtuchkin"
+      ],
+      "version": "0.7.3"
+    },
+    "import-meta-resolve": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>",
+        "Copyright Node.js contributors. All rights reserved.",
+        "Copyright Joyent, Inc. and other Node contributors. All rights reserved."
+      ],
+      "version": "4.2.0"
+    },
+    "internmap": {
+      "license": "ISC",
+      "notices": [
+        "Copyright 2021 Mike Bostock"
+      ],
+      "version": "1.0.1"
+    },
+    "js-yaml": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (C) 2011-2015 by Vitaly Puzrin"
+      ],
+      "version": "5.4.2"
+    },
+    "katex": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2013-2020 Khan Academy and other contributors"
+      ],
+      "version": "0.19.0"
+    },
+    "khroma": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2019-present Fabio Spampinato, Andrew Maney"
+      ],
+      "version": "2.1.0"
+    },
+    "langium": {
+      "license": "MIT",
+      "notices": [
+        "Copyright 2021 TypeFox GmbH"
+      ],
+      "version": "4.4.0"
+    },
+    "layout-base": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2019 iVis@Bilkent"
+      ],
+      "version": "2.0.1"
+    },
+    "lodash-es": {
+      "license": "MIT",
+      "notices": [
+        "Copyright OpenJS Foundation and other contributors <https://openjsf.org/>",
+        "Copyright and related rights for sample code are waived via CC0. Sample"
+      ],
+      "version": "4.18.1"
+    },
+    "marked": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)",
+        "Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)",
+        "Copyright \u00a9 2004, John Gruber"
+      ],
+      "version": "16.4.2"
+    },
+    "package-manager-detector": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2020-PRESENT Anthony Fu <https://github.com/antfu>"
+      ],
+      "version": "1.8.0"
+    },
+    "path-data-parser": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2020 Preet Shihn"
+      ],
+      "version": "0.1.0"
+    },
+    "points-on-curve": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2020 Preet Shihn"
+      ],
+      "version": "0.2.0"
+    },
+    "points-on-path": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2020 Preet"
+      ],
+      "version": "0.2.1"
+    },
+    "robust-predicates": {
+      "license": "Unlicense",
+      "notices": [],
+      "version": "3.0.3"
+    },
+    "roughjs": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2019 Preet Shihn"
+      ],
+      "version": "4.6.6"
+    },
+    "rw": {
+      "license": "BSD-3-Clause",
+      "notices": [
+        "Copyright (c) 2014-2016, Michael Bostock"
+      ],
+      "version": "1.3.3"
+    },
+    "safer-buffer": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2018 Nikita Skovoroda <chalkerx@gmail.com>"
+      ],
+      "version": "2.1.2"
+    },
+    "stylis": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2016-present Sultan Tarimo"
+      ],
+      "version": "4.4.0"
+    },
+    "tinyexec": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2024 Tinylibs"
+      ],
+      "version": "1.3.1"
+    },
+    "ts-dedent": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2018 Tamino Martinius"
+      ],
+      "version": "2.3.0"
+    },
+    "uuid": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) 2010-2020 Robert Kieffer and other contributors"
+      ],
+      "version": "11.1.1"
+    },
+    "vscode-jsonrpc": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Microsoft Corporation"
+      ],
+      "version": "9.0.3"
+    },
+    "vscode-languageserver": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Microsoft Corporation"
+      ],
+      "version": "10.1.2"
+    },
+    "vscode-languageserver-protocol": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Microsoft Corporation"
+      ],
+      "version": "3.18.4"
+    },
+    "vscode-languageserver-textdocument": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Microsoft Corporation"
+      ],
+      "version": "1.0.15"
+    },
+    "vscode-languageserver-types": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Microsoft Corporation"
+      ],
+      "version": "3.18.4"
+    },
+    "vscode-uri": {
+      "license": "MIT",
+      "notices": [
+        "Copyright (c) Microsoft"
+      ],
+      "version": "3.1.0"
+    }
+  },
+  "mermaid": "11.15.0"
+}

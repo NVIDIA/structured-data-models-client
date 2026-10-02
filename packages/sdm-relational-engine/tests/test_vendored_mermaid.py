@@ -98,16 +98,19 @@ def test_bundled_license_notices_are_unchanged() -> None:
 
 
 def test_license_states_no_version_the_notices_do_not() -> None:
-    r"""Every version the LICENSE claims must be one the bundle declares.
+    r"""Every version the LICENSE reads out of the bundle must be in it.
 
     This is the direction that matters: attributing a component at a version
     upstream does not ship is a false statement about what we distribute. It is
-    how ``js-yaml 4.1.0`` survived the upgrade to a bundle carrying 4.1.1. The
-    reverse is not asserted, because the LICENSE deliberately attributes some
-    components without pinning a version.
+    how ``js-yaml 4.1.0`` survived the upgrade to a bundle carrying 4.1.1.
+
+    Only the part read out of the bundle is checked. The generated part below
+    it states the version each notice was read from, which is a different
+    claim and is checked against MERMAID_COMPONENTS.json instead.
     """
     licence = (Path(__file__).resolve().parents[3] / 'LICENSE').read_text()
     section = licence[licence.index('THIRD-PARTY SOFTWARE BUNDLED') :]
+    section = section[: section.index('The components mermaid declares')]
     declared = _versions(_notice_blocks()) | {_declared('Version').split()[0]}
 
     unsupported = _versions(section) - declared
@@ -115,3 +118,33 @@ def test_license_states_no_version_the_notices_do_not() -> None:
         f'the LICENSE attributes bundled components at {sorted(unsupported)}, '
         'which neither the bundle notices nor VENDORED.md declare.'
     )
+
+
+def test_the_generated_versions_are_the_ones_recorded() -> None:
+    r"""The generated part says which version each notice was read from.
+
+    That is a claim about the reading, not about the bundle, so it is checked
+    against the file the reading was recorded in.
+    """
+    import json
+
+    assets = Path(__file__).resolve().parents[1] / 'src'
+    recorded = json.loads(
+        (
+            assets
+            / 'sdm_relational_engine'
+            / 'rfm'
+            / 'assets'
+            / 'MERMAID_COMPONENTS.json'
+        ).read_text()
+    )['components']
+
+    licence = (Path(__file__).resolve().parents[3] / 'LICENSE').read_text()
+    generated = licence[licence.index('The components mermaid declares') :]
+    generated = generated[: generated.index('MIT License, as it applies')]
+
+    for name, component in recorded.items():
+        assert f'{name} {component["version"]}' in generated, (
+            f'{name} is recorded at {component["version"]} but the LICENSE '
+            f'does not attribute it at that version'
+        )
