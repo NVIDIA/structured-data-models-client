@@ -6,7 +6,8 @@ promises has promised everything.
 
 ## What is public
 
-Public is what a distribution's top-level `__all__` names, and nothing else:
+Public is what the `__all__` of a package in the table below names, and
+nothing else:
 
 ```python
 import sdm_client
@@ -66,11 +67,12 @@ request that was previously sent. The changelog identifies the change.
 repository has been published, and none of the five distributions exists on
 PyPI. These promises begin at 1.0.0; they do not apply earlier.
 
-This distinction matters. Before the first release this document listed
-`predictive_query` as public, and the release containing it takes that package
-off the public surface with no deprecation period, which the rule below would
-otherwise forbid. There is no period to serve: nobody can be holding names that
-were never published, and warning about them from the first release would be
+This distinction matters. Before the first release, this document made
+`predictive_query` public, along with `sdm_client.ModelSpec` and the model
+handles' `spec` attribute. The first release takes all of them off the public
+surface with no deprecation period, which the rule below would otherwise
+forbid. There is no period to serve: nobody can be holding names that were
+never published, and warning about them from the first release would be
 deprecating something that was never available. Everything after 1.0.0 gets
 the full treatment.
 
