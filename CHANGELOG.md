@@ -35,11 +35,6 @@ declare as `1.0.0` and none has published. The heading becomes
   test pins that, so the check is not mistaken for coverage it does not give.
   Rules the spec states in prose rather than in a schema are not read either,
   and neither are OpenAPI's own formats, which are not JSON Schema assertions.
-- An `SDMWarning` naming each `text` feature column a request for
-  `KumoRelational` carries. The relational model has no text processor, so such
-  a column is carried, dropped at the model, and contributes nothing. The
-  request still succeeds, and the warning says to type the column categorical
-  if its values are labels rather than prose, or to leave it out.
 - `FittedModel` carries the question its context was pinned for, so a session
   can refuse a request that asks something else rather than answering the
   pinned question in its place.
@@ -267,12 +262,14 @@ declare as `1.0.0` and none has published. The heading becomes
   multi-label.
 
 - **A column the model cannot read is named rather than silently dropped.**
-  A `text` feature column reaches the relational model and is ignored there.
-  Holding content fixed and varying only the semantic type, the same
-  determining column scores 1.00 as `categorical` and chance as `text`. The
-  request still succeeds, because a model that answers from graph structure
-  alone should not refuse over an unreadable attribute, but the columns that
-  carried nothing are now named.
+  A `text` feature column reaches the relational model and is ignored there,
+  because the model has no text processor. Holding content fixed and varying
+  only the semantic type, the same determining column scores 1.00 as
+  `categorical` and chance as `text`. The request still succeeds, because a
+  model that answers from graph structure alone should not refuse over an
+  unreadable attribute, but an `SDMWarning` now names each `text` feature
+  column a request for `KumoRelational` carries. It says to type the column
+  categorical if its values are labels rather than prose, or to leave it out.
 
 - **A time column the caller never named can no longer be acquired.** The
   engine guessed keys and time columns from column *names*, and the guess could
