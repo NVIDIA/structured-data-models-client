@@ -31,10 +31,10 @@ declare as `1.0.0` and none has published. The heading becomes
   pinned spec, which catches a renamed key, a dropped section, a value off an
   enum, and an invented key in any section the contract declares closed. Six of
   the seventeen schemas a request reaches set `additionalProperties: true`, so
-  a key invented inside one of those stays contractual and is not reported, and
-  rules the spec states in prose rather than in a schema are not read either.
-  Tests pin both limits, so the check is not mistaken for the coverage it does
-  not give.
+  a key invented inside one of those stays contractual and is not reported. A
+  test pins that, so the check is not mistaken for coverage it does not give.
+  Rules the spec states in prose rather than in a schema are not read either,
+  and neither are OpenAPI's own formats, which are not JSON Schema assertions.
 - `RuntimeContract.unread_feature_stypes`: the semantic types a deployment
   accepts and its model never reads. The relational model has no text
   processor, so a `text` column is carried, dropped at the model, and

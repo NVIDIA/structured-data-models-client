@@ -247,9 +247,7 @@ class TestTheRequestBodiesAreContractual:
     def test_a_recording_with_nothing_in_it_is_refused(
         self, tmp_path, recorded
     ):
-        """An empty recording satisfies every check there is, so it is the one
-        way this gate could pass while reading nothing.
-        """
+        """A recording that lost its contents would otherwise report success."""
         written = tmp_path / 'wire_payloads.json'
         written.write_text(json.dumps(recorded))
 
@@ -257,6 +255,24 @@ class TestTheRequestBodiesAreContractual:
 
         assert result.returncode == 1
         assert 'records no request bodies' in result.stderr
+
+    @needs_the_contract
+    @pytest.mark.parametrize(
+        'written, said',
+        [('not json at all', 'is not JSON'), ('[]', 'not calls by name')],
+        ids=['not json', 'not calls by name'],
+    )
+    def test_a_recording_it_cannot_read_is_reported_not_raised(
+        self, tmp_path, written, said
+    ):
+        recording = tmp_path / 'wire_payloads.json'
+        recording.write_text(written)
+
+        result = _check_payloads(recording)
+
+        assert result.returncode == 1
+        assert said in result.stderr
+        assert 'Traceback' not in result.stderr
 
     @needs_the_contract
     def test_a_permissive_section_is_not_policed(self, tmp_path):

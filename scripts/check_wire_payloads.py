@@ -79,6 +79,10 @@ def as_json_schema(node: Any) -> Any:
     return converted
 
 
+class Unreadable(Exception):
+    r"""The recording could not be read, which is not a contract failure."""
+
+
 def schema_for(body: dict[str, Any]) -> str | None:
     r"""Which request this body is, or ``None`` if it is none of them.
 
@@ -92,7 +96,14 @@ def schema_for(body: dict[str, Any]) -> str | None:
 
 
 def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
-    recorded = json.loads(payloads.read_text(encoding='utf-8'))
+    try:
+        recorded = json.loads(payloads.read_text(encoding='utf-8'))
+    except json.JSONDecodeError as error:
+        raise Unreadable(f'{payloads} is not JSON: {error}') from error
+    if not isinstance(recorded, dict):
+        raise Unreadable(
+            f'{payloads} holds {type(recorded).__name__}, not calls by name'
+        )
     bodies = []
     for name, entry in sorted(recorded.items()):
         calls = entry if isinstance(entry, list) else [entry]
@@ -134,11 +145,16 @@ def main() -> int:
         for name, schema in spec['components']['schemas'].items()
     }
 
-    bodies = recorded_bodies(args.payloads)
+    try:
+        bodies = recorded_bodies(args.payloads)
+    except Unreadable as error:
+        print(error, file=sys.stderr)
+        return 1
     if not bodies:
         print(
             f'{args.payloads} records no request bodies, so nothing was '
-            f'read. An empty recording passes every check there is.',
+            f'read. A recording that lost its contents would otherwise '
+            f'report success.',
             file=sys.stderr,
         )
         return 1
@@ -154,6 +170,9 @@ def main() -> int:
                 file=sys.stderr,
             )
             continue
+        # The formats this contract uses are OpenAPI's own: int32, int64,
+        # float and byte. None is a JSON Schema assertion, so the checker
+        # reads nothing today and is here for formats the contract may add.
         validator = Draft202012Validator(
             {**defs[wanted], '$defs': defs}, format_checker=FormatChecker()
         )
