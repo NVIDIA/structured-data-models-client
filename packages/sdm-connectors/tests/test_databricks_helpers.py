@@ -128,6 +128,15 @@ def test_warehouse_keeps_a_caller_s_entry_and_tags_after_its_own(
     }
 
 
+def test_warehouse_takes_a_none_entry_as_none_given(
+    driver_connect: dict[str, Any],
+) -> None:
+    """As connect() does, and as the driver reads None: its default."""
+    warehouse('abc123', workspace=_workspace(), user_agent_entry=None)
+
+    assert driver_connect['user_agent_entry'] == PARTNER
+
+
 def test_warehouse_refuses_an_entry_no_header_can_carry(
     driver_connect: dict[str, Any],
 ) -> None:

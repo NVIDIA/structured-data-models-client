@@ -562,6 +562,14 @@ def test_the_keys_are_read_back_from_what_the_driver_writes():
     assert _query_tag_keys(utils.serialize_query_tags(tags)) == set(tags)
 
 
+def test_a_none_user_agent_entry_is_the_same_as_none_given():
+    """connect() drops any None it is given, and the driver reads one as its
+    default, so None asks for no entry of the caller's own."""
+    captured = _captured_databricks_connect(user_agent_entry=None)
+
+    assert captured['user_agent_entry'] == PARTNER
+
+
 def test_a_caller_s_query_tags_argument_carries_the_sampling_tag_too():
     """The driver lets `query_tags=` replace the session's QUERY_TAGS, so a
     tag set only there would be dropped."""

@@ -254,6 +254,8 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     """
     connect_args = dict(kwargs)
     entry = connect_args.get('user_agent_entry')
+    # None is omitted, as connect() drops any None it is given and the driver
+    # reads one as its default.
     if entry is None:
         connect_args['user_agent_entry'] = partner_identifier()
     else:
