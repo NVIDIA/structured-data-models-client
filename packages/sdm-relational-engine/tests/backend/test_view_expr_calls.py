@@ -13,12 +13,22 @@ from __future__ import annotations
 import pytest
 from sdm_relational_engine.rfm.view_expr import (
     _DATABRICKS_FUNCTIONS,
+    _DATABRICKS_KEYWORDS,
+    _GRAMMAR_WORDS,
+    _NEVER_BEFORE_AN_EXPRESSION,
     _SNOWFLAKE_FUNCTIONS,
+    _SNOWFLAKE_RESERVED,
     _unsafe_expr_reason,
     _untrusted_call_reason,
 )
 
 _DIALECTS = ['databricks', 'snowflake']
+# The bare names these expressions use for columns.
+_COLUMNS = ('a', 'col', 'd', 'name', 'order_date', 'x', 'y', 'z')
+
+
+def _call(expr: str, dialect: str) -> str | None:
+    return _untrusted_call_reason(expr, dialect, columns=_COLUMNS)
 
 
 @pytest.mark.parametrize('dialect', _DIALECTS)
@@ -48,7 +58,7 @@ _DIALECTS = ['databricks', 'snowflake']
 )
 def test_a_pure_built_in_expression_is_trusted(dialect: str, expr: str) -> None:
     assert _unsafe_expr_reason(expr) is None
-    assert _untrusted_call_reason(expr, dialect) is None
+    assert _call(expr, dialect) is None
 
 
 @pytest.mark.parametrize('dialect', _DIALECTS)
@@ -83,23 +93,23 @@ def test_any_other_call_is_refused(
     dialect: str, expr: str, reason: str
 ) -> None:
     assert _unsafe_expr_reason(expr) is None
-    refused = _untrusted_call_reason(expr, dialect)
+    refused = _call(expr, dialect)
     assert refused is not None
     assert reason in refused
 
 
 def test_the_allowlists_are_dialect_specific() -> None:
-    assert _untrusted_call_reason('IFF(x, 1, 0)', 'snowflake') is None
-    assert _untrusted_call_reason('DIV0(x, 2)', 'snowflake') is None
-    assert _untrusted_call_reason('DIV0(x, 2)', 'databricks') is not None
-    assert _untrusted_call_reason('named_struct(a, x)', 'databricks') is None
-    assert _untrusted_call_reason('named_struct(a, x)', 'snowflake') is not None
+    assert _call('IFF(x, 1, 0)', 'snowflake') is None
+    assert _call('DIV0(x, 2)', 'snowflake') is None
+    assert _call('DIV0(x, 2)', 'databricks') is not None
+    assert _call('named_struct(a, x)', 'databricks') is None
+    assert _call('named_struct(a, x)', 'snowflake') is not None
 
 
 def test_a_type_name_is_a_call_outside_a_cast() -> None:
     # `VARCHAR(` is a type behind `AS` or `::`, and anything else elsewhere.
-    assert _untrusted_call_reason('x::VARCHAR(10)', 'snowflake') is None
-    assert _untrusted_call_reason('VARCHAR(10)', 'snowflake') is not None
+    assert _call('x::VARCHAR(10)', 'snowflake') is None
+    assert _call('VARCHAR(10)', 'snowflake') is not None
 
 
 @pytest.mark.parametrize(
@@ -145,7 +155,7 @@ def test_from_and_table_in_a_scalar_expression_are_accepted(expr: str) -> None:
 
 
 def _refused(expr: str, dialect: str) -> str | None:
-    return _unsafe_expr_reason(expr) or _untrusted_call_reason(expr, dialect)
+    return _unsafe_expr_reason(expr) or _call(expr, dialect)
 
 
 @pytest.mark.parametrize('dialect', _DIALECTS)
@@ -357,3 +367,266 @@ def test_an_unknown_word_in_front_does_not_make_a_keyword(
     SQL while the rule was that an unknown word must be a value.
     """
     assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        # WHEN, THEN and ELSE take an operand. Databricks resolves `then`,
+        # `else` and `end` here as routines.
+        'CASE WHEN then(x) THEN 1 END',
+        'CASE WHEN a THEN when(x) END',
+        'CASE WHEN a THEN else(x) END',
+        'CASE WHEN a THEN 1 ELSE end(x) END',
+        # Databricks resolves `from` and `then` inside FILTER (WHERE ...) as
+        # routines.
+        'upper(x) FILTER (WHERE from(y))',
+        'upper(x) FILTER (WHERE then(y))',
+        # RLIKE and REGEXP take no quantifier.
+        'x RLIKE any(y)',
+        'x REGEXP some(y)',
+        # `AS` outside a cast gives an alias, so the type name is a call.
+        'x AS object(1)',
+        'x AS varchar(10)',
+        'upper(x AS varchar(10))',
+    ],
+)
+def test_a_keyword_where_an_operand_belongs_is_a_call(
+    dialect: str, expr: str
+) -> None:
+    assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'context',
+    [
+        'upper(x) FILTER (WHERE {K}(y))',
+        'x REGEXP_LIKE {K}(y)',
+        'x AT TIME ZONE {K}(y)',
+    ],
+)
+@pytest.mark.parametrize(
+    'word',
+    [
+        'all', 'and', 'as', 'between', 'both', 'by', 'distinct', 'else',
+        'end', 'for', 'from', 'in', 'interval', 'is', 'leading', 'or', 'over',
+        'placing', 'then', 'trailing', 'when',
+    ],
+)  # fmt: skip
+def test_a_keyword_after_a_word_that_is_no_value_is_a_call(
+    dialect: str, context: str, word: str
+) -> None:
+    r"""On Databricks each of these words names a routine where an operand
+    belongs, as after WHERE, REGEXP_LIKE or ZONE.
+    """
+    assert _refused(context.replace('{K}', word), dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'CASE WHEN a THEN 1 END IN (1)',
+        "x REGEXP ('a')",
+        "x RLIKE ('a')",
+        'x LIKE (y)',
+    ],
+)
+def test_a_keyword_after_a_column_opens_a_group(
+    dialect: str, expr: str
+) -> None:
+    assert _refused(expr, dialect) is None
+
+
+_GRAMMAR_COLUMNS = ('where', 'then', 'zone', 'end', 'x', 'y')
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'upper(x) FILTER (WHERE from(y))',
+        'upper(x) FILTER (where escape(y))',
+        'CASE WHEN a THEN in(y) END',
+        'CASE WHEN x then in(y) END',
+        'x AT TIME zone escape(y)',
+        'x AT TIME ZONE in(y)',
+        'x end in(y)',
+        'where in(y)',
+    ],
+)
+def test_a_column_named_like_grammar_is_no_value(
+    dialect: str, expr: str
+) -> None:
+    r"""The parser reads `where` as WHERE whatever the table holds, so a
+    column of that name must not make the keyword behind it grammar.
+    """
+    assert _unsafe_expr_reason(expr) is None
+    refused = _untrusted_call_reason(expr, dialect, columns=_GRAMMAR_COLUMNS)
+    assert refused is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        "region IN ('EMEA', 'APAC')",
+        "date BETWEEN ('2020-01-01') AND ('2021-01-01')",
+        "year LIKE ('20%')",
+        "name NOT IN ('a')",
+        "REGION NOT LIKE ('a%')",
+        'year BETWEEN (2020) AND (2021)',
+        "date NOT BETWEEN ('2020-01-01') AND ('2021-01-01')",
+    ],
+)
+def test_a_column_named_like_a_harmless_keyword_is_a_value(
+    dialect: str, expr: str
+) -> None:
+    r"""`REGION`, `DATE` and `YEAR` are keywords, but none is ever followed by
+    an expression, so a column of that name is the operand of what follows.
+    """
+    columns = ('Region', 'DATE', 'year', 'name')
+    assert _untrusted_call_reason(expr, dialect, columns=columns) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        "region IN ('EMEA')",
+        'x IN (1)',
+        'x BETWEEN (1) AND (2)',
+        'x NOT IN (1)',
+    ],
+)
+def test_without_columns_no_bare_word_is_a_value(
+    dialect: str, expr: str
+) -> None:
+    assert _untrusted_call_reason(expr, dialect, columns=()) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        "upper('a') IN ('A')",
+        't.x IN (1)',
+        'CASE (x) WHEN (1) THEN (2) END',
+        'NOT (1 = 1)',
+        'upper(x)',
+    ],
+)
+def test_without_columns_a_group_after_no_bare_word_is_accepted(
+    dialect: str, expr: str
+) -> None:
+    assert _untrusted_call_reason(expr, dialect, columns=()) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'CASE (x) WHEN (1) THEN 2 END',
+        '(CASE (x) WHEN 1 THEN 2 END)',
+        'coalesce(y, CASE (x) WHEN 1 THEN 2 END)',
+        'CASE(x) when 1 THEN 2 END',
+    ],
+)
+def test_case_opens_a_group_where_a_simple_case_starts(
+    dialect: str, expr: str
+) -> None:
+    assert _refused(expr, dialect) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'case(x)',
+        'case(x) + 1',
+        'x + case(y)',
+        'x = case(y)',
+        'x IN (1) AND case(y)',
+        'CASE (x) = 1 WHEN TRUE THEN 2 END',
+        'CASE (x) THEN 2 END',
+        'NOT case(x)',
+    ],
+)
+def test_case_is_a_call_where_no_simple_case_starts(
+    dialect: str, expr: str
+) -> None:
+    r"""Without a WHEN after its group, `case(x)` resolves as a routine."""
+    assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'x END in(y)',
+        'x END IN (y)',
+        'CASE WHEN a THEN 1 END END in(y)',
+        '(CASE WHEN a THEN 1) END in(y)',
+        't.case x END in(y)',
+        'CASE WHEN a THEN END in(y)',
+    ],
+)
+def test_end_is_a_value_only_when_it_closes_a_case(
+    dialect: str, expr: str
+) -> None:
+    assert _call(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'CASE WHEN a THEN 1 ELSE 2 END IN (1)',
+        'CASE WHEN a THEN CASE WHEN x THEN 1 END END IN (1)',
+        "(CASE WHEN a THEN 'b' END) IN ('b')",
+        'CASE WHEN a THEN (CASE WHEN x THEN 1 END) END NOT IN (1)',
+        'x::int IN (1)',
+        'x::timestamp_ntz BETWEEN (1) AND (2)',
+        'EXTRACT(YEAR FROM (d))',
+        'EXTRACT(zone FROM (d))',
+        'date_part(DAY FROM (d))',
+        'transform(a, v -> v IN (1))',
+        'transform(a, (k, v) -> v NOT IN (k))',
+        'filter(a, region -> region LIKE (y))',
+        '1 IN (1)',
+        'TRUE IN (x)',
+        'NULL IS DISTINCT FROM (x)',
+    ],
+)
+def test_a_value_the_guard_recognises_opens_a_group(
+    dialect: str, expr: str
+) -> None:
+    assert _refused(expr, dialect) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'transform(a, where -> where in(y))',
+        'transform(a, v -> w IN (1))',
+        'x:where in(y)',
+    ],
+)
+def test_a_word_bound_nowhere_is_no_value(dialect: str, expr: str) -> None:
+    assert _refused(expr, dialect) is not None
+
+
+def test_the_grammar_words_keep_zone() -> None:
+    r"""`AT TIME ZONE` and `FILTER (WHERE` take an expression next, so a
+    column named `zone` or `where` is never a value.
+    """
+    assert {'zone', 'where', 'then', 'end', 'by', 'when'} <= _GRAMMAR_WORDS
+    assert len(_DATABRICKS_KEYWORDS) == 644
+    assert len(_SNOWFLAKE_RESERVED) == 92
+    # A safe word that is no keyword would be a value anyway.
+    assert _NEVER_BEFORE_AN_EXPRESSION <= (
+        _DATABRICKS_KEYWORDS | _SNOWFLAKE_RESERVED | {'number', 'text'}
+    )

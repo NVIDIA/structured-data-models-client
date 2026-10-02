@@ -426,6 +426,10 @@ Qualified and quoted function names, `IDENTIFIER()`, and session values such as 
 Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
 It also refuses parentheses that do not balance outside quoted text, since a stray `)` could close the query the expression is spliced into.
 Some allowed built-ins are costly or read the session time zone; `docs/about/architecture.md` lists them.
+A keyword before `(`, as in `x IN (1)`, counts as grammar only after something known to be a value: a literal, a closing bracket, quoted text, a qualified name, or a column of the table the expression runs on.
+Databricks lets almost every keyword name a function, so `WHERE from(y)` or `CASE WHEN then(x)` calls one, and a word the check cannot place now leaves the column out instead.
+A column named like a keyword that takes an expression next, such as `where` or `zone`, is never taken for a value; one named `region`, `date` or `year` still is.
+Each table's columns are read before its expressions are checked, and the metric view's `filter` is checked against the source table's columns before any row is read.
 
 **A metric view's `filter` is applied, or the view is refused.**
 The filter decides which rows a metric view holds, and it used to be reported as unrepresentable and dropped, so a schema and every request read rows the view leaves out.

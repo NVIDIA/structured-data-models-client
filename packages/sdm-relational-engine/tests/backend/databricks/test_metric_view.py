@@ -24,6 +24,7 @@ try:
         MetricViewJoin,
         UnsupportedFilterError,
         UnsupportedJoinError,
+        check_filter_calls,
         parse_join_condition,
         parse_metric_view,
         parse_table_reference,
@@ -432,6 +433,7 @@ def test_parse_metric_view_source_filter(row_filter: str) -> None:
 
     assert spec.filter == row_filter
     assert not any('filter' in message for message in spec.messages)
+    check_filter_calls(spec.filter, _FACT_COLUMNS)
 
 
 @pytest.mark.parametrize(
@@ -447,12 +449,8 @@ def test_parse_metric_view_source_filter(row_filter: str) -> None:
             "keyword 'SELECT'",
         ),
         ('source.customer_id IN (TABLE cat.sch.vip)', "keyword 'TABLE'"),
-        ("secret('scope', 'key') = source.token", "calls 'secret'"),
-        ('my_udf(source.amount) > 0', "calls 'my_udf'"),
         ('source.amount > 0; DROP TABLE x', "contains ';'"),
-        ('current_date > source.order_date', 'current_date'),
         ('source.note = $$x$$', "'$$'"),
-        ('escape(source.note)', "calls 'escape'"),
     ],
 )
 def test_parse_metric_view_refuses_a_filter(
@@ -472,18 +470,50 @@ def test_parse_metric_view_refuses_a_filter(
     assert isinstance(caught.value, ValueError)
 
 
+# The columns of `cat.sch.facts`, which `_FILTERED_YAML` reads.
+_FACT_COLUMNS = ('status', 'amount', 'order status', 'note', 'token')
+
+
+@pytest.mark.parametrize(
+    ('row_filter', 'reason'),
+    [
+        ("secret('scope', 'key') = source.token", "calls 'secret'"),
+        ('my_udf(source.amount) > 0', "calls 'my_udf'"),
+        ('current_date > source.order_date', 'current_date'),
+        ('escape(source.note)', "calls 'escape'"),
+        ('note FOO escape(token)', "calls 'escape'"),
+        ('upper(note) FILTER (WHERE from(token))', "calls 'from'"),
+    ],
+)
+def test_check_filter_calls_refuses_a_call(
+    row_filter: str, reason: str
+) -> None:
+    with pytest.raises(UnsupportedFilterError) as caught:
+        check_filter_calls(row_filter, _FACT_COLUMNS)
+
+    assert reason in str(caught.value)
+    assert 'Create a regular view with this WHERE clause' in str(caught.value)
+
+
+def test_check_filter_calls_reads_a_keyword_after_a_column_as_grammar() -> None:
+    # `status` is a column of the source table, so `IN (` is grammar.
+    check_filter_calls("status IN ('VALID')", _FACT_COLUMNS)
+    with pytest.raises(UnsupportedFilterError, match="calls 'IN'"):
+        check_filter_calls("status IN ('VALID')", ())
+
+
 def test_parse_metric_view_refuses_a_filter_that_is_not_sql() -> None:
     with pytest.raises(UnsupportedFilterError, match='not a SQL condition'):
         parse_metric_view(_FILTERED_YAML.format(filter='true'))
 
 
-def test_a_trusted_filter_may_call_a_udf_but_not_read_a_join() -> None:
+def test_parsing_leaves_calls_to_check_filter_calls() -> None:
     def parse(row_filter: str) -> Any:
         return parse_metric_view(
-            _FILTERED_YAML.format(filter=json.dumps(row_filter)),
-            trust_expressions=True,
+            _FILTERED_YAML.format(filter=json.dumps(row_filter))
         )
 
+    # Trusted mode skips `check_filter_calls`, and nothing else refuses this:
     assert parse('my_udf(source.amount) > 0').filter == (
         'my_udf(source.amount) > 0'
     )
@@ -1807,3 +1837,112 @@ def test_a_join_filter_refuses_the_metric_view() -> None:
             'sales_mv', connection=connection, verbose=False
         )
     assert not any('order_lines' in sql for sql in connection.sql_log)
+
+
+_KEYWORD_YAML = """
+version: "1.1"
+source: cat.sch.order_lines
+filter: {filter}
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+dimensions:
+  - name: product_line
+    expr: source.product_line
+  - name: is_gold
+    expr: customers.segment IN ('gold')
+  - name: misplaced
+    expr: segment IN ('gold')
+"""
+
+
+def _keyword_view(row_filter: str) -> list:
+    return _metric_view(
+        _KEYWORD_YAML.format(filter=json.dumps(row_filter)),
+        {
+            'product_line': 'string',
+            'is_gold': 'boolean',
+            'misplaced': 'boolean',
+        },
+    )
+
+
+def test_a_dimension_is_checked_against_the_columns_of_its_own_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""`segment` is a column of the joined table only, so `IN (` after it is
+    grammar there and a call on the fact table.
+    """
+    expr_df = _EXPR_DATA['customers'].assign(is_gold=[True, False] * 5)
+    monkeypatch.setitem(_EXPR_DATA, 'customers', expr_df)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(_keyword_view("status = 'VALID'")),
+            verbose=False,
+        )
+
+    assert str(graph['customers']['is_gold'].expr) == "segment IN ('gold')"
+    assert not graph['order_lines'].has_column('misplaced')
+    (message,) = graph.conversion_messages
+    assert "'misplaced'" in message and "calls 'IN'" in message
+    assert graph['order_lines'].row_filter == "status = 'VALID'"
+
+
+@pytest.mark.parametrize('internal', [True, False])
+def test_a_filter_is_checked_against_the_columns_of_the_source_table(
+    monkeypatch: pytest.MonkeyPatch, internal: bool
+) -> None:
+    r"""`segment` belongs to the joined table, so on the fact table the
+    filter's `IN (` would call a function. It is refused before a row is read.
+    """
+    connection = _FakeConnection(_keyword_view("segment IN ('gold')"))
+    monkeypatch.setattr(
+        'sdm_connectors.backends.databricks.connect',
+        lambda **kwargs: connection,
+    )
+
+    with pytest.raises(UnsupportedFilterError, match="calls 'IN'"):
+        Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=dict(server_hostname='x') if internal else connection,
+            verbose=False,
+        )
+
+    assert connection.closed is internal
+    assert connection.sql_log
+    assert all(
+        sql.startswith('DESCRIBE') or 'information_schema' in sql
+        for sql in connection.sql_log
+    ), connection.sql_log
+
+
+def test_a_trusted_metric_view_keeps_a_filter_calling_a_udf(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for table, column in (
+        ('customers', 'is_gold'),
+        ('order_lines', 'misplaced'),
+    ):
+        expr_df = _EXPR_DATA[table].assign(**{column: False})
+        monkeypatch.setitem(_EXPR_DATA, table, expr_df)
+    row_filter = "my_udf(status) = 'VALID'"
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(_keyword_view(row_filter)),
+            verbose=False,
+            trust_expressions=True,
+        )
+
+    assert graph['order_lines'].row_filter == row_filter
+    with pytest.raises(UnsupportedFilterError, match="calls 'my_udf'"):
+        Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(_keyword_view(row_filter)),
+            verbose=False,
+        )
