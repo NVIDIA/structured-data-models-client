@@ -181,18 +181,20 @@ class _Cursor:
         table_match = re.search(r'FROM `[^`]+`\.`[^`]+`\.`([^`]+)`', sql)
         assert table_match is not None, f'unexpected SQL: {sql}'
         name = table_match.group(1)
-        if sql.upper().startswith('SELECT COUNT(*)'):
-            self._rows = [(len(_DATA[name]),)]
-            return
         frame = _DATA[name]
-        if sql.startswith('SELECT MIN('):
-            column = re.findall(r'`((?:[^`]|``)+)`', sql)[0]
-            whole = (
-                frame[column].min(),
-                frame[column].max(),
-                int(frame[column].count()),
-            )
-            self._rows = [_RANGES.get(column, whole)]
+        if sql.startswith('SELECT COUNT(*), MIN('):
+            row: list[Any] = [len(frame)]
+            for column in re.findall(r'MIN\(`((?:[^`]|``)+)`\)', sql):
+                whole = (
+                    frame[column].min(),
+                    frame[column].max(),
+                    int(frame[column].count()),
+                )
+                row.extend(_RANGES.get(column, whole))
+            self._rows = [tuple(row)]
+            return
+        if sql.upper().startswith('SELECT COUNT(*)'):
+            self._rows = [(len(frame),)]
             return
         projection = sql.split(' FROM ')[0]
         if ' AS `' in projection:

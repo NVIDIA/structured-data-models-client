@@ -128,31 +128,38 @@ declare as `1.0.0` and none has published. The heading becomes
   another. Against Databricks, a demand question after the first took 4.6 s
   rather than 14.7 s. The time range is still read per question: it decides
   the anchor a question defaults to, and must see new rows.
+- `time_columns=` on `Schema.from_data` and `Schema.from_source` takes
+  `None`, as in `time_columns={'users': None}`, to say a table has no time
+  column. Naming no column was refused before.
 
 ### Fixed
 
 - **A schema may infer a different time column than before.** `from_data`
   and `from_source` now both call one function,
   `predictive_query.time_columns.choose_time_column`, so the same rows get
-  the same time column either way. It never takes a timestamp that holds no
-  value, or one value in every row that holds one when at least two do, nor
-  one whose name says when a row was loaded or synced, such as
-  `_fivetran_synced` or `EXTRACTDATE`, nor a date of birth, such as
-  `BirthDate` or `dob`. A stamp of the last edit, such as `ModifiedDate`,
-  `updated_at` or `last_seen`, is taken only when no other timestamp is
-  left, as in an append-only log of changes. Of several left, a `created`
-  stamp is taken, and otherwise the one whose values start earliest, read
-  over the whole table on a source. Before, `from_data` took a lone
-  timestamp unchecked and gave a table with several none, and `from_source`
-  compared only the rows it read and never took a name such as `last_seen`.
-  On AdventureWorks `customers` now gets no time column, where
-  `ModifiedDate`, one date later than every order, made every windowed
-  question about a customer fail, and `sales_order_details` gets `OrderDate`
-  instead of `ModifiedDate`. RelBench's `rel-f1` `drivers` gets none rather
-  than `dob`. One `SDMWarning` per schema of more than one table names every
-  column taken as the earliest of several or as the only edit stamp left,
-  and every column refused for a table left without a time column, each
-  with its reason and the `time_columns=` override.
+  the same time column either way. It never takes a timestamp that is empty
+  in more than half the table's rows, or holds one value in every row that
+  holds one (unless the table has a single row), nor one whose name says
+  when a row was loaded or synced, such as `_fivetran_synced` or
+  `EXTRACTDATE`, nor a date of birth, such as `BirthDate` or `dob`. A stamp
+  of the last edit, such as `ModifiedDate`, `updated_at` or `last_login`, is
+  never taken on a table with a primary key, and on one without, read as an
+  append-only log of changes, only when no other timestamp is left. Of
+  several left, a `created` stamp is taken, and otherwise the one whose
+  values start earliest, read over the whole table on a source and leaving
+  out placeholders before 1901 or at 1970-01-01T00:00:00. On a source read
+  in part, one query per table reads every timestamp over the whole table.
+  Before, `from_data` took a lone timestamp unchecked and gave a table with
+  several none, and `from_source` compared only the rows it read and never
+  took a name such as `last_seen`. On AdventureWorks `customers` now gets no
+  time column, where `ModifiedDate`, one date later than every order, made
+  every windowed question about a customer fail, and `sales_order_details`
+  gets `OrderDate` instead of `ModifiedDate`. RelBench's `rel-f1` `drivers`
+  gets none rather than `dob`. One `SDMWarning` per schema of more than one
+  table names every column taken as the earliest of several or as a lone
+  edit stamp, and every column refused for a table left without a time
+  column, each with its reason and the `time_columns=` override that settles
+  it.
 - **A metric view dimension keeps its string literals.** Resolving a
   dimension rewrote text inside a literal as if it were SQL: `'source.web'`
   lost its `source.`, `'customers.x'` moved a source dimension to the

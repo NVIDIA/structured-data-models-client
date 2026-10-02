@@ -20,7 +20,9 @@ from predictive_query.time_columns import (
     BIRTH_DATE_TOKENS,
     EDIT_STAMP_TOKENS,
     LOAD_STAMP_TOKENS,
+    ColumnRange,
     RejectedTimeColumn,
+    TableRange,
     choose_time_column,
     is_birth_date,
     is_edit_stamp,
@@ -33,10 +35,25 @@ ONE_DAY = pd.Series([pd.Timestamp('2025-09-11')] * 4)
 NO_DAY = pd.Series([pd.NaT] * 4)
 
 
-def _choose(full_range=None, **columns):
+def _choose(read=None, **columns):
+    r"""Choose among ``columns``, reading the whole table by ``read``, which
+    answers for one column at a time."""
     return choose_time_column(
-        pd.DataFrame(columns), list(columns), full_range=full_range
+        pd.DataFrame(columns),
+        list(columns),
+        full_range=None if read is None else _one_query(read),
     )
+
+
+def _one_query(read):
+    def full_range(names):
+        ranges = {name: read(name) for name in names}
+        if any(seen is None for seen in ranges.values()):
+            return None
+        columns = {name: ColumnRange(*seen) for name, seen in ranges.items()}
+        return TableRange(max(seen.held for seen in columns.values()), columns)
+
+    return full_range
 
 
 @pytest.mark.parametrize(
@@ -179,6 +196,20 @@ def test_a_lone_edit_stamp_is_taken_as_a_last_resort():
     assert choice.rejected == ()
 
 
+def test_a_keyed_table_never_takes_an_edit_stamp():
+    """A `users` table edited in place: its `last_login` is no user's
+    time."""
+    choice = choose_time_column(
+        pd.DataFrame({'last_login': DAYS}), ['last_login'], keyed=True
+    )
+    assert choice.column is None
+    assert choice.rejected == (RejectedTimeColumn('last_login', 'edit_stamp'),)
+    # The key can be settled later, and the choice follows it.
+    assert choice.for_key(False).column == 'last_login'
+    assert choice.for_key(False).rejected == ()
+    assert choice.for_key(False).for_key(True) == choice
+
+
 def test_an_edit_stamp_is_never_taken_over_another_timestamp():
     """`sales_order_details` holds the two with the same earliest value."""
     choice = _choose(ModifiedDate=DAYS, OrderDate=LATER)
@@ -219,28 +250,65 @@ def test_an_empty_column_is_refused():
     assert choice.rejected[0].why == 'no row holds a value'
 
 
-def test_a_single_value_is_no_evidence_of_a_constant():
-    """A one-row frame keeps its timestamp."""
+def test_a_one_row_table_keeps_its_timestamp():
+    """A single value is no evidence that a column never changes."""
     assert _choose(ordered=ONE_DAY[:1]).column == 'ordered'
-    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11'), pd.NaT])
-    assert _choose(ordered=held_once).column == 'ordered'
+    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11')])
+    assert _choose(ordered=held_once).rejected == (
+        RejectedTimeColumn('ordered', 'constant', held_once[1]),
+    )
+    assert _choose(ordered=held_once).rejected[0].why == (
+        'every row that holds a value holds 2025-09-11 00:00:00'
+    )
+
+
+def test_a_mostly_empty_column_is_refused():
+    """A `cancelled_at` set on one order in 1200 is no order's time."""
+    cancelled = pd.Series([pd.NaT] * 1_200)
+    cancelled[5] = pd.Timestamp('2024-05-05')
+    cancelled[9] = pd.Timestamp('2024-06-05')
+    choice = _choose(cancelled_at=cancelled)
+    assert choice.column is None
+    assert choice.rejected == (RejectedTimeColumn('cancelled_at', 'sparse'),)
+    assert choice.rejected[0].why == '1,198 of its 1,200 rows hold no value'
+
+
+def test_a_column_empty_in_half_the_rows_is_kept():
+    half = pd.Series([pd.NaT, pd.NaT, *DAYS[:2]])
+    assert _choose(shipped=half).column == 'shipped'
+
+
+def test_a_column_is_counted_over_the_whole_table():
+    """Dense in the rows read is not dense in the table."""
+    whole = TableRange(
+        1_000, {'cancelled_at': ColumnRange(DAYS[0], DAYS[3], 4)}
+    )
+    choice = choose_time_column(
+        pd.DataFrame({'cancelled_at': DAYS}),
+        ['cancelled_at'],
+        full_range=lambda names: whole,
+    )
+    assert choice.rejected[0].why == '996 of its 1,000 rows hold no value'
 
 
 def test_a_column_constant_only_in_the_rows_read_is_kept():
     """rel-hm's `transactions.t_dat` holds one date in its first 1000 rows."""
     asked = []
 
-    def full_range(name):
-        asked.append(name)
-        return pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22'), 9
+    def full_range(names):
+        asked.append(list(names))
+        stamps = pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22')
+        return TableRange(9, {name: ColumnRange(*stamps, 9) for name in names})
 
-    choice = _choose(full_range, t_dat=ONE_DAY, other=LATER)
-    assert choice.rejected == ()
+    choice = choose_time_column(
+        pd.DataFrame({'t_dat': ONE_DAY, 'other': LATER, 'synced': DAYS}),
+        ['t_dat', 'other', 'synced'],
+        full_range=full_range,
+    )
     assert choice.among == ('t_dat', 'other')
     assert choice.column == 't_dat'
-    # A column that looked constant pays for the check, and every column a
-    # choice by earliest value is made among is read over the whole table.
-    assert asked == ['t_dat', 'other']
+    # One query reads every column a name does not already refuse.
+    assert asked == [['t_dat', 'other']]
 
 
 def test_a_column_constant_in_every_row_is_refused_after_asking():
@@ -253,16 +321,20 @@ def test_a_column_constant_in_every_row_is_refused_after_asking():
     )
 
 
-def test_a_value_held_once_in_the_rows_read_is_checked_against_the_table():
-    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11'), pd.NaT])
+def test_a_value_held_once_is_checked_against_the_whole_table():
+    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11')])
     stamp = pd.Timestamp('2025-09-11')
-    assert (
-        _choose(lambda name: (stamp, stamp, 2), joined=held_once).column is None
-    )
-    assert (
-        _choose(lambda name: (stamp, stamp, 1), joined=held_once).column
-        == 'joined'
-    )
+
+    def choose(rows: int, held: int):
+        whole = TableRange(rows, {'joined': ColumnRange(stamp, stamp, held)})
+        return choose_time_column(
+            pd.DataFrame({'joined': held_once}),
+            ['joined'],
+            full_range=lambda names: whole,
+        )
+
+    assert choose(rows=3, held=2).column is None
+    assert choose(rows=1, held=1).column == 'joined'
 
 
 def test_a_table_that_cannot_be_asked_keeps_its_column():
@@ -316,6 +388,36 @@ def test_the_earliest_compares_times_in_any_zone_and_text():
         ordered=LATER,
     )
     assert choice.column == 'ordered'
+
+
+@pytest.mark.parametrize(
+    'placeholder', ['1970-01-01', '1900-01-01', '1753-01-01']
+)
+def test_a_placeholder_is_no_start(placeholder):
+    """A `cancelled_at` filled with 1970-01-01 where no order was
+    cancelled does not start before the orders."""
+    stamp = pd.Timestamp(placeholder)
+    filled = pd.Series([stamp, stamp, LATER[2], LATER[3]])
+    choice = _choose(cancelled_at=filled, order_date=DAYS)
+    assert choice.column == 'order_date'
+    assert choice.how == 'earliest'
+
+
+def test_a_placeholder_minimum_over_the_table_is_read_past():
+    epoch = pd.Timestamp('1970-01-01')
+    whole = TableRange(
+        9,
+        {
+            'cancelled_at': ColumnRange(epoch, LATER[3], 9),
+            'order_date': ColumnRange(DAYS[0], DAYS[3], 9),
+        },
+    )
+    choice = choose_time_column(
+        pd.DataFrame({'cancelled_at': [epoch, *LATER[1:]], 'order_date': DAYS}),
+        ['cancelled_at', 'order_date'],
+        full_range=lambda names: whole,
+    )
+    assert choice.column == 'order_date'
 
 
 def test_a_tie_on_the_earliest_value_takes_the_first_column():

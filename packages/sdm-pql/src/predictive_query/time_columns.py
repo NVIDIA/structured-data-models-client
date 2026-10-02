@@ -6,13 +6,16 @@ r"""Which timestamp column inference takes as a table's time column.
 
 A time column says when a row became true, and a query counts or windows rows
 by it. Some timestamps say nothing of the sort, and are never taken: one that
-holds a single value in every row, or none, and one whose name says when a row
-was loaded or synced, such as `_fivetran_synced`.
+is empty in more than half the rows, or holds a single value in every row that
+holds one, and one whose name says when a row was loaded or synced, such as
+`_fivetran_synced`.
 Nor is a date of birth.
-A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is taken
-only when it is a table's one timestamp left, since in an append-only log of
-changes it is when the row began. Of several left, a `created` stamp is taken,
-and otherwise the one whose values start earliest.
+A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is never
+taken on a table with a primary key, whose rows are edited in place. On a
+table without one it is taken only when it is the one timestamp left, since
+in an append-only log of changes it is when the row began. Of several left, a `created` stamp is taken,
+and otherwise the one whose values start earliest, placeholders such as
+1900-01-01 or 1970-01-01 left out.
 
 :func:`choose_time_column` is the one rule both inference paths apply: the
 client's, which reads a frame, and the relational engine's, which reads a
@@ -26,8 +29,8 @@ import datetime
 import re
 import warnings
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field, replace
+from typing import Literal, NamedTuple
 
 import pandas as pd
 
@@ -165,18 +168,26 @@ class RejectedTimeColumn:
 
     Attributes:
         column: The column's name.
-        reason: Why it was refused. ``'constant'`` when at least two rows
-            hold a value and all hold the same one, or no row holds one.
+        reason: Why it was refused. ``'constant'`` when no row holds a
+            value, or the table has more than one row and every row that
+            holds a value holds the same one. ``'sparse'`` when more than
+            half the rows hold no value.
             ``'load_stamp'`` when its name says when a row was loaded.
             ``'edit_stamp'`` when it says when a row was last changed.
             ``'birth_date'`` when it says when someone was born.
         value: The one value every row holds, or ``None`` when no row holds
-            one or the reason is the name.
+            one or the reason is not ``'constant'``.
+        missing: How many rows hold no value, when the reason is the values.
+        rows: How many rows the table has, when the reason is the values.
     """
 
     column: str
-    reason: Literal['constant', 'load_stamp', 'edit_stamp', 'birth_date']
+    reason: Literal[
+        'constant', 'sparse', 'load_stamp', 'edit_stamp', 'birth_date'
+    ]
     value: object = None
+    missing: int = field(default=0, compare=False)
+    rows: int = field(default=0, compare=False)
 
     @property
     def why(self) -> str:
@@ -189,8 +200,15 @@ class RejectedTimeColumn:
             return 'it looks like when a row was loaded, not when it began'
         if self.reason == 'birth_date':
             return 'it looks like a date of birth, not when a row began'
+        if self.reason == 'sparse':
+            return f'{self.missing:,} of its {self.rows:,} rows hold no value'
         if self.value is None:
             return 'no row holds a value'
+        if self.missing:
+            return (
+                f'every row that holds a value holds '
+                f'{_as_timestamp(self.value)}'
+            )
         return f'every row holds {_as_timestamp(self.value)}'
 
 
@@ -204,22 +222,65 @@ class TimeColumnChoice:
             when it was the one creation stamp among several, ``'earliest'``
             when its values start earliest of :attr:`among`, and
             ``'edit_stamp'`` when it looks like a stamp of the last edit but
-            no other timestamp was left. ``None`` when no column was taken.
+            no other timestamp was left and the table has no primary key.
+            ``None`` when no column was taken.
         among: The columns it was chosen from, itself included.
-        rejected: The columns refused, each with its reason, in table order.
+        refused: Every column screened out, each with its reason, in table
+            order, a lone edit stamp taken as the last resort included.
+        fallback: The lone edit stamp left, when no other timestamp was.
     """
 
     column: str | None
     how: Literal['only', 'created', 'earliest', 'edit_stamp'] | None
     among: tuple[str, ...]
-    rejected: tuple[RejectedTimeColumn, ...]
+    refused: tuple[RejectedTimeColumn, ...]
+    fallback: str | None = None
+
+    @property
+    def rejected(self) -> tuple[RejectedTimeColumn, ...]:
+        r"""The columns refused, each with its reason, in table order."""
+        return tuple(r for r in self.refused if r.column != self.column)
+
+    def for_key(self, keyed: bool) -> TimeColumnChoice:
+        r"""This choice for a table that has a primary key, or has none.
+
+        A keyed table holds one row per thing, edited in place, so a stamp
+        of its last edit says when the row last changed and is refused. A
+        table without one is read as an append-only log, where it says when
+        the row was written, and is taken when nothing else is left. The key
+        may be settled after the time column was chosen, so the choice is
+        kept both ways.
+        """
+        if self.fallback is None:
+            return self
+        if keyed:
+            return replace(self, column=None, how=None, among=())
+        return replace(
+            self, column=self.fallback, how='edit_stamp', among=(self.fallback,)
+        )
 
 
-_VARIES = object()
+class ColumnRange(NamedTuple):
+    r"""A column's ``MIN``, ``MAX`` and ``COUNT`` over every row of its
+    table.
+    """
 
-#: Reads a column's MIN, MAX and count of values over every row of its table,
-#: or ``None`` when it cannot.
-FullRange = Callable[[str], tuple[object, object, int] | None]
+    low: object
+    high: object
+    #: How many rows hold a value.
+    held: int
+
+
+class TableRange(NamedTuple):
+    r"""What one query over every row of a table read."""
+
+    rows: int
+    columns: Mapping[str, ColumnRange]
+
+
+#: Reads the row count of a table and the range of each named column over
+#: every row, in one query, or ``None`` when it cannot.
+FullRange = Callable[[Sequence[str]], TableRange | None]
 
 
 def choose_time_column(
@@ -227,14 +288,16 @@ def choose_time_column(
     candidates: Sequence[str],
     *,
     full_range: FullRange | None = None,
+    keyed: bool = False,
 ) -> TimeColumnChoice:
     r"""Choose a table's time column among its timestamps.
 
-    A column holding one value in at least two rows, or none in any, is
-    refused, as is one named as a load stamp.
+    A column empty in more than half the rows is refused, as is one holding
+    one value in every row that holds one, unless the table has a single
+    row, and one named as a load stamp.
     So is one named as a date of birth.
     Of those left, a stamp of the last edit is taken only when it is the one
-    column left. Otherwise a creation stamp is preferred, and of several the
+    column left and the table has no primary key. Otherwise a creation stamp is preferred, and of several the
     one whose values start earliest is taken, the first in table order on a
     tie.
 
@@ -242,14 +305,22 @@ def choose_time_column(
         frame: The rows read, holding every candidate.
         candidates: The timestamp columns, in table order.
         full_range: ``None`` when ``frame`` holds every row. Otherwise asked
-            for each column that looks constant in the rows read, and for
-            each column a choice by earliest value is made among, so that
-            the answer is the one every row gives.
+            once, for every column not refused by its name, so that whether
+            a column is constant and where it starts are what every row
+            says.
+        keyed: Whether the table has a primary key.
 
     Returns:
         The column taken, how, and the columns refused.
     """
-    whole = _WholeTable(full_range)
+    whole = _WholeTable(
+        full_range,
+        [
+            name
+            for name in candidates
+            if not is_load_stamp(name) and not is_birth_date(name)
+        ],
+    )
     rejected: dict[str, RejectedTimeColumn] = {}
     plain: list[str] = []
     edited: list[str] = []
@@ -258,8 +329,8 @@ def choose_time_column(
             rejected[name] = RejectedTimeColumn(name, 'load_stamp')
         elif is_birth_date(name):
             rejected[name] = RejectedTimeColumn(name, 'birth_date')
-        elif (held := _constant(frame[name], name, whole)) is not _VARIES:
-            rejected[name] = RejectedTimeColumn(name, 'constant', held)
+        elif refused := _refused_for_values(name, frame, whole):
+            rejected[name] = refused
         elif is_edit_stamp(name):
             rejected[name] = RejectedTimeColumn(name, 'edit_stamp')
             edited.append(name)
@@ -272,15 +343,13 @@ def choose_time_column(
         among: Sequence[str],
     ) -> TimeColumnChoice:
         return TimeColumnChoice(
-            column,
-            how,
-            tuple(among),
-            tuple(r for name, r in rejected.items() if name != column),
+            column, how, tuple(among), tuple(rejected.values())
         )
 
     if not plain:
         if len(edited) == 1:
-            return chosen(edited[0], 'edit_stamp', edited)
+            last_resort = replace(chosen(None, None, ()), fallback=edited[0])
+            return last_resort.for_key(keyed)
         return chosen(None, None, ())
     created = [name for name in plain if is_creation_stamp(name)]
     if len(created) == 1:
@@ -294,50 +363,61 @@ def choose_time_column(
 
 
 class _WholeTable:
-    r"""Asks the table for a column's range once."""
+    r"""What one query over every row of the table said, if it was asked."""
 
-    def __init__(self, full_range: FullRange | None) -> None:
-        self._full_range = full_range
-        self._seen: dict[str, tuple[object, object, int] | None] = {}
+    def __init__(
+        self, full_range: FullRange | None, names: Sequence[str]
+    ) -> None:
+        self.can_ask = full_range is not None
+        self.read = (
+            full_range(names) if full_range is not None and names else None
+        )
 
-    @property
-    def can_ask(self) -> bool:
-        return self._full_range is not None
-
-    def __call__(self, name: str) -> tuple[object, object, int] | None:
-        if self._full_range is None:
-            return None
-        if name not in self._seen:
-            self._seen[name] = self._full_range(name)
-        return self._seen[name]
+    def __call__(self, name: str) -> ColumnRange | None:
+        return None if self.read is None else self.read.columns.get(name)
 
 
-def _constant(values: pd.Series, name: str, whole: _WholeTable) -> object:
-    r"""The one value a column holds in at least two rows, ``None`` when it
-    holds none, or ``_VARIES``.
+def _refused_for_values(
+    name: str, frame: pd.DataFrame, whole: _WholeTable
+) -> RejectedTimeColumn | None:
+    r"""Refuse a column that is mostly empty or holds one value, by what
+    every row of the table holds.
 
-    A single value is no evidence that the column never changes, so a
-    one-row table keeps its timestamp.
+    A single value is no evidence that a column never changes, so a one-row
+    table keeps its timestamp. A table that cannot be asked keeps its column
+    too: only evidence refuses one.
     """
-    present = values.dropna()
-    first = present.iloc[0] if len(present) else None
-    if len(present) > 1 and not bool((present == first).all()):
-        return _VARIES
-    count = len(present)
+    present = frame[name].dropna()
+    rows, held = len(frame), len(present)
+    first = present.iloc[0] if held else None
+    same = held > 0 and bool((present == first).all())
     if whole.can_ask:
         seen = whole(name)
-        if seen is None:
-            # A table that cannot be asked keeps its column: only evidence
-            # rejects one.
-            return _VARIES
-        low, high, count = seen
-        if count > 1 and not bool(low == high):
-            return _VARIES
+        if seen is None or whole.read is None:
+            return None
+        rows, held = whole.read.rows, seen.held
+        same = held > 0 and bool(seen.low == seen.high)
         # The value read keeps the type the rows were read as.
-        first = low if first is None else first
-    if count == 0:
-        return None
-    return _VARIES if count == 1 else first
+        first = seen.low if first is None else first
+    missing = rows - held
+    if held == 0:
+        return RejectedTimeColumn(name, 'constant', None, missing, rows)
+    if 2 * missing > rows:
+        return RejectedTimeColumn(name, 'sparse', None, missing, rows)
+    if rows > 1 and same:
+        return RejectedTimeColumn(name, 'constant', first, missing, rows)
+    return None
+
+
+# Values that stand for no date: anything before 1901, such as 0001-01-01 or
+# 1900-01-01, and the Unix epoch at midnight, which a zero or a missing value
+# becomes on its way into a timestamp.
+_FIRST_REAL_DAY = pd.Timestamp('1901-01-01', tz='UTC')
+_EPOCH = pd.Timestamp('1970-01-01', tz='UTC')
+
+
+def _is_placeholder(stamp: pd.Timestamp) -> bool:
+    return stamp < _FIRST_REAL_DAY or stamp == _EPOCH
 
 
 def _earliest(
@@ -345,15 +425,19 @@ def _earliest(
 ) -> str:
     r"""The column of ``among`` whose values start earliest, the first in
     table order on a tie or when none can be read as a time.
+
+    A placeholder is no start: a `cancelled_at` filled with 1970-01-01 does
+    not begin before the orders it cancels. Where a column starts is read
+    over the whole table when it was asked; when its whole-table minimum is
+    a placeholder, the earliest real value in the rows read is used, since
+    one query cannot skip the placeholders in every SQL dialect.
     """
     starts: dict[str, pd.Timestamp] = {}
     for name in among:
         seen = whole(name)
-        start = (
-            _as_instant(seen[0])
-            if seen is not None
-            else _first_instant(frame[name])
-        )
+        start = None if seen is None else _as_instant(seen.low)
+        if start is None or _is_placeholder(start):
+            start = _first_instant(frame[name])
         if start is not None:
             starts[name] = start
     if not starts:
@@ -362,7 +446,9 @@ def _earliest(
 
 
 def _first_instant(values: pd.Series) -> pd.Timestamp | None:
-    r"""The earliest of ``values`` as a UTC timestamp, or ``None``."""
+    r"""The earliest of ``values`` that is not a placeholder, as a UTC
+    timestamp, or ``None``.
+    """
     if isinstance(values.dtype, pd.ArrowDtype):
         values = pd.Series(values.to_numpy(), index=values.index)
     try:
@@ -371,7 +457,8 @@ def _first_instant(values: pd.Series) -> pd.Timestamp | None:
             parsed = pd.to_datetime(values, errors='coerce', utc=True)
     except (TypeError, ValueError, OverflowError):
         return None
-    return _as_instant(parsed.min())
+    real = parsed[(parsed >= _FIRST_REAL_DAY) & (parsed != _EPOCH)]
+    return _as_instant(real.min())
 
 
 def _as_instant(value: object) -> pd.Timestamp | None:
