@@ -265,7 +265,7 @@ def test_a_fit_time_output_list_is_not_read_again_later():
     from sdm_client.client import FittedModel
 
     named = ['prediction', 'quantiles']
-    fitted = FittedModel(
+    fitted = FittedModel._open(
         client=None,
         adapter=None,
         session_id='s1',

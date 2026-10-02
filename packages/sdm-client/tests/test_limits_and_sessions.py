@@ -403,7 +403,7 @@ def test_a_session_refuses_a_request_that_asks_something_else():
         'PREDICT COUNT(b.*, 0, 30, days) > 0 FOR EACH users.uid', schema
     ).materialize(**kw)
 
-    handle = FittedModel(
+    handle = FittedModel._open(
         None, None, 'sid', ('prediction',), question=pinned._question
     )
 
@@ -439,7 +439,7 @@ def test_a_session_refuses_a_request_asked_as_several_questions():
         schema,
     ).materialize(indices=[1, 2], anchor_time=pd.Timestamp('2021-01-01'))
 
-    handle = FittedModel(
+    handle = FittedModel._open(
         None, None, 'sid', ('prediction',), question=forecast.query
     )
 
@@ -481,7 +481,7 @@ def test_a_tabular_request_records_the_question_it_was_built_from():
 def _pinned(request):
     from sdm_client.client import FittedModel
 
-    return FittedModel(
+    return FittedModel._open(
         None, None, 'sid', ('prediction',), question=request._question
     )
 

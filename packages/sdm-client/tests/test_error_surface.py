@@ -106,8 +106,14 @@ def test_keys_that_can_be_hashed_are_untouched():
 # --- the session path checks what it was handed ----------------------------
 
 
+def test_a_fitted_model_is_not_constructed_directly():
+    """What a handle is built from is internal, so ``fit()`` is the way in."""
+    with pytest.raises(TypeError, match=r'SDMClient\.fit\(\)'):
+        FittedModel()
+
+
 def handle(**kwargs) -> FittedModel:
-    return FittedModel(
+    return FittedModel._open(
         client=kwargs.pop('client', None),
         adapter=kwargs.pop('adapter', None),
         session_id=kwargs.pop('session_id', 's1'),

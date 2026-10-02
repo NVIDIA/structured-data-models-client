@@ -150,7 +150,7 @@ def handle(pinned_keys) -> object:
         def session_prediction_plan(self, request, outputs, pinned=None):
             return ()
 
-    return FittedModel(
+    return FittedModel._open(
         client=Client(),
         adapter=Adapter(),
         session_id='s1',
