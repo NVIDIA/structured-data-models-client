@@ -290,14 +290,31 @@ _TYPE_NAMES = frozenset(
 )  # fmt: skip
 
 # Read without parentheses, these return the session's identity or clock.
-# Databricks also answers bare `user` and `current_path`, the latter even over
-# a column of that name, as checked on a DBSQL 2026.38 warehouse.
 _SESSION_VALUES = re.compile(
     r'(?<![\w$.\ue000])'
     r'(current_(?:catalog|database|date|path|role|schema|time|timestamp|user)'
     r'|localtime|localtimestamp|session_user|user)\b(?!\s*\()',
     flags=re.IGNORECASE,
 )
+
+# The session words a column of the same name overrides. On a DBSQL 2026.38
+# warehouse each reads the column, bare or nested, in a comparison, a CASE,
+# an aggregate or a metric view, except `current_path`, which always returns
+# the search path. Snowflake reserves `current_date`, `current_time`,
+# `current_timestamp`, `current_user`, `localtime` and `localtimestamp`, so no
+# bare column takes those names, and how it reads the others is not
+# documented, so every session word stays refused there.
+_COLUMN_OVER_SESSION = {
+    'databricks': frozenset(
+        {
+            'current_catalog', 'current_database', 'current_date',
+            'current_role', 'current_schema', 'current_time',
+            'current_timestamp', 'current_user', 'localtime',
+            'localtimestamp', 'session_user', 'user',
+        }
+    ),
+    'snowflake': frozenset(),
+}  # fmt: skip
 
 # A private-use character stands in for quoted text, so a call to a quoted
 # name stays visible as a call.
@@ -731,7 +748,9 @@ def _untrusted_call_reason(
     otherwise run with the caller's credentials every time a graph samples.
     Qualified and quoted names, and ``IDENTIFIER()``, are refused since they
     can name anything. Session values (``current_user``) are refused too: a
-    column must not change with who reads it.
+    column must not change with who reads it. A session word that one of
+    ``columns`` also names reads that column where the dialect lets the
+    column win, and is accepted there.
 
     Every ``(`` is checked, and fails closed: it must open a group, follow
     a keyword, give a type its parameters, or call a trusted function. So a
@@ -753,9 +772,8 @@ def _untrusted_call_reason(
     """
     trusted = _TRUSTED_FUNCTIONS[dialect]
     text = _QUOTED_EXPR_TEXT.sub(_QUOTED, expr)
-    visible = frozenset(
-        {column.lower() for column in columns} | _lambda_parameters(text)
-    )
+    named = frozenset(column.lower() for column in columns)
+    visible = named | _lambda_parameters(text)
     for index, char in enumerate(text):
         if char != '(':
             continue
@@ -785,6 +803,10 @@ def _untrusted_call_reason(
             return (
                 f"it calls '{name}', which is not a pure built-in SQL function"
             )
-    if session := _SESSION_VALUES.search(text):
-        return f"it reads the session value '{session.group(1)}'"
+    # A lambda parameter is in scope only inside its lambda, so only the
+    # table's columns can stand in for a session word.
+    overridden = named & _COLUMN_OVER_SESSION[dialect]
+    for session in _SESSION_VALUES.finditer(text):
+        if session.group(1).lower() not in overridden:
+            return f"it reads the session value '{session.group(1)}'"
     return None

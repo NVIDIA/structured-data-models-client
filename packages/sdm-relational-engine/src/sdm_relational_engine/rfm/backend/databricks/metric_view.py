@@ -121,7 +121,47 @@ class MetricViewSpec:
     joins: list[MetricViewJoin]
     columns: list[MetricViewColumn]
     messages: list[str]
-    filter: str | None = None
+    filter: MetricViewFilter | None = None
+
+
+@dataclass(frozen=True)
+class MetricViewFilter:
+    r"""A metric view's ``filter``, held back until what it calls is checked.
+
+    Every read of the source table runs the filter under the caller's
+    credentials, and which of its words are columns is known only once the
+    source table's columns are read. So the SQL is handed out only by
+    :meth:`checked`, given those columns, or by :meth:`trusted`.
+
+    Args:
+        _sql: The condition, which already references no joined table and
+            holds no sub-query, comment or statement separator.
+    """
+
+    _sql: str
+
+    def checked(self, columns: Collection[str]) -> str:
+        r"""Returns the filter if it calls only pure built-in functions.
+
+        Args:
+            columns: The columns of the source table.
+
+        Raises:
+            UnsupportedFilterError: If the filter calls a function that is
+                not trusted, or reads a session value.
+        """
+        reason = _untrusted_call_reason(
+            self._sql, 'databricks', columns=columns
+        )
+        if reason is not None:
+            _refuse_filter(self._sql, reason)
+        return self._sql
+
+    def trusted(self) -> str:
+        r"""Returns the filter unchecked, for a caller who trusts whoever
+        authored the view.
+        """
+        return self._sql
 
 
 def unquote_ident(name: str) -> str:
@@ -250,8 +290,9 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
 
     The ``filter`` decides which rows the view holds, so it is never dropped:
     it is returned to be applied to the source table, or the view is refused.
-    Which functions it calls is checked by :func:`check_filter_calls` once
-    the source table's columns are known.
+    Which functions it calls depends on the source table's columns, so it
+    comes back as a :class:`MetricViewFilter` that gives out its SQL only
+    once checked against them.
 
     Args:
         definition: The YAML definition.
@@ -453,7 +494,7 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
 def _check_filter(
     row_filter: Any,
     candidates: Sequence[tuple[tuple[str, ...], str]],
-) -> str | None:
+) -> MetricViewFilter | None:
     r"""Returns the filter if it can be applied to the source table alone.
 
     The graph keeps each join as a table of its own, so a condition on a
@@ -482,26 +523,7 @@ def _check_filter(
                 break
     if reason is not None:
         _refuse_filter(row_filter, reason)
-    return row_filter.strip()
-
-
-def check_filter_calls(row_filter: str, columns: Collection[str]) -> None:
-    r"""Refuses a filter that calls anything but a pure built-in function.
-
-    Run before any row of the source table is read, since every read of it
-    runs the filter.
-
-    Args:
-        row_filter: The filter :func:`parse_metric_view` returned.
-        columns: The columns of the source table.
-
-    Raises:
-        UnsupportedFilterError: If the filter calls a function that is not
-            trusted.
-    """
-    reason = _untrusted_call_reason(row_filter, 'databricks', columns=columns)
-    if reason is not None:
-        _refuse_filter(row_filter, reason)
+    return MetricViewFilter(row_filter.strip())
 
 
 def _refuse_filter(row_filter: Any, reason: str) -> NoReturn:

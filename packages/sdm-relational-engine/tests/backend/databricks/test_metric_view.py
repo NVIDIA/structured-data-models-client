@@ -21,10 +21,10 @@ try:
     from sdm_relational_engine.rfm.backend.databricks.metric_view import (
         SOURCE_ALIAS,
         JoinKeyRef,
+        MetricViewFilter,
         MetricViewJoin,
         UnsupportedFilterError,
         UnsupportedJoinError,
-        check_filter_calls,
         parse_join_condition,
         parse_metric_view,
         parse_table_reference,
@@ -382,7 +382,7 @@ dimensions:
     assert [(c.name, c.alias) for c in spec.columns] == [
         ('valid', 'source'),
     ]
-    assert spec.filter == "source.status = 'VALID'"
+    assert spec.filter == MetricViewFilter("source.status = 'VALID'")
     assert spec.messages == [
         "Failed to add join 'promos' since only plain table names are "
         'supported as join sources',
@@ -431,9 +431,9 @@ def test_parse_metric_view_source_filter(row_filter: str) -> None:
         _FILTERED_YAML.format(filter=json.dumps(row_filter))
     )
 
-    assert spec.filter == row_filter
+    assert spec.filter is not None
+    assert spec.filter.checked(_FACT_COLUMNS) == row_filter
     assert not any('filter' in message for message in spec.messages)
-    check_filter_calls(spec.filter, _FACT_COLUMNS)
 
 
 @pytest.mark.parametrize(
@@ -485,21 +485,20 @@ _FACT_COLUMNS = ('status', 'amount', 'order status', 'note', 'token')
         ('upper(note) FILTER (WHERE from(token))', "calls 'from'"),
     ],
 )
-def test_check_filter_calls_refuses_a_call(
-    row_filter: str, reason: str
-) -> None:
+def test_a_checked_filter_refuses_a_call(row_filter: str, reason: str) -> None:
     with pytest.raises(UnsupportedFilterError) as caught:
-        check_filter_calls(row_filter, _FACT_COLUMNS)
+        MetricViewFilter(row_filter).checked(_FACT_COLUMNS)
 
     assert reason in str(caught.value)
     assert 'Create a regular view with this WHERE clause' in str(caught.value)
 
 
-def test_check_filter_calls_reads_a_keyword_after_a_column_as_grammar() -> None:
+def test_a_checked_filter_reads_a_keyword_after_a_column_as_grammar() -> None:
     # `status` is a column of the source table, so `IN (` is grammar.
-    check_filter_calls("status IN ('VALID')", _FACT_COLUMNS)
+    row_filter = MetricViewFilter("status IN ('VALID')")
+    assert row_filter.checked(_FACT_COLUMNS) == "status IN ('VALID')"
     with pytest.raises(UnsupportedFilterError, match="calls 'IN'"):
-        check_filter_calls("status IN ('VALID')", ())
+        row_filter.checked(())
 
 
 def test_parse_metric_view_refuses_a_filter_that_is_not_sql() -> None:
@@ -507,14 +506,14 @@ def test_parse_metric_view_refuses_a_filter_that_is_not_sql() -> None:
         parse_metric_view(_FILTERED_YAML.format(filter='true'))
 
 
-def test_parsing_leaves_calls_to_check_filter_calls() -> None:
+def test_parsing_leaves_calls_to_the_check() -> None:
     def parse(row_filter: str) -> Any:
         return parse_metric_view(
             _FILTERED_YAML.format(filter=json.dumps(row_filter))
         )
 
-    # Trusted mode skips `check_filter_calls`, and nothing else refuses this:
-    assert parse('my_udf(source.amount) > 0').filter == (
+    # Trusted mode skips the check, and nothing else refuses this:
+    assert parse('my_udf(source.amount) > 0').filter == MetricViewFilter(
         'my_udf(source.amount) > 0'
     )
     with pytest.raises(UnsupportedFilterError, match='joined table'):
@@ -524,6 +523,24 @@ def test_parsing_leaves_calls_to_check_filter_calls() -> None:
     # A stray `)` would close the filtered subquery and append to it:
     with pytest.raises(UnsupportedFilterError, match="closes a '\\('"):
         parse('source.amount > 0) OR (1 = 1')
+
+
+def test_a_parsed_filter_gives_out_its_sql_only_through_a_check() -> None:
+    r"""The parsed filter is no string, so it cannot reach a query unless a
+    caller checks it against the source table's columns or trusts the view.
+    """
+    row_filter = "my_udf(status) = 'VALID'"
+    spec = parse_metric_view(
+        _FILTERED_YAML.format(filter=json.dumps(row_filter))
+    )
+
+    assert isinstance(spec.filter, MetricViewFilter)
+    assert not isinstance(spec.filter, str)
+    public = {name for name in dir(spec.filter) if not name.startswith('_')}
+    assert public == {'checked', 'trusted'}
+    with pytest.raises(UnsupportedFilterError, match="calls 'my_udf'"):
+        spec.filter.checked(_FACT_COLUMNS)
+    assert spec.filter.trusted() == row_filter
 
 
 def test_parse_metric_view_duplicate_aliases() -> None:

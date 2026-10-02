@@ -658,6 +658,22 @@ def test_a_quoted_name_or_a_cast_of_a_call_opens_a_group(
     assert _call(expr, dialect) is None
 
 
+_SESSION_WORDS = [
+    'current_catalog', 'current_database', 'current_date', 'current_path',
+    'current_role', 'current_schema', 'current_time', 'current_timestamp',
+    'current_user', 'localtime', 'localtimestamp', 'session_user', 'user',
+]  # fmt: skip
+# Where a session word may stand, each checked on a DBSQL 2026.38 warehouse.
+_SESSION_POSITIONS = [
+    '{}',
+    'upper({})',
+    "{} = 'a'",
+    "CASE WHEN {} = 'a' THEN 1 END",
+    "x IN ({}, 'b')",
+    "concat('a', {})",
+]
+
+
 @pytest.mark.parametrize('dialect', _DIALECTS)
 @pytest.mark.parametrize(
     ('expr', 'value'),
@@ -672,12 +688,71 @@ def test_a_quoted_name_or_a_cast_of_a_call_opens_a_group(
 def test_a_bare_session_value_is_refused(
     dialect: str, expr: str, value: str
 ) -> None:
-    r"""Databricks answers bare `user` with the session user, and bare
-    `current_path` with the search path even over a column of that name.
+    r"""Without a column of its name, a bare session word reads the session:
+    Databricks answers bare `user` with the session user.
     """
-    refused = _untrusted_call_reason(expr, dialect, columns=('user', 'x'))
+    refused = _untrusted_call_reason(expr, dialect, columns=('x',))
     assert refused is not None
     assert f"session value '{value}'" in refused
+
+
+@pytest.mark.parametrize('position', _SESSION_POSITIONS)
+@pytest.mark.parametrize(
+    'word', [word for word in _SESSION_WORDS if word != 'current_path']
+)
+def test_a_column_named_like_a_session_value_is_read_on_databricks(
+    word: str, position: str
+) -> None:
+    r"""Databricks reads a column over the session value of its name, in any
+    spelling of either.
+    """
+    expr = position.format(word.upper())
+    columns = (word, 'x')
+    assert _untrusted_call_reason(expr, 'databricks', columns=columns) is None
+    assert _untrusted_call_reason(expr, 'databricks', columns=('x',))
+
+
+@pytest.mark.parametrize('position', _SESSION_POSITIONS)
+def test_current_path_is_refused_even_over_a_column(position: str) -> None:
+    r"""Databricks answers `current_path` with the search path even where a
+    column of that name is in scope.
+    """
+    expr = position.format('current_path')
+    refused = _untrusted_call_reason(
+        expr, 'databricks', columns=('current_path', 'x')
+    )
+    assert refused is not None
+    assert "session value 'current_path'" in refused
+
+
+@pytest.mark.parametrize('word', _SESSION_WORDS)
+def test_snowflake_refuses_a_session_value_even_over_a_column(
+    word: str,
+) -> None:
+    r"""Snowflake reserves some session words as column names and does not
+    say how it reads the others, so a column of the name excuses none.
+    """
+    refused = _untrusted_call_reason(word, 'snowflake', columns=(word,))
+    assert refused is not None
+    assert f"session value '{word}'" in refused
+
+
+def test_only_the_session_words_a_column_names_are_excused() -> None:
+    refused = _untrusted_call_reason(
+        'concat(user, current_user)', 'databricks', columns=('user',)
+    )
+    assert refused is not None
+    assert "session value 'current_user'" in refused
+
+
+def test_a_lambda_parameter_does_not_excuse_a_session_value() -> None:
+    r"""A lambda parameter is in scope only inside its lambda, so a session
+    word outside it still reads the session.
+    """
+    expr = 'concat(transform(a, user -> user)[0], user)'
+    refused = _untrusted_call_reason(expr, 'databricks', columns=('a',))
+    assert refused is not None
+    assert "session value 'user'" in refused
 
 
 @pytest.mark.parametrize('dialect', _DIALECTS)
