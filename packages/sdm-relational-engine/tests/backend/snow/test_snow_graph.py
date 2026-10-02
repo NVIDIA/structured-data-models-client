@@ -566,12 +566,9 @@ def test_a_listing_without_a_hybrid_column_counts_the_key() -> None:
     assert counts == [KeyCount(rows=12, distinct=12, nulls=0, enforced=False)]
 
 
-def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""Every rack is installed after the last alert, as an entity table whose
-    time column records an edit is. No entity exists at any anchor, and the
-    window over none of them was bound by NaN, which the warehouse refused.
+def _racks_installed_after_every_alert(monkeypatch: pytest.MonkeyPatch):
+    r"""A graph whose entity table records an edit, not a creation, so every
+    rack is installed after the last alert and none exists at any anchor.
     """
     from predictive_query.ast import Aggregation, Column, DateOffsetRange
     from predictive_query.query import ValidatedPredictiveQuery
@@ -629,8 +626,18 @@ def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
         ),
         entity_ast=Column(fqn='RACKS.RACK_ID'),
     )
-
     connection.statements.clear()
+    return sampler, query, connection
+
+
+def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""No entity exists at any anchor, and the window over none of them was
+    bound by NaN, which the warehouse refused.
+    """
+    sampler, query, connection = _racks_installed_after_every_alert(monkeypatch)
+
     with pytest.raises(ValueError, match='Failed to collect any context') as e:
         sampler.sample_target(
             query=query,
@@ -643,4 +650,24 @@ def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
         )
 
     assert "No row of 'RACKS' existed at the anchor" in str(e.value)
+    assert not [sql for sql in connection.statements if 'FLATTEN' in sql]
+
+
+def test_lagged_targets_for_no_entities_ask_the_warehouse_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Lagged targets reach the window lookup without the guard context
+    sampling has, so the lookup carries its own.
+    """
+    sampler, query, connection = _racks_installed_after_every_alert(monkeypatch)
+
+    lagged = sampler.sample_lagged_target(
+        query,
+        entity_pkey=pd.Series([], dtype='object'),
+        anchor_time=pd.Series([], dtype='datetime64[ns]'),
+        lag_timesteps=2,
+    )
+
+    assert list(lagged.columns) == ['__kumo_arl0__', '__kumo_arl1__']
+    assert len(lagged) == 0
     assert not [sql for sql in connection.statements if 'FLATTEN' in sql]

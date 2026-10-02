@@ -13,6 +13,7 @@ from predictive_query.ast import Column, Condition, Constant
 from predictive_query.query import ValidatedPredictiveQuery
 from predictive_query.schema.task import TaskType
 from predictive_query.schema.typing import Dtype, Stype
+from sdm_relational_engine.exceptions import NoEligibleEntityError
 from sdm_relational_engine.rfm import (
     Explanation,
     Graph,
@@ -742,6 +743,50 @@ def test_get_train_table_with_no_labels_is_an_empty_table() -> None:
     empty = train_table('comedy')
     assert len(empty) == 0
     assert list(empty.columns) == ['ENTITY', 'ANCHOR_TIMESTAMP', 'TARGET']
+
+
+def test_get_train_table_with_no_entity_at_the_anchor_raises() -> None:
+    r"""An entity table whose time column starts after the anchor has no
+    entity to ask about, which is a misconfigured column rather than an
+    answer of no labels, so it reaches the caller instead of reading as an
+    empty table.
+    """
+    from sdm_relational_engine.rfm.backend.local import LocalTable
+
+    movies = LocalTable(
+        df=pd.DataFrame(
+            {
+                'MID': range(10),
+                'ADDED': pd.date_range('2021-01-01', periods=10, freq='D'),
+            }
+        ),
+        name='MOVIES',
+        primary_key='MID',
+        time_column='ADDED',
+    )
+    ratings = LocalTable(
+        df=pd.DataFrame(
+            {
+                'RID': range(40),
+                'MID': [mid % 10 for mid in range(40)],
+                'STARS': [1.0] * 40,
+                'TIME': pd.date_range('2020-01-01', periods=40, freq='D'),
+            }
+        ),
+        name='RATING',
+        primary_key='RID',
+        time_column='TIME',
+    )
+    graph = Graph([movies, ratings])
+    graph.link('RATING', 'MID', 'MOVIES')
+    model = KumoRelational(graph, verbose=False)
+
+    with pytest.raises(NoEligibleEntityError, match='No row of'):
+        model.get_train_table(
+            'PREDICT COUNT(RATING.STARS, 0, 7, days) FOR EACH MOVIES.MID',
+            size=3,
+            anchor_time=pd.Timestamp('2020-01-10'),
+        )
 
 
 def test_context_anchor_time(

@@ -56,6 +56,15 @@ class TableNotFoundError(KumoRelationalError, ValueError):
     r"""A table named for a graph is not in its source."""
 
 
+class NoEligibleEntityError(KumoRelationalError, ValueError):
+    r"""No entity existed at the anchor, so nothing could be asked about.
+
+    Separate from an empty sample, whose remedy is to widen the query. This
+    one says the entity table's time column records something other than
+    when each entity began.
+    """
+
+
 class NoTablesFoundError(KumoRelationalError, ValueError):
     r"""A source searched for its tables holds none."""
 

@@ -20,6 +20,7 @@ from predictive_query.query import (
 )
 from predictive_query.schema.typing import ProblemType, Stype
 
+from sdm_relational_engine.exceptions import NoEligibleEntityError
 from sdm_relational_engine.rfm.base import DataBackend
 from sdm_relational_engine.rfm.base.utils import (
     TimeBound,
@@ -457,12 +458,65 @@ class Sampler(ABC):
 
         return time_offset_dict
 
+    def _no_entity_at_anchor(
+        self,
+        query: ValidatedPredictiveQuery,
+        anchor_time: pd.Timestamp | Literal['entity'],
+    ) -> pd.Timestamp | None:
+        r"""When the entity table starts after the anchor, that start.
+
+        ``None`` when it does not, when the table has no time column, and
+        when its values are all null, which reports ``pd.Timestamp.max``
+        rather than a start. A diagnosis is not worth an error of its own,
+        so an unreadable column is no start either.
+        """
+        if not isinstance(anchor_time, pd.Timestamp):
+            return None
+        try:
+            entity_table = query.entity_table
+            if self.time_column_dict.get(entity_table) is None:
+                return None
+            earliest = self.get_min_time([entity_table])
+            if earliest is None or earliest == pd.Timestamp.max:
+                return None
+            return earliest if earliest > anchor_time else None
+        except Exception:
+            return None
+
+    def _empty_sample_error(
+        self,
+        query: ValidatedPredictiveQuery,
+        anchor_time: pd.Timestamp | Literal['entity'],
+        opening: str,
+        examples: Literal['context', 'test'] = 'context',
+    ) -> ValueError:
+        r"""The error an empty sample raises, typed by what caused it.
+
+        An entity table starting after the anchor is a misconfigured time
+        column, not an answer of no labels, and a caller that reads every
+        empty sample alike turns the first into the second.
+        """
+        reason, earliest = self._diagnose_empty_sample(
+            query, anchor_time, examples
+        )
+        error = ValueError if earliest is None else NoEligibleEntityError
+        return error(opening + reason)
+
     def _empty_sample_reason(
         self,
         query: ValidatedPredictiveQuery,
         anchor_time: pd.Timestamp | Literal['entity'],
         examples: Literal['context', 'test'] = 'context',
     ) -> str:
+        r"""Why a sample came back empty."""
+        return self._diagnose_empty_sample(query, anchor_time, examples)[0]
+
+    def _diagnose_empty_sample(
+        self,
+        query: ValidatedPredictiveQuery,
+        anchor_time: pd.Timestamp | Literal['entity'],
+        examples: Literal['context', 'test'] = 'context',
+    ) -> tuple[str, pd.Timestamp | None]:
         r"""Why a sample came back empty, in terms of where the anchor fell.
 
         Each example needs the query's whole window of data after its anchor:
@@ -482,10 +536,12 @@ class Sampler(ABC):
         anchor has no entity to ask about at all. A column that records an
         edit, not a creation, does that. A later anchor is offered only when
         the data still holds a whole window after the first entity starts.
+        That start is returned alongside the reason, so the caller can raise
+        a misconfigured time column as something other than no labels.
         """
         generic = ' Is your predictive query too restrictive?'
         if not isinstance(anchor_time, pd.Timestamp):
-            return generic
+            return generic, None
         kind = 'Context' if examples == 'context' else 'Test'
 
         try:
@@ -501,25 +557,16 @@ class Sampler(ABC):
         except Exception:
             aggregations, max_time, min_time = [], None, None
 
-        try:
+        earliest = self._no_entity_at_anchor(query, anchor_time)
+        if earliest is not None:
             entity_table = query.entity_table
             column = self.time_column_dict.get(entity_table)
-            earliest = None
-            if column is not None:
-                earliest = self.get_min_time([entity_table])
-            # An all-null column reports pd.Timestamp.max: not a start time.
-            starts_after = (
-                earliest is not None
-                and earliest != pd.Timestamp.max
-                and earliest > anchor_time
-            )
-            later_fits = starts_after and (
-                max_time is not None
-                and _window_fits_after(aggregations, earliest, max_time)
-            )
-        except Exception:
-            starts_after = later_fits = False
-        if starts_after:
+            try:
+                later_fits = max_time is not None and _window_fits_after(
+                    aggregations, earliest, max_time
+                )
+            except Exception:
+                later_fits = False
             later = f', or pass an anchor_time after {earliest}'
             later = later if later_fits else ''
             return (
@@ -529,10 +576,10 @@ class Sampler(ABC):
                 f'its anchor. If {column!r} does not record when each entity '
                 f'began, set the time column of {entity_table!r} to None'
                 f'{later}.'
-            )
+            ), earliest
 
         if max_time is None:
-            return generic
+            return generic, None
 
         listed = ', '.join(repr(name) for name in table_names)
         holds = 'holds' if len(table_names) == 1 else 'hold'
@@ -544,14 +591,14 @@ class Sampler(ABC):
         if _window_fits_after(aggregations, anchor_time, max_time):
             condition = _entity_filter_condition(query)
             if condition is None:
-                return generic
+                return generic, None
             return (
                 f' The anchor time is not the reason: {facts}, which leaves '
                 f"room after it for the query's whole window. No entity "
                 f'passed {condition!r}, so there was nothing to sample: check '
                 f'that the values it compares against occur in the data, '
                 f'including their case.'
-            )
+            ), None
 
         where = (
             'come from before the anchor'
@@ -564,7 +611,7 @@ class Sampler(ABC):
             f"query's full window of data after it, so an anchor at or near "
             f'the end of the range leaves none to draw from. Pass an earlier '
             f'anchor_time, or shorten the window the query asks about.'
-        )
+        ), None
 
     def sample_target(
         self,
@@ -881,15 +928,18 @@ class Sampler(ABC):
         # INVALID_REQUEST while an unrecognised error becomes INTERNAL_ERROR,
         # which reads as a fault in the service rather than in the request.
         if num_train_examples > 0 and len(train_y) == 0:
-            raise ValueError(
-                'Failed to collect any context examples.'
-                + self._empty_sample_reason(query, requested_train_anchor_time)
+            raise self._empty_sample_error(
+                query,
+                requested_train_anchor_time,
+                'Failed to collect any context examples.',
             )
 
         if num_test_examples > 0 and len(test_y) == 0:
-            raise ValueError(
-                'Failed to collect any test examples for evaluation.'
-                + self._empty_sample_reason(query, test_anchor_time, 'test')
+            raise self._empty_sample_error(
+                query,
+                test_anchor_time,
+                'Failed to collect any test examples for evaluation.',
+                'test',
             )
 
         global _coverage_warned
