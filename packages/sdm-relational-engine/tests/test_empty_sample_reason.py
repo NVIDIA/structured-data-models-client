@@ -241,3 +241,100 @@ def test_the_anchor_reported_is_the_one_the_caller_passed() -> None:
     reason = _sample_with_filter('comedy', num_train_trials=50)
 
     assert '2020-01-10' in reason
+
+
+class _Started(_Sampler):
+    r"""Its entity table ``drivers`` has a time column starting at a time."""
+
+    time_column_dict = {'drivers': 'dob'}
+
+    def __init__(self, earliest) -> None:
+        super().__init__(LAST_ROW)
+        self._earliest = earliest
+
+    def get_min_time(self, table_names=None):
+        if table_names == ['drivers']:
+            return self._earliest
+        return super().get_min_time(table_names)
+
+
+def _for_each_driver(**kwargs) -> _Query:
+    query = _Query('results.points', **kwargs)
+    query.entity_table = 'drivers'
+    return query
+
+
+def test_entities_that_start_after_the_anchor_are_named_not_the_anchor() -> (
+    None
+):
+    r"""No anchor in the data helps when every entity starts after it, so the
+    column that puts them there is named instead.
+    """
+    reason = _Started(pd.Timestamp('2024-01-01'))._empty_sample_reason(
+        _for_each_driver(), LAST_ROW
+    )
+
+    assert "No row of 'drivers' existed at the anchor" in reason
+    assert "the earliest 'dob' is 2024-01-01" in reason
+    assert "set the time column of 'drivers' to None" in reason
+    assert 'anchor_time' not in reason
+
+
+def test_an_entity_that_existed_by_the_anchor_leaves_the_anchor_reason() -> (
+    None
+):
+    reason = _Started(pd.Timestamp('1950-01-01'))._empty_sample_reason(
+        _for_each_driver(), LAST_ROW
+    )
+
+    assert 'most likely the reason' in reason
+    assert "'drivers'" not in reason
+
+
+def test_an_all_null_entity_time_column_is_not_a_start_time() -> None:
+    r"""A column with no values reports the latest timestamp there is, which
+    is no time any entity started.
+    """
+    reason = _Started(pd.Timestamp.max)._empty_sample_reason(
+        _for_each_driver(), LAST_ROW
+    )
+
+    assert 'most likely the reason' in reason
+    assert "'drivers'" not in reason
+
+
+def test_a_later_anchor_is_offered_when_a_window_fits_after_the_first_entity():
+    reason = _Started(pd.Timestamp('2023-01-01'))._empty_sample_reason(
+        _for_each_driver(window=pd.DateOffset(days=7)),
+        pd.Timestamp('2020-01-01'),
+    )
+
+    assert "No row of 'drivers' existed at the anchor" in reason
+    assert 'or pass an anchor_time after 2023-01-01 00:00:00.' in reason
+
+
+def test_no_later_anchor_is_offered_when_no_window_fits_after_it() -> None:
+    reason = _Started(pd.Timestamp('2023-07-28'))._empty_sample_reason(
+        _for_each_driver(window=pd.DateOffset(days=7)),
+        pd.Timestamp('2020-01-01'),
+    )
+
+    assert "No row of 'drivers' existed at the anchor" in reason
+    assert 'anchor_time' not in reason
+
+
+def test_test_examples_are_not_called_context_examples() -> None:
+    r"""The same reasons explain an empty test set, whose examples sit at the
+    anchor rather than before it.
+    """
+    started = _Started(pd.Timestamp('2024-01-01'))._empty_sample_reason(
+        _for_each_driver(), LAST_ROW, 'test'
+    )
+    anchored = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query('results.points'), LAST_ROW, 'test'
+    )
+
+    for reason in (started, anchored):
+        assert 'Context' not in reason
+        assert 'Test examples' in reason
+    assert 'are asked at the anchor' in anchored

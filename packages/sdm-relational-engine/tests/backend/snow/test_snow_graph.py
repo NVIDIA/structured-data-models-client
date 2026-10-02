@@ -2,6 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import math
 import re
 
 import pandas as pd
@@ -123,6 +124,11 @@ class _FakeCursor:
         self._arrow = None
         if self._connection is not None:
             self._connection.statements.append(sql)
+        # The driver binds a float NaN as a FLOAT, which a timestamp refuses.
+        if any(
+            isinstance(v, float) and math.isnan(v) for v in parameters or ()
+        ):
+            raise ProgrammingError(f'NaN bound into: {sql}')
         sql = ' '.join(sql.split())
 
         if sql == f'SHOW TABLES IN SCHEMA "{_DATABASE}"."{_SCHEMA}"':
@@ -139,6 +145,17 @@ class _FakeCursor:
         if ' AS k, COUNT(*) AS n, ' in sql:
             self._rows = [
                 _count_key(select) for select in sql.split(' UNION ALL ')
+            ]
+            return
+
+        if sql.startswith('SHOW TABLES LIKE ? '):
+            # The row count is the eighth field of the listing.
+            self._rows = [(None,) * 7 + (len(_DATA[parameters[0]]),)]
+            return
+
+        if ' as table_index, ' in sql:
+            self._rows = [
+                _min_max(select) for select in sql.split(' UNION ALL ')
             ]
             return
 
@@ -198,6 +215,15 @@ class _FakeCursor:
     def fetch_arrow_all(self, force_return_table: bool = False) -> 'pa.Table':
         assert self._arrow is not None
         return self._arrow
+
+
+def _min_max(select: str) -> tuple[int, object, object]:
+    r"""Answer one ``SELECT`` of a time range from the tables above."""
+    index = int(re.match(r'SELECT (\d+) as table_index', select).group(1))
+    table = re.search(r'FROM "[^"]+"\."[^"]+"\."([^"]+)"', select).group(1)
+    column = re.search(r'MIN\("([^"]+)"\)', select).group(1)
+    values = _DATA[table][column]
+    return index, values.min(), values.max()
 
 
 def _count_key(select: str) -> tuple[int, int, int, int]:
@@ -538,3 +564,83 @@ def test_a_listing_without_a_hybrid_column_counts_the_key() -> None:
     counts = count_keys([(graph['RACKS'], ['RACK_ID'])])
 
     assert counts == [KeyCount(rows=12, distinct=12, nulls=0, enforced=False)]
+
+
+def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Every rack is installed after the last alert, as an entity table whose
+    time column records an edit is. No entity exists at any anchor, and the
+    window over none of them was bound by NaN, which the warehouse refused.
+    """
+    from predictive_query.ast import Aggregation, Column, DateOffsetRange
+    from predictive_query.query import ValidatedPredictiveQuery
+    from predictive_query.schema.typing import AggregationType
+    from sdm_relational_engine.rfm import KumoRelational
+
+    racks = _DATA['RACKS'].assign(INSTALLED_AT=pd.Timestamp('2025-01-01'))
+    alerts = pd.DataFrame(
+        {
+            'ALERT_ID': [f'alert_{i}' for i in range(6)],
+            'RACK_ID': [f'rack_{i % 3}' for i in range(6)],
+            'RAISED_AT': pd.date_range('2024-01-01', periods=6, freq='W'),
+        }
+    )
+    monkeypatch.setitem(_DATA, 'RACKS', racks)
+    monkeypatch.setitem(_DATA, 'ALERTS', alerts)
+    monkeypatch.setitem(
+        _COLUMN_TYPES,
+        'RACKS',
+        {**_COLUMN_TYPES['RACKS'], 'INSTALLED_AT': 'TIMESTAMP_NTZ(9)'},
+    )
+    monkeypatch.setitem(
+        _COLUMN_TYPES,
+        'ALERTS',
+        {
+            'ALERT_ID': 'VARCHAR(16)',
+            'RACK_ID': 'VARCHAR(16)',
+            'RAISED_AT': 'TIMESTAMP_NTZ(9)',
+        },
+    )
+    monkeypatch.setitem(_PRIMARY_KEYS, 'ALERTS', 'ALERT_ID')
+    connection = _FakeConnection()
+    graph = Graph.from_snowflake(
+        connection=connection,
+        database=_DATABASE,
+        schema=_SCHEMA,
+        tables=[
+            dict(
+                name='RACKS', primary_key='RACK_ID', time_column='INSTALLED_AT'
+            ),
+            dict(
+                name='ALERTS', primary_key='ALERT_ID', time_column='RAISED_AT'
+            ),
+        ],
+        edges=[('ALERTS', 'RACK_ID', 'RACKS')],
+        infer_metadata=False,
+        verbose=False,
+    )
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    query = ValidatedPredictiveQuery(
+        target_ast=Aggregation(
+            aggr=AggregationType.COUNT,
+            target=Column(fqn='ALERTS.*'),
+            aggr_time_range=DateOffsetRange(0, 30),
+        ),
+        entity_ast=Column(fqn='RACKS.RACK_ID'),
+    )
+
+    connection.statements.clear()
+    with pytest.raises(ValueError, match='Failed to collect any context') as e:
+        sampler.sample_target(
+            query=query,
+            num_train_examples=4,
+            train_anchor_time=pd.Timestamp('2024-02-01'),
+            num_train_trials=8,
+            num_test_examples=0,
+            test_anchor_time=pd.Timestamp('2024-02-01'),
+            num_test_trials=0,
+        )
+
+    assert "No row of 'RACKS' existed at the anchor" in str(e.value)
+    assert not [sql for sql in connection.statements if 'FLATTEN' in sql]

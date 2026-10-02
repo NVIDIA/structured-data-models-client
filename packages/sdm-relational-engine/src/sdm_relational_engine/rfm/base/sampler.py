@@ -461,14 +461,15 @@ class Sampler(ABC):
         self,
         query: ValidatedPredictiveQuery,
         anchor_time: pd.Timestamp | Literal['entity'],
+        examples: Literal['context', 'test'] = 'context',
     ) -> str:
         r"""Why a sample came back empty, in terms of where the anchor fell.
 
-        Context examples are drawn from before the anchor and each needs the
-        query's whole window of data after it, so an anchor at the end of the
-        data leaves nowhere to draw from. The default anchor is the latest
-        timestamp in the tables the query aggregates, which puts every default
-        prediction at exactly that edge.
+        Each example needs the query's whole window of data after its anchor:
+        context examples are drawn from before the anchor, test examples sit
+        at it. An anchor at the end of the data leaves nowhere to draw from.
+        The default anchor is the latest timestamp in the tables the query
+        aggregates, which puts every default prediction at exactly that edge.
 
         Asking whether the query is too restrictive sends the caller to rewrite
         something that was never wrong, so state the anchor and the range it
@@ -476,10 +477,17 @@ class Sampler(ABC):
         whole window cannot be the explanation, though, and a caller sent to
         move it has been handed a remedy that cannot work: there the entity
         filter is what selected nothing.
+
+        Before either, an entity table whose time column starts after the
+        anchor has no entity to ask about at all. A column that records an
+        edit, not a creation, does that. A later anchor is offered only when
+        the data still holds a whole window after the first entity starts.
         """
         generic = ' Is your predictive query too restrictive?'
         if not isinstance(anchor_time, pd.Timestamp):
             return generic
+        kind = 'Context' if examples == 'context' else 'Test'
+
         try:
             aggregations = query.get_all_target_aggregations()
             table_names = sorted(
@@ -488,12 +496,41 @@ class Sampler(ABC):
                     for aggr in aggregations
                 }
             )
-            if not table_names:
-                return generic
-            max_time = self.get_max_time(table_names)
-            min_time = self.get_min_time(table_names)
+            max_time = self.get_max_time(table_names) if table_names else None
+            min_time = self.get_min_time(table_names) if table_names else None
         except Exception:
-            return generic
+            aggregations, max_time, min_time = [], None, None
+
+        try:
+            entity_table = query.entity_table
+            column = self.time_column_dict.get(entity_table)
+            earliest = None
+            if column is not None:
+                earliest = self.get_min_time([entity_table])
+            # An all-null column reports pd.Timestamp.max: not a start time.
+            starts_after = (
+                earliest is not None
+                and earliest != pd.Timestamp.max
+                and earliest > anchor_time
+            )
+            later_fits = starts_after and (
+                max_time is not None
+                and _window_fits_after(aggregations, earliest, max_time)
+            )
+        except Exception:
+            starts_after = later_fits = False
+        if starts_after:
+            later = f', or pass an anchor_time after {earliest}'
+            later = later if later_fits else ''
+            return (
+                f' No row of {entity_table!r} existed at the anchor: it is '
+                f'{anchor_time}, and the earliest {column!r} is {earliest}. '
+                f'{kind} examples only ask about an entity that existed by '
+                f'its anchor. If {column!r} does not record when each entity '
+                f'began, set the time column of {entity_table!r} to None'
+                f'{later}.'
+            )
+
         if max_time is None:
             return generic
 
@@ -516,9 +553,14 @@ class Sampler(ABC):
                 f'including their case.'
             )
 
+        where = (
+            'come from before the anchor'
+            if examples == 'context'
+            else 'are asked at the anchor'
+        )
         return (
-            f' The anchor time is most likely the reason: {facts}. Context '
-            f'examples come from before the anchor and each needs the '
+            f' The anchor time is most likely the reason: {facts}. {kind} '
+            f'examples {where} and each needs the '
             f"query's full window of data after it, so an anchor at or near "
             f'the end of the range leaves none to draw from. Pass an earlier '
             f'anchor_time, or shorten the window the query asks about.'
@@ -761,22 +803,30 @@ class Sampler(ABC):
                 train_time = train_time.iloc[:num_train_trials]
 
         # 4. Sample training and test labels ##################################
-        train_y, train_mask, test_y, test_mask = self._sample_target(
-            query=query,
-            entity_df=entity_df,
-            train_index=train_index,
-            train_time=train_time,
-            num_train_examples=(
-                num_train_examples + num_test_examples
-                if shared_train_test
-                else num_train_examples
-            ),
-            test_index=test_index,
-            test_time=test_time,
-            num_test_examples=0 if shared_train_test else num_test_examples,
-            columns_dict=columns_dict,
-            time_offset_dict=time_offset_dict,
-        )
+        if len(train_index) == 0 and len(test_index) == 0:
+            # Nothing to label, and a warehouse sampler bounds its window by
+            # the latest end time of the entities asked about: NaN for none.
+            train_y = test_y = pd.Series([], dtype=float)
+            train_mask = test_mask = np.zeros(0, dtype=bool)
+        else:
+            train_y, train_mask, test_y, test_mask = self._sample_target(
+                query=query,
+                entity_df=entity_df,
+                train_index=train_index,
+                train_time=train_time,
+                num_train_examples=(
+                    num_train_examples + num_test_examples
+                    if shared_train_test
+                    else num_train_examples
+                ),
+                test_index=test_index,
+                test_time=test_time,
+                num_test_examples=(
+                    0 if shared_train_test else num_test_examples
+                ),
+                columns_dict=columns_dict,
+                time_offset_dict=time_offset_dict,
+            )
 
         # 5. Post-processing ##################################################
         if shared_train_test:
@@ -839,7 +889,7 @@ class Sampler(ABC):
         if num_test_examples > 0 and len(test_y) == 0:
             raise ValueError(
                 'Failed to collect any test examples for evaluation.'
-                + self._empty_sample_reason(query, test_anchor_time)
+                + self._empty_sample_reason(query, test_anchor_time, 'test')
             )
 
         global _coverage_warned
