@@ -1046,6 +1046,82 @@ class Table(ABC):
             f')'
         )
 
+    # Key counts ##############################################################
+
+    #: The column sets the source refuses to repeat, set while reading the
+    #: columns by a backend that enforces its primary and unique keys.
+    _unique_constraints: tuple[frozenset[str], ...] = ()
+
+    def _declares_key(self, names: Sequence[str]) -> bool:
+        r"""Whether the source's catalog names ``names`` as a key of this
+        table, as a primary key or a unique constraint.
+        """
+        if len(names) != 1:
+            return False
+        column = self._source_column_dict.get(names[0])
+        return column is not None and (
+            column.is_primary_key or column.is_unique_key
+        )
+
+    def _enforces_key(self, names: Sequence[str]) -> tuple[bool, bool]:
+        r"""Whether the source refuses a second row with the same ``names``,
+        and whether it refuses a row missing any of them.
+
+        Unique and never null together leave nothing to count.
+        """
+        columns = self._source_column_dict
+        if any(name not in columns for name in names):
+            return False, False
+        unique = any(
+            constraint <= set(names) for constraint in self._unique_constraints
+        )
+        never_null = all(not columns[name].is_nullable for name in names)
+        return unique, never_null
+
+    def _key_count_sql(
+        self, label: int, names: Sequence[str], *, unique: bool
+    ) -> str:
+        r"""One ``SELECT`` of a ``UNION ALL``: this table's rows, the distinct
+        values of its key, and the rows missing part of the key.
+        """
+        quoted = [self._quote_key_column(name) for name in names]
+        missing = ' OR '.join(f'{column} IS NULL' for column in quoted)
+        nulls = f'COUNT(CASE WHEN {missing} THEN 1 END)'
+        # A key the source keeps unique has one distinct value per row that
+        # holds one, so only the nulls cost anything to count.
+        distinct = (
+            f'COUNT(*) - {nulls}' if unique else self._count_distinct(quoted)
+        )
+        return (
+            f'SELECT {label} AS k, COUNT(*) AS n, {distinct} AS d, '
+            f'{nulls} AS z\nFROM {self._quoted_source_name}'
+        )
+
+    def _count_distinct(self, quoted: Sequence[str]) -> str:
+        r"""The distinct values of a key, leaving out a row missing any part.
+
+        Spark and Snowflake count several columns and skip such a row
+        themselves. A dialect that does neither overrides this.
+        """
+        return f'COUNT(DISTINCT {", ".join(quoted)})'
+
+    def _repeated_key_sql(self, names: Sequence[str]) -> str:
+        r"""One value of the key that more than one row holds."""
+        quoted = ', '.join(self._quote_key_column(name) for name in names)
+        present = ' AND '.join(
+            f'{self._quote_key_column(name)} IS NOT NULL' for name in names
+        )
+        return (
+            f'SELECT {quoted}\nFROM {self._quoted_source_name}\n'
+            f'WHERE {present}\nGROUP BY {quoted}\nHAVING COUNT(*) > 1\nLIMIT 1'
+        )
+
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        r"""Run one statement against the source and return its rows."""
+        raise NotImplementedError(
+            f"'{self.__class__.__name__}' cannot run SQL against its source"
+        )
+
     # Abstract Methods ########################################################
 
     @property

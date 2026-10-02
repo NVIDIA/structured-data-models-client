@@ -5,6 +5,7 @@
 import re
 from collections import Counter
 from collections.abc import Sequence
+from functools import cached_property
 from typing import cast
 
 import pandas as pd
@@ -208,6 +209,57 @@ class SnowTable(Table):
                 for column in self._source_column_dict.values()
             },
             stype_dict=None,
+        )
+
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql)
+            return list(cursor.fetchall())
+
+    def _enforces_key(self, names: Sequence[str]) -> tuple[bool, bool]:
+        columns = self._source_column_dict
+        primary = frozenset(
+            column.name for column in columns.values() if column.is_primary_key
+        )
+        # Only a hybrid table enforces its primary key, and every hybrid table
+        # declares one, so a table declaring none is not asked about.
+        if not primary or not primary <= set(names) or not self._is_hybrid:
+            return False, False
+        never_null = all(
+            name in columns and not columns[name].is_nullable for name in names
+        )
+        return True, never_null
+
+    @cached_property
+    def _is_hybrid(self) -> bool:
+        r"""Whether this is a hybrid table, the one kind whose primary key
+        Snowflake enforces. A table it cannot say about is taken to be not.
+        """
+        try:
+            with (
+                paramstyle(self._connection),
+                self._connection.cursor() as cursor,
+            ):
+                cursor.execute(
+                    f'SHOW TABLES LIKE ? '
+                    f'IN SCHEMA {quote_ident(self._database)}.'
+                    f'{quote_ident(self._schema)}',
+                    (self._source_name,),
+                )
+                fields = [
+                    str(field[0]).lower() for field in cursor.description or ()
+                ]
+                rows = cursor.fetchall()
+        except Exception:
+            return False
+        if 'name' not in fields or 'is_hybrid' not in fields:
+            return False
+        name, hybrid = fields.index('name'), fields.index('is_hybrid')
+        # `LIKE` reads `_` as any character, so the name is matched exactly.
+        return any(
+            row[name] == self._source_name
+            and str(row[hybrid]).strip().upper() == 'Y'
+            for row in rows
         )
 
     def _get_num_rows(self) -> int | None:

@@ -96,7 +96,15 @@ class DuckDBTable(Table):
                 f'WHERE table_name = {source_name}'
             )
             cursor.execute(sql)
-            for constraint_type, column_names in cursor.fetchall():
+            constraints = cursor.fetchall()
+            # DuckDB enforces both, composite or not, so a key covering one
+            # needs no counting.
+            self._unique_constraints = tuple(
+                frozenset(column_names)
+                for constraint_type, column_names in constraints
+                if constraint_type in ('PRIMARY KEY', 'UNIQUE')
+            )
+            for constraint_type, column_names in constraints:
                 if len(column_names) != 1:
                     continue  # No composite keys yet.
                 column = column_names[0]
@@ -165,6 +173,19 @@ class DuckDBTable(Table):
             },
             stype_dict=None,
         )
+
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql)
+            return list(cursor.fetchall())
+
+    def _count_distinct(self, quoted: Sequence[str]) -> str:
+        if len(quoted) == 1:
+            return super()._count_distinct(quoted)
+        # A row of several values is not null when one of them is, so a row
+        # missing part of the key is left out by hand.
+        present = ' AND '.join(f'{column} IS NOT NULL' for column in quoted)
+        return f'COUNT(DISTINCT ({", ".join(quoted)})) FILTER (WHERE {present})'
 
     def _get_num_rows(self) -> int | None:
         with self._connection.cursor() as cursor:

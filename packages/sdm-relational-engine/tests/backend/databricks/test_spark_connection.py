@@ -25,6 +25,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 from sdm_relational_engine.rfm import Graph, KumoRelational
+from sdm_relational_engine.rfm.base import KeyCount, count_keys
 
 try:
     from sdm_relational_engine.rfm.backend.databricks import (
@@ -164,6 +165,13 @@ class _Session:
                 ],
                 links,
             )
+        if ' AS k, COUNT(*) AS n, ' in query:
+            return _rows(
+                ['k', 'n', 'd', 'z'],
+                [_count_key(select) for select in query.split('\nUNION ALL\n')],
+            )
+        if 'HAVING COUNT(*) > 1' in query:
+            return _repeated_key(query)
         if 'COUNT(*)' in query:
             return _rows(['n'], [(_TABLES[_source(query)].num_rows,)])
         if 'MIN(' in query and 'MAX(' in query:
@@ -198,6 +206,27 @@ class _Session:
 
 def _source(query: str) -> str:
     return re.search(r'`sch`\.`(\w+)`', query).group(1)
+
+
+def _key(query: str, around: str) -> list[tuple]:
+    table = _TABLES[_source(query)]
+    names = re.findall(r'`(\w+)`', re.search(around, query).group(1))
+    return list(zip(*(table[name].to_pylist() for name in names), strict=True))
+
+
+def _count_key(select: str) -> tuple[int, int, int, int]:
+    r"""Answer one ``SELECT`` of a key count from the tables above."""
+    keys = _key(select, r'COUNT\(DISTINCT ([^)]*)\)')
+    present = [key for key in keys if None not in key]
+    label = int(re.match(r'SELECT (\d+) AS k', select).group(1))
+    return label, len(keys), len(set(present)), len(keys) - len(present)
+
+
+def _repeated_key(query: str) -> pa.Table:
+    keys = _key(query, r'GROUP BY (.*)\n')
+    names = re.findall(r'`(\w+)`', re.search(r'GROUP BY (.*)\n', query)[1])
+    repeated = [key for key in dict.fromkeys(keys) if keys.count(key) > 1]
+    return _rows(names, repeated[:1])
 
 
 @pytest.fixture
@@ -284,6 +313,40 @@ def test_neighbours_come_back_in_the_order_they_were_chosen(
     order_by = sampler._neighbor_order_by('orders', refs['ts'], refs['user_id'])
     assert query.rstrip().endswith(f'ORDER BY TMP.__KUMO_BATCH__, {order_by}')
     assert all(ref in order_by for ref in refs.values())
+
+
+def test_every_key_is_counted_in_one_statement(
+    session: _Session, graph: Graph, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        _TABLES, 'users', pa.concat_tables([_USERS, _USERS.slice(1, 1)])
+    )
+    before = len(session.calls)
+
+    counts = count_keys(
+        [(graph['users'], ['user_id']), (graph['orders'], ['user_id', 'ts'])]
+    )
+
+    counted, shown = (query for query, _ in session.calls[before:])
+    assert counted == (
+        'SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, '
+        'COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\n'
+        'FROM `cat`.`sch`.`users`\n'
+        'UNION ALL\n'
+        'SELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`, `ts`) AS d, '
+        'COUNT(CASE WHEN `user_id` IS NULL OR `ts` IS NULL THEN 1 END) AS z\n'
+        'FROM `cat`.`sch`.`orders`'
+    )
+    assert shown == (
+        'SELECT `user_id`\nFROM `cat`.`sch`.`users`\n'
+        'WHERE `user_id` IS NOT NULL\nGROUP BY `user_id`\n'
+        'HAVING COUNT(*) > 1\nLIMIT 1'
+    )
+    # Databricks enforces no key, so a declared one is counted too.
+    assert counts == [
+        KeyCount(rows=4, distinct=3, nulls=0, enforced=False, example=2),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
+    ]
 
 
 def test_the_session_route_needs_no_sql_connector() -> None:

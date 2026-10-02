@@ -216,6 +216,14 @@ class PostgresTable(Table):
                 'only single-column primary keys.'
             )
 
+        # Postgres enforces both, so a key covering one needs no counting.
+        self._unique_constraints = tuple(
+            frozenset(column for _, column in positioned_columns)
+            for (constraint_type, _), positioned_columns in (
+                grouped_constraints.items()
+            )
+            if constraint_type in ('PRIMARY KEY', 'UNIQUE')
+        )
         counts = Counter(name for _, name, *_ in constraints)
         primary_keys: set[str] = set()
         unique_keys: set[str] = set()
@@ -328,6 +336,19 @@ class PostgresTable(Table):
             },
             stype_dict=None,
         )
+
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        with _reading(self._connection) as cursor:
+            cursor.execute(sql)
+            return list(cursor.fetchall())
+
+    def _count_distinct(self, quoted: Sequence[str]) -> str:
+        if len(quoted) == 1:
+            return super()._count_distinct(quoted)
+        # A row of several values is not null when one of them is, so a row
+        # missing part of the key is left out by hand.
+        present = ' AND '.join(f'{column} IS NOT NULL' for column in quoted)
+        return f'COUNT(DISTINCT ({", ".join(quoted)})) FILTER (WHERE {present})'
 
     def _get_num_rows(self) -> int | None:
         with _reading(self._connection) as cursor:

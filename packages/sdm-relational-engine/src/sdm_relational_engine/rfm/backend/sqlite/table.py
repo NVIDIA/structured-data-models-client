@@ -83,15 +83,22 @@ class SQLiteTable(Table):
                 )
 
             unique_keys: set[str] = set()
+            constraints: list[frozenset[str]] = []
             sql = f'PRAGMA index_list({self._quoted_source_name})'
             cursor.execute(sql)
-            for _, index_name, is_unique, *_ in cursor.fetchall():
+            for _, index_name, is_unique, *more in cursor.fetchall():
+                partial = len(more) > 1 and bool(more[1])
                 if bool(is_unique):
                     sql = f'PRAGMA index_info({quote_ident(index_name)})'
                     cursor.execute(sql)
                     index = cursor.fetchall()
                     if len(index) == 1:
                         unique_keys.add(index[0][2])
+                    # A partial index is unique only over the rows it covers,
+                    # and an index on an expression names no column.
+                    names = [row[2] for row in index]
+                    if not partial and None not in names:
+                        constraints.append(frozenset(names))
 
             # Special SQLite case that creates a rowid alias for
             # `INTEGER PRIMARY KEY` annotated columns:
@@ -100,8 +107,11 @@ class SQLiteTable(Table):
                 for _, column, dtype, _, _, is_pkey in columns
                 if bool(is_pkey) and dtype.strip().upper() == 'INTEGER'
             ]
-            if len(rowid_candidates) == 1:
-                unique_keys.add(rowid_candidates[0])
+            rowid = rowid_candidates[0] if len(rowid_candidates) == 1 else None
+            if rowid is not None:
+                unique_keys.add(rowid)
+                constraints.append(frozenset({rowid}))
+            self._unique_constraints = tuple(constraints)
 
             for _, column, dtype, notnull, _, is_pkey in columns:
                 source_column = SourceColumn(
@@ -109,7 +119,9 @@ class SQLiteTable(Table):
                     dtype=self._to_dtype(dtype),
                     is_primary_key=bool(is_pkey),
                     is_unique_key=column in unique_keys,
-                    is_nullable=not bool(is_pkey) and not bool(notnull),
+                    # Only the rowid alias is never null: SQLite lets any
+                    # other primary key hold one, unless declared NOT NULL.
+                    is_nullable=column != rowid and not bool(notnull),
                 )
                 source_columns.append(source_column)
 
@@ -158,6 +170,22 @@ class SQLiteTable(Table):
 
     def _get_num_rows(self) -> int | None:
         return None
+
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql)
+            return list(cursor.fetchall())
+
+    def _count_distinct(self, quoted: Sequence[str]) -> str:
+        if len(quoted) == 1:
+            return super()._count_distinct(quoted)
+        # SQLite counts one column distinct at a time, so the pairs are
+        # counted in a subquery.
+        present = ' AND '.join(f'{column} IS NOT NULL' for column in quoted)
+        return (
+            f'(SELECT COUNT(*) FROM (SELECT DISTINCT {", ".join(quoted)} '
+            f'FROM {self._quoted_source_name} WHERE {present}))'
+        )
 
     def _get_expr_sample_df(
         self,

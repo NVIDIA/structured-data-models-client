@@ -277,6 +277,11 @@ class DatabricksTable(Table):
             stype_dict=None,
         )
 
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql)
+            return list(cursor.fetchall())
+
     def _get_num_rows(self) -> int | None:
         with self._connection.cursor() as cursor:
             sql = f'SELECT COUNT(*) FROM {self._quoted_source_name}'
