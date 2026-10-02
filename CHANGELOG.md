@@ -357,8 +357,9 @@ The rules are the ones `Schema.from_data` applies to a frame.
 A declared key, or one named in `primary_keys`, warns when up to 1% of rows repeat a value and is refused above that, naming the count, an example and what to do instead.
 A key named in `primary_keys` is refused for a row with no value in it too; a declared or inferred one is warned about.
 An inferred key that repeats more than 1% is declined, with the warning `from_data` gives.
-The count is one `UNION ALL` statement per source, a full scan of each table, about a third of a second per AdventureWorks table on a SQL warehouse; approximate counts were too inaccurate to judge 1% by.
-It is skipped for a key the source enforces: a PostgreSQL or DuckDB primary key or unique constraint, a SQLite primary key or unique index, and a Snowflake hybrid table's primary key.
+The count is one `UNION ALL` statement per source, a full scan of each table, about 0.8 s per AdventureWorks table on a cold SQL warehouse; approximate counts were too inaccurate to judge 1% by.
+A key the source keeps unique and never null is not scanned at all: a PostgreSQL or DuckDB primary key, a SQLite `INTEGER PRIMARY KEY`, and a Snowflake hybrid table's primary key.
+A key the source keeps unique but lets be null is still scanned, for its nulls alone: a unique constraint or index on a nullable column, and every other SQLite primary key, since SQLite lets one hold a null.
 A semantic model's tables are not counted, since the model derives them.
 `check_keys=False` skips the scan and every check with it.
 `SourceTable.duplicate_keys` now holds what the count found, and `None` where nothing was counted, rather than always zero.
