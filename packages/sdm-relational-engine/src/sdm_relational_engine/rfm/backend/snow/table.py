@@ -5,6 +5,7 @@
 import re
 from collections import Counter
 from collections.abc import Sequence
+from functools import cached_property
 from typing import cast
 
 import pandas as pd
@@ -209,6 +210,79 @@ class SnowTable(Table):
             },
             stype_dict=None,
         )
+
+    def _fetch_rows(self, sql: str) -> list[tuple]:
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql)
+            return list(cursor.fetchall())
+
+    def _declared_primary_key(self) -> frozenset[str]:
+        return frozenset(
+            column.name
+            for column in self._source_column_dict.values()
+            if column.is_primary_key
+        )
+
+    def _enforces_key(self, names: Sequence[str]) -> tuple[bool, bool]:
+        primary = self._declared_primary_key()
+        # Only a hybrid table enforces its primary key, and every hybrid table
+        # declares one, so a table declaring none is not asked about.
+        if not primary or not primary <= set(names) or not self._is_hybrid:
+            return False, False
+        columns = self._source_column_dict
+        never_null = all(
+            name in columns and not columns[name].is_nullable for name in names
+        )
+        return True, never_null
+
+    @classmethod
+    def _before_counting_keys(
+        cls, keys: Sequence[tuple[Table, Sequence[str]]]
+    ) -> None:
+        # One listing per schema answers for every table in it, rather than a
+        # SHOW per table.
+        asked: dict[tuple[str, str], list[SnowTable]] = {}
+        for table, names in keys:
+            if not isinstance(table, SnowTable) or '_is_hybrid' in vars(table):
+                continue
+            primary = table._declared_primary_key()
+            if primary and primary <= set(names):
+                schema = (table._database, table._schema)
+                asked.setdefault(schema, []).append(table)
+        for tables in asked.values():
+            hybrid = tables[0]._hybrid_tables()
+            for table in tables:
+                vars(table)['_is_hybrid'] = table._source_name in hybrid
+
+    @cached_property
+    def _is_hybrid(self) -> bool:
+        r"""Whether this is a hybrid table, the one kind whose primary key
+        Snowflake enforces.
+        """
+        return self._source_name in self._hybrid_tables()
+
+    def _hybrid_tables(self) -> set[str]:
+        r"""The hybrid tables in this table's schema. A schema it cannot list
+        is taken to hold none, so every key in it is counted.
+        """
+        try:
+            with self._connection.cursor() as cursor:
+                cursor.execute(
+                    f'SHOW TABLES IN SCHEMA {quote_ident(self._database)}.'
+                    f'{quote_ident(self._schema)}'
+                )
+                fields = [
+                    str(field[0]).lower() for field in cursor.description or ()
+                ]
+                rows = cursor.fetchall()
+        except Exception:
+            return set()
+        if 'name' not in fields or 'is_hybrid' not in fields:
+            return set()
+        name, hybrid = fields.index('name'), fields.index('is_hybrid')
+        return {
+            row[name] for row in rows if str(row[hybrid]).strip().upper() == 'Y'
+        }
 
     def _get_num_rows(self) -> int | None:
         with paramstyle(self._connection), self._connection.cursor() as cursor:

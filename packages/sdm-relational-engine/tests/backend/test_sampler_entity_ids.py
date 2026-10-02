@@ -214,12 +214,13 @@ class _SnowCursor:
         )
 
     def fetch_arrow_all(self, force_return_table: bool = True) -> pa.Table:
-        return pa.table(
-            {
-                'user_id': pa.array([], type=pa.string()),
-                'ts': pa.array([], type=pa.string()),
-            }
-        )
+        columns = {
+            'user_id': pa.array([], type=pa.string()),
+            'ts': pa.array([], type=pa.string()),
+        }
+        if '__KUMO_BATCH__' in self._connection.calls[-1][0]:
+            columns['__KUMO_BATCH__'] = pa.array([], type=pa.int64())
+        return pa.table(columns)
 
     def fetchall(self) -> list:
         return self._connection.rows
@@ -334,3 +335,38 @@ def test_snow_min_max_probe_keeps_table_names_out_of_the_sql(
     assert hostile not in sql
     assert "'" not in sql
     assert set(out) == {hostile}
+
+
+def test_snow_binds_the_time_bounds_of_a_window(snow_sampler: Any) -> None:
+    snow_sampler._foreign_key_dict = {'users': [('user_id', 'users')]}
+    snow_sampler._min_time_dict = {'users': pd.Timestamp('2024-01-01')}
+    snow_sampler._max_time_dict = {'users': pd.Timestamp('2024-01-04')}
+    anchor = pd.Series(pd.to_datetime(['2024-02-01', '2024-03-01']))
+
+    snow_sampler._by_time(
+        'users',
+        'user_id',
+        pd.Series(['u1', 'u2']),
+        anchor_time=anchor,
+        min_offset=pd.DateOffset(days=-30),
+        max_offset=pd.DateOffset(days=0),
+        columns=_COLUMNS,
+    )
+    by_time = snow_sampler._connection.calls[-1]
+    snow_sampler._by_fkey(
+        'users',
+        'user_id',
+        pd.Series(['u1', 'u2']),
+        num_neighbors=2,
+        anchor_time=anchor,
+        columns=_COLUMNS,
+    )
+    by_fkey = snow_sampler._connection.calls[-1]
+
+    assert by_time[1][1:] == ('2024-03-01 00:00:00', '2024-01-02 00:00:00')
+    assert by_fkey[1][1] == '2024-03-01 00:00:00'
+    for sql, parameters, paramstyle in (by_time, by_fkey):
+        assert paramstyle == 'qmark'
+        assert len(parameters) == 3
+        assert sql.count('?') == 3
+        assert "'2024" not in sql

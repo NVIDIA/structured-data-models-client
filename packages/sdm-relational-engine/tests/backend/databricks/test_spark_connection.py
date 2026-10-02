@@ -21,10 +21,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 from sdm_relational_engine.rfm import Graph, KumoRelational
+from sdm_relational_engine.rfm.base import KeyCount, count_keys
 
 try:
     from sdm_relational_engine.rfm.backend.databricks import (
@@ -164,6 +166,13 @@ class _Session:
                 ],
                 links,
             )
+        if ' AS k, COUNT(*) AS n, ' in query:
+            return _rows(
+                ['k', 'n', 'd', 'z'],
+                [_count_key(select) for select in query.split('\nUNION ALL\n')],
+            )
+        if 'HAVING COUNT(*) > 1' in query:
+            return _repeated_key(query)
         if 'COUNT(*)' in query:
             return _rows(['n'], [(_TABLES[_source(query)].num_rows,)])
         if 'MIN(' in query and 'MAX(' in query:
@@ -182,7 +191,8 @@ class _Session:
 
     @staticmethod
     def _by_primary_key(query: str, args: Any) -> pa.Table:
-        (payload,) = args
+        # A window's time bounds follow the payload.
+        payload = args[0]
         ids = json.loads(payload)
         table = _TABLES[_source(query)]
         key = _PRIMARY_KEYS[_source(query)]
@@ -198,6 +208,27 @@ class _Session:
 
 def _source(query: str) -> str:
     return re.search(r'`sch`\.`(\w+)`', query).group(1)
+
+
+def _key(query: str, around: str) -> list[tuple]:
+    table = _TABLES[_source(query)]
+    names = re.findall(r'`(\w+)`', re.search(around, query).group(1))
+    return list(zip(*(table[name].to_pylist() for name in names), strict=True))
+
+
+def _count_key(select: str) -> tuple[int, int, int, int]:
+    r"""Answer one ``SELECT`` of a key count from the tables above."""
+    keys = _key(select, r'COUNT\(DISTINCT ([^)]*)\)')
+    present = [key for key in keys if None not in key]
+    label = int(re.match(r'SELECT (\d+) AS k', select).group(1))
+    return label, len(keys), len(set(present)), len(keys) - len(present)
+
+
+def _repeated_key(query: str) -> pa.Table:
+    keys = _key(query, r'GROUP BY (.*)\n')
+    names = re.findall(r'`(\w+)`', re.search(r'GROUP BY (.*)\n', query)[1])
+    repeated = [key for key in dict.fromkeys(keys) if keys.count(key) > 1]
+    return _rows(names, repeated[:1])
 
 
 @pytest.fixture
@@ -284,6 +315,101 @@ def test_neighbours_come_back_in_the_order_they_were_chosen(
     order_by = sampler._neighbor_order_by('orders', refs['ts'], refs['user_id'])
     assert query.rstrip().endswith(f'ORDER BY TMP.__KUMO_BATCH__, {order_by}')
     assert all(ref in order_by for ref in refs.values())
+
+
+def test_the_time_bounds_of_a_window_are_bound_values(
+    session: _Session, graph: Graph
+) -> None:
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    anchor = pd.Series(pd.to_datetime(['2024-02-01', '2024-03-01']))
+
+    before = len(session.calls)
+    sampler._by_time(
+        'orders',
+        'user_id',
+        pd.Series([1, 2]),
+        anchor_time=anchor,
+        min_offset=pd.DateOffset(days=-30),
+        max_offset=pd.DateOffset(days=0),
+        columns={'user_id', 'ts'},
+    )
+    sampler._by_fkey(
+        'orders',
+        'user_id',
+        pd.Series([1, 2]),
+        num_neighbors=2,
+        anchor_time=anchor,
+        columns={'user_id', 'ts'},
+    )
+    windows = [
+        (query, args)
+        for query, args in session.calls[before:]
+        if 'posexplode' in query
+    ]
+
+    assert len(windows) == 2
+    by_time, by_fkey = windows
+    assert by_time[1][1:] == ['2024-03-01 00:00:00', '2024-01-02 00:00:00']
+    assert by_fkey[1][1] == '2024-03-01 00:00:00'
+    for query, args in windows:
+        assert len(args) == 3
+        assert "'2024" not in query
+        assert query.count('?') == 3
+
+
+def test_every_key_is_counted_in_one_statement(
+    session: _Session, graph: Graph, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        _TABLES, 'users', pa.concat_tables([_USERS, _USERS.slice(1, 1)])
+    )
+    before = len(session.calls)
+
+    counts = count_keys(
+        [(graph['users'], ['user_id']), (graph['orders'], ['user_id', 'ts'])]
+    )
+
+    counted, shown = (query for query, _ in session.calls[before:])
+    assert counted == (
+        'SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, '
+        'COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z\n'
+        'FROM `cat`.`sch`.`users`\n'
+        'UNION ALL\n'
+        'SELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`, `ts`) AS d, '
+        'COUNT(CASE WHEN `user_id` IS NULL OR `ts` IS NULL THEN 1 END) AS z\n'
+        'FROM `cat`.`sch`.`orders`'
+    )
+    assert shown == (
+        'SELECT `user_id`\nFROM `cat`.`sch`.`users`\n'
+        'WHERE `user_id` IS NOT NULL\nGROUP BY `user_id`\n'
+        'HAVING COUNT(*) > 1\nLIMIT 1'
+    )
+    # Databricks enforces no key, so a declared one is counted too.
+    assert counts == [
+        KeyCount(rows=4, distinct=3, nulls=0, enforced=False, example=2),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
+    ]
+
+
+def test_an_id_two_rows_hold_is_refused_where_it_is_scored(
+    graph: Graph, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        _TABLES, 'users', pa.concat_tables([_USERS, _USERS.slice(1, 1)])
+    )
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    columns = {'user_id', 'age'}
+
+    with pytest.raises(ValueError, match=r'Cannot score 2: more than one row'):
+        sampler._by_pkey(
+            'users', pd.Series([1, 2]), columns, scored=np.array([1])
+        )
+    # Reached only through a link, it takes one of them, as it always has.
+    df, batch = sampler._by_pkey(
+        'users', pd.Series([1, 2]), columns, scored=np.array([0])
+    )
+    assert df['user_id'].tolist() == [1, 2]
+    assert batch.tolist() == [0, 1]
 
 
 def test_the_session_route_needs_no_sql_connector() -> None:

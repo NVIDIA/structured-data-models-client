@@ -55,9 +55,21 @@ declare as `1.0.0` and none has published. The heading becomes
   has no sessions. Needs the new `databricks-serving` extra. It sends the
   frozen `request_json`/`response_json` envelope every deployed endpoint
   reads and writes.
-- Prediction requests from `SDMClient.for_databricks_serving` name sdm-client
-  in their User-Agent (`nvidia_sdm-client/<version>`); queries that sample a
-  warehouse do not.
+- Every Databricks connection and API request sdm-client opens names it as
+  `nvidia_sdm-client/<version>`, as Databricks requires of a partner product.
+  Prediction requests from `SDMClient.for_databricks_serving` carry it in the
+  User-Agent. So do SQL warehouse connections from `warehouse()` and the
+  engine's own, ahead of any `user_agent_entry` you pass. Lakebase
+  connections from `lakebase()` carry it as `application_name`, ahead of any
+  you pass. The `WorkspaceClient` requests these make carry it too, through a
+  copy of your client rather than your client itself.
+  Warehouse sessions sdm-client opens also tag their statements
+  `sdm_client_purpose: sampling`, beside your own query tags, so query history
+  tells sampling apart. An `sdm_client_purpose` of your own is kept instead.
+  A connection or Spark session you open yourself and pass to a source is used
+  as it is, with neither.
+  `sdm-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,
+  the first release whose SEA route sends a session's query tags.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a
@@ -124,10 +136,24 @@ declare as `1.0.0` and none has published. The heading becomes
   `materialize(..., prediction_statistic='mean')` for the mean.
   `inference_config={'output_type': ...}` is still refused, and now names the
   option to use instead.
+- A `Schema` pickled before sources were added loads again, as the schema of frames it was.
+  Restoring it left out the source and the engine's reading of it, so asking for either raised `AttributeError`.
 - **Foreign keys a PostgreSQL or Databricks catalog declares now link the
   tables.** `Schema.from_source` compared the engine's qualified name for the
   referenced table with the caller's bare one, so no declared key matched and
   links fell back to name matching.
+- **A declared foreign key could attach to a table whose name differs only in case.**
+  PostgreSQL and Snowflake hold `"Parent"` and `parent` as two tables, and `Schema.from_source` matched the referenced name without regard to case, so the key landed on whichever was listed last.
+  The exact name now wins, and a case-insensitive match counts only when one table answers to it.
+- **DuckDB discovery read every schema and attached database.**
+  A table named like one in the current schema was listed twice, which the graph refused, and a namesake's keys and foreign keys were read as the table's own.
+  Discovery and the constraint lookups now stay in `current_database()` and `current_schema()`, where a bare table name is read from.
+- **A declared foreign key to a unique column, not the primary key, was dropped with a warning that blamed the dtypes.**
+  When the referenced table has no primary key, `Schema.from_source` now keys it by that column, as the catalog says it identifies a row, and checks it like any other key.
+  When the table has another primary key, the warning says so and names the `primary_keys=` that would let the key join.
+- **SQLite timestamps stored with nanoseconds put a row on a window's edge on the wrong side of it.**
+  A window bound was spelled with microseconds and zeros after them, so `.123456000` sorted before a stored `.123456789`, dropping the row at the window's end and keeping the one at its start.
+  The bound now carries all nine digits before it is cut to the stored length.
 - **Reading a Postgres database held a transaction open.** Without
   autocommit, psycopg keeps the first statement's transaction, and its locks,
   until a commit, so a graph kept writers to its tables waiting, and one failed
@@ -362,6 +388,21 @@ returns Arrow or plain rows, so the common case is unchanged, but a
 column **with** nulls now arrives as `Int64`, `string` or `boolean` where it
 previously arrived as `float64` or `object`. Code that tests `frame.dtypes`
 against numpy types for such a column will see the difference.
+
+**`Schema.from_source` checks every key against every row, so a schema that built before may now warn or raise.**
+Databricks and Snowflake do not enforce a declared primary key, and a key inferred from a 1,000-row preview has only been seen to hold there.
+A repeated value used to pass silently: a scored id matched one of its rows at random, so a prediction changed between seeds, and the context could hold one entity twice at one anchor time, with labels that disagreed.
+The rules are the ones `Schema.from_data` applies to a frame.
+A declared key, or one named in `primary_keys`, warns when up to 1% of rows repeat a value and is refused above that, naming the count, an example and what to do instead.
+A key named in `primary_keys` is refused for a row with no value in it too; a declared or inferred one is warned about.
+An inferred key that repeats more than 1% is declined, with the warning `from_data` gives.
+The count is one `UNION ALL` statement per source, a full scan of each table, about 0.8 s per AdventureWorks table on a cold SQL warehouse; approximate counts were too inaccurate to judge 1% by.
+A key the source keeps unique and never null is not scanned at all: a PostgreSQL or DuckDB primary key, a SQLite `INTEGER PRIMARY KEY`, and a Snowflake hybrid table's primary key.
+A key the source keeps unique but lets be null is still scanned, for its nulls alone: a unique constraint or index on a nullable column, and every other SQLite primary key, since SQLite lets one hold a null.
+A semantic model's tables are not counted, since the model derives them.
+`check_keys=False` skips the scan and every check with it.
+`SourceTable.duplicate_keys` now holds what the count found, and `None` where nothing was counted, rather than always zero.
+Sampling holds the line too, whatever was checked: an id asked to be scored that more than one row holds is refused, and context sampling keeps one row per key, so no entity appears twice at one anchor time.
 
 ### Notes for a reviewer
 

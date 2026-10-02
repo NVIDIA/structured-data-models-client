@@ -552,6 +552,35 @@ def sdm_client_entry() -> str:
     return f'nvidia_sdm-client/{version}'
 
 
+@pytest.mark.parametrize(
+    'package_version',
+    ['1.0.0', '1.0.0a1', '1.0.0rc2.dev3', '1.0.0.post1', '1.0'],
+)
+def test_the_connectors_name_sdm_client_exactly_as_serving_does(
+    package_version,
+):
+    """Each package keeps its own copy, so the serving extra need not bring
+    the connectors; Databricks needs one stable identifier from both."""
+    connectors = pytest.importorskip('sdm_connectors._databricks_partner')
+    from sdm_client.core.databricks_user_agent import (
+        databricks_product_version,
+        sdm_client_user_agent,
+    )
+
+    assert connectors.partner_user_agent() == sdm_client_user_agent()
+    assert connectors.partner_identifier() == sdm_client_entry()
+
+    def translated(translate):
+        try:
+            return translate(package_version)
+        except ValueError:
+            return ValueError
+
+    assert translated(databricks_product_version) == translated(
+        connectors.databricks_product_version
+    )
+
+
 def test_a_passed_workspace_client_s_requests_name_sdm_client(workspace_host):
     """Databricks attributes partner traffic by the User-Agent, and the
     caller's own client is theirs: it is copied to carry the entry, not

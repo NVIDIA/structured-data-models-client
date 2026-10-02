@@ -136,6 +136,7 @@ class DuckDBSampler(SQLSampler):
         table_name: str,
         index: pd.Series,
         columns: set[str],
+        scored: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
         key = self.primary_key_dict[table_name]
         key_ref = self.table_column_ref_dict[table_name][key]
@@ -150,6 +151,8 @@ class DuckDBSampler(SQLSampler):
         sql = (
             f'SELECT '
             f'tmp.__kumo_batch__, '
+            f'COUNT(*) OVER (PARTITION BY tmp.__kumo_batch__) '
+            f'AS __kumo_matches__, '
             f'{", ".join(projections)}\n'
             f'FROM {quote_ident(tmp_name)} tmp\n'
             f'JOIN {self.source_name_dict[table_name]}\n'
@@ -165,8 +168,15 @@ class DuckDBSampler(SQLSampler):
             table = cursor.to_arrow_table()
 
         batch = table['__kumo_batch__'].to_numpy()
-        batch_index = table.schema.get_field_index('__kumo_batch__')
-        table = table.remove_column(batch_index)
+        self._refuse_an_id_scored_twice(
+            table_name,
+            index,
+            batch,
+            table['__kumo_matches__'].to_numpy(),
+            scored,
+        )
+        for helper in ('__kumo_batch__', '__kumo_matches__'):
+            table = table.remove_column(table.schema.get_field_index(helper))
 
         return Table._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),

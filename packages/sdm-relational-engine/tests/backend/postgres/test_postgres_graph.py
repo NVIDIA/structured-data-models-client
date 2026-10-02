@@ -461,3 +461,66 @@ def test_a_keyless_table_with_json_and_xml_columns_samples(
         )
     finally:
         connection.close()
+
+
+def test_names_that_need_quoting_are_sampled(postgres_dsn: str) -> None:
+    """Every statement names a table through its quoted source name, so a
+    schema and table needing quotes sample like plain ones.
+    """
+    schema = f'Sales {uuid.uuid4().hex[:8]}'
+    connection = psycopg.connect(postgres_dsn, autocommit=True)
+    try:
+        connection.execute(f'CREATE SCHEMA "{schema}"')
+        connection.execute(
+            f'CREATE TABLE "{schema}"."Customers" '
+            '(customer_id BIGINT PRIMARY KEY)'
+        )
+        connection.execute(
+            f'CREATE TABLE "{schema}"."Order Items" ('
+            'item_id BIGINT PRIMARY KEY, customer_id BIGINT REFERENCES '
+            f'"{schema}"."Customers"(customer_id), ordered_at TIMESTAMP)'
+        )
+        connection.execute(
+            f'INSERT INTO "{schema}"."Customers" '
+            'SELECT value FROM generate_series(1, 20) AS value'
+        )
+        connection.execute(
+            f'INSERT INTO "{schema}"."Order Items" '
+            'SELECT value, 1 + (value % 20), '
+            "TIMESTAMP '2025-01-01' + value * INTERVAL '1 day' "
+            'FROM generate_series(1, 200) AS value'
+        )
+        graph = Graph.from_postgres(
+            connection,
+            tables=[
+                dict(name='customers', source_name='Customers'),
+                dict(name='items', source_name='Order Items'),
+            ],
+            schema=schema,
+            verbose=False,
+        )
+        assert [tuple(edge) for edge in graph.edges] == [
+            ('items', 'customer_id', 'customers')
+        ]
+        _materialize(
+            graph,
+            'PREDICT COUNT(items.*, 0, 30, days) FOR EACH customers.customer_id',
+        )
+
+        sampler = PostgresSampler(graph, verbose=False)
+        entities = sampler._sample_entity_table(
+            'customers', {'customer_id'}, num_rows=5, random_seed=1
+        )
+        neighbours, _ = sampler._by_fkey(
+            'items',
+            'customer_id',
+            pd.Series([1, 2]),
+            num_neighbors=3,
+            anchor_time=pd.Series(pd.to_datetime(['2025-06-01'] * 2)),
+            columns={'item_id', 'customer_id', 'ordered_at'},
+        )
+        assert len(entities) == 5
+        assert len(neighbours) == 6
+    finally:
+        connection.execute(f'DROP SCHEMA "{schema}" CASCADE')
+        connection.close()

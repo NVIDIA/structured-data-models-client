@@ -314,7 +314,7 @@ class _TableShape:
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None
     time_column: str | None
-    duplicate_keys: int
+    duplicate_keys: int | None
 
     def _own_columns(self) -> None:
         r"""Point every column at this table, and take a copy of any that is
@@ -467,7 +467,12 @@ class _TableShape:
         for name in names:
             self.columns[name]._mark_as_key()
         frame = getattr(self, 'data', None)
-        if frame is None or frame.empty:
+        if frame is None:
+            # A table in its source is counted by `Schema.from_source`, and a
+            # key named afterwards has not been.
+            object.__setattr__(self, 'duplicate_keys', None)
+            return
+        if frame.empty:
             return
         quality = _key_quality(frame, names)
         object.__setattr__(self, 'duplicate_keys', quality.duplicates)
@@ -499,17 +504,9 @@ class _TableShape:
                     f'should see one, or name a different primary key.'
                 )
             else:
-                remedy = (
-                    ' Name a different primary key if this column is a '
-                    'foreign key rather than an identifier.'
-                )
-            warnings.warn(
-                f'{self.name}.{".".join(names)} identifies a row '
-                f'{quality.duplicates} time(s) it has already been used, '
-                f'e.g. {quality.example!r}. Those rows are '
-                f'indistinguishable to the model.{remedy}',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
+                remedy = _NAME_ANOTHER_KEY
+            _warn_a_key_repeats(
+                self.name, names, quality.duplicates, quality.example, remedy
             )
 
     def _could_hold_a_key(self, name: str) -> bool:
@@ -603,17 +600,18 @@ class _TableShape:
                 if name in frame.columns and frame[name].isna().any()
             ]
             raise StructuredDataError(
-                f'{_the_key_of(self.name, names)} has {quality.nulls} row(s) '
-                f'with no value, in {_and_list(empty)}, so those rows cannot '
-                f'be identified; fill or drop them before using '
-                f'{"them" if len(empty) > 1 else "it"} as a primary key',
+                _a_key_missing_values(self.name, names, quality.nulls, empty),
                 code='INVALID_REQUEST',
             )
-        if quality.duplicates > len(frame) * (1 - _KEY_UNIQUENESS):
+        if _too_many_repeats(quality.duplicates, len(frame)):
             raise StructuredDataError(
-                f'{_the_key_of(self.name, names)} is not unique enough to '
-                f'identify a row: {quality.duplicates} of {len(frame)} rows '
-                f'repeat a value already used, e.g. {quality.example!r}',
+                _not_unique_enough(
+                    self.name,
+                    names,
+                    quality.duplicates,
+                    len(frame),
+                    quality.example,
+                ),
                 code='INVALID_REQUEST',
             )
 
@@ -730,9 +728,12 @@ class SourceTable(_TableShape):
     columns: dict[str, Column]
     primary_key: str | Sequence[str] | None = None
     time_column: str | None = None
-    #: Always zero: the rows are not here to count, and declared keys are not
-    #: checked against the source.
-    duplicate_keys: int = field(init=False, default=0)
+    #: How many rows repeat a primary key value another row already used, as
+    #: :meth:`Schema.from_source` counted them in the source. Zero for a key
+    #: the source enforces, and for a table with no key. ``None`` where
+    #: nothing was counted: ``check_keys=False``, a semantic model's table,
+    #: or a key named after the schema was built.
+    duplicate_keys: int | None = field(init=False, default=None)
 
     def __post_init__(self) -> None:
         self._check_name(self.name)
@@ -910,8 +911,14 @@ class Schema:
         checking what is added to it. Said nothing while it does: a copy is
         not a new declaration, and the notices were given when the schema it
         was copied from was built.
+
+        A schema pickled before it could be bound to a source has neither
+        that source nor the engine's reading of it, which is what it is: a
+        schema of frames.
         """
-        object.__setattr__(self, '__dict__', dict(state))
+        object.__setattr__(
+            self, '__dict__', {'_source': None, '_engine_tables': None, **state}
+        )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             self.relationships = list(state.get('relationships') or ())
@@ -1060,6 +1067,7 @@ class Schema:
         primary_keys: Mapping[str, str | Sequence[str]] | None = None,
         time_columns: Mapping[str, str] | None = None,
         relationships: Sequence[Relationship] | None = None,
+        check_keys: bool = True,
     ) -> Schema:
         r"""Describe tables that stay in their source.
 
@@ -1078,6 +1086,18 @@ class Schema:
         :meth:`from_data`. When a query is materialized, the engine samples
         the tables with SQL, a hop at a time, and only the rows it samples
         leave the source.
+
+        Each key is then checked against every row, by the rules
+        :meth:`from_data` applies to a frame. Databricks and Snowflake do not
+        enforce a declared key, and a key inferred from a preview has only
+        been seen to hold there, so a repeated value would otherwise surface
+        as rows that change between seeds and context examples that
+        contradict each other. A declared key, or one named in
+        ``primary_keys``, warns when up to 1% of rows repeat a value and is
+        refused beyond that; an inferred key is declined beyond it. The count
+        is one statement for all the tables, a full scan of each, and it is
+        skipped for a key the source enforces, such as a PostgreSQL or DuckDB
+        primary key. :attr:`SourceTable.duplicate_keys` holds what it found.
 
         A semantic model, such as a Databricks metric view or a Snowflake
         semantic view, is a source of its own, and already says how its
@@ -1104,6 +1124,10 @@ class Schema:
             time_columns: Overrides for a table's time column.
             relationships: Overrides for the relationships. Pass an empty
                 sequence to assert there are none.
+            check_keys: Count each key's repeats and missing values in the
+                source. ``False`` skips the scan, and the checks with it, and
+                leaves :attr:`SourceTable.duplicate_keys` ``None``. The tables
+                of a semantic model are never counted: the model derives them.
 
         Returns:
             A schema of :class:`SourceTable`, bound to ``source``.
@@ -1111,7 +1135,9 @@ class Schema:
         Raises:
             StructuredDataError: If ``tables`` is empty, a name is not a
                 string, a table is not in the source, the source describes no
-                table, or an override names something that does not exist.
+                table, an override names something that does not exist, or a
+                declared or named key repeats a value in more than 1% of rows
+                or a named key has no value in some row.
             MissingExtraError: If the relational engine, which reads the
                 source, is not installed.
         """
@@ -1127,6 +1153,7 @@ class Schema:
             _require_table_names(tables)
 
         read = EngineTables()
+        engine_tables: dict[str, Any] | None = None
         if is_semantic_model(source):
             graph = semantic_model_graph(source)
             read.keep({name: graph[name] for name in graph.tables})
@@ -1162,8 +1189,29 @@ class Schema:
                 for name, named in chosen.items()
             }
             declared = _declared_links(graph, chosen, built)
+            if relationships is None:
+                _key_by_the_referenced_column(built, declared)
+            engine_tables = {name: graph[name] for name in chosen}
 
+        found = {
+            name: _as_key_tuple(table.primary_key)
+            for name, table in built.items()
+        }
         _apply_keys_and_times(built, primary_keys, time_columns)
+        if check_keys and engine_tables is not None:
+            # Before relationships are inferred: a declined key is one no
+            # relationship can point at.
+            _check_source_keys(
+                source,
+                built,
+                engine_tables,
+                found,
+                set(primary_keys or ()),
+                infer_links=relationships is None,
+            )
+        else:
+            for table in built.values():
+                object.__setattr__(table, 'duplicate_keys', None)
         if relationships is None:
             covered = {
                 (link.source_table, link.source_column) for link in declared
@@ -1314,8 +1362,26 @@ def _joinable_inferred_links(
     for it is not refused for a guess made on their behalf.
     """
     unjoinable = [link for link in inferred if not _is_joinable(built, link)]
-    _warn_of_a_name_match_that_cannot_join(built, unjoinable)
+    _warn_of_a_link_that_cannot_join(built, unjoinable)
     return [link for link in inferred if _is_joinable(built, link)]
+
+
+def _key_by_the_referenced_column(
+    built: Mapping[str, SourceTable], declared: Sequence[Relationship]
+) -> None:
+    r"""Key a keyless table by the column declared foreign keys refer to.
+
+    A catalog lets a foreign key refer only to a primary key or a unique
+    column, so that column identifies a row, as a lone unique column does when
+    the engine infers a key. Before the keys are checked, so this one is too.
+    Foreign keys naming different columns of one table leave it keyless.
+    """
+    referenced: dict[str, set[str]] = {}
+    for link in declared:
+        referenced.setdefault(link.target_table, set()).add(link.target_column)
+    for name, columns in referenced.items():
+        if built[name].primary_key is None and len(columns) == 1:
+            built[name].primary_key = next(iter(columns))
 
 
 def _checked_links(
@@ -1335,6 +1401,142 @@ def _checked_links(
         _require_column(built, link.target_table, link.target_column)
         _require_joinable(built, link)
     return links
+
+
+#: How a message names each source's engine.
+_BACKEND_NAMES = {
+    'databricks': 'Databricks',
+    'snowflake': 'Snowflake',
+    'postgres': 'PostgreSQL',
+    'duckdb': 'DuckDB',
+    'sqlite': 'SQLite',
+}
+
+_SKIP_THE_CHECK = (
+    'Name another key with primary_keys=, or pass check_keys=False to skip '
+    '(one full scan per table).'
+)
+
+
+def _check_source_keys(
+    source: Any,
+    built: Mapping[str, SourceTable],
+    engine_tables: Mapping[str, Any],
+    found: Mapping[str, tuple[str, ...]],
+    stated: AbstractSet[str],
+    *,
+    infer_links: bool,
+) -> None:
+    r"""Hold the keys of tables in a source to the rules a key of frames
+    meets, counting the rows where they are.
+
+    A stated key, from ``primary_keys=`` or the catalog, warns at up to 1% of
+    rows repeating a value and is refused above that. A key the engine
+    inferred is kept up to the same 1% and declined beyond it, as inference
+    over frames declines it. A key the source enforces is not counted.
+
+    Args:
+        source: The source the tables are in.
+        built: The tables, keyed as they will be.
+        engine_tables: The engine's reading of each table, by schema name.
+        found: The key each table had before ``primary_keys=`` was applied.
+        stated: The tables whose key ``primary_keys=`` named.
+        infer_links: Whether relationships will be inferred, which is when a
+            declined key is worth a word.
+    """
+    from sdm_relational_engine.rfm.base import count_keys
+
+    for table in built.values():
+        object.__setattr__(table, 'duplicate_keys', 0)
+    keyed = {
+        name: _as_key_tuple(table.primary_key)
+        for name, table in built.items()
+        if table.primary_key is not None
+    }
+    if not keyed:
+        return
+    counts = dict(
+        zip(
+            keyed,
+            count_keys([(engine_tables[name], keyed[name]) for name in keyed]),
+            strict=True,
+        )
+    )
+    backend = _BACKEND_NAMES.get(source.backend, source.backend)
+    declined: dict[str, Any] = {}
+    for name, names in keyed.items():
+        count = counts[name]
+        rows, distinct = count.rows, count.distinct
+        if rows is None or distinct is None:
+            continue
+        table = built[name]
+        declared = (
+            name not in stated
+            and names == found[name]
+            and engine_tables[name]._declares_key(names)
+        )
+        repeats = count.repeats
+        if name not in stated and not declared:
+            # Inferred, so declined as inference over a frame declines it.
+            if distinct < rows * _KEY_UNIQUENESS:
+                declined[name] = count
+                table.primary_key = None
+                continue
+        elif count.nulls and name in stated:
+            empty = names if len(names) == 1 else None
+            missing = _a_key_missing_values(name, names, count.nulls, empty)
+            raise StructuredDataError(
+                f'{missing}. {_SKIP_THE_CHECK}', code='INVALID_REQUEST'
+            )
+        elif _too_many_repeats(repeats, rows):
+            found_out = _not_unique_enough(
+                name, names, repeats, rows, count.example
+            )
+            unenforced = (
+                f'{backend} does not enforce declared keys. '
+                if declared and not count.enforced
+                else ''
+            )
+            raise StructuredDataError(
+                f'{found_out}. {unenforced}{_SKIP_THE_CHECK}',
+                code='INVALID_REQUEST',
+            )
+        if count.nulls:
+            _warn_a_key_has_no_value(name, '.'.join(names), count.nulls)
+        if repeats:
+            _warn_a_key_repeats(
+                name, names, repeats, count.example, _NAME_ANOTHER_KEY
+            )
+        object.__setattr__(table, 'duplicate_keys', repeats)
+
+    if not infer_links or not declined:
+        return
+    named_elsewhere = _tables_naming_each_column(built)
+    keyed_by = {
+        table.primary_key
+        for table in built.values()
+        if isinstance(table.primary_key, str)
+    }
+    for name, count in declined.items():
+        column = keyed[name][0]
+        rows, distinct = count.rows or 0, count.distinct or 0
+        if (
+            len(keyed[name]) > 1
+            or column in keyed_by
+            or not named_elsewhere.get(column, set()) - {name}
+            or distinct < rows * _NEARLY_A_KEY
+            or not count.repeats
+        ):
+            continue
+        _warn_a_key_was_declined(
+            name,
+            column,
+            count.repeats,
+            rows,
+            count.example,
+            f'Keep one row per {column!r} in the source, or name a column '
+            f'that does identify a row with primary_keys={{{name!r}: ...}}.',
+        )
 
 
 def _require_table_names(tables: Mapping[str, str]) -> None:
@@ -1498,11 +1700,11 @@ def _declared_links(
     """
     # `dst_table` is qualified the way `source_name` is, not the way the caller
     # named the table.
-    by_source_name = {graph[name].source_name.lower(): name for name in tables}
+    by_source_name = {graph[name].source_name: name for name in tables}
     links = []
     for name in tables:
         for key in graph[name].source_foreign_keys:
-            target = by_source_name.get(key.dst_table.lower())
+            target = _table_named(by_source_name, key.dst_table)
             if target is None:
                 continue
             if key.name not in built[name].columns:
@@ -1518,6 +1720,26 @@ def _declared_links(
                 )
             )
     return links
+
+
+def _table_named(
+    by_source_name: Mapping[str, str], dst_table: str
+) -> str | None:
+    r"""The table a foreign key's target names, matched exactly if it can be.
+
+    SQLite and Databricks fold names to lower case, so a case-insensitive match
+    still counts, but only when one table answers to it. PostgreSQL and
+    Snowflake can hold both `"Parent"` and `parent`, and guessing between them
+    would attach the key to the wrong one.
+    """
+    if dst_table in by_source_name:
+        return by_source_name[dst_table]
+    folded = [
+        name
+        for source_name, name in by_source_name.items()
+        if source_name.lower() == dst_table.lower()
+    ]
+    return folded[0] if len(folded) == 1 else None
 
 
 def _require_column(
@@ -1601,14 +1823,8 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
         # worked before, including any relationship pointing at this table,
         # but the engine drops these rows without a word, so the guess is
         # said out loud.
-        missing = int(frame[inferred].isna().sum())
-        warnings.warn(
-            f'{name}.{inferred} identifies a row, but {missing} row(s) have '
-            f'no value for it. Those rows cannot be scored and the model '
-            f'will not see them; fill or drop them, or name a different '
-            f'primary key.',
-            category=SDMWarning,
-            stacklevel=caller_stacklevel(),
+        _warn_a_key_has_no_value(
+            name, inferred, int(frame[inferred].isna().sum())
         )
         object.__setattr__(table, 'primary_key', inferred)
         table._adopt_key(inferred)
@@ -2013,7 +2229,7 @@ def _warn_table_cannot_be_linked_to(
 
 
 def _tables_naming_each_column(
-    tables: Mapping[str, Table],
+    tables: Mapping[str, _TableShape],
 ) -> dict[str, set[str]]:
     r"""Which tables hold a column of each name.
 
@@ -2087,21 +2303,16 @@ def _warn_repeats_cost_the_table_its_key(
             quality = _key_quality(frame, (column,))
             if not quality.duplicates:
                 continue
-            warnings.warn(
-                f'{name}.{column} is named like a key and another table names '
-                f'it too, but {quality.duplicates} of {len(frame)} rows '
-                f'repeat a value already used, e.g. {quality.example!r}, so '
-                f'it does not identify a row and {name!r} gets no primary '
-                f'key. Nothing can link to a table without one: every '
-                f'relationship pointing at {name!r} is dropped, so nothing is '
-                f'gathered through it, and a question about another table '
-                f'reaches it only where {name!r} names that table itself. '
+            _warn_a_key_was_declined(
+                name,
+                column,
+                quality.duplicates,
+                len(frame),
+                quality.example,
                 f'Keep one row per {column!r}: '
                 f'frame = frame.drop_duplicates({column!r}), and infer '
                 f'again, or name a column that does identify a row with '
                 f'primary_keys={{{name!r}: ...}}.',
-                category=SDMWarning,
-                stacklevel=caller_stacklevel(),
             )
             spoken_for.add(name)
             break
@@ -2422,10 +2633,10 @@ def _infer_relationships(
     return links
 
 
-def _warn_of_a_name_match_that_cannot_join(
+def _warn_of_a_link_that_cannot_join(
     tables: Mapping[str, _TableShape], dropped: Sequence[Relationship]
 ) -> None:
-    """Say when a column named for a key holds values that key cannot match.
+    """Say why an inferred or declared link could not join.
 
     Dropping it is right: joining `int64` to `string` matches nothing, and an
     edge that matches nothing is worse than no edge. But it was dropped in
@@ -2434,7 +2645,30 @@ def _warn_of_a_name_match_that_cannot_join(
     """
     for link in dropped:
         source = tables[link.source_table].columns[link.source_column]
-        target = tables[link.target_table].columns[link.target_column]
+        target_table = tables[link.target_table]
+        target = target_table.columns[link.target_column]
+        key = _as_key_tuple(target_table.primary_key)
+        if key != (link.target_column,):
+            # A declared foreign key may name a unique column that is not the
+            # key, which is no fault of the dtypes.
+            has = (
+                f'the primary key of {link.target_table!r} is '
+                f'{_and_list(list(key))}'
+                if key
+                else f'{link.target_table!r} has no primary key'
+            )
+            warnings.warn(
+                f'{link.source_table}.{link.source_column} refers to '
+                f'{link.target_table}.{link.target_column}, but {has}. A '
+                f'relationship joins to a primary key, so none was made from '
+                f'it. Pass '
+                f'primary_keys={{{link.target_table!r}: '
+                f'{link.target_column!r}}} if {link.target_column!r} '
+                f'identifies a row of {link.target_table!r}.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
+            continue
         warnings.warn(
             f'{link.source_table}.{link.source_column} names the key of '
             f'{link.target_table!r} and holds {source.dtype!r} where that key '
@@ -2542,6 +2776,91 @@ def _the_key_of(table: str, names: Sequence[str]) -> str:
     if len(names) == 1:
         return f'{table}.{names[0]}'
     return f'the primary key of {table!r}, {_and_list(list(names))},'
+
+
+_NAME_ANOTHER_KEY = (
+    ' Name a different primary key if this column is a foreign key rather '
+    'than an identifier.'
+)
+
+
+def _too_many_repeats(duplicates: int, rows: int) -> bool:
+    r"""Whether a stated key repeats more than inference would tolerate."""
+    return duplicates > rows * (1 - _KEY_UNIQUENESS)
+
+
+def _not_unique_enough(
+    table: str, names: Sequence[str], duplicates: int, rows: int, example: Any
+) -> str:
+    return (
+        f'{_the_key_of(table, names)} is not unique enough to identify a '
+        f'row: {duplicates:,} of {rows:,} rows repeat a value already used, '
+        f'e.g. {example!r}'
+    )
+
+
+def _a_key_missing_values(
+    table: str, names: Sequence[str], nulls: int, empty: Sequence[str] | None
+) -> str:
+    r"""Why a stated key with a null in it is refused.
+
+    ``empty`` names the columns holding the nulls, or is ``None`` where only
+    the rows missing some part of a composite key were counted.
+    """
+    where = f', in {_and_list(empty)},' if empty else ' in part of it,'
+    several = empty is None or len(empty) > 1
+    return (
+        f'{_the_key_of(table, names)} has {nulls:,} row(s) with no value'
+        f'{where} so those rows cannot be identified; fill or drop them '
+        f'before using {"them" if several else "it"} as a primary key'
+    )
+
+
+def _warn_a_key_repeats(
+    table: str, names: Sequence[str], duplicates: int, example: Any, remedy: str
+) -> None:
+    warnings.warn(
+        f'{table}.{".".join(names)} identifies a row {duplicates:,} time(s) '
+        f'it has already been used, e.g. {example!r}. Those rows are '
+        f'indistinguishable to the model.{remedy}',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+def _warn_a_key_has_no_value(table: str, column: str, missing: int) -> None:
+    r"""Said of a key that was inferred rather than stated, which a null in
+    it does not cost: inference is a guess, and refusing would break tables
+    that worked before.
+    """
+    warnings.warn(
+        f'{table}.{column} identifies a row, but {missing:,} row(s) have no '
+        f'value for it. Those rows cannot be scored and the model will not '
+        f'see them; fill or drop them, or name a different primary key.',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
+
+
+def _warn_a_key_was_declined(
+    table: str,
+    column: str,
+    duplicates: int,
+    rows: int,
+    example: Any,
+    remedy: str,
+) -> None:
+    warnings.warn(
+        f'{table}.{column} is named like a key and another table names it '
+        f'too, but {duplicates:,} of {rows:,} rows repeat a value already '
+        f'used, e.g. {example!r}, so it does not identify a row and '
+        f'{table!r} gets no primary key. Nothing can link to a table without '
+        f'one: every relationship pointing at {table!r} is dropped, so '
+        f'nothing is gathered through it, and a question about another table '
+        f'reaches it only where {table!r} names that table itself. {remedy}',
+        category=SDMWarning,
+        stacklevel=caller_stacklevel(),
+    )
 
 
 def _key_quality(frame: pd.DataFrame, names: Sequence[str]) -> _KeyQuality:
