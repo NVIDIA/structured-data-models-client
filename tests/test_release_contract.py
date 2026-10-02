@@ -78,6 +78,105 @@ def _run(script: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _predictive_query_types_exposed() -> list[str]:
+    """Where a public package names or hands out a ``predictive_query`` type.
+
+    The public packages are the ones the snapshot records. A type is caught by
+    its module when an annotation is an object, and by name when it is a
+    string: every capitalised name ``predictive_query`` exports that no public
+    package exports itself, so ``sdm_client.Column`` is not mistaken for
+    ``predictive_query.Column``.
+    """
+    import dataclasses
+    import importlib
+    import inspect
+
+    internal = importlib.import_module('predictive_query')
+    public = [
+        importlib.import_module(name)
+        for name in json.loads((GOLDEN / 'public_api.json').read_text())
+    ]
+    own = {name for module in public for name in module.__all__}
+    names = sorted(
+        name
+        for name in internal.__all__
+        if name[:1].isupper() and name not in own
+    )
+    pattern = re.compile(
+        r'\bpredictive_query\b|\b(?:' + '|'.join(map(re.escape, names)) + r')\b'
+    )
+
+    def internal_module(obj: object) -> bool:
+        module = getattr(obj, '__module__', None) or ''
+        return module.split('.')[0] == 'predictive_query'
+
+    def signature(where: str, function: object) -> list[str]:
+        try:
+            written = inspect.signature(function)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return []
+        annotations = [
+            (f'{where}({p.name})', p.annotation)
+            for p in written.parameters.values()
+        ] + [(f'{where} ->', written.return_annotation)]
+        return [
+            f'{at}: {annotation}'
+            for at, annotation in annotations
+            if annotation is not inspect.Parameter.empty
+            and pattern.search(str(annotation))
+        ]
+
+    found: list[str] = []
+    seen: set[type] = set()
+
+    def walk(where: str, owner: type) -> None:
+        if owner in seen or internal_module(owner):
+            return
+        seen.add(owner)
+        found.extend(
+            f'{where} inherits {base.__module__}.{base.__qualname__}'
+            for base in owner.__mro__
+            if internal_module(base)
+        )
+        hints = dict(vars(owner).get('__annotations__', {}))
+        if dataclasses.is_dataclass(owner):
+            hints.update({f.name: f.type for f in dataclasses.fields(owner)})
+        found.extend(
+            f'{where}.{name}: {hint}'
+            for name, hint in hints.items()
+            if not name.startswith('_') and pattern.search(str(hint))
+        )
+        found.extend(signature(where, owner))
+        for name in dir(owner):
+            if name.startswith('_'):
+                continue
+            member = inspect.getattr_static(owner, name)
+            if isinstance(member, property):
+                found.extend(signature(f'{where}.{name}', member.fget))
+            elif isinstance(member, (staticmethod, classmethod)):
+                found.extend(signature(f'{where}.{name}', member.__func__))
+            elif callable(member):
+                found.extend(signature(f'{where}.{name}', member))
+            elif internal_module(type(member)):
+                found.append(f'{where}.{name} holds a {type(member)!r}')
+            elif (getattr(type(member), '__module__', '') or '').startswith(
+                'sdm_'
+            ):
+                walk(f'{where}.{name}', type(member))
+
+    for module in public:
+        for name in module.__all__:
+            obj = getattr(module, name)
+            where = f'{module.__name__}.{name}'
+            if internal_module(obj) or internal_module(type(obj)):
+                found.append(f'{where} is from predictive_query')
+            elif inspect.isclass(obj):
+                walk(where, obj)
+            elif callable(obj):
+                found.extend(signature(where, obj))
+    return found
+
+
 class TestPublicSurface:
     """What a caller can name, and what the endpoint receives."""
 
@@ -87,6 +186,20 @@ class TestPublicSurface:
             'The public API changed. If that was intended, re-record it with '
             '`python scripts/snapshot_public_api.py --write` and say so in the '
             f'changelog.\n{result.stdout}{result.stderr}'
+        )
+
+    def test_no_public_name_hands_out_a_predictive_query_type(self):
+        """``predictive_query`` is internal, so nothing public may expose it.
+
+        ``ModelSpec`` once took a ``Profile`` in its signature, and the model
+        handles handed one out through ``spec``. The snapshot records
+        signatures but not what a property returns or what an attribute holds,
+        so this reads the annotations and the values themselves.
+        """
+        exposed = _predictive_query_types_exposed()
+        assert not exposed, (
+            '`predictive_query` is not public (docs/reference/stability.md), '
+            'but these public names expose its types:\n' + '\n'.join(exposed)
         )
 
     def test_the_wire_payloads_match_the_recorded_snapshot(self):
