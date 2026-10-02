@@ -276,3 +276,60 @@ def test_both_warehouses_produce_frames_a_schema_can_be_inferred_from(
         assert isinstance(frame, pd.DataFrame)
         assert not frame.empty
         assert all(isinstance(name, str) for name in frame.columns)
+
+
+# --- what Databricks records of a connection sdm-client opens ---------------
+
+#: How long query history may take to show a statement.
+QUERY_HISTORY_SECONDS = 600
+
+
+@pytest.fixture(scope='module')
+def workspace() -> Any:
+    r"""The ambient ``WorkspaceClient``, and the warehouse it may read from."""
+    if not os.environ.get('DATABRICKS_WAREHOUSE_ID'):
+        pytest.skip(
+            'set DATABRICKS_WAREHOUSE_ID, and a host and credential the '
+            'Databricks SDK reads, to check what query history records'
+        )
+    sdk = pytest.importorskip('databricks.sdk')
+    try:
+        return sdk.WorkspaceClient()
+    except Exception as error:  # noqa: BLE001 - no credential is a skip
+        pytest.skip(
+            f'no ambient Databricks credential ({type(error).__name__})'
+        )
+
+
+def test_query_history_records_the_partner_and_the_sampling_tag(workspace):
+    """What Databricks attributes the statement by, read back where it does:
+    the client application from the User-Agent, and the session's tags."""
+    import time
+
+    from databricks.sdk.service.sql import QueryFilter
+
+    from sdm_connectors.databricks import warehouse
+
+    with warehouse(
+        os.environ['DATABRICKS_WAREHOUSE_ID'], workspace=workspace
+    ) as connection:
+        cursor = connection.cursor()
+        cursor.execute('SELECT 1 AS one')
+        assert cursor.fetchall()[0][0] == 1
+        statement_id = cursor.query_id
+    assert statement_id
+
+    deadline = time.monotonic() + QUERY_HISTORY_SECONDS
+    while True:
+        found = workspace.query_history.list(
+            filter_by=QueryFilter(statement_ids=[statement_id]),
+            include_metrics=False,
+        ).res
+        if found or time.monotonic() > deadline:
+            break
+        time.sleep(15)
+    assert found, f'{statement_id} is not in query history'
+    [query] = found
+    assert query.client_application == 'nvidia_sdm-client'
+    tags = {tag.key: tag.value for tag in query.query_tags or []}
+    assert tags.get('sdm_client_purpose') == 'sampling'

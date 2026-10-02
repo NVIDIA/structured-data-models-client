@@ -71,6 +71,8 @@ def test_databricks_driver_options_bypass_the_allow_list(monkeypatch):
         'catalog': 'c',
         'access_token': 't',
         'use_cloud_fetch': True,
+        'user_agent_entry': PARTNER,
+        'session_configuration': {'QUERY_TAGS': SAMPLING},
     }
 
 
@@ -411,7 +413,11 @@ def test_postgres_reads_the_standard_environment_variables(monkeypatch):
     assert captured['dbname'] == 'explicit', 'an argument must win over PG*'
 
 
-# --- Databricks user agent ---------------------------------------------------
+# --- Databricks partner identifier and query tag ----------------------------
+
+#: What Databricks requires on every connection sdm-client opens.
+PARTNER = 'nvidia_sdm-client/1.0.0'
+SAMPLING = 'sdm_client_purpose:sampling'
 
 
 def _captured_databricks_connect(**kwargs):
@@ -434,23 +440,200 @@ def _captured_databricks_connect(**kwargs):
     return captured
 
 
-def test_a_sampling_connection_carries_no_partner_tag():
-    """sdm-client names itself on prediction requests only, so a query that
-    samples a warehouse does not claim to be one."""
-    assert 'user_agent_entry' not in _captured_databricks_connect()
+def test_a_connection_names_sdm_client_and_tags_its_statements_as_sampling():
+    """Databricks requires a partner product to identify every connection it
+    opens; the query tag says what the statements are for."""
+    captured = _captured_databricks_connect()
+
+    assert captured['user_agent_entry'] == PARTNER
+    assert captured['session_configuration'] == {'QUERY_TAGS': SAMPLING}
 
 
-def test_a_caller_s_own_user_agent_entry_is_passed_through_alone():
+def test_a_caller_s_user_agent_entry_is_kept_after_the_partner_identifier():
     captured = _captured_databricks_connect(user_agent_entry='acme/2.1')
 
-    assert captured['user_agent_entry'] == 'acme/2.1'
+    assert captured['user_agent_entry'] == f'{PARTNER} acme/2.1'
 
 
 def test_a_latin_1_user_agent_entry_is_kept():
     """Refusing what a header cannot carry must not refuse what it can."""
     captured = _captured_databricks_connect(user_agent_entry='café/1.0')
 
-    assert captured['user_agent_entry'] == 'café/1.0'
+    assert captured['user_agent_entry'] == f'{PARTNER} café/1.0'
+
+
+def test_a_caller_s_session_query_tags_are_kept_beside_the_sampling_tag():
+    """The caller's own session settings go through unchanged, and their dict
+    is not written to."""
+    session = {'query_tags': 'team:growth', 'ansi_mode': 'true'}
+
+    captured = _captured_databricks_connect(session_configuration=session)
+
+    assert captured['session_configuration'] == {
+        'query_tags': f'team:growth,{SAMPLING}',
+        'ansi_mode': 'true',
+    }
+    assert session == {'query_tags': 'team:growth', 'ansi_mode': 'true'}
+
+
+@pytest.mark.parametrize(
+    'theirs',
+    [
+        'sdm_client_purpose:audit',
+        'team:growth,sdm_client_purpose:audit',
+        # Escaped as the driver escapes a value, so the comma and colon are
+        # part of team's value rather than a separator.
+        r'team:a\,b\:c,sdm_client_purpose:audit',
+    ],
+    ids=['alone', 'after-another', 'after-escapes'],
+)
+def test_a_caller_s_own_purpose_tag_wins_over_the_sampling_one(theirs):
+    """The caller set it on purpose, and a second key would leave which one
+    the warehouse keeps to chance."""
+    session = {'QUERY_TAGS': theirs}
+
+    captured = _captured_databricks_connect(session_configuration=session)
+
+    assert captured['session_configuration'] == {'QUERY_TAGS': theirs}
+
+
+def test_a_purpose_named_only_inside_a_value_is_not_the_caller_s_own():
+    """Escaped, it is part of team's value, so the tag is still added."""
+    theirs = r'team:x\,sdm_client_purpose\:audit'
+
+    captured = _captured_databricks_connect(
+        session_configuration={'QUERY_TAGS': theirs}
+    )
+
+    assert captured['session_configuration'] == {
+        'QUERY_TAGS': f'{theirs},{SAMPLING}'
+    }
+
+
+def test_a_session_query_tag_ending_in_a_lone_backslash_is_refused():
+    """It would escape the comma before the sampling tag and fold the tag
+    into the caller's value."""
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+
+    with pytest.raises(ConnectorError) as error:
+        databricks.connect(
+            server_hostname='h',
+            http_path='p',
+            access_token='t',
+            session_configuration={'QUERY_TAGS': 'team:growth\\'},
+        )
+    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
+
+
+def test_a_session_query_tag_ending_in_an_escaped_backslash_is_kept():
+    theirs = 'team:growth\\\\'
+
+    captured = _captured_databricks_connect(
+        session_configuration={'QUERY_TAGS': theirs}
+    )
+
+    assert captured['session_configuration'] == {
+        'QUERY_TAGS': f'{theirs},{SAMPLING}'
+    }
+
+
+def test_the_caller_s_purpose_wins_in_a_query_tags_argument_too():
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+    if 'query_tags' not in databricks._CONNECT_ARGS:
+        pytest.skip('this driver takes no query_tags= argument')
+
+    captured = _captured_databricks_connect(
+        query_tags={'sdm_client_purpose': 'audit'}
+    )
+
+    assert captured['query_tags'] == {'sdm_client_purpose': 'audit'}
+
+
+def test_the_keys_are_read_back_from_what_the_driver_writes():
+    """Escaping is the driver's, so a caller's string written by it is read
+    with the same rule."""
+    utils = pytest.importorskip('databricks.sql.utils')
+    if not hasattr(utils, 'serialize_query_tags'):
+        pytest.skip('this driver has no query tag serializer')
+    from sdm_connectors.backends.databricks import _query_tag_keys
+
+    tags = {'team': 'a,b:c\\', 'sdm_client_purpose': 'x', 'flag': None}
+
+    assert _query_tag_keys(utils.serialize_query_tags(tags)) == set(tags)
+
+
+def test_a_none_user_agent_entry_is_the_same_as_none_given():
+    """connect() drops any None it is given, and the driver reads one as its
+    default, so None asks for no entry of the caller's own."""
+    captured = _captured_databricks_connect(user_agent_entry=None)
+
+    assert captured['user_agent_entry'] == PARTNER
+
+
+def test_a_caller_s_query_tags_argument_carries_the_sampling_tag_too():
+    """The driver lets `query_tags=` replace the session's QUERY_TAGS, so a
+    tag set only there would be dropped."""
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+    if 'query_tags' not in databricks._CONNECT_ARGS:
+        pytest.skip('this driver takes no query_tags= argument')
+
+    captured = _captured_databricks_connect(query_tags={'team': 'growth'})
+
+    assert captured['query_tags'] == {
+        'team': 'growth',
+        'sdm_client_purpose': 'sampling',
+    }
+
+
+def test_the_driver_sends_the_sampling_tag_as_the_session_s_query_tags():
+    """What the driver itself puts on the wire for the tag, read from its own
+    serializer, so a format it changes is caught here."""
+    utils = pytest.importorskip('databricks.sql.utils')
+    if not hasattr(utils, 'serialize_query_tags'):
+        pytest.skip('this driver has no query tag serializer')
+
+    assert utils.serialize_query_tags({'sdm_client_purpose': 'sampling'}) == (
+        SAMPLING
+    )
+
+
+@pytest.mark.parametrize(
+    ('package_version', 'expected'),
+    [
+        ('1.0.0', '1.0.0'),
+        ('1.2.3', '1.2.3'),
+        ('1.0.0a1', '1.0.0-alpha.1'),
+        ('1.0.0rc2', '1.0.0-rc.2'),
+        ('1.0.0.dev3', '1.0.0-dev.3'),
+        ('1.0.0rc2.dev3', '1.0.0-rc.2.dev.3'),
+        ('1.0.0.post1', '1.0.0+post.1'),
+    ],
+)
+def test_a_python_version_is_translated_to_the_semver_databricks_takes(
+    package_version, expected
+):
+    from sdm_connectors._databricks_partner import databricks_product_version
+
+    assert databricks_product_version(package_version) == expected
+
+
+def test_a_version_that_cannot_be_expressed_is_refused_not_invented():
+    """An invented fallback would claim the wrong release."""
+    from sdm_connectors._databricks_partner import databricks_product_version
+
+    with pytest.raises(ValueError):
+        databricks_product_version('1.0')
+
+
+def test_the_identifier_names_the_installed_release():
+    """The identifier names this SDK's release, so it has to track it."""
+    import sdm_connectors
+    from sdm_connectors._databricks_partner import partner_identifier
+
+    assert (
+        partner_identifier()
+        == f'nvidia_sdm-client/{sdm_connectors.__version__}'
+    )
 
 
 @pytest.mark.parametrize(

@@ -5,8 +5,9 @@
 r"""How a prediction request names this SDK to Databricks.
 
 Databricks attributes partner traffic by a ``<partner>_<product>/<version>``
-entry in the User-Agent. Only prediction requests carry it: the queries that
-sample a warehouse are the caller's own, and are left unnamed.
+entry in the User-Agent. sdm-connectors keeps its own copy for the
+connections it opens, so the serving extra need not bring it and its pandas;
+a test holds the two to the same identifier.
 """
 
 from __future__ import annotations
