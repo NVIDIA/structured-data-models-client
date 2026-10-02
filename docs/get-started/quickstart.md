@@ -101,6 +101,7 @@ Each key is then checked against every row, in one statement that scans each tab
 A key that repeats a value in more than 1% of rows is refused, as `Schema.from_data` refuses one; `check_keys=False` skips the scan and the check.
 A schema's tables all come from one source.
 A semantic model, such as a Databricks metric view or a Snowflake semantic view, is a source of its own, and brings its tables, keys and relationships: `Schema.from_source(source.semantic_model('sales_metrics'))`.
+Its expressions run as SQL under your credentials, so a column calling anything but a standard built-in SQL function is left out with a message; `semantic_model(name, trust_expressions=True)` keeps it when you trust whoever wrote the model.
 
 ## Asking the same context several questions
 

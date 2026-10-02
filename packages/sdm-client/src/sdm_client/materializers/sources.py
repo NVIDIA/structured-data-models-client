@@ -221,7 +221,8 @@ def semantic_model_graph(model: Any) -> Graph:
     Snowflake semantic view.
 
     Named after the model's own tables, with its links, keys and time columns
-    as the model declares them.
+    as the model declares them. Discovery and gathering both read it here, so
+    they keep the same columns.
     """
     try:
         from sdm_relational_engine.rfm import Graph
@@ -238,6 +239,7 @@ def semantic_model_graph(model: Any) -> Graph:
             catalog=namespace.get('catalog'),
             schema=namespace.get('schema'),
             verbose=False,
+            trust_expressions=model.trust_expressions,
         )
     if model.backend == 'snowflake':
         # The engine resolves an unqualified name against the connection's
@@ -251,7 +253,10 @@ def semantic_model_graph(model: Any) -> Graph:
             model.name if '.' in model.name else '.'.join([*parts, model.name])
         )
         return Graph.from_snowflake_semantic_view(
-            name, model.connection, verbose=False
+            name,
+            model.connection,
+            verbose=False,
+            trust_expressions=model.trust_expressions,
         )
     raise StructuredDataError(  # pragma: no cover - SemanticModel refuses
         f'no semantic model is kept in a {model.backend!r} source',

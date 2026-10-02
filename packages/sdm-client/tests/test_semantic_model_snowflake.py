@@ -247,3 +247,28 @@ def test_tables_select_and_rename_within_the_view() -> None:
     assert {(e.src_table, e.fkey, e.dst_table) for e in graph.edges} == {
         ('racks', 'DATACENTER_ID', 'sites')
     }
+
+
+@pytest.mark.parametrize('trusted', [False, True])
+def test_trusting_the_view_reaches_the_engine(
+    monkeypatch: pytest.MonkeyPatch, trusted: bool
+) -> None:
+    from sdm_relational_engine.rfm import Graph
+
+    seen: list[Any] = []
+    read = Graph.from_snowflake_semantic_view.__func__  # type: ignore[attr-defined]
+
+    def spy(cls: Any, *args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs.get('trust_expressions'))
+        return read(cls, *args, **kwargs)
+
+    monkeypatch.setattr(Graph, 'from_snowflake_semantic_view', classmethod(spy))
+    model = SnowflakeSource(
+        _FakeConnection(), database=_DATABASE, schema=_SCHEMA
+    ).semantic_model('GPU_FLEET_SV', trust_expressions=trusted)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        schema = Schema.from_source(model)
+    RelationalMaterializer(schema)._build_graph()
+
+    assert seen == [trusted]

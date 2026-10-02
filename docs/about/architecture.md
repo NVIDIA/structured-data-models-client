@@ -325,6 +325,8 @@ An earlier draft took `metric_view=` on `from_source`, which put one vendor's wo
 The engine turns the view into its graph: the source becomes a table named as it is in the catalog, each join a table named after the join, each dimension a column of the table it reads, and each join a relationship to the key it names.
 An expression dimension stays an expression, computed in the warehouse when the table is sampled, so `materialize()` rebuilds the tables from the view and then keeps only what the schema kept.
 Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
+A model is written by someone else, and its expressions run under the caller's credentials each time a request is gathered, so by default they may call only pure, deterministic built-in functions, from an allowlist per dialect.
+A column calling a user-defined function, `secret()`, `http_request()` or `SYSTEM$WAIT()` is left out with a message, and `trust_expressions=True` keeps it; sub-queries, comments and statement separators are refused either way.
 A Snowflake semantic view goes through the same path, read by the engine's own semantic-view support; it is tested against a fake connection, not yet against a Snowflake account.
 
 ---

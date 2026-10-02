@@ -45,6 +45,10 @@ from sdm_relational_engine.rfm.base import (
 from sdm_relational_engine.rfm.base.casting import CastMixin
 from sdm_relational_engine.rfm.base.utils import Timedelta
 from sdm_relational_engine.rfm.metadata_inference import infer_time_column
+from sdm_relational_engine.rfm.view_expr import (
+    _unsafe_expr_reason,
+    _untrusted_call_reason,
+)
 from sdm_relational_engine.utils.environment import (
     in_jupyter_notebook,
     in_streamlit_notebook,
@@ -143,75 +147,37 @@ def _qualifier_pattern(table_name: str) -> re.Pattern[str]:
     )
 
 
-_UNSAFE_EXPR_TOKENS = (';', '--', '/*', '*/')
-_EXPR_QUOTE_DELIMITERS = ('$$', "'", '"', '`')
-_QUOTED_EXPR_TEXT = re.compile(
-    '|'.join(
-        [
-            r'\$\$[\s\S]*?\$\$',
-            r"'(?:''|\\[\s\S]|[^'\\])*'",
-            r'"(?:""|\\[\s\S]|[^"\\])*"',
-            r'`(?:``|[^`])*`',
-        ]
-    )
-)
-_UNSAFE_EXPR_KEYWORDS = re.compile(
-    r'(?<![\w.])'
-    r'(?:(?:select|update|delete|merge|create|alter|drop|grant|revoke'
-    r'|execute)\b'
-    r'|(?:insert|truncate)\b(?!\s*\())',
-    flags=re.IGNORECASE,
-)
-
-
-def _unsafe_expr_reason(expr: str) -> str | None:
-    r"""Return why a remote view expression is unsafe, or ``None``.
-
-    A semantic/metric view is authored by a third party, yet its column
-    expressions are spliced verbatim into sampler queries and run under the
-    caller's warehouse role. A scalar expression never needs a statement
-    separator, a comment or a sub-query, so those are refused while
-    arithmetic, casts, ``CASE`` and function calls are left alone.
-
-    Keywords are matched only outside string literals and quoted identifiers,
-    since a keyword inside one is data rather than SQL and rejecting it would
-    drop a legitimate column. The token check deliberately stays on the raw
-    expression: quoting rules vary by dialect, so a separator or comment must
-    not become invisible just because this function believes it is quoted.
-
-    Deciding what counts as quoted is itself dialect-specific, and getting it
-    wrong defeats the guard. Snowflake also has ``$$...$$``, and both
-    Snowflake and Databricks honour backslash escapes inside a literal. A
-    payload using ``$$`` or ``\'`` shifts where a doubling-only reader sees the
-    literal end and can smuggle a sub-query through the gap, so both forms are
-    recognised. A remaining delimiter means this function and the warehouse
-    disagree about string boundaries, so it fails closed. This also refuses a
-    quoted name ending in a lone backslash, which is invalid on Databricks and
-    exotic on Snowflake.
-
-    ``INSERT`` and ``TRUNCATE`` are also ordinary Snowflake scalar functions,
-    and as statements are always followed by ``INTO``/``TABLE`` rather than by
-    ``(``, so a call cannot be one. A keyword directly behind a ``.`` is the
-    trailing part of a qualified name (``ORDERS.MERGE``), which also cannot
-    begin a statement. ``SELECT`` may legally be followed by ``(``, so it is
-    always refused.
+def _view_expr_message(
+    column: str,
+    expr: str,
+    view: str,
+    dialect: str,
+    trust_expressions: bool,
+) -> str | None:
+    r"""Why a view's column expression is dropped, or ``None`` to keep it.
 
     Args:
+        column: How the dropped column is named in the message.
         expr: The expression as written in the view definition.
+        view: ``'metric view'`` or ``'semantic view'``.
+        dialect: ``'databricks'`` or ``'snowflake'``.
+        trust_expressions: Whether to call any function the view names.
     """
-    for token in _UNSAFE_EXPR_TOKENS:
-        if token in expr:
-            return f'it contains {token!r}'
-    unquoted = _QUOTED_EXPR_TEXT.sub(' ', expr)
-    for delimiter in _EXPR_QUOTE_DELIMITERS:
-        if delimiter in unquoted:
-            return (
-                f'it leaves {delimiter!r} unpaired, so which part of it '
-                f'is quoted text cannot be established'
-            )
-    if match := _UNSAFE_EXPR_KEYWORDS.search(unquoted):
-        return f"it contains the SQL keyword '{match.group()}'"
-    return None
+    hatch = ''
+    reason = _unsafe_expr_reason(expr)
+    if reason is None and not trust_expressions:
+        reason = _untrusted_call_reason(expr, dialect)
+        hatch = (
+            '. Pass trust_expressions=True to keep it if you trust whoever '
+            'authored the view'
+        )
+    if reason is None:
+        return None
+    return (
+        f'Failed to add {column} since {reason}, and expressions taken from '
+        f'the {view} are executed as SQL under your warehouse '
+        f'credentials{hatch}'
+    )
 
 
 class ViewConversionWarning(UserWarning):
@@ -1133,6 +1099,8 @@ class Graph:
         catalog: str | None = None,
         schema: str | None = None,
         verbose: bool = True,
+        *,
+        trust_expressions: bool = False,
     ) -> Self:
         r"""Create a :class:`Graph` from a Databricks Unity Catalog metric
         view.
@@ -1147,8 +1115,10 @@ class Graph:
         Dimension expressions later run as SQL under your warehouse
         credentials, making the view definition executable input. Expressions
         with a statement separator, comment, or sub-query are not plain scalar
-        expressions and are dropped with a warning. Load only trusted metric
-        views.
+        expressions and are dropped with a warning. So are expressions calling
+        anything but a pure built-in function, such as a user-defined function
+        or ``secret()``, unless ``trust_expressions`` is set. Load only trusted
+        metric views.
 
         .. code-block:: python
 
@@ -1179,6 +1149,9 @@ class Graph:
                 unqualified ``metric_view_name`` is resolved against the
                 connection defaults.
             verbose: Whether to print verbose output.
+            trust_expressions: Whether to keep dimensions that call functions
+                other than pure built-ins. Sub-queries, comments and
+                statement separators are refused regardless.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
@@ -1246,13 +1219,14 @@ class Graph:
                     columns_by_alias[column_spec.alias].append(
                         ColumnSpec(name=column_spec.name)
                     )
-                elif reason := _unsafe_expr_reason(column_spec.expr):
-                    msgs.append(
-                        f"Failed to add column '{column_spec.name}' "
-                        f'since {reason}, and expressions taken from '
-                        f'the metric view are executed as SQL under '
-                        f'your warehouse credentials'
-                    )
+                elif msg := _view_expr_message(
+                    f"column '{column_spec.name}'",
+                    column_spec.expr,
+                    'metric view',
+                    'databricks',
+                    trust_expressions,
+                ):
+                    msgs.append(msg)
                 else:
                     columns_by_alias[column_spec.alias].append(
                         ColumnSpec(
@@ -1436,6 +1410,8 @@ class Graph:
         semantic_view_name: str,
         connection: SnowflakeConnection | dict[str, Any] | None = None,
         verbose: bool = True,
+        *,
+        trust_expressions: bool = False,
     ) -> Self:
         r"""Create a :class:`Graph` from a Snowflake semantic view.
 
@@ -1449,6 +1425,10 @@ class Graph:
           express aggregations with a predictive query instead.
         - **Composite primary keys** and **composite relationship keys**.
         - **Columns whose expression references another logical table.**
+        - **Columns whose expression calls anything but a pure built-in
+          function**, such as a user-defined function or ``SYSTEM$WAIT()``,
+          unless ``trust_expressions`` is set. Expressions run as SQL under
+          your warehouse credentials every time the graph samples.
         - **Relationships whose referencing (left) key is itself a primary
           key**, i.e. one-to-one relationships. Note a view made only of such
           relationships yields a graph with no edges at all.
@@ -1484,6 +1464,9 @@ class Graph:
                 connection. If ``None``, will open a connection from
                 credentials stored in environment variables.
             verbose: Whether to print verbose output.
+            trust_expressions: Whether to keep columns that call functions
+                other than pure built-ins. Sub-queries, comments and
+                statement separators are refused regardless.
 
         Raises:
             GraphConstructionError: If the semantic view does not exist or
@@ -1581,14 +1564,14 @@ class Graph:
                     unsupported_columns.append(column_name)
                     continue
 
-                if reason := _unsafe_expr_reason(column_expr):
-                    msgs.append(
-                        f"Failed to add column '{column_name}' of "
-                        f"table '{table_name}' since {reason}, and "
-                        f'expressions taken from the semantic view '
-                        f'are executed as SQL under your warehouse '
-                        f'credentials'
-                    )
+                if msg := _view_expr_message(
+                    f"column '{column_name}' of table '{table_name}'",
+                    column_expr,
+                    'semantic view',
+                    'snowflake',
+                    trust_expressions,
+                ):
+                    msgs.append(msg)
                     continue
 
                 column = ColumnSpec(

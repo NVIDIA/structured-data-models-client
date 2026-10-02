@@ -310,7 +310,9 @@ class DatabricksSource(Source):
         """
         return self._connection
 
-    def semantic_model(self, name: str) -> SemanticModel:
+    def semantic_model(
+        self, name: str, *, trust_expressions: bool = False
+    ) -> SemanticModel:
         r"""A metric view in this catalog and schema, as a source of its own.
 
         >>> model = source.semantic_model('sales_metrics')
@@ -324,8 +326,12 @@ class DatabricksSource(Source):
         Args:
             name: The metric view, qualified or resolved against this source's
                 catalog and schema.
+            trust_expressions: Whether to keep dimensions that call functions
+                other than pure built-ins. They run as SQL under your
+                credentials each time a request is gathered, so by default
+                such a dimension is left out with a message.
         """
-        return SemanticModel(self, name)
+        return SemanticModel(self, name, trust_expressions=trust_expressions)
 
 
 class SnowflakeSource(Source):
@@ -365,7 +371,9 @@ class SnowflakeSource(Source):
         r"""The connection sampling runs through, a Snowpark session's own."""
         return self._connection
 
-    def semantic_model(self, name: str) -> SemanticModel:
+    def semantic_model(
+        self, name: str, *, trust_expressions: bool = False
+    ) -> SemanticModel:
         r"""A semantic view in this database and schema, as a source of its
         own.
 
@@ -378,8 +386,12 @@ class SnowflakeSource(Source):
         Args:
             name: The semantic view, qualified or resolved against this
                 source's database and schema.
+            trust_expressions: Whether to keep columns that call functions
+                other than pure built-ins. They run as SQL under your
+                credentials each time a request is gathered, so by default
+                such a column is left out with a message.
         """
-        return SemanticModel(self, name)
+        return SemanticModel(self, name, trust_expressions=trust_expressions)
 
 
 class PostgresSource(Source):
@@ -464,10 +476,16 @@ class SemanticModel(Source):
         source: The source the model is kept in.
         name: The model's name, qualified or resolved against ``source``'s
             namespace.
+        trust_expressions: Whether to keep columns whose expressions call
+            functions other than pure built-ins.
     """
 
     def __init__(
-        self, source: DatabricksSource | SnowflakeSource, name: str
+        self,
+        source: DatabricksSource | SnowflakeSource,
+        name: str,
+        *,
+        trust_expressions: bool = False,
     ) -> None:
         if not isinstance(source, DatabricksSource | SnowflakeSource):
             raise ConnectorError(
@@ -480,8 +498,15 @@ class SemanticModel(Source):
                 f'a semantic model needs its name, got {name!r}',
                 code='INVALID_CONNECTOR_ARGS',
             )
+        if not isinstance(trust_expressions, bool):
+            raise ConnectorError(
+                f'trust_expressions is True or False, got '
+                f'{trust_expressions!r}',
+                code='INVALID_CONNECTOR_ARGS',
+            )
         self._source = source
         self._name = name
+        self._trust_expressions = trust_expressions
         self._backend = source.backend
         self._connection = source.connection
         self._namespace = source.namespace
@@ -496,8 +521,16 @@ class SemanticModel(Source):
         r"""The model's name, as given."""
         return self._name
 
+    @property
+    def trust_expressions(self) -> bool:
+        r"""Whether columns calling functions other than pure built-ins are
+        kept.
+        """
+        return self._trust_expressions
+
     def __repr__(self) -> str:
-        return f'SemanticModel({self._name!r} in {self._source!r})'
+        trusted = ', trust_expressions=True' if self._trust_expressions else ''
+        return f'SemanticModel({self._name!r} in {self._source!r}{trusted})'
 
 
 _BY_BACKEND: Mapping[str, type[Source]] = {

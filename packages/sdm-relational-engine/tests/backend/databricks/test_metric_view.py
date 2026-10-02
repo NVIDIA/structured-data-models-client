@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import re
+import warnings
 from typing import Any
 
 import pandas as pd
@@ -11,7 +12,7 @@ from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
 )
-from sdm_relational_engine.rfm import Edge, Graph
+from sdm_relational_engine.rfm import Edge, Graph, ViewConversionWarning
 
 try:
     import pyarrow as pa
@@ -1094,6 +1095,75 @@ def test_from_databricks_metric_view_drops_a_hostile_expression() -> None:
     fact = graph['order_lines']
     assert not fact.has_column('leaked')
     assert {column.name for column in fact.columns} == {'product_line'}
+
+
+_UDF_EXPR_YAML = """
+version: "1.1"
+source: cat.sch.order_lines
+dimensions:
+  - name: product_line
+    expr: UPPER(source.product_line)
+  - name: masked
+    expr: my_udf(source.product_line)
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+"""
+
+
+def _udf_metric_view(**kwargs: Any) -> tuple[Graph, list[str]]:
+    connection = _FakeConnection(
+        _metric_view(
+            _UDF_EXPR_YAML, {'product_line': 'string', 'masked': 'string'}
+        )
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv', connection=connection, verbose=False, **kwargs
+        )
+    return graph, connection.sql_log
+
+
+def test_a_dimension_calling_a_udf_is_dropped_before_it_runs() -> None:
+    graph, sql_log = _udf_metric_view()
+
+    fact = graph['order_lines']
+    assert not fact.has_column('masked')
+    assert str(fact['product_line'].expr) == 'UPPER(product_line)'
+    assert not any('my_udf' in sql for sql in sql_log)
+    (message,) = [m for m in graph.conversion_messages if "'masked'" in m]
+    assert "calls 'my_udf'" in message
+    assert 'trust_expressions=True' in message
+
+
+def test_a_trusted_metric_view_keeps_its_udf_dimension(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expr_df = _EXPR_DATA['order_lines'].assign(masked='x')
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+
+    graph, sql_log = _udf_metric_view(trust_expressions=True)
+
+    assert str(graph['order_lines']['masked'].expr) == 'my_udf(product_line)'
+    assert any('my_udf' in sql for sql in sql_log)
+    assert graph.conversion_messages == ()
+
+
+def test_a_trusted_metric_view_still_refuses_a_sub_query() -> None:
+    describe_rows = _metric_view(
+        _HOSTILE_EXPR_YAML, {'product_line': 'string', 'leaked': 'double'}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(describe_rows),
+            verbose=False,
+            trust_expressions=True,
+        )
+
+    assert not graph['order_lines'].has_column('leaked')
 
 
 def test_from_databricks_case_insensitive_identifiers() -> None:

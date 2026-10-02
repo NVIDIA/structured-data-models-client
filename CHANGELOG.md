@@ -389,6 +389,14 @@ A semantic model's tables are not counted, since the model derives them.
 `SourceTable.duplicate_keys` now holds what the count found, and `None` where nothing was counted, rather than always zero.
 Sampling holds the line too, whatever was checked: an id asked to be scored that more than one row holds is refused, and context sampling keeps one row per key, so no entity appears twice at one anchor time.
 
+**A semantic model's expressions may call only standard SQL functions, unless you trust it.**
+A metric view or semantic view is written by someone else, and its expressions run as SQL under your credentials every time a request is gathered.
+Any function call used to pass, so a view could make sdm-client call a user-defined function, `secret()`, `http_request()`, `ai_query()` or `SYSTEM$WAIT()` as you.
+Now a column whose expression calls anything but a pure, deterministic built-in function is left out, with a conversion message naming the function.
+Qualified and quoted function names, `IDENTIFIER()`, and session values such as `current_user` and `current_date` are left out the same way.
+`source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
+Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
+
 ### Notes for a reviewer
 
 **Graph visualization is kept, and so is its provenance.** `Graph.visualize()`

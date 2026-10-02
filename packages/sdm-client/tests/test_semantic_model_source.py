@@ -300,3 +300,81 @@ def test_a_schema_built_by_hand_reads_the_model_it_names(source: Any) -> None:
         )
 
     assert shape(by_hand) == shape(described)
+
+
+_UDF_DIMENSION = '  - name: tagged\n    expr: tag(source.line_id)\n'
+_UDF_VIEW = _VIEW.replace('measures:', _UDF_DIMENSION + 'measures:')
+_UDF_DESCRIBE = [
+    ('View Text', _UDF_VIEW, None) if row[0] == 'View Text' else row
+    for row in _DESCRIBE
+]
+_UDF_DESCRIBE.insert(6, ('tagged', 'string', None))
+
+
+@pytest.fixture
+def udf_view(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    r"""The view gains a dimension calling ``tag()``, a user-defined function.
+    Returns what each read of the view was told about trusting it.
+    """
+    from sdm_relational_engine.rfm import Graph
+
+    monkeypatch.setitem(globals(), '_DESCRIBE', _UDF_DESCRIBE)
+    monkeypatch.setitem(
+        _EXPRESSIONS['order_lines'],
+        'tagged',
+        lambda df: 't' + df['line_id'].astype(str),
+    )
+    seen: list[Any] = []
+    read = Graph.from_databricks_metric_view.__func__  # type: ignore[attr-defined]
+
+    def spy(cls: Any, *args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs.get('trust_expressions'))
+        return read(cls, *args, **kwargs)
+
+    monkeypatch.setattr(Graph, 'from_databricks_metric_view', classmethod(spy))
+    return seen
+
+
+def test_a_udf_dimension_is_left_out_by_default(
+    source: Any, udf_view: list[Any]
+) -> None:
+    with pytest.warns(UserWarning, match="calls 'tag'"):
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    assert 'tagged' not in schema['order_lines']
+    assert 'segment' in schema['customers']
+    assert udf_view == [False]
+
+
+def test_trusting_the_model_reaches_both_reads(
+    source: Any, udf_view: list[Any]
+) -> None:
+    model = source.semantic_model('sales_mv', trust_expressions=True)
+    assert model.trust_expressions
+    assert 'trust_expressions=True' in repr(model)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        described = Schema.from_source(model)
+    assert 'tagged' in described['order_lines']
+
+    # A schema written by hand has read nothing yet, so gathering reads the
+    # model again and must keep the same column.
+    by_hand = Schema(
+        {
+            name: SourceTable(
+                name,
+                table.source_name,
+                dict(table.columns),
+                primary_key=table.primary_key,
+                time_column=table.time_column,
+            )
+            for name, table in described.tables.items()
+        },
+        described.relationships,
+        source=model,
+    )
+    graph = RelationalMaterializer(by_hand)._build_graph()
+
+    assert str(graph['order_lines']['tagged'].expr) == 'tag(line_id)'
+    assert udf_view == [True, True]
