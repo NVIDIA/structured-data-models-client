@@ -396,6 +396,8 @@ Now a column whose expression calls anything but a pure, deterministic built-in 
 Qualified and quoted function names, `IDENTIFIER()`, and session values such as `current_user` and `current_date` are left out the same way.
 `source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
 Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
+It also refuses parentheses that do not balance outside quoted text, since a stray `)` could close the query the expression is spliced into.
+Some allowed built-ins are costly or read the session time zone; `docs/about/architecture.md` lists them.
 
 **A metric view's `filter` is applied, or the view is refused.**
 The filter decides which rows a metric view holds, and it used to be reported as unrepresentable and dropped, so a schema and every request read rows the view leaves out.
