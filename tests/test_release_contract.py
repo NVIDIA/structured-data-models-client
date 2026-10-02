@@ -321,31 +321,91 @@ class TestTheRequestBodiesAreContractual:
         assert result.returncode == 0
 
 
+_ENGINE_LICENSE = 'packages/sdm-relational-engine/LICENSE'
+
+
 class TestTheNoticesAreComplete:
     """What an open-source release has to say about what it ships.
 
-    Apache-2.0 asks for the third-party notices to travel with the code, and
-    the licenses of the bundled components ask for their copyright lines to be
-    reproduced. Naming a component and its license is not either of those.
+    The licenses of the bundled components ask for their copyright lines to be
+    reproduced where they have one. Naming a component and its license is not
+    that.
     """
 
-    def test_every_bundled_component_carries_a_copyright(self):
-        """A license name is not a notice. MIT, ISC and BSD-3-Clause each ask
-        for the copyright line, so every component enumerated has to have one.
-        """
-        licence = (REPO / 'LICENSE').read_text()
+    #: Every component the third-party section enumerates, in the order it
+    #: lists them. Written out rather than parsed: the section is prose, and a
+    #: pattern loose enough to read all of its shapes was loose enough to pass
+    #: entries whose notice had been deleted. A component added to the bundle
+    #: has to be added here, which is the point.
+    BUNDLED = (
+        'mermaid',
+        'DOMPurify',
+        'js-yaml',
+        'Lodash',
+        'Cytoscape',
+        'Promises/A+',
+        'jQuery',
+        'Bezier curve',
+        'Runge-Kutta',
+        '@braintree/sanitize-url',
+        '@iconify/utils',
+        '@mermaid-js/parser',
+        'chevrotain',
+        'langium',
+        '@upsetjs/venn.js',
+        'cytoscape-cose-bilkent',
+        'cytoscape-fcose',
+        'cose-base',
+        'layout-base',
+        'd3',
+        'd3-sankey',
+        'dagre-d3-es',
+        'dayjs',
+        'es-toolkit',
+        'katex',
+        'khroma',
+        'marked',
+        'Markdown',
+        'roughjs',
+        'stylis',
+        'ts-dedent',
+        'uuid',
+    )
+
+    #: The one component with no notice to reproduce. It ships the stock
+    #: Apache-2.0 text, no NOTICE file and no copyright line, so requiring one
+    #: here would mean inventing it.
+    WITHOUT_A_NOTICE = frozenset({'chevrotain'})
+
+    def _entries(self, path: str) -> dict[str, str]:
+        """Each enumerated component, with the text that attributes it."""
+        licence = (REPO / path).read_text()
         section = licence[licence.index('THIRD-PARTY SOFTWARE BUNDLED') :]
         section = section[: section.index('MIT License, as it applies')]
 
-        missing = []
-        for block in re.split(r'\n(?=    [@\w])', section):
-            named = re.match(r'    ([@\w./-]+)\s+License:', block)
-            if named and 'opyright' not in block:
-                missing.append(named.group(1))
+        marks = []
+        for name in self.BUNDLED:
+            at = section.find(name)
+            assert at != -1, f'{path} no longer enumerates {name}'
+            marks.append((at, name))
+        marks.sort()
+        return {
+            name: section[at : marks[i + 1][0] if i + 1 < len(marks) else None]
+            for i, (at, name) in enumerate(marks)
+        }
+
+    @pytest.mark.parametrize('path', ['LICENSE', _ENGINE_LICENSE])
+    def test_every_bundled_component_carries_a_copyright(self, path):
+        """A license name is not a notice."""
+        missing = [
+            name
+            for name, entry in self._entries(path).items()
+            if name not in self.WITHOUT_A_NOTICE and 'opyright' not in entry
+        ]
 
         assert not missing, (
-            f'{missing} are attributed by license but carry no copyright '
-            f'notice, which their licenses require to be reproduced'
+            f'{path}: {missing} are enumerated but carry no copyright notice, '
+            f'which their licenses require to be reproduced'
         )
 
     def test_the_readme_links_every_package_license(self):

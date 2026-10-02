@@ -234,6 +234,7 @@ enumerated by mermaid's own bundled license manifest.
   https://github.com/cure53/DOMPurify/blob/3.4.0/LICENSE
 
   js-yaml 4.1.1
+  Copyright (C) 2011-2015 by Vitaly Puzrin
   License: MIT (full text below)
   https://github.com/nodeca/js-yaml
 
@@ -252,7 +253,8 @@ enumerated by mermaid's own bundled license manifest.
     - Embeddable Minimum Strictly-Compliant Promises/A+ 1.1.1 Thenable,
       Copyright (c) 2013-2014 Ralf S. Engelschall (http://engelschall.com),
       License: MIT
-    - Event object based on jQuery events, License: MIT
+    - Event object based on jQuery events,
+      Copyright OpenJS Foundation and other contributors, License: MIT
       https://jquery.org/license/
     - Bezier curve function generator, Copyright Gaetan Renaudeau,
       License: MIT
@@ -260,13 +262,15 @@ enumerated by mermaid's own bundled license manifest.
       Copyright Koen Bok, License: MIT
 
   The remaining components declared by mermaid 11.15.0 and bundled into the same
-  file, as enumerated from mermaid's own package manifest. Each copyright notice
-  below is the one that component's own license file carries.
+  file, as enumerated from mermaid's own package manifest, together with the
+  components those reach. Each copyright notice below is the one that
+  component's own license file carries, except where this file says a component
+  has none.
 
   Versions are given only where the bundle records them, as it does for
-  DOMPurify and js-yaml above. mermaid declares the rest as ranges rather than
-  exact versions, and a built bundle does not record what those resolved to, so
-  naming one here would claim more than this file can show.
+  DOMPurify and js-yaml above. mermaid declares most of these as ranges rather
+  than exact versions, and a built bundle does not record what any of them
+  resolved to, so naming one here would claim more than this file can show.
 
     @braintree/sanitize-url            License: MIT
       Copyright (c) 2017 Braintree
@@ -277,8 +281,8 @@ enumerated by mermaid's own bundled license manifest.
     @mermaid-js/parser                 License: MIT
       Copyright (c) 2023 Yokozuna59
       which embeds chevrotain, License: Apache-2.0 (full text above)
-        Copyright its authors. chevrotain declares Apache-2.0 and ships no
-        NOTICE file and no copyright line, so there is none to reproduce.
+        chevrotain ships the stock Apache-2.0 text with no NOTICE file and no
+        copyright line, so it has no notice to reproduce.
         https://github.com/chevrotain/chevrotain
       and langium, License: MIT
         Copyright 2021 TypeFox GmbH
@@ -293,16 +297,28 @@ enumerated by mermaid's own bundled license manifest.
     cytoscape-fcose                    License: MIT
       Copyright (c) 2018 - present, iVis-at-Bilkent
       https://github.com/iVis-at-Bilkent/cytoscape.js-fcose
+    cose-base                          License: MIT
+      Copyright (c) 2019 - present, iVis@Bilkent.
+      Reached through both Cytoscape layouts above rather than declared by
+      mermaid, and bundled into the same file.
+      https://github.com/iVis-at-Bilkent/cose-base
+    layout-base                        License: MIT
+      Copyright (c) 2019 iVis@Bilkent
+      Reached through cose-base, and bundled into the same file.
+      https://github.com/iVis-at-Bilkent/layout-base
     d3                                 License: ISC (full text below)
       Copyright 2010-2023 Mike Bostock
       https://github.com/d3/d3
     d3-sankey                          License: BSD-3-Clause (full text below)
       Copyright 2015, Mike Bostock
+      All rights reserved.
       https://github.com/d3/d3-sankey
     dagre-d3-es                        License: MIT
       Original dagre-d3 copyright: Copyright (c) 2013 Chris Pettitt
       Original dagre copyright: Copyright (c) 2012-2014 Chris Pettitt
       Original graphlib copyright: Copyright (c) 2012-2014 Chris Pettitt
+      Copyright (c) 2022-2024 Thibaut Lassalle, David Newell, Alois Klink,
+      Sidharth Vinod and dagre-es contributors
       https://github.com/tbo47/dagre-es
     dayjs                              License: MIT
       Copyright (c) 2018-present, iamkun
@@ -320,9 +336,41 @@ enumerated by mermaid's own bundled license manifest.
       reports it as unknown. The license file at its v2.1.0 tag grants MIT, and
       that is the source of this entry.
       https://github.com/fabiospampinato/khroma/blob/v2.1.0/license
-    marked                             License: MIT
-      Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
-      Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
+    marked                             License: MIT and BSD-3-Clause
+      marked itself, License: MIT (full text below)
+        Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
+        Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
+      and the Markdown it derives from, License: BSD-3-Clause, whose notice
+      marked carries and reproduced here because its third clause names
+      Markdown rather than the project:
+        Copyright (c) 2004, John Gruber
+        http://daringfireball.net/
+        All rights reserved.
+
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions are
+        met:
+
+        * Redistributions of source code must retain the above copyright
+          notice, this list of conditions and the following disclaimer.
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+        * Neither the name "Markdown" nor the names of its contributors may be
+          used to endorse or promote products derived from this software
+          without specific prior written permission.
+
+        This software is provided by the copyright holders and contributors "as
+        is" and any express or implied warranties, including, but not limited
+        to, the implied warranties of merchantability and fitness for a
+        particular purpose are disclaimed. In no event shall the copyright
+        owner or contributors be liable for any direct, indirect, incidental,
+        special, exemplary, or consequential damages (including, but not
+        limited to, procurement of substitute goods or services; loss of use,
+        data, or profits; or business interruption) however caused and on any
+        theory of liability, whether in contract, strict liability, or tort
+        (including negligence or otherwise) arising in any way out of the use
+        of this software, even if advised of the possibility of such damage.
       https://github.com/markedjs/marked
     roughjs                            License: MIT
       Copyright (c) 2019 Preet Shihn
