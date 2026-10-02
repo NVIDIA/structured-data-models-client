@@ -2113,11 +2113,21 @@ class Graph:
         """
         for table in self.tables.values():
             table.infer_metadata(verbose=False)
+        self._settle_time_columns()
 
         if verbose:
             self.print_metadata()
 
         return self
+
+    def _settle_time_columns(self) -> None:
+        r"""Refuse a lone edit stamp on a table an edge points at, and take
+        it on one none does: the first is an entity edited in place, the
+        second a log of changes.
+        """
+        linked = {edge.dst_table for edge in self.edges}
+        for name, table in self.tables.items():
+            table._settle_time_column(name in linked)
 
     # Edges ###################################################################
 
@@ -2591,6 +2601,7 @@ class Graph:
         )
 
         self._warn_unlinkable_tables()
+        self._settle_time_columns()
 
         if verbose:
             self.print_links()

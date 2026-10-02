@@ -11,11 +11,12 @@ holds one, and one whose name says when a row was loaded or synced, such as
 `_fivetran_synced`.
 Nor is a date of birth.
 A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is never
-taken on a table with a primary key, whose rows are edited in place. On a
-table without one it is taken only when it is the one timestamp left, since
-in an append-only log of changes it is when the row began. Of several left, a `created` stamp is taken,
-and otherwise the one whose values start earliest, placeholders such as
-1900-01-01 or 1970-01-01 left out.
+taken on a table another table links to, an entity whose rows are edited in
+place. On a table nothing links to it is taken only when it is the one
+timestamp left, since in an append-only log of changes it is when the row
+began. Of several left, a `created` stamp is taken, and otherwise the one
+whose values start earliest, placeholders such as 1900-01-01 or 1970-01-01
+left out.
 
 :func:`choose_time_column` is the one rule both inference paths apply: the
 client's, which reads a frame, and the relational engine's, which reads a
@@ -222,7 +223,7 @@ class TimeColumnChoice:
             when it was the one creation stamp among several, ``'earliest'``
             when its values start earliest of :attr:`among`, and
             ``'edit_stamp'`` when it looks like a stamp of the last edit but
-            no other timestamp was left and the table has no primary key.
+            no other timestamp was left and no table links to this one.
             ``None`` when no column was taken.
         among: The columns it was chosen from, itself included.
         refused: Every column screened out, each with its reason, in table
@@ -241,19 +242,20 @@ class TimeColumnChoice:
         r"""The columns refused, each with its reason, in table order."""
         return tuple(r for r in self.refused if r.column != self.column)
 
-    def for_key(self, keyed: bool) -> TimeColumnChoice:
-        r"""This choice for a table that has a primary key, or has none.
+    def for_links(self, linked: bool) -> TimeColumnChoice:
+        r"""This choice for a table another table links to, or none does.
 
-        A keyed table holds one row per thing, edited in place, so a stamp
-        of its last edit says when the row last changed and is refused. A
-        table without one is read as an append-only log, where it says when
-        the row was written, and is taken when nothing else is left. The key
-        may be settled after the time column was chosen, so the choice is
+        A table something links to is an entity, one row per thing, edited
+        in place, so a stamp of its last edit says when the row last changed
+        and is refused. A table nothing links to is read as an append-only
+        log, where the stamp says when the row was written, and it is taken
+        when nothing else is left. The links are known only once every table
+        is described, after the time column was chosen, so the choice is
         kept both ways.
         """
         if self.fallback is None:
             return self
-        if keyed:
+        if linked:
             return replace(self, column=None, how=None, among=())
         return replace(
             self, column=self.fallback, how='edit_stamp', among=(self.fallback,)
@@ -288,7 +290,7 @@ def choose_time_column(
     candidates: Sequence[str],
     *,
     full_range: FullRange | None = None,
-    keyed: bool = False,
+    linked: bool = False,
 ) -> TimeColumnChoice:
     r"""Choose a table's time column among its timestamps.
 
@@ -297,9 +299,9 @@ def choose_time_column(
     row, and one named as a load stamp.
     So is one named as a date of birth.
     Of those left, a stamp of the last edit is taken only when it is the one
-    column left and the table has no primary key. Otherwise a creation stamp is preferred, and of several the
-    one whose values start earliest is taken, the first in table order on a
-    tie.
+    column left and no table links to this one. Otherwise a creation stamp
+    is preferred, and of several the one whose values start earliest is
+    taken, the first in table order on a tie.
 
     Args:
         frame: The rows read, holding every candidate.
@@ -308,7 +310,8 @@ def choose_time_column(
             once, for every column not refused by its name, so that whether
             a column is constant and where it starts are what every row
             says.
-        keyed: Whether the table has a primary key.
+        linked: Whether another table links to this one. Usually not known
+            yet; see :meth:`TimeColumnChoice.for_links`.
 
     Returns:
         The column taken, how, and the columns refused.
@@ -349,7 +352,7 @@ def choose_time_column(
     if not plain:
         if len(edited) == 1:
             last_resort = replace(chosen(None, None, ()), fallback=edited[0])
-            return last_resort.for_key(keyed)
+            return last_resort.for_links(linked)
         return chosen(None, None, ())
     created = [name for name in plain if is_creation_stamp(name)]
     if len(created) == 1:

@@ -196,18 +196,18 @@ def test_a_lone_edit_stamp_is_taken_as_a_last_resort():
     assert choice.rejected == ()
 
 
-def test_a_keyed_table_never_takes_an_edit_stamp():
-    """A `users` table edited in place: its `last_login` is no user's
-    time."""
+def test_a_linked_table_never_takes_an_edit_stamp():
+    """A `users` table that `orders` links to is edited in place: its
+    `last_login` is no user's time."""
     choice = choose_time_column(
-        pd.DataFrame({'last_login': DAYS}), ['last_login'], keyed=True
+        pd.DataFrame({'last_login': DAYS}), ['last_login'], linked=True
     )
     assert choice.column is None
     assert choice.rejected == (RejectedTimeColumn('last_login', 'edit_stamp'),)
-    # The key can be settled later, and the choice follows it.
-    assert choice.for_key(False).column == 'last_login'
-    assert choice.for_key(False).rejected == ()
-    assert choice.for_key(False).for_key(True) == choice
+    # The links are settled later, and the choice follows them.
+    assert choice.for_links(False).column == 'last_login'
+    assert choice.for_links(False).rejected == ()
+    assert choice.for_links(False).for_links(True) == choice
 
 
 def test_an_edit_stamp_is_never_taken_over_another_timestamp():

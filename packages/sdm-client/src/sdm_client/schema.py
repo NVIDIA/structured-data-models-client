@@ -1046,7 +1046,7 @@ class Schema:
         else:
             inferred = _checked_links(built, relationships)
 
-        _settle_edit_stamps(built, chose, time_columns)
+        _settle_edit_stamps(built, chose, time_columns, inferred)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, inferred)
@@ -1239,7 +1239,7 @@ class Schema:
         else:
             links = _checked_links(built, relationships)
 
-        _settle_edit_stamps(built, chose, time_columns)
+        _settle_edit_stamps(built, chose, time_columns, links)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, links, source=source)
@@ -2135,9 +2135,7 @@ def _infer_time_column(table: Table, frame: pd.DataFrame) -> TimeColumnChoice:
         for name, column in table.columns.items()
         if column.stype == 'timestamp' and name != table.primary_key
     ]
-    choice = choose_time_column(
-        frame, stamps, keyed=table.primary_key is not None
-    )
+    choice = choose_time_column(frame, stamps)
     table.time_column = choice.column
     return choice
 
@@ -2146,18 +2144,23 @@ def _settle_edit_stamps(
     built: Mapping[str, _TableShape],
     chose: dict[str, TimeColumnChoice | None],
     time_columns: Mapping[str, str | None] | None,
+    links: Sequence[Relationship],
 ) -> None:
-    r"""Take or refuse a lone edit stamp by the key each table ends with.
+    r"""Take or refuse a lone edit stamp by whether another table links to
+    the table it is in.
 
-    Inference chose before the caller's keys, and on a source before the
-    keys checked against it, were applied. A table keyed only now refuses
-    the stamp of its last edit, and one that lost its key takes it.
+    A table something links to is an entity and refuses the stamp of its
+    last edit; one nothing links to is a log and takes it. Decided on the
+    schema's final links, the one fact both paths share by now: the two
+    guess keys differently, so a log's `update_id` is a key from a frame
+    and none from a source, and a rule on the key made them disagree.
     """
+    linked = {link.target_table for link in links}
     for name, choice in chose.items():
         if choice is None or name in (time_columns or {}):
             continue
         table = built[name]
-        settled = choice.for_key(table.primary_key is not None)
+        settled = choice.for_links(name in linked)
         if settled != choice:
             chose[name] = settled
             table.time_column = settled.column
@@ -2205,8 +2208,8 @@ def _warn_how_time_columns_were_inferred(
                 lines.append(
                     f'{name}.{column} was taken as the time column although '
                     f'it looks like when a row was last changed, because the '
-                    f'table has no primary key and no other timestamp, so it '
-                    f'reads as a log of changes. If it does not say when a row '
+                    f'table has no other timestamp and no table links to it, '
+                    f'so it reads as a log of changes. If it does not say when a row '
                     f'became true, clear it: time_columns={{{name!r}: None}}.'
                 )
         elif column is None:
