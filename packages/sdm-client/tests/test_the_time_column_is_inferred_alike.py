@@ -250,6 +250,15 @@ def test_a_source_infers_the_time_column_its_frames_do(
     assert said_in_place == said_in_memory
 
 
+def test_a_one_row_table_keeps_its_timestamp(build: Build) -> None:
+    """One value is no evidence that a column never changes."""
+    frames = _frames({'ordered': ONE_DAY}, rows=1)
+    in_memory, _ = _described(lambda: Schema.from_data(frames))
+    in_place, _ = _described(lambda: Schema.from_source(build(frames)))
+    assert in_memory['orders'].time_column == 'ordered'
+    assert in_place['orders'].time_column == 'ordered'
+
+
 def test_every_guess_is_named_in_one_notice_with_why_and_the_override() -> None:
     frames = _frames({'ordered': ONE_DAY})
     frames['order_status_updates'] = pd.DataFrame(

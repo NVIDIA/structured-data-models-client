@@ -855,9 +855,9 @@ class Table(ABC):
         """
         return self._time_column_choice
 
-    def _full_range(self, name: str) -> tuple[object, object] | None:
-        r"""``MIN`` and ``MAX`` of column ``name`` over every row, or
-        ``None`` when this table cannot ask its source.
+    def _full_range(self, name: str) -> tuple[object, object, int] | None:
+        r"""``MIN``, ``MAX`` and ``COUNT`` of column ``name`` over every row,
+        or ``None`` when this table cannot ask its source.
         """
         held = self[name]
         if held.is_source:
@@ -868,13 +868,13 @@ class Table(ABC):
             column = f'({held.expr})'
         try:
             rows = self._fetch_rows(
-                f'SELECT MIN({column}), MAX({column})\n'
+                f'SELECT MIN({column}), MAX({column}), COUNT({column})\n'
                 f'FROM {self._quoted_source_name}'
             )
         except Exception:
             # Only evidence rejects a column, and a failed query is none.
             return None
-        return rows[0][0], rows[0][1]
+        return rows[0][0], rows[0][1], int(rows[0][2])
 
     def infer_metadata(self, verbose: bool = True) -> Self:
         r"""Infers metadata, *i.e.*, primary keys and time columns, in this

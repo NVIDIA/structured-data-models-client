@@ -154,8 +154,8 @@ class RejectedTimeColumn:
 
     Attributes:
         column: The column's name.
-        reason: Why it was refused. ``'constant'`` when every row holds
-            the same value, or none.
+        reason: Why it was refused. ``'constant'`` when at least two rows
+            hold a value and all hold the same one, or no row holds one.
             ``'load_stamp'`` when its name says when a row was loaded.
             ``'edit_stamp'`` when it says when a row was last changed.
             ``'birth_date'`` when it says when someone was born.
@@ -206,9 +206,9 @@ class TimeColumnChoice:
 
 _VARIES = object()
 
-#: Reads a column's MIN and MAX over every row of its table, or ``None`` when
-#: it cannot.
-FullRange = Callable[[str], tuple[object, object] | None]
+#: Reads a column's MIN, MAX and count of values over every row of its table,
+#: or ``None`` when it cannot.
+FullRange = Callable[[str], tuple[object, object, int] | None]
 
 
 def choose_time_column(
@@ -219,7 +219,7 @@ def choose_time_column(
 ) -> TimeColumnChoice:
     r"""Choose a table's time column among its timestamps.
 
-    A column holding one value in every row, or none, is
+    A column holding one value in at least two rows, or none in any, is
     refused, as is one named as a load stamp.
     So is one named as a date of birth.
     Of those left, a stamp of the last edit is taken only when it is the one
@@ -287,13 +287,13 @@ class _WholeTable:
 
     def __init__(self, full_range: FullRange | None) -> None:
         self._full_range = full_range
-        self._seen: dict[str, tuple[object, object] | None] = {}
+        self._seen: dict[str, tuple[object, object, int] | None] = {}
 
     @property
     def can_ask(self) -> bool:
         return self._full_range is not None
 
-    def __call__(self, name: str) -> tuple[object, object] | None:
+    def __call__(self, name: str) -> tuple[object, object, int] | None:
         if self._full_range is None:
             return None
         if name not in self._seen:
@@ -302,25 +302,31 @@ class _WholeTable:
 
 
 def _constant(values: pd.Series, name: str, whole: _WholeTable) -> object:
-    r"""The one value every row of a column holds, ``None`` when it holds
-    none, or ``_VARIES``.
+    r"""The one value a column holds in at least two rows, ``None`` when it
+    holds none, or ``_VARIES``.
+
+    A single value is no evidence that the column never changes, so a
+    one-row table keeps its timestamp.
     """
     present = values.dropna()
     first = present.iloc[0] if len(present) else None
     if len(present) > 1 and not bool((present == first).all()):
         return _VARIES
+    count = len(present)
     if whole.can_ask:
         seen = whole(name)
         if seen is None:
             # A table that cannot be asked keeps its column: only evidence
             # rejects one.
             return _VARIES
-        low, high = seen
-        if not bool(low == high):
+        low, high, count = seen
+        if count > 1 and not bool(low == high):
             return _VARIES
         # The value read keeps the type the rows were read as.
         first = low if first is None else first
-    return first
+    if count == 0:
+        return None
+    return _VARIES if count == 1 else first
 
 
 def _earliest(

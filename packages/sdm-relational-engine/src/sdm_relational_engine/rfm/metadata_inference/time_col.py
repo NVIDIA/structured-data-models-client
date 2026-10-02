@@ -20,8 +20,8 @@ def infer_time_column(
     Args:
         df: The pandas DataFrame to analyze.
         candidates: A list of potential candidates.
-        full_range: Reads a column's MIN and MAX over the whole table, when
-            ``df`` holds only some of its rows.
+        full_range: Reads a column's MIN, MAX and count of values over the
+            whole table, when ``df`` holds only some of its rows.
 
     Returns:
         The name of the detected time column, or ``None`` if not found.

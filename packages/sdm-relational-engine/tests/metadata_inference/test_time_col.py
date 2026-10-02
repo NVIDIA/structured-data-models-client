@@ -109,7 +109,7 @@ def test_a_column_constant_in_the_rows_read_is_checked_against_the_table():
     assert table.time_column is not None
     assert table.time_column.name == 't_dat'
     assert [sql for sql in asked if 'MIN(' in sql] == [
-        'SELECT MIN("t_dat"), MAX("t_dat")\nFROM "t"'
+        'SELECT MIN("t_dat"), MAX("t_dat"), COUNT("t_dat")\nFROM "t"'
     ]
 
 

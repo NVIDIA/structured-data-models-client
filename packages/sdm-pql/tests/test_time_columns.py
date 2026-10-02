@@ -197,13 +197,20 @@ def test_an_empty_column_is_refused():
     assert choice.rejected[0].why == 'no row holds a value'
 
 
+def test_a_single_value_is_no_evidence_of_a_constant():
+    """A one-row frame keeps its timestamp."""
+    assert _choose(ordered=ONE_DAY[:1]).column == 'ordered'
+    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11'), pd.NaT])
+    assert _choose(ordered=held_once).column == 'ordered'
+
+
 def test_a_column_constant_only_in_the_rows_read_is_kept():
     """rel-hm's `transactions.t_dat` holds one date in its first 1000 rows."""
     asked = []
 
     def full_range(name):
         asked.append(name)
-        return pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22')
+        return pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22'), 9
 
     choice = _choose(full_range, t_dat=ONE_DAY, other=LATER)
     assert choice.rejected == ()
@@ -216,11 +223,23 @@ def test_a_column_constant_only_in_the_rows_read_is_kept():
 
 def test_a_column_constant_in_every_row_is_refused_after_asking():
     choice = _choose(
-        lambda name: (pd.Timestamp('2025-09-11'),) * 2,
+        lambda name: (pd.Timestamp('2025-09-11'),) * 2 + (9,),
         joined=ONE_DAY,
     )
     assert choice.rejected == (
         RejectedTimeColumn('joined', 'constant', pd.Timestamp('2025-09-11')),
+    )
+
+
+def test_a_value_held_once_in_the_rows_read_is_checked_against_the_table():
+    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11'), pd.NaT])
+    stamp = pd.Timestamp('2025-09-11')
+    assert (
+        _choose(lambda name: (stamp, stamp, 2), joined=held_once).column is None
+    )
+    assert (
+        _choose(lambda name: (stamp, stamp, 1), joined=held_once).column
+        == 'joined'
     )
 
 
@@ -254,7 +273,7 @@ def test_the_earliest_is_read_over_the_whole_table_when_it_can_be():
         'ordered': pd.Timestamp('2021-01-01'),
     }
     choice = _choose(
-        lambda name: (starts[name], pd.Timestamp('2030-01-01')),
+        lambda name: (starts[name], pd.Timestamp('2030-01-01'), 9),
         shipped=LATER,
         ordered=DAYS,
     )
@@ -264,10 +283,11 @@ def test_the_earliest_is_read_over_the_whole_table_when_it_can_be():
 def test_the_earliest_compares_times_in_any_zone_and_text():
     choice = _choose(
         lambda name: {
-            'shipped': ('2024-01-01 06:00:00', '2025-01-01'),
+            'shipped': ('2024-01-01 06:00:00', '2025-01-01', 9),
             'ordered': (
                 pd.Timestamp('2024-01-01 09:00', tz='Asia/Tokyo'),
                 pd.Timestamp('2025-01-01', tz='Asia/Tokyo'),
+                9,
             ),
         }[name],
         shipped=DAYS,
