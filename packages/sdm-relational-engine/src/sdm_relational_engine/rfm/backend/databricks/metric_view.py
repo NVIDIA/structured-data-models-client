@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from sdm_relational_engine.exceptions import KumoRelationalError
 from sdm_relational_engine.rfm.view_expr import (
@@ -202,23 +202,43 @@ def _field_pattern(name: str) -> re.Pattern[str]:
     )
 
 
+def _sub_outside_strings(
+    pattern: re.Pattern[str],
+    repl: str | Callable[[re.Match[str]], str],
+    expr: str,
+) -> str:
+    r"""``pattern.sub(repl, expr)`` with every string literal left as is.
+
+    A literal holding `source.` or a field's name is data, and rewriting it
+    changes the values the view declares.
+    """
+    out: list[str] = []
+    last = 0
+    for match in _STRING_LITERAL_RE.finditer(expr):
+        out.append(pattern.sub(repl, expr[last : match.start()]))
+        out.append(match.group())
+        last = match.end()
+    out.append(pattern.sub(repl, expr[last:]))
+    return ''.join(out)
+
+
 def references_alias(expr: str, alias: str | Sequence[str]) -> bool:
     r"""Returns ``True`` if the expression references a column of the given
-    table alias or join path.
+    table alias or join path outside its string literals.
     """
-    return _path_pattern(_to_path(alias)).search(expr) is not None
+    masked = _STRING_LITERAL_RE.sub("''", expr)
+    return _path_pattern(_to_path(alias)).search(masked) is not None
 
 
 def strip_alias_qualifier(expr: str, alias: str | Sequence[str]) -> str:
     r"""Removes all qualified references to the given table alias or join
-    path from the expression.
+    path from the expression, leaving its string literals as they are.
     """
-    return _path_pattern(_to_path(alias)).sub('', expr).strip()
+    pattern = _path_pattern(_to_path(alias))
+    return _sub_outside_strings(pattern, '', expr).strip()
 
 
-def parse_metric_view(
-    definition: str, *, trust_expressions: bool = False
-) -> MetricViewSpec:
+def parse_metric_view(definition: str) -> MetricViewSpec:
     r"""Parses a metric view YAML definition into its graph-relevant parts.
 
     Measures define aggregations rather than row-level values, and are
@@ -230,11 +250,11 @@ def parse_metric_view(
 
     The ``filter`` decides which rows the view holds, so it is never dropped:
     it is returned to be applied to the source table, or the view is refused.
+    Which functions it calls is checked by :func:`check_filter_calls` once
+    the source table's columns are known.
 
     Args:
         definition: The YAML definition.
-        trust_expressions: Whether the filter may call functions other than
-            pure built-ins.
 
     Raises:
         ValueError: If the definition is not a YAML mapping, misses a source,
@@ -364,9 +384,7 @@ def parse_metric_view(
     candidates.append(((SOURCE_ALIAS,), SOURCE_ALIAS))
     candidates.sort(key=lambda candidate: len(candidate[0]), reverse=True)
 
-    row_filter = _check_filter(
-        cfg.get('filter'), candidates, trust_expressions=trust_expressions
-    )
+    row_filter = _check_filter(cfg.get('filter'), candidates)
 
     columns: list[MetricViewColumn] = []
     defined: dict[str, str] = {}
@@ -388,8 +406,10 @@ def parse_metric_view(
             continue
 
         for field_name, field_expr in defined.items():
-            expr = _field_pattern(field_name).sub(
-                lambda match: f'({field_expr})', expr
+            expr = _sub_outside_strings(
+                _field_pattern(field_name),
+                lambda match: f'({field_expr})',
+                expr,
             )
         defined[name] = expr
 
@@ -433,8 +453,6 @@ def parse_metric_view(
 def _check_filter(
     row_filter: Any,
     candidates: Sequence[tuple[tuple[str, ...], str]],
-    *,
-    trust_expressions: bool,
 ) -> str | None:
     r"""Returns the filter if it can be applied to the source table alone.
 
@@ -446,8 +464,6 @@ def _check_filter(
         row_filter: The ``filter`` section, if any.
         candidates: Every join path or alias a column can be qualified by,
             with the alias it resolves to.
-        trust_expressions: Whether the filter may call functions other than
-            pure built-ins.
     """
     if row_filter is None:
         return None
@@ -464,17 +480,37 @@ def _check_filter(
             if alias != SOURCE_ALIAS and references_alias(masked, path):
                 reason = f"it references the joined table '{alias}'"
                 break
-    if reason is None and not trust_expressions:
-        assert isinstance(row_filter, str)
-        reason = _untrusted_call_reason(row_filter, 'databricks')
     if reason is not None:
-        raise UnsupportedFilterError(
-            f'Cannot apply the metric view filter {row_filter!r} since '
-            f'{reason}. The graph would otherwise read rows the view leaves '
-            f'out. Create a regular view with this WHERE clause and point the '
-            f"metric view's source at it"
-        )
+        _refuse_filter(row_filter, reason)
     return row_filter.strip()
+
+
+def check_filter_calls(row_filter: str, columns: Collection[str]) -> None:
+    r"""Refuses a filter that calls anything but a pure built-in function.
+
+    Run before any row of the source table is read, since every read of it
+    runs the filter.
+
+    Args:
+        row_filter: The filter :func:`parse_metric_view` returned.
+        columns: The columns of the source table.
+
+    Raises:
+        UnsupportedFilterError: If the filter calls a function that is not
+            trusted.
+    """
+    reason = _untrusted_call_reason(row_filter, 'databricks', columns=columns)
+    if reason is not None:
+        _refuse_filter(row_filter, reason)
+
+
+def _refuse_filter(row_filter: Any, reason: str) -> NoReturn:
+    raise UnsupportedFilterError(
+        f'Cannot apply the metric view filter {row_filter!r} since '
+        f'{reason}. The graph would otherwise read rows the view leaves '
+        f'out. Create a regular view with this WHERE clause and point the '
+        f"metric view's source at it"
+    )
 
 
 def resolve_join_keys(

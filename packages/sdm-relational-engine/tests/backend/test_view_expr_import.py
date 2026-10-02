@@ -396,3 +396,70 @@ def test_a_trusted_semantic_view_still_refuses_a_sub_query(snow_graph):
         graph = snow_graph(_LEAKED_DIMENSION, trust_expressions=True)
 
     assert not graph['USERS'].has_column('LEAKED')
+
+
+def test_a_semantic_view_column_is_checked_against_its_base_table(snow_graph):
+    r"""`NAME` is a column of the base table, so `IN (` after it is grammar.
+    `NICK` is not, so the same text after it would call `IN`.
+    """
+    import warnings
+
+    from sdm_relational_engine.rfm import ViewConversionWarning
+
+    extra = (
+        '      - name: IS_A\n'
+        "        expr: IFF(name IN ('a'), 1, 0)\n"
+        '        data_type: NUMBER\n'
+        '      - name: IS_NICK\n'
+        "        expr: IFF(nick IN ('a'), 1, 0)\n"
+        '        data_type: NUMBER\n'
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = snow_graph(extra)
+
+    table = graph['USERS']
+    assert str(table['IS_A'].expr) == "IFF(name IN ('a'), 1, 0)"
+    assert not table.has_column('IS_NICK')
+    (message,) = graph.conversion_messages
+    assert "'IS_NICK'" in message and "calls 'IN'" in message
+
+
+def test_a_semantic_view_table_keeps_its_primary_key_and_time_column(
+    monkeypatch,
+):
+    import sdm_relational_engine.rfm.backend.snow as snow
+
+    class _TimedTable(_stub_table_class(snow.SnowTable)):
+        def _get_expr_sample_df(self, columns) -> pd.DataFrame:
+            return pd.DataFrame(
+                {
+                    column.name: pd.date_range('2025-01-01', periods=3)
+                    if column.name == 'SIGNED_UP'
+                    else ['x', 'y', 'z']
+                    for column in columns
+                }
+            )
+
+    monkeypatch.setattr(snow, 'SnowTable', _TimedTable)
+
+    from sdm_relational_engine.rfm import Graph
+
+    yaml = _SEMANTIC_VIEW.format(
+        extra=(
+            '    time_dimensions:\n'
+            '      - name: SIGNED_UP\n'
+            '        expr: TO_TIMESTAMP(USER_ID)\n'
+            '        data_type: TIMESTAMP_NTZ\n'
+        )
+    )
+    graph = Graph.from_snowflake_semantic_view(
+        'MY_VIEW', connection=_Connection(scalar=yaml), verbose=False
+    )
+
+    table = graph['USERS']
+    assert table.primary_key is not None
+    assert table.primary_key.name == 'USER_ID'
+    assert table.time_column is not None
+    assert table.time_column.name == 'SIGNED_UP'
+    assert graph.conversion_messages == ()

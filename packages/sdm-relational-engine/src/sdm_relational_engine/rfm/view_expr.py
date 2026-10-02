@@ -10,6 +10,7 @@ into sampler queries and run under the caller's warehouse credentials.
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 
 _UNSAFE_EXPR_TOKENS = (';', '--', '/*', '*/', '|>', '->>')
 _EXPR_QUOTE_DELIMITERS = ('$$', "'", '"', '`')
@@ -277,7 +278,8 @@ _KEYWORDS = frozenset(
     }
 )  # fmt: skip
 
-# Type names take `(` for their parameters behind `AS` or `::`.
+# Type names take `(` for their parameters after `::`, or after the `AS` of a
+# cast. Anywhere else `AS` starts an alias and the name is a call.
 _TYPE_NAMES = frozenset(
     {
         'array', 'binary', 'char', 'character', 'dec', 'decimal', 'double',
@@ -288,37 +290,226 @@ _TYPE_NAMES = frozenset(
 )  # fmt: skip
 
 # Read without parentheses, these return the session's identity or clock.
+# Databricks also answers bare `user` and `current_path`, the latter even over
+# a column of that name, as checked on a DBSQL 2026.38 warehouse.
 _SESSION_VALUES = re.compile(
-    r'(?<![\w$.])'
-    r'(current_(?:catalog|database|date|role|schema|time|timestamp|user)'
-    r'|localtime|localtimestamp|session_user)\b(?!\s*\()',
+    r'(?<![\w$.\ue000])'
+    r'(current_(?:catalog|database|date|path|role|schema|time|timestamp|user)'
+    r'|localtime|localtimestamp|session_user|user)\b(?!\s*\()',
     flags=re.IGNORECASE,
 )
 
 # A private-use character stands in for quoted text, so a call to a quoted
 # name stays visible as a call.
 _QUOTED = '\ue000'
-# What may stand right before a `(` that opens a group rather than a call.
-#: Keywords SQL reserves, which therefore cannot name a function. A word
-#: in front of one says nothing about what it is, so the ordinary rules
-#: apply. Anything missing from this set is treated as nameable, which
-#: refuses an expression rather than lifting it.
-_RESERVED = frozenset(
-    {
-        'all', 'and', 'as', 'between', 'both', 'by', 'case', 'distinct',
-        'else', 'end', 'for', 'from', 'in', 'interval', 'is', 'leading',
-        'not', 'or', 'over', 'placing', 'then', 'trailing', 'when',
-    }
-)  # fmt: skip
 
 #: Operators written as words. They end no operand, so a keyword behind
 #: one is being called: `1 DIV escape(x)` calls `escape`.
 _WORD_OPERATORS = frozenset({'div', 'collate'})
 
+# Every Databricks SQL keyword, from `SELECT keyword FROM sql_keywords()` on a
+# DBSQL 2026.38 warehouse. None is reserved, so each may also name a routine.
+_DATABRICKS_KEYWORDS = frozenset(
+    {
+        'access', 'action', 'add', 'after', 'aggregate', 'align',
+        'all', 'alter', 'always', 'analyze', 'and', 'anonymous',
+        'anti', 'any', 'any_value', 'apply', 'approx', 'archive',
+        'archived', 'array', 'as', 'asc', 'asensitive', 'asof',
+        'async', 'at', 'atomic', 'authorization', 'auto',
+        'autoclusteringprofile', 'autoclusteringupdate', 'autocommit',
+        'begin', 'bernoulli', 'between', 'bigint', 'bin',
+        'bin_distribute_ratio', 'bin_end', 'bin_start', 'binary',
+        'binding', 'bitemporal', 'bloomfilter', 'boolean', 'both',
+        'bucket', 'buckets', 'by', 'byte', 'cache', 'call', 'called',
+        'cascade', 'case', 'cast', 'catalog', 'catalogs', 'cdc',
+        'change', 'changes', 'char', 'character', 'check',
+        'checkpoint', 'cleanroom', 'cleanrooms', 'clear', 'clone',
+        'close', 'cloud', 'cluster', 'clustered', 'code', 'codegen',
+        'collaborators', 'collate', 'collation', 'collations',
+        'collect', 'collection', 'column', 'columns', 'comment',
+        'comments', 'commit', 'compact', 'compactions', 'compensation',
+        'compute', 'concatenate', 'condition', 'condition_identifier',
+        'conf', 'constraint', 'constraints', 'contains', 'continue',
+        'convert', 'copy', 'copy_options', 'cost', 'create',
+        'credential', 'credentials', 'cron', 'cross', 'cube',
+        'current', 'current_database', 'current_date', 'current_path',
+        'current_recipient', 'current_schema', 'current_time',
+        'current_timestamp', 'current_user', 'cursor', 'data',
+        'database', 'databases', 'date', 'date_add', 'date_diff',
+        'dateadd', 'datediff', 'day', 'dayofyear', 'days', 'dbfs',
+        'dbproperties', 'dec', 'decfloat', 'decfloat_rounding_mode',
+        'decimal', 'declare', 'deep', 'default', 'default_path',
+        'deferrable', 'deferred', 'define', 'defined', 'definer',
+        'delay', 'delete', 'deletion', 'delimited', 'delta', 'deny',
+        'depends', 'desc', 'describe', 'description', 'detail',
+        'deterministic', 'dfs', 'diagnostics', 'directories',
+        'directory', 'disable', 'disk', 'distance', 'distinct',
+        'distribute', 'div', 'do', 'double', 'drop', 'dropped', 'dry',
+        'effective', 'else', 'elseif', 'empty', 'enable', 'encryption',
+        'end', 'enforced', 'environment', 'error', 'escape', 'escaped',
+        'every', 'evolution', 'exact', 'except', 'exchange', 'exclude',
+        'exclusive', 'execute', 'exists', 'exit', 'expect',
+        'expiration', 'explain', 'export', 'extend', 'extended',
+        'external', 'extract', 'fail', 'false', 'feature', 'feed',
+        'fetch', 'fields', 'file', 'fileformat', 'files', 'filter',
+        'first', 'flamegraph', 'float', 'flow', 'flows', 'fn',
+        'following', 'for', 'force', 'foreign', 'format',
+        'format_options', 'format_version', 'formatted', 'found',
+        'frame', 'freshness', 'from', 'fsck', 'full', 'function',
+        'functions', 'generate', 'generated', 'geography', 'geometry',
+        'get', 'get_column_tag_value', 'get_tag_value', 'global',
+        'governed', 'grant', 'grants', 'group', 'grouping', 'groups',
+        'handler', 'having', 'history', 'hour', 'hours',
+        'iceberg_compat_version', 'id', 'identified', 'identifier',
+        'identity', 'if', 'ignore', 'ilike', 'immediate', 'import',
+        'in', 'include', 'inclusive', 'increment', 'incremental',
+        'index', 'indexes', 'inherit', 'initially', 'inner', 'inout',
+        'inpath', 'input', 'inputformat', 'insensitive', 'insert',
+        'int', 'integer', 'intersect', 'interval', 'into', 'inventory',
+        'invoker', 'is', 'isolation', 'items', 'iterate', 'jfr',
+        'join', 'json', 'json_table', 'key', 'keys', 'language',
+        'last', 'lateral', 'lazy', 'leading', 'leave', 'left', 'level',
+        'like', 'limit', 'line_number', 'lines', 'list', 'lite',
+        'live', 'load', 'local', 'localtime', 'location', 'locations',
+        'lock', 'locks', 'logical', 'long', 'loop', 'macro', 'managed',
+        'manual', 'many', 'map', 'mask', 'masks', 'match',
+        'match_condition', 'match_recognize', 'matched', 'matches',
+        'materialize', 'materialized', 'max', 'mcp', 'measure',
+        'measures', 'memory', 'merge', 'message_arguments',
+        'message_text', 'metadata', 'metadata_path', 'metastore',
+        'metastores', 'metric', 'metrics', 'microsecond',
+        'microseconds', 'millisecond', 'milliseconds', 'minus',
+        'minute', 'minutes', 'model', 'models', 'modified', 'modifies',
+        'month', 'months', 'most', 'move', 'msck', 'name', 'namespace',
+        'namespaces', 'nanosecond', 'nanoseconds', 'natural',
+        'nearest', 'next', 'no', 'nocopy', 'none', 'norely', 'not',
+        'novalidate', 'null', 'nulls', 'numeric', 'of', 'offset',
+        'omit', 'on', 'once', 'one', 'only', 'open', 'optimization',
+        'optimize', 'option', 'options', 'or', 'order', 'ordinality',
+        'out', 'outer', 'outputformat', 'over', 'overlaps', 'overlay',
+        'overwrite', 'owner', 'parameter', 'parquet', 'partial',
+        'partition', 'partitioned', 'partitions', 'past', 'path',
+        'pattern', 'per', 'percent', 'permute', 'pivot', 'place',
+        'placing', 'point', 'policies', 'policy', 'position',
+        'preceding', 'predictive', 'preserve', 'primary', 'principals',
+        'private', 'privileges', 'procedure', 'procedures', 'profile',
+        'profiler', 'properties', 'provider', 'providers', 'purge',
+        'put', 'qualify', 'quarantine', 'quarter', 'query',
+        'query_tags', 'range', 'read', 'reads', 'real', 'recipient',
+        'recipients', 'recordreader', 'recordwriter', 'recover',
+        'recursion', 'recursive', 'reduce', 'references', 'refresh',
+        'region', 'relationship', 'rely', 'remove', 'rename', 'reorg',
+        'repair', 'repeat', 'repeatable', 'replace', 'replicas',
+        'reset', 'resignal', 'resolve', 'respect', 'restore',
+        'restrict', 'retain', 'return', 'returned_sqlstate', 'returns',
+        'revoke', 'right', 'role', 'roles', 'rollback', 'rollup',
+        'row', 'row_count', 'rows', 'run', 'sample', 'scd', 'schedule',
+        'schema', 'schemas', 'search', 'second', 'seconds', 'secret',
+        'secrets', 'security', 'select', 'semi', 'separated',
+        'sequence', 'serde', 'serdeproperties', 'service',
+        'session_user', 'set', 'sets', 'shallow', 'share', 'shares',
+        'short', 'show', 'shred', 'signal', 'similarity', 'simple',
+        'single', 'skewed', 'skip', 'smallint', 'snapshot', 'some',
+        'sort', 'sorted', 'source', 'specific', 'sql', 'sqlexception',
+        'sqlstate', 'start', 'static', 'statistics', 'storage',
+        'stored', 'stratify', 'stream', 'streaming', 'strict',
+        'string', 'struct', 'style', 'subset', 'substr', 'substring',
+        'sync', 'system', 'system_path', 'system_time',
+        'system_version', 'table', 'tableref', 'tables', 'tablesample',
+        'tag', 'tags', 'target', 'tblproperties', 'tblproperty',
+        'terminated', 'then', 'time', 'timediff', 'timeseries',
+        'timestamp', 'timestamp_ltz', 'timestamp_ntz', 'timestampadd',
+        'timestampdiff', 'tinyint', 'to', 'touch', 'track', 'trailing',
+        'transaction', 'transaction_active', 'transactions',
+        'transform', 'trigger', 'trim', 'true', 'truncate', 'try_cast',
+        'type', 'unarchive', 'unbounded', 'uncache', 'undrop',
+        'uniform', 'union', 'unique', 'unknown', 'unlock', 'unmatched',
+        'unmaterialize', 'unnest', 'unpivot', 'unset', 'unshred',
+        'until', 'update', 'updates', 'upgrade', 'url', 'use', 'user',
+        'users', 'using', 'vacuum', 'validate', 'value', 'values',
+        'var', 'varchar', 'variable', 'variant', 'vector', 'verify',
+        'version', 'view', 'views', 'violation', 'void', 'volume',
+        'volumes', 'watermark', 'week', 'weeks', 'when', 'where',
+        'while', 'width', 'window', 'with', 'within', 'without',
+        'work', 'x', 'year', 'years', 'zone', 'zorder',
+    }
+)  # fmt: skip
+
+# Snowflake's reserved keywords, after its "Reserved & limited keywords" page.
+_SNOWFLAKE_RESERVED = frozenset(
+    {
+        'account', 'all', 'alter', 'and', 'any', 'as', 'between', 'by',
+        'case', 'cast', 'check', 'column', 'connect', 'connection',
+        'constraint', 'create', 'cross', 'current', 'current_date',
+        'current_time', 'current_timestamp', 'current_user',
+        'database', 'delete', 'distinct', 'drop', 'else', 'exists',
+        'false', 'following', 'for', 'from', 'full', 'grant', 'group',
+        'gscluster', 'having', 'ilike', 'in', 'increment', 'inner',
+        'insert', 'intersect', 'into', 'is', 'issue', 'join',
+        'lateral', 'left', 'like', 'localtime', 'localtimestamp',
+        'minus', 'natural', 'not', 'null', 'of', 'on', 'or', 'order',
+        'organization', 'qualify', 'regexp', 'revoke', 'right',
+        'rlike', 'row', 'rows', 'sample', 'schema', 'select', 'set',
+        'some', 'start', 'table', 'tablesample', 'then', 'to',
+        'trigger', 'true', 'try_cast', 'union', 'unique', 'update',
+        'using', 'values', 'view', 'when', 'whenever', 'where',
+        'window', 'with',
+    }
+)  # fmt: skip
+
+#: Keywords that never precede an expression, checked by hand against the
+#: Spark grammar and the Databricks and Snowflake references. Read as grammar,
+#: each is followed by a literal, a name, `(`, `,` or another keyword, so a
+#: column of that name before `IN (` is a value. A keyword missing here stays
+#: grammar, which refuses rather than lifts.
+_NEVER_BEFORE_AN_EXPRESSION = frozenset(
+    {
+        # Datetime units. Each is followed by a literal, `,`, `FROM` or `TO`.
+        'day', 'dayofyear', 'days', 'hour', 'hours', 'microsecond',
+        'microseconds', 'millisecond', 'milliseconds', 'minute', 'minutes',
+        'month', 'months', 'nanosecond', 'nanoseconds', 'quarter', 'second',
+        'seconds', 'week', 'weeks', 'year', 'years',
+        # Typed literals and type names, followed by a literal, `AS` or `(`.
+        'date', 'number', 'text', 'time', 'timestamp', 'x',
+        # Words that only commands, clauses or `name(` forms use.
+        'access', 'action', 'code', 'comment', 'cost', 'data', 'description',
+        'file', 'format', 'history', 'id', 'index', 'key', 'language',
+        'level', 'location', 'measure', 'metric', 'model', 'name', 'owner',
+        'path', 'percent', 'position', 'region', 'role', 'schedule',
+        'sequence', 'source', 'start', 'tag', 'tags', 'target', 'type', 'url',
+        'value', 'version',
+    }
+)  # fmt: skip
+
+#: Words the parser may read as grammar, so a column named like one is still
+#: not a value: `WHERE from(y)` calls `from` whatever the table holds. `zone`
+#: stays too, out of caution: neither warehouse parses standard SQL's `AT TIME
+#: ZONE <expr>` today, but Databricks keeps `zone` as a keyword.
+_GRAMMAR_WORDS = (
+    _DATABRICKS_KEYWORDS
+    | _SNOWFLAKE_RESERVED
+    | _KEYWORDS
+    | _WORD_OPERATORS
+    | _TYPE_NAMES
+    | {'cast', 'date_part', 'extract', 'identifier', 'try_cast'}
+) - _NEVER_BEFORE_AN_EXPRESSION
+
+# What may stand right before a `(` that opens a group rather than a call.
 _OPENS_A_GROUP = frozenset('+-*/%=<>!|&^~,([?:')
 _LAST_TOKEN = re.compile(r'([\w$\ue000]+)\s*$')
 _QUALIFIED = re.compile(r'\.\s*$')
-_TYPE_CONTEXT = re.compile(r'(?:(?<![\w$])as|::)\s*$', flags=re.IGNORECASE)
+_AFTER_DOUBLE_COLON = re.compile(r'::\s*$')
+_AFTER_AS = re.compile(r'(?<![\w$])as\s*$', flags=re.IGNORECASE)
+_CASTS = frozenset({'cast', 'try_cast'})
+# The field of `EXTRACT(YEAR FROM d)` is a value, whatever its name.
+_DATETIME_FIELD = re.compile(
+    r'(?<![\w$.])(?:extract|date_part)\s*\(\s*$', flags=re.IGNORECASE
+)
+_LAMBDA_PARAMETERS = re.compile(
+    r'(?:\(\s*([\w$]+(?:\s*,\s*[\w$]+)*)\s*\)|([\w$]+))\s*->'
+)
+_WORD_OR_BRACKET = re.compile(r'[\w$\ue000]+|[()\[\]]')
+_WHEN = re.compile(r'\s*when\b', flags=re.IGNORECASE)
 
 
 #: The keyword pairs SQL actually writes, as in ``x NOT LIKE ('a')`` and
@@ -337,42 +528,104 @@ _FOLLOWS_A_KEYWORD = {
             'rlike',
         }
     ),
+    # Only LIKE and ILIKE take a quantifier: `x RLIKE any(y)` calls `any`.
     'like': frozenset({'all', 'any', 'some'}),
     'ilike': frozenset({'all', 'any', 'some'}),
-    'rlike': frozenset({'all', 'any', 'some'}),
-    'regexp': frozenset({'all', 'any', 'some'}),
     'is': frozenset({'distinct', 'not'}),
     'distinct': frozenset({'from'}),
+    # WHEN, THEN and ELSE each take an operand, so a keyword right after one
+    # is a call: Databricks runs `CASE WHEN then(x) THEN 1 END` as one.
     'case': frozenset({'when'}),
-    'when': frozenset({'then'}),
-    'then': frozenset({'else', 'when'}),
-    'else': frozenset({'end'}),
 }
 
 
-def _follows_a_value(lead: str, strong: bool = False) -> bool:
+def _closes_a_case(lead: str) -> bool:
+    r"""Whether a ``CASE`` is open at the end of ``lead``, in the same group.
+
+    Args:
+        lead: The expression text before an ``END``, quoted text replaced.
+    """
+    open_cases = [0]
+    for token in _WORD_OR_BRACKET.finditer(lead):
+        text = token.group()
+        if text in '([':
+            open_cases.append(0)
+        elif text in ')]':
+            if len(open_cases) > 1:
+                open_cases.pop()
+        elif _QUALIFIED.search(lead[: token.start()]):
+            continue
+        elif text.lower() == 'case':
+            open_cases[-1] += 1
+        elif text.lower() == 'end' and open_cases[-1] > 0:
+            open_cases[-1] -= 1
+    return open_cases[-1] > 0
+
+
+def _follows_a_value(lead: str, columns: frozenset[str]) -> bool:
     r"""Whether ``lead`` ends with something a comparison can be about.
 
-    A value, a closing bracket or a quoted string ends an operand. A keyword
-    does not: after ``NOT`` or ``AND`` the next thing is an expression.
+    A value is recognised by what it is rather than by what it is not, so a
+    word nobody thought of fails closed. It is a closing bracket, quoted
+    text, a literal, a qualified name, a type after ``::``, the field of
+    ``EXTRACT``, the ``END`` of an open ``CASE``, or a bare word naming one
+    of ``columns`` that the parser cannot read as grammar instead. A keyword
+    is none of these: after ``NOT`` or ``AND`` the next thing is an
+    expression.
+
+    Args:
+        lead: The expression text before a keyword, quoted text replaced.
+        columns: The folded names an expression may use bare.
     """
     lead = lead.rstrip()
     if not lead:
         return False
     if lead[-1] in ')]' + _QUOTED:
         return True
-    if not re.match(r'[\w$]', lead[-1]):
-        return False
-    if strong:
-        return False
     last = _LAST_TOKEN.search(lead)
     if last is None:
         return False
+    before = lead[: last.start()]
+    if (
+        _QUALIFIED.search(before)
+        or _AFTER_DOUBLE_COLON.search(before)
+        or _DATETIME_FIELD.search(before)
+    ):
+        return True
     word = last.group(1).lower()
-    return word not in _KEYWORDS and word not in _WORD_OPERATORS
+    if word[0].isdigit() or word in ('true', 'false', 'null'):
+        return True
+    if word == 'end':
+        return _closes_a_case(before) and _follows_a_value(before, columns)
+    # A table may name a column `where`, which the parser still reads as WHERE.
+    return word in columns and word not in _GRAMMAR_WORDS
 
 
-def _acts_as_keyword(word: str, lead: str) -> bool:
+def _opens_a_simple_case(lead: str, group: str) -> bool:
+    r"""Whether ``CASE`` before ``group`` starts ``CASE (x) WHEN ...``.
+
+    ``CASE`` names no function in either dialect, yet the same text calls one
+    wherever a ``CASE`` cannot start or no ``WHEN`` follows, so both are
+    required.
+
+    Args:
+        lead: The expression text before ``CASE``, quoted text replaced.
+        group: The expression text from the ``(`` after ``CASE`` on.
+    """
+    lead = lead.rstrip()
+    if lead and lead[-1] not in '(,':
+        return False
+    depth = 0
+    for index, char in enumerate(group):
+        depth += {'(': 1, ')': -1}.get(char, 0)
+        if depth == 0:
+            return _WHEN.match(group, index + 1) is not None
+    return False
+
+
+def _acts_as_keyword(
+    word: str, lead: str, group: str, columns: frozenset[str]
+) -> bool:
     r"""Whether ``word``, followed by ``(``, is a keyword rather than a call.
 
     Databricks lets most of these words name a function too, so ``escape(x)``
@@ -395,15 +648,17 @@ def _acts_as_keyword(word: str, lead: str) -> bool:
     Args:
         word: The folded word before ``(``.
         lead: The expression text before ``word``.
+        group: The expression text from that ``(`` on.
+        columns: The folded names an expression may use bare.
     """
     if word == 'not':
         return True
     if word == 'case':
-        return not _follows_a_value(lead)
-    return _in_keyword_position(word, lead)
+        return _opens_a_simple_case(lead, group)
+    return _in_keyword_position(word, lead, columns)
 
 
-def _in_keyword_position(word: str, lead: str, strong: bool = True) -> bool:
+def _in_keyword_position(word: str, lead: str, columns: frozenset[str]) -> bool:
     r"""Whether ``word`` sits where a keyword may, given what precedes it.
 
     After a value, yes. After another keyword, only where SQL writes that
@@ -411,7 +666,7 @@ def _in_keyword_position(word: str, lead: str, strong: bool = True) -> bool:
     DISTINCT FROM`` reaches a value through ``IS``, while a bare ``DISTINCT
     FROM`` does not.
     """
-    if _follows_a_value(lead, strong=strong and word not in _RESERVED):
+    if _follows_a_value(lead, columns):
         return True
     lead = lead.rstrip()
     previous = _LAST_TOKEN.search(lead)
@@ -422,10 +677,51 @@ def _in_keyword_position(word: str, lead: str, strong: bool = True) -> bool:
         return False
     if before == 'case':
         return True
-    return _in_keyword_position(before, lead[: previous.start()], False)
+    return _in_keyword_position(before, lead[: previous.start()], columns)
 
 
-def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
+def _names_a_type(lead: str) -> bool:
+    r"""Whether the word after ``lead`` stands where only a type can.
+
+    That is after ``::``, or after an ``AS`` directly inside ``CAST(`` or
+    ``TRY_CAST(``. Elsewhere ``AS`` gives an alias, so ``x AS object(1)``
+    calls ``object``.
+
+    Args:
+        lead: The expression text before the word, quoted text replaced.
+    """
+    if _AFTER_DOUBLE_COLON.search(lead):
+        return True
+    after_as = _AFTER_AS.search(lead)
+    if after_as is None:
+        return False
+    depth = 0
+    for index in range(after_as.start() - 1, -1, -1):
+        depth += {')': 1, '(': -1}.get(lead[index], 0)
+        if depth < 0:
+            opener = lead[:index].rstrip()
+            name = _LAST_TOKEN.search(opener)
+            return (
+                name is not None
+                and name.group(1).lower() in _CASTS
+                and not _QUALIFIED.search(opener[: name.start()])
+            )
+    return False
+
+
+def _lambda_parameters(text: str) -> set[str]:
+    r"""The folded names ``text`` binds in lambdas, as in ``x -> x + 1``."""
+    names: set[str] = set()
+    for group, single in _LAMBDA_PARAMETERS.findall(text):
+        names.update(
+            name.strip().lower() for name in (group or single).split(',')
+        )
+    return names
+
+
+def _untrusted_call_reason(
+    expr: str, dialect: str, *, columns: Collection[str]
+) -> str | None:
     r"""Return why an expression calls a function that is not trusted, or
     ``None``.
 
@@ -441,15 +737,25 @@ def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
     a keyword, give a type its parameters, or call a trusted function. So a
     name this does not recognise as a name is refused rather than skipped.
 
+    A keyword before ``(`` is grammar only after a value, as in ``x IN (1)``
+    or ``x NOT LIKE ('a')``, and a call anywhere else: ``NOT escape(x)``. A
+    bare word counts as a value only if it names one of ``columns`` or a
+    lambda parameter, and the parser cannot read it as grammar instead.
+
     Apply :func:`_unsafe_expr_reason` first, which establishes that every
     quote in ``expr`` is paired.
 
     Args:
         expr: The expression as written in the view definition.
         dialect: ``'databricks'`` or ``'snowflake'``.
+        columns: The columns of the table the expression is evaluated on.
+            Pass ``()`` where none are known, and no bare word is a value.
     """
     trusted = _TRUSTED_FUNCTIONS[dialect]
     text = _QUOTED_EXPR_TEXT.sub(_QUOTED, expr)
+    visible = frozenset(
+        {column.lower() for column in columns} | _lambda_parameters(text)
+    )
     for index, char in enumerate(text):
         if char != '(':
             continue
@@ -470,12 +776,10 @@ def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
         if folded == 'identifier':
             return 'it names a function through IDENTIFIER()'
         if folded in _KEYWORDS and _acts_as_keyword(
-            folded, before[: token.start()]
+            folded, before[: token.start()], text[index:], visible
         ):
             continue
-        if folded in _TYPE_NAMES and _TYPE_CONTEXT.search(
-            before[: token.start()]
-        ):
+        if folded in _TYPE_NAMES and _names_a_type(before[: token.start()]):
             continue
         if folded not in trusted:
             return (

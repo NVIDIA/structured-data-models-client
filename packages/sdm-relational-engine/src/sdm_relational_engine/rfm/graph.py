@@ -9,7 +9,7 @@ import io
 import re
 import warnings
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
@@ -152,6 +152,7 @@ def _view_expr_message(
     view: str,
     dialect: str,
     trust_expressions: bool,
+    columns: Collection[str],
 ) -> str | None:
     r"""Why a view's column expression is dropped, or ``None`` to keep it.
 
@@ -161,11 +162,12 @@ def _view_expr_message(
         view: ``'metric view'`` or ``'semantic view'``.
         dialect: ``'databricks'`` or ``'snowflake'``.
         trust_expressions: Whether to call any function the view names.
+        columns: The columns of the table the expression is evaluated on.
     """
     hatch = ''
     reason = _unsafe_expr_reason(expr, dialect)
     if reason is None and not trust_expressions:
-        reason = _untrusted_call_reason(expr, dialect)
+        reason = _untrusted_call_reason(expr, dialect, columns=columns)
         hatch = (
             '. Pass trust_expressions=True to keep it if you trust whoever '
             'authored the view'
@@ -1170,6 +1172,7 @@ class Graph:
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
             UnsupportedJoinError,
+            check_filter_calls,
             parse_metric_view,
             parse_table_reference,
             read_metric_view_definition,
@@ -1202,9 +1205,7 @@ class Graph:
             definition, dtype_names, view_catalog, view_schema = (
                 read_metric_view_definition(connection, quoted_name)
             )
-            spec = parse_metric_view(
-                definition, trust_expressions=trust_expressions
-            )
+            spec = parse_metric_view(definition)
             msgs = list(spec.messages)
 
             def _table_parts(parts: tuple[str, ...]) -> tuple[str, str, str]:
@@ -1225,6 +1226,61 @@ class Graph:
                 for name, data_type in dtype_names.items()
             }
 
+            fact_catalog, fact_schema, fact_source = _table_parts(spec.source)
+            if any(join.alias == fact_source for join in spec.joins):
+                raise ValueError(
+                    f"Cannot convert metric view '{metric_view_name}' into a "
+                    f"graph since the join name '{fact_source}' collides with "
+                    f'the name of the source table'
+                )
+
+            # Tables start empty, so the checks below see their columns before
+            # anything reads a row.
+            fact_table = DatabricksTable(
+                connection,
+                name=fact_source,
+                source_name=fact_source,
+                catalog=fact_catalog,
+                schema=fact_schema,
+                columns=[],
+                primary_key=None,
+                row_filter=spec.filter,
+            )
+            tables_by_alias: dict[str, DatabricksTable] = {
+                SOURCE_ALIAS: fact_table
+            }
+            joins_by_alias = {join.alias: join for join in spec.joins}
+
+            def _table(alias: str) -> DatabricksTable:
+                if alias not in tables_by_alias:
+                    join = joins_by_alias[alias]
+                    catalog_, schema_, source_ = _table_parts(join.table)
+                    tables_by_alias[alias] = DatabricksTable(
+                        connection,
+                        name=join.alias,
+                        source_name=source_,
+                        catalog=catalog_,
+                        schema=schema_,
+                        columns=[],
+                        primary_key=None,
+                    )
+                return tables_by_alias[alias]
+
+            def _columns_of(alias: str) -> list[str]:
+                if alias == SOURCE_ALIAS:
+                    return list(fact_table._source_column_dict)
+                # A join that cannot be read is dropped below with its reason,
+                # so here it shows no columns.
+                try:
+                    return list(_table(alias)._source_column_dict)
+                except ValueError:
+                    return []
+
+            # Every read of the fact table runs the filter, so it is checked
+            # before the first one.
+            if spec.filter is not None and not trust_expressions:
+                check_filter_calls(spec.filter, _columns_of(SOURCE_ALIAS))
+
             columns_by_alias: dict[str, list[ColumnSpec]] = defaultdict(list)
             for column_spec in spec.columns:
                 if unquote_ident(column_spec.expr) == column_spec.name:
@@ -1237,6 +1293,7 @@ class Graph:
                     'metric view',
                     'databricks',
                     trust_expressions,
+                    _columns_of(column_spec.alias),
                 ):
                     msgs.append(msg)
                 else:
@@ -1248,14 +1305,6 @@ class Graph:
                         )
                     )
 
-            fact_catalog, fact_schema, fact_source = _table_parts(spec.source)
-            if any(join.alias == fact_source for join in spec.joins):
-                raise ValueError(
-                    f"Cannot convert metric view '{metric_view_name}' into a "
-                    f"graph since the join name '{fact_source}' collides with "
-                    f'the name of the source table'
-                )
-
             graph = cls(tables=[])
         except BaseException as error:
             if internal_connection:
@@ -1266,16 +1315,7 @@ class Graph:
         if internal_connection:
             graph._connection = connection
 
-        fact_table = DatabricksTable(
-            connection,
-            name=fact_source,
-            source_name=fact_source,
-            catalog=fact_catalog,
-            schema=fact_schema,
-            columns=columns_by_alias.get(SOURCE_ALIAS, []),
-            primary_key=None,
-            row_filter=spec.filter,
-        )
+        fact_table.add_columns(columns_by_alias.get(SOURCE_ALIAS, []))
         graph.add_table(fact_table)
         table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
 
@@ -1289,16 +1329,8 @@ class Graph:
                 )
                 continue
 
-            join_catalog, join_schema, join_source = _table_parts(join.table)
-            table = DatabricksTable(
-                connection,
-                name=join.alias,
-                source_name=join_source,
-                catalog=join_catalog,
-                schema=join_schema,
-                columns=columns_by_alias.get(join.alias, []),
-                primary_key=None,
-            )
+            table = _table(join.alias)
+            table.add_columns(columns_by_alias.get(join.alias, []))
 
             # Adding a join mutates tables that are already part of the graph,
             # so record every mutation and undo it in full in case the join is
@@ -1542,6 +1574,18 @@ class Graph:
                 if name != table_name
             ]
 
+            # The table starts empty, so the checks below see its columns
+            # before anything reads a row.
+            table = SnowTable(
+                connection,
+                name=table_name,
+                source_name=source_table_name,
+                database=database,
+                schema=schema,
+                columns=[],
+                primary_key=None,
+            )
+
             columns: list[ColumnSpec] = []
             unsupported_columns: list[str] = []
             for column_cfg in chain(
@@ -1579,6 +1623,7 @@ class Graph:
                     'semantic view',
                     'snowflake',
                     trust_expressions,
+                    list(table._source_column_dict),
                 ):
                     msgs.append(msg)
                     continue
@@ -1603,15 +1648,11 @@ class Graph:
                     f'reference other tables'
                 )
 
-            table = SnowTable(
-                connection,
-                name=table_name,
-                source_name=source_table_name,
-                database=database,
-                schema=schema,
-                columns=columns,
-                primary_key=primary_key,
-            )
+            table.add_columns(columns)
+            if primary_key is not None:
+                if primary_key not in table:
+                    table.add_column(primary_key)
+                table.primary_key = primary_key
 
             # TODO: allow registering time columns explicitly, without the
             # heuristic.
