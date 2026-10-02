@@ -462,6 +462,8 @@ Databricks lets almost every keyword name a function, so `WHERE from(y)` or `CAS
 A column named like a keyword that takes an expression next, such as `where` or `then`, is never taken for a value; one named `region`, `date` or `year` still is.
 `zone` is treated the same way out of caution: no warehouse parses `AT TIME ZONE` today, but Databricks keeps the word as a keyword.
 Bare `user` and `current_path` are left out like `current_user`, since Databricks answers both with the session's identity and search path.
+On Databricks a session word that also names a column of the table reads that column, so it is kept, except `current_path`, which Databricks answers with the search path even then.
+Snowflake keeps refusing every session word, column or not.
 Each table's columns are read before its expressions are checked, and the metric view's `filter` is checked against the source table's columns before any row is read.
 
 **A metric view's `filter` is applied, or the view is refused.**
