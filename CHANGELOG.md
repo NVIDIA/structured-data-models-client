@@ -130,6 +130,9 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A declared foreign key could attach to a table whose name differs only in case.**
   PostgreSQL and Snowflake hold `"Parent"` and `parent` as two tables, and `Schema.from_source` matched the referenced name without regard to case, so the key landed on whichever was listed last.
   The exact name now wins, and a case-insensitive match counts only when one table answers to it.
+- **DuckDB discovery read every schema and attached database.**
+  A table named like one in the current schema was listed twice, which the graph refused, and a namesake's keys and foreign keys were read as the table's own.
+  Discovery and the constraint lookups now stay in `current_database()` and `current_schema()`, where a bare table name is read from.
 - **Reading a Postgres database held a transaction open.** Without
   autocommit, psycopg keeps the first statement's transaction, and its locks,
   until a commit, so a graph kept writers to its tables waiting, and one failed

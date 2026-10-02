@@ -645,9 +645,13 @@ class Graph:
         try:
             if tables is None:
                 with connection.cursor() as cursor:
+                    # Only the schema an unqualified name resolves in, since
+                    # that is where each table is read from.
                     cursor.execute(
                         'SELECT table_name FROM duckdb_tables() '
-                        'WHERE NOT temporary AND NOT internal'
+                        'WHERE NOT temporary AND NOT internal '
+                        'AND database_name = current_database() '
+                        'AND schema_name = current_schema()'
                     )
                     tables = [row[0] for row in cursor.fetchall()]
                 _require_discovered_tables(tables, 'the DuckDB database')

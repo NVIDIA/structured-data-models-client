@@ -41,6 +41,11 @@ class DuckDBTable(Table):
     """
 
     _SQL_TEXT_TYPE = 'VARCHAR'
+    # The table is read by its bare name, which resolves in the current
+    # schema, so a namesake elsewhere must not lend it constraints.
+    _IN_CURRENT_SCHEMA = (
+        'database_name = current_database() AND schema_name = current_schema()'
+    )
 
     def __init__(
         self,
@@ -93,7 +98,8 @@ class DuckDBTable(Table):
             sql = (
                 'SELECT constraint_type, constraint_column_names\n'
                 'FROM duckdb_constraints()\n'
-                f'WHERE table_name = {source_name}'
+                f'WHERE table_name = {source_name}\n'
+                f'  AND {self._IN_CURRENT_SCHEMA}'
             )
             cursor.execute(sql)
             constraints = cursor.fetchall()
@@ -136,6 +142,7 @@ class DuckDBTable(Table):
                 '       constraint_column_names, referenced_column_names\n'
                 'FROM duckdb_constraints()\n'
                 f'WHERE table_name = {source_name}\n'
+                f'  AND {self._IN_CURRENT_SCHEMA}\n'
                 "  AND constraint_type = 'FOREIGN KEY'"
             )
             cursor.execute(sql)
