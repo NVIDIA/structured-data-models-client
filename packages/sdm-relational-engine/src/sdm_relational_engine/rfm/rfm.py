@@ -42,7 +42,11 @@ from requests.exceptions import RequestException, Timeout
 from sdm_relational_engine._version import __version__
 from sdm_relational_engine.client.client import NimClient
 from sdm_relational_engine.client.rfm import RFMAPI
-from sdm_relational_engine.exceptions import HTTPException, NimFailureError
+from sdm_relational_engine.exceptions import (
+    HTTPException,
+    NimFailureError,
+    NoEligibleEntityError,
+)
 from sdm_relational_engine.rfm import Graph, TaskTable
 from sdm_relational_engine.rfm.base import DataBackend, Sampler, composite_key
 from sdm_relational_engine.rfm.base.utils import Timestamp, to_naive_utc
@@ -1833,9 +1837,14 @@ class KumoRelational:
                 num_test_trials=max_iterations * size,
                 random_seed=random_seed,
             )
+        except NoEligibleEntityError:
+            raise
         except ValueError as e:
             # No labels at this anchor is an answer here; the sampler raises
             # it as a ValueError so the client reports it as the caller's.
+            # An entity table that starts after the anchor is a misconfigured
+            # time column instead, and arrives as its own type so that it
+            # reaches the caller rather than reading as zero labels.
             if str(e).startswith('Failed to collect any test examples'):
                 return pd.DataFrame(
                     {
