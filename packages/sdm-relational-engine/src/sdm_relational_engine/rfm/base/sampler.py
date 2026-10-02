@@ -787,22 +787,30 @@ class Sampler(ABC):
                 train_time = train_time.iloc[:num_train_trials]
 
         # 4. Sample training and test labels ##################################
-        train_y, train_mask, test_y, test_mask = self._sample_target(
-            query=query,
-            entity_df=entity_df,
-            train_index=train_index,
-            train_time=train_time,
-            num_train_examples=(
-                num_train_examples + num_test_examples
-                if shared_train_test
-                else num_train_examples
-            ),
-            test_index=test_index,
-            test_time=test_time,
-            num_test_examples=0 if shared_train_test else num_test_examples,
-            columns_dict=columns_dict,
-            time_offset_dict=time_offset_dict,
-        )
+        if len(train_index) == 0 and len(test_index) == 0:
+            # Nothing to label, and a warehouse sampler bounds its window by
+            # the latest end time of the entities asked about: NaN for none.
+            train_y = test_y = pd.Series([], dtype=float)
+            train_mask = test_mask = np.zeros(0, dtype=bool)
+        else:
+            train_y, train_mask, test_y, test_mask = self._sample_target(
+                query=query,
+                entity_df=entity_df,
+                train_index=train_index,
+                train_time=train_time,
+                num_train_examples=(
+                    num_train_examples + num_test_examples
+                    if shared_train_test
+                    else num_train_examples
+                ),
+                test_index=test_index,
+                test_time=test_time,
+                num_test_examples=(
+                    0 if shared_train_test else num_test_examples
+                ),
+                columns_dict=columns_dict,
+                time_offset_dict=time_offset_dict,
+            )
 
         # 5. Post-processing ##################################################
         if shared_train_test:
