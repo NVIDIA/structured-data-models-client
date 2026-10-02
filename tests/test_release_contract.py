@@ -17,7 +17,10 @@ import subprocess
 import sys
 from collections.abc import Sequence
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # The packages support 3.10, where tomllib is not in the stdlib.
+    import tomli as tomllib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PACKAGES = REPO / 'packages'

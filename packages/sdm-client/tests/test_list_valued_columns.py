@@ -398,6 +398,9 @@ def test_a_uuid_column_is_walked_and_passes():
     So it is walked, and its cells are `uuid.UUID` objects, not bytes, so
     they pass. The gate is conservative and the cell rule is the authority;
     the cost of that is one walk over a column that turns out to be fine.
+
+    Built from the Arrow array itself: casting the converted values to
+    `ArrowDtype(pa.uuid())` asks for a numpy dtype pandas 2 cannot give.
     """
     pa = pytest.importorskip('pyarrow')
     import uuid as uuid_module
@@ -407,8 +410,7 @@ def test_a_uuid_column_is_walked_and_passes():
 
     value = uuid_module.uuid4()
     series = pd.Series(
-        pa.array([value.bytes], type=pa.uuid()).to_pandas(),
-        dtype=pd.ArrowDtype(pa.uuid()),
+        pd.arrays.ArrowExtensionArray(pa.array([value.bytes], type=pa.uuid()))
     )
     assert not _holds_only_scalars(series.dtype)
     assert serialize_column(series, 'string') == [str(value)]

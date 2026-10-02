@@ -252,6 +252,11 @@ def conversion_that_works(
                     )
             except (ValueError, TypeError, OverflowError):
                 continue
+            # pandas 2 answers mixed offsets without `utc=True` with a column
+            # of objects, and a warning, where pandas 3 raises. Neither is a
+            # reading of the column, so both go on to the next candidate.
+            if not pd.api.types.is_datetime64_any_dtype(converted):
+                continue
             if converted.isna().any():
                 continue
             if not only_plausible_years:

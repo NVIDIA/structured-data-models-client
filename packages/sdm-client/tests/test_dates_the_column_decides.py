@@ -407,10 +407,11 @@ def test_a_year_first_column_reads_when_only_some_rows_carry_a_zone(values):
 
 def test_reading_each_value_on_its_own_terms_is_not_offered_to_inference():
     """It also reads part codes, which is the guess the plausible-year window
-    exists to refuse."""
+    exists to refuse. The year is one pandas 2 can hold in nanoseconds, so
+    the code reads as a date on every supported pandas."""
     from sdm_client.core import dates
 
-    codes = pd.Series(['4711-01-02'] * 20)
+    codes = pd.Series(['2201-01-02'] * 20)
     assert dates.conversion_that_works(codes) is None
     assert dates.conversion_that_works(codes, only_plausible_years=False)
 

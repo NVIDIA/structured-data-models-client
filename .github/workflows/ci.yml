@@ -106,7 +106,7 @@ jobs:
       # the connection. Without the driver, importing the backend raises and
       # every test covering it skips.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*'
+          pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
           pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' \
             -e './packages/sdm-client[test]' \
             -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
