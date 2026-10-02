@@ -299,6 +299,10 @@ _SESSION_VALUES = re.compile(
 # name stays visible as a call.
 _QUOTED = '\ue000'
 # What may stand right before a `(` that opens a group rather than a call.
+#: Operators written as words. They end no operand, so a keyword behind
+#: one is being called: `1 DIV escape(x)` calls `escape`.
+_WORD_OPERATORS = frozenset({'div', 'collate'})
+
 _OPENS_A_GROUP = frozenset('+-*/%=<>!|&^~,([?:')
 _LAST_TOKEN = re.compile(r'([\w$\ue000]+)\s*$')
 _QUALIFIED = re.compile(r'\.\s*$')
@@ -310,13 +314,22 @@ _TYPE_CONTEXT = re.compile(r'(?:(?<![\w$])as|::)\s*$', flags=re.IGNORECASE)
 #: before a word that could name a function counts as one.
 _FOLLOWS_A_KEYWORD = {
     'not': frozenset(
-        {'between', 'exists', 'ilike', 'in', 'like', 'regexp', 'rlike'}
+        {
+            'between',
+            'distinct',
+            'exists',
+            'ilike',
+            'in',
+            'like',
+            'regexp',
+            'rlike',
+        }
     ),
     'like': frozenset({'all', 'any', 'some'}),
     'ilike': frozenset({'all', 'any', 'some'}),
     'rlike': frozenset({'all', 'any', 'some'}),
     'regexp': frozenset({'all', 'any', 'some'}),
-    'is': frozenset({'distinct'}),
+    'is': frozenset({'distinct', 'not'}),
     'distinct': frozenset({'from'}),
     'case': frozenset({'when'}),
     'when': frozenset({'then'}),
@@ -339,7 +352,10 @@ def _follows_a_value(lead: str) -> bool:
     if not re.match(r'[\w$]', lead[-1]):
         return False
     last = _LAST_TOKEN.search(lead)
-    return last is not None and last.group(1).lower() not in _KEYWORDS
+    if last is None:
+        return False
+    word = last.group(1).lower()
+    return word not in _KEYWORDS and word not in _WORD_OPERATORS
 
 
 def _acts_as_keyword(word: str, lead: str) -> bool:
@@ -358,16 +374,17 @@ def _acts_as_keyword(word: str, lead: str) -> bool:
     need the value the comparison is about, so ``NOT regexp(x)`` with nothing
     in front of it is a call.
 
+    ``NOT`` and ``CASE`` are their own cases. Neither names a function in
+    either dialect, and ``CASE (x) WHEN ...`` compares a value, so ``CASE``
+    is keyword syntax only where a ``CASE`` may start.
+
     Args:
         word: The folded word before ``(``.
         lead: The expression text before ``word``.
     """
     if word == 'not':
-        # `NOT` names no function in either dialect.
         return True
     if word == 'case':
-        # `CASE (x) WHEN ...` compares a value, but only where a `CASE`
-        # may start.
         return not _follows_a_value(lead)
     return _in_keyword_position(word, lead)
 

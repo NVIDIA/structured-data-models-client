@@ -302,6 +302,9 @@ def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:
         'AND NOT escape(x)',
         'NOT NOT escape(x)',
         'CASE WHEN escape(x) THEN 1 END',
+        '1 DIV escape(x)',
+        'x COLLATE escape(y)',
+        'NOT distinct(x)',
     ],
 )
 def test_a_keyword_named_function_after_a_keyword_is_a_call(
@@ -314,3 +317,18 @@ def test_a_keyword_named_function_after_a_keyword_is_a_call(
     a user-defined `escape` run under the caller's credentials.
     """
     assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'x IS NOT DISTINCT FROM (y)',
+        'x IS DISTINCT FROM (y)',
+    ],
+)
+def test_is_distinct_from_reaches_its_value(dialect: str, expr: str) -> None:
+    r"""`FROM` is keyword syntax here only because `DISTINCT`, then `NOT`,
+    then `IS` each sit where a keyword may, ending at a value.
+    """
+    assert _refused(expr, dialect) is None
