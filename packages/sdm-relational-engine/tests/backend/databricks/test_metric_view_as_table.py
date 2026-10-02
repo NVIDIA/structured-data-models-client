@@ -81,7 +81,10 @@ def test_a_metric_view_is_named_as_one_before_its_rows_are_read() -> None:
     assert info.value.name == 'Sales_Metrics'
     message = str(info.value)
     assert "'cat.sch.Sales_Metrics' is a metric view" in message
-    assert "Graph.from_databricks_metric_view('Sales_Metrics'" in message
+    assert (
+        "Graph.from_databricks_metric_view('Sales_Metrics', connection, "
+        "catalog='cat', schema='sch')"
+    ) in message
     assert len(connection.statements) == 1
     # Still a ValueError, as a table that is not there is.
     assert isinstance(info.value, ValueError)

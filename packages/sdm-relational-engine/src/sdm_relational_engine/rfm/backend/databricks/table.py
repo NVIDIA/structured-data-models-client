@@ -183,7 +183,8 @@ class DatabricksTable(Table):
                     f'Its measures are aggregations with no value per row, '
                     f'so it cannot be read as a table. Load it with '
                     f"Graph.from_databricks_metric_view('{self._source_name}', "
-                    f'connection) instead.',
+                    f"connection, catalog='{self._catalog}', "
+                    f"schema='{self._schema}') instead.",
                     name=self._source_name,
                 )
 
