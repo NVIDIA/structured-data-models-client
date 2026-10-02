@@ -911,8 +911,14 @@ class Schema:
         checking what is added to it. Said nothing while it does: a copy is
         not a new declaration, and the notices were given when the schema it
         was copied from was built.
+
+        A schema pickled before it could be bound to a source has neither
+        that source nor the engine's reading of it, which is what it is: a
+        schema of frames.
         """
-        object.__setattr__(self, '__dict__', dict(state))
+        object.__setattr__(
+            self, '__dict__', {'_source': None, '_engine_tables': None, **state}
+        )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             self.relationships = list(state.get('relationships') or ())

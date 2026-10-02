@@ -109,6 +109,8 @@ declare as `1.0.0` and none has published. The heading becomes
 
 ### Fixed
 
+- A `Schema` pickled before sources were added loads again, as the schema of frames it was.
+  Restoring it left out the source and the engine's reading of it, so asking for either raised `AttributeError`.
 - **Foreign keys a PostgreSQL or Databricks catalog declares now link the
   tables.** `Schema.from_source` compared the engine's qualified name for the
   referenced table with the caller's bare one, so no declared key matched and

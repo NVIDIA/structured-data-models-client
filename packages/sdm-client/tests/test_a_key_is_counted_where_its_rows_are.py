@@ -14,8 +14,10 @@ time, with labels that could disagree.
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import pickle
 import re
 import uuid
 import warnings
@@ -480,3 +482,38 @@ def test_the_context_holds_an_entity_once_at_each_anchor_time(
 
     assert {row[entity] for row in table['rows']} & set(repeated)
     assert [pair for pair, seen in pairs.items() if seen > 1] == []
+
+
+# --- a schema pickled before it could have a source -------------------------
+
+
+def test_a_schema_pickled_before_sources_still_loads() -> None:
+    r"""A schema pickled by a release without sources held its tables and
+    relationships and nothing else. It loads as the schema of frames it was.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data({'users': USERS, 'orders': ORDERS})
+    # Its relationships and tables point back at it, so every reference is
+    # written the old way, not only the outermost one.
+    old_state = {
+        key: value
+        for key, value in vars(schema).items()
+        if key not in ('_source', '_engine_tables')
+    }
+
+    class _AsReleased(pickle.Pickler):
+        def reducer_override(self, obj: Any) -> Any:
+            if obj is schema:
+                return object.__new__, (Schema,), old_state
+            return NotImplemented
+
+    written = io.BytesIO()
+    _AsReleased(written).dump(schema)
+    loaded = pickle.loads(written.getvalue())
+
+    assert isinstance(loaded, Schema)
+    assert loaded.source is None
+    assert loaded.relationships == schema.relationships
+    assert loaded.snapshot()['users'].primary_key == 'user_id'
+    assert _materialize(loaded, TEMPORAL, ['u001'], seed=7)['predict']
