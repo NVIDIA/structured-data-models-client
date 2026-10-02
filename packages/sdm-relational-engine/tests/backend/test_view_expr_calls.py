@@ -289,3 +289,71 @@ def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:
     assert _unsafe_expr_reason('"MY\\COL" * 2', 'snowflake') is not None
     assert _unsafe_expr_reason("'a\\\\b' || x", 'snowflake') is None
     assert _unsafe_expr_reason('"MY\\COL" * 2', 'databricks') is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'NOT escape(x)',
+        'NOT escape(1)',
+        'TRUE AND escape(col)',
+        'x OR escape(y)',
+        'AND NOT escape(x)',
+        'NOT NOT escape(x)',
+        'CASE WHEN escape(x) THEN 1 END',
+        '1 DIV escape(x)',
+        'x COLLATE escape(y)',
+        'NOT distinct(x)',
+    ],
+)
+def test_a_keyword_named_function_after_a_keyword_is_a_call(
+    dialect: str, expr: str
+) -> None:
+    r"""A word in front is not proof the next word is keyword syntax.
+
+    `escape(` after a value is the ESCAPE of a LIKE. After NOT, which takes an
+    expression next, it calls whatever is named, so reading it as a keyword let
+    a user-defined `escape` run under the caller's credentials.
+    """
+    assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'x IS NOT DISTINCT FROM (y)',
+        'x IS DISTINCT FROM (y)',
+    ],
+)
+def test_is_distinct_from_reaches_its_value(dialect: str, expr: str) -> None:
+    r"""`FROM` is keyword syntax here only because `DISTINCT`, then `NOT`,
+    then `IS` each sit where a keyword may, ending at a value.
+    """
+    assert _refused(expr, dialect) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'x REGEXP_LIKE escape(y)',
+        'x SIMILAR TO escape(y)',
+        'x AT TIME ZONE escape(y)',
+        'x FOO escape(y)',
+        'x UNKNOWNOPERATOR escape(y)',
+    ],
+)
+def test_an_unknown_word_in_front_does_not_make_a_keyword(
+    dialect: str, expr: str
+) -> None:
+    r"""The word-operator set cannot be complete, so missing one must cost a
+    refusal rather than a call.
+
+    A name that could also be a function is keyword syntax only behind
+    something this recognises: a bracket, a literal, or a keyword it writes
+    the pair for. `REGEXP_LIKE`, `SIMILAR TO` and `AT TIME ZONE` each reached
+    SQL while the rule was that an unknown word must be a value.
+    """
+    assert _refused(expr, dialect) is not None

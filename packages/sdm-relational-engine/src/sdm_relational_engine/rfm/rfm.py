@@ -908,12 +908,13 @@ class KumoRelational:
         * ``output_type``: Summarize regression and forecasting distributions
           with ``"median"`` (default), ``"mean"``, or ``"quantiles"``. The
           last adds the full distribution as ``Q_<level>`` columns beside the
-          point prediction. The SDM-backed NIM takes ``"median"``, the 50th
-          of its 999 predicted quantiles, or ``"mean"``, their average. On a
-          **zero-inflated regression target** the median is exactly ``0.0``
-          once half of that grid sits at zero, while the mean stays above it.
-          Ask for the mean, or for the quantiles, when that difference
-          matters.
+          point prediction. The SDM-backed NIM returns ``"median"`` as the
+          500th of its 999 predicted quantiles and ``"mean"`` as their
+          average. Neither is pinned to ``0.0`` on a **zero-inflated
+          regression target**, but both can land slightly below zero,
+          because the predicted quantiles are not clipped to the target's
+          range. Ask for ``"quantiles"`` when the spread matters, and for
+          ``"mean"`` when predictions will be summed across entities.
 
         Any other key is rejected by name rather than forwarded to the NIM,
         where it would silently substitute the default.
@@ -1836,8 +1837,10 @@ class KumoRelational:
                 num_test_trials=max_iterations * size,
                 random_seed=random_seed,
             )
-        except RuntimeError as e:
-            if 'Failed to collect any' in str(e):
+        except ValueError as e:
+            # No labels at this anchor is an answer here; the sampler raises
+            # it as a ValueError so the client reports it as the caller's.
+            if str(e).startswith('Failed to collect any test examples'):
                 return pd.DataFrame(
                     {
                         'ENTITY': [],

@@ -15,6 +15,7 @@ the same way through Spark as through a warehouse is for a live run.
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 import sys
@@ -25,6 +26,9 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+from predictive_query.ast import Aggregation, Column, DateOffsetRange
+from predictive_query.query import ValidatedPredictiveQuery
+from predictive_query.schema.typing import AggregationType
 from sdm_relational_engine.rfm import Graph, KumoRelational
 from sdm_relational_engine.rfm.base import KeyCount, count_keys
 
@@ -106,6 +110,11 @@ class _Session:
 
     def sql(self, query: str, args: Any = None) -> _Frame:
         self.calls.append((query, args))
+        # Spark binds a float NaN as a DOUBLE, which a timestamp refuses.
+        if any(
+            isinstance(arg, float) and math.isnan(arg) for arg in args or ()
+        ):
+            raise AssertionError(f'NaN bound into:\n{query}')
         return _Frame(self._answer(query, args))
 
     def _answer(self, query: str, args: Any) -> pa.Table:
@@ -176,16 +185,16 @@ class _Session:
         if 'COUNT(*)' in query:
             return _rows(['n'], [(_TABLES[_source(query)].num_rows,)])
         if 'MIN(' in query and 'MAX(' in query:
-            ts = _ORDERS['ts'].to_pylist()
             return _rows(
-                ['table_index', 'min_date', 'max_date'], [(0, min(ts), max(ts))]
+                ['table_index', 'min_date', 'max_date'],
+                [_min_max(select) for select in query.split('\nUNION ALL\n')],
             )
         if 'posexplode(from_json(?' in query:
             return self._by_primary_key(query, args)
         if re.search(r'\bLIMIT \d+$', query):
             table = _TABLES[_source(query)]
             return table.select(
-                re.findall(r'`(\w+)`', query.split(' FROM ')[0])
+                re.findall(r'`(\w+)`', re.split(r'\sFROM\s', query)[0])
             )
         raise AssertionError(f'unexpected statement:\n{query}')
 
@@ -214,6 +223,14 @@ def _key(query: str, around: str) -> list[tuple]:
     table = _TABLES[_source(query)]
     names = re.findall(r'`(\w+)`', re.search(around, query).group(1))
     return list(zip(*(table[name].to_pylist() for name in names), strict=True))
+
+
+def _min_max(select: str) -> tuple[int, Any, Any]:
+    r"""Answer one ``SELECT`` of a time range from the tables above."""
+    index = int(re.search(r'(\d+) as table_index', select).group(1))
+    column = re.search(r'MIN\(`(\w+)`\)', select).group(1)
+    values = _TABLES[_source(select)][column].to_pylist()
+    return index, min(values), max(values)
 
 
 def _count_key(select: str) -> tuple[int, int, int, int]:
@@ -410,6 +427,82 @@ def test_an_id_two_rows_hold_is_refused_where_it_is_scored(
     )
     assert df['user_id'].tolist() == [1, 2]
     assert batch.tolist() == [0, 1]
+
+
+def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
+    session: _Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Every user starts after the last order, as an entity table whose time
+    column records an edit does. No entity exists at any anchor, and the
+    window over none of them was bound by NaN, which the warehouse refused.
+    """
+    joined = pa.array(pd.to_datetime(['2025-01-01'] * 3), pa.timestamp('us'))
+    monkeypatch.setitem(
+        _TABLES, 'users', _USERS.append_column('joined', joined)
+    )
+    graph = Graph.from_databricks(
+        connection=SparkConnection(session),
+        tables=['users', 'orders'],
+        catalog='cat',
+        schema='sch',
+        verbose=False,
+    )
+    graph['users'].time_column = 'joined'
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    query = ValidatedPredictiveQuery(
+        target_ast=Aggregation(
+            aggr=AggregationType.COUNT,
+            target=Column(fqn='orders.*'),
+            aggr_time_range=DateOffsetRange(0, 30),
+        ),
+        entity_ast=Column(fqn='users.user_id'),
+    )
+
+    before = len(session.calls)
+    with pytest.raises(ValueError, match='Failed to collect any context') as e:
+        sampler.sample_target(
+            query=query,
+            num_train_examples=4,
+            train_anchor_time=pd.Timestamp('2024-03-01'),
+            num_train_trials=8,
+            num_test_examples=0,
+            test_anchor_time=pd.Timestamp('2024-03-01'),
+            num_test_trials=0,
+            random_seed=0,
+        )
+
+    assert "No row of 'users' existed at the anchor" in str(e.value)
+    assert "time column of 'users' to None" in str(e.value)
+    assert not [q for q, _ in session.calls[before:] if 'posexplode' in q]
+
+
+def test_lagged_targets_for_no_entities_ask_the_warehouse_nothing(
+    session: _Session, graph: Graph
+) -> None:
+    r"""Lagged targets reach the window lookup without the guard context
+    sampling has, and a window over no entities was bound by NaN.
+    """
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    query = ValidatedPredictiveQuery(
+        target_ast=Aggregation(
+            aggr=AggregationType.COUNT,
+            target=Column(fqn='orders.*'),
+            aggr_time_range=DateOffsetRange(0, 30),
+        ),
+        entity_ast=Column(fqn='users.user_id'),
+    )
+
+    before = len(session.calls)
+    lagged = sampler.sample_lagged_target(
+        query,
+        entity_pkey=pd.Series([], dtype='int64'),
+        anchor_time=pd.Series([], dtype='datetime64[ns]'),
+        lag_timesteps=2,
+    )
+
+    assert list(lagged.columns) == ['__kumo_arl0__', '__kumo_arl1__']
+    assert len(lagged) == 0
+    assert not [q for q, _ in session.calls[before:] if 'posexplode' in q]
 
 
 def test_the_session_route_needs_no_sql_connector() -> None:

@@ -6,8 +6,7 @@
 
 pydantic's default is
 ``extra='ignore'``, so ``output_typ='mean'`` used to return the *median* with
-no diagnostic, on a zero-inflated target, a column of ``0.0`` where the
-caller asked for a mean. Nothing forwards an unknown key (the wire payload is
+no diagnostic where the caller asked for a mean. Nothing forwards an unknown key (the wire payload is
 built from the declared fields alone), so there is no forward compatibility to
 weigh against saying so.
 """

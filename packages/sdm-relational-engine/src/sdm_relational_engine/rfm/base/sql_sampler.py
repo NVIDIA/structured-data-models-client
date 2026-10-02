@@ -150,6 +150,28 @@ class SQLSampler(Sampler):
             key=lambda column: (order.get(column, len(order)), column),
         )
 
+    def _no_rows(
+        self,
+        table_name: str,
+        columns: Iterable[str],
+    ) -> tuple[pd.DataFrame, np.ndarray]:
+        r"""What a lookup for no entities returns, without asking for it.
+
+        The frame has the columns a query would have returned, with the time
+        column typed, so a target computed over it compares times as usual.
+        """
+        time_column = self.time_column_dict.get(table_name)
+        df = pd.DataFrame(
+            {
+                column: pd.Series(
+                    [],
+                    dtype='datetime64[ns]' if column == time_column else object,
+                )
+                for column in self._ordered_columns(table_name, columns)
+            }
+        )
+        return df, np.empty(0, dtype=np.int64)
+
     def _neighbor_order_by(
         self,
         table_name: str,
