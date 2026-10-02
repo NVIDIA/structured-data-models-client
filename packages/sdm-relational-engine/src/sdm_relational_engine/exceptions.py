@@ -56,6 +56,22 @@ class TableNotFoundError(KumoRelationalError, ValueError):
     r"""A table named for a graph is not in its source."""
 
 
+class MetricViewAsTableError(KumoRelationalError, ValueError):
+    r"""A Databricks metric view was named where a table was expected.
+
+    A metric view's measures are aggregations with no value per row, so
+    Databricks refuses to read its rows as a table's. Raised before that
+    read, from the catalog's own record of what the relation is.
+
+    Attributes:
+        name: The metric view, spelled as the caller named it.
+    """
+
+    def __init__(self, message: str, *, name: str) -> None:
+        super().__init__(message)
+        self.name = name
+
+
 class NoEligibleEntityError(KumoRelationalError, ValueError):
     r"""No entity existed at the anchor, so nothing could be asked about.
 

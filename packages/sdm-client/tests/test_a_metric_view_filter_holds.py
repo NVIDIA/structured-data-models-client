@@ -134,7 +134,7 @@ class _Cursor:
         if 'information_schema.columns' in sql:
             table = str(parameters[1]).lower()
             self._rows = [
-                (name, dtype, 'YES', 'cat', 'sch', table)
+                (name, dtype, 'YES', 'cat', 'sch', table, 'MANAGED')
                 for name, dtype in _TYPES.get(table, {}).items()
             ]
             return

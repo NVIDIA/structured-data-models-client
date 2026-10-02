@@ -129,6 +129,7 @@ class _Session:
                     'table_catalog',
                     'table_schema',
                     'table_name',
+                    'table_type',
                 ],
                 [
                     (
@@ -138,6 +139,7 @@ class _Session:
                         'cat',
                         schema,
                         name,
+                        'MANAGED',
                     )
                     for field in table.schema
                 ],

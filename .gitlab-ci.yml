@@ -23,6 +23,9 @@ stages:
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_CACHE_DIR: "1"
+  # PyPI rate-limited these runners (a 429 in job 465379378), which pip does not
+  # retry. Internal only: GitHub's runners cannot reach this mirror.
+  PIP_INDEX_URL: https://urm.nvidia.com/artifactory/api/pypi/pypi-remote/simple
   CONTRACT_PROJECT: kumo-tfm-nims/structured-data-api
 
 .python:
@@ -240,6 +243,9 @@ wheels:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    # Into the manylinux container too. cibuildwheel prepends passed variables
+    # to the `environment` pyproject sets, so PIP_FIND_LINKS still applies.
+    CIBW_ENVIRONMENT_PASS_LINUX: PIP_INDEX_URL
   parallel:
     matrix:
       - CIBW_ARCHS_LINUX: x86_64
@@ -251,7 +257,17 @@ wheels:
     - for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
     - docker info --format '{{.Architecture}} {{.ServerVersion}}'
     # Pinned by digest: it runs privileged, so a moved tag must not change what runs.
-    - if [ "$CIBW_ARCHS_LINUX" = aarch64 ]; then docker run --rm --privileged tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install arm64; fi  # qemu-v10.2.3
+    # The pull is retried because Docker Hub once reset it mid-transfer (job 466303202).
+    - |
+      if [ "$CIBW_ARCHS_LINUX" = aarch64 ]; then
+        binfmt=tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0  # qemu-v10.2.3
+        for attempt in 1 2 3; do
+          docker pull -q "$binfmt" && break
+          if [ "$attempt" = 3 ]; then echo "pulling $binfmt failed 3 times" >&2; exit 1; fi
+          sleep $((attempt * 15))
+        done
+        docker run --rm --privileged "$binfmt" --install arm64
+      fi
     - pip install -q build 'cibuildwheel==4.2.1'
     # The engine's smoke test installs it against these, which exist nowhere
     # but here until a release; `[tool.cibuildwheel.linux]` points pip at them.

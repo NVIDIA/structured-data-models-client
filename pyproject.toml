@@ -100,7 +100,6 @@ module = [
     "sdm_relational_engine.rfm.base.table",          # 12
     "sdm_relational_engine.rfm.graph",               # 10
     "sdm_relational_engine.rfm.rfm",                 #  9
-    "sdm_relational_engine.rfm.relbench",            #  3
     "sdm_relational_engine.rfm.backend.sqlite.sampler",     # 2
     "sdm_relational_engine.rfm.backend.snow.sampler",       # 2
     "sdm_relational_engine.rfm.backend.duckdb.table",       # 1

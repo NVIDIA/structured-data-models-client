@@ -121,6 +121,7 @@ def engine_graph(
     """
     try:
         from sdm_relational_engine import (
+            MetricViewAsTableError,
             NoTablesFoundError,
             TableNotFoundError,
         )
@@ -146,6 +147,15 @@ def engine_graph(
         ) from error
     except TableNotFoundError as error:
         raise StructuredDataError(str(error), code='INVALID_REQUEST') from error
+    except MetricViewAsTableError as error:
+        # The engine's advice names its own API; here a source reads the view.
+        raise StructuredDataError(
+            f'{error.name!r} is a metric view, not a table: its measures are '
+            f'aggregations with no value per row. Read it as a semantic model '
+            f'instead, with source.semantic_model({error.name!r}).',
+            code='INVALID_REQUEST',
+            details={'metric_view': error.name},
+        ) from error
 
 
 def _read(

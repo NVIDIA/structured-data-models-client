@@ -1,0 +1,1665 @@
+{
+ "generated_by": "scripts/pin_relbench.py",
+ "revisions": {
+  "stanford-star/relbench-v1": "d8e976fd0a4b78877204bc8dfbcfc9a9f7f48600",
+  "stanford-star/relbench-v2-extra": "071cb21e698ad91537d43ca6282411a6d0e78256",
+  "stanford-star/dbinfer": "f7c72172e7a4e9f59e94e03e5849ded7e5bc5165",
+  "stanford-star/tgb": "14708177601e8459cbe6a86bd90c509afd40111b"
+ },
+ "datasets": {
+  "dbinfer-amazon": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Customer": {
+     "sha256": "bc2933612361bcaf9d6309fc5a52d270408f0a1590d3e4aa9e1dd23584dfd134",
+     "primary_key": "customer_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Product": {
+     "sha256": "cf1b894ef612e9b4ce4a0fbb7f32b394ba3487d401a9a7fb487ce0c100aa4276",
+     "primary_key": "product_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Review": {
+     "sha256": "061db08142c1123130e2880503df1faba3f2184432c526d6e7996cc61882ebf2",
+     "primary_key": null,
+     "time_column": "review_time",
+     "foreign_keys": {
+      "customer_id": "Customer",
+      "product_id": "Product"
+     }
+    }
+   }
+  },
+  "dbinfer-avs": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Offer": {
+     "sha256": "5ed6b3bb3cd44e19ce7af3e52c924c755f7b3eda3e3cbf28fef5c5cbe31cab87",
+     "primary_key": "offer",
+     "time_column": null,
+     "foreign_keys": {
+      "brand": "Brand",
+      "category": "Category",
+      "company": "Company"
+     }
+    },
+    "Brand": {
+     "sha256": "5b3996482f14935b37ed78ac4534cd39d5a8ed8cc4bf71d13f10ea465b620acf",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Category": {
+     "sha256": "e4a283dfb5d829b18e6f2c533629438e85c258963068cbab5dabe00c4bfd8bdf",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Chain": {
+     "sha256": "3e30458708d44b960b4b236847c71378038960ce03e99d2737184a2d75c8076b",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Company": {
+     "sha256": "3f05c4d6ec1068976656ae37a8e51f78f3ffacb205df42abebbdb72c0886951f",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Customer": {
+     "sha256": "827cd003d8b36e2b0fa617d76bcef1a7be4925562b81f591736800969d3f90a4",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "History": {
+     "sha256": "a6af897bd74c66cdb0818ac32fb1437401f0d5b7c735862daf4fb2130bf39365",
+     "primary_key": null,
+     "time_column": "offerdate",
+     "foreign_keys": {
+      "chain": "Chain",
+      "id": "Customer",
+      "offer": "Offer"
+     }
+    },
+    "Transaction": {
+     "sha256": "adbfa91855cf766d52667f3726ada3888d5b489c55e21383c182b8e5729d8b94",
+     "primary_key": null,
+     "time_column": "date",
+     "foreign_keys": {
+      "brand": "Brand",
+      "category": "Category",
+      "chain": "Chain",
+      "company": "Company",
+      "id": "Customer"
+     }
+    }
+   }
+  },
+  "dbinfer-diginetica": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Product": {
+     "sha256": "dfe3b14863402fac527f4693eb6c38026600fdbb7d523b9e435c8768d744e3ad",
+     "primary_key": "itemId",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Query": {
+     "sha256": "989eeec9ed1e8554a37d5825e7c99ad4ff73c0568bffceaa1ecca9c93c9e2778",
+     "primary_key": "queryId",
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "sessionId": "Session",
+      "userId": "User"
+     }
+    },
+    "Orders": {
+     "sha256": "ba01053b724416779a46c2220ae11bf0f7f305a6a319f8ea8e1786221a9c1149",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Session": {
+     "sha256": "8f97e071a5650ee16486c44c818d69f1158c34d3f76a98ca18d2481d114f170a",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Token": {
+     "sha256": "b216550200e27ed51000a84701de5650d1e1fde67dc621dca38530e266f9ba4b",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "User": {
+     "sha256": "014c18f8b0109ddd34294b1066a6bc23c747532f81288d3febbc50a0f87c1acf",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Click": {
+     "sha256": "0191c4fece9a1a040b7530868f26ec0eec8405d6b8ea4bb8a1f8d7d82f9d2a2e",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "queryId": "Query",
+      "itemId": "Product"
+     }
+    },
+    "QueryResult": {
+     "sha256": "e0142e7f1f6e07ba4d973c0ea350d19682f23f9e94268afe15cb0d2251f4fec7",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "queryId": "Query",
+      "itemId": "Product"
+     }
+    },
+    "View": {
+     "sha256": "e6548ece42a50a7bcd708a103e3c07a98254235b59d532f7505d1b9ea72221d5",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "sessionId": "Session",
+      "userId": "User",
+      "itemId": "Product"
+     }
+    },
+    "Purchase": {
+     "sha256": "ba861387673acfcc8d5121277403ddceb1471df7009122c3145e407278b50a65",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "sessionId": "Session",
+      "userId": "User",
+      "itemId": "Product",
+      "ordernumber": "Orders"
+     }
+    },
+    "ProductNameToken": {
+     "sha256": "c34352cc65f3afef6a2291675f3891c6b3cc6ad31917ca244eec8976313ba871",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "itemId": "Product",
+      "token": "Token"
+     }
+    },
+    "QuerySearchstringToken": {
+     "sha256": "d5b6677e00b35b4ce5104f4fd2d407b2de2974546e07c096beedc83fa5e53459",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "queryId": "Query",
+      "token": "Token"
+     }
+    }
+   }
+  },
+  "dbinfer-outbrain-small": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Event": {
+     "sha256": "3c04e473f089f7c693dc253ee55032cc60a5d4c13f116049f642ba47cb63f95e",
+     "primary_key": "display_id",
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "uuid": "User",
+      "document_id": "DocumentsMeta"
+     }
+    },
+    "PromotedContent": {
+     "sha256": "951c5abf7fff7bd3003c9b292746bd759993a6d6d830be5c2a9f87e488d8b903",
+     "primary_key": "ad_id",
+     "time_column": null,
+     "foreign_keys": {
+      "document_id": "DocumentsMeta"
+     }
+    },
+    "DocumentsMeta": {
+     "sha256": "c9ffb175d166d79d12e7026f2c71feb3eef4fb2e2a8f5ec79555c9b33f4781bd",
+     "primary_key": "document_id",
+     "time_column": "publish_time",
+     "foreign_keys": {}
+    },
+    "User": {
+     "sha256": "fd5efcd745b0baa927166b7d64e4a182336e175902502b79ee1a54a7dcc417cf",
+     "primary_key": "uuid",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Pageview": {
+     "sha256": "d3ded98c827c886032fc6326cfaa99355d0ef48c882e51eeb1032d51000369d9",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "uuid": "User",
+      "document_id": "DocumentsMeta"
+     }
+    },
+    "Click": {
+     "sha256": "6289f84a4ad34a7a3147ad1ee94d83e65aaaa4e821e96360b1d490950572783c",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "display_id": "Event",
+      "ad_id": "PromotedContent"
+     }
+    },
+    "DocumentsTopic": {
+     "sha256": "0674d010cb1e7fe4864050f7cbffc143cc3ad9f8a79d70eaec18b3969326adde",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "document_id": "DocumentsMeta"
+     }
+    },
+    "DocumentsCategory": {
+     "sha256": "73a0cd9759faabc8bd245cedd4ea9ab41756cd577c56ec6a3fa6578846a38b10",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "document_id": "DocumentsMeta"
+     }
+    },
+    "DocumentsEntity": {
+     "sha256": "e77716b8c0256b560ae09387ca69167839e3eeffa7c2d189f4b6e45eec12a143",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "document_id": "DocumentsMeta"
+     }
+    }
+   }
+  },
+  "dbinfer-retailrocket": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Category": {
+     "sha256": "16d939f4d38d737eb9f136d90bb6c50c7fbdc0e58705299a4f056004e5e5bd97",
+     "primary_key": "categoryid",
+     "time_column": null,
+     "foreign_keys": {
+      "parentid": "Category"
+     }
+    },
+    "Item": {
+     "sha256": "10c8d98957efe3662c33631fb3f84464f027d488682a30d613f1726de8418cfb",
+     "primary_key": "itemid",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Visitor": {
+     "sha256": "c945c4cf6797638c769931a79f2a010856ada8b271fae4958fd33176a16f5e58",
+     "primary_key": "id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "View": {
+     "sha256": "5027fccb469810decfdeacb1525c09a565b9f6b96aca6fea64af30d153568806",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "itemid": "Item",
+      "visitorid": "Visitor"
+     }
+    },
+    "ItemAvailability": {
+     "sha256": "86ce48fca8ece1556871a77570cc62c1ea6312adcedf7f3f40740dec920c3b5e",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "itemid": "Item"
+     }
+    },
+    "ItemCategory": {
+     "sha256": "4790eccbbd0673bfecc84eb5999aa175db3fd6476d2c280a3b67756aff3826f4",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "itemid": "Item",
+      "category": "Category"
+     }
+    },
+    "ItemProperty": {
+     "sha256": "c072d323ba5eeda4e8ee78210260cbbfe7b20c77a368d12c2c270c912febef77",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "itemid": "Item"
+     }
+    }
+   }
+  },
+  "dbinfer-seznam": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Client": {
+     "sha256": "ef2135582f2c54fd80e12b9ab4db2202041dd35fc725ad75bf39e424a9d2e0ed",
+     "primary_key": "client_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Dobito": {
+     "sha256": "7b5ad8fd79a56357ff8fff3b945e07485bb96d7de97e77cf99c8b2d7c1d037fb",
+     "primary_key": null,
+     "time_column": "date",
+     "foreign_keys": {
+      "client_id": "Client"
+     }
+    },
+    "Probehnuto": {
+     "sha256": "2dc50afd2a74cf1bd5f606dd400455ceee6f6dc43a0ac6dca61c988ec9aa9e14",
+     "primary_key": null,
+     "time_column": "date",
+     "foreign_keys": {
+      "client_id": "Client"
+     }
+    },
+    "ProbehnutoMimoPenezenku": {
+     "sha256": "99d1ca736e87c2bb1b007b82149baa9d00aa1ba228db0190a5b3dfaa417fee07",
+     "primary_key": null,
+     "time_column": "date",
+     "foreign_keys": {
+      "client_id": "Client"
+     }
+    }
+   }
+  },
+  "dbinfer-stackexchange": {
+   "repository": "stanford-star/dbinfer",
+   "tables": {
+    "Badges": {
+     "sha256": "a600578f955ac748785d48fd857590f22923003964dd4783ee758247d40a7730",
+     "primary_key": "Id",
+     "time_column": "Date",
+     "foreign_keys": {
+      "UserId": "Users"
+     }
+    },
+    "Comments": {
+     "sha256": "de39aa8e593ad6241bed985efeee944ff0827f8c10bc96c14a59e5fd1c4fa7d5",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "Posts",
+      "UserId": "Users"
+     }
+    },
+    "PostHistory": {
+     "sha256": "89a5b8152fc1fe2e6edb7704d456c9b0730bc75ae892786721626c3130f62456",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "Posts",
+      "UserId": "Users"
+     }
+    },
+    "PostLink": {
+     "sha256": "633b1c673243ba56d2a7493cb8eae7756366837a273d60c932891c4b50cf3db4",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "Posts",
+      "RelatedPostId": "Posts"
+     }
+    },
+    "Posts": {
+     "sha256": "18ab8c29cce65190d7da92a6b4378106687c309c85ea4e4a899974b2ecb03c27",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "AcceptedAnswerId": "Posts",
+      "LastEditorUserId": "Users",
+      "OwnerUserId": "Users",
+      "ParentId": "Posts"
+     }
+    },
+    "Tag": {
+     "sha256": "ab520c977b350d6b9f80d06ed2c207d8e3690841458514b023566ee34878f760",
+     "primary_key": "Id",
+     "time_column": null,
+     "foreign_keys": {
+      "ExcerptPostId": "Posts",
+      "WikiPostId": "Posts"
+     }
+    },
+    "Users": {
+     "sha256": "5a608acae0dc803bdd1531f3ee42ea5f67b3b249484edb79495fbc024585ac6d",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {}
+    },
+    "Vote": {
+     "sha256": "82707e6b1bd71391fe39f22be71f7adde2a6e169b23b0a2dd6fb88841bc1bca5",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "Posts",
+      "UserId": "Users"
+     }
+    },
+    "PostTag": {
+     "sha256": "cfa006fa434bee364e466977089acb26f365cbb6a806b690a3d7206a834976be",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "PostId": "Posts",
+      "TagId": "Tag"
+     }
+    }
+   }
+  },
+  "rel-amazon": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "review": {
+     "sha256": "47babb4b585bd81d784b39321d06bfd9fdc9083fba56c2580fe6ca15f93c5f92",
+     "primary_key": null,
+     "time_column": "review_time",
+     "foreign_keys": {
+      "customer_id": "customer",
+      "product_id": "product"
+     }
+    },
+    "product": {
+     "sha256": "5420ce6202d2e3488985b40d83e11b14992cb20462a8e2deadc3a89c0aa95141",
+     "primary_key": "product_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "customer": {
+     "sha256": "b45076392619a3e68c8fe32b0b1b71f11d20b4ba9bf496b0226937fe962a333c",
+     "primary_key": "customer_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "rel-arxiv": {
+   "repository": "stanford-star/relbench-v2-extra",
+   "tables": {
+    "paperCategories": {
+     "sha256": "d740a664b002b0b862c60ac78759bcf34019e0fb8e619f5311b5d15a64462f91",
+     "primary_key": null,
+     "time_column": "Submission_Date",
+     "foreign_keys": {
+      "Paper_ID": "papers",
+      "Category_ID": "categories"
+     }
+    },
+    "authors": {
+     "sha256": "3b987ccbf6474e15555ba01b134301ad0a3eda5d466b5eb71446987a1c744c44",
+     "primary_key": "Author_ID",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "categories": {
+     "sha256": "5ba65a4e34e2cf45f5eaa278b6808f01b98c42824e0dd6c4c91e1509e89da40d",
+     "primary_key": "Category_ID",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "citations": {
+     "sha256": "22cbb1cc68b1bfa55ed023fdfb687173d8bef24e6b2d4fe67ce0a6f64c9ff0ed",
+     "primary_key": null,
+     "time_column": "Submission_Date",
+     "foreign_keys": {
+      "Paper_ID": "papers",
+      "References_Paper_ID": "papers"
+     }
+    },
+    "papers": {
+     "sha256": "6cf8ab7ba167468b0800e4315f7ca5a7d974364e3f858ec4bd969b9a4f0f0d27",
+     "primary_key": "Paper_ID",
+     "time_column": "Submission_Date",
+     "foreign_keys": {
+      "Primary_Category_ID": "categories"
+     }
+    },
+    "paperAuthors": {
+     "sha256": "0b769e2faee764a353ff084de73d996503c8b8ec0ec86dea1fd255e03ed765eb",
+     "primary_key": null,
+     "time_column": "Submission_Date",
+     "foreign_keys": {
+      "Paper_ID": "papers",
+      "Author_ID": "authors"
+     }
+    }
+   }
+  },
+  "rel-avito": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "VisitStream": {
+     "sha256": "1dc90e699a6310b1f06e31fb864ddfd13e905531897f83b8246aab5441d62eb8",
+     "primary_key": null,
+     "time_column": "ViewDate",
+     "foreign_keys": {
+      "UserID": "UserInfo",
+      "AdID": "AdsInfo"
+     }
+    },
+    "AdsInfo": {
+     "sha256": "ffd766192c219a2a9cf333e2759abc20a92a0bbaf48536aa19b1e4fb03c5ba9a",
+     "primary_key": "AdID",
+     "time_column": null,
+     "foreign_keys": {
+      "LocationID": "Location",
+      "CategoryID": "Category"
+     }
+    },
+    "SearchStream": {
+     "sha256": "89484ac87d387c7c02c7518a8095ef0556f6399613d8047adc2c5da03218ccb3",
+     "primary_key": null,
+     "time_column": "SearchDate",
+     "foreign_keys": {
+      "SearchID": "SearchInfo",
+      "AdID": "AdsInfo"
+     }
+    },
+    "SearchInfo": {
+     "sha256": "1d0da34769df4185e49f0b533e42749319807d84897e081334399511009662e9",
+     "primary_key": "SearchID",
+     "time_column": "SearchDate",
+     "foreign_keys": {
+      "UserID": "UserInfo",
+      "LocationID": "Location",
+      "CategoryID": "Category"
+     }
+    },
+    "Category": {
+     "sha256": "58f3d864dd71ea4661653e3115bc6a955c35bb5b112ed991adb27eb110db973f",
+     "primary_key": "CategoryID",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "PhoneRequestsStream": {
+     "sha256": "54a6ab65bdcf404d373dd908c11e7e2dcf7d9f335ee6a63b928dc273a459208b",
+     "primary_key": null,
+     "time_column": "PhoneRequestDate",
+     "foreign_keys": {
+      "UserID": "UserInfo",
+      "AdID": "AdsInfo"
+     }
+    },
+    "UserInfo": {
+     "sha256": "745096781fe34ca879d95fdb3624cd14c38c4f6e7f0cf941c0fd6641457b4327",
+     "primary_key": "UserID",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "Location": {
+     "sha256": "eb3fe4a95036447cb60411ff2a032d20339462bfcdc8f80c4f290cd4f38ec5fd",
+     "primary_key": "LocationID",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "rel-event": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "user_friends": {
+     "sha256": "ebbfa7b3d44357db1e594adae7087512123dc3e041576f1bbf8ffb47c812a6c9",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "user": "users",
+      "friend": "users"
+     }
+    },
+    "event_interest": {
+     "sha256": "fbce09555916c915d38a14a7701f182042219431254c62b85718a6b25a04cb90",
+     "primary_key": null,
+     "time_column": "timestamp",
+     "foreign_keys": {
+      "event": "events",
+      "user": "users"
+     }
+    },
+    "event_attendees": {
+     "sha256": "7b32cf71a518ac9065bb0a31f58edf110c72853bd4bd4cad48ac06d95184b27c",
+     "primary_key": null,
+     "time_column": "start_time",
+     "foreign_keys": {
+      "event": "events",
+      "user_id": "users"
+     }
+    },
+    "users": {
+     "sha256": "5228f18d331e1fe656a1d0d446b4bb8284db4e79a316e09c6e4c786f310f5dc0",
+     "primary_key": "user_id",
+     "time_column": "joinedAt",
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "3c9da41a9d48bec1bcbcde7bca1bf2565a94b746619d98a56aa33f6c56dfb3f0",
+     "primary_key": "event_id",
+     "time_column": "start_time",
+     "foreign_keys": {
+      "user_id": "users"
+     }
+    }
+   }
+  },
+  "rel-f1": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "races": {
+     "sha256": "65411ff4f44c9d0af59be72c5fc55fb02fcdfd7aa0106e58309a2928dc04b71b",
+     "primary_key": "raceId",
+     "time_column": "date",
+     "foreign_keys": {
+      "circuitId": "circuits"
+     }
+    },
+    "qualifying": {
+     "sha256": "8da1d1f670d139a96c26a633a38e872909e7733c4c3dbcc3821503f3e93680eb",
+     "primary_key": "qualifyId",
+     "time_column": "date",
+     "foreign_keys": {
+      "raceId": "races",
+      "driverId": "drivers",
+      "constructorId": "constructors"
+     }
+    },
+    "constructor_standings": {
+     "sha256": "db807b2330e75a077def66e12288931cdb1bdf3c07ed9b66d85a435148a2931f",
+     "primary_key": "constructorStandingsId",
+     "time_column": "date",
+     "foreign_keys": {
+      "raceId": "races",
+      "constructorId": "constructors"
+     }
+    },
+    "standings": {
+     "sha256": "18b17906cdd403def543d05a4947ef432a8c0206040a6e23bc6727ecd3ef2cdd",
+     "primary_key": "driverStandingsId",
+     "time_column": "date",
+     "foreign_keys": {
+      "raceId": "races",
+      "driverId": "drivers"
+     }
+    },
+    "constructors": {
+     "sha256": "7c142c0b72ec1addf452211aad9db7c6634b5485338d47544c563b9c5801ead5",
+     "primary_key": "constructorId",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "drivers": {
+     "sha256": "d09e98acbb33993167a5b73144259a06c16a57ca2af66889ec3f06a34bd88475",
+     "primary_key": "driverId",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "constructor_results": {
+     "sha256": "9a494cfacd27945f2330a96090eca1b4edcc6ad297ae405582b6bb9db9c255da",
+     "primary_key": "constructorResultsId",
+     "time_column": "date",
+     "foreign_keys": {
+      "raceId": "races",
+      "constructorId": "constructors"
+     }
+    },
+    "circuits": {
+     "sha256": "29fb93df62628920c0a64651052d04c2728eeea7ef33c40d6f7aaccb6c7f0c27",
+     "primary_key": "circuitId",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "results": {
+     "sha256": "33baa4732c7360500f9cefb9a0b1653ef216f33c54d95c7de4738a2199e23f6f",
+     "primary_key": "resultId",
+     "time_column": "date",
+     "foreign_keys": {
+      "raceId": "races",
+      "driverId": "drivers",
+      "constructorId": "constructors"
+     }
+    }
+   }
+  },
+  "rel-hm": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "transactions": {
+     "sha256": "6d3d83a378467a02beba8e9855d2fdb6df8e8e87d4cac53c81b94a363af9559a",
+     "primary_key": null,
+     "time_column": "t_dat",
+     "foreign_keys": {
+      "customer_id": "customer",
+      "article_id": "article"
+     }
+    },
+    "article": {
+     "sha256": "e119bbe9d882d1cbb6488e578b0e74a76e135b3cf51523dd6eb19ba306e53000",
+     "primary_key": "article_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "customer": {
+     "sha256": "531a89244a2dbb31008fe897eec5d262e1b25179d7b97dbd6dfcc6e7caa8e462",
+     "primary_key": "customer_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "rel-ratebeer": {
+   "repository": "stanford-star/relbench-v2-extra",
+   "tables": {
+    "brewers": {
+     "sha256": "37180b1649bc606d2696e339a95db9350f0b5e54c4eb1bd4592f2f6b4a1fd685",
+     "primary_key": "brewer_id",
+     "time_column": null,
+     "foreign_keys": {
+      "country_id": "countries",
+      "state_id": "states",
+      "type_id": "place_types"
+     }
+    },
+    "beer_styles": {
+     "sha256": "49f83bc25b380924e7cabc9136c04252b0ad46cec230e0cb868180c72f72acaf",
+     "primary_key": "style_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "beers": {
+     "sha256": "fb5d60196fab318937a71d2c3cbbf183e0d1b72591352946e6bba386ba968e13",
+     "primary_key": "beer_id",
+     "time_column": "created_at",
+     "foreign_keys": {
+      "brewer_id": "brewers",
+      "style_id": "beer_styles"
+     }
+    },
+    "countries": {
+     "sha256": "660a819838ebb3acbcf47ead71fca27f74619fb34543be405bb4509230229978",
+     "primary_key": "country_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "place_types": {
+     "sha256": "ed26de209f2dc604dcb11a125d2a32761e01ab5c04eac2c0c6a11eda783c6111",
+     "primary_key": "type_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "users": {
+     "sha256": "2f544755d85bdeeed147a6008e72029f039e8b6b1256be3536f764b71c352431",
+     "primary_key": "user_id",
+     "time_column": "created_at",
+     "foreign_keys": {}
+    },
+    "places": {
+     "sha256": "0e9e4a34c3a0a074c8a787c3223aca57c602dc20b01ce8e6db7b763cd5c0b4c7",
+     "primary_key": "place_id",
+     "time_column": null,
+     "foreign_keys": {
+      "state_id": "states",
+      "type_id": "place_types",
+      "country_id": "countries"
+     }
+    },
+    "beer_ratings": {
+     "sha256": "131a6f291a3aa488c1d95426eba94a0f7d4502c6d9c4965ebdf556d152151dcd",
+     "primary_key": "rating_id",
+     "time_column": "created_at",
+     "foreign_keys": {
+      "user_id": "users",
+      "beer_id": "beers",
+      "availability_id": "availability"
+     }
+    },
+    "place_ratings": {
+     "sha256": "f5724a2f7db2415eac1ef7de77d4d38bb32b93f6f8e13f6e4b997e6dcf4c9f4a",
+     "primary_key": "rating_id",
+     "time_column": "created_at",
+     "foreign_keys": {
+      "place_id": "places",
+      "user_id": "users"
+     }
+    },
+    "favorites": {
+     "sha256": "d3a90a4370abd8cd7ba2bcb2bba1f19c66addfcd1f63fb9444de5e5073f70d76",
+     "primary_key": "favorite_id",
+     "time_column": "created_at",
+     "foreign_keys": {
+      "user_id": "users",
+      "beer_id": "beers"
+     }
+    },
+    "availability": {
+     "sha256": "35365110117e2796de32e36af989969525b16fc871d7c0fd6aee6def8234acdc",
+     "primary_key": "avail_id",
+     "time_column": null,
+     "foreign_keys": {
+      "beer_id": "beers",
+      "place_id": "places",
+      "country_id": "countries",
+      "user_id": "users"
+     }
+    },
+    "beer_upcs": {
+     "sha256": "79114a8f8a5677bc8171a4a4d5744bf312aee9f827db02cbe25cecf28bcf726e",
+     "primary_key": null,
+     "time_column": null,
+     "foreign_keys": {
+      "beer_id": "beers"
+     }
+    },
+    "states": {
+     "sha256": "64e450ffff171df6e82de411789104c038ddbbc5b3a4c8eb019c94cabcebb897",
+     "primary_key": "state_id",
+     "time_column": null,
+     "foreign_keys": {
+      "country_id": "countries"
+     }
+    }
+   }
+  },
+  "rel-salt": {
+   "repository": "stanford-star/relbench-v2-extra",
+   "tables": {
+    "salesdocumentitem": {
+     "sha256": "691f1ace40cfebf71c5534f70f4f20d3b206ad7961db1cd49f5bf11275a73087",
+     "primary_key": "ID",
+     "time_column": "CREATIONTIMESTAMP",
+     "foreign_keys": {
+      "SALESDOCUMENT": "salesdocument",
+      "SOLDTOPARTY": "customer",
+      "SHIPTOPARTY": "customer",
+      "BILLTOPARTY": "customer",
+      "PAYERPARTY": "customer"
+     }
+    },
+    "salesdocument": {
+     "sha256": "9e6beeb819c84347c72b4042892915f273295ceaf55978f100d2b78fefc58af7",
+     "primary_key": "SALESDOCUMENT",
+     "time_column": "CREATIONTIMESTAMP",
+     "foreign_keys": {}
+    },
+    "address": {
+     "sha256": "7d572fd14842d32eeae7d7b952066c89190aa73da37d9dc6e243e35df6ecf6dc",
+     "primary_key": "ADDRESSID",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "customer": {
+     "sha256": "ed995f6c6ea5ce4ca50dacad79d01add300eb1d313e0c2875e375483fd2394e1",
+     "primary_key": "CUSTOMER",
+     "time_column": null,
+     "foreign_keys": {
+      "ADDRESSID": "address"
+     }
+    }
+   }
+  },
+  "rel-stack": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "badges": {
+     "sha256": "14d75037870632795cda368fd6516adb1e0fa24fcbdad8e21011f8f81d0c8bb6",
+     "primary_key": "Id",
+     "time_column": "Date",
+     "foreign_keys": {
+      "UserId": "users"
+     }
+    },
+    "votes": {
+     "sha256": "f2f90de004bfc41f187e8c43dab472e227480914261acf63af7d4c57e06f8e99",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "posts",
+      "UserId": "users"
+     }
+    },
+    "users": {
+     "sha256": "6326edcecdc02f0364114a12d8ea602b01e9b23798f3a71ca6d884030712e96f",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {}
+    },
+    "comments": {
+     "sha256": "a31d0e7faf17298f3eddab6a13463be05ac60a0bc1cdbc84cafc45bdcbf80f94",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "UserId": "users",
+      "PostId": "posts"
+     }
+    },
+    "posts": {
+     "sha256": "a49e3c5e55e45212230c6ad290bb352930e9a4dc4a3a9882b36121a0566fbd3b",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "OwnerUserId": "users",
+      "ParentId": "posts"
+     }
+    },
+    "postLinks": {
+     "sha256": "a3b6f7fcd52115004bed2e077a842e3e625c19cec838daed77941990195ce40d",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "posts",
+      "RelatedPostId": "posts"
+     }
+    },
+    "postHistory": {
+     "sha256": "ceb2680328d30b2e5ce57572dcc659446556450481fadab4e6384a35979ec8ec",
+     "primary_key": "Id",
+     "time_column": "CreationDate",
+     "foreign_keys": {
+      "PostId": "posts",
+      "UserId": "users"
+     }
+    }
+   }
+  },
+  "rel-trial": {
+   "repository": "stanford-star/relbench-v1",
+   "tables": {
+    "conditions_studies": {
+     "sha256": "b9d4518962b64e2abf3699c404333d57d0ac7ba5d2dcf16fdd4769a47cfb5dc1",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies",
+      "condition_id": "conditions"
+     }
+    },
+    "interventions": {
+     "sha256": "77603a9692d68c22084d96e2a380eaf1faf9fa61e88e925fb0c0d2651e427aee",
+     "primary_key": "intervention_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "drop_withdrawals": {
+     "sha256": "11c1546cd2f4c0d6dfaff93d998845a72d23d9fccdd4bcd7856392c863dcca4c",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies"
+     }
+    },
+    "outcome_analyses": {
+     "sha256": "12a4f8d57c3701668bd04c0f51d8a29799175927f2d49726914d6d1c98be9147",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies",
+      "outcome_id": "outcomes"
+     }
+    },
+    "sponsors_studies": {
+     "sha256": "9d89cf918252a0bfd449aa6a8ea41fb95e139ca181b54d9361789b4b9290e020",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies",
+      "sponsor_id": "sponsors"
+     }
+    },
+    "facilities_studies": {
+     "sha256": "9095867fc5b18b6114ac940fc966894b7df2dda376d4e9294f5639f474cc5b3b",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies",
+      "facility_id": "facilities"
+     }
+    },
+    "eligibilities": {
+     "sha256": "d599b207f37f2aa99e7dcdf7d07410c899e3fa4d4c805c361005464700e72514",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies"
+     }
+    },
+    "interventions_studies": {
+     "sha256": "541dc25a29c43a8e334b0d5996c545dfff939a5e4daf01fe2a6f1cc8a1da4533",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies",
+      "intervention_id": "interventions"
+     }
+    },
+    "outcomes": {
+     "sha256": "d5b6149cecfdf28f65c7e8c2b9277d95f5af831a795e41c18bc252abeff0666c",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies"
+     }
+    },
+    "facilities": {
+     "sha256": "4b214d93990481874b86d78938b3fdc84680db3cd6ee6e54d56c67a4787dceee",
+     "primary_key": "facility_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "reported_event_totals": {
+     "sha256": "84143d6ed8c142c4a32697eecaad5e5d988a8437f73ebaebf868fb326ca33cf1",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies"
+     }
+    },
+    "sponsors": {
+     "sha256": "8490c115bdcabcc8f6e79cf26413e4db83bccd344158f1375e27e134de10307c",
+     "primary_key": "sponsor_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "studies": {
+     "sha256": "f3e43811026e7ca85a8ea35c05a80b5a1bec6463850705167cad3a44c03f1841",
+     "primary_key": "nct_id",
+     "time_column": "start_date",
+     "foreign_keys": {}
+    },
+    "conditions": {
+     "sha256": "c6feddc073a5808f22561941d2da67c35fbede34df5c4012161f13fe73bad311",
+     "primary_key": "condition_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "designs": {
+     "sha256": "8a7f4267afa815ecc9b1bfc37139beffdef7d10fede4caa5a00e5a0d9b93c427",
+     "primary_key": "id",
+     "time_column": "date",
+     "foreign_keys": {
+      "nct_id": "studies"
+     }
+    }
+   }
+  },
+  "tgbl-coin": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "nodes": {
+     "sha256": "e0bcb20b483533b23faae79a97ffc3da89914b7138237affdbbca0f59c11741e",
+     "primary_key": "node_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "2cb55669b70c80745b5bef406780431994c1077f87467e5f57836934f0312fca",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes",
+      "dst_id": "nodes"
+     }
+    }
+   }
+  },
+  "tgbl-comment": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "nodes": {
+     "sha256": "969cc5a15dcc1c19295da7ea9c69cfaf8c7a16e806a6b814e393e7433786c282",
+     "primary_key": "node_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "370293c934558da2f7c83d84a9c2615d9a9cba270d759517afd80fbcc57795fe",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes",
+      "dst_id": "nodes"
+     }
+    }
+   }
+  },
+  "tgbl-flight": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "nodes": {
+     "sha256": "18a1003caebdfda43e0014bc7bd65d2425e9f74a372f20cf70461a22feee2a45",
+     "primary_key": "node_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "ebc32bfff9375e0456affdf68bdec696d54889b52627cef49712b125c96b836d",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes",
+      "dst_id": "nodes"
+     }
+    }
+   }
+  },
+  "tgbl-review": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "nodes": {
+     "sha256": "b3805c2489e2efac1843c5956933bcdf3185c074cda3560d11f7203df3db1d22",
+     "primary_key": "node_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "be335d95a8daf20ac44e1b98f0419896b6bb760b23c7be98585c6f7df3bacaf3",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes",
+      "dst_id": "nodes"
+     }
+    }
+   }
+  },
+  "tgbl-review-v2": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "nodes": {
+     "sha256": "b3805c2489e2efac1843c5956933bcdf3185c074cda3560d11f7203df3db1d22",
+     "primary_key": "node_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "be335d95a8daf20ac44e1b98f0419896b6bb760b23c7be98585c6f7df3bacaf3",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes",
+      "dst_id": "nodes"
+     }
+    }
+   }
+  },
+  "tgbl-wiki": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "dst_nodes": {
+     "sha256": "77837bef73d4b32d25a5f79fba406ae1539f7ac4a11a5965d1e81648af58ebac",
+     "primary_key": "dst_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "src_nodes": {
+     "sha256": "77220f63e2dc5f0f3173f42049a1e6382dc46b09a54ce34ae8d1db4d6c3c2c0c",
+     "primary_key": "src_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "22e19fa06ff3ee22db0a173d461a7f85149c4fbecc120e8db4b14066c069f9be",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "src_nodes",
+      "dst_id": "dst_nodes"
+     }
+    }
+   }
+  },
+  "tgbl-wiki-v2": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "dst_nodes": {
+     "sha256": "77837bef73d4b32d25a5f79fba406ae1539f7ac4a11a5965d1e81648af58ebac",
+     "primary_key": "dst_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "src_nodes": {
+     "sha256": "77220f63e2dc5f0f3173f42049a1e6382dc46b09a54ce34ae8d1db4d6c3c2c0c",
+     "primary_key": "src_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "e7b81f5d43832b14784c8edd9cc4fc255a13602f17be3b2e7dbae31c57cbe603",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "src_nodes",
+      "dst_id": "dst_nodes"
+     }
+    }
+   }
+  },
+  "tgbn-trade": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "nodes": {
+     "sha256": "3db4ce21cf59b7316e3e683b3214fa020bcbcbce49c0f22728d4fb5f627e3366",
+     "primary_key": "node_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events": {
+     "sha256": "a6239d4b967d9ac2b1642ac8519ef53ed5dfb10ac5fb53a2a9f524c51f5a6382",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes",
+      "dst_id": "nodes"
+     }
+    },
+    "label_event_items": {
+     "sha256": "54b202f381ced022802c68f85e8bf56795e70c885622fcda6d91b5ae732d2c8b",
+     "primary_key": "item_id",
+     "time_column": null,
+     "foreign_keys": {
+      "label_event_id": "label_events",
+      "label_id": "labels"
+     }
+    },
+    "label_events": {
+     "sha256": "70ee03cf96c289e820f4e5c38e7720e53725829517b1a84952aa1c9413e20d23",
+     "primary_key": "label_event_id",
+     "time_column": "label_ts",
+     "foreign_keys": {
+      "src_id": "nodes"
+     }
+    },
+    "labels": {
+     "sha256": "5240e14ed405cb349028b269607d39a03c51856506ea5e905bf33babb4833aaf",
+     "primary_key": "label_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "thgl-forum": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "events_edge_type_0": {
+     "sha256": "22e9b9d53b49cfa23acfdbde3ed18dd587ac6287ea62a4e309acfe68b453e3b5",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_0"
+     }
+    },
+    "nodes_type_1": {
+     "sha256": "b36af7218ffe875d324c6fa37d4c90daaabcd2c3d139a78e7240fa468fa11fba",
+     "primary_key": "node_type_1_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_1": {
+     "sha256": "cefdddecd26c6583f76979fac1666a0fe118cbaee541f789fe3a73564d4198f2",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "nodes_type_0": {
+     "sha256": "ef961f4d6ac886399d4020a22d0becc44c713dfe7870fe26927a0c40e6e301ac",
+     "primary_key": "node_type_0_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "thgl-github": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "events_edge_type_10": {
+     "sha256": "efc3fa741018f5916d536a1bd00bd10eeb53e7be64faf9130ff4727e16888f21",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_3"
+     }
+    },
+    "events_edge_type_9": {
+     "sha256": "53447766bcbe58436cc29fb12e6035ef0a123429bdd33d85d0cdae79aa7afcef",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_1",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_5": {
+     "sha256": "10688984f4090aafbc44c239e1d5981955e7378366243d5e7723a9b0119a56fc",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_3"
+     }
+    },
+    "events_edge_type_0": {
+     "sha256": "9e390f5e91266a5d391ed652b6a64faaf5c5e4063a29e9497f3ab5af10d23d54",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "nodes_type_3": {
+     "sha256": "3080b80bf370383a98e688e4efc0bc0a90bbe2b9fb5b8b912d26b7463950db59",
+     "primary_key": "node_type_3_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_6": {
+     "sha256": "7b599c14e2c450add137b269354c5f06fae24e8f6da19e56ff52d05c04e694b1",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_3",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_7": {
+     "sha256": "57657dc57008cf82d84e93dc0ef7170d8e22f43bbce60200475f5bba6d2500fc",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_0"
+     }
+    },
+    "events_edge_type_11": {
+     "sha256": "d20a4b0f6ce72cf2f92891e550c59b8a26c280141b947e3d67b68dcce722047d",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_3",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_12": {
+     "sha256": "3ba133a3d61a4fc666441ddfb9bf81aa26c9f8aba7f3f35c3954e7c573ecd077",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_0"
+     }
+    },
+    "nodes_type_1": {
+     "sha256": "9c7758be59d5fba7ee17fb298dd3d14f96868b9543fecfd8801945fe57101615",
+     "primary_key": "node_type_1_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_8": {
+     "sha256": "6a4a013e1a60774e4191a43503c77f8fd5f4a619b7b01070419435ca1e69a98c",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "nodes_type_2": {
+     "sha256": "2ed5731ec1f18239785817b62c79dcbffa1727e414e7ccc1e7f51557a4155642",
+     "primary_key": "node_type_2_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_2": {
+     "sha256": "1bfb8cbce1c44e2e0cb88f8572eaa619dcd3f0b6e651e379ef7d6c2e45b41f09",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_4": {
+     "sha256": "68f556e903ab1b7ee1702e9abb8aae486fb03b6ebe9fd3e5683dc1dc2df52931",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_3",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_13": {
+     "sha256": "5f0900cbe155f59054cf25bf913284adc17021bf721416afbd801c6032ca6b6d",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_3": {
+     "sha256": "a3064cb1c142641d3b3fe170d898fc9580903845f7611e1f8b25cbaaccefca39",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_3"
+     }
+    },
+    "events_edge_type_1": {
+     "sha256": "3b3f9683bfee2eb5befbe33fcb504b11edba6a2efe45c475b0f1659d60003b4d",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_0"
+     }
+    },
+    "nodes_type_0": {
+     "sha256": "a145d5af737217ad8672eea54fd138b49e5d6f7fdbbec06ace93ca45c2f1db7d",
+     "primary_key": "node_type_0_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "thgl-myket": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "events_edge_type_0": {
+     "sha256": "d1c8be128515f04f42e63c51ed6cc39049e7107e1f2309edde7e89ca43f5a954",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "nodes_type_1": {
+     "sha256": "b238d3b520b909cb8835d7e9dadbe4b1de1aa1edd2fd15d71489d413b404b7a5",
+     "primary_key": "node_type_1_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_1": {
+     "sha256": "c1f8cd85ead770884144d84745d5025f28c173c589a5f2f01163ad307e825049",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "nodes_type_0": {
+     "sha256": "ae0d4e9aed33738042fe5621a9711693adc8808f2fe6a40b3243c985521f04df",
+     "primary_key": "node_type_0_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  },
+  "thgl-software": {
+   "repository": "stanford-star/tgb",
+   "tables": {
+    "events_edge_type_10": {
+     "sha256": "089d2335ad05c876712b2c998dc2ac8153bd350f7ad929eab4717263667e155e",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_9": {
+     "sha256": "d908a313a11ee608801b07a1a913b2497f69637787d43c58b920cbff2bc7c78d",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_3",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "events_edge_type_5": {
+     "sha256": "05eec750032aa13b295fcd64716c161a331a9d987326161a52145de92837290b",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "events_edge_type_0": {
+     "sha256": "ca908689cc1714f9487e0d91b8744eee33273da57fc2f50bb9e938a27cd8879c",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_1"
+     }
+    },
+    "nodes_type_3": {
+     "sha256": "0ca6568effa713afe19fe5402f6a30bd03425794ff40fb4c45c76ccfe35b8d34",
+     "primary_key": "node_type_3_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_6": {
+     "sha256": "cf56dd348d6810ec9bdba0038ebd76329c9a8e0598785939c8b419abe1ab9956",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_3"
+     }
+    },
+    "events_edge_type_7": {
+     "sha256": "cfeb4926c6190b1617e12475569b80d833cb6e688ede351ff081cc8ff089fad2",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_3",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "events_edge_type_11": {
+     "sha256": "c655f2654dc6cbd9ed3a84b8c8d7d45e3e551a2fad0828a89c05a3c0991506f3",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_1",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "events_edge_type_12": {
+     "sha256": "c9ff508397065624fa133b7f1c47711cc914a7adaa8aef671b0d861b9266807e",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "nodes_type_1": {
+     "sha256": "70a591bb1d935001d3ce88044662fe196a079b3a27c3747487efa33a66bbe556",
+     "primary_key": "node_type_1_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_8": {
+     "sha256": "ab80e6300525ceb4ecba181b7f71101aeeb41f05ee0e9923d56b6a276e378375",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_3"
+     }
+    },
+    "nodes_type_2": {
+     "sha256": "7229f5d8a554e4e175d7edb63541e08147a6d7f89927691af999772041bf13f1",
+     "primary_key": "node_type_2_id",
+     "time_column": null,
+     "foreign_keys": {}
+    },
+    "events_edge_type_2": {
+     "sha256": "e00c8634c55d67f2d363e8f1fb338e85e9ed6ce9a7e80bb3df9075182a1b5697",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_1",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "events_edge_type_4": {
+     "sha256": "7e84859dad458aca0334984640c38c7eec055d1820f87d2bcbdf24b6d28aa635",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_3",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "events_edge_type_13": {
+     "sha256": "a508c2c5dc7228b5f6994a743c904242664fe8e8d4c1cdbb71ca90c7145ebf50",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_2",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "events_edge_type_3": {
+     "sha256": "fc74b7bcac8f255a18fb34bf5a4e2197885311987055bcfa38a0d140d47549fa",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_0",
+      "dst_id": "nodes_type_3"
+     }
+    },
+    "events_edge_type_1": {
+     "sha256": "a415b0111e89d205b6079fc9976577d6cc5834e801ddd4c0e5534657ade42b40",
+     "primary_key": "event_id",
+     "time_column": "event_ts",
+     "foreign_keys": {
+      "src_id": "nodes_type_1",
+      "dst_id": "nodes_type_2"
+     }
+    },
+    "nodes_type_0": {
+     "sha256": "7adbaff0a1a4f4366800f92c9397dfd1fdd18cf141d11bb2274d9f59443c8b21",
+     "primary_key": "node_type_0_id",
+     "time_column": null,
+     "foreign_keys": {}
+    }
+   }
+  }
+ }
+}

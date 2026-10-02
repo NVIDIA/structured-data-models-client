@@ -6,10 +6,9 @@ import difflib
 import json
 import warnings
 from functools import lru_cache
-from importlib import import_module
+from importlib import import_module, resources
 from pathlib import Path
 from typing import Any
-from urllib.request import urlopen
 
 import pyarrow as pa
 import pyarrow.parquet
@@ -20,10 +19,7 @@ from sdm_relational_engine.rfm import Graph
 from sdm_relational_engine.rfm.backend.local import LocalTable
 
 PREFIX = 'rel-'
-HASH_URL = (
-    'https://raw.githubusercontent.com/snap-stanford/relbench/main/'
-    'relbench/datasets/hashes.json'
-)
+HUB = 'https://huggingface.co'
 
 EXCLUDE = {
     'hm': {
@@ -69,48 +65,88 @@ def _pooch() -> Any:
 
 
 def cache_dir() -> Path:
-    r"""The directory RelBench archives are downloaded to and extracted in."""
+    r"""The directory RelBench tables are downloaded to."""
     return Path(_pooch().os_cache('relbench'))
 
 
 @lru_cache
-def get_registry() -> Any:
-    r"""The ``pooch`` registry of RelBench archives and their SHA-256 digests.
+def get_registry() -> dict[str, Any]:
+    r"""The RelBench datasets this loader knows, pinned to one commit each.
 
-    The digests are fetched at call time from ``HASH_URL``, a file in the
-    upstream ``snap-stanford/relbench`` repository, so the set of accepted
-    archives is whatever that repository publishes today.
+    RelBench publishes its datasets as Hugging Face dataset repositories that
+    carry no hash file and move with ``main``. ``assets/relbench_registry.json``
+    records a commit per repository and, for every dataset at that commit,
+    its tables' keys and time columns and the SHA-256 of each table's parquet
+    file. ``scripts/pin_relbench.py`` writes it; ``assets/VENDORED.md`` says
+    how the digests were obtained. A file whose bytes differ from the recorded
+    digest is refused, so what loads is what was pinned.
     """
-    with urlopen(HASH_URL) as r:
-        hashes = json.load(r)
-
-    return _pooch().create(
-        path=cache_dir(),
-        base_url='https://relbench.stanford.edu/download/',
-        registry=hashes,
+    path = (
+        resources.files('sdm_relational_engine.rfm')
+        / 'assets'
+        / 'relbench_registry.json'
     )
+    registry: dict[str, Any] = json.loads(path.read_text(encoding='utf-8'))
+    return registry
+
+
+def _fetch(archive: str, verbose: bool) -> Path:
+    r"""Download ``archive``'s tables, check each digest, and return its
+    directory.
+
+    Files are read at the pinned commit rather than at ``main``, so the URL
+    names the same bytes the digest was recorded from. ``pooch`` checks the
+    digest of a cached file on every call too, and fetches it again if it
+    differs.
+    """
+    registry = get_registry()
+    dataset = registry['datasets'][archive]
+    repository = dataset['repository']
+    revision = registry['revisions'][repository]
+    pooch = _pooch()
+    store = pooch.create(
+        path=cache_dir() / repository / revision,
+        base_url=f'{HUB}/datasets/{repository}/resolve/{revision}/',
+        registry={
+            f'{archive}/db/{table}.parquet': f'sha256:{spec["sha256"]}'
+            for table, spec in dataset['tables'].items()
+        },
+        # A dropped connection should not cost a multi-gigabyte restart by hand.
+        retry_if_failed=2,
+    )
+    # pooch logs a line per file it downloads, and a dataset is now many files,
+    # so verbose=False silences that as well as the progress bars.
+    logger = pooch.get_logger()
+    level = logger.level
+    if not verbose:
+        logger.setLevel('WARNING')
+    try:
+        for key in store.registry:
+            store.fetch(key, progressbar=verbose)
+    finally:
+        logger.setLevel(level)
+    return Path(store.abspath) / archive
 
 
 def from_relbench(dataset: str, verbose: bool = True) -> Graph:
     r"""Load a RelBench dataset into a :class:`Graph`.
 
-    On first use this downloads the dataset archive (hundreds of MB for the
-    larger datasets) from ``relbench.stanford.edu`` and extracts it into a
-    per-user cache directory (:func:`cache_dir`). Digests come from the
-    upstream RelBench repository; see :func:`get_registry`.
+    On first use this downloads the dataset's tables (hundreds of MB for the
+    larger datasets) from RelBench's Hugging Face repositories into a per-user
+    cache directory (:func:`cache_dir`), and checks each against the digest
+    pinned in :func:`get_registry`.
 
-    ``dataset`` is an archive name from :func:`get_registry`, with or without
-    its family prefix: both ``'f1'`` and ``'rel-f1'`` resolve. Only 11 of the
-    published datasets carry a ``rel-`` prefix, so the archive name rather than
-    a stripped one is what identifies a dataset here.
+    ``dataset`` is a name from :func:`get_registry`, with or without its
+    family prefix: both ``'f1'`` and ``'rel-f1'`` resolve. Only some of the
+    published datasets carry a ``rel-`` prefix, so the published name rather
+    than a stripped one is what identifies a dataset here.
 
     Requires the ``relbench`` extra
     (``pip install 'sdm-relational-engine[relbench]'``).
     """
     dataset = dataset.lower()
-    registry = get_registry()
+    archives = get_registry()['datasets']
 
-    archives = {key.split('/')[0] for key in registry.registry}
     archive = next(
         (name for name in (dataset, f'{PREFIX}{dataset}') if name in archives),
         None,
@@ -125,41 +161,29 @@ def from_relbench(dataset: str, verbose: bool = True) -> Graph:
         )
 
     dataset = archive.removeprefix(PREFIX)
-
-    registry.fetch(
-        f'{archive}/db.zip',
-        processor=_pooch().Unzip(extract_dir='.'),
-        progressbar=verbose,
-    )
+    directory = _fetch(archive, verbose)
 
     graph = Graph(tables=[])
     edges: list[tuple[str, str, str]] = []
-    for path in (cache_dir() / archive / 'db').glob('*.parquet'):
+    for name, spec in archives[archive]['tables'].items():
+        path = directory / 'db' / f'{name}.parquet'
         schema = pa.parquet.read_schema(path)
-        exclude = EXCLUDE.get(dataset, {}).get(path.stem, [])
-        columns = [name for name in schema.names if name not in exclude]
+        exclude = EXCLUDE.get(dataset, {}).get(name, [])
+        columns = [column for column in schema.names if column not in exclude]
         data = pa.parquet.read_table(path, columns=columns)
-        metadata = {
-            key.decode('utf-8'): json.loads(value.decode('utf-8'))
-            for key, value in schema.metadata.items()
-            if key in [b'fkey_col_to_pkey_table', b'pkey_col', b'time_col']
-        }
 
-        table = LocalTable(
-            df=data.to_pandas(),
-            name=path.stem,
-            primary_key=metadata['pkey_col'],
-            time_column=metadata['time_col'],
+        graph.add_table(
+            LocalTable(
+                df=data.to_pandas(),
+                name=name,
+                primary_key=spec['primary_key'],
+                time_column=spec['time_column'],
+            )
         )
-        graph.add_table(table)
 
         edges.extend(
-            [
-                (path.stem, fkey, dst_table)
-                for fkey, dst_table in metadata[
-                    'fkey_col_to_pkey_table'
-                ].items()
-            ]
+            (name, fkey, dst_table)
+            for fkey, dst_table in spec['foreign_keys'].items()
         )
 
     for edge in edges:

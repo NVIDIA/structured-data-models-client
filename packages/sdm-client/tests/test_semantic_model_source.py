@@ -76,7 +76,14 @@ _TYPES = {
     },
     'customers': {'customer_id': 'INT', 'segment': 'STRING'},
     'products': {'product_id': 'INT', 'color': 'STRING'},
+    # information_schema lists a metric view's measures as plain columns.
+    'sales_mv': {
+        'line_id': 'INT',
+        'segment': 'STRING',
+        'total_quantity': 'BIGINT',
+    },
 }
+_TABLE_TYPES = {'sales_mv': 'METRIC_VIEW'}
 
 _DATA = {
     'order_lines': pd.DataFrame(
@@ -157,7 +164,15 @@ class _Cursor:
             table = self._bound(sql, parameters, 'table_name')
             types = _TYPES.get(table or '', {}) if schema == _SCHEMA else {}
             self._rows = [
-                (name, dtype, 'YES', _CATALOG, _SCHEMA, table)
+                (
+                    name,
+                    dtype,
+                    'YES',
+                    _CATALOG,
+                    _SCHEMA,
+                    table,
+                    _TABLE_TYPES.get(table or '', 'MANAGED'),
+                )
                 for name, dtype in types.items()
             ]
             return
@@ -262,6 +277,23 @@ def test_tables_select_and_rename_among_the_model_s_own(source: Any) -> None:
 def test_a_table_the_model_does_not_have_is_named(source: Any) -> None:
     with pytest.raises(StructuredDataError, match='not tables of'):
         _schema(source, {'orders': 'orders'})
+
+
+def test_a_metric_view_named_as_a_table_points_to_the_semantic_model(
+    source: Any,
+) -> None:
+    r"""Reading its rows fails in Databricks on the measures, with an error
+    that says nothing of what to do instead. The catalog knows what the
+    relation is before any row is read; this fake would fail on such a read.
+    """
+    with pytest.raises(StructuredDataError) as info:
+        Schema.from_source(source, {'m': 'sales_mv'})
+
+    error = info.value
+    assert error.code == 'INVALID_REQUEST'
+    assert 'is a metric view' in error.message
+    assert "source.semantic_model('sales_mv')" in error.message
+    assert error.details == {'metric_view': 'sales_mv'}
 
 
 def test_the_graph_sampled_is_the_model_cut_to_the_schema(
