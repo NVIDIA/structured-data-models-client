@@ -321,6 +321,64 @@ class TestTheRequestBodiesAreContractual:
         assert result.returncode == 0
 
 
+class TestTheNoticesAreComplete:
+    """What an open-source release has to say about what it ships.
+
+    Apache-2.0 asks for the third-party notices to travel with the code, and
+    the licenses of the bundled components ask for their copyright lines to be
+    reproduced. Naming a component and its license is not either of those.
+    """
+
+    def test_every_bundled_component_carries_a_copyright(self):
+        """A license name is not a notice. MIT, ISC and BSD-3-Clause each ask
+        for the copyright line, so every component enumerated has to have one.
+        """
+        licence = (REPO / 'LICENSE').read_text()
+        section = licence[licence.index('THIRD-PARTY SOFTWARE BUNDLED') :]
+        section = section[: section.index('MIT License, as it applies')]
+
+        missing = []
+        for block in re.split(r'\n(?=    [@\w])', section):
+            named = re.match(r'    ([@\w./-]+)\s+License:', block)
+            if named and 'opyright' not in block:
+                missing.append(named.group(1))
+
+        assert not missing, (
+            f'{missing} are attributed by license but carry no copyright '
+            f'notice, which their licenses require to be reproduced'
+        )
+
+    def test_the_readme_links_every_package_license(self):
+        """A reader looking for the terms of one package should not have to
+        guess that each directory holds its own copy.
+        """
+        readme = (REPO / 'README.md').read_text()
+        packages = sorted(p.name for p in PACKAGES.iterdir() if p.is_dir())
+
+        for package in packages:
+            link = f'packages/{package}/LICENSE'
+            assert link in readme, f'the README does not link {link}'
+            assert (REPO / link).is_file(), f'{link} is linked but missing'
+
+    def test_the_engine_license_says_what_the_root_one_says(self):
+        """The engine ships the bundle, so its own copy carries the same
+        notices. They differ only in the path each gives for the bundle.
+        """
+
+        def notices(path):
+            text = (REPO / path).read_text()
+            text = text[text.index('THIRD-PARTY SOFTWARE BUNDLED') :]
+            return [
+                line
+                for line in text.splitlines()
+                if 'opyright' in line or 'License:' in line
+            ]
+
+        assert notices('LICENSE') == notices(
+            'packages/sdm-relational-engine/LICENSE'
+        )
+
+
 class TestErrorContract:
     """Exception identity is what callers branch on, so it is pinned."""
 
