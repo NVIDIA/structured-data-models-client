@@ -333,6 +333,15 @@ declare as `1.0.0` and none has published. The heading becomes
   range of the `[relational]` extra, which is a native build, is documented
   where users meet it rather than surfacing as an unexplained pip resolver
   error.
+- **An entity table whose time column starts after the anchor now raises
+  `NoEligibleEntityError` instead of returning an empty label table.**
+  `get_train_table()` reads an empty sample as an answer of no labels, which
+  it is when the query's filter selects nothing, and it matched on the opening
+  of the sampler's message. That opening also carries the case where no entity
+  existed at the anchor, so a time column recording an edit rather than a
+  creation came back as a legitimate empty table and nothing said to look at
+  it. The new error is a `ValueError`, so a caller already catching one is
+  unaffected.
 
 ### Behaviour worth knowing before you rely on it
 

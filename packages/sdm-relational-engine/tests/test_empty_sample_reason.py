@@ -5,6 +5,7 @@
 import pandas as pd
 from predictive_query.ast import Column, Condition, Constant, Filter
 from predictive_query.schema.typing import Dtype, RelOp
+from sdm_relational_engine.exceptions import NoEligibleEntityError
 from sdm_relational_engine.rfm.base.sampler import Sampler
 
 _WINDOW_PAST_THE_DATA = pd.DateOffset(years=5)
@@ -65,6 +66,9 @@ class _Sampler:
         return pd.Timestamp('1950-05-13')
 
     _empty_sample_reason = Sampler._empty_sample_reason
+    _diagnose_empty_sample = Sampler._diagnose_empty_sample
+    _empty_sample_error = Sampler._empty_sample_error
+    _no_entity_at_anchor = Sampler._no_entity_at_anchor
 
 
 LAST_ROW = pd.Timestamp('2023-07-30')
@@ -338,3 +342,44 @@ def test_test_examples_are_not_called_context_examples() -> None:
         assert 'Context' not in reason
         assert 'Test examples' in reason
     assert 'are asked at the anchor' in anchored
+
+
+def test_entities_that_start_after_the_anchor_raise_their_own_error() -> None:
+    r"""A caller that reads every empty sample as zero labels would report a
+    misconfigured time column as a legitimate answer, so this one arrives as
+    its own type.
+    """
+    error = _Started(pd.Timestamp('2024-01-01'))._empty_sample_error(
+        _for_each_driver(),
+        LAST_ROW,
+        'Failed to collect any test examples for evaluation.',
+        'test',
+    )
+
+    assert isinstance(error, NoEligibleEntityError)
+    assert isinstance(error, ValueError)
+    assert "No row of 'drivers' existed at the anchor" in str(error)
+    assert str(error).startswith('Failed to collect any test examples')
+
+
+def test_an_anchor_at_the_end_of_the_data_stays_a_plain_value_error() -> None:
+    error = _Sampler(LAST_ROW)._empty_sample_error(
+        _Query('results.points'),
+        LAST_ROW,
+        'Failed to collect any context examples.',
+    )
+
+    assert type(error) is ValueError
+
+
+def test_an_entity_start_that_cannot_be_compared_is_not_a_start() -> None:
+    r"""A diagnosis is not worth an error of its own, so a time column whose
+    values cannot be compared with the anchor leaves the other reasons to
+    explain the empty sample.
+    """
+    sampler = _Started(pd.Timestamp('2024-01-01', tz='UTC'))
+
+    assert sampler._no_entity_at_anchor(_for_each_driver(), LAST_ROW) is None
+    assert 'most likely the reason' in sampler._empty_sample_reason(
+        _for_each_driver(), LAST_ROW
+    )
