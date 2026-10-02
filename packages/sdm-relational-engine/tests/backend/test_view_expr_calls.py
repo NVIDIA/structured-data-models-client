@@ -332,3 +332,28 @@ def test_is_distinct_from_reaches_its_value(dialect: str, expr: str) -> None:
     then `IS` each sit where a keyword may, ending at a value.
     """
     assert _refused(expr, dialect) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'x REGEXP_LIKE escape(y)',
+        'x SIMILAR TO escape(y)',
+        'x AT TIME ZONE escape(y)',
+        'x FOO escape(y)',
+        'x UNKNOWNOPERATOR escape(y)',
+    ],
+)
+def test_an_unknown_word_in_front_does_not_make_a_keyword(
+    dialect: str, expr: str
+) -> None:
+    r"""The word-operator set cannot be complete, so missing one must cost a
+    refusal rather than a call.
+
+    A name that could also be a function is keyword syntax only behind
+    something this recognises: a bracket, a literal, or a keyword it writes
+    the pair for. `REGEXP_LIKE`, `SIMILAR TO` and `AT TIME ZONE` each reached
+    SQL while the rule was that an unknown word must be a value.
+    """
+    assert _refused(expr, dialect) is not None
