@@ -50,7 +50,8 @@ Four things differ from a laptop, each found by running on every LTS runtime and
 Databricks requires a partner product to identify every connection and API request it opens, so each one sdm-client opens names it as `nvidia_sdm-client/<version>`.
 Model Serving requests and SQL warehouse connections carry it in the User-Agent, and Lakebase connections carry it as `application_name`, each ahead of any you pass.
 The `WorkspaceClient` requests sdm-client makes carry it through a copy of your client, which is left unchanged.
-A connection or Spark session you open yourself and pass to a source is used as it is, without it.
+Statements on a warehouse session sdm-client opens are also tagged `sdm_client_purpose: sampling` in query history.
+A connection or Spark session you open yourself and pass to a source is used as it is, without either.
 
 ## Packages
 

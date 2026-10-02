@@ -22,6 +22,10 @@ from sdm_connectors._version import __version__
 DATABRICKS_PARTNER = 'nvidia'
 DATABRICKS_PRODUCT = 'sdm-client'
 
+#: The query tag on every warehouse session sdm-client opens, which says what
+#: its statements are for without changing the identifier above.
+SAMPLING_QUERY_TAG = ('sdm_client_purpose', 'sampling')
+
 _PACKAGE_VERSION_RE = re.compile(
     r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
     r'(?:(a|b|rc)(0|[1-9]\d*))?'

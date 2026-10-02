@@ -101,26 +101,31 @@ def test_warehouse_connects_as_the_workspace_and_names_sdm_client(
     provider = driver_connect.pop('credentials_provider')
     assert provider() is _authenticate
     # Exactly these: no access token from the shell, and the partner
-    # identifier Databricks attributes the connection by.
+    # identifier and sampling tag Databricks attributes the connection by.
     assert driver_connect == {
         'server_hostname': 'adb-1.azuredatabricks.net',
         'http_path': '/sql/1.0/warehouses/abc123',
         'use_cloud_fetch': False,
         'user_agent_entry': PARTNER,
+        'session_configuration': {'QUERY_TAGS': 'sdm_client_purpose:sampling'},
     }
     assert calls == ['warehouses.get:abc123']
 
 
-def test_warehouse_keeps_a_caller_s_entry_after_its_own(
+def test_warehouse_keeps_a_caller_s_entry_and_tags_after_its_own(
     driver_connect: dict[str, Any],
 ) -> None:
     warehouse(
         'abc123',
         workspace=_workspace(),
         user_agent_entry='acme/2.1',
+        session_configuration={'QUERY_TAGS': 'team:growth'},
     )
 
     assert driver_connect['user_agent_entry'] == f'{PARTNER} acme/2.1'
+    assert driver_connect['session_configuration'] == {
+        'QUERY_TAGS': 'team:growth,sdm_client_purpose:sampling'
+    }
 
 
 def test_warehouse_refuses_an_entry_no_header_can_carry(
@@ -163,8 +168,8 @@ def test_warehouse_refuses_an_option_it_sets_or_the_driver_ignores(
 def test_a_connection_the_caller_opened_is_used_as_it_is(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """sdm-client did not open it, so it does not reopen it to name
-    itself: only the read runs."""
+    """sdm-client did not open it, so it neither reopens it to name itself
+    nor sets a tag on its session: only the read runs."""
     from sdm_connectors import DatabricksSource, read_table
 
     databricks_sql = pytest.importorskip('databricks.sql')

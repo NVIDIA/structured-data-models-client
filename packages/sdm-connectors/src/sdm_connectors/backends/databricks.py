@@ -9,7 +9,10 @@ import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias
 
-from sdm_connectors._databricks_partner import partner_identifier
+from sdm_connectors._databricks_partner import (
+    SAMPLING_QUERY_TAG,
+    partner_identifier,
+)
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -209,7 +212,8 @@ def connect(
     OAuth application or an ``auth_type`` the driver dispatches on.
 
     The connection names sdm-client in its User-Agent, ahead of any
-    ``user_agent_entry`` given.
+    ``user_agent_entry`` given, and tags its session's statements
+    ``sdm_client_purpose: sampling``.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)
@@ -239,7 +243,10 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
 
     Databricks requires a partner product to identify every connection it
     opens, so ``user_agent_entry`` starts with ``nvidia_sdm-client/<version>``
-    and keeps any entry the caller gave after it.
+    and keeps any entry the caller gave after it. The session's statements
+    are tagged ``sdm_client_purpose: sampling``, beside any query tags the
+    caller set, so a query history can tell sampling apart without a
+    second identifier.
 
     Raises:
         ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a ``user_agent_entry``
@@ -252,6 +259,19 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     else:
         _check_user_agent_entry(entry)
         connect_args['user_agent_entry'] = f'{partner_identifier()} {entry}'
+    key, value = SAMPLING_QUERY_TAG
+    tags = connect_args.get('query_tags')
+    if isinstance(tags, Mapping):
+        # The driver lets these replace the session's QUERY_TAGS outright.
+        connect_args['query_tags'] = {**tags, key: value}
+        return connect_args
+    # The session's own setting, which every driver from 4.1.3 sends on both
+    # its Thrift and SEA routes; `query_tags=` would need 4.2.6.
+    session = dict(connect_args.get('session_configuration') or {})
+    name = next((k for k in session if k.upper() == 'QUERY_TAGS'), 'QUERY_TAGS')
+    theirs = session.get(name)
+    session[name] = f'{theirs},{key}:{value}' if theirs else f'{key}:{value}'
+    connect_args['session_configuration'] = session
     return connect_args
 
 

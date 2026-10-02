@@ -85,8 +85,10 @@ def warehouse(
         source = DatabricksSource(connection, catalog='main', schema='sales')
 
     The connection names sdm-client in its User-Agent, ahead of any
-    ``user_agent_entry`` given. The warehouse lookup names sdm-client too,
-    through a copy of ``workspace`` rather than the caller's own.
+    ``user_agent_entry`` given, and tags its statements
+    ``sdm_client_purpose: sampling`` beside any query tags given. The
+    warehouse lookup names sdm-client too, through a copy of ``workspace``
+    rather than the caller's own.
 
     A Real-Time warehouse is refused: the driver serves it through a backend
     that takes no workspace-client credentials, so connect to it with

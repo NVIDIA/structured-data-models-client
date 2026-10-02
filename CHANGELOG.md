@@ -63,8 +63,13 @@ declare as `1.0.0` and none has published. The heading becomes
   connections from `lakebase()` carry it as `application_name`, ahead of any
   you pass. The `WorkspaceClient` requests these make carry it too, through a
   copy of your client rather than your client itself.
+  Warehouse sessions sdm-client opens also tag their statements
+  `sdm_client_purpose: sampling`, beside your own query tags, so query history
+  tells sampling apart.
   A connection or Spark session you open yourself and pass to a source is used
-  as it is, without it.
+  as it is, with neither.
+  `sdm-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,
+  the first release whose SEA route sends a session's query tags, and
   `sdm-client[databricks-serving]` brings `sdm-connectors`, which holds the
   identifier.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
