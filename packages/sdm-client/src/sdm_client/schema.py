@@ -40,6 +40,10 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
+from predictive_query.time_columns import (
+    RejectedTimeColumn,
+    screen_time_columns,
+)
 
 from sdm_client.core import dates
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -1018,6 +1022,7 @@ class Schema:
             )
 
         built: dict[str, Table] = {}
+        declined: dict[str, tuple[RejectedTimeColumn, ...]] = {}
         for name, frame in tables.items():
             if not isinstance(name, str) or not name:
                 raise StructuredDataError(
@@ -1030,7 +1035,7 @@ class Schema:
                     f'{type(frame).__name__}',
                     code='INVALID_REQUEST',
                 )
-            built[name] = _infer_table(name, frame)
+            built[name], declined[name] = _infer_table_declining(name, frame)
 
         _apply_keys_and_times(built, primary_keys, time_columns)
         if relationships is None:
@@ -1054,7 +1059,8 @@ class Schema:
             _warn_table_cannot_be_linked_to(built, dates, spoken_for)
             _warn_one_key_name_keys_several_tables(built)
         _warn_stype_was_decided_by_the_rows_read(built)
-        _warn_several_columns_could_be_the_time_column(schema)
+        _warn_time_column_candidates_were_declined(schema, declined)
+        _warn_several_columns_could_be_the_time_column(schema, declined)
         _warn_two_ways_to_reach_one_table(built, schema.relationships)
         return schema
 
@@ -1154,6 +1160,7 @@ class Schema:
 
         read = EngineTables()
         engine_tables: dict[str, Any] | None = None
+        declined: dict[str, tuple[RejectedTimeColumn, ...]] = {}
         if is_semantic_model(source):
             graph = semantic_model_graph(source)
             read.keep({name: graph[name] for name in graph.tables})
@@ -1187,6 +1194,9 @@ class Schema:
             built = {
                 name: _describe_source_table(graph[name], named)
                 for name, named in chosen.items()
+            }
+            declined = {
+                name: graph[name].time_column_rejections for name in chosen
             }
             declared = _declared_links(graph, chosen, built)
             if relationships is None:
@@ -1230,7 +1240,8 @@ class Schema:
             schema = cls(built, links, source=source)
         schema._engine_tables = read
         schema._mark_key_columns()
-        _warn_several_columns_could_be_the_time_column(schema)
+        _warn_time_column_candidates_were_declined(schema, declined)
+        _warn_several_columns_could_be_the_time_column(schema, declined)
         _warn_two_ways_to_reach_one_table(built, schema.relationships)
         return schema
 
@@ -1786,7 +1797,15 @@ def _as_key_tuple(key: Any) -> tuple[str, ...]:
 
 
 def _infer_table(name: str, frame: pd.DataFrame) -> Table:
-    r"""Describe a frame as a table, inferring the types, key and time column.
+    r"""Describe a frame as a table; see :func:`_infer_table_declining`."""
+    return _infer_table_declining(name, frame)[0]
+
+
+def _infer_table_declining(
+    name: str, frame: pd.DataFrame
+) -> tuple[Table, tuple[RejectedTimeColumn, ...]]:
+    r"""Describe a frame as a table, inferring the types, key and time column,
+    and return with it the timestamps refused as the time column.
 
     The cells are checked before any column is described. Typing a column asks
     for its distinct values, and a list cell makes that raise `unhashable
@@ -1828,14 +1847,12 @@ def _infer_table(name: str, frame: pd.DataFrame) -> Table:
         )
         object.__setattr__(table, 'primary_key', inferred)
         table._adopt_key(inferred)
-        table.time_column = _infer_time_column(columns)
-        return table
+        return table, _infer_time_column(table, frame)
     # Assigning the key is what marks its column, counts what the uniqueness
     # threshold tolerated and says so; doing any of it a second time here would
     # report the same duplicate twice, from inside this module.
     table.primary_key = inferred
-    table.time_column = _infer_time_column(columns)
-    return table
+    return table, _infer_time_column(table, frame)
 
 
 def _copy_table(table: _T) -> _T:
@@ -2101,12 +2118,58 @@ def _warn_dates_stored_as_text(table: Table) -> str | None:
     return None
 
 
-def _infer_time_column(columns: Mapping[str, Column]) -> str | None:
-    stamps = [name for name, c in columns.items() if c.stype == 'timestamp']
-    return stamps[0] if len(stamps) == 1 else None
+def _infer_time_column(
+    table: Table, frame: pd.DataFrame
+) -> tuple[RejectedTimeColumn, ...]:
+    r"""Set the time column when exactly one timestamp may be it, and return
+    the ones refused.
+
+    The rule is the one the engine applies to a source, so a frame and the
+    same rows in a warehouse infer the same column. Where several remain the
+    engine takes the oldest; here the choice is left to the caller.
+    """
+    stamps = [
+        name
+        for name, column in table.columns.items()
+        if column.stype == 'timestamp' and name != table.primary_key
+    ]
+    screen = screen_time_columns(frame, stamps)
+    table.time_column = screen.chosen
+    return screen.rejected
 
 
-def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
+def _warn_time_column_candidates_were_declined(
+    schema: Schema, declined: Mapping[str, Sequence[RejectedTimeColumn]]
+) -> None:
+    """Say which timestamp was refused as the time column, and why.
+
+    A table left without a time column fails its first windowed query, and
+    that refusal cannot say which of its columns inference passed over. Only
+    for such a table, and only where something could be windowed, as below.
+    """
+    tables = schema.tables
+    if len(tables) < 2 and not schema.relationships:
+        return
+    for name, table in sorted(tables.items()):
+        if table.time_column is not None:
+            continue
+        for rejected in declined.get(name, ()):
+            if rejected.column not in table.columns:
+                continue
+            warnings.warn(
+                f'{name}.{rejected.column} was not taken as the time column '
+                f'because {rejected.why}. If it does say when a row became '
+                f'true, name it: '
+                f'time_columns={{{name!r}: {rejected.column!r}}}.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
+
+
+def _warn_several_columns_could_be_the_time_column(
+    schema: Schema,
+    declined: Mapping[str, Sequence[RejectedTimeColumn]],
+) -> None:
     """Say when a table has more than one timestamp and so was given none.
 
     Choosing between them would decide what the model is allowed to know at
@@ -2116,8 +2179,9 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
 
     Only where something could be windowed: a lone table is asked single-table
     questions, which have no window, so there is no refusal ahead to warn of.
-    The column in the remedy is an example, the first alphabetically, and
-    not a nomination.
+    A column inference refused is no candidate and is reported on its own.
+    The column in the remedy is an example, the first in the table, and not a
+    nomination.
     """
     tables = schema.tables
     if len(tables) < 2 and not schema.relationships:
@@ -2125,11 +2189,12 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
     for name, table in sorted(tables.items()):
         if table.time_column is not None:
             continue
-        stamps = sorted(
+        refused = {rejected.column for rejected in declined.get(name, ())}
+        stamps = [
             column
             for column, held in table.columns.items()
-            if held.stype == 'timestamp'
-        )
+            if held.stype == 'timestamp' and column not in refused
+        ]
         if len(stamps) < 2:
             continue
         warnings.warn(
@@ -2137,8 +2202,8 @@ def _warn_several_columns_could_be_the_time_column(schema: Schema) -> None:
             f'column, {_and_list(stamps)}, so it was given none, and a query '
             f'over a window of it is refused. Name the one that says when a '
             f'row became true: time_columns={{{name!r}: {stamps[0]!r}}} '
-            f'names {stamps[0]!r}, which is only the first of them '
-            f'alphabetically.',
+            f'names {stamps[0]!r}, which is only the first of them in the '
+            f'table.',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
