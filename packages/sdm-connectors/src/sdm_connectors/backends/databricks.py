@@ -246,7 +246,7 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     and keeps any entry the caller gave after it. The session's statements
     are tagged ``sdm_client_purpose: sampling``, beside any query tags the
     caller set, so a query history can tell sampling apart without a
-    second identifier.
+    second identifier. A caller's own ``sdm_client_purpose`` is kept instead.
 
     Raises:
         ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a ``user_agent_entry``
@@ -262,17 +262,57 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     key, value = SAMPLING_QUERY_TAG
     tags = connect_args.get('query_tags')
     if isinstance(tags, Mapping):
-        # The driver lets these replace the session's QUERY_TAGS outright.
-        connect_args['query_tags'] = {**tags, key: value}
+        # The driver lets these replace the session's QUERY_TAGS outright. A
+        # caller's own sdm_client_purpose is theirs to set, so it wins.
+        connect_args['query_tags'] = {key: value, **tags}
         return connect_args
     # The session's own setting, which every driver from 4.1.3 sends on both
     # its Thrift and SEA routes; `query_tags=` would need 4.2.6.
     session = dict(connect_args.get('session_configuration') or {})
     name = next((k for k in session if k.upper() == 'QUERY_TAGS'), 'QUERY_TAGS')
     theirs = session.get(name)
-    session[name] = f'{theirs},{key}:{value}' if theirs else f'{key}:{value}'
+    if not theirs:
+        session[name] = f'{key}:{value}'
+    elif key not in _query_tag_keys(str(theirs)):
+        session[name] = f'{theirs},{key}:{value}'
     connect_args['session_configuration'] = session
     return connect_args
+
+
+def _query_tag_keys(serialized: str) -> set[str]:
+    r"""The keys in a ``QUERY_TAGS`` string, written as the driver's
+    ``serialize_query_tags`` writes one: ``key:value`` pairs joined by ``,``,
+    with a backslash escaping the character after it.
+
+    Raises:
+        ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a string that ends in
+            an unpaired backslash, which would escape the separator after it.
+    """
+    keys: set[str] = set()
+    key: list[str] = []
+    in_key = True
+    characters = iter(serialized)
+    for character in characters:
+        if character == '\\':
+            escaped = next(characters, None)
+            if escaped is None:
+                raise ConnectorError(
+                    'invalid Databricks QUERY_TAGS session setting: it ends '
+                    'in a backslash that escapes nothing; write a literal '
+                    'backslash as two',
+                    code='INVALID_CONNECTOR_ARGS',
+                )
+            if in_key:
+                key.append(escaped)
+        elif character == ',':
+            keys.add(''.join(key))
+            key, in_key = [], True
+        elif character == ':' and in_key:
+            in_key = False
+        elif in_key:
+            key.append(character)
+    keys.add(''.join(key))
+    return keys
 
 
 def _check_user_agent_entry(entry: object) -> None:

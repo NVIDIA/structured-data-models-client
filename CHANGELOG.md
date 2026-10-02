@@ -65,7 +65,7 @@ declare as `1.0.0` and none has published. The heading becomes
   copy of your client rather than your client itself.
   Warehouse sessions sdm-client opens also tag their statements
   `sdm_client_purpose: sampling`, beside your own query tags, so query history
-  tells sampling apart.
+  tells sampling apart. An `sdm_client_purpose` of your own is kept instead.
   A connection or Spark session you open yourself and pass to a source is used
   as it is, with neither.
   `sdm-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,

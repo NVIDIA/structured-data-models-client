@@ -476,6 +476,92 @@ def test_a_caller_s_session_query_tags_are_kept_beside_the_sampling_tag():
     assert session == {'query_tags': 'team:growth', 'ansi_mode': 'true'}
 
 
+@pytest.mark.parametrize(
+    'theirs',
+    [
+        'sdm_client_purpose:audit',
+        'team:growth,sdm_client_purpose:audit',
+        # Escaped as the driver escapes a value, so the comma and colon are
+        # part of team's value rather than a separator.
+        r'team:a\,b\:c,sdm_client_purpose:audit',
+    ],
+    ids=['alone', 'after-another', 'after-escapes'],
+)
+def test_a_caller_s_own_purpose_tag_wins_over_the_sampling_one(theirs):
+    """The caller set it on purpose, and a second key would leave which one
+    the warehouse keeps to chance."""
+    session = {'QUERY_TAGS': theirs}
+
+    captured = _captured_databricks_connect(session_configuration=session)
+
+    assert captured['session_configuration'] == {'QUERY_TAGS': theirs}
+
+
+def test_a_purpose_named_only_inside_a_value_is_not_the_caller_s_own():
+    """Escaped, it is part of team's value, so the tag is still added."""
+    theirs = r'team:x\,sdm_client_purpose\:audit'
+
+    captured = _captured_databricks_connect(
+        session_configuration={'QUERY_TAGS': theirs}
+    )
+
+    assert captured['session_configuration'] == {
+        'QUERY_TAGS': f'{theirs},{SAMPLING}'
+    }
+
+
+def test_a_session_query_tag_ending_in_a_lone_backslash_is_refused():
+    """It would escape the comma before the sampling tag and fold the tag
+    into the caller's value."""
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+
+    with pytest.raises(ConnectorError) as error:
+        databricks.connect(
+            server_hostname='h',
+            http_path='p',
+            access_token='t',
+            session_configuration={'QUERY_TAGS': 'team:growth\\'},
+        )
+    assert error.value.code == 'INVALID_CONNECTOR_ARGS'
+
+
+def test_a_session_query_tag_ending_in_an_escaped_backslash_is_kept():
+    theirs = 'team:growth\\\\'
+
+    captured = _captured_databricks_connect(
+        session_configuration={'QUERY_TAGS': theirs}
+    )
+
+    assert captured['session_configuration'] == {
+        'QUERY_TAGS': f'{theirs},{SAMPLING}'
+    }
+
+
+def test_the_caller_s_purpose_wins_in_a_query_tags_argument_too():
+    databricks = pytest.importorskip('sdm_connectors.backends.databricks')
+    if 'query_tags' not in databricks._CONNECT_ARGS:
+        pytest.skip('this driver takes no query_tags= argument')
+
+    captured = _captured_databricks_connect(
+        query_tags={'sdm_client_purpose': 'audit'}
+    )
+
+    assert captured['query_tags'] == {'sdm_client_purpose': 'audit'}
+
+
+def test_the_keys_are_read_back_from_what_the_driver_writes():
+    """Escaping is the driver's, so a caller's string written by it is read
+    with the same rule."""
+    utils = pytest.importorskip('databricks.sql.utils')
+    if not hasattr(utils, 'serialize_query_tags'):
+        pytest.skip('this driver has no query tag serializer')
+    from sdm_connectors.backends.databricks import _query_tag_keys
+
+    tags = {'team': 'a,b:c\\', 'sdm_client_purpose': 'x', 'flag': None}
+
+    assert _query_tag_keys(utils.serialize_query_tags(tags)) == set(tags)
+
+
 def test_a_caller_s_query_tags_argument_carries_the_sampling_tag_too():
     """The driver lets `query_tags=` replace the session's QUERY_TAGS, so a
     tag set only there would be dropped."""
