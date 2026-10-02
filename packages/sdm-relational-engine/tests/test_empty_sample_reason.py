@@ -258,8 +258,8 @@ class _Started(_Sampler):
         return super().get_min_time(table_names)
 
 
-def _for_each_driver() -> _Query:
-    query = _Query('results.points')
+def _for_each_driver(**kwargs) -> _Query:
+    query = _Query('results.points', **kwargs)
     query.entity_table = 'drivers'
     return query
 
@@ -301,3 +301,40 @@ def test_an_all_null_entity_time_column_is_not_a_start_time() -> None:
 
     assert 'most likely the reason' in reason
     assert "'drivers'" not in reason
+
+
+def test_a_later_anchor_is_offered_when_a_window_fits_after_the_first_entity():
+    reason = _Started(pd.Timestamp('2023-01-01'))._empty_sample_reason(
+        _for_each_driver(window=pd.DateOffset(days=7)),
+        pd.Timestamp('2020-01-01'),
+    )
+
+    assert "No row of 'drivers' existed at the anchor" in reason
+    assert 'or pass an anchor_time after 2023-01-01 00:00:00.' in reason
+
+
+def test_no_later_anchor_is_offered_when_no_window_fits_after_it() -> None:
+    reason = _Started(pd.Timestamp('2023-07-28'))._empty_sample_reason(
+        _for_each_driver(window=pd.DateOffset(days=7)),
+        pd.Timestamp('2020-01-01'),
+    )
+
+    assert "No row of 'drivers' existed at the anchor" in reason
+    assert 'anchor_time' not in reason
+
+
+def test_test_examples_are_not_called_context_examples() -> None:
+    r"""The same reasons explain an empty test set, whose examples sit at the
+    anchor rather than before it.
+    """
+    started = _Started(pd.Timestamp('2024-01-01'))._empty_sample_reason(
+        _for_each_driver(), LAST_ROW, 'test'
+    )
+    anchored = _Sampler(LAST_ROW)._empty_sample_reason(
+        _Query('results.points'), LAST_ROW, 'test'
+    )
+
+    for reason in (started, anchored):
+        assert 'Context' not in reason
+        assert 'Test examples' in reason
+    assert 'are asked at the anchor' in anchored

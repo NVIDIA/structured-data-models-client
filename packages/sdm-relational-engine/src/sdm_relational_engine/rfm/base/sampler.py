@@ -461,14 +461,15 @@ class Sampler(ABC):
         self,
         query: ValidatedPredictiveQuery,
         anchor_time: pd.Timestamp | Literal['entity'],
+        examples: Literal['context', 'test'] = 'context',
     ) -> str:
         r"""Why a sample came back empty, in terms of where the anchor fell.
 
-        Context examples are drawn from before the anchor and each needs the
-        query's whole window of data after it, so an anchor at the end of the
-        data leaves nowhere to draw from. The default anchor is the latest
-        timestamp in the tables the query aggregates, which puts every default
-        prediction at exactly that edge.
+        Each example needs the query's whole window of data after its anchor:
+        context examples are drawn from before the anchor, test examples sit
+        at it. An anchor at the end of the data leaves nowhere to draw from.
+        The default anchor is the latest timestamp in the tables the query
+        aggregates, which puts every default prediction at exactly that edge.
 
         Asking whether the query is too restrictive sends the caller to rewrite
         something that was never wrong, so state the anchor and the range it
@@ -479,11 +480,27 @@ class Sampler(ABC):
 
         Before either, an entity table whose time column starts after the
         anchor has no entity to ask about at all. A column that records an
-        edit, not a creation, does that, and no anchor in the data helps.
+        edit, not a creation, does that. A later anchor is offered only when
+        the data still holds a whole window after the first entity starts.
         """
         generic = ' Is your predictive query too restrictive?'
         if not isinstance(anchor_time, pd.Timestamp):
             return generic
+        kind = 'Context' if examples == 'context' else 'Test'
+
+        try:
+            aggregations = query.get_all_target_aggregations()
+            table_names = sorted(
+                {
+                    aggr.get_target_column_name().split('.')[0]
+                    for aggr in aggregations
+                }
+            )
+            max_time = self.get_max_time(table_names) if table_names else None
+            min_time = self.get_min_time(table_names) if table_names else None
+        except Exception:
+            aggregations, max_time, min_time = [], None, None
+
         try:
             entity_table = query.entity_table
             column = self.time_column_dict.get(entity_table)
@@ -496,30 +513,24 @@ class Sampler(ABC):
                 and earliest != pd.Timestamp.max
                 and earliest > anchor_time
             )
+            later_fits = starts_after and (
+                max_time is not None
+                and _window_fits_after(aggregations, earliest, max_time)
+            )
         except Exception:
-            starts_after = False
+            starts_after = later_fits = False
         if starts_after:
+            later = f', or pass an anchor_time after {earliest}'
+            later = later if later_fits else ''
             return (
                 f' No row of {entity_table!r} existed at the anchor: it is '
                 f'{anchor_time}, and the earliest {column!r} is {earliest}. '
-                f'Context examples only ask about an entity that existed by '
+                f'{kind} examples only ask about an entity that existed by '
                 f'its anchor. If {column!r} does not record when each entity '
-                f'began, set the time column of {entity_table!r} to None.'
+                f'began, set the time column of {entity_table!r} to None'
+                f'{later}.'
             )
-        try:
-            aggregations = query.get_all_target_aggregations()
-            table_names = sorted(
-                {
-                    aggr.get_target_column_name().split('.')[0]
-                    for aggr in aggregations
-                }
-            )
-            if not table_names:
-                return generic
-            max_time = self.get_max_time(table_names)
-            min_time = self.get_min_time(table_names)
-        except Exception:
-            return generic
+
         if max_time is None:
             return generic
 
@@ -542,9 +553,14 @@ class Sampler(ABC):
                 f'including their case.'
             )
 
+        where = (
+            'come from before the anchor'
+            if examples == 'context'
+            else 'are asked at the anchor'
+        )
         return (
-            f' The anchor time is most likely the reason: {facts}. Context '
-            f'examples come from before the anchor and each needs the '
+            f' The anchor time is most likely the reason: {facts}. {kind} '
+            f'examples {where} and each needs the '
             f"query's full window of data after it, so an anchor at or near "
             f'the end of the range leaves none to draw from. Pass an earlier '
             f'anchor_time, or shorten the window the query asks about.'
@@ -873,7 +889,7 @@ class Sampler(ABC):
         if num_test_examples > 0 and len(test_y) == 0:
             raise ValueError(
                 'Failed to collect any test examples for evaluation.'
-                + self._empty_sample_reason(query, test_anchor_time)
+                + self._empty_sample_reason(query, test_anchor_time, 'test')
             )
 
         global _coverage_warned
