@@ -1043,8 +1043,7 @@ def test_a_forecast_failure_unrelated_to_its_window_is_not_told_to_shorten():
 def test_a_ranking_with_cold_candidates_sends_nothing_and_names_them_all(
     requests_mock,
 ):
-    """The endpoint refuses a one-class context, and finding each such
-    candidate while sending spent every call before it and named only one."""
+    """Every cold candidate is named at once, and nothing is sent."""
     pytest.importorskip('sdm_relational_engine')
     from sdm_client import KumoRelational, SDMClient
     from sdm_client.errors import UnsupportedRequestError

@@ -442,7 +442,9 @@ class SDMClient:
         ranking = rewritten.kind == RANKING
         if ranking:
             _refuse_outputs_a_ranking_cannot_give(outputs)
-            self._refuse_candidates_no_context_teaches(request, model)
+            self._refuse_candidates_no_context_teaches(
+                request, model, rewritten
+            )
         # A ranking needs how sure each answer was, which is what orders the
         # candidates, and the fields it gives back are the merge's own. A step
         # of a forecast is an ordinary regression, so the caller's fields are
@@ -465,16 +467,18 @@ class SDMClient:
         return _report_absent(merged, outputs, spec_for(model).model_id)
 
     def _refuse_candidates_no_context_teaches(
-        self, request: Request, model: str | Model
+        self,
+        request: Request,
+        model: str | Model,
+        rewritten: Decomposition,
     ) -> None:
         r"""Refuse a ranking with a one-class candidate before any call.
 
-        The endpoint refuses a classification whose context holds one class,
-        so finding such a candidate while sending spent every call before it,
-        and named only the first of several.
+        The endpoint refuses a classification whose context holds one class.
+        Finding that while sending spent every call before it and named only
+        the first such candidate, so every candidate is checked up front and
+        all of them are named at once.
         """
-        rewritten = request.decomposition
-        assert rewritten is not None
         cold = []
         for part, (_, about) in zip(
             request.parts or (), rewritten.parts, strict=True
