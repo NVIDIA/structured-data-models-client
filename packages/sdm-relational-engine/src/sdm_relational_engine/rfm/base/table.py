@@ -17,6 +17,7 @@ from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Dtype, Stype
 from predictive_query.time_columns import (
     ColumnRange,
+    TableRange,
     TimeColumnChoice,
     choose_time_column,
 )
@@ -859,14 +860,12 @@ class Table(ABC):
         """
         return self._time_column_choice
 
-    def _full_range(
-        self, names: Sequence[str]
-    ) -> dict[str, ColumnRange] | None:
-        r"""``MIN``, ``MAX`` and ``COUNT`` of each column of ``names`` over
-        every row, in one query, or ``None`` when this table cannot ask its
-        source.
+    def _full_range(self, names: Sequence[str]) -> TableRange | None:
+        r"""The row count, and ``MIN``, ``MAX`` and ``COUNT`` of each column
+        of ``names``, over every row in one query, or ``None`` when this
+        table cannot ask its source.
         """
-        selects: list[str] = []
+        selects = ['COUNT(*)']
         for name in names:
             held = self[name]
             if held.is_source:
@@ -883,11 +882,16 @@ class Table(ABC):
         except Exception:
             # Only evidence rejects a column, and a failed query is none.
             return None
-        row = rows[0]
-        return {
-            name: ColumnRange(row[3 * i], row[3 * i + 1], int(row[3 * i + 2]))
-            for i, name in enumerate(names)
-        }
+        count, *ranges = rows[0]
+        return TableRange(
+            int(count),
+            {
+                name: ColumnRange(
+                    ranges[3 * i], ranges[3 * i + 1], int(ranges[3 * i + 2])
+                )
+                for i, name in enumerate(names)
+            },
+        )
 
     def infer_metadata(self, verbose: bool = True) -> Self:
         r"""Infers metadata, *i.e.*, primary keys and time columns, in this

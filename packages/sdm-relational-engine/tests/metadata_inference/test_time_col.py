@@ -110,7 +110,7 @@ def test_a_column_constant_in_the_rows_read_is_checked_against_the_table():
     assert table.time_column is not None
     assert table.time_column.name == 't_dat'
     assert [sql for sql in asked if 'MIN(' in sql] == [
-        'SELECT MIN("t_dat"), MAX("t_dat"), COUNT("t_dat")\nFROM "t"'
+        'SELECT COUNT(*), MIN("t_dat"), MAX("t_dat"), COUNT("t_dat")\nFROM "t"'
     ]
 
 
@@ -155,7 +155,8 @@ def test_every_column_is_checked_in_one_query():
     assert table.time_column is not None
     assert table.time_column.name == 'OrderDate'
     assert [sql for sql in asked if 'MIN(' in sql] == [
-        'SELECT MIN("OrderDate"), MAX("OrderDate"), COUNT("OrderDate"), '
+        'SELECT COUNT(*), '
+        'MIN("OrderDate"), MAX("OrderDate"), COUNT("OrderDate"), '
         'MIN("DueDate"), MAX("DueDate"), COUNT("DueDate"), '
         'MIN("ShipDate"), MAX("ShipDate"), COUNT("ShipDate"), '
         'MIN("ModifiedDate"), MAX("ModifiedDate"), COUNT("ModifiedDate")\n'

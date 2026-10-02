@@ -6,8 +6,9 @@ r"""Which timestamp column inference takes as a table's time column.
 
 A time column says when a row became true, and a query counts or windows rows
 by it. Some timestamps say nothing of the sort, and are never taken: one that
-holds a single value in every row, or none, and one whose name says when a row
-was loaded or synced, such as `_fivetran_synced`.
+is empty in more than half the rows, or holds a single value in every row that
+holds one, and one whose name says when a row was loaded or synced, such as
+`_fivetran_synced`.
 Nor is a date of birth.
 A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is taken
 only when it is a table's one timestamp left, since in an append-only log of
@@ -26,7 +27,7 @@ import datetime
 import re
 import warnings
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, NamedTuple
 
 import pandas as pd
@@ -165,18 +166,26 @@ class RejectedTimeColumn:
 
     Attributes:
         column: The column's name.
-        reason: Why it was refused. ``'constant'`` when at least two rows
-            hold a value and all hold the same one, or no row holds one.
+        reason: Why it was refused. ``'constant'`` when no row holds a
+            value, or the table has more than one row and every row that
+            holds a value holds the same one. ``'sparse'`` when more than
+            half the rows hold no value.
             ``'load_stamp'`` when its name says when a row was loaded.
             ``'edit_stamp'`` when it says when a row was last changed.
             ``'birth_date'`` when it says when someone was born.
         value: The one value every row holds, or ``None`` when no row holds
-            one or the reason is the name.
+            one or the reason is not ``'constant'``.
+        missing: How many rows hold no value, when the reason is the values.
+        rows: How many rows the table has, when the reason is the values.
     """
 
     column: str
-    reason: Literal['constant', 'load_stamp', 'edit_stamp', 'birth_date']
+    reason: Literal[
+        'constant', 'sparse', 'load_stamp', 'edit_stamp', 'birth_date'
+    ]
     value: object = None
+    missing: int = field(default=0, compare=False)
+    rows: int = field(default=0, compare=False)
 
     @property
     def why(self) -> str:
@@ -189,8 +198,15 @@ class RejectedTimeColumn:
             return 'it looks like when a row was loaded, not when it began'
         if self.reason == 'birth_date':
             return 'it looks like a date of birth, not when a row began'
+        if self.reason == 'sparse':
+            return f'{self.missing:,} of its {self.rows:,} rows hold no value'
         if self.value is None:
             return 'no row holds a value'
+        if self.missing:
+            return (
+                f'every row that holds a value holds '
+                f'{_as_timestamp(self.value)}'
+            )
         return f'every row holds {_as_timestamp(self.value)}'
 
 
@@ -215,9 +231,6 @@ class TimeColumnChoice:
     rejected: tuple[RejectedTimeColumn, ...]
 
 
-_VARIES = object()
-
-
 class ColumnRange(NamedTuple):
     r"""A column's ``MIN``, ``MAX`` and ``COUNT`` over every row of its
     table.
@@ -229,9 +242,16 @@ class ColumnRange(NamedTuple):
     held: int
 
 
-#: Reads the range of each named column over every row of their table in one
-#: query, or ``None`` when it cannot.
-FullRange = Callable[[Sequence[str]], Mapping[str, ColumnRange] | None]
+class TableRange(NamedTuple):
+    r"""What one query over every row of a table read."""
+
+    rows: int
+    columns: Mapping[str, ColumnRange]
+
+
+#: Reads the row count of a table and the range of each named column over
+#: every row, in one query, or ``None`` when it cannot.
+FullRange = Callable[[Sequence[str]], TableRange | None]
 
 
 def choose_time_column(
@@ -242,8 +262,9 @@ def choose_time_column(
 ) -> TimeColumnChoice:
     r"""Choose a table's time column among its timestamps.
 
-    A column holding one value in at least two rows, or none in any, is
-    refused, as is one named as a load stamp.
+    A column empty in more than half the rows is refused, as is one holding
+    one value in every row that holds one, unless the table has a single
+    row, and one named as a load stamp.
     So is one named as a date of birth.
     Of those left, a stamp of the last edit is taken only when it is the one
     column left. Otherwise a creation stamp is preferred, and of several the
@@ -277,8 +298,8 @@ def choose_time_column(
             rejected[name] = RejectedTimeColumn(name, 'load_stamp')
         elif is_birth_date(name):
             rejected[name] = RejectedTimeColumn(name, 'birth_date')
-        elif (held := _constant(frame[name], name, whole)) is not _VARIES:
-            rejected[name] = RejectedTimeColumn(name, 'constant', held)
+        elif refused := _refused_for_values(name, frame, whole):
+            rejected[name] = refused
         elif is_edit_stamp(name):
             rejected[name] = RejectedTimeColumn(name, 'edit_stamp')
             edited.append(name)
@@ -319,40 +340,44 @@ class _WholeTable:
         self, full_range: FullRange | None, names: Sequence[str]
     ) -> None:
         self.can_ask = full_range is not None
-        self._ranges = (
+        self.read = (
             full_range(names) if full_range is not None and names else None
         )
 
     def __call__(self, name: str) -> ColumnRange | None:
-        return None if self._ranges is None else self._ranges.get(name)
+        return None if self.read is None else self.read.columns.get(name)
 
 
-def _constant(values: pd.Series, name: str, whole: _WholeTable) -> object:
-    r"""The one value a column holds in at least two rows, ``None`` when it
-    holds none, or ``_VARIES``.
+def _refused_for_values(
+    name: str, frame: pd.DataFrame, whole: _WholeTable
+) -> RejectedTimeColumn | None:
+    r"""Refuse a column that is mostly empty or holds one value, by what
+    every row of the table holds.
 
-    A single value is no evidence that the column never changes, so a
-    one-row table keeps its timestamp.
+    A single value is no evidence that a column never changes, so a one-row
+    table keeps its timestamp. A table that cannot be asked keeps its column
+    too: only evidence refuses one.
     """
-    present = values.dropna()
-    first = present.iloc[0] if len(present) else None
-    if len(present) > 1 and not bool((present == first).all()):
-        return _VARIES
-    count = len(present)
+    present = frame[name].dropna()
+    rows, held = len(frame), len(present)
+    first = present.iloc[0] if held else None
+    same = held > 0 and bool((present == first).all())
     if whole.can_ask:
         seen = whole(name)
-        if seen is None:
-            # A table that cannot be asked keeps its column: only evidence
-            # rejects one.
-            return _VARIES
-        low, high, count = seen
-        if count > 1 and not bool(low == high):
-            return _VARIES
+        if seen is None or whole.read is None:
+            return None
+        rows, held = whole.read.rows, seen.held
+        same = held > 0 and bool(seen.low == seen.high)
         # The value read keeps the type the rows were read as.
-        first = low if first is None else first
-    if count == 0:
-        return None
-    return _VARIES if count == 1 else first
+        first = seen.low if first is None else first
+    missing = rows - held
+    if held == 0:
+        return RejectedTimeColumn(name, 'constant', None, missing, rows)
+    if 2 * missing > rows:
+        return RejectedTimeColumn(name, 'sparse', None, missing, rows)
+    if rows > 1 and same:
+        return RejectedTimeColumn(name, 'constant', first, missing, rows)
+    return None
 
 
 def _earliest(

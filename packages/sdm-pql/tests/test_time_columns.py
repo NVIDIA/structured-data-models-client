@@ -22,6 +22,7 @@ from predictive_query.time_columns import (
     LOAD_STAMP_TOKENS,
     ColumnRange,
     RejectedTimeColumn,
+    TableRange,
     choose_time_column,
     is_birth_date,
     is_edit_stamp,
@@ -49,7 +50,8 @@ def _one_query(read):
         ranges = {name: read(name) for name in names}
         if any(seen is None for seen in ranges.values()):
             return None
-        return {name: ColumnRange(*seen) for name, seen in ranges.items()}
+        columns = {name: ColumnRange(*seen) for name, seen in ranges.items()}
+        return TableRange(max(seen.held for seen in columns.values()), columns)
 
     return full_range
 
@@ -234,11 +236,45 @@ def test_an_empty_column_is_refused():
     assert choice.rejected[0].why == 'no row holds a value'
 
 
-def test_a_single_value_is_no_evidence_of_a_constant():
-    """A one-row frame keeps its timestamp."""
+def test_a_one_row_table_keeps_its_timestamp():
+    """A single value is no evidence that a column never changes."""
     assert _choose(ordered=ONE_DAY[:1]).column == 'ordered'
-    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11'), pd.NaT])
-    assert _choose(ordered=held_once).column == 'ordered'
+    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11')])
+    assert _choose(ordered=held_once).rejected == (
+        RejectedTimeColumn('ordered', 'constant', held_once[1]),
+    )
+    assert _choose(ordered=held_once).rejected[0].why == (
+        'every row that holds a value holds 2025-09-11 00:00:00'
+    )
+
+
+def test_a_mostly_empty_column_is_refused():
+    """A `cancelled_at` set on one order in 1200 is no order's time."""
+    cancelled = pd.Series([pd.NaT] * 1_200)
+    cancelled[5] = pd.Timestamp('2024-05-05')
+    cancelled[9] = pd.Timestamp('2024-06-05')
+    choice = _choose(cancelled_at=cancelled)
+    assert choice.column is None
+    assert choice.rejected == (RejectedTimeColumn('cancelled_at', 'sparse'),)
+    assert choice.rejected[0].why == '1,198 of its 1,200 rows hold no value'
+
+
+def test_a_column_empty_in_half_the_rows_is_kept():
+    half = pd.Series([pd.NaT, pd.NaT, *DAYS[:2]])
+    assert _choose(shipped=half).column == 'shipped'
+
+
+def test_a_column_is_counted_over_the_whole_table():
+    """Dense in the rows read is not dense in the table."""
+    whole = TableRange(
+        1_000, {'cancelled_at': ColumnRange(DAYS[0], DAYS[3], 4)}
+    )
+    choice = choose_time_column(
+        pd.DataFrame({'cancelled_at': DAYS}),
+        ['cancelled_at'],
+        full_range=lambda names: whole,
+    )
+    assert choice.rejected[0].why == '996 of its 1,000 rows hold no value'
 
 
 def test_a_column_constant_only_in_the_rows_read_is_kept():
@@ -247,12 +283,8 @@ def test_a_column_constant_only_in_the_rows_read_is_kept():
 
     def full_range(names):
         asked.append(list(names))
-        return {
-            name: ColumnRange(
-                pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22'), 9
-            )
-            for name in names
-        }
+        stamps = pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22')
+        return TableRange(9, {name: ColumnRange(*stamps, 9) for name in names})
 
     choice = choose_time_column(
         pd.DataFrame({'t_dat': ONE_DAY, 'other': LATER, 'synced': DAYS}),
@@ -275,16 +307,20 @@ def test_a_column_constant_in_every_row_is_refused_after_asking():
     )
 
 
-def test_a_value_held_once_in_the_rows_read_is_checked_against_the_table():
-    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11'), pd.NaT])
+def test_a_value_held_once_is_checked_against_the_whole_table():
+    held_once = pd.Series([pd.NaT, pd.Timestamp('2025-09-11')])
     stamp = pd.Timestamp('2025-09-11')
-    assert (
-        _choose(lambda name: (stamp, stamp, 2), joined=held_once).column is None
-    )
-    assert (
-        _choose(lambda name: (stamp, stamp, 1), joined=held_once).column
-        == 'joined'
-    )
+
+    def choose(rows: int, held: int):
+        whole = TableRange(rows, {'joined': ColumnRange(stamp, stamp, held)})
+        return choose_time_column(
+            pd.DataFrame({'joined': held_once}),
+            ['joined'],
+            full_range=lambda names: whole,
+        )
+
+    assert choose(rows=3, held=2).column is None
+    assert choose(rows=1, held=1).column == 'joined'
 
 
 def test_a_table_that_cannot_be_asked_keeps_its_column():
