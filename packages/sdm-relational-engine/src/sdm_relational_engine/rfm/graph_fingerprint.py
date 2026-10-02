@@ -31,7 +31,8 @@ The order is: the format version, then each table sorted by name, then the
 edges sorted, then the edges inference guessed. A table is its name, its column
 count, then each column in the order the table holds it as name, semantic type
 and storage type; then its declared key columns in order preceded by their
-count; then its primary key, time column and end time column.
+count; then its primary key, time column and end time column; then the row
+filter its source is read through, empty when it has none.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ from typing import Any, Protocol
 # The encoding below, bumped only when THAT changes. Versioning on the package
 # version instead would throw away every downstream cache on a release that had
 # nothing to do with fingerprinting.
-FINGERPRINT_VERSION = 1
+FINGERPRINT_VERSION = 2
 
 
 class _Column(Protocol):
@@ -135,6 +136,8 @@ def _table_terms(table: _Table) -> list[str]:
     for attribute in ('time_column', 'end_time_column'):
         column = getattr(table, attribute, None)
         terms.append(_term(column.name if column is not None else None))
+    # A metric view's filter decides which rows the sampler reads.
+    terms.append(_term(getattr(table, 'row_filter', None)))
     return terms
 
 

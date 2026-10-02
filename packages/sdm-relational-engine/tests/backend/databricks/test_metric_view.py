@@ -489,6 +489,9 @@ def test_a_trusted_filter_may_call_a_udf_but_not_read_a_join() -> None:
         parse("customers.segment = 'gold'")
     with pytest.raises(UnsupportedFilterError, match='SELECT'):
         parse('source.amount > (SELECT 1)')
+    # A stray `)` would close the filtered subquery and append to it:
+    with pytest.raises(UnsupportedFilterError, match="closes a '\\('"):
+        parse('source.amount > 0) OR (1 = 1')
 
 
 def test_parse_metric_view_duplicate_aliases() -> None:
@@ -1778,6 +1781,13 @@ def test_the_filter_wraps_every_read_of_the_fact_table() -> None:
     copied = fact.copy('lines')
     assert copied.row_filter == fact.row_filter
     assert copied._quoted_source_name == filtered
+
+    # Reading other rows is another graph to anything that caches by name:
+    from sdm_relational_engine.rfm.graph_fingerprint import graph_fingerprint
+
+    name = graph_fingerprint(graph)
+    fact._row_filter = None
+    assert graph_fingerprint(graph) != name
 
 
 def test_a_join_filter_refuses_the_metric_view() -> None:
