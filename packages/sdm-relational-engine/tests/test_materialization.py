@@ -460,6 +460,8 @@ def test_materialize_task_rejects_sanitized_entity_reference() -> None:
         },
         verbose=False,
     )
+    # One date orders nothing, so it is named rather than inferred.
+    graph['USERS'].time_column = 'TIME'
     model = KumoRelational(graph, verbose=False)
     task = TaskTable(
         task_type=TaskType.REGRESSION,

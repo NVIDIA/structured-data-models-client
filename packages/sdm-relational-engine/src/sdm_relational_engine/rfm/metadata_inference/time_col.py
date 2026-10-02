@@ -2,10 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import re
 import warnings
 
 import pandas as pd
+from predictive_query.time_columns import (
+    FullRange,
+    RejectedTimeColumn,
+    screen_time_columns,
+)
 
 from sdm_relational_engine.rfm.base.utils import is_datetime, to_datetime
 
@@ -13,39 +17,40 @@ from sdm_relational_engine.rfm.base.utils import is_datetime, to_datetime
 def infer_time_column(
     df: pd.DataFrame,
     candidates: list[str],
+    *,
+    full_range: FullRange | None = None,
 ) -> str | None:
     r"""Auto-detect potential time column.
 
     Args:
         df: The pandas DataFrame to analyze.
         candidates: A list of potential candidates.
+        full_range: Reads a column's MIN and MAX over the whole table, when
+            ``df`` holds only some of its rows.
 
     Returns:
         The name of the detected time column, or ``None`` if not found.
     """
-    candidates = [  # Exclude all candidates with `*last*` in column names:
-        col_name
-        for col_name in candidates
-        if not re.search(r'(^|_)last(_|$)', col_name, re.IGNORECASE)
-    ]
+    return choose_time_column(df, candidates, full_range=full_range)[0]
 
-    if len(candidates) == 0:
-        return None
 
-    if len(candidates) == 1:
-        return candidates[0]
+def choose_time_column(
+    df: pd.DataFrame,
+    candidates: list[str],
+    *,
+    full_range: FullRange | None = None,
+) -> tuple[str | None, tuple[RejectedTimeColumn, ...]]:
+    r"""The inferred time column, and the candidates refused with why.
 
-    # If there exists a dedicated `create*` column, use it as time column:
-    create_candidates = [
-        candidate
-        for candidate in candidates
-        if candidate.lower().startswith('create')
-    ]
-    if len(create_candidates) == 1:
-        return create_candidates[0]
-    if len(create_candidates) > 1:
-        candidates = create_candidates
+    See :func:`infer_time_column` for the arguments.
+    """
+    screen = screen_time_columns(df, candidates, full_range=full_range)
+    if len(screen.eligible) <= 1:
+        return screen.chosen, screen.rejected
+    return _oldest(df, list(screen.eligible)), screen.rejected
 
+
+def _oldest(df: pd.DataFrame, candidates: list[str]) -> str | None:
     datetime_candidates = [
         candidate for candidate in candidates if is_datetime(df[candidate])
     ]

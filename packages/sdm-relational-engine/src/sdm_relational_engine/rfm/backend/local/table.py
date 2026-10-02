@@ -112,6 +112,11 @@ class LocalTable(Table):
     def _get_source_sample_df(self) -> pd.DataFrame:
         return self._data
 
+    def _full_range(self, name: str) -> tuple[object, object] | None:
+        # The sample is the whole frame, so it already holds the answer.
+        values = self._source_sample_df[name]
+        return values.min(), values.max()
+
     def _materialize_derived_key(
         self,
         derived: str,
