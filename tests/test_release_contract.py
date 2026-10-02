@@ -267,6 +267,11 @@ class TestTheRequestBodiesAreContractual:
             (b'{"case": [{}, 2]}', 'not a request body'),
             (b'\xff\xfe', 'is not UTF-8'),
             (None, 'cannot be read'),
+            (b'{"case": ' + b'9' * 5000 + b'}', 'cannot be parsed'),
+            (
+                b'{"case": ' + b'[' * 10000 + b'0' + b']' * 10000 + b'}',
+                'cannot be parsed',
+            ),
         ],
         ids=[
             'not json',
@@ -276,14 +281,14 @@ class TestTheRequestBodiesAreContractual:
             'a scalar among calls',
             'not utf-8',
             'no file at all',
+            'an integer past the digit limit',
+            'nesting past the recursion limit',
         ],
     )
     def test_a_recording_it_cannot_read_is_reported_not_raised(
         self, tmp_path, written, said
     ):
-        """A broken recording is the reader's mistake, not a contract failure,
-        and either way a traceback says neither.
-        """
+        """A malformed recording fails without a traceback."""
         recording = tmp_path / 'wire_payloads.json'
         if written is not None:
             recording.write_bytes(written)

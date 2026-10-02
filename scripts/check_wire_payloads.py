@@ -98,9 +98,9 @@ def schema_for(body: dict[str, Any]) -> str | None:
 def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
     r"""The bodies in a recording, as ``name`` and body.
 
-    Every way the file can fail to be a recording is an ``Unreadable``, so a
-    broken file reads as the mistake it is rather than as a contract failure
-    or a traceback.
+    Raises ``Unreadable`` if the file cannot be read or is not a recording,
+    so a broken file reads as the mistake it is rather than as a contract
+    failure or a traceback.
     """
     try:
         text = payloads.read_text(encoding='utf-8')
@@ -113,6 +113,11 @@ def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
         recorded = json.loads(text)
     except json.JSONDecodeError as error:
         raise Unreadable(f'{payloads} is not JSON: {error}') from error
+    except (ValueError, RecursionError) as error:
+        # JSON a parser will not finish: an integer past the digit limit, or
+        # nesting past the recursion one. Still the file's fault, not the
+        # contract's.
+        raise Unreadable(f'{payloads} cannot be parsed: {error}') from error
 
     if not isinstance(recorded, dict):
         raise Unreadable(
