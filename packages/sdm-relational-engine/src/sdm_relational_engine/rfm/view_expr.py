@@ -34,7 +34,7 @@ _UNSAFE_EXPR_KEYWORDS = re.compile(
 _QUERY_START = re.compile(r'(?:^|\()\s*from\b', flags=re.IGNORECASE)
 
 
-def _unsafe_expr_reason(expr: str) -> str | None:
+def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     r"""Return why a remote view expression is unsafe, or ``None``.
 
     A scalar expression never needs a statement separator, a comment or a
@@ -73,10 +73,21 @@ def _unsafe_expr_reason(expr: str) -> str | None:
 
     Args:
         expr: The expression as written in the view definition.
+        dialect: ``'databricks'`` or ``'snowflake'`` to also refuse quoting
+            that dialect does not have: ``$$`` on Databricks, and a backslash
+            inside a Snowflake double-quoted name. ``None`` checks only what
+            both share.
     """
     for token in _UNSAFE_EXPR_TOKENS:
         if token in expr:
             return f'it contains {token!r}'
+    # Databricks has no `$$` literal, and quotes no name with a backslash.
+    if dialect == 'databricks' and '$$' in expr:
+        return "it contains '$$', which Databricks SQL does not quote with"
+    if dialect == 'snowflake':
+        for quoted in _QUOTED_EXPR_TEXT.findall(expr):
+            if quoted.startswith('"') and '\\' in quoted:
+                return 'it has a backslash inside a double-quoted name'
     unquoted = _QUOTED_EXPR_TEXT.sub(' ', expr)
     for delimiter in _EXPR_QUOTE_DELIMITERS:
         if delimiter in unquoted:
@@ -294,6 +305,26 @@ _QUALIFIED = re.compile(r'\.\s*$')
 _TYPE_CONTEXT = re.compile(r'(?:(?<![\w$])as|::)\s*$', flags=re.IGNORECASE)
 
 
+def _acts_as_keyword(word: str, lead: str) -> bool:
+    r"""Whether ``word``, followed by ``(``, is a keyword rather than a call.
+
+    Databricks lets most of these words name a function too, so ``escape(x)``
+    calls one. As a keyword each follows a value, a ``)`` or another keyword,
+    as in ``x IN (...)`` and ``TRIM(BOTH ' ' FROM x)``. ``NOT`` and ``CASE``
+    can also begin an expression.
+
+    Args:
+        word: The folded word before ``(``.
+        lead: The expression text before ``word``.
+    """
+    if word in ('not', 'case'):
+        return True
+    lead = lead.rstrip()
+    return bool(lead) and (
+        lead[-1] in ')]' + _QUOTED or bool(re.match(r'[\w$]', lead[-1]))
+    )
+
+
 def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
     r"""Return why an expression calls a function that is not trusted, or
     ``None``.
@@ -338,7 +369,9 @@ def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
         folded = name.lower()
         if folded == 'identifier':
             return 'it names a function through IDENTIFIER()'
-        if folded in _KEYWORDS:
+        if folded in _KEYWORDS and _acts_as_keyword(
+            folded, before[: token.start()]
+        ):
             continue
         if folded in _TYPE_NAMES and _TYPE_CONTEXT.search(
             before[: token.start()]

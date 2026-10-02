@@ -231,3 +231,61 @@ def test_parentheses_must_balance_in_trusted_mode_too() -> None:
     assert _unsafe_expr_reason('x = 1) OR (1 = 1') is not None
     assert _unsafe_expr_reason('upper(x') is not None
     assert _unsafe_expr_reason("x = ')'") is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'escape(x)',
+        'over(x)',
+        'leading(x)',
+        'for(x)',
+        'FROM(x)',
+        'In (x)',
+        'upper(x) || escape(x)',
+        'concat(x, over(x))',
+        '(trailing(x))',
+        'transform(a, y -> placing(y))',
+    ],
+)
+def test_a_keyword_where_a_value_belongs_is_a_call(
+    dialect: str, expr: str
+) -> None:
+    r"""Databricks lets a non-reserved keyword name a function, so
+    ``escape(x)`` calls one; it is a keyword only after a value or a keyword.
+    """
+    assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'NOT (x = 1)',
+        'NOT(x)',
+        'CASE (x) WHEN (1) THEN (2) ELSE (3) END',
+        'x NOT IN (1, 2)',
+        "x LIKE ANY ('a%', 'b%')",
+        'x BETWEEN (1) AND (2) OR (y)',
+        'x IS DISTINCT FROM (y)',
+        "upper(x) IN ('A')",
+        "'a' IN (x)",
+        'SUBSTRING(x FROM (2) FOR (3))',
+    ],
+)
+def test_a_keyword_after_a_value_opens_a_group(dialect: str, expr: str) -> None:
+    assert _refused(expr, dialect) is None
+
+
+def test_databricks_has_no_dollar_quoting() -> None:
+    assert _unsafe_expr_reason('$$x$$', 'snowflake') is None
+    assert _unsafe_expr_reason('$$x$$', 'databricks') is not None
+    assert _unsafe_expr_reason("CONCAT('$$', x)", 'databricks') is not None
+
+
+def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:
+    assert _unsafe_expr_reason('"MY COL" * 2', 'snowflake') is None
+    assert _unsafe_expr_reason('"MY\\COL" * 2', 'snowflake') is not None
+    assert _unsafe_expr_reason("'a\\\\b' || x", 'snowflake') is None
+    assert _unsafe_expr_reason('"MY\\COL" * 2', 'databricks') is None

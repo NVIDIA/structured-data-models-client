@@ -164,7 +164,7 @@ def _view_expr_message(
         trust_expressions: Whether to call any function the view names.
     """
     hatch = ''
-    reason = _unsafe_expr_reason(expr)
+    reason = _unsafe_expr_reason(expr, dialect)
     if reason is None and not trust_expressions:
         reason = _untrusted_call_reason(expr, dialect)
         hatch = (

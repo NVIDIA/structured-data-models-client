@@ -456,7 +456,7 @@ def _check_filter(
     if not isinstance(row_filter, str) or not row_filter.strip():
         reason = 'it is not a SQL condition'
     else:
-        reason = _unsafe_expr_reason(row_filter)
+        reason = _unsafe_expr_reason(row_filter, 'databricks')
     if reason is None:
         assert isinstance(row_filter, str)
         masked = _STRING_LITERAL_RE.sub("''", row_filter)

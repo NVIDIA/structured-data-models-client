@@ -451,6 +451,8 @@ def test_parse_metric_view_source_filter(row_filter: str) -> None:
         ('my_udf(source.amount) > 0', "calls 'my_udf'"),
         ('source.amount > 0; DROP TABLE x', "contains ';'"),
         ('current_date > source.order_date', 'current_date'),
+        ('source.note = $$x$$', "'$$'"),
+        ('escape(source.note)', "calls 'escape'"),
     ],
 )
 def test_parse_metric_view_refuses_a_filter(
