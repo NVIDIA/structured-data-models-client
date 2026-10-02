@@ -5,15 +5,22 @@
 r"""Connections to Databricks, opened as the caller's own workspace client.
 
 Each helper returns the driver's own connection, which the caller owns and
-closes, and hands it to a source like any other. Neither tags the connection:
-sdm-client names itself on prediction requests only, never on the queries that
-sample a warehouse.
+closes, and hands it to a source like any other. Databricks requires a partner
+product to identify every connection and API call it opens, so both name
+sdm-client as ``nvidia_sdm-client/<version>``: in the warehouse driver's
+User-Agent, in Lakebase's ``application_name``, and on the workspace client's
+own requests. A connection the caller opens and passes to a source directly
+is theirs, and is used as it is.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from sdm_connectors._databricks_partner import (
+    partner_identifier,
+    partner_user_agent,
+)
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -77,6 +84,12 @@ def warehouse(
         connection = warehouse(warehouse_id, workspace=WorkspaceClient())
         source = DatabricksSource(connection, catalog='main', schema='sales')
 
+    The connection names sdm-client in its User-Agent, ahead of any
+    ``user_agent_entry`` given, and tags its statements
+    ``sdm_client_purpose: sampling`` beside any query tags given. The
+    warehouse lookup names sdm-client too, through a copy of ``workspace``
+    rather than the caller's own.
+
     A Real-Time warehouse is refused: the driver serves it through a backend
     that takes no workspace-client credentials, so connect to it with
     ``databricks.sql.connect`` and a token or OAuth M2M credentials instead.
@@ -94,8 +107,7 @@ def warehouse(
     check_connect_args(
         'databricks', driver_options, backend._CONNECT_ARGS, hint=None
     )
-    if 'user_agent_entry' in driver_options:
-        backend._check_user_agent_entry(driver_options['user_agent_entry'])
+    connect_args = backend._as_sdm_client(driver_options)
     client = _workspace(workspace, 'databricks')
     with driver_guard(
         'CONNECT_FAILED',
@@ -122,7 +134,7 @@ def warehouse(
                 server_hostname=odbc.hostname,
                 http_path=odbc.path,
                 credentials_provider=lambda: client.config.authenticate,
-                **driver_options,
+                **connect_args,
             )
         except Exception as error:
             if not _refused_as_real_time(error):
@@ -190,6 +202,11 @@ def lakebase(
         )
         source = PostgresSource(connection, schema='public')
 
+    ``application_name`` is ``nvidia_sdm-client/<version>``, with any
+    ``application_name`` given after it, cut to the 63 bytes Postgres keeps.
+    The workspace's calls name sdm-client too, through a copy of
+    ``workspace`` rather than the caller's own.
+
     The credential is valid for at most an hour: an open connection outlives
     it, and a new connection needs a fresh call. The login user is whatever
     ``current_user.me().user_name`` reports, for a service principal too.
@@ -229,6 +246,9 @@ def lakebase(
         token = api.generate_database_credential(endpoint=endpoint).token
         user = client.current_user.me().user_name
     options = {'sslmode': 'require', 'autocommit': True, **driver_options}
+    options['application_name'] = _application_name(
+        options.get('application_name')
+    )
     with driver_guard(
         'CONNECT_FAILED',
         f'could not connect to Lakebase endpoint {endpoint!r}',
@@ -259,19 +279,45 @@ def _endpoint_host(api: PostgresAPI, endpoint: str) -> str:
     return host
 
 
+#: What Postgres keeps of an ``application_name``: NAMEDATALEN less one.
+_APPLICATION_NAME_BYTES = 63
+
+
+def _application_name(theirs: object) -> str:
+    r"""``nvidia_sdm-client/<version>``, then the caller's own name.
+
+    Cut to the bytes Postgres keeps, on a character boundary, since the
+    server would otherwise cut it wherever the limit falls.
+    """
+    name = partner_identifier()
+    if theirs is not None and str(theirs).strip():
+        name = f'{name} {theirs}'
+    return name.encode()[:_APPLICATION_NAME_BYTES].decode(errors='ignore')
+
+
 def _workspace(
     workspace: WorkspaceClient | None, backend: str
 ) -> WorkspaceClient:
+    r"""A workspace client whose requests name sdm-client.
+
+    A caller's ``WorkspaceClient`` is copied for that, not changed; a
+    subclass or test double is used as given, since a copy would lose what
+    it adds.
+    """
     if workspace is not None:
-        return workspace
+        return _named_copy(workspace)
     sdk = require_driver(
         backend,
         'databricks-sdk',
         'databricks.sdk',
         absent=('databricks', 'databricks.sdk'),
     )
+    from databricks.sdk.config import Config
+
     try:
-        client: WorkspaceClient = sdk.WorkspaceClient()
+        # Named before the client is built, which reads the User-Agent once.
+        config = Config().with_user_agent_extra(*partner_user_agent())
+        client: WorkspaceClient = sdk.WorkspaceClient(config=config)
     except Exception as error:
         # The type only: the SDK's text can quote the configuration it read.
         raise ConnectorError(
@@ -283,6 +329,21 @@ def _workspace(
             details={'driver_error': type(error).__name__},
         ) from None
     return client
+
+
+def _named_copy(workspace: WorkspaceClient) -> WorkspaceClient:
+    try:
+        from databricks.sdk import WorkspaceClient
+    except ImportError:
+        return workspace
+    if type(workspace) is not WorkspaceClient:
+        return workspace
+    # copy() gives the copy its own User-Agent extras and shares the rest,
+    # credentials included.
+    config = workspace.config.copy()
+    return WorkspaceClient(
+        config=config.with_user_agent_extra(*partner_user_agent())
+    )
 
 
 def _refuse_restated(

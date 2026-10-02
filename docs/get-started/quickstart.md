@@ -97,6 +97,8 @@ In a Databricks notebook, `DatabricksSource(spark, catalog=..., schema=...)` sam
 For Lakebase, `lakebase(endpoint, database='databricks_postgres', workspace=workspace)`, from the same module, opens a `psycopg` connection for `PostgresSource` as `workspace` too; it comes with the `lakebase` extra.
 Leave `tables` out to take every table the source holds.
 Each is described from the catalog, which on a warehouse costs seconds per table, so on a large schema name the ones you need.
+Each key is then checked against every row, in one statement that scans each table once, because Databricks and Snowflake do not enforce a declared key.
+A key that repeats a value in more than 1% of rows is refused, as `Schema.from_data` refuses one; `check_keys=False` skips the scan and the check.
 A schema's tables all come from one source.
 A semantic model, such as a Databricks metric view or a Snowflake semantic view, is a source of its own, and brings its tables, keys and relationships: `Schema.from_source(source.semantic_model('sales_metrics'))`.
 

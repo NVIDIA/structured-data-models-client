@@ -82,7 +82,10 @@ class LocalSampler(Sampler):
         columns_dict: dict[str, set[str]],
         num_neighbors: list[int],
         random_seed: int | None = None,
+        scored: np.ndarray | None = None,
     ) -> SamplerOutput:
+        # The graph store keeps one row per key, so no id can match two.
+        del scored
 
         index = self._graph_store.get_node_id(entity_table_name, entity_pkey)
 

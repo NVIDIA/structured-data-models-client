@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 from sdm_relational_engine.exceptions import GraphConstructionError
 from sdm_relational_engine.rfm import Graph
+from sdm_relational_engine.rfm.base import KeyCount, count_keys
 
 try:
     import pyarrow as pa
@@ -97,10 +98,16 @@ relationships:
 
 
 class _FakeCursor:
-    def __init__(self, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        error: Exception | None = None,
+        connection: '_FakeConnection | None' = None,
+    ) -> None:
         self._error = error
+        self._connection = connection
         self._rows: list = []
         self._arrow: pa.Table | None = None
+        self.description: list[tuple[str]] = []
 
     def __enter__(self) -> '_FakeCursor':
         return self
@@ -114,7 +121,26 @@ class _FakeCursor:
 
         self._rows = []
         self._arrow = None
+        if self._connection is not None:
+            self._connection.statements.append(sql)
         sql = ' '.join(sql.split())
+
+        if sql == f'SHOW TABLES IN SCHEMA "{_DATABASE}"."{_SCHEMA}"':
+            assert self._connection is not None
+            fields = self._connection.listing
+            hybrid = self._connection.hybrid
+            self.description = [(field,) for field in fields]
+            self._rows = [
+                (None, table, 'Y' if table in hybrid else 'N')[: len(fields)]
+                for table in _COLUMN_TYPES
+            ]
+            return
+
+        if ' AS k, COUNT(*) AS n, ' in sql:
+            self._rows = [
+                _count_key(select) for select in sql.split(' UNION ALL ')
+            ]
+            return
 
         if 'SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW' in sql:
             self._rows = [(_SEMANTIC_VIEW_YAML,)]
@@ -143,7 +169,7 @@ class _FakeCursor:
                     name,
                     dtype,
                     'COLUMN',
-                    'Y',
+                    'N' if _PRIMARY_KEYS[table] == name else 'Y',
                     None,
                     'Y' if _PRIMARY_KEYS[table] == name else 'N',
                     'N',
@@ -174,14 +200,29 @@ class _FakeCursor:
         return self._arrow
 
 
+def _count_key(select: str) -> tuple[int, int, int, int]:
+    r"""Answer one ``SELECT`` of a key count from the tables above."""
+    label = int(re.match(r'SELECT (\d+) AS k', select).group(1))
+    table = re.search(r'FROM "[^"]+"\."[^"]+"\."([^"]+)"', select).group(1)
+    names = re.findall(
+        r'"([^"]+)"', re.search(r'COUNT\(DISTINCT ([^)]*)\)', select).group(1)
+    )
+    keys = list(zip(*(_DATA[table][name] for name in names), strict=True))
+    present = [key for key in keys if not any(pd.isna(v) for v in key)]
+    return label, len(keys), len(set(present)), len(keys) - len(present)
+
+
 class _FakeConnection(Connection):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.closed = False
         self._paramstyle = 'pyformat'
+        self.statements: list[str] = []
+        self.hybrid: set[str] = set()
+        self.listing = ('created_on', 'name', 'is_hybrid')
 
     def cursor(self) -> _FakeCursor:  # type: ignore[override]
-        return _FakeCursor(self.error)
+        return _FakeCursor(self.error, self)
 
     def close(self) -> None:
         self.closed = True
@@ -420,3 +461,80 @@ def test_semantic_view_drops_a_type_mismatched_relationship(
     assert len(dropped) == 1
     assert "'RACKS'" in dropped[0] and "'DATACENTERS'" in dropped[0]
     assert graph.validate() is graph
+
+
+def _counted_graph(connection: _FakeConnection) -> Graph:
+    return Graph.from_snowflake(
+        connection=connection,
+        database=_DATABASE,
+        schema=_SCHEMA,
+        tables=['RACKS', 'DATACENTERS'],
+        infer_metadata=False,
+        verbose=False,
+    )
+
+
+def test_every_key_is_counted_in_one_statement() -> None:
+    connection = _FakeConnection()
+    graph = _counted_graph(connection)
+    connection.statements.clear()
+
+    counts = count_keys(
+        [
+            (graph['RACKS'], ['RACK_ID']),
+            (graph['DATACENTERS'], ['REGION', 'COUNTRY']),
+            (graph['DATACENTERS'], ['DATACENTER_ID']),
+        ]
+    )
+
+    # Declared keys are asked about first, in one listing for the schema:
+    # only a hybrid table enforces one.
+    shown, counted = connection.statements
+    assert shown == 'SHOW TABLES IN SCHEMA "DB"."SCH"'
+    assert counted == (
+        'SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT "RACK_ID") AS d, '
+        'COUNT(CASE WHEN "RACK_ID" IS NULL THEN 1 END) AS z\n'
+        'FROM "DB"."SCH"."RACKS"\n'
+        'UNION ALL\n'
+        'SELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT "REGION", "COUNTRY") '
+        'AS d, COUNT(CASE WHEN "REGION" IS NULL OR "COUNTRY" IS NULL THEN 1 '
+        'END) AS z\n'
+        'FROM "DB"."SCH"."DATACENTERS"\n'
+        'UNION ALL\n'
+        'SELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT "DATACENTER_ID") AS d, '
+        'COUNT(CASE WHEN "DATACENTER_ID" IS NULL THEN 1 END) AS z\n'
+        'FROM "DB"."SCH"."DATACENTERS"'
+    )
+    assert counts == [
+        KeyCount(rows=12, distinct=12, nulls=0, enforced=False),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
+    ]
+
+
+def test_a_hybrid_table_key_is_not_counted() -> None:
+    connection = _FakeConnection()
+    connection.hybrid = {'RACKS'}
+    graph = _counted_graph(connection)
+    connection.statements.clear()
+
+    counts = count_keys(
+        [(graph['RACKS'], ['RACK_ID']), (graph['DATACENTERS'], ['COUNTRY'])]
+    )
+
+    assert counts == [
+        KeyCount(None, None, 0, enforced=True),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
+    ]
+    assert '"RACKS"' not in connection.statements[-1]
+
+
+def test_a_listing_without_a_hybrid_column_counts_the_key() -> None:
+    connection = _FakeConnection()
+    connection.hybrid = {'RACKS'}
+    connection.listing = ('created_on', 'name')
+    graph = _counted_graph(connection)
+
+    counts = count_keys([(graph['RACKS'], ['RACK_ID'])])
+
+    assert counts == [KeyCount(rows=12, distinct=12, nulls=0, enforced=False)]

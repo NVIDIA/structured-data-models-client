@@ -253,6 +253,7 @@ Each warehouse has a class of its own, named for it, so what only one warehouse 
 |---|---|---|
 | Table type | `Table`, holding `data: pd.DataFrame` | `SourceTable`: a source name and column metadata, no rows |
 | Keys and relationships | given, else inferred from values and names | given, else the catalog's constraints, else inferred from names |
+| Keys checked against | every row, in memory | every row, counted in the source unless it enforces the key |
 | Semantic types | inferred from the rows | inferred from a 1,000-row preview, the engine's rule |
 | Sampling at `materialize()` | the engine's `LocalSampler`, in memory | the engine's SQL sampler for that backend |
 | What leaves the source | every row | the sampled rows |
@@ -277,6 +278,9 @@ The source holds it and never closes it.
 A warehouse connection is the driver's own object, opened with the driver's own `connect`.
 It is the type the engine already accepts, so there is no second connection type to convert between.
 On Databricks, `sdm_connectors.databricks.warehouse()` and `lakebase()` open one as the caller's `WorkspaceClient` and hand back that same native connection, for the caller to close.
+Every connection and API request sdm-client opens there names it as `nvidia_sdm-client/<version>`, as Databricks requires of a partner product, and a warehouse session it opens tags its statements `sdm_client_purpose: sampling`.
+Each package keeps a private copy of the identifier, so the connectors never import the client and the serving extra brings no connectors; a test holds the two copies to the same value.
+A connection the caller opens and passes in is used as it is.
 A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
 A schema over a source does not pickle.
 

@@ -9,6 +9,10 @@ import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias
 
+from sdm_connectors._databricks_partner import (
+    SAMPLING_QUERY_TAG,
+    partner_identifier,
+)
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -207,8 +211,9 @@ def connect(
     for that flow deliberately is allowed through. Such a request names an
     OAuth application or an ``auth_type`` the driver dispatches on.
 
-    The connection carries no partner tag of its own: sdm-client names itself
-    on prediction requests only, never on the queries that sample a warehouse.
+    The connection names sdm-client in its User-Agent, ahead of any
+    ``user_agent_entry`` given, and tags its session's statements
+    ``sdm_client_purpose: sampling``.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)
@@ -229,9 +234,87 @@ def connect(
             'waits for a human and never returns',
             code='INVALID_CONNECTOR_ARGS',
         )
-    if 'user_agent_entry' in kwargs:
-        _check_user_agent_entry(kwargs['user_agent_entry'])
-    return databricks_sql.connect(**kwargs)
+    return databricks_sql.connect(**_as_sdm_client(kwargs))
+
+
+def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    r"""Return ``databricks.sql.connect`` arguments for a connection
+    sdm-client opens.
+
+    Databricks requires a partner product to identify every connection it
+    opens, so ``user_agent_entry`` starts with ``nvidia_sdm-client/<version>``
+    and keeps any entry the caller gave after it. The session's statements
+    are tagged ``sdm_client_purpose: sampling``, beside any query tags the
+    caller set, so a query history can tell sampling apart without a
+    second identifier. A caller's own ``sdm_client_purpose`` is kept instead.
+
+    Raises:
+        ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a ``user_agent_entry``
+            no HTTP header can carry.
+    """
+    connect_args = dict(kwargs)
+    entry = connect_args.get('user_agent_entry')
+    # None is omitted, as connect() drops any None it is given and the driver
+    # reads one as its default.
+    if entry is None:
+        connect_args['user_agent_entry'] = partner_identifier()
+    else:
+        _check_user_agent_entry(entry)
+        connect_args['user_agent_entry'] = f'{partner_identifier()} {entry}'
+    key, value = SAMPLING_QUERY_TAG
+    tags = connect_args.get('query_tags')
+    if isinstance(tags, Mapping):
+        # The driver lets these replace the session's QUERY_TAGS outright. A
+        # caller's own sdm_client_purpose is theirs to set, so it wins.
+        connect_args['query_tags'] = {key: value, **tags}
+        return connect_args
+    # The session's own setting, which every driver from 4.1.3 sends on both
+    # its Thrift and SEA routes; `query_tags=` would need 4.2.6.
+    session = dict(connect_args.get('session_configuration') or {})
+    name = next((k for k in session if k.upper() == 'QUERY_TAGS'), 'QUERY_TAGS')
+    theirs = session.get(name)
+    if not theirs:
+        session[name] = f'{key}:{value}'
+    elif key not in _query_tag_keys(str(theirs)):
+        session[name] = f'{theirs},{key}:{value}'
+    connect_args['session_configuration'] = session
+    return connect_args
+
+
+def _query_tag_keys(serialized: str) -> set[str]:
+    r"""The keys in a ``QUERY_TAGS`` string, written as the driver's
+    ``serialize_query_tags`` writes one: ``key:value`` pairs joined by ``,``,
+    with a backslash escaping the character after it.
+
+    Raises:
+        ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a string that ends in
+            an unpaired backslash, which would escape the separator after it.
+    """
+    keys: set[str] = set()
+    key: list[str] = []
+    in_key = True
+    characters = iter(serialized)
+    for character in characters:
+        if character == '\\':
+            escaped = next(characters, None)
+            if escaped is None:
+                raise ConnectorError(
+                    'invalid Databricks QUERY_TAGS session setting: it ends '
+                    'in a backslash that escapes nothing; write a literal '
+                    'backslash as two',
+                    code='INVALID_CONNECTOR_ARGS',
+                )
+            if in_key:
+                key.append(escaped)
+        elif character == ',':
+            keys.add(''.join(key))
+            key, in_key = [], True
+        elif character == ':' and in_key:
+            in_key = False
+        elif in_key:
+            key.append(character)
+    keys.add(''.join(key))
+    return keys
 
 
 def _check_user_agent_entry(entry: object) -> None:

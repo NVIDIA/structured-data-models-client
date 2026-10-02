@@ -871,7 +871,7 @@
         "public_methods": {
           "check_consistent": "(self) -> 'None'",
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
-          "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
+          "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
           "snapshot": "(self) -> 'Schema'"
         },
         "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"

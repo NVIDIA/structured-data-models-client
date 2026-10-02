@@ -18,6 +18,7 @@ from .source import SourceColumn, SourceForeignKey  # noqa: E402
 from .expression import Expression, LocalExpression  # noqa: E402
 from .column import ColumnSpec, ColumnSpecType, Column  # noqa: E402
 from .table import Table  # noqa: E402
+from .key_count import KeyCount, count_keys  # noqa: E402
 from .sampler import SamplerOutput, Sampler  # noqa: E402
 from .sql_sampler import SQLSampler  # noqa: E402
 
@@ -27,6 +28,7 @@ __all__ = [
     'ColumnSpecType',
     'DataBackend',
     'Expression',
+    'KeyCount',
     'LocalExpression',
     'SQLSampler',
     'Sampler',
@@ -34,4 +36,5 @@ __all__ = [
     'SourceColumn',
     'SourceForeignKey',
     'Table',
+    'count_keys',
 ]
