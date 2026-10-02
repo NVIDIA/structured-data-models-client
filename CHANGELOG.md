@@ -447,7 +447,7 @@ The message names the way out: create a regular view with that `WHERE` clause an
 **`predictive_query` is not public API.**
 `sdm-pql` installs it because `sdm-client` parses and validates PQL with it, and any release may change it.
 Write PQL with `sdm_client.PredictiveQuery`.
-`ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and the model handles keep theirs private.
+`ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and `KumoTabular` and `KumoRelational` have no public `spec` attribute.
 `Model.name` and `SDMClient.capabilities()` describe a model.
 
 ### Notes for a reviewer
