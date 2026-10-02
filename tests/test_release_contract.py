@@ -11,16 +11,21 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
+import ast
+import builtins
 import importlib
 import importlib.util
+import inspect
 import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+import typing
+from collections.abc import Sequence
 from types import ModuleType
+from typing import NamedTuple
 
 import pytest
 
@@ -88,126 +93,353 @@ def _public_packages() -> list[ModuleType]:
     ]
 
 
-def _exposed(
-    pattern: re.Pattern[str], internal: Callable[[object], bool]
-) -> list[str]:
-    """Where a public package names or hands out an internal type.
+#: Every top-level package this repository ships, public or not.
+FIRST_PARTY = frozenset(
+    {
+        'predictive_query',
+        'sdm_api',
+        'sdm_client',
+        'sdm_connectors',
+        'sdm_relational_engine',
+    }
+)
 
-    A type is caught by ``internal`` when an annotation is an object, and by
-    ``pattern`` when it is a string. Every public name is read: its signature,
-    a dataclass field, a property's return, a base class, or an attribute
-    value, following first-party values one level at a time.
+#: Installed beside the public packages and not public themselves
+#: (docs/reference/stability.md), so a public package may not re-export from
+#: them or build a public class on one of their classes either.
+INTERNAL_PACKAGES = frozenset({'predictive_query', 'sdm_relational_engine'})
+
+#: Types a public name hands out that no public package exports. Each stays for
+#: the reason beside it, and an entry nothing hands out any more fails, so the
+#: list can only shrink.
+HANDED_OUT_THOUGH_NOT_EXPORTED = frozenset(
+    {
+        # What `PredictionResult.items` holds, as its docstring says: the
+        # contract's own response item, generated into `sdm_api` from the
+        # OpenAPI document. Its fields are the wire's and move only with the
+        # contract. Exporting it, or wrapping it in a type of the client's
+        # own, is a decision about the result type rather than a leak to close.
+        'sdm_api.generated.tfm_api.PredictionItem',
+        # What `DatabricksSource.connection` is for a source built from a Spark
+        # session: the session shaped like a Databricks SQL connection, so
+        # sampling has one interface to run through. The connector's typing
+        # check pins that type, so changing it is a change to sources.
+        'sdm_connectors.backends.spark.SparkConnection',
+    }
+)
+
+_UNKNOWN = object()
+
+
+class _Unimported(NamedTuple):
+    """A name in a first-party module that only its source can describe."""
+
+    module: str
+    name: str
+    #: The text of the alias it is, or ``'class'``.
+    definition: str
+
+
+def _source_tree(module_name: str) -> ast.Module | None:
+    """A module's source, parsed without importing it.
+
+    Not importing matters: a backend imports its optional driver at the top,
+    and a test run without the driver still has to say what the backend's
+    names are.
     """
-    import dataclasses
-    import inspect
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.origin or not spec.origin.endswith('.py'):
+        return None
+    return ast.parse(pathlib.Path(spec.origin).read_text())
 
-    def signature(where: str, function: object) -> list[str]:
-        try:
-            written = inspect.signature(function)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return []
-        annotations = [
-            (f'{where}({p.name})', p.annotation)
-            for p in written.parameters.values()
-        ] + [(f'{where} ->', written.return_annotation)]
-        return [
-            f'{at}: {annotation}'
-            for at, annotation in annotations
-            if annotation is not inspect.Parameter.empty
-            and pattern.search(str(annotation))
-        ]
 
-    found: list[str] = []
-    seen: set[type] = set()
+def _top_level_imports(tree: ast.Module) -> dict[str, tuple[str, str | None]]:
+    """What each name a module imports at its top level, or only under
+    ``TYPE_CHECKING``, is imported from: ``(module, attribute)``.
 
-    def walk(where: str, owner: type) -> None:
-        if owner in seen or internal(owner):
-            return
-        seen.add(owner)
-        found.extend(
-            f'{where} inherits {base.__module__}.{base.__qualname__}'
-            for base in owner.__mro__
-            if internal(base)
-        )
-        hints = dict(vars(owner).get('__annotations__', {}))
-        if dataclasses.is_dataclass(owner):
-            hints.update({f.name: f.type for f in dataclasses.fields(owner)})
-        found.extend(
-            f'{where}.{name}: {hint}'
-            for name, hint in hints.items()
-            if not name.startswith('_') and pattern.search(str(hint))
-        )
-        found.extend(signature(where, owner))
-        for name in dir(owner):
-            if name.startswith('_'):
-                continue
-            member = inspect.getattr_static(owner, name)
-            if isinstance(member, property):
-                found.extend(signature(f'{where}.{name}', member.fget))
-            elif isinstance(member, (staticmethod, classmethod)):
-                found.extend(signature(f'{where}.{name}', member.__func__))
-            elif callable(member):
-                found.extend(signature(f'{where}.{name}', member))
-            elif internal(type(member)):
-                found.append(f'{where}.{name} holds a {type(member)!r}')
-            elif (getattr(type(member), '__module__', '') or '').startswith(
-                'sdm_'
-            ):
-                walk(f'{where}.{name}', type(member))
-
-    for module in _public_packages():
-        for name in module.__all__:
-            obj = getattr(module, name)
-            where = f'{module.__name__}.{name}'
-            if internal(obj) or internal(type(obj)):
-                found.append(f'{where} is internal')
-            elif inspect.isclass(obj):
-                walk(where, obj)
-            elif callable(obj):
-                found.extend(signature(where, obj))
+    An annotation under ``from __future__ import annotations`` is a string, and
+    a name imported only for the type checker is not there at runtime to look
+    up, so the source says where it comes from.
+    """
+    found: dict[str, tuple[str, str | None]] = {}
+    pending: list[ast.stmt] = list(tree.body)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.If, ast.Try)):
+            pending.extend(node.body)
+            pending.extend(node.orelse)
+        elif (
+            isinstance(node, ast.ImportFrom) and node.module and not node.level
+        ):
+            for alias in node.names:
+                found[alias.asname or alias.name] = (node.module, alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    found[alias.asname] = (alias.name, None)
+                else:
+                    head = alias.name.split('.')[0]
+                    found[head] = (head, None)
     return found
 
 
-def _predictive_query_types_exposed() -> list[str]:
-    """Where a public package names or hands out a ``predictive_query`` type.
+def _defined_in_source(tree: ast.Module, name: str) -> str | None:
+    """How a module's source defines ``name``, when it is not there to look
+    up: the text of a type alias, ``'class'``, or ``None``.
 
-    Caught by its module when an annotation is an object, and by name when it
-    is a string: every capitalised name ``predictive_query`` exports that no
-    public package exports itself, so ``sdm_client.Column`` is not mistaken for
-    ``predictive_query.Column``.
+    An alias over an optional driver exists only under ``TYPE_CHECKING``, and
+    a module that cannot be imported has nothing to look up at all.
     """
-    internal = importlib.import_module('predictive_query')
-    own = {name for module in _public_packages() for name in module.__all__}
-    names = sorted(
-        name
-        for name in internal.__all__
-        if name[:1].isupper() and name not in own
-    )
-    pattern = re.compile(
-        r'\bpredictive_query\b|\b(?:' + '|'.join(map(re.escape, names)) + r')\b'
-    )
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return 'class'
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+            and node.value is not None
+        ):
+            return ast.unparse(node.value)
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name
+        ):
+            return ast.unparse(node.value)
+    return None
 
-    def from_predictive_query(obj: object) -> bool:
+
+class _InternalTypes:
+    """Every place a public package names or hands out a type that is not
+    public.
+
+    Public is a name in the ``__all__`` of a public package. A type from the
+    standard library or a third-party package is not this project's to promise
+    and passes. Read from every exported name: a function's signature, and a
+    class's constructor, methods, properties, class-level annotations
+    (dataclass fields among them) and the values of its public attributes,
+    along every first-party class in its MRO. A class this project defines
+    must be public itself to appear there.
+    """
+
+    def __init__(self, packages: Sequence[ModuleType]) -> None:
+        self.packages = packages
+        self.public = {
+            id(getattr(module, name)): f'{module.__name__}.{name}'
+            for module in packages
+            for name in module.__all__
+        }
+        self.found: list[str] = []
+        self.allowed: set[str] = set()
+        self._walked: set[int] = set()
+        self._trees: dict[str, ast.Module | None] = {}
+        self._imported: dict[str, dict[str, tuple[str, str | None]]] = {}
+
+    def run(self) -> list[str]:
+        for module in self.packages:
+            for name in module.__all__:
+                obj = getattr(module, name)
+                where = f'{module.__name__}.{name}'
+                if inspect.isclass(obj) or inspect.isroutine(obj):
+                    self._type(where, obj)
+                if inspect.isclass(obj):
+                    self._class(where, obj)
+                elif inspect.isroutine(obj):
+                    self._signature(where, obj)
+                else:
+                    self._type(f'{where} holds', type(obj))
+        return self.found
+
+    def _type(self, where: str, obj: object) -> None:
+        if obj is None or obj is Ellipsis or isinstance(obj, (str, int)):
+            return  # `None`, or a `Literal` argument
+        if isinstance(obj, typing.TypeVar):
+            for inner in (obj.__bound__, *obj.__constraints__):
+                self._type(where, inner)
+            return
+        if not inspect.isclass(obj) and typing.get_origin(obj) is not None:
+            self._type(where, typing.get_origin(obj))
+            for argument in typing.get_args(obj):
+                for one in (
+                    argument if isinstance(argument, list) else [argument]
+                ):
+                    self._type(where, one)
+            return
         module = getattr(obj, '__module__', None) or ''
-        return module.split('.')[0] == 'predictive_query'
+        root = module.split('.')[0]
+        if root not in FIRST_PARTY:
+            return
+        qualified = f'{module}.{getattr(obj, "__qualname__", obj)}'
+        if id(obj) in self.public:
+            if root in INTERNAL_PACKAGES:
+                self.found.append(
+                    f'{where}: {qualified} comes from {root}, which is not '
+                    f'public'
+                )
+            return
+        if qualified in HANDED_OUT_THOUGH_NOT_EXPORTED:
+            self.allowed.add(qualified)
+            return
+        self.found.append(f'{where}: {qualified} is not public')
 
-    return _exposed(pattern, from_predictive_query)
+    def _annotation(self, where: str, annotation: object, module: str) -> None:
+        if annotation is inspect.Parameter.empty:
+            return
+        if not isinstance(annotation, str):
+            self._type(where, annotation)
+            return
+        # A `Literal`'s strings are values, not names.
+        names = re.sub(r"'[^']*'|\"[^\"]*\"", '', annotation)
+        for dotted in re.findall(r'[A-Za-z_][\w.]*', names):
+            if dotted in {'None', 'True', 'False'}:
+                continue
+            resolved = self._resolve(dotted, module)
+            if resolved is _UNKNOWN:
+                self.found.append(
+                    f'{where}: cannot tell what {dotted!r} is, so cannot '
+                    f'tell whether it is public'
+                )
+            elif isinstance(resolved, _Unimported):
+                self._unimported(where, resolved)
+            elif resolved is not None:
+                self._type(where, resolved)
 
+    def _resolve(self, dotted: str, module_name: str) -> object:
+        """What ``dotted`` names in ``module_name``: the object, ``None`` for
+        a name from outside this project, an ``_Unimported`` for a name only
+        the source can say anything about, or ``_UNKNOWN``.
+        """
+        loaded = sys.modules.get(module_name)
+        head, *rest = dotted.split('.')
+        imports = self._imports(module_name)
+        if loaded is not None and head in vars(loaded):
+            obj = vars(loaded)[head]
+        elif head in imports:
+            source, attribute = imports[head]
+            if source.split('.')[0] not in FIRST_PARTY:
+                return None
+            if attribute is None:
+                try:
+                    obj = importlib.import_module(source)
+                except ImportError:
+                    return _UNKNOWN
+            else:
+                obj = self._lookup(source, attribute)
+                if obj is _UNKNOWN or isinstance(obj, _Unimported):
+                    return obj
+        elif loaded is None and self._tree(module_name) is not None:
+            return self._lookup(module_name, head)
+        elif hasattr(builtins, head):
+            return None
+        else:
+            return _UNKNOWN
+        for part in rest:
+            if isinstance(obj, ModuleType):
+                if obj.__name__.split('.')[0] not in FIRST_PARTY:
+                    return None
+            obj = getattr(obj, part, _UNKNOWN)
+            if obj is _UNKNOWN:
+                return _UNKNOWN
+        return None if isinstance(obj, ModuleType) else obj
 
-def _model_descriptions_exposed() -> list[str]:
-    """Where a public package names or hands out a ``ModelSpec`` or the
-    ``RuntimeContract`` it carries.
+    def _lookup(self, module_name: str, name: str) -> object:
+        """``name`` in a first-party module, imported if it can be, and read
+        from its source if it cannot or defines ``name`` only for the type
+        checker."""
+        try:
+            module: ModuleType | None = importlib.import_module(module_name)
+        except ImportError:
+            module = None
+        if module is not None and hasattr(module, name):
+            return getattr(module, name)
+        tree = self._tree(module_name)
+        defined = None if tree is None else _defined_in_source(tree, name)
+        if defined is None:
+            return _UNKNOWN
+        return _Unimported(module_name, name, defined)
 
-    They are how the client describes a model to itself. A model's public
-    description is ``Model.name`` and ``SDMClient.capabilities()``.
-    """
-    from sdm_client.base import ModelSpec, RuntimeContract
+    def _unimported(self, where: str, found: _Unimported) -> None:
+        if found.definition != 'class':
+            self._annotation(where, found.definition, found.module)
+            return
+        # A class whose module cannot be imported here cannot be exported by
+        # a package that was, so it is not public.
+        qualified = f'{found.module}.{found.name}'
+        if qualified in HANDED_OUT_THOUGH_NOT_EXPORTED:
+            self.allowed.add(qualified)
+        else:
+            self.found.append(f'{where}: {qualified} is not public')
 
-    described = (ModelSpec, RuntimeContract)
-    pattern = re.compile(
-        r'\b(?:' + '|'.join(kind.__name__ for kind in described) + r')\b'
-    )
-    return _exposed(pattern, lambda obj: any(obj is kind for kind in described))
+    def _tree(self, module_name: str) -> ast.Module | None:
+        if module_name not in self._trees:
+            self._trees[module_name] = _source_tree(module_name)
+        return self._trees[module_name]
+
+    def _imports(self, module_name: str) -> dict[str, tuple[str, str | None]]:
+        if module_name not in self._imported:
+            tree = self._tree(module_name)
+            self._imported[module_name] = (
+                {} if tree is None else _top_level_imports(tree)
+            )
+        return self._imported[module_name]
+
+    def _signature(self, where: str, function: object) -> None:
+        function = inspect.unwrap(function)  # type: ignore[arg-type]
+        module = getattr(function, '__module__', None) or ''
+        if module.split('.')[0] not in FIRST_PARTY:
+            return
+        try:
+            written = inspect.signature(function)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return
+        for parameter in written.parameters.values():
+            self._annotation(
+                f'{where}({parameter.name})', parameter.annotation, module
+            )
+        self._annotation(f'{where} ->', written.return_annotation, module)
+
+    def _class(self, where: str, owner: type) -> None:
+        if id(owner) in self._walked:
+            return
+        self._walked.add(id(owner))
+        # A base of this project's own is read below as part of the class, so
+        # a private one is an implementation detail. A base from a package
+        # that is not public would tie a public class to it.
+        for base in owner.__mro__[1:]:
+            if (base.__module__ or '').split('.')[0] in INTERNAL_PACKAGES:
+                self.found.append(
+                    f'{where} inherits {base.__module__}.{base.__qualname__}'
+                )
+        for defined_on in owner.__mro__:
+            module = defined_on.__module__ or ''
+            if module.split('.')[0] not in FIRST_PARTY:
+                continue
+            annotations = vars(defined_on).get('__annotations__', {})
+            for name, hint in annotations.items():
+                if not name.startswith('_'):
+                    self._annotation(f'{where}.{name}', hint, module)
+            for name, member in vars(defined_on).items():
+                dunder = name.startswith('__') and name.endswith('__')
+                if name.startswith('_') and not dunder:
+                    continue
+                at = f'{where}.{name}'
+                if isinstance(member, property):
+                    for accessor in (member.fget, member.fset):
+                        if accessor is not None:
+                            self._signature(at, accessor)
+                elif isinstance(member, (staticmethod, classmethod)):
+                    self._signature(at, member.__func__)
+                elif inspect.isfunction(member):
+                    self._signature(at, member)
+                elif inspect.isclass(member):
+                    if not dunder:
+                        self._type(at, member)
+                elif not dunder:
+                    self._type(f'{at} holds', type(member))
 
 
 class TestPublicSurface:
@@ -221,34 +453,92 @@ class TestPublicSurface:
             f'changelog.\n{result.stdout}{result.stderr}'
         )
 
-    def test_no_public_name_hands_out_a_predictive_query_type(self):
-        """``predictive_query`` is internal, so nothing public may expose it.
+    def test_no_public_name_names_a_type_that_is_not_public(self):
+        """A type a caller is handed is one the caller can rely on.
 
-        ``ModelSpec`` once took a ``Profile`` in its signature, and the model
-        handles handed one out through ``spec``. The snapshot records
-        signatures but not what a property returns or what an attribute holds,
-        so this reads the annotations and the values themselves.
+        The snapshot records signatures as text, and records a property or an
+        attribute by its name alone, so a public name could return or hold a
+        type nobody exports, and the type would be public in all but name:
+        `predictive_query.Profile` through `ModelSpec`, `ModelSpec` through a
+        model handle's `spec`, `Decomposition` through `Request`. This reads
+        the annotations and the values themselves.
         """
-        exposed = _predictive_query_types_exposed()
+        finder = _InternalTypes(_public_packages())
+        exposed = finder.run()
         assert not exposed, (
-            '`predictive_query` is not public (docs/reference/stability.md), '
-            'but these public names expose its types:\n' + '\n'.join(exposed)
+            'These public names name or hand out a type that is not public '
+            '(docs/reference/stability.md). Make the name private, make the '
+            'type public on purpose, or, if it truly must stay, add it to '
+            'HANDED_OUT_THOUGH_NOT_EXPORTED with the reason:\n'
+            + '\n'.join(exposed)
+        )
+        stale = sorted(HANDED_OUT_THOUGH_NOT_EXPORTED - finder.allowed)
+        assert not stale, (
+            'Nothing public hands these out any more, so they no longer need '
+            f'an exception in HANDED_OUT_THOUGH_NOT_EXPORTED: {stale}'
         )
 
-    def test_no_public_name_hands_out_a_model_s_internal_description(self):
-        """``ModelSpec`` and ``RuntimeContract`` are internal, so nothing
-        public may expose them.
+    def test_the_check_finds_each_way_a_type_is_handed_out(
+        self, tmp_path, monkeypatch
+    ):
+        """The check above passing means something only if it can fail.
 
-        ``RuntimeContract`` carries no ``predictive_query`` type, so the test
-        above does not see it, and the snapshot would record a property that
-        returned one as an attribute name and nothing more.
+        A probe module poses as part of `sdm_client` and hands out internal
+        types each way the check reads, beside a function that names only
+        public and third-party types and must pass.
         """
-        exposed = _model_descriptions_exposed()
-        assert not exposed, (
-            '`ModelSpec` and `RuntimeContract` are not public '
-            '(docs/reference/stability.md), but these public names expose '
-            'them:\n' + '\n'.join(exposed)
+        probe = tmp_path / '_leak_probe.py'
+        probe.write_text(
+            'from __future__ import annotations\n'
+            'import dataclasses\n'
+            'from typing import TYPE_CHECKING\n'
+            'import pandas as pd\n'
+            'from predictive_query import Profile, validate\n'
+            'from sdm_client.models import KUMO_TABULAR\n'
+            'from sdm_client.request import Request\n'
+            'if TYPE_CHECKING:\n'
+            '    from sdm_client.base import ModelAdapter, ModelSpec\n'
+            '    from sdm_client.decompose import Decomposition\n'
+            '__all__ = [\n'
+            "    'Field', 'Handle', 'Inherits', 'fine', 'mystery', 'rewritten',\n"
+            "    'validate',\n"
+            ']\n'
+            'def rewritten() -> Decomposition | None: ...\n'
+            'def mystery() -> NotDefinedAnywhere: ...\n'
+            'def fine(frame: pd.DataFrame, n: int) -> list[Request]: ...\n'
+            'class Handle:\n'
+            '    spec = KUMO_TABULAR\n'
+            '    def __init__(self, adapter: ModelAdapter) -> None: ...\n'
+            '    @property\n'
+            '    def described(self) -> ModelSpec: ...\n'
+            '@dataclasses.dataclass\n'
+            'class Field:\n'
+            '    profile: Profile\n'
+            'class Inherits(Profile):\n'
+            '    pass\n'
         )
+        name = 'sdm_client._leak_probe'
+        spec = importlib.util.spec_from_file_location(name, probe)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, name, module)
+        spec.loader.exec_module(module)
+
+        found = '\n'.join(_InternalTypes([*_public_packages(), module]).run())
+
+        expected = [
+            '_leak_probe.rewritten ->: sdm_client.decompose.Decomposition',
+            "_leak_probe.mystery ->: cannot tell what 'NotDefinedAnywhere'",
+            '_leak_probe.Handle.spec holds: sdm_client.base.ModelSpec',
+            '_leak_probe.Handle.__init__(adapter): sdm_client.base.ModelAdapter',
+            '_leak_probe.Handle.described ->: sdm_client.base.ModelSpec',
+            '_leak_probe.Field.profile: predictive_query.profiles.Profile',
+            '_leak_probe.Inherits inherits predictive_query',
+            '_leak_probe.validate: predictive_query.api.validate comes from',
+        ]
+        missed = [line for line in expected if line not in found]
+        assert not missed, f'not reported: {missed}\nreported:\n{found}'
+        assert '_leak_probe.fine' not in found, found
 
     def test_the_wire_payloads_match_the_recorded_snapshot(self):
         result = _run('snapshot_wire_payloads.py')
