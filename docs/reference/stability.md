@@ -19,7 +19,6 @@ Concretely, the public surface is:
 |---|---|
 | `sdm_client` | Everything in `sdm_client.__all__`: the client, `Schema`, `Request`, `PredictiveQuery`, the model handles, `PredictionResult`, the exception types and `SDMWarning` |
 | `sdm_api` | Everything in `sdm_api.__all__`: the wire vocabulary |
-| `predictive_query` | Everything in `predictive_query.__all__`: the parser, AST, validators and profiles |
 | `sdm_connectors` | Everything in `sdm_connectors.__all__` |
 | `sdm_connectors.databricks` | Everything in `sdm_connectors.databricks.__all__`: `warehouse` and `lakebase` |
 | `sdm_relational_engine` | Reached through `sdm_client`. Import it directly at your own risk |
@@ -31,6 +30,9 @@ Not public, and free to change in any release:
   `sdm_client.core.transport`,
   `sdm_client.adapters`, `sdm_client.materializers` and `sdm_client.wire`.
   Their contents are implementation details, however stable they look.
+- The `predictive_query` package, which the `sdm-pql` distribution installs.
+  `sdm-client` depends on it to parse and validate PQL, but it is not a
+  supported API. Write PQL with `sdm_client.PredictiveQuery`.
 - The exact text of an exception or warning message. Branch on the exception
   **type** and on `StructuredDataError.code`, never on the message. Codes are
   public; prose is not.
@@ -64,13 +66,13 @@ request that was previously sent. The changelog identifies the change.
 repository has been published, and none of the five distributions exists on
 PyPI. These promises begin at 1.0.0; they do not apply earlier.
 
-This distinction matters. The release containing this document also renames
-two names from `predictive_query.__all__`
-(`GraphDefinition` and `Edge`, now `SchemaDefinition` and `Relationship`) with
-no deprecation period, which the rule below would otherwise forbid. There is no
-period to serve: nobody can be holding the old names, and shipping aliases that
-warn from the first release would be deprecating something that was never
-available. Everything after 1.0.0 gets the full treatment.
+This distinction matters. Before the first release this document listed
+`predictive_query` as public, and the release containing it takes that package
+off the public surface with no deprecation period, which the rule below would
+otherwise forbid. There is no period to serve: nobody can be holding names that
+were never published, and warning about them from the first release would be
+deprecating something that was never available. Everything after 1.0.0 gets
+the full treatment.
 
 ## Deprecation
 

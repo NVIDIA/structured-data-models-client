@@ -32,7 +32,6 @@ PACKAGES = (
     'sdm_client',
     'sdm_connectors',
     'sdm_connectors.databricks',
-    'predictive_query',
 )
 
 
