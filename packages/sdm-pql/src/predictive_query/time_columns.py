@@ -10,9 +10,10 @@ is empty in more than half the rows, or holds a single value in every row that
 holds one, and one whose name says when a row was loaded or synced, such as
 `_fivetran_synced`.
 Nor is a date of birth.
-A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is taken
-only when it is a table's one timestamp left, since in an append-only log of
-changes it is when the row began. Of several left, a `created` stamp is taken,
+A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is never
+taken on a table with a primary key, whose rows are edited in place. On a
+table without one it is taken only when it is the one timestamp left, since
+in an append-only log of changes it is when the row began. Of several left, a `created` stamp is taken,
 and otherwise the one whose values start earliest, placeholders such as
 1900-01-01 or 1970-01-01 left out.
 

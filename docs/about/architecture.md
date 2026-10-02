@@ -235,6 +235,7 @@ request = PredictiveQuery(query, schema).materialize(indices=[...])
 `tables` maps the names a query uses to the names in the source.
 Left out, it is every table the source describes, each under its own name.
 `primary_keys`, `time_columns` and `relationships` mean what they mean on `from_data`.
+`time_columns={'orders': None}` says a table has no time column, on either.
 
 A source is where the tables are and how to reach them, and it is the only thing that differs between backends.
 Each warehouse has a class of its own, named for it, so what only one warehouse has is a method only its class offers:
