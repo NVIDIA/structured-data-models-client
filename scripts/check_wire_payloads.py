@@ -79,6 +79,16 @@ def as_json_schema(node: Any) -> Any:
     return converted
 
 
+def not_json(constant: str) -> Any:
+    r"""Refuse the constants Python reads that JSON does not write.
+
+    ``NaN`` and the infinities are a Python extension. A recording holding
+    one is not JSON, and no endpoint would read it, so it is not something to
+    validate and pass.
+    """
+    raise ValueError(f'{constant} is not a JSON value')
+
+
 class Unreadable(Exception):
     r"""The recording could not be read, which is not a contract failure."""
 
@@ -110,13 +120,12 @@ def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
         raise Unreadable(f'{payloads} is not UTF-8: {error}') from error
 
     try:
-        recorded = json.loads(text)
+        recorded = json.loads(text, parse_constant=not_json)
     except json.JSONDecodeError as error:
         raise Unreadable(f'{payloads} is not JSON: {error}') from error
     except (ValueError, RecursionError) as error:
-        # JSON a parser will not finish: an integer past the digit limit, or
-        # nesting past the recursion one. Still the file's fault, not the
-        # contract's.
+        # Python raises these for an integer too large to convert, for JSON
+        # nested too deeply, and for the constants refused above.
         raise Unreadable(f'{payloads} cannot be parsed: {error}') from error
 
     if not isinstance(recorded, dict):

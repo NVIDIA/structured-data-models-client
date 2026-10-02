@@ -272,6 +272,8 @@ class TestTheRequestBodiesAreContractual:
                 b'{"case": ' + b'[' * 10000 + b'0' + b']' * 10000 + b'}',
                 'cannot be parsed',
             ),
+            (b'{"case": {"model": NaN}}', 'not a JSON value'),
+            (b'{"case": {"model": Infinity}}', 'not a JSON value'),
         ],
         ids=[
             'not json',
@@ -283,6 +285,8 @@ class TestTheRequestBodiesAreContractual:
             'no file at all',
             'an integer past the digit limit',
             'nesting past the recursion limit',
+            'a not-a-number',
+            'an infinity',
         ],
     )
     def test_a_recording_it_cannot_read_is_reported_not_raised(
