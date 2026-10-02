@@ -206,6 +206,7 @@ class SnowSampler(SQLSampler):
         table_name: str,
         index: pd.Series,
         columns: set[str],
+        scored: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
 
         if len(index) == 0:
@@ -244,10 +245,19 @@ class SnowSampler(SQLSampler):
 
         # Remove any duplicated primary keys in post-processing:
         tmp = table.append_column('__KUMO_ID__', pa.array(range(len(table))))
-        gb = tmp.group_by('__KUMO_BATCH__').aggregate([('__KUMO_ID__', 'min')])
+        gb = tmp.group_by('__KUMO_BATCH__').aggregate(
+            [('__KUMO_ID__', 'min'), ('__KUMO_ID__', 'count')]
+        )
         table = table.take(gb['__KUMO_ID___min'])
 
         batch = table['__KUMO_BATCH__'].cast(pa.int64()).to_numpy()
+        self._refuse_an_id_scored_twice(
+            table_name,
+            index,
+            batch,
+            gb['__KUMO_ID___count'].to_numpy(),
+            scored,
+        )
         batch_index = table.schema.get_field_index('__KUMO_BATCH__')
         table = table.remove_column(batch_index)
 

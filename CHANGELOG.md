@@ -360,6 +360,7 @@ It is skipped for a key the source enforces: a PostgreSQL or DuckDB primary key 
 A semantic model's tables are not counted, since the model derives them.
 `check_keys=False` skips the scan and every check with it.
 `SourceTable.duplicate_keys` now holds what the count found, and `None` where nothing was counted, rather than always zero.
+Sampling holds the line too, whatever was checked: an id asked to be scored that more than one row holds is refused, and context sampling keeps one row per key, so no entity appears twice at one anchor time.
 
 ### Notes for a reviewer
 

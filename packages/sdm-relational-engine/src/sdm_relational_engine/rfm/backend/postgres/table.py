@@ -49,6 +49,7 @@ def _frame(cursor: Any) -> pd.DataFrame:
     helper_names = {
         '__kumo_batch__': '__KUMO_BATCH__',
         '__kumo_row__': '__KUMO_ROW__',
+        '__kumo_matches__': '__KUMO_MATCHES__',
     }
     names = [helper_names.get(name, name) for name in names]
     # Preserve the Python scalars exactly until `_sanitize_postgres_frame` can

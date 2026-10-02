@@ -14,10 +14,12 @@ time, with labels that could disagree.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
 import warnings
+from collections import Counter
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -37,11 +39,14 @@ from sdm_connectors import (  # noqa: E402
 )
 
 from sdm_client import (  # noqa: E402
+    PredictiveQuery,
     Schema,
     StructuredDataError,
 )
 
 TABLES = {'users': 'app_users', 'orders': 'app_orders'}
+TEMPORAL = 'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id'
+STATIC = 'PREDICT users.country FOR EACH users.user_id'
 
 
 def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -428,3 +433,50 @@ def test_nothing_is_counted_when_asked_not_to(
     assert not [w for w in caught if 'identifies a row' in str(w.message)]
     assert schema['users'].duplicate_keys is None
     assert schema['orders'].duplicate_keys is None
+
+
+# --- what sampling does with a key that repeats anyway ----------------------
+
+
+def _materialize(schema: Schema, query: str, ids: list[str], seed: int) -> Any:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(query, schema).materialize(
+            indices=ids, random_seed=seed
+        )
+    (payload,) = request._payloads
+    return json.loads(json.dumps(payload, default=str))
+
+
+def _unchecked(build: Build, users: pd.DataFrame) -> Schema:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(build(users), TABLES, check_keys=False)
+
+
+@pytest.mark.parametrize('query', [TEMPORAL, STATIC])
+def test_an_id_two_rows_hold_cannot_be_scored(build: Build, query: str) -> None:
+    schema = _unchecked(build, _repeating('u007'))
+
+    with pytest.raises(StructuredDataError, match=r"Cannot score 'u007'"):
+        _materialize(schema, query, ['u001', 'u007'], seed=7)
+    assert _materialize(schema, query, ['u001'], seed=7)['predict']
+
+
+@pytest.mark.parametrize('query', [TEMPORAL, STATIC])
+@pytest.mark.parametrize('seed', [7, 11])
+def test_the_context_holds_an_entity_once_at_each_anchor_time(
+    build: Build, query: str, seed: int
+) -> None:
+    repeated = [f'u{i:03d}' for i in range(0, 200, 10)]
+    schema = _unchecked(build, _repeating(*repeated))
+
+    table = _materialize(schema, query, ['u001'], seed)['context'][
+        'instance_table'
+    ]
+    entity = table['columns'].index('__kumo_entity_ref_0')
+    anchor = table['columns'].index('__kumo_anchor_time')
+    pairs = Counter((row[entity], row[anchor]) for row in table['rows'])
+
+    assert {row[entity] for row in table['rows']} & set(repeated)
+    assert [pair for pair, seen in pairs.items() if seen > 1] == []

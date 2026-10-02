@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -347,6 +348,27 @@ def test_every_key_is_counted_in_one_statement(
         KeyCount(rows=4, distinct=3, nulls=0, enforced=False, example=2),
         KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
     ]
+
+
+def test_an_id_two_rows_hold_is_refused_where_it_is_scored(
+    graph: Graph, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        _TABLES, 'users', pa.concat_tables([_USERS, _USERS.slice(1, 1)])
+    )
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    columns = {'user_id', 'age'}
+
+    with pytest.raises(ValueError, match=r'Cannot score 2: more than one row'):
+        sampler._by_pkey(
+            'users', pd.Series([1, 2]), columns, scored=np.array([1])
+        )
+    # Reached only through a link, it takes one of them, as it always has.
+    df, batch = sampler._by_pkey(
+        'users', pd.Series([1, 2]), columns, scored=np.array([0])
+    )
+    assert df['user_id'].tolist() == [1, 2]
+    assert batch.tolist() == [0, 1]
 
 
 def test_the_session_route_needs_no_sql_connector() -> None:

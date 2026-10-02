@@ -337,6 +337,7 @@ class DatabricksSampler(SQLSampler):
         table_name: str,
         index: pd.Series,
         columns: set[str],
+        scored: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
 
         if len(index) == 0:
@@ -366,10 +367,19 @@ class DatabricksSampler(SQLSampler):
 
         # Remove any duplicated primary keys in post-processing:
         tmp = table.append_column('__KUMO_ROW__', pa.array(range(len(table))))
-        gb = tmp.group_by('__KUMO_BATCH__').aggregate([('__KUMO_ROW__', 'min')])
+        gb = tmp.group_by('__KUMO_BATCH__').aggregate(
+            [('__KUMO_ROW__', 'min'), ('__KUMO_ROW__', 'count')]
+        )
         table = table.take(gb['__KUMO_ROW___min'])
 
         batch = table['__KUMO_BATCH__'].cast(pa.int64()).to_numpy()
+        self._refuse_an_id_scored_twice(
+            table_name,
+            index,
+            batch,
+            gb['__KUMO_ROW___count'].to_numpy(),
+            scored,
+        )
         batch_index = table.schema.get_field_index('__KUMO_BATCH__')
         table = table.remove_column(batch_index)
 

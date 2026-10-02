@@ -2498,6 +2498,8 @@ class KumoRelational:
             num_neighbors=num_neighbors,
             exclude_cols_dict=exclude_cols_dict,
             random_seed=random_seed,
+            # The prediction rows follow the context ones in `entity_pkey`.
+            scored=np.arange(len(task._context_df), len(entity_pkey)),
         )
 
         if len(subgraph.tables) > _MAX_SUBGRAPH_TABLES:

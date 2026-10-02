@@ -357,6 +357,7 @@ class PostgresSampler(SQLSampler):
         table_name: str,
         index: pd.Series,
         columns: set[str],
+        scored: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
         if len(index) == 0:
             return pd.DataFrame(), np.empty(0, dtype=int)
@@ -372,7 +373,9 @@ class PostgresSampler(SQLSampler):
             f'{", ".join(projections)},\n'
             '         ROW_NUMBER() OVER (PARTITION BY '
             'TMP.__KUMO_BATCH__\n'
-            f'           ORDER BY {key_ref}) AS __KUMO_ROW__\n'
+            f'           ORDER BY {key_ref}) AS __KUMO_ROW__,\n'
+            '         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) '
+            'AS __KUMO_MATCHES__\n'
             '  FROM TMP\n'
             f'  JOIN {self.source_name_dict[table_name]}\n'
             f'    ON {key_ref} = TMP.__KUMO_ID__\n'
@@ -381,7 +384,17 @@ class PostgresSampler(SQLSampler):
             'ORDER BY __KUMO_BATCH__'
         )
         rows = [self._coerce_id(value, dtype, postgres_type) for value in index]
-        return self._sanitize_output(table_name, self._flatten(sql, rows))
+        frame = self._flatten(sql, rows)
+        if '__KUMO_MATCHES__' in frame:
+            matches = frame.pop('__KUMO_MATCHES__').to_numpy(dtype=np.int64)
+            self._refuse_an_id_scored_twice(
+                table_name,
+                index,
+                frame['__KUMO_BATCH__'].to_numpy(dtype=np.int64),
+                matches,
+                scored,
+            )
+        return self._sanitize_output(table_name, frame)
 
     def _by_fkey(
         self,

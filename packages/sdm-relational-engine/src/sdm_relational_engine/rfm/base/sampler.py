@@ -230,6 +230,7 @@ class Sampler(ABC):
         num_neighbors: list[int],
         exclude_cols_dict: dict[str, list[str]] | None = None,
         random_seed: int | None = None,
+        scored: np.ndarray | None = None,
     ) -> SampledSubgraph:
         r"""Samples distinct subgraphs for each entity primary key.
 
@@ -240,6 +241,10 @@ class Sampler(ABC):
             num_neighbors: The number of neighbors to sample for each hop.
             exclude_cols_dict: The columns to exclude from the subgraph.
             random_seed: A manual seed for neighborhood sampling.
+            scored: The positions in ``entity_pkey`` of the entities being
+                scored, rather than given as context. A source that does not
+                enforce its key could hold two rows for one of them, and
+                scoring either would be a guess, so that is refused.
 
         Raises:
             ValueError: If ``exclude_cols_dict`` names a table or a feature
@@ -293,6 +298,7 @@ class Sampler(ABC):
             columns_dict=columns_dict,
             num_neighbors=num_neighbors,
             random_seed=random_seed,
+            scored=scored,
         )
 
         # Parse `SamplerOutput` into a sampled subgraph:
@@ -595,6 +601,12 @@ class Sampler(ABC):
                 f'Failed to find any rows in the entity table '
                 f"'{query.entity_table}'."
             )
+        # A key the source does not enforce can repeat. Two rows of one entity
+        # would be two examples at one anchor time, whose labels can disagree.
+        entity_df = entity_df.drop_duplicates(
+            subset=[self.primary_key_dict[query.entity_table]],
+            ignore_index=True,
+        )
 
         entity_pkey = entity_df[self.primary_key_dict[query.entity_table]]
         entity_time: pd.Series | None = None
@@ -947,6 +959,7 @@ class Sampler(ABC):
         columns_dict: dict[str, set[str]],
         num_neighbors: list[int],
         random_seed: int | None = None,
+        scored: np.ndarray | None = None,
     ) -> SamplerOutput:
         r"""Samples distinct subgraphs for each entity primary key.
 
@@ -957,6 +970,8 @@ class Sampler(ABC):
             columns_dict: The columns to return for each table.
             num_neighbors: The number of neighbors to sample for each hop.
             random_seed: A manual seed for neighborhood sampling.
+            scored: The positions in ``entity_pkey`` of the entities being
+                scored. Each has to match exactly one row.
         """
 
     @abstractmethod

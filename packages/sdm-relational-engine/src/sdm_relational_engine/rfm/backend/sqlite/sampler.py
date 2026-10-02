@@ -364,6 +364,7 @@ class SQLiteSampler(SQLSampler):
         table_name: str,
         index: pd.Series,
         columns: set[str],
+        scored: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
         source_table = self.source_table_dict[table_name]
         key = self.primary_key_dict[table_name]
@@ -376,14 +377,25 @@ class SQLiteSampler(SQLSampler):
         tmp = pa.table([pa.array(index)], names=['__kumo_id__'])
         tmp_name = f'tmp_{table_name}_{key}_{id(tmp)}'
 
+        unique = key in source_table and source_table[key].is_unique_key
+        # Counted only where it is asked about: each count is a lookup of its
+        # own, and an id the source keeps unique matches one row anyway.
+        counted = scored is not None and len(scored) > 0 and not unique
+        matches = (
+            f'(SELECT COUNT(*) FROM {self.source_name_dict[table_name]} '
+            f'WHERE {key_ref} == tmp.__kumo_id__) as __kumo_matches__, '
+            if counted
+            else ''
+        )
         sql = (
             f'SELECT '
             f'tmp.rowid - 1 as __kumo_batch__, '
+            f'{matches}'
             f'{", ".join(projections)}\n'
             f'FROM {quote_ident(tmp_name)} tmp\n'
             f'JOIN {self.source_name_dict[table_name]} ent\n'
         )
-        if key in source_table and source_table[key].is_unique_key:
+        if unique:
             sql += f'  ON {key_ref} = tmp.__kumo_id__'
         else:
             sql += (
@@ -403,6 +415,16 @@ class SQLiteSampler(SQLSampler):
         batch = table['__kumo_batch__'].to_numpy()
         batch_index = table.schema.get_field_index('__kumo_batch__')
         table = table.remove_column(batch_index)
+        if counted:
+            self._refuse_an_id_scored_twice(
+                table_name,
+                index,
+                batch,
+                table['__kumo_matches__'].to_numpy(),
+                scored,
+            )
+            matches_index = table.schema.get_field_index('__kumo_matches__')
+            table = table.remove_column(matches_index)
 
         return Table._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),

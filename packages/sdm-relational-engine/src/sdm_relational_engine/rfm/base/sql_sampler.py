@@ -263,6 +263,7 @@ class SQLSampler(Sampler):
         columns_dict: dict[str, set[str]],
         num_neighbors: list[int],
         random_seed: int | None = None,
+        scored: np.ndarray | None = None,
     ) -> SamplerOutput:
 
         # SQL backends do not use the local pseudo-random neighborhood
@@ -291,6 +292,7 @@ class SQLSampler(Sampler):
             table_name=entity_table_name,
             index=entity_pkey,
             columns=sample_columns_dict[entity_table_name],
+            scored=scored,
         )
         if len(batch) != len(entity_pkey):
             mask = np.ones(len(entity_pkey), dtype=bool)
@@ -619,8 +621,50 @@ class SQLSampler(Sampler):
         table_name: str,
         index: pd.Series,
         columns: set[str],
+        scored: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, np.ndarray]:
-        pass
+        r"""One row for each id in ``index``, and the position each came for.
+
+        An id matching several rows gets one of them, except at a position in
+        ``scored``, which is refused by :meth:`_refuse_an_id_scored_twice`.
+        """
+
+    def _refuse_an_id_scored_twice(
+        self,
+        table_name: str,
+        index: pd.Series,
+        batch: np.ndarray,
+        matches: np.ndarray,
+        scored: np.ndarray | None,
+    ) -> None:
+        r"""Refuse to score an id that more than one row holds.
+
+        Args:
+            table_name: The table the ids were looked up in.
+            index: The ids looked up.
+            batch: The position in ``index`` of each row kept.
+            matches: How many rows matched the id of each row kept.
+            scored: The positions in ``index`` being scored.
+        """
+        if scored is None or len(scored) == 0:
+            return
+        many = np.zeros(len(index), dtype=bool)
+        many[np.asarray(batch, dtype=np.int64)] = np.asarray(matches) > 1
+        repeated = [int(position) for position in scored if many[position]]
+        if not repeated:
+            return
+        key = self.primary_key_dict[table_name]
+        ids = list(dict.fromkeys(index.iloc[repeated].tolist()))
+        shown = ', '.join(repr(value) for value in ids[:5])
+        more = f' and {len(ids) - 5:,} more' if len(ids) > 5 else ''
+        which = 'each of these values' if len(ids) > 1 else 'this value'
+        raise ValueError(
+            f'Cannot score {shown}{more}: more than one row of table '
+            f"'{table_name}' holds {which} of '{key}', so which row is meant "
+            f'would be a guess. The source does not enforce the key; keep '
+            f'one row per value, or key the table on columns that identify '
+            f'a row.'
+        )
 
     @abstractmethod
     def _by_fkey(
