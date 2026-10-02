@@ -83,8 +83,7 @@ def not_json(constant: str) -> Any:
     r"""Refuse the constants Python reads that JSON does not write.
 
     ``NaN`` and the infinities are a Python extension. A recording holding
-    one is not JSON, and no endpoint would read it, so it is not something to
-    validate and pass.
+    one is not JSON, so it is not something to validate and pass.
     """
     raise ValueError(f'{constant} is not a JSON value')
 
