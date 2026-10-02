@@ -15,7 +15,7 @@ declare as `1.0.0` and none has published. The heading becomes
 
 - `docs/reference/stability.md`: the compatibility contract, saying what is public,
   what a version bump means, and the deprecation path. Enforced rather than
-  stated: `tests/golden/` records the exported surface of every distribution and
+  stated: `tests/golden/` records the exported surface of every public package and
   the wire payloads of four canonical requests, and `tests/test_release_contract.py`
   compares them on every run.
 - `RELEASING.md`, and a publish workflow using PyPI Trusted Publishing with PEP
@@ -443,6 +443,12 @@ A filter on the source table's own columns now limits every read of that table: 
 A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
 The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
 `parameters` and `materialization` are still left out with a message.
+
+**`predictive_query` is not public API.**
+`sdm-pql` installs it because `sdm-client` parses and validates PQL with it, and any release may change it.
+Write PQL with `sdm_client.PredictiveQuery`.
+`ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and the model handles keep theirs private.
+`Model.name` and `SDMClient.capabilities()` describe a model.
 
 ### Notes for a reviewer
 
