@@ -110,8 +110,26 @@ class DatabricksTable(Table):
 
     @property
     def row_filter(self) -> str | None:
-        r"""The condition every read of this table's rows is limited to."""
+        r"""The condition every read of this table's rows is limited to.
+
+        The setter replaces it, and raises :class:`ValueError` once a row has
+        been read, since what was read and counted then would hold rows the
+        new condition leaves out.
+        """
         return self._row_filter
+
+    @row_filter.setter
+    def row_filter(self, row_filter: str | None) -> None:
+        if (
+            '_source_sample_df' in vars(self)
+            or '_num_rows' in vars(self)
+            or len(self._expr_sample_df.columns) > 0
+        ):
+            raise ValueError(
+                f"Cannot change the row filter of table '{self.name}' since "
+                f'its rows have already been read'
+            )
+        self._row_filter = row_filter
 
     @property
     def _quoted_source_name(self) -> str:

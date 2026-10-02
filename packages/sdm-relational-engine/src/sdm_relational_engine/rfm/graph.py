@@ -1277,7 +1277,7 @@ class Graph:
             # Every read of the fact table runs the filter, so it is checked
             # against the table's columns and attached before the first one.
             if spec.filter is not None:
-                fact_table._row_filter = (
+                fact_table.row_filter = (
                     spec.filter.trusted()
                     if trust_expressions
                     else spec.filter.checked(_columns_of(SOURCE_ALIAS))

@@ -1839,6 +1839,26 @@ def test_the_filter_wraps_every_read_of_the_fact_table() -> None:
     assert graph_fingerprint(graph) != name
 
 
+def test_a_row_filter_is_set_only_before_a_row_is_read() -> None:
+    from sdm_relational_engine.rfm.backend.databricks import DatabricksTable
+
+    table = DatabricksTable(
+        _FakeConnection(),
+        name='order_lines',
+        catalog='cat',
+        schema='sch',
+        columns=[],
+        primary_key=None,
+    )
+    table.row_filter = "status = 'VALID'"
+    assert "WHERE (status = 'VALID'))" in table._quoted_source_name
+
+    table.add_columns(['status'])
+    with pytest.raises(ValueError, match='already been read'):
+        table.row_filter = None
+    assert table.row_filter == "status = 'VALID'"
+
+
 def test_a_join_filter_refuses_the_metric_view() -> None:
     definition = _METRIC_VIEW_YAML.replace(
         "filter: source.status = 'VALID'", "filter: customers.segment = 'gold'"
