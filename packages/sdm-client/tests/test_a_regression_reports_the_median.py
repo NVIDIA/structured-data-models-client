@@ -208,3 +208,43 @@ def test_a_statistic_that_cannot_be_reported_is_refused(query, statistic, said):
     with pytest.raises(StructuredDataError, match=said) as error:
         asked(query, prediction_statistic=statistic)
     assert error.value.code == 'INVALID_REQUEST'
+
+
+CHURN = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH people.user_id'
+RANKING = (
+    'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2 '
+    'FOR EACH people.user_id'
+)
+
+
+def ranked(sent: dict[str, Any]) -> dict[str, Any]:
+    answered = answer(sent)
+    for prediction in answered['predictions']:
+        prediction['probabilities'] = {'0': 0.4, '1': 0.6}
+    return answered
+
+
+@pytest.mark.parametrize(
+    'query, options',
+    [(CHURN, {}), (RANKING, {'candidates': [0, 1]})],
+    ids=['classification', 'ranking'],
+)
+def test_a_question_with_no_distribution_sends_no_statistic(
+    query, options, requests_mock
+):
+    r"""Only a regression has a distribution to summarise, so nothing else
+    carries the field, and a deployment reading it cannot be told a statistic
+    for an answer that has none.
+    """
+    route = requests_mock.post(
+        f'{URL}/v1/predictions',
+        json=lambda call, _: ranked(call.json()),
+    )
+    with SDMClient(URL) as client:
+        client.predict(asked(query, **options), model=KumoRelational())
+
+    sent = [call.json() for call in route.request_history]
+    assert sent
+    for body in sent:
+        assert body['task']['kind'] != 'regression'
+        assert 'prediction_statistic' not in body['output']

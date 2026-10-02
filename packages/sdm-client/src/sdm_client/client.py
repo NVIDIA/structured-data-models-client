@@ -444,7 +444,9 @@ class SDMClient:
         unscored: frozenset[int] = frozenset()
         if ranking:
             _refuse_outputs_a_ranking_cannot_give(outputs)
-            unscored = self._candidates_no_context_teaches(request, model)
+            unscored = self._candidates_no_context_teaches(
+                request, model, rewritten
+            )
         # A ranking needs how sure each answer was, which is what orders the
         # candidates, and the fields it gives back are the merge's own. A step
         # of a forecast is an ordinary regression, so the caller's fields are
@@ -476,7 +478,10 @@ class SDMClient:
         return _report_absent(merged, outputs, spec_for(model).model_id)
 
     def _candidates_no_context_teaches(
-        self, request: Request, model: str | Model
+        self,
+        request: Request,
+        model: str | Model,
+        rewritten: Decomposition,
     ) -> frozenset[int]:
         r"""Which of a ranking's parts ask about a one-class candidate.
 
@@ -489,8 +494,6 @@ class SDMClient:
         ranking, so a candidate that cannot be scored for one cannot be scored
         for any.
         """
-        rewritten = request.decomposition
-        assert rewritten is not None
         positions = []
         for position, (part, (_, about)) in enumerate(
             zip(request.parts or (), rewritten.parts, strict=True)
