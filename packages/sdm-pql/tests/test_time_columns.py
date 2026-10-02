@@ -390,5 +390,35 @@ def test_the_earliest_compares_times_in_any_zone_and_text():
     assert choice.column == 'ordered'
 
 
+@pytest.mark.parametrize(
+    'placeholder', ['1970-01-01', '1900-01-01', '1753-01-01']
+)
+def test_a_placeholder_is_no_start(placeholder):
+    """A `cancelled_at` filled with 1970-01-01 where no order was
+    cancelled does not start before the orders."""
+    stamp = pd.Timestamp(placeholder)
+    filled = pd.Series([stamp, stamp, LATER[2], LATER[3]])
+    choice = _choose(cancelled_at=filled, order_date=DAYS)
+    assert choice.column == 'order_date'
+    assert choice.how == 'earliest'
+
+
+def test_a_placeholder_minimum_over_the_table_is_read_past():
+    epoch = pd.Timestamp('1970-01-01')
+    whole = TableRange(
+        9,
+        {
+            'cancelled_at': ColumnRange(epoch, LATER[3], 9),
+            'order_date': ColumnRange(DAYS[0], DAYS[3], 9),
+        },
+    )
+    choice = choose_time_column(
+        pd.DataFrame({'cancelled_at': [epoch, *LATER[1:]], 'order_date': DAYS}),
+        ['cancelled_at', 'order_date'],
+        full_range=lambda names: whole,
+    )
+    assert choice.column == 'order_date'
+
+
 def test_a_tie_on_the_earliest_value_takes_the_first_column():
     assert _choose(shipped=DAYS, delivered=DAYS).column == 'shipped'

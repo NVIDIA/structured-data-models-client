@@ -57,6 +57,10 @@ EARLIEST_PAST_THE_ROWS_READ = pd.Series(
     + list(pd.date_range('2020-01-01', periods=ROWS - 1_000, freq='D'))
 )
 BIRTHS = pd.Series(pd.date_range('1960-01-01', periods=ROWS, freq='W'))
+# The epoch where no order was cancelled, which is most of them.
+PLACEHOLDERS = pd.Series([pd.Timestamp('1970-01-01')] * ROWS).where(
+    pd.Series(range(ROWS)) % 50 != 0, HOURS + pd.Timedelta(days=1)
+)
 # Set on one order in a hundred, and earlier than every order date.
 CANCELLED = (HOURS - pd.Timedelta(days=30)).where(
     pd.Series(range(ROWS)) % 100 == 0
@@ -109,6 +113,10 @@ CASES: dict[str, tuple[dict[str, pd.Series], str | None]] = {
         'order_date',
     ),
     'a lone mostly empty stamp': ({'cancelled_at': CANCELLED}, None),
+    'a placeholder-filled stamp beside the order date': (
+        {'order_date': HOURS, 'cancelled_at': PLACEHOLDERS},
+        'order_date',
+    ),
 }
 
 

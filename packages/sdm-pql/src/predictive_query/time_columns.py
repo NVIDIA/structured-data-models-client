@@ -13,7 +13,8 @@ Nor is a date of birth.
 A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is taken
 only when it is a table's one timestamp left, since in an append-only log of
 changes it is when the row began. Of several left, a `created` stamp is taken,
-and otherwise the one whose values start earliest.
+and otherwise the one whose values start earliest, placeholders such as
+1900-01-01 or 1970-01-01 left out.
 
 :func:`choose_time_column` is the one rule both inference paths apply: the
 client's, which reads a frame, and the relational engine's, which reads a
@@ -407,20 +408,35 @@ def _refused_for_values(
     return None
 
 
+# Values that stand for no date: anything before 1901, such as 0001-01-01 or
+# 1900-01-01, and the Unix epoch at midnight, which a zero or a missing value
+# becomes on its way into a timestamp.
+_FIRST_REAL_DAY = pd.Timestamp('1901-01-01', tz='UTC')
+_EPOCH = pd.Timestamp('1970-01-01', tz='UTC')
+
+
+def _is_placeholder(stamp: pd.Timestamp) -> bool:
+    return stamp < _FIRST_REAL_DAY or stamp == _EPOCH
+
+
 def _earliest(
     frame: pd.DataFrame, among: Sequence[str], whole: _WholeTable
 ) -> str:
     r"""The column of ``among`` whose values start earliest, the first in
     table order on a tie or when none can be read as a time.
+
+    A placeholder is no start: a `cancelled_at` filled with 1970-01-01 does
+    not begin before the orders it cancels. Where a column starts is read
+    over the whole table when it was asked; when its whole-table minimum is
+    a placeholder, the earliest real value in the rows read is used, since
+    one query cannot skip the placeholders in every SQL dialect.
     """
     starts: dict[str, pd.Timestamp] = {}
     for name in among:
         seen = whole(name)
-        start = (
-            _as_instant(seen[0])
-            if seen is not None
-            else _first_instant(frame[name])
-        )
+        start = None if seen is None else _as_instant(seen.low)
+        if start is None or _is_placeholder(start):
+            start = _first_instant(frame[name])
         if start is not None:
             starts[name] = start
     if not starts:
@@ -429,7 +445,9 @@ def _earliest(
 
 
 def _first_instant(values: pd.Series) -> pd.Timestamp | None:
-    r"""The earliest of ``values`` as a UTC timestamp, or ``None``."""
+    r"""The earliest of ``values`` that is not a placeholder, as a UTC
+    timestamp, or ``None``.
+    """
     if isinstance(values.dtype, pd.ArrowDtype):
         values = pd.Series(values.to_numpy(), index=values.index)
     try:
@@ -438,7 +456,8 @@ def _first_instant(values: pd.Series) -> pd.Timestamp | None:
             parsed = pd.to_datetime(values, errors='coerce', utc=True)
     except (TypeError, ValueError, OverflowError):
         return None
-    return _as_instant(parsed.min())
+    real = parsed[(parsed >= _FIRST_REAL_DAY) & (parsed != _EPOCH)]
+    return _as_instant(real.min())
 
 
 def _as_instant(value: object) -> pd.Timestamp | None:
