@@ -15,11 +15,11 @@ import warnings
 
 import pytest
 
-from sdm_client import KumoRelational, Schema, UnsupportedRequestError
+from sdm_client import Schema, UnsupportedRequestError
 from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers.relational import RelationalMaterializer
-from sdm_client.models import RELATIONAL_LIMITS
+from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
 
 
 def payload(*, predict_rows: int, context_rows: int) -> dict:
@@ -178,7 +178,7 @@ def test_the_default_outputs_follow_the_relational_task_kind():
 
 def test_the_relational_model_declares_the_deployment_it_was_read_from():
     """A second build of the same id serves less; this is the shipping one."""
-    runtime = KumoRelational().spec.runtime
+    runtime = KUMO_RELATIONAL.runtime
     assert {'forecasting', 'temporal_link_prediction'} <= runtime.tasks
     assert 'explanation' in runtime.outputs
     # Only these inference options reach the wire; the engine defaults to more.

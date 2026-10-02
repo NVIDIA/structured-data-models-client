@@ -331,7 +331,7 @@ def test_a_handle_carrying_an_unregistered_spec_is_refused():
     from sdm_client.models import Model
 
     class Invented(Model):
-        spec = ModelSpec(
+        _spec = ModelSpec(
             model_id='not-a-real-model',
             profile=RELATIONAL_PROFILE,
             runtime=RuntimeContract(
@@ -373,12 +373,12 @@ def test_a_frame_on_a_self_referencing_schema_is_told_what_would_work():
 def test_no_explanation_format_is_advertised_that_cannot_be_asked_for():
     """Two were, and neither appears in any response: nothing on this client
     takes a format argument, and the endpoint names its own."""
-    from sdm_client import KumoRelational
+    from sdm_client.models import KUMO_RELATIONAL
 
-    assert KumoRelational().spec.runtime.explanation_formats == ()
+    assert KUMO_RELATIONAL.runtime.explanation_formats == ()
 
 
 def test_the_model_that_explains_still_says_so_through_its_outputs():
-    from sdm_client import KumoRelational
+    from sdm_client.models import KUMO_RELATIONAL
 
-    assert 'explanation' in KumoRelational().spec.runtime.outputs
+    assert 'explanation' in KUMO_RELATIONAL.runtime.outputs

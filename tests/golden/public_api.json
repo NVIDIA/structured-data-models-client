@@ -118,7 +118,6 @@
       "MissingExtraError",
       "Model",
       "ModelCapabilities",
-      "ModelSpec",
       "NimRequestError",
       "PredictionResult",
       "PredictiveQuery",
@@ -170,8 +169,7 @@
         ],
         "kind": "class",
         "public_attributes": [
-          "name",
-          "spec"
+          "name"
         ],
         "public_methods": {},
         "signature": "()"
@@ -182,8 +180,7 @@
         ],
         "kind": "class",
         "public_attributes": [
-          "name",
-          "spec"
+          "name"
         ],
         "public_methods": {},
         "signature": "()"
@@ -216,13 +213,6 @@
         ],
         "public_methods": {},
         "signature": "(model: 'str', tasks: 'tuple[str, ...]', outputs: 'tuple[str, ...]', single_table: 'bool', multiple_tables: 'bool', relationships: 'bool', explanation_formats: 'tuple[str, ...]' = (), sessions: 'bool' = True, source: 'str' = 'sdk') -> None"
-      },
-      "ModelSpec": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [],
-        "public_methods": {},
-        "signature": "(model_id: 'str', profile: 'Profile', runtime: 'RuntimeContract') -> None"
       },
       "NimRequestError": {
         "bases": [
