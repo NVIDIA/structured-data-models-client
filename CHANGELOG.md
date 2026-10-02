@@ -346,7 +346,8 @@ declare as `1.0.0` and none has published. The heading becomes
   It read RelBench's `hashes.json` from upstream's `main`, which RelBench 3 deleted when it moved its data from `relbench.stanford.edu` to Hugging Face.
   The loader now reads the tables from those Hugging Face repositories at a commit pinned in the package, and checks each against a SHA-256 recorded with it, so what loads cannot change upstream unseen.
   `scripts/pin_relbench.py` writes the pins, and `rfm/assets/VENDORED.md` says how the digests were obtained.
-  Downloads land in a new cache directory, so a dataset fetched before is fetched once more.
+  Downloads land in a new cache directory, so a dataset fetched before is fetched once more, and the old `<cache>/rel-*` folders (and the other archive folders beside them) can be deleted.
+  `rel-mimic`, `tgbn-genre`, `tgbn-reddit` and `tgbn-token` are no longer available, as RelBench does not publish them on Hugging Face.
 - **A Databricks metric view named as a table failed with the warehouse's `METRIC_VIEW_MISSING_MEASURE_FUNCTION`.**
   `Schema.from_source(DatabricksSource(...), {'m': '<metric view>'})` read its rows like a table's, and Databricks refuses that for a measure.
   The column look-up now reads the relation's type from `information_schema` too, so a metric view is refused before any row is read, with a `StructuredDataError` (`INVALID_REQUEST`) that says to use `source.semantic_model('<metric view>')`.

@@ -40,7 +40,6 @@ REPOSITORIES = (
     'stanford-star/relbench-v2-extra',
     'stanford-star/dbinfer',
     'stanford-star/tgb',
-    'stanford-star/redelex',
 )
 
 HUB = 'https://huggingface.co'
@@ -80,9 +79,8 @@ def _tree(repository: str, revision: str) -> list[dict[str, Any]]:
 def _manifest(repository: str, revision: str, entry: dict[str, Any]) -> Any:
     path = quote(entry['path'])
     body, _ = _get(f'{HUB}/datasets/{repository}/resolve/{revision}/{path}')
-    blob = hashlib.sha1(  # noqa: S324 - Git's object id, not a security hash
-        b'blob %d\0' % len(body) + body
-    ).hexdigest()
+    # Git's object id for the blob, which the tree listing names.
+    blob = hashlib.sha1(b'blob %d\0' % len(body) + body).hexdigest()
     if blob != entry['oid']:
         sys.exit(
             f'{repository}@{revision}:{entry["path"]} does not match its Git '

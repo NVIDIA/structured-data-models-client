@@ -29,9 +29,10 @@ the visualization tests, and re-enumerate the bundled components in the root
 
 - Project: https://github.com/stanford-star/relbench
 - Data: the Hugging Face dataset repositories `stanford-star/relbench-v1`,
-  `stanford-star/relbench-v2-extra`, `stanford-star/dbinfer`,
-  `stanford-star/tgb` and `stanford-star/redelex`, each at the commit the file
-  records under `revisions`.
+  `stanford-star/relbench-v2-extra`, `stanford-star/dbinfer` and
+  `stanford-star/tgb`, each at the commit the file records under `revisions`.
+  RelBench's other repositories, such as the CTU datasets in
+  `stanford-star/redelex`, are not pinned; add one to the script to offer it.
 - Written by `scripts/pin_relbench.py`; regenerate it rather than editing it.
 
 What `Graph.from_relbench()` may load, and the bytes it must load.
