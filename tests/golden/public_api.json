@@ -123,7 +123,6 @@
       "PredictiveQuery",
       "Relationship",
       "Request",
-      "RuntimeContract",
       "SDMClient",
       "SDMWarning",
       "Schema",
@@ -274,18 +273,6 @@
           "materialized": "(*, payloads: 'tuple[dict[str, Any], ...]', schema: 'Schema', query: 'str', indices: 'list[Any]', entity_table: 'str | None' = None, windowed: 'bool' = False, requested_inference: 'Mapping[str, Any] | None' = None) -> 'Request'"
         },
         "signature": "(context: 'pd.DataFrame', predict: 'pd.DataFrame', *, target: 'str', task: 'str', related_tables: 'Mapping[str, pd.DataFrame] | None' = None, schema: 'Schema | None' = None, entity_table: 'str' = 'instance', inference: 'Mapping[str, Any] | None' = None, task_options: 'Mapping[str, Any] | None' = None) -> 'None'"
-      },
-      "RuntimeContract": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [
-          "explanation_formats",
-          "inference_options",
-          "sessions",
-          "unread_feature_stypes"
-        ],
-        "public_methods": {},
-        "signature": "(tasks: 'frozenset[str]', outputs: 'frozenset[str]', explanation_formats: 'tuple[str, ...]' = (), sessions: 'bool' = True, limits: 'Mapping[str, int]' = <factory>, inference_options: 'frozenset[str]' = frozenset(), unread_feature_stypes: 'frozenset[str]' = frozenset()) -> None"
       },
       "SDMClient": {
         "bases": [],
