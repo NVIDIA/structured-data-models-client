@@ -250,6 +250,51 @@ def test_each_step_moves_the_window_by_its_own_span():
     ]
 
 
+def test_a_forecast_step_is_the_window_question_asked_on_its_own():
+    """Step one of a forecast is the plain question, and so reads against it.
+
+    The AdventureWorks notebook asks a 30 day demand question with an ensemble
+    and the same question forecast three windows out. Its first step can only
+    be read against the plain answer if the two requests are the same, so the
+    ensemble has to reach every step and nothing else may differ. Each later
+    step moves the window along and changes nothing else.
+    """
+    pytest.importorskip('sdm_relational_engine')
+    graph = shop()
+    how = {
+        'indices': [1],
+        'anchor_time': pd.Timestamp('2025-12-01'),
+        'inference_config': {'num_estimators': 4, 'column_shuffle': True},
+    }
+    plain = PredictiveQuery(
+        'PREDICT COUNT(buys.*, 0, 30, days) FOR EACH users.uid', graph
+    ).materialize(**how)
+    forecast = PredictiveQuery(
+        'PREDICT COUNT(buys.*, 0, 30, days) FORECAST 3 TIMEFRAMES '
+        'FOR EACH users.uid',
+        graph,
+    ).materialize(**how)
+
+    (asked,) = plain.payloads
+    ensemble = asked['inference']['inference_config']
+    assert (ensemble['num_estimators'], ensemble['column_shuffle']) == (4, True)
+
+    steps = [part.payloads for part in forecast.parts]
+    assert steps[0] == plain.payloads
+
+    def anchors(payload):
+        scored = payload['predict']['instance_table']
+        at = scored['columns'].index('__kumo_anchor_time')
+        return [row[at] for row in scored['rows']]
+
+    for (payload,), window in zip(
+        steps[1:], ['30, 60, days', '60, 90, days'], strict=True
+    ):
+        assert window in payload['metadata']['source_query']
+        assert anchors(payload) == anchors(asked)
+        assert payload['inference'] == asked['inference']
+
+
 # --- what comes back names the row it was asked about ----------------------
 
 

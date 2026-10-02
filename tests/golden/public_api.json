@@ -999,7 +999,7 @@
           "namespace"
         ],
         "public_methods": {
-          "semantic_model": "(self, name: 'str') -> 'SemanticModel'"
+          "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SemanticModel'"
         },
         "signature": "(connection: 'DatabricksConnection | SparkSession', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
       },
@@ -1062,10 +1062,11 @@
           "connection",
           "name",
           "namespace",
-          "source"
+          "source",
+          "trust_expressions"
         ],
         "public_methods": {},
-        "signature": "(source: 'DatabricksSource | SnowflakeSource', name: 'str') -> 'None'"
+        "signature": "(source: 'DatabricksSource | SnowflakeSource', name: 'str', *, trust_expressions: 'bool' = False) -> 'None'"
       },
       "SnowflakeSource": {
         "bases": [
@@ -1078,7 +1079,7 @@
           "namespace"
         ],
         "public_methods": {
-          "semantic_model": "(self, name: 'str') -> 'SemanticModel'"
+          "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SemanticModel'"
         },
         "signature": "(connection: 'SnowflakeConnection | SnowparkSession', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
       },
