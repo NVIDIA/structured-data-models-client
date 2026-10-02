@@ -701,6 +701,49 @@ def test_get_train_table(
     assert set(train_table['ENTITY']) == {'user_b', 'user_c', 'user_d'}
 
 
+def test_get_train_table_with_no_labels_is_an_empty_table() -> None:
+    r"""No entity passing the filter is an answer of no labels. The sampler's
+    error became a ValueError, and the RuntimeError caught here no longer
+    matched it, so the caller got the error instead.
+    """
+    from sdm_relational_engine.rfm.backend.local import LocalTable
+
+    movies = LocalTable(
+        df=pd.DataFrame({'MID': range(10), 'GENRES': ['Comedy'] * 10}),
+        name='MOVIES',
+        primary_key='MID',
+    )
+    ratings = LocalTable(
+        df=pd.DataFrame(
+            {
+                'RID': range(40),
+                'MID': [mid % 10 for mid in range(40)],
+                'STARS': [1.0] * 40,
+                'TIME': pd.date_range('2020-01-01', periods=40, freq='D'),
+            }
+        ),
+        name='RATING',
+        primary_key='RID',
+        time_column='TIME',
+    )
+    graph = Graph([movies, ratings])
+    graph.link('RATING', 'MID', 'MOVIES')
+    model = KumoRelational(graph, verbose=False)
+
+    def train_table(genre: str) -> pd.DataFrame:
+        return model.get_train_table(
+            f'PREDICT COUNT(RATING.STARS, 0, 7, days) FOR EACH MOVIES.MID '
+            f"WHERE MOVIES.GENRES = '{genre}'",
+            size=3,
+            anchor_time=pd.Timestamp('2020-01-10'),
+        )
+
+    assert len(train_table('Comedy')) == 3
+    empty = train_table('comedy')
+    assert len(empty) == 0
+    assert list(empty.columns) == ['ENTITY', 'ANCHOR_TIMESTAMP', 'TARGET']
+
+
 def test_context_anchor_time(
     user_store_graph: Graph,
     ltv: ValidatedPredictiveQuery,

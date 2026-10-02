@@ -1833,8 +1833,10 @@ class KumoRelational:
                 num_test_trials=max_iterations * size,
                 random_seed=random_seed,
             )
-        except RuntimeError as e:
-            if 'Failed to collect any' in str(e):
+        except ValueError as e:
+            # No labels at this anchor is an answer here; the sampler raises
+            # it as a ValueError so the client reports it as the caller's.
+            if str(e).startswith('Failed to collect any test examples'):
                 return pd.DataFrame(
                     {
                         'ENTITY': [],
