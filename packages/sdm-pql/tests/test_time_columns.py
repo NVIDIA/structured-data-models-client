@@ -17,6 +17,9 @@ import pandas as pd
 import pytest
 
 from predictive_query.time_columns import (
+    BIRTH_DATE_TOKENS,
+    EDIT_STAMP_TOKENS,
+    LOAD_STAMP_TOKENS,
     RejectedTimeColumn,
     choose_time_column,
     is_birth_date,
@@ -52,6 +55,12 @@ def _choose(full_range=None, **columns):
         'reloadedAt',
         'LOADDATE',
         'SYNCEDAT',
+        'extract_date',
+        'EXTRACTDATE',
+        'ingest_date',
+        'INGESTDATE',
+        'ingestion_date',
+        'INGESTIONDATE',
     ],
 )
 def test_a_stamp_of_a_load_is_read_as_one(name):
@@ -74,6 +83,7 @@ def test_a_stamp_of_a_load_is_read_as_one(name):
         'LASTLOGIN',
         'LASTSEEN',
         'LASTORDERDATE',
+        'CHANGEDDATE',
     ],
 )
 def test_a_stamp_of_the_last_change_is_read_as_one(name):
@@ -98,6 +108,18 @@ def test_a_stamp_of_the_last_change_is_read_as_one(name):
 )
 def test_a_date_of_birth_is_read_as_one(name):
     assert is_birth_date(name)
+
+
+@pytest.mark.parametrize(
+    'token',
+    sorted(LOAD_STAMP_TOKENS | EDIT_STAMP_TOKENS | BIRTH_DATE_TOKENS),
+)
+def test_a_name_folded_into_one_word_reads_as_it_does_split(token):
+    """Snowflake folds `extract_date` into `EXTRACTDATE` only when it was
+    written `extractDate`, so the two spellings must be read alike."""
+    split, folded = f'{token}_date', f'{token}date'.upper()
+    for rule in (is_load_stamp, is_edit_stamp, is_birth_date):
+        assert rule(split) == rule(folded), rule.__name__
 
 
 @pytest.mark.parametrize(

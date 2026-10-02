@@ -40,9 +40,13 @@ LOAD_STAMP_TOKENS = frozenset(
         'load',
         'reload',
         'reloaded',
+        'ingest',
         'ingested',
+        'ingestion',
         'batched',
+        'extract',
         'extracted',
+        'extraction',
         'etl',
         'refresh',
         'refreshdate',
@@ -63,19 +67,26 @@ CREATION_TOKENS = frozenset({'create', 'created', 'creation'})
 
 # A name in one case with no separators, as Snowflake folds `lastLogin` into
 # `LASTLOGIN`, has no token boundary, so these are matched as its prefix. Each
-# keeps the endings that make it a different word: LASTING, LASTLY,
-# SYNCHRONOUS, REFRESHMENT. A short list of endings, rather than a dictionary,
-# keeps every joined stamp refused and only these words kept.
+# keeps the endings that make it a different word: LASTING, EDITION,
+# SYNCHRONOUS, and CHANGEDATE, which reads as change date. A short list of
+# endings, rather than a dictionary, keeps every joined stamp refused and only
+# these words kept.
 _JOINED_LOAD_PREFIXES: Mapping[str, tuple[str, ...]] = {
     'load': ('ing',),
+    'reload': ('ing',),
     'sync': ('hron',),
     'etl': (),
     'refresh': ('ing', 'ment'),
     'ingest': (),
     'extract': (),
+    'batched': (),
 }
 _JOINED_EDIT_PREFIXES: Mapping[str, tuple[str, ...]] = {
     'last': ('ing', 'ly'),
+    'edit': ('ion', 'or'),
+    'changed': ('ate',),
+    'deleted': ('ate',),
+    'deletion': (),
 }
 _JOINED_BIRTH_PREFIXES: Mapping[str, tuple[str, ...]] = {'dob': (), 'born': ()}
 
