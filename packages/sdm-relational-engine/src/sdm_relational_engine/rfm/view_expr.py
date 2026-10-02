@@ -67,6 +67,10 @@ def _unsafe_expr_reason(expr: str) -> str | None:
     ``TABLE t``, a query opening with ``FROM``, and the ``|>`` pipe, and
     Snowflake chains statements with ``->>``, so those are refused too.
 
+    Parentheses must balance outside quoted text. An expression is spliced
+    into a select list or a filter's ``WHERE (...)``, and a stray ``)`` would
+    close that and let the rest append clauses.
+
     Args:
         expr: The expression as written in the view definition.
     """
@@ -80,6 +84,13 @@ def _unsafe_expr_reason(expr: str) -> str | None:
                 f'it leaves {delimiter!r} unpaired, so which part of it '
                 f'is quoted text cannot be established'
             )
+    depth = 0
+    for char in unquoted:
+        depth += {'(': 1, ')': -1}.get(char, 0)
+        if depth < 0:
+            return "it closes a '(' it never opened"
+    if depth != 0:
+        return "it leaves a '(' unclosed"
     if match := _UNSAFE_EXPR_KEYWORDS.search(unquoted):
         return f"it contains the SQL keyword '{match.group()}'"
     if _QUERY_START.search(unquoted):
@@ -89,6 +100,8 @@ def _unsafe_expr_reason(expr: str) -> str | None:
 
 # Pure, deterministic, built-in scalar functions, after the Databricks SQL
 # built-in function reference. Checked against `SHOW SYSTEM FUNCTIONS`.
+# Some can be costly (`repeat`, `sequence`) or read the session time zone
+# (`from_unixtime`); docs/about/architecture.md says so, and they stay allowed.
 _DATABRICKS_FUNCTIONS = frozenset(
     {
         # Conditional and null handling:
@@ -273,11 +286,12 @@ _SESSION_VALUES = re.compile(
 
 # A private-use character stands in for quoted text, so a call to a quoted
 # name stays visible as a call.
-_QUOTED = ''
-_CALL = re.compile(r'(?<![\w$])([A-Za-z_][\w$]*|)\s*\(')
+_QUOTED = '\ue000'
+# What may stand right before a `(` that opens a group rather than a call.
+_OPENS_A_GROUP = frozenset('+-*/%=<>!|&^~,([?:')
+_LAST_TOKEN = re.compile(r'([\w$\ue000]+)\s*$')
 _QUALIFIED = re.compile(r'\.\s*$')
 _TYPE_CONTEXT = re.compile(r'(?:(?<![\w$])as|::)\s*$', flags=re.IGNORECASE)
-_CALLED_RESULT = re.compile(r'\)\s*\(')
 
 
 def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
@@ -292,6 +306,10 @@ def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
     can name anything. Session values (``current_user``) are refused too: a
     column must not change with who reads it.
 
+    Every ``(`` is checked, and fails closed: it must open a group, follow
+    a keyword, give a type its parameters, or call a trusted function. So a
+    name this does not recognise as a name is refused rather than skipped.
+
     Apply :func:`_unsafe_expr_reason` first, which establishes that every
     quote in ``expr`` is paired.
 
@@ -301,26 +319,35 @@ def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
     """
     trusted = _TRUSTED_FUNCTIONS[dialect]
     text = _QUOTED_EXPR_TEXT.sub(_QUOTED, expr)
-    for match in _CALL.finditer(text):
-        name = match.group(1)
-        before = text[: match.start()]
-        if name == _QUOTED:
+    for index, char in enumerate(text):
+        if char != '(':
+            continue
+        before = text[:index].rstrip()
+        if not before or before[-1] in _OPENS_A_GROUP:
+            continue
+        if before[-1] in ')]':
+            return 'it calls the result of an expression'
+        token = _LAST_TOKEN.search(before)
+        if token is None:
+            return f"it calls what precedes '(' after {before[-10:]!r}"
+        name = token.group(1)
+        if _QUOTED in name:
             return 'it calls a function by a quoted name'
-        if _QUALIFIED.search(before):
+        if _QUALIFIED.search(before[: token.start()]):
             return f"it calls the qualified function '{name}'"
         folded = name.lower()
         if folded == 'identifier':
             return 'it names a function through IDENTIFIER()'
         if folded in _KEYWORDS:
             continue
-        if folded in _TYPE_NAMES and _TYPE_CONTEXT.search(before):
+        if folded in _TYPE_NAMES and _TYPE_CONTEXT.search(
+            before[: token.start()]
+        ):
             continue
         if folded not in trusted:
             return (
                 f"it calls '{name}', which is not a pure built-in SQL function"
             )
-    if _CALLED_RESULT.search(text):
-        return 'it calls the result of an expression'
     if session := _SESSION_VALUES.search(text):
         return f"it reads the session value '{session.group(1)}'"
     return None

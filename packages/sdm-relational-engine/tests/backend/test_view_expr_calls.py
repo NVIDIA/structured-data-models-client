@@ -142,3 +142,92 @@ def test_a_query_without_select_is_refused(expr: str) -> None:
 )
 def test_from_and_table_in_a_scalar_expression_are_accepted(expr: str) -> None:
     assert _unsafe_expr_reason(expr) is None
+
+
+def _refused(expr: str, dialect: str) -> str | None:
+    return _unsafe_expr_reason(expr) or _untrusted_call_reason(expr, dialect)
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        # Case variants of a refused name:
+        'SECRET(x)',
+        'Secret(x)',
+        'sEcReT(x)',
+        # Whitespace or a newline before `(`:
+        'secret (x)',
+        'secret\n(x)',
+        'secret\t\r\n (x)',
+        # Quoted and qualified names:
+        '`secret`(x)',
+        '"SECRET"(x)',
+        '`upper`(x)',
+        'cat.sch.upper(x)',
+        'system.builtin.secret(x)',
+        '`cat`.`sch`.`f`(x)',
+        '"DB"."SCH"."F"(x)',
+        "IDENTIFIER('secret')(x)",
+        "identifier ('upper') (x)",
+        # A refused call nested where a keyword or lambda opens a group:
+        'transform(a, y -> secret(y))',
+        'x IN (secret(x), 1)',
+        "CASE WHEN secret(x) = 'a' THEN 1 ELSE 0 END",
+        'upper(lower(secret(x)))',
+        # Names the old pattern never recognised as names:
+        '1f(x)',
+        'x + 9secret(x)',
+        'fünf(x)',
+        '函数(x)',
+        'a[0](x)',
+        'upper(x)(y)',
+        # Parentheses that close what the query opened:
+        'x) OR (1 = 1',
+        'x)) UNION ALL (VALUES (1)',
+        'upper(x',
+        '(x',
+        'x)',
+        # Comments and separators:
+        'x --',
+        'x /*',
+        'x; DROP TABLE t',
+        # Queries without SELECT, and statement chains:
+        'x IN (TABLE t)',
+        'x IN (FROM t)',
+        '(FROM t |> AGGREGATE MAX(c))',
+        '1 ->> SHOW TABLES',
+    ],
+)
+def test_the_validator_refuses(dialect: str, expr: str) -> None:
+    assert _refused(expr, dialect) is not None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        "CONCAT('secret(', x)",
+        "'evil(x)'",
+        "x = 'a) OR (1 = 1'",
+        'upper(lower(trim(x)))',
+        "COALESCE(NULLIF(TRIM(x), ''), UPPER(y))",
+        'CAST(x AS DECIMAL(10,2))',
+        'CAST(x AS DECIMAL(10, 2)) * (1 + y)',
+        'transform(a, y -> upper(y))',
+        'filter(a, y -> length(trim(y)) > 0)',
+        '((x + 1) * (y - 2))',
+        "x IN ('a', 'b') AND NOT (y = 1)",
+        'a[(0)] + (1)',
+        'CASE WHEN (x > 1) THEN upper(y) ELSE lower(y) END',
+    ],
+)
+def test_the_validator_accepts(dialect: str, expr: str) -> None:
+    assert _refused(expr, dialect) is None
+
+
+def test_parentheses_must_balance_in_trusted_mode_too() -> None:
+    # `_unsafe_expr_reason` is the check `trust_expressions=True` keeps.
+    assert _unsafe_expr_reason('x = 1) OR (1 = 1') is not None
+    assert _unsafe_expr_reason('upper(x') is not None
+    assert _unsafe_expr_reason("x = ')'") is None
