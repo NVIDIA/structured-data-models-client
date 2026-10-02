@@ -397,6 +397,13 @@ Qualified and quoted function names, `IDENTIFIER()`, and session values such as 
 `source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
 Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
 
+**A metric view's `filter` is applied, or the view is refused.**
+The filter decides which rows a metric view holds, and it used to be reported as unrepresentable and dropped, so a schema and every request read rows the view leaves out.
+A filter on the source table's own columns now limits every read of that table: its preview, its row count, its time range, entity sampling and each lookup read `(SELECT * FROM <source> AS source WHERE (<filter>))` instead of the table.
+A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
+The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
+`parameters` and `materialization` are still left out with a message.
+
 ### Notes for a reviewer
 
 **Graph visualization is kept, and so is its provenance.** `Graph.visualize()`

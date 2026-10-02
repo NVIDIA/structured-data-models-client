@@ -183,8 +183,8 @@ def _view_expr_message(
 class ViewConversionWarning(UserWarning):
     r"""Warn that parts of a view could not be represented in a :class:`Graph`.
 
-    Metric and semantic views normally convert only partially because measures,
-    filters, and cross-table expressions have no graph equivalent. The
+    Metric and semantic views normally convert only partially because measures
+    and cross-table expressions have no graph equivalent. The
     dedicated category lets a project silence this warning without silencing
     every client warning. The same diagnostics appear on the returned graph as
     :attr:`Graph.conversion_messages` for programmatic handling.
@@ -1112,6 +1112,12 @@ class Graph:
         aggregations with a predictive query. Other unrepresentable elements
         are dropped with a warning.
 
+        The view's ``filter`` is applied to the fact table, so every read of it
+        sees only the rows the view holds. A filter on a joined table cannot
+        be, and the view is refused rather than read unfiltered: create a
+        regular view with that ``WHERE`` clause and point the metric view's
+        source at it.
+
         Dimension expressions later run as SQL under your warehouse
         credentials, making the view definition executable input. Expressions
         with a statement separator, comment, or sub-query are not plain scalar
@@ -1149,9 +1155,14 @@ class Graph:
                 unqualified ``metric_view_name`` is resolved against the
                 connection defaults.
             verbose: Whether to print verbose output.
-            trust_expressions: Whether to keep dimensions that call functions
-                other than pure built-ins. Sub-queries, comments and
-                statement separators are refused regardless.
+            trust_expressions: Whether to keep dimensions, and accept a
+                filter, that call functions other than pure built-ins.
+                Sub-queries, comments and statement separators are refused
+                regardless.
+
+        Raises:
+            UnsupportedFilterError: If the view's filter references a joined
+                table, or is not a safe scalar condition.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
@@ -1192,7 +1203,9 @@ class Graph:
             definition, dtype_names, view_catalog, view_schema = (
                 read_metric_view_definition(connection, quoted_name)
             )
-            spec = parse_metric_view(definition)
+            spec = parse_metric_view(
+                definition, trust_expressions=trust_expressions
+            )
             msgs = list(spec.messages)
 
             def _table_parts(parts: tuple[str, ...]) -> tuple[str, str, str]:
@@ -1262,6 +1275,7 @@ class Graph:
             schema=fact_schema,
             columns=columns_by_alias.get(SOURCE_ALIAS, []),
             primary_key=None,
+            row_filter=spec.filter,
         )
         graph.add_table(fact_table)
         table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}

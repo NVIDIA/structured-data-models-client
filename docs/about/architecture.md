@@ -327,6 +327,8 @@ An expression dimension stays an expression, computed in the warehouse when the 
 Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
 A model is written by someone else, and its expressions run under the caller's credentials each time a request is gathered, so by default they may call only pure, deterministic built-in functions, from an allowlist per dialect.
 A column calling a user-defined function, `secret()`, `http_request()` or `SYSTEM$WAIT()` is left out with a message, and `trust_expressions=True` keeps it; sub-queries, comments and statement separators are refused either way.
+A metric view's `filter` decides which rows it holds, so it is applied to the source table on every read rather than dropped.
+A filter on a joined table cannot be, and the view is refused: create a regular view with that `WHERE` clause and point the metric view's source at it.
 A Snowflake semantic view goes through the same path, read by the engine's own semantic-view support; it is tested against a fake connection, not yet against a Snowflake account.
 
 ---

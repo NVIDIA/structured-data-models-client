@@ -321,7 +321,8 @@ class DatabricksSource(Source):
         they join. Its source table becomes a table named as it is in the
         catalog, each join a table named after the join, and each dimension a
         column of the table it reads. Measures are aggregations rather than
-        row values, so they are left out.
+        row values, so they are left out. The view's ``filter`` limits the
+        rows of its source table; a filter on a joined table is refused.
 
         Args:
             name: The metric view, qualified or resolved against this source's
