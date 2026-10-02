@@ -1189,6 +1189,8 @@ class Schema:
                 for name, named in chosen.items()
             }
             declared = _declared_links(graph, chosen, built)
+            if relationships is None:
+                _key_by_the_referenced_column(built, declared)
             engine_tables = {name: graph[name] for name in chosen}
 
         found = {
@@ -1360,8 +1362,26 @@ def _joinable_inferred_links(
     for it is not refused for a guess made on their behalf.
     """
     unjoinable = [link for link in inferred if not _is_joinable(built, link)]
-    _warn_of_a_name_match_that_cannot_join(built, unjoinable)
+    _warn_of_a_link_that_cannot_join(built, unjoinable)
     return [link for link in inferred if _is_joinable(built, link)]
+
+
+def _key_by_the_referenced_column(
+    built: Mapping[str, SourceTable], declared: Sequence[Relationship]
+) -> None:
+    r"""Key a keyless table by the column declared foreign keys refer to.
+
+    A catalog lets a foreign key refer only to a primary key or a unique
+    column, so that column identifies a row, as a lone unique column does when
+    the engine infers a key. Before the keys are checked, so this one is too.
+    Foreign keys naming different columns of one table leave it keyless.
+    """
+    referenced: dict[str, set[str]] = {}
+    for link in declared:
+        referenced.setdefault(link.target_table, set()).add(link.target_column)
+    for name, columns in referenced.items():
+        if built[name].primary_key is None and len(columns) == 1:
+            built[name].primary_key = next(iter(columns))
 
 
 def _checked_links(
@@ -2613,10 +2633,10 @@ def _infer_relationships(
     return links
 
 
-def _warn_of_a_name_match_that_cannot_join(
+def _warn_of_a_link_that_cannot_join(
     tables: Mapping[str, _TableShape], dropped: Sequence[Relationship]
 ) -> None:
-    """Say when a column named for a key holds values that key cannot match.
+    """Say why an inferred or declared link could not join.
 
     Dropping it is right: joining `int64` to `string` matches nothing, and an
     edge that matches nothing is worse than no edge. But it was dropped in
@@ -2625,7 +2645,30 @@ def _warn_of_a_name_match_that_cannot_join(
     """
     for link in dropped:
         source = tables[link.source_table].columns[link.source_column]
-        target = tables[link.target_table].columns[link.target_column]
+        target_table = tables[link.target_table]
+        target = target_table.columns[link.target_column]
+        key = _as_key_tuple(target_table.primary_key)
+        if key != (link.target_column,):
+            # A declared foreign key may name a unique column that is not the
+            # key, which is no fault of the dtypes.
+            has = (
+                f'the primary key of {link.target_table!r} is '
+                f'{_and_list(list(key))}'
+                if key
+                else f'{link.target_table!r} has no primary key'
+            )
+            warnings.warn(
+                f'{link.source_table}.{link.source_column} refers to '
+                f'{link.target_table}.{link.target_column}, but {has}. A '
+                f'relationship joins to a primary key, so none was made from '
+                f'it. Pass '
+                f'primary_keys={{{link.target_table!r}: '
+                f'{link.target_column!r}}} if {link.target_column!r} '
+                f'identifies a row of {link.target_table!r}.',
+                category=SDMWarning,
+                stacklevel=caller_stacklevel(),
+            )
+            continue
         warnings.warn(
             f'{link.source_table}.{link.source_column} names the key of '
             f'{link.target_table!r} and holds {source.dtype!r} where that key '

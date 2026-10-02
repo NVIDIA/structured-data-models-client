@@ -133,6 +133,9 @@ declare as `1.0.0` and none has published. The heading becomes
 - **DuckDB discovery read every schema and attached database.**
   A table named like one in the current schema was listed twice, which the graph refused, and a namesake's keys and foreign keys were read as the table's own.
   Discovery and the constraint lookups now stay in `current_database()` and `current_schema()`, where a bare table name is read from.
+- **A declared foreign key to a unique column, not the primary key, was dropped with a warning that blamed the dtypes.**
+  When the referenced table has no primary key, `Schema.from_source` now keys it by that column, as the catalog says it identifies a row, and checks it like any other key.
+  When the table has another primary key, the warning says so and names the `primary_keys=` that would let the key join.
 - **Reading a Postgres database held a transaction open.** Without
   autocommit, psycopg keeps the first statement's transaction, and its locks,
   until a commit, so a graph kept writers to its tables waiting, and one failed

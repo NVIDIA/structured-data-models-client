@@ -335,6 +335,61 @@ def test_a_foreign_key_lands_on_the_table_whose_name_matches_exactly(
     ]
 
 
+def test_a_foreign_key_to_a_unique_column_keys_a_keyless_table(
+    postgres: Any,
+) -> None:
+    # Two unique columns leave the engine without a key to infer, so only the
+    # foreign key says which one identifies a region.
+    connection, namespace = postgres
+    for statement in (
+        'CREATE TABLE {in_}region (code TEXT UNIQUE, slug TEXT UNIQUE)',
+        'CREATE TABLE {in_}store (store_id INTEGER PRIMARY KEY, '
+        'ref TEXT UNIQUE)',
+        'CREATE TABLE {in_}sale (sale_id INTEGER PRIMARY KEY, '
+        'region_code TEXT REFERENCES {in_}region(code), '
+        'store_ref TEXT REFERENCES {in_}store(ref), ts TIMESTAMP)',
+        "INSERT INTO {in_}region VALUES ('n', 'north'), ('s', 'south')",
+        "INSERT INTO {in_}store VALUES (1, 'a'), (2, 'b')",
+        # A sale a day for a year, so a 30 day window has history behind it.
+        'INSERT INTO {in_}sale SELECT i, '
+        "CASE WHEN i % 2 = 0 THEN 'n' ELSE 's' END, "
+        "CASE WHEN i % 3 = 0 THEN 'a' ELSE 'b' END, "
+        "TIMESTAMP '2024-01-01' + i * INTERVAL '1 day' "
+        'FROM generate_series(1, 365) AS i',
+    ):
+        connection.execute(statement.format(in_=f'{namespace}.'))
+    source = PostgresSource(connection, schema=namespace)
+
+    with pytest.warns(SDMWarning) as caught:
+        schema = Schema.from_source(source)
+
+    assert schema['region'].primary_key == 'code'
+    assert schema['store'].primary_key == 'store_id'
+    assert schema.relationships == [
+        Relationship('sale', 'region_code', 'region', 'code')
+    ]
+    messages = [str(warning.message) for warning in caught]
+    assert (
+        "sale.store_ref refers to store.ref, but the primary key of 'store' "
+        "is 'store_id'. A relationship joins to a primary key, so none was "
+        "made from it. Pass primary_keys={'store': 'ref'} if 'ref' "
+        "identifies a row of 'store'."
+    ) in messages
+    assert not any('cannot match' in message for message in messages)
+
+    # Sales alternate between the regions daily, so every 30 day label counts
+    # 15 when the join runs through the adopted key.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        request = PredictiveQuery(
+            'PREDICT COUNT(sale.*, 0, 30, days) FOR EACH region.code', schema
+        ).materialize(indices=['n'], random_seed=7)
+    (payload,) = request._payloads
+    context = json.loads(json.dumps(payload, default=str))['context']
+    labels = {(row[1], row[3]) for row in context['instance_table']['rows']}
+    assert labels == {('n', 15.0), ('s', 15.0)}
+
+
 def test_overrides_mean_what_they_mean_on_from_data(
     duckdb_source: Any,
 ) -> None:
