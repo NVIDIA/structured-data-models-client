@@ -27,7 +27,7 @@ import re
 import warnings
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import pandas as pd
 
@@ -217,9 +217,21 @@ class TimeColumnChoice:
 
 _VARIES = object()
 
-#: Reads a column's MIN, MAX and count of values over every row of its table,
-#: or ``None`` when it cannot.
-FullRange = Callable[[str], tuple[object, object, int] | None]
+
+class ColumnRange(NamedTuple):
+    r"""A column's ``MIN``, ``MAX`` and ``COUNT`` over every row of its
+    table.
+    """
+
+    low: object
+    high: object
+    #: How many rows hold a value.
+    held: int
+
+
+#: Reads the range of each named column over every row of their table in one
+#: query, or ``None`` when it cannot.
+FullRange = Callable[[Sequence[str]], Mapping[str, ColumnRange] | None]
 
 
 def choose_time_column(
@@ -242,14 +254,21 @@ def choose_time_column(
         frame: The rows read, holding every candidate.
         candidates: The timestamp columns, in table order.
         full_range: ``None`` when ``frame`` holds every row. Otherwise asked
-            for each column that looks constant in the rows read, and for
-            each column a choice by earliest value is made among, so that
-            the answer is the one every row gives.
+            once, for every column not refused by its name, so that whether
+            a column is constant and where it starts are what every row
+            says.
 
     Returns:
         The column taken, how, and the columns refused.
     """
-    whole = _WholeTable(full_range)
+    whole = _WholeTable(
+        full_range,
+        [
+            name
+            for name in candidates
+            if not is_load_stamp(name) and not is_birth_date(name)
+        ],
+    )
     rejected: dict[str, RejectedTimeColumn] = {}
     plain: list[str] = []
     edited: list[str] = []
@@ -294,22 +313,18 @@ def choose_time_column(
 
 
 class _WholeTable:
-    r"""Asks the table for a column's range once."""
+    r"""What one query over every row of the table said, if it was asked."""
 
-    def __init__(self, full_range: FullRange | None) -> None:
-        self._full_range = full_range
-        self._seen: dict[str, tuple[object, object, int] | None] = {}
+    def __init__(
+        self, full_range: FullRange | None, names: Sequence[str]
+    ) -> None:
+        self.can_ask = full_range is not None
+        self._ranges = (
+            full_range(names) if full_range is not None and names else None
+        )
 
-    @property
-    def can_ask(self) -> bool:
-        return self._full_range is not None
-
-    def __call__(self, name: str) -> tuple[object, object, int] | None:
-        if self._full_range is None:
-            return None
-        if name not in self._seen:
-            self._seen[name] = self._full_range(name)
-        return self._seen[name]
+    def __call__(self, name: str) -> ColumnRange | None:
+        return None if self._ranges is None else self._ranges.get(name)
 
 
 def _constant(values: pd.Series, name: str, whole: _WholeTable) -> object:

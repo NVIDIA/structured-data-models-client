@@ -17,6 +17,7 @@ from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable  # noqa: E402
 
 ROWS = 1_200
 HOURS = pd.Series(pd.date_range('2023-01-01', periods=ROWS, freq='h'))
+LATER = HOURS + pd.Timedelta(days=3)
 
 
 def _duckdb_table(frame: pd.DataFrame) -> DuckDBTable:
@@ -127,13 +128,39 @@ def test_a_column_constant_in_every_row_is_refused_after_checking():
     ]
 
 
-def test_a_varied_column_costs_no_query():
-    table = _duckdb_table(pd.DataFrame({'id': range(ROWS), 'stamp': HOURS}))
+def test_every_column_is_checked_in_one_query():
+    """AdventureWorks `sales_order_headers` holds four timestamps."""
+    table = _duckdb_table(
+        pd.DataFrame(
+            {
+                'id': range(ROWS),
+                'OrderDate': HOURS,
+                'DueDate': LATER,
+                'ShipDate': LATER,
+                'ModifiedDate': LATER,
+                '_etl_loaded_at': HOURS,
+            }
+        )
+    )
     asked: list[str] = []
-    table._fetch_rows = asked.append  # type: ignore[assignment,method-assign]
+    fetch = table._fetch_rows
+
+    def recorded(sql: str) -> list[tuple]:
+        asked.append(sql)
+        return fetch(sql)
+
+    table._fetch_rows = recorded  # type: ignore[method-assign]
     table.infer_time_column(verbose=False)
+
     assert table.time_column is not None
-    assert asked == []
+    assert table.time_column.name == 'OrderDate'
+    assert [sql for sql in asked if 'MIN(' in sql] == [
+        'SELECT MIN("OrderDate"), MAX("OrderDate"), COUNT("OrderDate"), '
+        'MIN("DueDate"), MAX("DueDate"), COUNT("DueDate"), '
+        'MIN("ShipDate"), MAX("ShipDate"), COUNT("ShipDate"), '
+        'MIN("ModifiedDate"), MAX("ModifiedDate"), COUNT("ModifiedDate")\n'
+        'FROM "t"'
+    ]
 
 
 def test_a_failed_check_keeps_the_column():

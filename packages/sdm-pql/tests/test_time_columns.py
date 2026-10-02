@@ -20,6 +20,7 @@ from predictive_query.time_columns import (
     BIRTH_DATE_TOKENS,
     EDIT_STAMP_TOKENS,
     LOAD_STAMP_TOKENS,
+    ColumnRange,
     RejectedTimeColumn,
     choose_time_column,
     is_birth_date,
@@ -33,10 +34,24 @@ ONE_DAY = pd.Series([pd.Timestamp('2025-09-11')] * 4)
 NO_DAY = pd.Series([pd.NaT] * 4)
 
 
-def _choose(full_range=None, **columns):
+def _choose(read=None, **columns):
+    r"""Choose among ``columns``, reading the whole table by ``read``, which
+    answers for one column at a time."""
     return choose_time_column(
-        pd.DataFrame(columns), list(columns), full_range=full_range
+        pd.DataFrame(columns),
+        list(columns),
+        full_range=None if read is None else _one_query(read),
     )
+
+
+def _one_query(read):
+    def full_range(names):
+        ranges = {name: read(name) for name in names}
+        if any(seen is None for seen in ranges.values()):
+            return None
+        return {name: ColumnRange(*seen) for name, seen in ranges.items()}
+
+    return full_range
 
 
 @pytest.mark.parametrize(
@@ -230,17 +245,24 @@ def test_a_column_constant_only_in_the_rows_read_is_kept():
     """rel-hm's `transactions.t_dat` holds one date in its first 1000 rows."""
     asked = []
 
-    def full_range(name):
-        asked.append(name)
-        return pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22'), 9
+    def full_range(names):
+        asked.append(list(names))
+        return {
+            name: ColumnRange(
+                pd.Timestamp('2018-09-20'), pd.Timestamp('2020-09-22'), 9
+            )
+            for name in names
+        }
 
-    choice = _choose(full_range, t_dat=ONE_DAY, other=LATER)
-    assert choice.rejected == ()
+    choice = choose_time_column(
+        pd.DataFrame({'t_dat': ONE_DAY, 'other': LATER, 'synced': DAYS}),
+        ['t_dat', 'other', 'synced'],
+        full_range=full_range,
+    )
     assert choice.among == ('t_dat', 'other')
     assert choice.column == 't_dat'
-    # A column that looked constant pays for the check, and every column a
-    # choice by earliest value is made among is read over the whole table.
-    assert asked == ['t_dat', 'other']
+    # One query reads every column a name does not already refuse.
+    assert asked == [['t_dat', 'other']]
 
 
 def test_a_column_constant_in_every_row_is_refused_after_asking():

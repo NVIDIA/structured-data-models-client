@@ -15,7 +15,11 @@ from predictive_query.schema.common import StrEnum
 from predictive_query.schema.table import Column as ColumnDefinition
 from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Dtype, Stype
-from predictive_query.time_columns import TimeColumnChoice, choose_time_column
+from predictive_query.time_columns import (
+    ColumnRange,
+    TimeColumnChoice,
+    choose_time_column,
+)
 from sdm_connectors import quote_ident
 from typing_extensions import Self
 
@@ -855,26 +859,35 @@ class Table(ABC):
         """
         return self._time_column_choice
 
-    def _full_range(self, name: str) -> tuple[object, object, int] | None:
-        r"""``MIN``, ``MAX`` and ``COUNT`` of column ``name`` over every row,
-        or ``None`` when this table cannot ask its source.
+    def _full_range(
+        self, names: Sequence[str]
+    ) -> dict[str, ColumnRange] | None:
+        r"""``MIN``, ``MAX`` and ``COUNT`` of each column of ``names`` over
+        every row, in one query, or ``None`` when this table cannot ask its
+        source.
         """
-        held = self[name]
-        if held.is_source:
-            column = self._quote_key_column(name)
-        else:
-            # A metric view's dimension is an expression, read as the
-            # sample reads it.
-            column = f'({held.expr})'
+        selects: list[str] = []
+        for name in names:
+            held = self[name]
+            if held.is_source:
+                column = self._quote_key_column(name)
+            else:
+                # A metric view's dimension is an expression, read as the
+                # sample reads it.
+                column = f'({held.expr})'
+            selects.append(f'MIN({column}), MAX({column}), COUNT({column})')
         try:
             rows = self._fetch_rows(
-                f'SELECT MIN({column}), MAX({column}), COUNT({column})\n'
-                f'FROM {self._quoted_source_name}'
+                f'SELECT {", ".join(selects)}\nFROM {self._quoted_source_name}'
             )
         except Exception:
             # Only evidence rejects a column, and a failed query is none.
             return None
-        return rows[0][0], rows[0][1], int(rows[0][2])
+        row = rows[0]
+        return {
+            name: ColumnRange(row[3 * i], row[3 * i + 1], int(row[3 * i + 2]))
+            for i, name in enumerate(names)
+        }
 
     def infer_metadata(self, verbose: bool = True) -> Self:
         r"""Infers metadata, *i.e.*, primary keys and time columns, in this

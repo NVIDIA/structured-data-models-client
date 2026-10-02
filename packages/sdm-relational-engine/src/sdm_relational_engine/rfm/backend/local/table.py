@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import cast
 
 import pandas as pd
+from predictive_query.time_columns import ColumnRange
 
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -112,10 +113,17 @@ class LocalTable(Table):
     def _get_source_sample_df(self) -> pd.DataFrame:
         return self._data
 
-    def _full_range(self, name: str) -> tuple[object, object, int] | None:
+    def _full_range(
+        self, names: Sequence[str]
+    ) -> dict[str, ColumnRange] | None:
         # The sample is the whole frame, so it already holds the answer.
-        values = self._source_sample_df[name]
-        return values.min(), values.max(), int(values.count())
+        frame = self._source_sample_df
+        return {
+            name: ColumnRange(
+                frame[name].min(), frame[name].max(), int(frame[name].count())
+            )
+            for name in names
+        }
 
     def _materialize_derived_key(
         self,
