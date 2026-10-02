@@ -35,10 +35,11 @@ declare as `1.0.0` and none has published. The heading becomes
   test pins that, so the check is not mistaken for coverage it does not give.
   Rules the spec states in prose rather than in a schema are not read either,
   and neither are OpenAPI's own formats, which are not JSON Schema assertions.
-- `RuntimeContract.unread_feature_stypes`: the semantic types a deployment
-  accepts and its model never reads. The relational model has no text
-  processor, so a `text` column is carried, dropped at the model, and
-  contributes nothing; naming the types makes that sayable rather than silent.
+- An `SDMWarning` naming each `text` feature column a request for
+  `KumoRelational` carries. The relational model has no text processor, so such
+  a column is carried, dropped at the model, and contributes nothing. The
+  request still succeeds, and the warning says to type the column categorical
+  if its values are labels rather than prose, or to leave it out.
 - `FittedModel` carries the question its context was pinned for, so a session
   can refuse a request that asks something else rather than answering the
   pinned question in its place.
@@ -448,6 +449,7 @@ The message names the way out: create a regular view with that `WHERE` clause an
 `sdm-pql` installs it because `sdm-client` parses and validates PQL with it, and any release may change it.
 Write PQL with `sdm_client.PredictiveQuery`.
 `ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and `KumoTabular` and `KumoRelational` have no public `spec` attribute.
+`RuntimeContract`, the part of a `ModelSpec` that describes a deployment, is internal too, since nothing public takes or returns one.
 `Model.name` and `SDMClient.capabilities()` describe a model.
 
 ### Notes for a reviewer
