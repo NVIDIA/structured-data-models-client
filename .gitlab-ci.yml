@@ -23,6 +23,9 @@ stages:
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_CACHE_DIR: "1"
+  # PyPI rate-limited these runners (a 429 in job 465379378), which pip does not
+  # retry. Internal only: GitHub's runners cannot reach this mirror.
+  PIP_INDEX_URL: https://urm.nvidia.com/artifactory/api/pypi/pypi-remote/simple
   CONTRACT_PROJECT: kumo-tfm-nims/structured-data-api
 
 .python:
@@ -240,6 +243,9 @@ wheels:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    # Into the manylinux container too. cibuildwheel prepends passed variables
+    # to the `environment` pyproject sets, so PIP_FIND_LINKS still applies.
+    CIBW_ENVIRONMENT_PASS_LINUX: PIP_INDEX_URL
   parallel:
     matrix:
       - CIBW_ARCHS_LINUX: x86_64
