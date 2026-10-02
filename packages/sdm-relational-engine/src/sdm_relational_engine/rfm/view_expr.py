@@ -299,6 +299,18 @@ _SESSION_VALUES = re.compile(
 # name stays visible as a call.
 _QUOTED = '\ue000'
 # What may stand right before a `(` that opens a group rather than a call.
+#: Keywords SQL reserves, which therefore cannot name a function. A word
+#: in front of one says nothing about what it is, so the ordinary rules
+#: apply. Anything missing from this set is treated as nameable, which
+#: refuses an expression rather than lifting it.
+_RESERVED = frozenset(
+    {
+        'all', 'and', 'as', 'between', 'both', 'by', 'case', 'distinct',
+        'else', 'end', 'for', 'from', 'in', 'interval', 'is', 'leading',
+        'not', 'or', 'over', 'placing', 'then', 'trailing', 'when',
+    }
+)  # fmt: skip
+
 #: Operators written as words. They end no operand, so a keyword behind
 #: one is being called: `1 DIV escape(x)` calls `escape`.
 _WORD_OPERATORS = frozenset({'div', 'collate'})
@@ -338,7 +350,7 @@ _FOLLOWS_A_KEYWORD = {
 }
 
 
-def _follows_a_value(lead: str) -> bool:
+def _follows_a_value(lead: str, strong: bool = False) -> bool:
     r"""Whether ``lead`` ends with something a comparison can be about.
 
     A value, a closing bracket or a quoted string ends an operand. A keyword
@@ -350,6 +362,8 @@ def _follows_a_value(lead: str) -> bool:
     if lead[-1] in ')]' + _QUOTED:
         return True
     if not re.match(r'[\w$]', lead[-1]):
+        return False
+    if strong:
         return False
     last = _LAST_TOKEN.search(lead)
     if last is None:
@@ -389,7 +403,7 @@ def _acts_as_keyword(word: str, lead: str) -> bool:
     return _in_keyword_position(word, lead)
 
 
-def _in_keyword_position(word: str, lead: str) -> bool:
+def _in_keyword_position(word: str, lead: str, strong: bool = True) -> bool:
     r"""Whether ``word`` sits where a keyword may, given what precedes it.
 
     After a value, yes. After another keyword, only where SQL writes that
@@ -397,7 +411,7 @@ def _in_keyword_position(word: str, lead: str) -> bool:
     DISTINCT FROM`` reaches a value through ``IS``, while a bare ``DISTINCT
     FROM`` does not.
     """
-    if _follows_a_value(lead):
+    if _follows_a_value(lead, strong=strong and word not in _RESERVED):
         return True
     lead = lead.rstrip()
     previous = _LAST_TOKEN.search(lead)
@@ -408,7 +422,7 @@ def _in_keyword_position(word: str, lead: str) -> bool:
         return False
     if before == 'case':
         return True
-    return _in_keyword_position(before, lead[: previous.start()])
+    return _in_keyword_position(before, lead[: previous.start()], False)
 
 
 def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
