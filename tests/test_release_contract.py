@@ -11,11 +11,16 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
 from collections.abc import Sequence
+
+import pytest
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -91,6 +96,229 @@ class TestPublicSurface:
             'intended, re-record with `python scripts/snapshot_wire_payloads.py '
             f'--write`.\n{result.stdout}{result.stderr}'
         )
+
+
+#: The contract to read the bodies against. CI clones it and says where, since
+#: nothing is checked out beside the repository there; locally the sibling
+#: checkout is the one being worked in.
+CONTRACT = pathlib.Path(
+    os.environ.get('SDM_CONTRACT_SPEC')
+    or REPO.parent / 'structured-data-api' / 'nim-sd.openapi.yaml'
+)
+
+needs_the_contract = pytest.mark.skipif(
+    not CONTRACT.is_file(),
+    reason=(
+        'needs the contract: set SDM_CONTRACT_SPEC, or check out '
+        'structured-data-api beside this repository'
+    ),
+)
+
+
+def _check_payloads(payloads: pathlib.Path | None = None):
+    command = [
+        sys.executable,
+        str(REPO / 'scripts' / 'check_wire_payloads.py'),
+        '--contract',
+        str(CONTRACT),
+    ]
+    if payloads is not None:
+        command += ['--payloads', str(payloads)]
+    return subprocess.run(command, capture_output=True, text=True)
+
+
+def _loaded(script: str):
+    r"""One script as a module, by path.
+
+    ``scripts`` is not a package, and importing it by name would rely on the
+    repository root being on the path, which is true only for some ways of
+    starting pytest.
+    """
+    spec = importlib.util.spec_from_file_location(
+        script, REPO / 'scripts' / f'{script}.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _doctored(tmp_path: pathlib.Path, mutate) -> pathlib.Path:
+    recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+    entry = recorded['relational/pql-count-aggregation']
+    mutate(entry[0] if isinstance(entry, list) else entry)
+    written = tmp_path / 'wire_payloads.json'
+    written.write_text(json.dumps(recorded))
+    return written
+
+
+class TestTheRequestBodiesAreContractual:
+    """The bodies the client builds, read against the spec they are sent to.
+
+    They are built as plain mappings rather than through the generated models,
+    so nothing but this checks that what goes out is what the contract says.
+    """
+
+    @needs_the_contract
+    def test_every_recorded_body_matches_the_contract(self):
+        result = _check_payloads()
+        assert result.returncode == 0, (
+            f'A recorded request body is not what the contract declares.\n'
+            f'{result.stdout}{result.stderr}'
+        )
+
+    @needs_the_contract
+    @pytest.mark.parametrize(
+        'mutate, said',
+        [
+            (lambda body: body.update(invented_key=1), 'invented_key'),
+            (lambda body: body.update(modle=body.pop('model')), "'model'"),
+            (
+                lambda body: body['output'].update(fields=['predcition']),
+                'predcition',
+            ),
+            (lambda body: body['task'].update(kind=7), 'not of type'),
+            (lambda body: body.pop('schema'), "'schema'"),
+            (lambda body: body['schema'].update(nonsense=1), 'nonsense'),
+        ],
+        ids=[
+            'an invented top-level key',
+            'a renamed required key',
+            'a field off the enum',
+            'a value of the wrong type',
+            'a dropped section',
+            'an invented key in a strict section',
+        ],
+    )
+    def test_a_body_the_contract_does_not_declare_is_refused(
+        self, tmp_path, mutate, said
+    ):
+        result = _check_payloads(_doctored(tmp_path, mutate))
+
+        assert result.returncode == 1
+        assert said in result.stderr
+
+    @needs_the_contract
+    @pytest.mark.parametrize(
+        'sections, schema',
+        [
+            (
+                ('model', 'task', 'schema', 'context', 'predict', 'output'),
+                'PredictionRequest',
+            ),
+            (('model', 'task', 'schema', 'context'), 'SessionCreateRequest'),
+            (('predict', 'output'), 'SessionPredictionRequest'),
+        ],
+        ids=['a prediction', 'a session', 'a session scoring call'],
+    )
+    def test_each_request_is_read_as_the_one_it_is(
+        self, tmp_path, sections, schema
+    ):
+        """A session id travels in the path, so only the sections tell these
+        apart. Reading one as another reports every field it wants as missing.
+        """
+        schema_for = _loaded('check_wire_payloads').schema_for
+
+        recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+        entry = recorded['relational/pql-count-aggregation']
+        whole = entry[0] if isinstance(entry, list) else entry
+        body = {key: whole[key] for key in sections if key in whole}
+
+        assert schema_for(body) == schema
+
+        written = tmp_path / 'wire_payloads.json'
+        written.write_text(json.dumps({'case': body}))
+        assert _check_payloads(written).returncode == 0
+
+    @needs_the_contract
+    def test_a_body_that_is_no_request_at_all_is_refused(self, tmp_path):
+        written = tmp_path / 'wire_payloads.json'
+        written.write_text(json.dumps({'case': {'model': 'kumo-relational'}}))
+
+        result = _check_payloads(written)
+
+        assert result.returncode == 1
+        assert 'none of' in result.stderr
+
+    @needs_the_contract
+    @pytest.mark.parametrize(
+        'recorded', [{}, {'case': []}], ids=['nothing', 'no bodies']
+    )
+    def test_a_recording_with_nothing_in_it_is_refused(
+        self, tmp_path, recorded
+    ):
+        """A recording that lost its contents would otherwise report success."""
+        written = tmp_path / 'wire_payloads.json'
+        written.write_text(json.dumps(recorded))
+
+        result = _check_payloads(written)
+
+        assert result.returncode == 1
+        assert 'records no request bodies' in result.stderr
+
+    @needs_the_contract
+    @pytest.mark.parametrize(
+        'written, said',
+        [
+            (b'not json at all', 'is not JSON'),
+            (b'[]', 'not calls by name'),
+            (b'"text"', 'not calls by name'),
+            (b'{"case": 1}', 'not a request body'),
+            (b'{"case": [{}, 2]}', 'not a request body'),
+            (b'\xff\xfe', 'is not UTF-8'),
+            (None, 'cannot be read'),
+            (b'{"case": ' + b'9' * 5000 + b'}', 'cannot be parsed'),
+            (
+                b'{"case": ' + b'[' * 10000 + b'0' + b']' * 10000 + b'}',
+                'cannot be parsed',
+            ),
+            (b'{"case": {"model": NaN}}', 'not a JSON value'),
+            (b'{"case": {"model": Infinity}}', 'not a JSON value'),
+        ],
+        ids=[
+            'not json',
+            'a list',
+            'a string',
+            'a scalar call',
+            'a scalar among calls',
+            'not utf-8',
+            'no file at all',
+            'an integer past the digit limit',
+            'nesting past the recursion limit',
+            'a not-a-number',
+            'an infinity',
+        ],
+    )
+    def test_a_recording_it_cannot_read_is_reported_not_raised(
+        self, tmp_path, written, said
+    ):
+        """A malformed recording fails without a traceback."""
+        recording = tmp_path / 'wire_payloads.json'
+        if written is not None:
+            recording.write_bytes(written)
+
+        result = _check_payloads(recording)
+
+        assert result.returncode == 1
+        assert said in result.stderr
+        assert 'Traceback' not in result.stderr
+
+    @needs_the_contract
+    def test_a_permissive_section_is_not_policed(self, tmp_path):
+        """What this check cannot do, pinned so nobody assumes otherwise.
+
+        Six of the schemas a request reaches declare
+        `additionalProperties: true`, so a key invented inside one of them is
+        contractual.
+        """
+        result = _check_payloads(
+            _doctored(
+                tmp_path,
+                lambda body: body['output'].update(statisitc='median'),
+            )
+        )
+
+        assert result.returncode == 0
 
 
 class TestErrorContract:

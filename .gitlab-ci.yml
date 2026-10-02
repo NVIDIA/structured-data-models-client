@@ -441,6 +441,10 @@ contract:
     - python scripts/check_contract_pin.py --contract /tmp/contract/nim-sd.openapi.yaml
     - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check
     - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --validate-contract
+    - python scripts/check_wire_payloads.py --contract /tmp/contract/nim-sd.openapi.yaml
+    # The checks on the checker. They need the spec, which only this job has,
+    # so running them with the suite would skip every one of them.
+    - SDM_CONTRACT_SPEC=/tmp/contract/nim-sd.openapi.yaml python -m pytest tests/test_release_contract.py -q -k TestTheRequestBodiesAreContractual
 
 # Advisory. The contract moving forward is something to know about, not a
 # reason to fail an unrelated change.
