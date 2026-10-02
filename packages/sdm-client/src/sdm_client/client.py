@@ -438,7 +438,7 @@ class SDMClient:
         or a value per step, rather than handed back as the several answers
         it took.
         """
-        rewritten = request.decomposition
+        rewritten = request._decomposition
         assert rewritten is not None
         ranking = rewritten.kind == RANKING
         unscored: frozenset[int] = frozenset()
@@ -1218,7 +1218,7 @@ def _refuse_to_pin_a_rewritten_question(request: Request) -> None:
     part and give back something shaped like the whole question. Refusing says
     what to do instead.
     """
-    rewritten = request.decomposition
+    rewritten = request._decomposition
     if rewritten is None:
         return
     raise StructuredDataError(

@@ -67,7 +67,7 @@ def test_a_candidate_is_carried_as_the_value_not_as_its_text():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12])
-    about = [value for _, value in request.decomposition.parts]
+    about = [value for _, value in request._decomposition.parts]
     assert about == [10, 11, 12]
     assert all(isinstance(value, int) for value in about)
 
@@ -123,8 +123,8 @@ def test_a_ranking_over_decimal_candidates_materializes_like_an_int_one():
     decimals = PredictiveQuery(text, shop()).materialize(
         indices=[1, 2, 3], candidates=[Decimal(10), Decimal(11), Decimal(12)]
     )
-    assert [part for part, _ in decimals.decomposition.parts] == [
-        part for part, _ in integers.decomposition.parts
+    assert [part for part, _ in decimals._decomposition.parts] == [
+        part for part, _ in integers._decomposition.parts
     ]
 
 
@@ -230,7 +230,7 @@ def test_forecast_steps_are_numbered_from_one():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3])
-    assert [step for _, step in request.decomposition.parts] == [1, 2, 3]
+    assert [step for _, step in request._decomposition.parts] == [1, 2, 3]
 
 
 def test_each_step_moves_the_window_by_its_own_span():
@@ -358,7 +358,7 @@ def test_a_forecast_answer_keeps_the_row_and_adds_the_step():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3])
-    merged = _by_step([answer(1.0), answer(2.0)], request.decomposition)
+    merged = _by_step([answer(1.0), answer(2.0)], request._decomposition)
     pairs = [(item.row_index, item.forecast_step) for item in merged.items]
     assert pairs == [(0, 1), (1, 1), (2, 1), (0, 2), (1, 2), (2, 2)]
 
@@ -498,7 +498,7 @@ def test_a_forecast_over_a_table_named_for_ranking_is_still_a_forecast(
         'FOR EACH users.uid',
         schema,
     ).materialize(indices=[1, 2, 3])
-    assert request.decomposition.kind == 'forecast'
+    assert request._decomposition.kind == 'forecast'
 
     asked_for = []
 
@@ -538,7 +538,7 @@ def test_the_top_k_option_overrides_the_number_written_in_the_query():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12], top_k=1)
-    assert request.decomposition.top == 1
+    assert request._decomposition.top == 1
 
 
 def test_the_number_written_in_the_query_is_used_when_nothing_overrides_it():
@@ -548,7 +548,7 @@ def test_the_number_written_in_the_query_is_used_when_nothing_overrides_it():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3], candidates=[10, 11, 12])
-    assert request.decomposition.top == 2
+    assert request._decomposition.top == 2
 
 
 def test_a_forecast_refuses_top_k_rather_than_dropping_it():
@@ -574,7 +574,7 @@ def test_a_part_carries_no_top_k_in_the_task_it_sends():
         'FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3], candidates=[10, 11], top_k=1)
-    assert request.decomposition.top == 1
+    assert request._decomposition.top == 1
     for part in request.parts:
         for envelope in part.payloads:
             assert 'top_k' not in envelope['task']
@@ -611,7 +611,7 @@ def test_a_session_still_takes_an_ordinary_question():
         'PREDICT COUNT(buys.*, 0, 7, days) > 0 FOR EACH users.uid',
         shop(),
     ).materialize(indices=[1, 2, 3])
-    assert request.decomposition is None
+    assert request._decomposition is None
     with pytest.raises(StructuredDataError) as raised:
         client.fit(request, model='kumo-relational')
     assert 'asked as' not in str(raised.value)
