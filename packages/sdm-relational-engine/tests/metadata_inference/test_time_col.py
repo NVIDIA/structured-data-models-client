@@ -109,3 +109,19 @@ def test_a_varied_column_costs_no_query():
     table.infer_time_column(verbose=False)
     assert table.time_column is not None
     assert asked == []
+
+
+def test_a_failed_check_keeps_the_column():
+    """Only evidence refuses a column, and a warehouse error is none."""
+    late = [pd.Timestamp('2023-01-01')] * ROWS
+    table = _duckdb_table(pd.DataFrame({'id': range(ROWS), 't_dat': late}))
+
+    def refused(sql: str) -> list[tuple]:
+        raise RuntimeError('PERMISSION_DENIED')
+
+    table._fetch_rows = refused  # type: ignore[method-assign]
+    table.infer_time_column(verbose=False)
+
+    assert table.time_column is not None
+    assert table.time_column.name == 't_dat'
+    assert table.time_column_rejections == ()

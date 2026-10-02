@@ -825,6 +825,19 @@ class Table(ABC):
             and column.name != self._end_time_column
         ]
 
+        if time_column := self._infer_time_column_among(candidates):
+            if verbose:
+                display.message(
+                    f'Inferred time column `{time_column}` for '
+                    f'table `{self.name}`'
+                )
+
+        return self
+
+    def _infer_time_column_among(self, candidates: list[str]) -> str | None:
+        r"""Set the time column inferred among ``candidates``, keeping what
+        was refused and why, and return it.
+        """
         df = self._get_sample_df()
         # Only a capped read can hide a second value past its last row.
         truncated = len(df) == self._NUM_SAMPLE_ROWS
@@ -835,14 +848,7 @@ class Table(ABC):
         )
         if time_column:
             self.time_column = time_column
-
-            if verbose:
-                display.message(
-                    f'Inferred time column `{time_column}` for '
-                    f'table `{self.name}`'
-                )
-
-        return self
+        return time_column
 
     @property
     def time_column_rejections(self) -> tuple[RejectedTimeColumn, ...]:
@@ -852,19 +858,23 @@ class Table(ABC):
         return self._time_column_rejections
 
     def _full_range(self, name: str) -> tuple[object, object] | None:
-        r"""``MIN`` and ``MAX`` of source column ``name`` over every row, or
+        r"""``MIN`` and ``MAX`` of column ``name`` over every row, or
         ``None`` when this table cannot ask its source.
         """
-        # A derived column has no source column to ask about.
-        if not self[name].is_source or name not in self._source_column_dict:
-            return None
-        column = self._quote_key_column(name)
+        held = self[name]
+        if held.is_source:
+            column = self._quote_key_column(name)
+        else:
+            # A metric view's dimension is an expression, read as the
+            # sample reads it.
+            column = f'({held.expr})'
         try:
             rows = self._fetch_rows(
                 f'SELECT MIN({column}), MAX({column})\n'
                 f'FROM {self._quoted_source_name}'
             )
-        except NotImplementedError:
+        except Exception:
+            # Only evidence rejects a column, and a failed query is none.
             return None
         return rows[0][0], rows[0][1]
 

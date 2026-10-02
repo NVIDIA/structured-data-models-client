@@ -1182,6 +1182,10 @@ class Schema:
                 name: _describe_source_table(graph[model], model, name=name)
                 for name, model in chosen.items()
             }
+            declined = {
+                name: graph[model].time_column_rejections
+                for name, model in chosen.items()
+            }
             declared = _model_links(graph, built, as_named)
         else:
             graph = engine_graph(source, tables, infer_metadata=True)

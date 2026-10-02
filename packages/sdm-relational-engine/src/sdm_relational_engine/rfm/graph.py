@@ -44,7 +44,6 @@ from sdm_relational_engine.rfm.base import (
 )
 from sdm_relational_engine.rfm.base.casting import CastMixin
 from sdm_relational_engine.rfm.base.utils import Timedelta
-from sdm_relational_engine.rfm.metadata_inference import infer_time_column
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
@@ -1392,11 +1391,7 @@ class Graph:
             ]
             if len(candidates) == 0:
                 continue
-            if time_column := infer_time_column(
-                df=table._get_sample_df(),
-                candidates=candidates,
-            ):
-                table.time_column = time_column
+            table._infer_time_column_among(candidates)
 
         msgs.extend(graph._drop_invalid_edges())
         graph.validate()
@@ -1633,11 +1628,7 @@ class Graph:
                     if column.stype == Stype.timestamp
                 ]
             if len(time_candidates) > 0:
-                if time_column := infer_time_column(
-                    df=table._get_sample_df(),
-                    candidates=time_candidates,
-                ):
-                    table.time_column = time_column
+                table._infer_time_column_among(time_candidates)
 
             graph.add_table(table)
 
