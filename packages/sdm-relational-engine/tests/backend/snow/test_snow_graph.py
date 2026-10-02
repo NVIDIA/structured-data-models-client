@@ -125,13 +125,15 @@ class _FakeCursor:
             self._connection.statements.append(sql)
         sql = ' '.join(sql.split())
 
-        if sql.startswith('SHOW TABLES LIKE ?'):
-            (table,) = parameters
-            hybrid = self._connection is not None and (
-                table in self._connection.hybrid
-            )
-            self.description = [('created_on',), ('name',), ('is_hybrid',)]
-            self._rows = [(None, table, 'Y' if hybrid else 'N')]
+        if sql == f'SHOW TABLES IN SCHEMA "{_DATABASE}"."{_SCHEMA}"':
+            assert self._connection is not None
+            fields = self._connection.listing
+            hybrid = self._connection.hybrid
+            self.description = [(field,) for field in fields]
+            self._rows = [
+                (None, table, 'Y' if table in hybrid else 'N')[: len(fields)]
+                for table in _COLUMN_TYPES
+            ]
             return
 
         if ' AS k, COUNT(*) AS n, ' in sql:
@@ -217,6 +219,7 @@ class _FakeConnection(Connection):
         self._paramstyle = 'pyformat'
         self.statements: list[str] = []
         self.hybrid: set[str] = set()
+        self.listing = ('created_on', 'name', 'is_hybrid')
 
     def cursor(self) -> _FakeCursor:  # type: ignore[override]
         return _FakeCursor(self.error, self)
@@ -480,12 +483,14 @@ def test_every_key_is_counted_in_one_statement() -> None:
         [
             (graph['RACKS'], ['RACK_ID']),
             (graph['DATACENTERS'], ['REGION', 'COUNTRY']),
+            (graph['DATACENTERS'], ['DATACENTER_ID']),
         ]
     )
 
-    # A declared key is asked about first: only a hybrid table enforces one.
+    # Declared keys are asked about first, in one listing for the schema:
+    # only a hybrid table enforces one.
     shown, counted = connection.statements
-    assert shown.startswith('SHOW TABLES LIKE ? IN SCHEMA "DB"."SCH"')
+    assert shown == 'SHOW TABLES IN SCHEMA "DB"."SCH"'
     assert counted == (
         'SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT "RACK_ID") AS d, '
         'COUNT(CASE WHEN "RACK_ID" IS NULL THEN 1 END) AS z\n'
@@ -494,10 +499,15 @@ def test_every_key_is_counted_in_one_statement() -> None:
         'SELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT "REGION", "COUNTRY") '
         'AS d, COUNT(CASE WHEN "REGION" IS NULL OR "COUNTRY" IS NULL THEN 1 '
         'END) AS z\n'
+        'FROM "DB"."SCH"."DATACENTERS"\n'
+        'UNION ALL\n'
+        'SELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT "DATACENTER_ID") AS d, '
+        'COUNT(CASE WHEN "DATACENTER_ID" IS NULL THEN 1 END) AS z\n'
         'FROM "DB"."SCH"."DATACENTERS"'
     )
     assert counts == [
         KeyCount(rows=12, distinct=12, nulls=0, enforced=False),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
         KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
     ]
 
@@ -508,7 +518,23 @@ def test_a_hybrid_table_key_is_not_counted() -> None:
     graph = _counted_graph(connection)
     connection.statements.clear()
 
+    counts = count_keys(
+        [(graph['RACKS'], ['RACK_ID']), (graph['DATACENTERS'], ['COUNTRY'])]
+    )
+
+    assert counts == [
+        KeyCount(None, None, 0, enforced=True),
+        KeyCount(rows=4, distinct=4, nulls=0, enforced=False),
+    ]
+    assert '"RACKS"' not in connection.statements[-1]
+
+
+def test_a_listing_without_a_hybrid_column_counts_the_key() -> None:
+    connection = _FakeConnection()
+    connection.hybrid = {'RACKS'}
+    connection.listing = ('created_on', 'name')
+    graph = _counted_graph(connection)
+
     counts = count_keys([(graph['RACKS'], ['RACK_ID'])])
 
-    assert counts == [KeyCount(None, None, 0, enforced=True)]
-    assert not [sql for sql in connection.statements if 'COUNT(' in sql]
+    assert counts == [KeyCount(rows=12, distinct=12, nulls=0, enforced=False)]

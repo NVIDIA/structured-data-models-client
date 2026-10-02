@@ -1063,6 +1063,14 @@ class Table(ABC):
             column.is_primary_key or column.is_unique_key
         )
 
+    @classmethod  # noqa: B027
+    def _before_counting_keys(
+        cls, keys: Sequence[tuple['Table', Sequence[str]]]
+    ) -> None:
+        r"""Read once, for all of ``keys``, what deciding which of them the
+        source enforces needs. Most backends read it with the columns.
+        """
+
     def _enforces_key(self, names: Sequence[str]) -> tuple[bool, bool]:
         r"""Whether the source refuses a second row with the same ``names``,
         and whether it refuses a row missing any of them.

@@ -58,6 +58,10 @@ def count_keys(keys: Sequence[tuple[Table, Sequence[str]]]) -> list[KeyCount]:
     ]
     selects: list[str] = []
     unique_by_label: dict[int, bool] = {}
+    for backend in {type(table) for table, _ in keys}:
+        backend._before_counting_keys(
+            [(table, names) for table, names in keys if type(table) is backend]
+        )
     for label, (table, names) in enumerate(keys):
         unique, never_null = table._enforces_key(names)
         if unique and never_null:
