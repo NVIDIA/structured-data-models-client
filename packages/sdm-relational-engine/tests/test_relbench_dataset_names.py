@@ -9,8 +9,8 @@ have it, ``'stackex'`` became ``'hex'``, and the download went looking for
 an archive nobody publishes. The registry's own name is the canonical one; a
 prefix the caller omits is added, never assumed.
 
-The registry is stubbed: resolution is what is under test, and the real one is
-a network fetch of whatever upstream publishes today.
+The registry is stubbed, and so is the download: resolution is what is under
+test here, and ``test_relbench_registry.py`` covers what is fetched.
 """
 
 from __future__ import annotations
@@ -27,33 +27,28 @@ _ARCHIVES = ['rel-f1', 'rel-amazon', 'rel-stack', 'stackex', 'ctu-financial']
 class _FetchedError(Exception):
     r"""Stops the loader once the archive name is known."""
 
-    def __init__(self, key: str) -> None:
-        self.key = key
+    def __init__(self, archive: str) -> None:
+        self.archive = archive
 
 
-class _Registry:
-    registry = {f'{name}/db.zip': 'sha256:0' for name in _ARCHIVES}
-
-    def fetch(self, key: str, **kwargs: Any) -> None:
-        raise _FetchedError(key)
+def _registry() -> dict[str, Any]:
+    return {'datasets': {name: {'tables': {}} for name in _ARCHIVES}}
 
 
-class _Pooch:
-    @staticmethod
-    def Unzip(**kwargs: Any) -> None:  # noqa: N802
-        return None
+def _fetch(archive: str, verbose: bool) -> None:
+    raise _FetchedError(archive)
 
 
 @pytest.fixture(autouse=True)
 def stub_registry(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(relbench, 'get_registry', _Registry)
-    monkeypatch.setattr(relbench, '_pooch', lambda: _Pooch)
+    monkeypatch.setattr(relbench, 'get_registry', _registry)
+    monkeypatch.setattr(relbench, '_fetch', _fetch)
 
 
 def _archive_for(dataset: str) -> str:
     with pytest.raises(_FetchedError) as info:
         relbench.from_relbench(dataset, verbose=False)
-    return info.value.key.removesuffix('/db.zip')
+    return info.value.archive
 
 
 @pytest.mark.parametrize(

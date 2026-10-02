@@ -53,6 +53,8 @@ snowflake-serving=[
 ]
 test=[
     "packaging",
+    # The RelBench loader's digest checks are pooch's, and are tested offline.
+    "pooch",
     "pytest",
     "pytest-httpserver",
     "pytest-mock",

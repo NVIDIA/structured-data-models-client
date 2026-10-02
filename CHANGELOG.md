@@ -342,6 +342,11 @@ declare as `1.0.0` and none has published. The heading becomes
   creation came back as a legitimate empty table and nothing said to look at
   it. The new error is a `ValueError`, so a caller already catching one is
   unaffected.
+- **`Graph.from_relbench` failed for every dataset with a 404.**
+  It read RelBench's `hashes.json` from upstream's `main`, which RelBench 3 deleted when it moved its data from `relbench.stanford.edu` to Hugging Face.
+  The loader now reads the tables from those Hugging Face repositories at a commit pinned in the package, and checks each against a SHA-256 recorded with it, so what loads cannot change upstream unseen.
+  `scripts/pin_relbench.py` writes the pins, and `rfm/assets/VENDORED.md` says how the digests were obtained.
+  Downloads land in a new cache directory, so a dataset fetched before is fetched once more.
 
 ### Behaviour worth knowing before you rely on it
 
