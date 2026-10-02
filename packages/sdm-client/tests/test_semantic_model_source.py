@@ -110,7 +110,7 @@ _EXPRESSIONS = {
 }
 
 # What a MIN/MAX over a whole table answers, where it is not the rows read.
-_RANGES: dict[str, tuple[Any, Any]] = {}
+_RANGES: dict[str, tuple[Any, Any, int]] = {}
 
 _DESCRIBE = [
     ('line_id', 'int', None),
@@ -187,7 +187,11 @@ class _Cursor:
         frame = _DATA[name]
         if sql.startswith('SELECT MIN('):
             column = re.findall(r'`((?:[^`]|``)+)`', sql)[0]
-            whole = (frame[column].min(), frame[column].max())
+            whole = (
+                frame[column].min(),
+                frame[column].max(),
+                int(frame[column].count()),
+            )
             self._rows = [_RANGES.get(column, whole)]
             return
         projection = sql.split(' FROM ')[0]
@@ -449,7 +453,9 @@ def test_a_model_s_constant_time_column_is_refused_and_named(
 
     assert schema['order_lines'].time_column is None
     assert said == [
-        'order_lines.ordered_at was not taken as the time column because '
+        'Some time columns were inferred, or refused, on a guess about what '
+        'a column holds:\n'
+        '- order_lines.ordered_at was not taken as the time column because '
         'every row holds 2024-01-01 00:00:00. If it does say when a row '
         "became true, name it: time_columns={'order_lines': 'ordered_at'}."
     ]
@@ -467,7 +473,7 @@ def test_a_model_s_column_constant_only_in_the_rows_read_is_kept(
     monkeypatch.setitem(
         _RANGES,
         'ordered_at',
-        (pd.Timestamp('2024-01-01'), pd.Timestamp('2024-06-01')),
+        (pd.Timestamp('2024-01-01'), pd.Timestamp('2024-06-01'), rows),
     )
 
     schema, said = _time_warnings(source)

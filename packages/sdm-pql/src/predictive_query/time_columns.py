@@ -2,73 +2,93 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Which timestamp columns may be inferred as a table's time column.
+r"""Which timestamp column inference takes as a table's time column.
 
 A time column says when a row became true, and a query counts or windows rows
-by it. Two kinds of timestamp say nothing of the sort: one that holds a single
-value in every row, and one that records when a row was last edited or
-loaded. Either, taken as the time column, puts every row at a moment unrelated
-to the event it records, and a window over it is empty or refused.
+by it. Some timestamps say nothing of the sort, and are never taken: one that
+holds a single value in every row, or none, and one whose name says when a row
+was loaded or synced, such as `_fivetran_synced`.
+Nor is a date of birth.
+A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is taken
+only when it is a table's one timestamp left, since in an append-only log of
+changes it is when the row began. Of several left, a `created` stamp is taken,
+and otherwise the one whose values start earliest.
 
-This module is the one rule both inference paths apply: the client's, which
-reads a frame, and the relational engine's, which reads a source. It sits here
-because both already import this distribution and neither imports the other.
+:func:`choose_time_column` is the one rule both inference paths apply: the
+client's, which reads a frame, and the relational engine's, which reads a
+source. It sits here because both already import this distribution and
+neither imports the other.
 """
 
 from __future__ import annotations
 
 import datetime
 import re
-from collections.abc import Callable, Sequence
+import warnings
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 import pandas as pd
 
-#: Name tokens that mark a column recording an edit or a load.
-EDIT_STAMP_TOKENS = frozenset(
+#: Name tokens that mark a column recording when a row was loaded or synced.
+LOAD_STAMP_TOKENS = frozenset(
     {
-        'last',
-        'edit',
-        'edited',
-        'changed',
         'synced',
         'sync',
         'loaded',
         'load',
         'reload',
         'reloaded',
+        'ingest',
         'ingested',
+        'ingestion',
         'batched',
+        'extract',
         'extracted',
+        'extraction',
         'etl',
         'refresh',
         'refreshdate',
         'refreshed',
-        'deleted',
-        'deletion',
     }
 )
 
-# A name in one case with no separators, as Snowflake folds `lastLogin` into
-# `LASTLOGIN`, has no token boundary, so these are matched as its prefix.
-_JOINED_PREFIXES = (
-    'last',
-    'load',
-    'sync',
-    'etl',
-    'refresh',
-    'ingest',
-    'extract',
+#: Name tokens that mark a column recording when a row was last changed.
+EDIT_STAMP_TOKENS = frozenset(
+    {'last', 'edit', 'edited', 'changed', 'deleted', 'deletion'}
 )
 
-# Endings that make one of those prefixes a different word (LASTING, LASTLY,
-# SYNCHRONOUS, REFRESHMENT). A short list of English suffixes, rather than a
-# dictionary, keeps every joined stamp refused and only these words kept.
-_WORD_CONTINUATIONS = ('ing', 'ly', 'hron', 'ment')
+#: Name tokens that mark a date of birth.
+BIRTH_DATE_TOKENS = frozenset({'birth', 'birthday', 'birthdate', 'dob', 'born'})
 
 #: Name tokens that mark a column recording when a row was created.
 CREATION_TOKENS = frozenset({'create', 'created', 'creation'})
+
+# A name in one case with no separators, as Snowflake folds `lastLogin` into
+# `LASTLOGIN`, has no token boundary, so these are matched as its prefix. Each
+# keeps the endings that make it a different word: LASTING, EDITION,
+# SYNCHRONOUS, and CHANGEDATE, which reads as change date. A short list of
+# endings, rather than a dictionary, keeps every joined stamp refused and only
+# these words kept.
+_JOINED_LOAD_PREFIXES: Mapping[str, tuple[str, ...]] = {
+    'load': ('ing',),
+    'reload': ('ing',),
+    'sync': ('hron',),
+    'etl': (),
+    'refresh': ('ing', 'ment'),
+    'ingest': (),
+    'extract': (),
+    'batched': (),
+}
+_JOINED_EDIT_PREFIXES: Mapping[str, tuple[str, ...]] = {
+    'last': ('ing', 'ly'),
+    'edit': ('ion', 'or'),
+    'changed': ('ate',),
+    'deleted': ('ate',),
+    'deletion': (),
+}
+_JOINED_BIRTH_PREFIXES: Mapping[str, tuple[str, ...]] = {'dob': (), 'born': ()}
 
 # An acronym run, a capitalised or lower word, or digits: `ETLLoadedAt` reads
 # as ETL, Loaded, At, and `LASTMODIFIEDDATE` as one token.
@@ -82,23 +102,53 @@ def name_tokens(name: str) -> tuple[str, ...]:
     return tuple(token.lower() for token in _TOKEN.findall(name))
 
 
-def is_edit_stamp(name: str) -> bool:
-    r"""Whether ``name`` reads as when a row was last changed or loaded,
-    rather than when it began.
+def _is_joined(name: str) -> bool:
+    return name.isalnum() and (name.isupper() or name.islower())
 
-    ``created_at`` and other ``*_at`` names are kept: only a name that says
-    modification, update, or one of :data:`EDIT_STAMP_TOKENS` is refused.
+
+def _reads_as(
+    name: str,
+    tokens: frozenset[str],
+    prefixes: Mapping[str, tuple[str, ...]],
+) -> bool:
+    if _is_joined(name):
+        lowered = name.lower()
+        for prefix, other_words in prefixes.items():
+            rest = lowered.removeprefix(prefix)
+            if rest != lowered and not rest.startswith(other_words):
+                return True
+    # By token, so `last_seen` is matched and `lastingDate` is not.
+    return not tokens.isdisjoint(name_tokens(name))
+
+
+def is_load_stamp(name: str) -> bool:
+    r"""Whether ``name`` reads as when a row was loaded, synced or
+    refreshed, which says nothing of when it began.
+    """
+    return _reads_as(name, LOAD_STAMP_TOKENS, _JOINED_LOAD_PREFIXES)
+
+
+def is_edit_stamp(name: str) -> bool:
+    r"""Whether ``name`` reads as when a row was last changed, rather than
+    when it began.
+
+    ``created_at`` and other ``*_at`` names are not: only a name that says
+    modification, update, or one of :data:`EDIT_STAMP_TOKENS` is.
     """
     lowered = name.lower()
     if 'modif' in lowered or 'updat' in lowered:
         return True
-    if name.isalnum() and (name.isupper() or name.islower()):
-        for prefix in _JOINED_PREFIXES:
-            rest = lowered.removeprefix(prefix)
-            if rest != lowered and not rest.startswith(_WORD_CONTINUATIONS):
-                return True
-    # By token, so `last_seen` is refused and `lastingDate` is kept.
-    return not EDIT_STAMP_TOKENS.isdisjoint(name_tokens(name))
+    return _reads_as(name, EDIT_STAMP_TOKENS, _JOINED_EDIT_PREFIXES)
+
+
+def is_birth_date(name: str) -> bool:
+    r"""Whether ``name`` reads as a date of birth, which says when someone
+    was born and not when a row became true.
+    """
+    # A name folded into one word, such as `DATEOFBIRTH`, by its letters.
+    if _is_joined(name) and 'birth' in name.lower():
+        return True
+    return _reads_as(name, BIRTH_DATE_TOKENS, _JOINED_BIRTH_PREFIXES)
 
 
 def is_creation_stamp(name: str) -> bool:
@@ -115,14 +165,17 @@ class RejectedTimeColumn:
 
     Attributes:
         column: The column's name.
-        reason: ``'constant'`` when every row holds the same value or none,
-            ``'edit_stamp'`` when its name says when a row last changed.
+        reason: Why it was refused. ``'constant'`` when at least two rows
+            hold a value and all hold the same one, or no row holds one.
+            ``'load_stamp'`` when its name says when a row was loaded.
+            ``'edit_stamp'`` when it says when a row was last changed.
+            ``'birth_date'`` when it says when someone was born.
         value: The one value every row holds, or ``None`` when no row holds
             one or the reason is the name.
     """
 
     column: str
-    reason: Literal['constant', 'edit_stamp']
+    reason: Literal['constant', 'load_stamp', 'edit_stamp', 'birth_date']
     value: object = None
 
     @property
@@ -132,74 +185,210 @@ class RejectedTimeColumn:
             return (
                 'it looks like when a row was last changed, not when it began'
             )
+        if self.reason == 'load_stamp':
+            return 'it looks like when a row was loaded, not when it began'
+        if self.reason == 'birth_date':
+            return 'it looks like a date of birth, not when a row began'
         if self.value is None:
             return 'no row holds a value'
         return f'every row holds {_as_timestamp(self.value)}'
 
 
 @dataclass(frozen=True)
-class TimeColumnScreen:
-    r"""What screening a table's timestamp columns left.
+class TimeColumnChoice:
+    r"""The time column inference took, and how.
 
     Attributes:
-        eligible: The columns that may be the time column, in the order they
-            were offered. Narrowed to the creation stamps when there are any.
-        rejected: The columns refused, each with its reason.
+        column: The time column, or ``None`` when no timestamp may be it.
+        how: ``'only'`` when it was the one timestamp left, ``'created'``
+            when it was the one creation stamp among several, ``'earliest'``
+            when its values start earliest of :attr:`among`, and
+            ``'edit_stamp'`` when it looks like a stamp of the last edit but
+            no other timestamp was left. ``None`` when no column was taken.
+        among: The columns it was chosen from, itself included.
+        rejected: The columns refused, each with its reason, in table order.
     """
 
-    eligible: tuple[str, ...]
+    column: str | None
+    how: Literal['only', 'created', 'earliest', 'edit_stamp'] | None
+    among: tuple[str, ...]
     rejected: tuple[RejectedTimeColumn, ...]
-
-    @property
-    def chosen(self) -> str | None:
-        r"""The time column, when exactly one column is eligible."""
-        return self.eligible[0] if len(self.eligible) == 1 else None
 
 
 _VARIES = object()
 
-#: Reads a column's MIN and MAX over every row of its table, or ``None`` when
-#: it cannot.
-FullRange = Callable[[str], tuple[object, object] | None]
+#: Reads a column's MIN, MAX and count of values over every row of its table,
+#: or ``None`` when it cannot.
+FullRange = Callable[[str], tuple[object, object, int] | None]
 
 
-def screen_time_columns(
+def choose_time_column(
     frame: pd.DataFrame,
     candidates: Sequence[str],
     *,
     full_range: FullRange | None = None,
-) -> TimeColumnScreen:
-    r"""Refuse the candidates that cannot be a time column.
+) -> TimeColumnChoice:
+    r"""Choose a table's time column among its timestamps.
+
+    A column holding one value in at least two rows, or none in any, is
+    refused, as is one named as a load stamp.
+    So is one named as a date of birth.
+    Of those left, a stamp of the last edit is taken only when it is the one
+    column left. Otherwise a creation stamp is preferred, and of several the
+    one whose values start earliest is taken, the first in table order on a
+    tie.
 
     Args:
         frame: The rows read, holding every candidate.
         candidates: The timestamp columns, in table order.
         full_range: ``None`` when ``frame`` holds every row. Otherwise asked
-            for each column that looks constant in the rows read, so that a
-            column constant only in its first rows is kept.
+            for each column that looks constant in the rows read, and for
+            each column a choice by earliest value is made among, so that
+            the answer is the one every row gives.
 
     Returns:
-        The eligible columns and the rejected ones.
+        The column taken, how, and the columns refused.
     """
-    eligible: list[str] = []
-    rejected: list[RejectedTimeColumn] = []
+    whole = _WholeTable(full_range)
+    rejected: dict[str, RejectedTimeColumn] = {}
+    plain: list[str] = []
+    edited: list[str] = []
     for name in candidates:
-        if is_edit_stamp(name):
-            rejected.append(RejectedTimeColumn(name, 'edit_stamp'))
-            continue
-        held = _the_one_value(frame[name])
-        if held is not _VARIES and full_range is not None:
-            seen = full_range(name)
-            # A table that cannot be asked keeps its column: only evidence
-            # rejects one. The value read keeps the type the rows were read as.
-            whole = _VARIES if seen is None else _the_one_value(pd.Series(seen))
-            held = whole if whole is _VARIES or held is None else held
-        if held is _VARIES:
-            eligible.append(name)
+        if is_load_stamp(name):
+            rejected[name] = RejectedTimeColumn(name, 'load_stamp')
+        elif is_birth_date(name):
+            rejected[name] = RejectedTimeColumn(name, 'birth_date')
+        elif (held := _constant(frame[name], name, whole)) is not _VARIES:
+            rejected[name] = RejectedTimeColumn(name, 'constant', held)
+        elif is_edit_stamp(name):
+            rejected[name] = RejectedTimeColumn(name, 'edit_stamp')
+            edited.append(name)
         else:
-            rejected.append(RejectedTimeColumn(name, 'constant', held))
-    created = [name for name in eligible if is_creation_stamp(name)]
-    return TimeColumnScreen(tuple(created or eligible), tuple(rejected))
+            plain.append(name)
+
+    def chosen(
+        column: str | None,
+        how: Literal['only', 'created', 'earliest', 'edit_stamp'] | None,
+        among: Sequence[str],
+    ) -> TimeColumnChoice:
+        return TimeColumnChoice(
+            column,
+            how,
+            tuple(among),
+            tuple(r for name, r in rejected.items() if name != column),
+        )
+
+    if not plain:
+        if len(edited) == 1:
+            return chosen(edited[0], 'edit_stamp', edited)
+        return chosen(None, None, ())
+    created = [name for name in plain if is_creation_stamp(name)]
+    if len(created) == 1:
+        return chosen(
+            created[0], 'created' if len(plain) > 1 else 'only', plain
+        )
+    among = created or plain
+    if len(among) == 1:
+        return chosen(among[0], 'only', among)
+    return chosen(_earliest(frame, among, whole), 'earliest', among)
+
+
+class _WholeTable:
+    r"""Asks the table for a column's range once."""
+
+    def __init__(self, full_range: FullRange | None) -> None:
+        self._full_range = full_range
+        self._seen: dict[str, tuple[object, object, int] | None] = {}
+
+    @property
+    def can_ask(self) -> bool:
+        return self._full_range is not None
+
+    def __call__(self, name: str) -> tuple[object, object, int] | None:
+        if self._full_range is None:
+            return None
+        if name not in self._seen:
+            self._seen[name] = self._full_range(name)
+        return self._seen[name]
+
+
+def _constant(values: pd.Series, name: str, whole: _WholeTable) -> object:
+    r"""The one value a column holds in at least two rows, ``None`` when it
+    holds none, or ``_VARIES``.
+
+    A single value is no evidence that the column never changes, so a
+    one-row table keeps its timestamp.
+    """
+    present = values.dropna()
+    first = present.iloc[0] if len(present) else None
+    if len(present) > 1 and not bool((present == first).all()):
+        return _VARIES
+    count = len(present)
+    if whole.can_ask:
+        seen = whole(name)
+        if seen is None:
+            # A table that cannot be asked keeps its column: only evidence
+            # rejects one.
+            return _VARIES
+        low, high, count = seen
+        if count > 1 and not bool(low == high):
+            return _VARIES
+        # The value read keeps the type the rows were read as.
+        first = low if first is None else first
+    if count == 0:
+        return None
+    return _VARIES if count == 1 else first
+
+
+def _earliest(
+    frame: pd.DataFrame, among: Sequence[str], whole: _WholeTable
+) -> str:
+    r"""The column of ``among`` whose values start earliest, the first in
+    table order on a tie or when none can be read as a time.
+    """
+    starts: dict[str, pd.Timestamp] = {}
+    for name in among:
+        seen = whole(name)
+        start = (
+            _as_instant(seen[0])
+            if seen is not None
+            else _first_instant(frame[name])
+        )
+        if start is not None:
+            starts[name] = start
+    if not starts:
+        return among[0]
+    return min(starts, key=starts.__getitem__)
+
+
+def _first_instant(values: pd.Series) -> pd.Timestamp | None:
+    r"""The earliest of ``values`` as a UTC timestamp, or ``None``."""
+    if isinstance(values.dtype, pd.ArrowDtype):
+        values = pd.Series(values.to_numpy(), index=values.index)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            parsed = pd.to_datetime(values, errors='coerce', utc=True)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return _as_instant(parsed.min())
+
+
+def _as_instant(value: object) -> pd.Timestamp | None:
+    r"""``value`` as a UTC timestamp, or ``None`` when it is not a time."""
+    if value is None:
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            stamp = pd.Timestamp(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if pd.isna(stamp):
+        return None
+    if stamp.tzinfo is None:
+        return stamp.tz_localize('UTC')
+    return stamp.tz_convert('UTC')
 
 
 def _as_timestamp(value: object) -> object:
@@ -212,14 +401,3 @@ def _as_timestamp(value: object) -> object:
         except ValueError:
             pass
     return value
-
-
-def _the_one_value(values: pd.Series) -> object:
-    r"""The only value ``values`` holds, ``None`` when it holds none, or
-    ``_VARIES``.
-    """
-    present = values.dropna()
-    if len(present) == 0:
-        return None
-    first = present.iloc[0]
-    return first if bool((present == first).all()) else _VARIES

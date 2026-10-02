@@ -898,32 +898,28 @@ def timestamp_warnings(tables, **how) -> list[str]:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         built = Schema.from_data(tables, **how)
-    assert built[next(iter(tables))].time_column is None
+    assert built[next(iter(tables))].time_column == 'shipped'
     return [
         str(item.message)
         for item in caught
-        if 'more than one column that could be its time column'
-        in str(item.message)
+        if 'its values start earliest' in str(item.message)
     ]
 
 
-def test_a_table_with_several_timestamps_is_told_it_was_given_none():
+def test_a_table_with_several_timestamps_is_told_which_was_taken():
+    """The earliest is taken, which is right for an order's dates, and the
+    caller is told so, with the column to name if it is not."""
     said = timestamp_warnings(
         {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
         primary_keys={'orders': 'oid', 'users': 'uid'},
     )
-    assert said
-
-
-def test_the_column_the_remedy_shows_is_shown_as_an_example():
-    """It is the first in the table, and reading it as the choice this made
-    would be reading a decision that was deliberately not taken."""
-    said = timestamp_warnings(
-        {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
-        primary_keys={'orders': 'oid', 'users': 'uid'},
-    )
-    assert "time_columns={'orders': 'shipped'}" in said[0]
-    assert 'only the first of them in the table' in said[0]
+    assert said == [
+        'Some time columns were inferred, or refused, on a guess about what '
+        'a column holds:\n'
+        '- orders.shipped was taken as the time column because its values '
+        "start earliest of 'shipped' and 'delivered'. If another says when a "
+        "row became true, name it: time_columns={'orders': 'delivered'}."
+    ]
 
 
 def test_the_remedy_never_shows_a_column_that_cannot_be_the_time_column():
@@ -936,18 +932,22 @@ def test_the_remedy_never_shows_a_column_that_cannot_be_the_time_column():
         {'orders': orders, 'users': pd.DataFrame({'uid': range(20)})},
         primary_keys={'orders': 'oid', 'users': 'uid'},
     )
-    assert said == [
-        "'orders' has more than one column that could be its time column, "
-        "'shipped' and 'delivered', so it was given none, and a query over a "
-        'window of it is refused. Name the one that says when a row became '
-        "true: time_columns={'orders': 'shipped'} names 'shipped', which is "
-        'only the first of them in the table.'
-    ]
+    assert len(said) == 1
+    assert 'DiscontinuedDate' not in said[0]
+    assert "time_columns={'orders': 'delivered'}" in said[0]
 
 
-def test_a_lone_table_is_not_told_a_window_over_it_is_refused():
-    """Nothing windows a single-table schema, so there is no refusal ahead
-    and the notice is about nothing."""
+def test_a_named_time_column_is_not_told_of_the_others():
+    assert not timestamp_warnings(
+        {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
+        primary_keys={'orders': 'oid', 'users': 'uid'},
+        time_columns={'orders': 'shipped'},
+    )
+
+
+def test_a_lone_table_is_not_told_which_was_taken():
+    """Nothing windows a single-table schema, so the choice decides no
+    window and the notice is about nothing."""
     assert not timestamp_warnings(
         {'orders': two_timestamps()}, primary_keys={'orders': 'oid'}
     )

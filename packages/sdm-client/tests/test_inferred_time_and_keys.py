@@ -74,19 +74,20 @@ def test_a_second_timestamp_does_not_displace_the_first():
 
 
 def test_naming_one_of_two_timestamps_resolves_what_inference_declined():
-    """Two candidates make inference decline. Saying which is the way back."""
+    """Two edit stamps and nothing else make inference decline. Saying which
+    is the way back."""
     frame = pd.DataFrame(
         {
-            'a': pd.to_datetime(['2021-01-01', '2021-02-01']),
-            'b': pd.to_datetime(['2022-01-01', '2022-02-01']),
+            'updated_at': pd.to_datetime(['2021-01-01', '2021-02-01']),
+            'last_login': pd.to_datetime(['2022-01-01', '2022-02-01']),
         }
     )
     schema = Schema.from_data({'t': frame})
     assert schema['t'].time_column is None
 
-    schema['t']['b'].stype = 'timestamp'
+    schema['t']['last_login'].stype = 'timestamp'
 
-    assert schema['t'].time_column == 'b'
+    assert schema['t'].time_column == 'last_login'
 
 
 def test_the_primary_key_is_not_taken_as_the_time_column():
