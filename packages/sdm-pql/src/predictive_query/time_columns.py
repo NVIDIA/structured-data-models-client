@@ -50,6 +50,23 @@ EDIT_STAMP_TOKENS = frozenset(
     }
 )
 
+# A name in one case with no separators, as Snowflake folds `lastLogin` into
+# `LASTLOGIN`, has no token boundary, so these are matched as its prefix.
+_JOINED_PREFIXES = (
+    'last',
+    'load',
+    'sync',
+    'etl',
+    'refresh',
+    'ingest',
+    'extract',
+)
+
+# Endings that make one of those prefixes a different word (LASTING, LASTLY,
+# SYNCHRONOUS, REFRESHMENT). A short list of English suffixes, rather than a
+# dictionary, keeps every joined stamp refused and only these words kept.
+_WORD_CONTINUATIONS = ('ing', 'ly', 'hron', 'ment')
+
 #: Name tokens that mark a column recording when a row was created.
 CREATION_TOKENS = frozenset({'create', 'created', 'creation'})
 
@@ -75,6 +92,11 @@ def is_edit_stamp(name: str) -> bool:
     lowered = name.lower()
     if 'modif' in lowered or 'updat' in lowered:
         return True
+    if name.isalnum() and (name.isupper() or name.islower()):
+        for prefix in _JOINED_PREFIXES:
+            rest = lowered.removeprefix(prefix)
+            if rest != lowered and not rest.startswith(_WORD_CONTINUATIONS):
+                return True
     # By token, so `last_seen` is refused and `lastingDate` is kept.
     return not EDIT_STAMP_TOKENS.isdisjoint(name_tokens(name))
 
