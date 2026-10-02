@@ -68,13 +68,13 @@ repository has been published, and none of the five distributions exists on
 PyPI. These promises begin at 1.0.0; they do not apply earlier.
 
 This distinction matters. Before the first release, this document made
-`predictive_query` public, along with `sdm_client.ModelSpec` and the model
-handles' `spec` attribute. The first release takes all of them off the public
-surface with no deprecation period, which the rule below would otherwise
-forbid. There is no period to serve: nobody can be holding names that were
-never published, and warning about them from the first release would be
-deprecating something that was never available. Everything after 1.0.0 gets
-the full treatment.
+`predictive_query` public, along with `sdm_client.ModelSpec`,
+`sdm_client.RuntimeContract` and the model handles' `spec` attribute. The first
+release takes all of them off the public surface with no deprecation period,
+which the rule below would otherwise forbid. There is no period to serve:
+nobody can be holding names that were never published, and warning about them
+from the first release would be deprecating something that was never available.
+Everything after 1.0.0 gets the full treatment.
 
 ## Deprecation
 

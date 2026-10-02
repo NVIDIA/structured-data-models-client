@@ -166,8 +166,8 @@ this layout would choose today.
 None of it is public API. Users write PQL through `sdm_client.PredictiveQuery`,
 and [the stability page](../reference/stability.md) lists `predictive_query`
 with the internals, so any release may change it. The same holds for
-`ModelSpec` and `ModelAdapter` below: they are how the client is built, not
-names it exports.
+`ModelSpec`, the `RuntimeContract` it carries, and `ModelAdapter` below: they
+are how the client is built, not names it exports.
 
 ### Who owns which types
 
