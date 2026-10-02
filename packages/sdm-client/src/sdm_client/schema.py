@@ -1680,11 +1680,11 @@ def _declared_links(
     """
     # `dst_table` is qualified the way `source_name` is, not the way the caller
     # named the table.
-    by_source_name = {graph[name].source_name.lower(): name for name in tables}
+    by_source_name = {graph[name].source_name: name for name in tables}
     links = []
     for name in tables:
         for key in graph[name].source_foreign_keys:
-            target = by_source_name.get(key.dst_table.lower())
+            target = _table_named(by_source_name, key.dst_table)
             if target is None:
                 continue
             if key.name not in built[name].columns:
@@ -1700,6 +1700,26 @@ def _declared_links(
                 )
             )
     return links
+
+
+def _table_named(
+    by_source_name: Mapping[str, str], dst_table: str
+) -> str | None:
+    r"""The table a foreign key's target names, matched exactly if it can be.
+
+    SQLite and Databricks fold names to lower case, so a case-insensitive match
+    still counts, but only when one table answers to it. PostgreSQL and
+    Snowflake can hold both `"Parent"` and `parent`, and guessing between them
+    would attach the key to the wrong one.
+    """
+    if dst_table in by_source_name:
+        return by_source_name[dst_table]
+    folded = [
+        name
+        for source_name, name in by_source_name.items()
+        if source_name.lower() == dst_table.lower()
+    ]
+    return folded[0] if len(folded) == 1 else None
 
 
 def _require_column(

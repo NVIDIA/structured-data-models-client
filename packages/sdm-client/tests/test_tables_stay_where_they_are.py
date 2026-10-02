@@ -308,6 +308,33 @@ def test_a_declared_foreign_key_links_what_names_would_not(
     ]
 
 
+def test_a_foreign_key_lands_on_the_table_whose_name_matches_exactly(
+    postgres: Any,
+) -> None:
+    # Postgres keeps "Parent" and parent apart, so folding case would merge
+    # them and leave the key on whichever was listed last.
+    connection, namespace = postgres
+    for statement in (
+        'CREATE TABLE {in_}"Parent" (parent_id INTEGER PRIMARY KEY)',
+        'CREATE TABLE {in_}parent (parent_id INTEGER PRIMARY KEY)',
+        'CREATE TABLE {in_}child (child_id INTEGER PRIMARY KEY, '
+        'parent_id INTEGER REFERENCES {in_}"Parent"(parent_id))',
+        'INSERT INTO {in_}"Parent" VALUES (1)',
+        'INSERT INTO {in_}parent VALUES (1)',
+        'INSERT INTO {in_}child VALUES (1, 1)',
+    ):
+        connection.execute(statement.format(in_=f'{namespace}.'))
+    source = PostgresSource(connection, schema=namespace)
+
+    schema = Schema.from_source(
+        source, {'Parent': 'Parent', 'parent': 'parent', 'child': 'child'}
+    )
+
+    assert schema.relationships == [
+        Relationship('child', 'parent_id', 'Parent', 'parent_id')
+    ]
+
+
 def test_overrides_mean_what_they_mean_on_from_data(
     duckdb_source: Any,
 ) -> None:

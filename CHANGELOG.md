@@ -127,6 +127,9 @@ declare as `1.0.0` and none has published. The heading becomes
   tables.** `Schema.from_source` compared the engine's qualified name for the
   referenced table with the caller's bare one, so no declared key matched and
   links fell back to name matching.
+- **A declared foreign key could attach to a table whose name differs only in case.**
+  PostgreSQL and Snowflake hold `"Parent"` and `parent` as two tables, and `Schema.from_source` matched the referenced name without regard to case, so the key landed on whichever was listed last.
+  The exact name now wins, and a case-insensitive match counts only when one table answers to it.
 - **Reading a Postgres database held a transaction open.** Without
   autocommit, psycopg keeps the first statement's transaction, and its locks,
   until a commit, so a graph kept writers to its tables waiting, and one failed
