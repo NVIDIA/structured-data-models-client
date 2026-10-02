@@ -2,18 +2,20 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""How a prediction request names this SDK to Databricks.
+r"""How sdm-client names itself to Databricks.
 
-Databricks attributes partner traffic by a ``<partner>_<product>/<version>``
-entry in the User-Agent. Only prediction requests carry it: the queries that
-sample a warehouse are the caller's own, and are left unnamed.
+Databricks requires a partner product to identify every connection, SDK call
+and API request it sends, by a ``<partner>_<product>/<version>`` entry. Here
+rather than in sdm-client so the connectors can send it too, and imported by
+sdm-client's serving transport so there is one identifier. The five
+distributions release on one version, so this package's is sdm-client's.
 """
 
 from __future__ import annotations
 
 import re
 
-from sdm_client._version import __version__
+from sdm_connectors._version import __version__
 
 #: Named as the distribution a Databricks administrator would see installed,
 #: never a model or endpoint.
@@ -58,14 +60,20 @@ def databricks_product_version(package_version: str) -> str:
     return version
 
 
-def sdm_client_user_agent() -> tuple[str, str]:
-    r"""The ``(name, version)`` entry naming this SDK, for
+def partner_user_agent() -> tuple[str, str]:
+    r"""The ``(name, version)`` naming sdm-client, for
     ``Config.with_user_agent_extra``.
 
-    An extra rather than the ``product`` slot, which names the application
-    and may be the caller's own.
+    An extra rather than the SDK's ``product`` slot, which names the
+    application and may be the caller's own.
     """
     return (
         f'{DATABRICKS_PARTNER}_{DATABRICKS_PRODUCT}',
         databricks_product_version(__version__),
     )
+
+
+def partner_identifier() -> str:
+    r"""``nvidia_sdm-client/<version>``, as a driver's User-Agent entry or a
+    Postgres ``application_name`` carries it."""
+    return '/'.join(partner_user_agent())

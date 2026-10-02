@@ -21,6 +21,9 @@ from sdm_connectors.sql import ConnectorError
 
 ENDPOINT = 'projects/p/branches/b/endpoints/e'
 
+#: What Databricks requires on every connection sdm-client opens.
+PARTNER = 'nvidia_sdm-client/1.0.0'
+
 
 def _authenticate() -> dict[str, str]:
     return {'Authorization': 'Bearer from-the-workspace'}
@@ -82,7 +85,7 @@ def driver_connect(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return seen
 
 
-def test_warehouse_connects_as_the_workspace_and_tags_nothing(
+def test_warehouse_connects_as_the_workspace_and_names_sdm_client(
     driver_connect: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The backend's own connect would read this beside credentials_provider.
@@ -97,13 +100,44 @@ def test_warehouse_connects_as_the_workspace_and_tags_nothing(
 
     provider = driver_connect.pop('credentials_provider')
     assert provider() is _authenticate
-    # Exactly these: no access token from the shell and no partner tag.
+    # Exactly these: no access token from the shell, and the partner
+    # identifier Databricks attributes the connection by.
     assert driver_connect == {
         'server_hostname': 'adb-1.azuredatabricks.net',
         'http_path': '/sql/1.0/warehouses/abc123',
         'use_cloud_fetch': False,
+        'user_agent_entry': PARTNER,
     }
     assert calls == ['warehouses.get:abc123']
+
+
+def test_warehouse_keeps_a_caller_s_entry_after_its_own(
+    driver_connect: dict[str, Any],
+) -> None:
+    warehouse(
+        'abc123',
+        workspace=_workspace(),
+        user_agent_entry='acme/2.1',
+    )
+
+    assert driver_connect['user_agent_entry'] == f'{PARTNER} acme/2.1'
+
+
+def test_warehouse_refuses_an_entry_no_header_can_carry(
+    driver_connect: dict[str, Any],
+) -> None:
+    calls: list[str] = []
+
+    with pytest.raises(ConnectorError) as excinfo:
+        warehouse(
+            'abc123',
+            workspace=_workspace(calls=calls),
+            user_agent_entry='bad\x01entry',
+        )
+
+    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
+    assert calls == []
+    assert driver_connect == {}
 
 
 @pytest.mark.parametrize(
@@ -124,6 +158,171 @@ def test_warehouse_refuses_an_option_it_sets_or_the_driver_ignores(
     assert excinfo.value.details['arguments'] == list(option)
     assert refusal in excinfo.value.message
     assert driver_connect == {}
+
+
+def test_a_connection_the_caller_opened_is_used_as_it_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """sdm-client did not open it, so it does not reopen it to name
+    itself: only the read runs."""
+    from sdm_connectors import DatabricksSource, read_table
+
+    databricks_sql = pytest.importorskip('databricks.sql')
+    monkeypatch.setattr(
+        databricks_sql, 'connect', lambda **kwargs: pytest.fail('opened')
+    )
+    executed: list[str] = []
+
+    class Cursor:
+        description = [('n',)]
+
+        def execute(self, sql: str) -> None:
+            executed.append(sql)
+
+        def fetchall(self) -> list[tuple[int]]:
+            return [(1,)]
+
+        def close(self) -> None:
+            pass
+
+    connection = type(
+        'Connection',
+        (),
+        {'__module__': 'databricks.sql.client', 'cursor': lambda _: Cursor()},
+    )()
+
+    source = DatabricksSource(connection, catalog='main', schema='s')
+    frame = read_table(source.connection, table='t')
+
+    assert source.connection is connection
+    assert frame['n'].tolist() == [1]
+    assert executed == ['SELECT * FROM t']
+    assert vars(connection) == {}
+
+
+# --- the workspace's own requests -------------------------------------------
+
+
+@pytest.fixture
+def workspace_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[tuple[str, list[dict[str, str]]]]:
+    """A local stand-in for a workspace that knows one warehouse, recording
+    the headers of each request it is sent."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    # A proxied runner would otherwise send these local requests to its proxy.
+    for name in ('HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('NO_PROXY', '127.0.0.1')
+    monkeypatch.setenv('no_proxy', '127.0.0.1')
+    received: list[dict[str, str]] = []
+    body = json.dumps(
+        {
+            'id': 'abc123',
+            'odbc_params': {
+                'hostname': 'adb-1.azuredatabricks.net',
+                'path': '/sql/1.0/warehouses/abc123',
+            },
+        }
+    ).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            received.append({'path': self.path, **self.headers})
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    server = HTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f'http://127.0.0.1:{server.server_port}', received
+    server.shutdown()
+    server.server_close()
+
+
+def _api_calls(received: list[dict[str, str]]) -> list[dict[str, str]]:
+    """The warehouse lookup, without the SDK's own discovery of the host."""
+    return [sent for sent in received if sent['path'].startswith('/api/')]
+
+
+def test_a_caller_s_workspace_client_is_copied_to_name_sdm_client(
+    driver_connect: dict[str, Any],
+    workspace_host: tuple[str, list[dict[str, str]]],
+) -> None:
+    """The warehouse lookup is a Databricks API call sdm-client makes, so it
+    carries the identifier too; the caller's own client is left as it was."""
+    sdk = pytest.importorskip('databricks.sdk')
+    host, received = workspace_host
+    workspace = sdk.WorkspaceClient(
+        config=sdk.core.Config(host=host, token='dapi-test', auth_type='pat')
+    )
+    before = workspace.config.user_agent
+
+    warehouse('abc123', workspace=workspace)
+
+    [sent] = _api_calls(received)
+    assert PARTNER in sent['User-Agent'].split()
+    assert sent['Authorization'] == 'Bearer dapi-test'
+    assert workspace.config.user_agent == before
+    assert 'nvidia_sdm-client' not in workspace.config.user_agent
+    # The connection authenticates as the caller's workspace still.
+    assert driver_connect['credentials_provider']()() == {
+        'Authorization': 'Bearer dapi-test'
+    }
+
+
+def test_the_ambient_workspace_client_names_sdm_client(
+    driver_connect: dict[str, Any],
+    workspace_host: tuple[str, list[dict[str, str]]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    pytest.importorskip('databricks.sdk')
+    host, received = workspace_host
+    for name in list(os.environ):
+        if name.startswith(('DATABRICKS_', 'ARM_', 'GOOGLE_')):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv('DATABRICKS_CONFIG_FILE', str(tmp_path / 'absent.cfg'))
+    monkeypatch.setenv('DATABRICKS_HOST', host)
+    monkeypatch.setenv('DATABRICKS_TOKEN', 'dapi-ambient')
+    monkeypatch.setenv('DATABRICKS_AUTH_TYPE', 'pat')
+
+    warehouse('abc123')
+
+    [sent] = _api_calls(received)
+    assert PARTNER in sent['User-Agent'].split()
+    assert sent['Authorization'] == 'Bearer dapi-ambient'
+    assert driver_connect['user_agent_entry'] == PARTNER
+
+
+def test_a_workspace_client_subclass_is_used_as_given(
+    driver_connect: dict[str, Any],
+    workspace_host: tuple[str, list[dict[str, str]]],
+) -> None:
+    """A copy would lose what the subclass adds, so its requests go as the
+    caller set them up; the connection itself still names sdm-client."""
+    sdk = pytest.importorskip('databricks.sdk')
+    host, received = workspace_host
+
+    class Audited(sdk.WorkspaceClient):
+        pass
+
+    workspace = Audited(
+        config=sdk.core.Config(host=host, token='dapi-test', auth_type='pat')
+    )
+
+    warehouse('abc123', workspace=workspace)
+
+    [sent] = _api_calls(received)
+    assert 'nvidia_sdm-client' not in sent['User-Agent']
+    assert driver_connect['user_agent_entry'] == PARTNER
 
 
 # --- lakebase ---------------------------------------------------------------
@@ -193,6 +392,9 @@ def test_lakebase_connects_as_the_current_user_with_a_minted_token(
         row = connection.execute('SELECT current_user, 1').fetchone()
         assert row == (user, 1)
         assert connection.autocommit
+        # What the server records the session as, where Databricks reads it.
+        name = connection.execute('SHOW application_name').fetchone()
+        assert name == (PARTNER,)
     finally:
         connection.close()
     assert sorted(calls) == [
@@ -225,8 +427,40 @@ def test_lakebase_takes_a_given_host_without_asking_for_the_endpoint(
         'password': 'minted',
         'sslmode': 'require',
         'autocommit': True,
+        'application_name': PARTNER,
     }
     assert calls == [f'generate_database_credential:{ENDPOINT}']
+
+
+@pytest.mark.parametrize(
+    'theirs,sent',
+    [
+        ('etl', f'{PARTNER} etl'),
+        ('   ', PARTNER),
+        # Postgres keeps 63 bytes, and a cut through a character would leave
+        # half of it.
+        ('é' * 40, f'{PARTNER} ' + 'é' * 19),
+    ],
+    ids=['kept-after', 'blank', 'cut-to-63-bytes'],
+)
+def test_lakebase_names_sdm_client_ahead_of_a_caller_s_application_name(
+    monkeypatch: pytest.MonkeyPatch, theirs: str, sent: str
+) -> None:
+    psycopg = pytest.importorskip('psycopg')
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(
+        psycopg, 'connect', lambda **kwargs: seen.update(kwargs)
+    )
+
+    lakebase(
+        ENDPOINT,
+        database='databricks_postgres',
+        workspace=_workspace(),
+        application_name=theirs,
+    )
+
+    assert seen['application_name'] == sent
+    assert len(seen['application_name'].encode()) <= 63
 
 
 def _no_postgres_api() -> SimpleNamespace:

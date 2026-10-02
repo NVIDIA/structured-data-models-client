@@ -9,6 +9,7 @@ import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias
 
+from sdm_connectors._databricks_partner import partner_identifier
 from sdm_connectors.sql import (
     ConnectorError,
     check_connect_args,
@@ -207,8 +208,8 @@ def connect(
     for that flow deliberately is allowed through. Such a request names an
     OAuth application or an ``auth_type`` the driver dispatches on.
 
-    The connection carries no partner tag of its own: sdm-client names itself
-    on prediction requests only, never on the queries that sample a warehouse.
+    The connection names sdm-client in its User-Agent, ahead of any
+    ``user_agent_entry`` given.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)
@@ -229,9 +230,29 @@ def connect(
             'waits for a human and never returns',
             code='INVALID_CONNECTOR_ARGS',
         )
-    if 'user_agent_entry' in kwargs:
-        _check_user_agent_entry(kwargs['user_agent_entry'])
-    return databricks_sql.connect(**kwargs)
+    return databricks_sql.connect(**_as_sdm_client(kwargs))
+
+
+def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
+    r"""Return ``databricks.sql.connect`` arguments for a connection
+    sdm-client opens.
+
+    Databricks requires a partner product to identify every connection it
+    opens, so ``user_agent_entry`` starts with ``nvidia_sdm-client/<version>``
+    and keeps any entry the caller gave after it.
+
+    Raises:
+        ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a ``user_agent_entry``
+            no HTTP header can carry.
+    """
+    connect_args = dict(kwargs)
+    entry = connect_args.get('user_agent_entry')
+    if entry is None:
+        connect_args['user_agent_entry'] = partner_identifier()
+    else:
+        _check_user_agent_entry(entry)
+        connect_args['user_agent_entry'] = f'{partner_identifier()} {entry}'
+    return connect_args
 
 
 def _check_user_agent_entry(entry: object) -> None:

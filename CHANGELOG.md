@@ -55,9 +55,18 @@ declare as `1.0.0` and none has published. The heading becomes
   has no sessions. Needs the new `databricks-serving` extra. It sends the
   frozen `request_json`/`response_json` envelope every deployed endpoint
   reads and writes.
-- Prediction requests from `SDMClient.for_databricks_serving` name sdm-client
-  in their User-Agent (`nvidia_sdm-client/<version>`); queries that sample a
-  warehouse do not.
+- Every Databricks connection and API request sdm-client opens names it as
+  `nvidia_sdm-client/<version>`, as Databricks requires of a partner product.
+  Prediction requests from `SDMClient.for_databricks_serving` carry it in the
+  User-Agent. So do SQL warehouse connections from `warehouse()` and the
+  engine's own, ahead of any `user_agent_entry` you pass. Lakebase
+  connections from `lakebase()` carry it as `application_name`, ahead of any
+  you pass. The `WorkspaceClient` requests these make carry it too, through a
+  copy of your client rather than your client itself.
+  A connection or Spark session you open yourself and pass to a source is used
+  as it is, without it.
+  `sdm-client[databricks-serving]` brings `sdm-connectors`, which holds the
+  identifier.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a

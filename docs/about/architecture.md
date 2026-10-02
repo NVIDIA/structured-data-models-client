@@ -277,6 +277,9 @@ The source holds it and never closes it.
 A warehouse connection is the driver's own object, opened with the driver's own `connect`.
 It is the type the engine already accepts, so there is no second connection type to convert between.
 On Databricks, `sdm_connectors.databricks.warehouse()` and `lakebase()` open one as the caller's `WorkspaceClient` and hand back that same native connection, for the caller to close.
+Every connection and API request sdm-client opens there names it as `nvidia_sdm-client/<version>`, as Databricks requires of a partner product.
+The identifier lives in a private `sdm_connectors` module, which sdm-client's serving transport imports, so the connectors never import the client.
+A connection the caller opens and passes in is used as it is.
 A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
 A schema over a source does not pickle.
 

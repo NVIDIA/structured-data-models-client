@@ -12,6 +12,11 @@ It provides:
   A source never closes it: the caller owns the connection and closes it.
 - `sdm_connectors.databricks.warehouse(warehouse_id, workspace=w)` and `lakebase(endpoint, database=..., workspace=w)`: open a Databricks SQL warehouse or Lakebase connection as the caller's own `WorkspaceClient`.
   Each returns the driver's native connection, for a source to take and the caller to close.
+  Databricks requires a partner product to identify every connection and API request it opens, so each names sdm-client as `nvidia_sdm-client/<version>`.
+  A warehouse connection carries it in the driver's User-Agent, ahead of any `user_agent_entry` you pass.
+  A Lakebase connection carries it as `application_name`, ahead of any you pass, within the 63 bytes Postgres keeps.
+  The `WorkspaceClient` requests they make carry it too, through a copy of your client, which is left unchanged.
+  A connection or Spark session you open yourself and pass to a source is used as it is, without the identifier.
 - `read(path, *, format=None, storage_options=None) -> DataFrame`: read a CSV or Parquet file as a flat pandas DataFrame, from a local path, a `file:` URI or an `s3://` URI.
 - `read_table(connection, table=…, query=…) -> DataFrame`: driver-agnostic fetch over an open connection, in that connection's own session.
 - `quote_ident(ident, char='"')` and `resolve_sql(table=…, query=…)`: SQL identifier quoting and a safe table/query guard.

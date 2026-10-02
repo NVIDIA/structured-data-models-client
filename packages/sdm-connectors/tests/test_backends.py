@@ -71,6 +71,7 @@ def test_databricks_driver_options_bypass_the_allow_list(monkeypatch):
         'catalog': 'c',
         'access_token': 't',
         'use_cloud_fetch': True,
+        'user_agent_entry': PARTNER,
     }
 
 
@@ -411,7 +412,10 @@ def test_postgres_reads_the_standard_environment_variables(monkeypatch):
     assert captured['dbname'] == 'explicit', 'an argument must win over PG*'
 
 
-# --- Databricks user agent ---------------------------------------------------
+# --- Databricks partner identifier ----------------------------------------
+
+#: What Databricks requires on every connection sdm-client opens.
+PARTNER = 'nvidia_sdm-client/1.0.0'
 
 
 def _captured_databricks_connect(**kwargs):
@@ -434,23 +438,64 @@ def _captured_databricks_connect(**kwargs):
     return captured
 
 
-def test_a_sampling_connection_carries_no_partner_tag():
-    """sdm-client names itself on prediction requests only, so a query that
-    samples a warehouse does not claim to be one."""
-    assert 'user_agent_entry' not in _captured_databricks_connect()
+def test_a_connection_names_sdm_client():
+    """Databricks requires a partner product to identify every connection it
+    opens."""
+    captured = _captured_databricks_connect()
+
+    assert captured['user_agent_entry'] == PARTNER
 
 
-def test_a_caller_s_own_user_agent_entry_is_passed_through_alone():
+def test_a_caller_s_user_agent_entry_is_kept_after_the_partner_identifier():
     captured = _captured_databricks_connect(user_agent_entry='acme/2.1')
 
-    assert captured['user_agent_entry'] == 'acme/2.1'
+    assert captured['user_agent_entry'] == f'{PARTNER} acme/2.1'
 
 
 def test_a_latin_1_user_agent_entry_is_kept():
     """Refusing what a header cannot carry must not refuse what it can."""
     captured = _captured_databricks_connect(user_agent_entry='café/1.0')
 
-    assert captured['user_agent_entry'] == 'café/1.0'
+    assert captured['user_agent_entry'] == f'{PARTNER} café/1.0'
+
+
+@pytest.mark.parametrize(
+    ('package_version', 'expected'),
+    [
+        ('1.0.0', '1.0.0'),
+        ('1.2.3', '1.2.3'),
+        ('1.0.0a1', '1.0.0-alpha.1'),
+        ('1.0.0rc2', '1.0.0-rc.2'),
+        ('1.0.0.dev3', '1.0.0-dev.3'),
+        ('1.0.0rc2.dev3', '1.0.0-rc.2.dev.3'),
+        ('1.0.0.post1', '1.0.0+post.1'),
+    ],
+)
+def test_a_python_version_is_translated_to_the_semver_databricks_takes(
+    package_version, expected
+):
+    from sdm_connectors._databricks_partner import databricks_product_version
+
+    assert databricks_product_version(package_version) == expected
+
+
+def test_a_version_that_cannot_be_expressed_is_refused_not_invented():
+    """An invented fallback would claim the wrong release."""
+    from sdm_connectors._databricks_partner import databricks_product_version
+
+    with pytest.raises(ValueError):
+        databricks_product_version('1.0')
+
+
+def test_the_identifier_names_the_installed_release():
+    """The identifier names this SDK's release, so it has to track it."""
+    import sdm_connectors
+    from sdm_connectors._databricks_partner import partner_identifier
+
+    assert (
+        partner_identifier()
+        == f'nvidia_sdm-client/{sdm_connectors.__version__}'
+    )
 
 
 @pytest.mark.parametrize(

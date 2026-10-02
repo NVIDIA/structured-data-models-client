@@ -74,8 +74,9 @@ s3 = ["sdm-connectors[s3]==1.0.0"]
 # a third-party package directly: the transport that imports it lives in this
 # distribution, not in the engine or the connectors. It is a way to reach a
 # model rather than a backend to read, so `all` does not carry it; ask for it by
-# name, as with the engine's extra of the same name.
-databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
+# name. The connectors hold the partner identifier every Databricks request
+# carries, so serving requests and warehouse connections send the same one.
+databricks-serving = ["databricks-sdk>=0.68.0,<1.0", "sdm-connectors==1.0.0"]
 all = [
     "sdm-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]

@@ -544,9 +544,9 @@ def test_the_debug_log_carries_no_rows(workspace_host, caplog, status, body):
 
 def sdm_client_entry() -> str:
     import sdm_client
-    from sdm_client.core.databricks_user_agent import (
-        databricks_product_version,
-    )
+
+    partner = pytest.importorskip('sdm_connectors._databricks_partner')
+    databricks_product_version = partner.databricks_product_version
 
     version = databricks_product_version(sdm_client.__version__)
     return f'nvidia_sdm-client/{version}'
@@ -701,38 +701,6 @@ def test_a_timeout_is_refused_when_the_sdk_s_config_cannot_be_copied_apart(
 
 
 @pytest.mark.parametrize(
-    ('package_version', 'expected'),
-    [
-        ('1.0.0', '1.0.0'),
-        ('1.2.3', '1.2.3'),
-        ('1.0.0a1', '1.0.0-alpha.1'),
-        ('1.0.0rc2', '1.0.0-rc.2'),
-        ('1.0.0.dev3', '1.0.0-dev.3'),
-        ('1.0.0rc2.dev3', '1.0.0-rc.2.dev.3'),
-        ('1.0.0.post1', '1.0.0+post.1'),
-    ],
-)
-def test_a_python_version_is_translated_to_the_semver_databricks_takes(
-    package_version, expected
-):
-    from sdm_client.core.databricks_user_agent import (
-        databricks_product_version,
-    )
-
-    assert databricks_product_version(package_version) == expected
-
-
-def test_a_version_that_cannot_be_expressed_is_refused_not_invented():
-    """An invented fallback would claim the wrong release."""
-    from sdm_client.core.databricks_user_agent import (
-        databricks_product_version,
-    )
-
-    with pytest.raises(ValueError):
-        databricks_product_version('1.0')
-
-
-@pytest.mark.parametrize(
     'named',
     [
         f'https://user:{SECRET}@dbc.example.com/serving-endpoints/x',
@@ -768,6 +736,28 @@ def test_without_the_sdk_the_extra_to_install_is_named(monkeypatch):
         SDMClient.for_databricks_serving(ENDPOINT)
     assert error.value.details['extra'] == 'databricks-serving'
     assert 'sdm-client[databricks-serving]' in str(error.value)
+
+
+def test_without_the_connectors_the_extra_to_install_is_named(
+    monkeypatch, workspace_host
+):
+    """The partner identifier lives in sdm-connectors, which the extra
+    brings; sending a request without it would break Databricks' rule."""
+    sdk = pytest.importorskip('databricks.sdk')
+    host, answer = workspace_host
+    workspace = sdk.WorkspaceClient(
+        config=sdk.core.Config(host=host, token='dapi-test', auth_type='pat')
+    )
+    monkeypatch.setitem(sys.modules, 'sdm_connectors._databricks_partner', None)
+
+    with pytest.raises(MissingExtraError) as error:
+        SDMClient.for_databricks_serving(ENDPOINT, workspace_client=workspace)
+
+    assert error.value.details == {
+        'extra': 'databricks-serving',
+        'package': 'sdm-connectors',
+    }
+    assert answer['headers'] == []
 
 
 @pytest.mark.parametrize(
