@@ -286,8 +286,8 @@ class PredictionResult:
                 f'({sorted(shapes)}), so they are not slices of one request',
                 code='INTERNAL_ERROR',
             )
-        # A candidate left out of at least one part's rows is named, so the
-        # rows that were ranked without it can still be told apart.
+        # Named when any part left it out. Which rows ranked without it is
+        # not recorded, so the union is the most that can be said.
         unscored: list[Any] = []
         for part in parts:
             unscored += [

@@ -1099,6 +1099,32 @@ def answered(request, **how):
     ]
 
 
+def test_each_candidate_of_a_ranking_is_exactly_one_call() -> None:
+    """A candidate is scored, or not, for every row of a ranking at once.
+
+    That holds only while one candidate is one call. The engine samples a
+    context per batch, so a split ranking could have a candidate cold in one
+    batch and scoreable in another, and the result has no way to say a
+    candidate was left out of some rows only.
+    """
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client import KumoRelational
+
+    request = PredictiveQuery(
+        'PREDICT LIST_DISTINCT(buys.iid, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.uid',
+        shop(),
+    ).materialize(
+        model=KumoRelational(),
+        indices=[1, 2, 3],
+        candidates=[10, 11],
+    )
+
+    assert len(request.parts) == 2
+    for part in request.parts:
+        assert len(part.payloads) == 1
+
+
 @pytest.mark.parametrize(
     ('candidates', 'cold', 'left_out'),
     [
@@ -1114,9 +1140,7 @@ def answered(request, **how):
 def test_a_ranking_leaves_out_the_candidates_no_context_teaches(
     requests_mock, candidates, cold, left_out
 ):
-    """Nobody in the shop buys 13 or 14, so the endpoint would refuse their
-    questions. Refusing the whole ranking for them gave back nothing about
-    the candidates that could be ranked."""
+    """Nobody in the shop buys 13 or 14, so the endpoint refuses them."""
     pytest.importorskip('sdm_relational_engine')
     route = an_endpoint_that_scores(requests_mock, 0.2, 0.9)
 

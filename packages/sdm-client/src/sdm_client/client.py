@@ -486,13 +486,16 @@ class SDMClient:
         r"""Which of a ranking's parts ask about a one-class candidate.
 
         The endpoint refuses a classification whose context holds one class,
-        so such a candidate cannot be scored. Every part is checked before any
-        call, so the rest are ranked without those and the caller is told
-        once, and a ranking with nothing left is refused before it spends one.
+        so such a candidate cannot be scored. Checking every part before any
+        call sends none for those, names them all at once, and refuses a
+        ranking with nothing left before it spends a call.
 
-        A candidate's context is gathered once for every entity in the
-        ranking, so a candidate that cannot be scored for one cannot be scored
-        for any.
+        A candidate is scored or not for the whole ranking, because each
+        candidate is one call: this client never asks the engine to batch, and
+        it caps the entities below the size a batch would split at. Were a
+        ranking ever split, the engine would sample a context per batch, and
+        one cold batch would drop the candidate from every row rather than
+        from its own, which the result has no way to say.
         """
         positions = []
         for position, (part, (_, about)) in enumerate(
@@ -967,9 +970,9 @@ def _ranked(
     onto the frame the caller scored. The candidates are the values the caller
     named, not what they looked like once written into a query.
 
-    `rewritten` holds only the parts that were asked. The candidates that were
-    not are carried beside the ranking, never in it, since any score given
-    them would be invented.
+    ``rewritten`` holds only the parts that were asked. The candidates that
+    were not are carried beside the ranking, never in it, since any score
+    given to them would be invented.
     """
 
     from sdm_api.generated.tfm_api import PredictionItem
