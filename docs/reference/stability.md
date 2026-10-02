@@ -34,6 +34,8 @@ Not public, and free to change in any release:
 - The `predictive_query` package, which the `sdm-pql` distribution installs.
   `sdm-client` depends on it to parse and validate PQL, but it is not a
   supported API. Write PQL with `sdm_client.PredictiveQuery`.
+- How a `FittedModel` is constructed. `SDMClient.fit()` returns one, and
+  calling the class yourself raises `TypeError`.
 - The exact text of an exception or warning message. Branch on the exception
   **type** and on `StructuredDataError.code`, never on the message. Codes are
   public; prose is not.
@@ -69,12 +71,13 @@ PyPI. These promises begin at 1.0.0; they do not apply earlier.
 
 This distinction matters. Before the first release, this document made
 `predictive_query` public, along with `sdm_client.ModelSpec`,
-`sdm_client.RuntimeContract` and the model handles' `spec` attribute. The first
-release takes all of them off the public surface with no deprecation period,
-which the rule below would otherwise forbid. There is no period to serve:
-nobody can be holding names that were never published, and warning about them
-from the first release would be deprecating something that was never available.
-Everything after 1.0.0 gets the full treatment.
+`sdm_client.RuntimeContract`, the model handles' `spec` attribute,
+`Request.decomposition` and the arguments `FittedModel` was constructed with.
+The first release takes all of them off the public surface with no deprecation
+period, which the rule below would otherwise forbid. There is no period to
+serve: nobody can be holding names that were never published, and warning about
+them from the first release would be deprecating something that was never
+available. Everything after 1.0.0 gets the full treatment.
 
 ## Deprecation
 
@@ -108,3 +111,10 @@ the same commit, making the change visible in review. The wire payloads of
 canonical requests are similarly recorded in
 `tests/golden/wire_payloads.json`, because what the endpoint receives is part
 of the contract too.
+
+A public name may not hand out a type that is not public. The same test file
+reads every type a public signature, dataclass field, property or class
+attribute names, and fails when one is this project's and not exported, so an
+internal type cannot become public by being returned. Types from the standard
+library and third-party packages pass. The few internal types a public name
+still hands out are listed in that test, each with the reason it stays.

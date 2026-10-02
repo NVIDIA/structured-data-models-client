@@ -215,9 +215,9 @@ declare as `1.0.0` and none has published. The heading becomes
   compared the query text, which a request built from frames has not got, which
   `task=` does not change, and which two spellings of one string literal write
   differently. A frame-built request scored against a session answered the
-  pinned question. The question is now assembled from the request. The only
-  visible change is the annotation of `FittedModel.__init__`'s `question`
-  parameter, on a type `fit()` returns and nobody constructs.
+  pinned question. The question is now assembled from the request, and
+  nothing visible changes: `fit()` builds the handle, and `FittedModel` is not
+  constructed directly.
 - **A ranking candidate is written as its column travels**, not as its own
   value, so a small key drawn from a column whose values straddle int64 is
   still written as that column's text rather than as a number it does not hold.
@@ -448,6 +448,12 @@ Write PQL with `sdm_client.PredictiveQuery`.
 `ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and `KumoTabular` and `KumoRelational` have no public `spec` attribute.
 `RuntimeContract`, the part of a `ModelSpec` that describes a deployment, is internal too, since nothing public takes or returns one.
 `Model.name` and `SDMClient.capabilities()` describe a model.
+
+**Nothing public hands out a type that is not public.**
+`Request.decomposition` is gone: it returned the client's own record of how a ranking or a forecast is asked in parts, and `Request.parts` and `Request.asked` say what was asked.
+`FittedModel` is returned by `SDMClient.fit()` and is not constructed directly, since what it is built from is internal; calling the class raises `TypeError`.
+`tests/test_release_contract.py` now fails when a public signature, dataclass field, property or class attribute names a type this project does not export.
+Two exceptions remain and are listed there with their reasons: `PredictionResult.items` holds the contract's generated `PredictionItem`, and a `DatabricksSource` built from a Spark session returns the session wrapped as a connection.
 
 ### Notes for a reviewer
 
