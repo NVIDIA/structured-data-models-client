@@ -1045,6 +1045,7 @@ class Schema:
         else:
             inferred = _checked_links(built, relationships)
 
+        _settle_edit_stamps(built, chose, time_columns)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, inferred)
@@ -1236,6 +1237,7 @@ class Schema:
         else:
             links = _checked_links(built, relationships)
 
+        _settle_edit_stamps(built, chose, time_columns)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, links, source=source)
@@ -2131,9 +2133,32 @@ def _infer_time_column(table: Table, frame: pd.DataFrame) -> TimeColumnChoice:
         for name, column in table.columns.items()
         if column.stype == 'timestamp' and name != table.primary_key
     ]
-    choice = choose_time_column(frame, stamps)
+    choice = choose_time_column(
+        frame, stamps, keyed=table.primary_key is not None
+    )
     table.time_column = choice.column
     return choice
+
+
+def _settle_edit_stamps(
+    built: Mapping[str, _TableShape],
+    chose: dict[str, TimeColumnChoice | None],
+    time_columns: Mapping[str, str | None] | None,
+) -> None:
+    r"""Take or refuse a lone edit stamp by the key each table ends with.
+
+    Inference chose before the caller's keys, and on a source before the
+    keys checked against it, were applied. A table keyed only now refuses
+    the stamp of its last edit, and one that lost its key takes it.
+    """
+    for name, choice in chose.items():
+        if choice is None or name in (time_columns or {}):
+            continue
+        table = built[name]
+        settled = choice.for_key(table.primary_key is not None)
+        if settled != choice:
+            chose[name] = settled
+            table.time_column = settled.column
 
 
 def _warn_how_time_columns_were_inferred(
@@ -2177,7 +2202,8 @@ def _warn_how_time_columns_were_inferred(
                 lines.append(
                     f'{name}.{column} was taken as the time column although '
                     f'it looks like when a row was last changed, because the '
-                    f'table has no other timestamp. If it does say when a row '
+                    f'table has no primary key and no other timestamp, so it '
+                    f'reads as a log of changes. If it does say when a row '
                     f'became true, name it: '
                     f'time_columns={{{name!r}: {column!r}}}.'
                 )

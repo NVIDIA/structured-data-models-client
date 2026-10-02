@@ -847,6 +847,7 @@ class Table(ABC):
             df,
             candidates,
             full_range=self._full_range if truncated else None,
+            keyed=self.has_primary_key(),
         )
         if time_column := self._time_column_choice.column:
             self.time_column = time_column

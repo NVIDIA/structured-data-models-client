@@ -64,10 +64,7 @@ CASES: dict[str, tuple[dict[str, pd.Series], str | None]] = {
         {'ModifiedDate': HOURS, 'OrderDate': HOURS},
         'OrderDate',
     ),
-    'a lone edit stamp, as in a log of changes': (
-        {'updated_at': HOURS},
-        'updated_at',
-    ),
+    'a lone edit stamp on a keyed table': ({'updated_at': HOURS}, None),
     'two edit stamps and nothing else': (
         {'updated_at': HOURS, 'last_login': LATER},
         None,
@@ -183,6 +180,8 @@ def _postgres_type(series: pd.Series) -> str:
         return 'BIGINT'
     if pd.api.types.is_float_dtype(series):
         return 'DOUBLE PRECISION'
+    if pd.api.types.is_string_dtype(series):
+        return 'TEXT'
     return 'TIMESTAMP'
 
 
@@ -260,6 +259,65 @@ def test_a_source_infers_the_time_column_its_frames_do(
     assert said_in_place == said_in_memory
 
 
+def test_a_log_takes_its_edit_stamp_and_a_keyed_table_does_not(
+    build: Build,
+) -> None:
+    """`order_status_updates` appends a row per change, keyed by nothing,
+    and its `updated_at` is when each row was written. `users` holds one
+    row per user, edited in place, and its `last_login` is no user's time.
+    """
+    last_login = pd.Series(pd.date_range('2024-01-01', periods=50, freq='D'))
+    frames = {
+        'users': pd.DataFrame({'user_id': range(50), 'last_login': last_login}),
+        'order_status_updates': pd.DataFrame(
+            {
+                'user_id': [i % 50 for i in range(ROWS)],
+                'status': ['paid', 'shipped'] * (ROWS // 2),
+                'updated_at': HOURS,
+            }
+        ),
+    }
+    in_memory, said_in_memory = _described(lambda: Schema.from_data(frames))
+    in_place, said_in_place = _described(
+        lambda: Schema.from_source(build(frames))
+    )
+    for schema in (in_memory, in_place):
+        assert schema['users'].primary_key == 'user_id'
+        assert schema['users'].time_column is None
+        assert schema['order_status_updates'].primary_key is None
+        assert schema['order_status_updates'].time_column == 'updated_at'
+    assert said_in_place == said_in_memory
+
+
+def test_a_key_the_caller_names_refuses_the_edit_stamp_too(
+    build: Build,
+) -> None:
+    """Inference chose before the caller's key was applied."""
+    frames = {
+        'customers': pd.DataFrame({'customer_id': range(50)}),
+        'accounts': pd.DataFrame(
+            {
+                'customer_id': [i % 50 for i in range(ROWS)],
+                'handle': [f'h{i}' for i in range(ROWS)],
+                'updated_at': HOURS,
+            }
+        ),
+    }
+    keys = {'accounts': 'handle'}
+    unkeyed = _described(lambda: Schema.from_data(frames))[0]
+    assert unkeyed['accounts'].primary_key is None
+    assert unkeyed['accounts'].time_column == 'updated_at'
+    in_memory, _ = _described(
+        lambda: Schema.from_data(frames, primary_keys=keys)
+    )
+    in_place, _ = _described(
+        lambda: Schema.from_source(build(frames), primary_keys=keys)
+    )
+    for schema in (in_memory, in_place):
+        assert schema['accounts'].primary_key == 'handle'
+        assert schema['accounts'].time_column is None
+
+
 def test_a_one_row_table_keeps_its_timestamp(build: Build) -> None:
     """One value is no evidence that a column never changes."""
     frames = _frames({'ordered': ONE_DAY}, rows=1)
@@ -272,7 +330,7 @@ def test_a_one_row_table_keeps_its_timestamp(build: Build) -> None:
 def test_every_guess_is_named_in_one_notice_with_why_and_the_override() -> None:
     frames = _frames({'ordered': ONE_DAY})
     frames['order_status_updates'] = pd.DataFrame(
-        {'order_id': range(ROWS), 'updated_at': HOURS}
+        {'order_id': [i % 100 for i in range(ROWS)], 'updated_at': HOURS}
     )
     frames['shipments'] = pd.DataFrame(
         {'order_id': range(ROWS), 'shipped_at': LATER, 'packed_at': HOURS}
@@ -285,8 +343,8 @@ def test_every_guess_is_named_in_one_notice_with_why_and_the_override() -> None:
         "became true, name it: time_columns={'customers': 'ModifiedDate'}.\n"
         '- order_status_updates.updated_at was taken as the time column '
         'although it looks like when a row was last changed, because the '
-        'table has no other timestamp. If it does say when a row became '
-        'true, name it: '
+        'table has no primary key and no other timestamp, so it reads as a '
+        'log of changes. If it does say when a row became true, name it: '
         "time_columns={'order_status_updates': 'updated_at'}.\n"
         '- orders.ordered was not taken as the time column because every row '
         'holds 2025-09-11 00:00:00. If it does say when a row became true, '

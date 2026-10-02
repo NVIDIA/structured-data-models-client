@@ -27,7 +27,7 @@ import datetime
 import re
 import warnings
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, NamedTuple
 
 import pandas as pd
@@ -220,15 +220,42 @@ class TimeColumnChoice:
             when it was the one creation stamp among several, ``'earliest'``
             when its values start earliest of :attr:`among`, and
             ``'edit_stamp'`` when it looks like a stamp of the last edit but
-            no other timestamp was left. ``None`` when no column was taken.
+            no other timestamp was left and the table has no primary key.
+            ``None`` when no column was taken.
         among: The columns it was chosen from, itself included.
-        rejected: The columns refused, each with its reason, in table order.
+        refused: Every column screened out, each with its reason, in table
+            order, a lone edit stamp taken as the last resort included.
+        fallback: The lone edit stamp left, when no other timestamp was.
     """
 
     column: str | None
     how: Literal['only', 'created', 'earliest', 'edit_stamp'] | None
     among: tuple[str, ...]
-    rejected: tuple[RejectedTimeColumn, ...]
+    refused: tuple[RejectedTimeColumn, ...]
+    fallback: str | None = None
+
+    @property
+    def rejected(self) -> tuple[RejectedTimeColumn, ...]:
+        r"""The columns refused, each with its reason, in table order."""
+        return tuple(r for r in self.refused if r.column != self.column)
+
+    def for_key(self, keyed: bool) -> TimeColumnChoice:
+        r"""This choice for a table that has a primary key, or has none.
+
+        A keyed table holds one row per thing, edited in place, so a stamp
+        of its last edit says when the row last changed and is refused. A
+        table without one is read as an append-only log, where it says when
+        the row was written, and is taken when nothing else is left. The key
+        may be settled after the time column was chosen, so the choice is
+        kept both ways.
+        """
+        if self.fallback is None:
+            return self
+        if keyed:
+            return replace(self, column=None, how=None, among=())
+        return replace(
+            self, column=self.fallback, how='edit_stamp', among=(self.fallback,)
+        )
 
 
 class ColumnRange(NamedTuple):
@@ -259,6 +286,7 @@ def choose_time_column(
     candidates: Sequence[str],
     *,
     full_range: FullRange | None = None,
+    keyed: bool = False,
 ) -> TimeColumnChoice:
     r"""Choose a table's time column among its timestamps.
 
@@ -267,7 +295,7 @@ def choose_time_column(
     row, and one named as a load stamp.
     So is one named as a date of birth.
     Of those left, a stamp of the last edit is taken only when it is the one
-    column left. Otherwise a creation stamp is preferred, and of several the
+    column left and the table has no primary key. Otherwise a creation stamp is preferred, and of several the
     one whose values start earliest is taken, the first in table order on a
     tie.
 
@@ -278,6 +306,7 @@ def choose_time_column(
             once, for every column not refused by its name, so that whether
             a column is constant and where it starts are what every row
             says.
+        keyed: Whether the table has a primary key.
 
     Returns:
         The column taken, how, and the columns refused.
@@ -312,15 +341,13 @@ def choose_time_column(
         among: Sequence[str],
     ) -> TimeColumnChoice:
         return TimeColumnChoice(
-            column,
-            how,
-            tuple(among),
-            tuple(r for name, r in rejected.items() if name != column),
+            column, how, tuple(among), tuple(rejected.values())
         )
 
     if not plain:
         if len(edited) == 1:
-            return chosen(edited[0], 'edit_stamp', edited)
+            last_resort = replace(chosen(None, None, ()), fallback=edited[0])
+            return last_resort.for_key(keyed)
         return chosen(None, None, ())
     created = [name for name in plain if is_creation_stamp(name)]
     if len(created) == 1:
