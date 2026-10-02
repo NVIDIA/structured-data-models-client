@@ -476,6 +476,35 @@ def test_no_entity_at_the_anchor_is_refused_without_a_window_query(
     assert not [q for q, _ in session.calls[before:] if 'posexplode' in q]
 
 
+def test_lagged_targets_for_no_entities_ask_the_warehouse_nothing(
+    session: _Session, graph: Graph
+) -> None:
+    r"""Lagged targets reach the window lookup without the guard context
+    sampling has, and a window over no entities was bound by NaN.
+    """
+    sampler = KumoRelational(graph, verbose=False)._sampler
+    query = ValidatedPredictiveQuery(
+        target_ast=Aggregation(
+            aggr=AggregationType.COUNT,
+            target=Column(fqn='orders.*'),
+            aggr_time_range=DateOffsetRange(0, 30),
+        ),
+        entity_ast=Column(fqn='users.user_id'),
+    )
+
+    before = len(session.calls)
+    lagged = sampler.sample_lagged_target(
+        query,
+        entity_pkey=pd.Series([], dtype='int64'),
+        anchor_time=pd.Series([], dtype='datetime64[ns]'),
+        lag_timesteps=2,
+    )
+
+    assert list(lagged.columns) == ['__kumo_arl0__', '__kumo_arl1__']
+    assert len(lagged) == 0
+    assert not [q for q, _ in session.calls[before:] if 'posexplode' in q]
+
+
 def test_the_session_route_needs_no_sql_connector() -> None:
     """A notebook samples through its own session, which needs no
     databricks-sql-connector, so every test above runs again where the

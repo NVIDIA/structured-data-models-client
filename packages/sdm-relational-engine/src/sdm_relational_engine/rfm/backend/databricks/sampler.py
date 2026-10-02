@@ -517,6 +517,11 @@ class DatabricksSampler(SQLSampler):
         max_offset: pd.DateOffset,
         columns: set[str],
     ) -> tuple[pd.DataFrame, np.ndarray]:
+        if len(index) == 0:
+            # The window's outer bounds are the latest and earliest of the
+            # entities' times, which for none is NaN, and a warehouse refuses.
+            return self._no_rows(table_name, columns)
+
         time_column = self.time_column_dict[table_name]
         dtype = self.table_dtype_dict[table_name][foreign_key]
         elem = self._elem_type(dtype)
