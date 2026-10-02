@@ -15,7 +15,7 @@ from predictive_query.schema.common import StrEnum
 from predictive_query.schema.table import Column as ColumnDefinition
 from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Dtype, Stype
-from predictive_query.time_columns import RejectedTimeColumn
+from predictive_query.time_columns import TimeColumnChoice, choose_time_column
 from sdm_connectors import quote_ident
 from typing_extensions import Self
 
@@ -34,9 +34,6 @@ from sdm_relational_engine.rfm.metadata_inference import (
     infer_dtype,
     infer_primary_key,
     infer_stype,
-)
-from sdm_relational_engine.rfm.metadata_inference.time_col import (
-    choose_time_column,
 )
 from sdm_relational_engine.utils.environment import in_tmux
 
@@ -99,7 +96,7 @@ class Table(ABC):
         self._end_time_column: str | None = None
         self._declined_primary_keys: tuple[str, ...] = ()
         self._declined_primary_key_rows: int | None = None
-        self._time_column_rejections: tuple[RejectedTimeColumn, ...] = ()
+        self._time_column_choice: TimeColumnChoice | None = None
         self._expr_sample_df = pd.DataFrame(index=range(self._NUM_SAMPLE_ROWS))
 
         if columns is None:
@@ -835,27 +832,28 @@ class Table(ABC):
         return self
 
     def _infer_time_column_among(self, candidates: list[str]) -> str | None:
-        r"""Set the time column inferred among ``candidates``, keeping what
-        was refused and why, and return it.
+        r"""Set the time column inferred among ``candidates``, keeping how it
+        was chosen and what was refused, and return it.
         """
         df = self._get_sample_df()
         # Only a capped read can hide a second value past its last row.
         truncated = len(df) == self._NUM_SAMPLE_ROWS
-        time_column, self._time_column_rejections = choose_time_column(
-            df=df,
-            candidates=candidates,
+        self._time_column_choice = choose_time_column(
+            df,
+            candidates,
             full_range=self._full_range if truncated else None,
         )
-        if time_column:
+        if time_column := self._time_column_choice.column:
             self.time_column = time_column
         return time_column
 
     @property
-    def time_column_rejections(self) -> tuple[RejectedTimeColumn, ...]:
-        r"""The timestamp columns :meth:`infer_time_column` refused, each
-        with the reason, so a caller can say why a table has no time column.
+    def time_column_choice(self) -> TimeColumnChoice | None:
+        r"""How :meth:`infer_time_column` chose the time column and which
+        timestamps it refused, so a caller can say why. ``None`` until it
+        has run, or when the time column was given.
         """
-        return self._time_column_rejections
+        return self._time_column_choice
 
     def _full_range(self, name: str) -> tuple[object, object] | None:
         r"""``MIN`` and ``MAX`` of column ``name`` over every row, or

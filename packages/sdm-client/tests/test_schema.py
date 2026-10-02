@@ -74,9 +74,11 @@ def test_the_single_timestamp_column_becomes_the_time_column():
     assert Schema.from_data({'users': users()})['users'].time_column == 'joined'
 
 
-def test_two_timestamp_columns_are_ambiguous_so_neither_is_chosen():
+def test_of_two_timestamp_columns_the_earliest_is_chosen():
     frame = users().assign(left=lambda f: f['joined'] + pd.Timedelta(days=1))
-    assert Schema.from_data({'users': frame})['users'].time_column is None
+    assert Schema.from_data({'users': frame})['users'].time_column == 'joined'
+    earlier = users().assign(left=lambda f: f['joined'] - pd.Timedelta(days=1))
+    assert Schema.from_data({'users': earlier})['users'].time_column == 'left'
 
 
 def test_a_last_seen_stamp_is_not_a_rival_for_the_time_column():

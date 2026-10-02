@@ -449,7 +449,9 @@ def test_a_model_s_constant_time_column_is_refused_and_named(
 
     assert schema['order_lines'].time_column is None
     assert said == [
-        'order_lines.ordered_at was not taken as the time column because '
+        'Some time columns were inferred, or refused, on a guess about what '
+        'a column holds:\n'
+        '- order_lines.ordered_at was not taken as the time column because '
         'every row holds 2024-01-01 00:00:00. If it does say when a row '
         "became true, name it: time_columns={'order_lines': 'ordered_at'}."
     ]
