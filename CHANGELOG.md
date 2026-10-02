@@ -122,20 +122,27 @@ declare as `1.0.0` and none has published. The heading becomes
 ### Fixed
 
 - **A schema may infer a different time column than before.** `from_data`
-  and `from_source` now apply one rule, kept in `predictive_query.time_columns`.
-  Neither takes a timestamp that holds one value in every row, or none, or
-  whose name says when a row was last changed or loaded, such as
-  `ModifiedDate`, `updated_at` or `_fivetran_synced`, even when it is the
-  only one. A `created` stamp is preferred over other timestamps. A column
-  constant in the rows a source table is described from is checked with one
-  `MIN`/`MAX` over the whole table before it is refused. On AdventureWorks
-  `customers` now gets no time column, where `ModifiedDate`, a single date
-  later than every order, made every windowed question about a customer
-  fail, and `sales_order_details` gets `OrderDate` instead of
-  `ModifiedDate`. Each refused column of a table left without a time column
-  is named in an `SDMWarning` with the reason and the `time_columns=`
-  override, and the warning about several candidates no longer suggests one
-  that was refused.
+  and `from_source` now both call one function,
+  `predictive_query.time_columns.choose_time_column`, so the same rows get
+  the same time column either way. It never takes a timestamp that holds no
+  value, or one value in every row that holds one when at least two do, nor
+  one whose name says when a row was loaded or synced, such as
+  `_fivetran_synced` or `EXTRACTDATE`, nor a date of birth, such as
+  `BirthDate` or `dob`. A stamp of the last edit, such as `ModifiedDate`,
+  `updated_at` or `last_seen`, is taken only when no other timestamp is
+  left, as in an append-only log of changes. Of several left, a `created`
+  stamp is taken, and otherwise the one whose values start earliest, read
+  over the whole table on a source. Before, `from_data` took a lone
+  timestamp unchecked and gave a table with several none, and `from_source`
+  compared only the rows it read and never took a name such as `last_seen`.
+  On AdventureWorks `customers` now gets no time column, where
+  `ModifiedDate`, one date later than every order, made every windowed
+  question about a customer fail, and `sales_order_details` gets `OrderDate`
+  instead of `ModifiedDate`. RelBench's `rel-f1` `drivers` gets none rather
+  than `dob`. One `SDMWarning` per schema of more than one table names every
+  column taken as the earliest of several or as the only edit stamp left,
+  and every column refused for a table left without a time column, each
+  with its reason and the `time_columns=` override.
 - **A metric view dimension keeps its string literals.** Resolving a
   dimension rewrote text inside a literal as if it were SQL: `'source.web'`
   lost its `source.`, `'customers.x'` moved a source dimension to the

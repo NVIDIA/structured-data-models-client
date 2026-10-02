@@ -170,7 +170,7 @@ this layout would choose today.
 | `Dtype`, `Stype`, `TaskType`, `ProblemType` | `sdm-pql` | PQL speaks them and will be an external dependency. One owner, no translation layer. |
 | `SchemaDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
 | `Profile`, `Capabilities` | `sdm-pql` | What a model may be asked, as data. §6. |
-| The time column rule (`predictive_query.time_columns`) | `sdm-pql` | Which timestamps inference may take. `Schema.from_data` and the engine behind `Schema.from_source` both apply it, and neither imports the other. |
+| The time column rule (`predictive_query.time_columns`) | `sdm-pql` | Which timestamp inference takes as a table's time column. `Schema.from_data` and the engine behind `Schema.from_source` both call its `choose_time_column`, and neither imports the other. |
 | Wire request/response, `InferenceSpec`, `OutputSpec` | `sdm-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
 | The DataFrame→wire encoder (`wire/`) | `sdm-client` | **Corrected during phase 2.** §8 first put this in `sdm-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `sdm-api` its zero-dependency property, which is why the split exists. `sdm-api` keeps the vocabulary; encoding a frame is client-side work. |
 | `Schema`, `Request`, `PredictionResult` | `sdm-client` | The public surface. |
