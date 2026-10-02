@@ -847,7 +847,6 @@ class Table(ABC):
             df,
             candidates,
             full_range=self._full_range if truncated else None,
-            keyed=self.has_primary_key(),
         )
         if time_column := self._time_column_choice.column:
             self.time_column = time_column
@@ -860,6 +859,19 @@ class Table(ABC):
         has run, or when the time column was given.
         """
         return self._time_column_choice
+
+    def _settle_time_column(self, linked: bool) -> None:
+        r"""Take or refuse a lone edit stamp by whether another table links
+        to this one, once the graph's edges say. A time column set by hand
+        since inference is left alone.
+        """
+        choice = self._time_column_choice
+        if choice is None or self._time_column != choice.column:
+            return
+        settled = choice.for_links(linked)
+        if settled != choice:
+            self._time_column_choice = settled
+            self.time_column = settled.column
 
     def _full_range(self, names: Sequence[str]) -> TableRange | None:
         r"""The row count, and ``MIN``, ``MAX`` and ``COUNT`` of each column

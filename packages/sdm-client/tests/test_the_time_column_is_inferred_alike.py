@@ -39,7 +39,7 @@ from sdm_connectors import (  # noqa: E402
     SQLiteSource,
 )
 
-from sdm_client import PredictiveQuery, Schema  # noqa: E402
+from sdm_client import PredictiveQuery, Relationship, Schema  # noqa: E402
 
 # More rows than the engine reads to describe a table, so a column constant
 # in the rows read is checked against the whole table.
@@ -71,7 +71,10 @@ CASES: dict[str, tuple[dict[str, pd.Series], str | None]] = {
         {'ModifiedDate': HOURS, 'OrderDate': HOURS},
         'OrderDate',
     ),
-    'a lone edit stamp on a keyed table': ({'updated_at': HOURS}, None),
+    'a lone edit stamp on a table nothing links to': (
+        {'updated_at': HOURS},
+        'updated_at',
+    ),
     'two edit stamps and nothing else': (
         {'updated_at': HOURS, 'last_login': LATER},
         None,
@@ -270,63 +273,65 @@ def test_a_source_infers_the_time_column_its_frames_do(
     assert said_in_place == said_in_memory
 
 
-def test_a_log_takes_its_edit_stamp_and_a_keyed_table_does_not(
-    build: Build,
+@pytest.mark.parametrize('surrogate', [False, True])
+@pytest.mark.parametrize('stamp', ['last_login', 'deleted_at'])
+def test_a_log_takes_its_edit_stamp_and_a_linked_table_does_not(
+    build: Build, stamp: str, surrogate: bool
 ) -> None:
-    """`order_status_updates` appends a row per change, keyed by nothing,
-    and its `updated_at` is when each row was written. `users` holds one
-    row per user, edited in place, and its `last_login` is no user's time.
+    """`order_status_updates` appends a row per change, and nothing links
+    to it, so its `updated_at` is when each row was written. `users` holds
+    one row per user, edited in place, and `orders` links to it, so its
+    `last_login` or `deleted_at` is no user's time.
+
+    With an `update_id`, a frame takes it as the log's key and a source
+    does not, which is why the key cannot decide this.
     """
-    last_login = pd.Series(pd.date_range('2024-01-01', periods=50, freq='D'))
+    stamps = pd.Series(pd.date_range('2024-01-01', periods=50, freq='D'))
+    log = {
+        'order_id': [i % 100 for i in range(ROWS)],
+        'updated_at': HOURS,
+    }
+    if surrogate:
+        log = {'update_id': range(ROWS), **log}
     frames = {
-        'users': pd.DataFrame({'user_id': range(50), 'last_login': last_login}),
-        'order_status_updates': pd.DataFrame(
-            {
-                'user_id': [i % 50 for i in range(ROWS)],
-                'status': ['paid', 'shipped'] * (ROWS // 2),
-                'updated_at': HOURS,
-            }
+        'users': pd.DataFrame({'user_id': range(50), stamp: stamps}),
+        'orders': pd.DataFrame(
+            {'order_id': range(100), 'user_id': [i % 50 for i in range(100)]}
         ),
+        'order_status_updates': pd.DataFrame(log),
     }
     in_memory, said_in_memory = _described(lambda: Schema.from_data(frames))
     in_place, said_in_place = _described(
         lambda: Schema.from_source(build(frames))
     )
     for schema in (in_memory, in_place):
-        assert schema['users'].primary_key == 'user_id'
         assert schema['users'].time_column is None
-        assert schema['order_status_updates'].primary_key is None
         assert schema['order_status_updates'].time_column == 'updated_at'
     assert said_in_place == said_in_memory
 
 
-def test_a_key_the_caller_names_refuses_the_edit_stamp_too(
+def test_a_link_the_caller_names_refuses_the_edit_stamp_too(
     build: Build,
 ) -> None:
-    """Inference chose before the caller's key was applied."""
+    """The links decide, and the caller's are the final ones."""
     frames = {
-        'customers': pd.DataFrame({'customer_id': range(50)}),
         'accounts': pd.DataFrame(
-            {
-                'customer_id': [i % 50 for i in range(ROWS)],
-                'handle': [f'h{i}' for i in range(ROWS)],
-                'updated_at': HOURS,
-            }
+            {'handle': [f'h{i}' for i in range(50)], 'updated_at': HOURS[:50]}
+        ),
+        'logins': pd.DataFrame(
+            {'account': [f'h{i % 50}' for i in range(ROWS)], 'at': HOURS}
         ),
     }
     keys = {'accounts': 'handle'}
-    unkeyed = _described(lambda: Schema.from_data(frames))[0]
-    assert unkeyed['accounts'].primary_key is None
-    assert unkeyed['accounts'].time_column == 'updated_at'
-    in_memory, _ = _described(
-        lambda: Schema.from_data(frames, primary_keys=keys)
-    )
-    in_place, _ = _described(
-        lambda: Schema.from_source(build(frames), primary_keys=keys)
-    )
-    for schema in (in_memory, in_place):
-        assert schema['accounts'].primary_key == 'handle'
-        assert schema['accounts'].time_column is None
+    links = [Relationship('logins', 'account', 'accounts', 'handle')]
+    source = build(frames)
+    for describe in (
+        functools.partial(Schema.from_data, frames, primary_keys=keys),
+        functools.partial(Schema.from_source, source, primary_keys=keys),
+    ):
+        assert describe()['accounts'].time_column == 'updated_at'
+        linked = _described(functools.partial(describe, relationships=links))
+        assert linked[0]['accounts'].time_column is None
 
 
 def test_a_one_row_table_keeps_its_timestamp(build: Build) -> None:
@@ -354,8 +359,8 @@ def test_every_guess_is_named_in_one_notice_with_why_and_the_override() -> None:
         "became true, name it: time_columns={'customers': 'ModifiedDate'}.\n"
         '- order_status_updates.updated_at was taken as the time column '
         'although it looks like when a row was last changed, because the '
-        'table has no primary key and no other timestamp, so it reads as a '
-        'log of changes. If it does not say when a row became true, clear '
+        'table has no other timestamp and no table links to it, so it reads '
+        'as a log of changes. If it does not say when a row became true, clear '
         "it: time_columns={'order_status_updates': None}.\n"
         '- orders.ordered was not taken as the time column because every row '
         'holds 2025-09-11 00:00:00. If it does say when a row became true, '

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from predictive_query.time_columns import RejectedTimeColumn
-from sdm_relational_engine.rfm import LocalTable
+from sdm_relational_engine.rfm import Graph, LocalTable
 from sdm_relational_engine.rfm.metadata_inference import infer_time_column
 
 duckdb = pytest.importorskip('duckdb')
@@ -179,3 +179,44 @@ def test_a_failed_check_keeps_the_column():
     assert table.time_column.name == 't_dat'
     assert table.time_column_choice is not None
     assert table.time_column_choice.rejected == ()
+
+
+def test_a_graph_refuses_an_edit_stamp_on_a_table_an_edge_points_at():
+    """`users` is an entity once `orders` links to it, and its
+    `last_login` is no user's time. A log nothing links to keeps its own.
+    """
+
+    def tables() -> list[LocalTable]:
+        return [
+            LocalTable(
+                pd.DataFrame({'user_id': range(4), 'last_login': HOURS[:4]}),
+                name='users',
+            ),
+            LocalTable(
+                pd.DataFrame({'order_id': range(8), 'user_id': [0, 1] * 4}),
+                name='orders',
+            ),
+            LocalTable(
+                pd.DataFrame({'user_id': [0, 1] * 4, 'updated_at': HOURS[:8]}),
+                name='user_updates',
+            ),
+        ]
+
+    alone = Graph(tables=tables()).infer_metadata(verbose=False)
+    assert alone['users'].time_column is not None
+    assert alone['users'].time_column.name == 'last_login'
+
+    linked = Graph(
+        tables=tables(),
+        edges=[
+            ('orders', 'user_id', 'users'),
+            ('user_updates', 'user_id', 'users'),
+        ],
+    ).infer_metadata(verbose=False)
+    assert linked['users'].time_column is None
+    assert linked['user_updates'].time_column is not None
+    assert linked['user_updates'].time_column.name == 'updated_at'
+
+    inferred = Graph(tables=tables()).infer_metadata(verbose=False)
+    inferred.infer_links(verbose=False)
+    assert inferred['users'].time_column is None
