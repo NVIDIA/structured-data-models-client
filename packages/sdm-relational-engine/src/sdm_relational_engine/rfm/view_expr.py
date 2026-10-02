@@ -290,16 +290,18 @@ _TYPE_NAMES = frozenset(
 )  # fmt: skip
 
 # Read without parentheses, these return the session's identity or clock.
+# Databricks also answers bare `user` and `current_path`, the latter even over
+# a column of that name, as checked on a DBSQL 2026.38 warehouse.
 _SESSION_VALUES = re.compile(
-    r'(?<![\w$.])'
-    r'(current_(?:catalog|database|date|role|schema|time|timestamp|user)'
-    r'|localtime|localtimestamp|session_user)\b(?!\s*\()',
+    r'(?<![\w$.\ue000])'
+    r'(current_(?:catalog|database|date|path|role|schema|time|timestamp|user)'
+    r'|localtime|localtimestamp|session_user|user)\b(?!\s*\()',
     flags=re.IGNORECASE,
 )
 
 # A private-use character stands in for quoted text, so a call to a quoted
 # name stays visible as a call.
-_QUOTED = ''
+_QUOTED = '\ue000'
 
 #: Operators written as words. They end no operand, so a keyword behind
 #: one is being called: `1 DIV escape(x)` calls `escape`.
@@ -475,12 +477,14 @@ _NEVER_BEFORE_AN_EXPRESSION = frozenset(
         'level', 'location', 'measure', 'metric', 'model', 'name', 'owner',
         'path', 'percent', 'position', 'region', 'role', 'schedule',
         'sequence', 'source', 'start', 'tag', 'tags', 'target', 'type', 'url',
-        'user', 'value', 'version',
+        'value', 'version',
     }
 )  # fmt: skip
 
 #: Words the parser may read as grammar, so a column named like one is still
-#: not a value: `WHERE from(y)` calls `from` whatever the table holds.
+#: not a value: `WHERE from(y)` calls `from` whatever the table holds. `zone`
+#: stays too, out of caution: neither warehouse parses standard SQL's `AT TIME
+#: ZONE <expr>` today, but Databricks keeps `zone` as a keyword.
 _GRAMMAR_WORDS = (
     _DATABRICKS_KEYWORDS
     | _SNOWFLAKE_RESERVED
@@ -492,7 +496,7 @@ _GRAMMAR_WORDS = (
 
 # What may stand right before a `(` that opens a group rather than a call.
 _OPENS_A_GROUP = frozenset('+-*/%=<>!|&^~,([?:')
-_LAST_TOKEN = re.compile(r'([\w$]+)\s*$')
+_LAST_TOKEN = re.compile(r'([\w$\ue000]+)\s*$')
 _QUALIFIED = re.compile(r'\.\s*$')
 _AFTER_DOUBLE_COLON = re.compile(r'::\s*$')
 _AFTER_AS = re.compile(r'(?<![\w$])as\s*$', flags=re.IGNORECASE)
@@ -504,7 +508,7 @@ _DATETIME_FIELD = re.compile(
 _LAMBDA_PARAMETERS = re.compile(
     r'(?:\(\s*([\w$]+(?:\s*,\s*[\w$]+)*)\s*\)|([\w$]+))\s*->'
 )
-_WORD_OR_BRACKET = re.compile(r'[\w$]+|[()\[\]]')
+_WORD_OR_BRACKET = re.compile(r'[\w$\ue000]+|[()\[\]]')
 _WHEN = re.compile(r'\s*when\b', flags=re.IGNORECASE)
 
 

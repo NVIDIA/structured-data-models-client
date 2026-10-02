@@ -434,7 +434,9 @@ It also refuses parentheses that do not balance outside quoted text, since a str
 Some allowed built-ins are costly or read the session time zone; `docs/about/architecture.md` lists them.
 A keyword before `(`, as in `x IN (1)`, counts as grammar only after something known to be a value: a literal, a closing bracket, quoted text, a qualified name, or a column of the table the expression runs on.
 Databricks lets almost every keyword name a function, so `WHERE from(y)` or `CASE WHEN then(x)` calls one, and a word the check cannot place now leaves the column out instead.
-A column named like a keyword that takes an expression next, such as `where` or `zone`, is never taken for a value; one named `region`, `date` or `year` still is.
+A column named like a keyword that takes an expression next, such as `where` or `then`, is never taken for a value; one named `region`, `date` or `year` still is.
+`zone` is treated the same way out of caution: no warehouse parses `AT TIME ZONE` today, but Databricks keeps the word as a keyword.
+Bare `user` and `current_path` are left out like `current_user`, since Databricks answers both with the session's identity and search path.
 Each table's columns are read before its expressions are checked, and the metric view's `filter` is checked against the source table's columns before any row is read.
 
 **A metric view's `filter` is applied, or the view is refused.**

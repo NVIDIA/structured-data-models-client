@@ -419,7 +419,8 @@ def test_a_keyword_after_a_word_that_is_no_value_is_a_call(
     dialect: str, context: str, word: str
 ) -> None:
     r"""On Databricks each of these words names a routine where an operand
-    belongs, as after WHERE, REGEXP_LIKE or ZONE.
+    belongs, as after WHERE. Neither REGEXP_LIKE nor ZONE is a value, so the
+    word after one is refused too.
     """
     assert _refused(context.replace('{K}', word), dialect) is not None
 
@@ -620,8 +621,10 @@ def test_a_word_bound_nowhere_is_no_value(dialect: str, expr: str) -> None:
 
 
 def test_the_grammar_words_keep_zone() -> None:
-    r"""`AT TIME ZONE` and `FILTER (WHERE` take an expression next, so a
-    column named `zone` or `where` is never a value.
+    r"""`FILTER (WHERE` takes an expression next, so a column named `where`
+    is never a value. `zone` stays grammar out of caution: no warehouse
+    parses `AT TIME ZONE <expr>` today, so `zone in(1)` on a column `zone`
+    runs as an IN test on Databricks, but the word is still a keyword there.
     """
     assert {'zone', 'where', 'then', 'end', 'by', 'when'} <= _GRAMMAR_WORDS
     assert len(_DATABRICKS_KEYWORDS) == 644
@@ -630,3 +633,61 @@ def test_the_grammar_words_keep_zone() -> None:
     assert _NEVER_BEFORE_AN_EXPRESSION <= (
         _DATABRICKS_KEYWORDS | _SNOWFLAKE_RESERVED | {'number', 'text'}
     )
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize('column', ['value', 'key', 'id', 'day', 'format'])
+def test_a_column_named_like_a_curated_keyword_opens_a_group(
+    dialect: str, column: str
+) -> None:
+    expr = f'{column} IN (1) AND {column} NOT LIKE (y)'
+    assert _untrusted_call_reason(expr, dialect, columns=(column, 'y')) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    ['`where` IN (1)', '"WHERE" IN (1)', 'CAST(upper(x) AS decimal(10,2))'],
+)
+def test_a_quoted_name_or_a_cast_of_a_call_opens_a_group(
+    dialect: str, expr: str
+) -> None:
+    r"""A quoted name is a value whatever it spells, and the type after the
+    AS of a cast takes its parameters even when the cast wraps a call.
+    """
+    assert _call(expr, dialect) is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    ('expr', 'value'),
+    [
+        ('user', 'user'),
+        ('CONCAT(x, USER)', 'USER'),
+        ('upper(current_path)', 'current_path'),
+        ('session_user', 'session_user'),
+        ('current_timestamp', 'current_timestamp'),
+    ],
+)
+def test_a_bare_session_value_is_refused(
+    dialect: str, expr: str, value: str
+) -> None:
+    r"""Databricks answers bare `user` with the session user, and bare
+    `current_path` with the search path even over a column of that name.
+    """
+    refused = _untrusted_call_reason(expr, dialect, columns=('user', 'x'))
+    assert refused is not None
+    assert f"session value '{value}'" in refused
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr', ["'x'current_date", '`x`user', 't.user', 'user_id', 'users']
+)
+def test_a_name_that_is_no_session_value_is_accepted(
+    dialect: str, expr: str
+) -> None:
+    r"""Databricks reads `'x'current_date` as `'x' AS current_date`, and a
+    qualified or longer name is a column.
+    """
+    assert _call(expr, dialect) is None
