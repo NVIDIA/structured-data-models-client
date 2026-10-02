@@ -918,7 +918,8 @@ def test_a_table_with_several_timestamps_is_told_which_was_taken():
         'a column holds:\n'
         '- orders.shipped was taken as the time column because its values '
         "start earliest of 'shipped' and 'delivered'. If another says when a "
-        "row became true, name it: time_columns={'orders': 'delivered'}."
+        "row became true, name it: time_columns={'orders': 'delivered'}. If "
+        "none does, clear it: time_columns={'orders': None}."
     ]
 
 

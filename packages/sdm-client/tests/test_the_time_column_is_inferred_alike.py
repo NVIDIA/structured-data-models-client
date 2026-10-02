@@ -15,7 +15,10 @@ disagreed or where the rule decides something new.
 
 from __future__ import annotations
 
+import ast
+import functools
 import os
+import re
 import uuid
 import warnings
 from collections.abc import Callable, Iterator
@@ -344,16 +347,60 @@ def test_every_guess_is_named_in_one_notice_with_why_and_the_override() -> None:
         '- order_status_updates.updated_at was taken as the time column '
         'although it looks like when a row was last changed, because the '
         'table has no primary key and no other timestamp, so it reads as a '
-        'log of changes. If it does say when a row became true, name it: '
-        "time_columns={'order_status_updates': 'updated_at'}.\n"
+        'log of changes. If it does not say when a row became true, clear '
+        "it: time_columns={'order_status_updates': None}.\n"
         '- orders.ordered was not taken as the time column because every row '
         'holds 2025-09-11 00:00:00. If it does say when a row became true, '
         "name it: time_columns={'orders': 'ordered'}.\n"
         '- shipments.packed_at was taken as the time column because its '
         "values start earliest of 'shipped_at' and 'packed_at'. If another "
         'says when a row became true, name it: '
-        "time_columns={'shipments': 'shipped_at'}."
+        "time_columns={'shipments': 'shipped_at'}. If none does, clear it: "
+        "time_columns={'shipments': None}."
     ]
+
+
+def _suggested(notice: str) -> list[dict[str, str | None]]:
+    return [
+        ast.literal_eval(found)
+        for found in re.findall(r'time_columns=(\{[^}]*\})', notice)
+    ]
+
+
+def test_every_override_a_notice_suggests_does_what_it_says(
+    build: Build,
+) -> None:
+    """Each remedy is applied, on both paths, and the table it names ends
+    with the time column it says and leaves the notice."""
+    frames = _frames({'ordered': ONE_DAY})
+    frames['order_status_updates'] = pd.DataFrame(
+        {'order_id': [i % 100 for i in range(ROWS)], 'updated_at': HOURS}
+    )
+    frames['shipments'] = pd.DataFrame(
+        {'order_id': range(ROWS), 'shipped_at': LATER, 'packed_at': HOURS}
+    )
+    _, said = _described(lambda: Schema.from_data(frames))
+    suggested = _suggested(said[0])
+    assert len(suggested) == 5
+    assert {'order_status_updates': None} in suggested
+    assert {'shipments': None} in suggested
+    source = build(frames)
+    for override in suggested:
+        [(table, column)] = override.items()
+        for schema, notices in (
+            _described(
+                functools.partial(
+                    Schema.from_data, frames, time_columns=override
+                )
+            ),
+            _described(
+                functools.partial(
+                    Schema.from_source, source, time_columns=override
+                )
+            ),
+        ):
+            assert schema[table].time_column == column
+            assert not any(f'- {table}.' in notice for notice in notices)
 
 
 def test_a_table_given_its_time_column_is_not_told_about_the_others() -> None:
