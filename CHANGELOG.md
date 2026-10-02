@@ -121,6 +121,12 @@ declare as `1.0.0` and none has published. The heading becomes
 
 ### Fixed
 
+- **A metric view dimension keeps its string literals.** Resolving a
+  dimension rewrote text inside a literal as if it were SQL: `'source.web'`
+  lost its `source.`, `'customers.x'` moved a source dimension to the
+  `customers` join or dropped it as referencing two tables, and a literal
+  equal to another dimension's name was replaced by that dimension's
+  expression. Literals are now left as written.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the

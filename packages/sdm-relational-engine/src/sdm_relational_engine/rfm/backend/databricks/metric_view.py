@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NoReturn
 
@@ -202,18 +202,40 @@ def _field_pattern(name: str) -> re.Pattern[str]:
     )
 
 
+def _sub_outside_strings(
+    pattern: re.Pattern[str],
+    repl: str | Callable[[re.Match[str]], str],
+    expr: str,
+) -> str:
+    r"""``pattern.sub(repl, expr)`` with every string literal left as is.
+
+    A literal holding `source.` or a field's name is data, and rewriting it
+    changes the values the view declares.
+    """
+    out: list[str] = []
+    last = 0
+    for match in _STRING_LITERAL_RE.finditer(expr):
+        out.append(pattern.sub(repl, expr[last : match.start()]))
+        out.append(match.group())
+        last = match.end()
+    out.append(pattern.sub(repl, expr[last:]))
+    return ''.join(out)
+
+
 def references_alias(expr: str, alias: str | Sequence[str]) -> bool:
     r"""Returns ``True`` if the expression references a column of the given
-    table alias or join path.
+    table alias or join path outside its string literals.
     """
-    return _path_pattern(_to_path(alias)).search(expr) is not None
+    masked = _STRING_LITERAL_RE.sub("''", expr)
+    return _path_pattern(_to_path(alias)).search(masked) is not None
 
 
 def strip_alias_qualifier(expr: str, alias: str | Sequence[str]) -> str:
     r"""Removes all qualified references to the given table alias or join
-    path from the expression.
+    path from the expression, leaving its string literals as they are.
     """
-    return _path_pattern(_to_path(alias)).sub('', expr).strip()
+    pattern = _path_pattern(_to_path(alias))
+    return _sub_outside_strings(pattern, '', expr).strip()
 
 
 def parse_metric_view(definition: str) -> MetricViewSpec:
@@ -384,8 +406,10 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
             continue
 
         for field_name, field_expr in defined.items():
-            expr = _field_pattern(field_name).sub(
-                lambda match: f'({field_expr})', expr
+            expr = _sub_outside_strings(
+                _field_pattern(field_name),
+                lambda match: f'({field_expr})',
+                expr,
             )
         defined[name] = expr
 

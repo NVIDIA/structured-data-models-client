@@ -1946,3 +1946,38 @@ def test_a_trusted_metric_view_keeps_a_filter_calling_a_udf(
             connection=_FakeConnection(_keyword_view(row_filter)),
             verbose=False,
         )
+
+
+def test_a_string_literal_is_data_to_a_dimension() -> None:
+    r"""A literal holding `source.`, a join's name or a field's name is data,
+    so it neither moves the dimension to a join nor gets rewritten.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.orders
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+dimensions:
+  - name: gold
+    expr: customers.segment = 'gold'
+  - name: tag
+    expr: CONCAT('source.', source.channel, "customers.x", 'gold')
+  - name: label
+    expr: CASE WHEN gold THEN 'gold' END
+""")
+
+    assert spec.messages == []
+    assert [(c.name, c.alias, c.expr) for c in spec.columns] == [
+        ('gold', 'customers', "segment = 'gold'"),
+        (
+            'tag',
+            'source',
+            "CONCAT('source.', channel, \"customers.x\", 'gold')",
+        ),
+        ('label', 'customers', "CASE WHEN (segment = 'gold') THEN 'gold' END"),
+    ]
+    assert not references_alias("'customers.x'", 'customers')
+    assert strip_alias_qualifier("source.a || 'source.b'", 'source') == (
+        "a || 'source.b'"
+    )
