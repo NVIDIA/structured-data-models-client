@@ -5,10 +5,10 @@
 r"""How sdm-client names itself to Databricks.
 
 Databricks requires a partner product to identify every connection, SDK call
-and API request it sends, by a ``<partner>_<product>/<version>`` entry. Here
-rather than in sdm-client so the connectors can send it too, and imported by
-sdm-client's serving transport so there is one identifier. The five
-distributions release on one version, so this package's is sdm-client's.
+and API request it sends, by a ``<partner>_<product>/<version>`` entry. A
+private copy of sdm-client's, since the connectors never import the client;
+a test holds the two to the same identifier. The five distributions release
+on one version, so this package's is sdm-client's.
 """
 
 from __future__ import annotations

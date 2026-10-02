@@ -69,9 +69,7 @@ declare as `1.0.0` and none has published. The heading becomes
   A connection or Spark session you open yourself and pass to a source is used
   as it is, with neither.
   `sdm-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,
-  the first release whose SEA route sends a session's query tags, and
-  `sdm-client[databricks-serving]` brings `sdm-connectors`, which holds the
-  identifier.
+  the first release whose SEA route sends a session's query tags.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
   prediction needs are read. `DatabricksSource` takes a SQL warehouse or a

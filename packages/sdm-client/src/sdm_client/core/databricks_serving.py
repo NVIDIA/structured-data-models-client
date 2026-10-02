@@ -24,6 +24,7 @@ import threading
 from collections.abc import Mapping
 from typing import Any
 
+from sdm_client.core.databricks_user_agent import sdm_client_user_agent
 from sdm_client.core.transport import (
     _check_encodable,
     _diagnosis_in,
@@ -146,11 +147,13 @@ class DatabricksServingTransport:
         self._max_request_bytes = max_request_bytes
         self._closed = False
         _keep_rows_out_of_the_sdk_log()
+        user_agent = sdm_client_user_agent()
         self._workspace = (
-            _named_copy(workspace_client, timeout)
+            _named_copy(workspace_client, user_agent, timeout)
             if workspace_client is not None
             else _ambient_workspace(
-                float(DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout)
+                float(DEFAULT_TIMEOUT_SECONDS if timeout is None else timeout),
+                user_agent,
             )
         )
 
@@ -516,7 +519,9 @@ def _error_code_of(error: BaseException) -> str | None:
     return None
 
 
-def _named_copy(workspace_client: Any, timeout: float | None) -> Any:
+def _named_copy(
+    workspace_client: Any, user_agent: tuple[str, str], timeout: float | None
+) -> Any:
     r"""A client like ``workspace_client`` whose requests name this SDK, and
     are bounded by ``timeout`` when one is given.
 
@@ -554,9 +559,7 @@ def _named_copy(workspace_client: Any, timeout: float | None) -> Any:
         config.retry_timeout_seconds = math.ceil(timeout)
     # Before the client is built: its ApiClient reads both timeouts and the
     # User-Agent once, then.
-    return WorkspaceClient(
-        config=config.with_user_agent_extra(*_partner_user_agent())
-    )
+    return WorkspaceClient(config=config.with_user_agent_extra(*user_agent))
 
 
 def _as_given(workspace_client: Any, timeout: float | None) -> Any:
@@ -579,7 +582,7 @@ def _as_given(workspace_client: Any, timeout: float | None) -> Any:
     return workspace_client
 
 
-def _ambient_workspace(timeout: float) -> Any:
+def _ambient_workspace(timeout: float, user_agent: tuple[str, str]) -> Any:
     try:
         from databricks.sdk import WorkspaceClient
         from databricks.sdk.core import Config
@@ -587,7 +590,6 @@ def _ambient_workspace(timeout: float) -> Any:
         raise MissingExtraError(
             'databricks-serving', 'databricks-sdk'
         ) from None
-    user_agent = _partner_user_agent()
     try:
         # The SDK retries for its own retry_timeout_seconds whatever one
         # attempt's timeout, so both are bounded by the caller's.
@@ -605,15 +607,3 @@ def _ambient_workspace(timeout: float) -> Any:
             f'workspace_client=',
             code='INVALID_CONFIGURATION',
         ) from None
-
-
-def _partner_user_agent() -> tuple[str, str]:
-    r"""The entry naming sdm-client, shared with the connectors so every
-    Databricks request sdm-client sends carries the same one."""
-    try:
-        from sdm_connectors._databricks_partner import partner_user_agent
-    except ImportError:
-        raise MissingExtraError(
-            'databricks-serving', 'sdm-connectors'
-        ) from None
-    return partner_user_agent()

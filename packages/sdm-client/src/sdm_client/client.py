@@ -317,8 +317,8 @@ class SDMClient:
                 double, which cannot be copied, it is refused.
 
         Raises:
-            MissingExtraError: If ``databricks-sdk`` or ``sdm-connectors`` is
-                not installed; install ``sdm-client[databricks-serving]``.
+            MissingExtraError: If ``databricks-sdk`` is not installed; install
+                ``sdm-client[databricks-serving]``.
             StructuredDataError: With code ``INVALID_CONFIGURATION``, if
                 ``endpoint`` is not a name, ``timeout`` is not a positive
                 number of seconds or is passed with a ``workspace_client``
