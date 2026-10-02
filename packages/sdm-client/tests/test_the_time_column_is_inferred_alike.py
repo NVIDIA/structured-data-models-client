@@ -53,6 +53,7 @@ EARLIEST_PAST_THE_ROWS_READ = pd.Series(
     list(HOURS[:1_000] + pd.Timedelta(days=2))
     + list(pd.date_range('2020-01-01', periods=ROWS - 1_000, freq='D'))
 )
+BIRTHS = pd.Series(pd.date_range('1960-01-01', periods=ROWS, freq='W'))
 
 CASES: dict[str, tuple[dict[str, pd.Series], str | None]] = {
     'an order date beside an edit stamp': (
@@ -94,6 +95,11 @@ CASES: dict[str, tuple[dict[str, pd.Series], str | None]] = {
         {'ordered_at': HOURS, 'shipped_at': EARLIEST_PAST_THE_ROWS_READ},
         'shipped_at',
     ),
+    'a hire date beside a birth date': (
+        {'BirthDate': BIRTHS, 'HireDate': HOURS},
+        'HireDate',
+    ),
+    'a lone date of birth': ({'dob': BIRTHS}, None),
 }
 
 

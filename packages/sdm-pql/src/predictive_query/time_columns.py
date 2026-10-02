@@ -8,6 +8,7 @@ A time column says when a row became true, and a query counts or windows rows
 by it. Some timestamps say nothing of the sort, and are never taken: one that
 holds a single value in every row, or none, and one whose name says when a row
 was loaded or synced, such as `_fivetran_synced`.
+Nor is a date of birth.
 A stamp of the last edit, such as `ModifiedDate` or `updated_at`, is taken
 only when it is a table's one timestamp left, since in an append-only log of
 changes it is when the row began. Of several left, a `created` stamp is taken,
@@ -54,6 +55,9 @@ EDIT_STAMP_TOKENS = frozenset(
     {'last', 'edit', 'edited', 'changed', 'deleted', 'deletion'}
 )
 
+#: Name tokens that mark a date of birth.
+BIRTH_DATE_TOKENS = frozenset({'birth', 'birthday', 'birthdate', 'dob', 'born'})
+
 #: Name tokens that mark a column recording when a row was created.
 CREATION_TOKENS = frozenset({'create', 'created', 'creation'})
 
@@ -73,6 +77,7 @@ _JOINED_LOAD_PREFIXES: Mapping[str, tuple[str, ...]] = {
 _JOINED_EDIT_PREFIXES: Mapping[str, tuple[str, ...]] = {
     'last': ('ing', 'ly'),
 }
+_JOINED_BIRTH_PREFIXES: Mapping[str, tuple[str, ...]] = {'dob': (), 'born': ()}
 
 # An acronym run, a capitalised or lower word, or digits: `ETLLoadedAt` reads
 # as ETL, Loaded, At, and `LASTMODIFIEDDATE` as one token.
@@ -125,6 +130,16 @@ def is_edit_stamp(name: str) -> bool:
     return _reads_as(name, EDIT_STAMP_TOKENS, _JOINED_EDIT_PREFIXES)
 
 
+def is_birth_date(name: str) -> bool:
+    r"""Whether ``name`` reads as a date of birth, which says when someone
+    was born and not when a row became true.
+    """
+    # A name folded into one word, such as `DATEOFBIRTH`, by its letters.
+    if _is_joined(name) and 'birth' in name.lower():
+        return True
+    return _reads_as(name, BIRTH_DATE_TOKENS, _JOINED_BIRTH_PREFIXES)
+
+
 def is_creation_stamp(name: str) -> bool:
     r"""Whether ``name`` reads as when a row was created."""
     # The prefix keeps an all caps `CREATEDDATE`, which splits into one token.
@@ -143,12 +158,13 @@ class RejectedTimeColumn:
             the same value, or none.
             ``'load_stamp'`` when its name says when a row was loaded.
             ``'edit_stamp'`` when it says when a row was last changed.
+            ``'birth_date'`` when it says when someone was born.
         value: The one value every row holds, or ``None`` when no row holds
             one or the reason is the name.
     """
 
     column: str
-    reason: Literal['constant', 'load_stamp', 'edit_stamp']
+    reason: Literal['constant', 'load_stamp', 'edit_stamp', 'birth_date']
     value: object = None
 
     @property
@@ -160,6 +176,8 @@ class RejectedTimeColumn:
             )
         if self.reason == 'load_stamp':
             return 'it looks like when a row was loaded, not when it began'
+        if self.reason == 'birth_date':
+            return 'it looks like a date of birth, not when a row began'
         if self.value is None:
             return 'no row holds a value'
         return f'every row holds {_as_timestamp(self.value)}'
@@ -203,6 +221,7 @@ def choose_time_column(
 
     A column holding one value in every row, or none, is
     refused, as is one named as a load stamp.
+    So is one named as a date of birth.
     Of those left, a stamp of the last edit is taken only when it is the one
     column left. Otherwise a creation stamp is preferred, and of several the
     one whose values start earliest is taken, the first in table order on a
@@ -226,6 +245,8 @@ def choose_time_column(
     for name in candidates:
         if is_load_stamp(name):
             rejected[name] = RejectedTimeColumn(name, 'load_stamp')
+        elif is_birth_date(name):
+            rejected[name] = RejectedTimeColumn(name, 'birth_date')
         elif (held := _constant(frame[name], name, whole)) is not _VARIES:
             rejected[name] = RejectedTimeColumn(name, 'constant', held)
         elif is_edit_stamp(name):

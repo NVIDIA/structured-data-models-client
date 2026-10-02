@@ -19,6 +19,7 @@ import pytest
 from predictive_query.time_columns import (
     RejectedTimeColumn,
     choose_time_column,
+    is_birth_date,
     is_edit_stamp,
     is_load_stamp,
 )
@@ -83,6 +84,25 @@ def test_a_stamp_of_the_last_change_is_read_as_one(name):
 @pytest.mark.parametrize(
     'name',
     [
+        'BirthDate',
+        'birth_date',
+        'BIRTHDATE',
+        'birthday',
+        'date_of_birth',
+        'DATEOFBIRTH',
+        'dob',
+        'DOB',
+        'born_at',
+        'BORNAT',
+    ],
+)
+def test_a_date_of_birth_is_read_as_one(name):
+    assert is_birth_date(name)
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
         'created_at',
         'CreationDate',
         'OrderDate',
@@ -101,6 +121,7 @@ def test_a_stamp_of_the_last_change_is_read_as_one(name):
 def test_a_stamp_of_when_a_row_began_is_kept(name):
     assert not is_edit_stamp(name)
     assert not is_load_stamp(name)
+    assert not is_birth_date(name)
 
 
 def test_a_load_stamp_is_never_taken():
@@ -111,6 +132,19 @@ def test_a_load_stamp_is_never_taken():
     )
     assert choice.rejected[0].why == (
         'it looks like when a row was loaded, not when it began'
+    )
+
+
+def test_a_date_of_birth_is_never_taken():
+    """Northwind's `Employees` holds `BirthDate` and `HireDate`, and the
+    earliest values are the birth dates."""
+    choice = _choose(BirthDate=DAYS, HireDate=LATER)
+    assert choice.column == 'HireDate'
+    assert choice.how == 'only'
+    alone = _choose(dob=DAYS)
+    assert alone.column is None
+    assert alone.rejected[0].why == (
+        'it looks like a date of birth, not when a row began'
     )
 
 
