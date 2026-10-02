@@ -58,8 +58,9 @@ def test_local_graph_store() -> None:
     graph = Graph.from_data(df_dict, verbose=False)
     assert graph['USERS'].primary_key is not None
     assert graph['USERS'].primary_key.name == 'USER_ID'
-    assert graph['USERS'].time_column is not None
-    assert graph['USERS'].time_column.name == 'TIME'
+    # Every user holds one date, which orders nothing, so it is not inferred.
+    assert graph['USERS'].time_column is None
+    graph['USERS'].time_column = 'TIME'
     assert graph['ORDERS'].primary_key is not None
     assert graph['ORDERS'].primary_key.name == 'ORDER_ID'
     assert graph['ORDERS'].time_column is not None
@@ -238,6 +239,8 @@ def test_sanitization_reason_precedence_and_reference_count() -> None:
         },
         verbose=False,
     )
+    # One date orders nothing, so it is named rather than inferred.
+    graph['USERS'].time_column = 'TIME'
     store = LocalGraphStore(graph, verbose=False)
     report = store.sanitization_report.tables['USERS']
 

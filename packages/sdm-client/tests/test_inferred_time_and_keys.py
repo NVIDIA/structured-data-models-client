@@ -268,7 +268,9 @@ def test_a_column_of_more_than_one_date_format_is_not_reported():
 def test_a_table_that_found_its_time_column_is_not_told_about_text():
     frame = pd.DataFrame(
         {
-            'when': pd.to_datetime(['2021-01-01'] * 4),
+            'when': pd.to_datetime(
+                ['2021-01-01', '2021-01-02', '2021-01-03', '2021-01-04']
+            ),
             'other': ['2021-01-01'] * 4,
             'v': [1.0] * 4,
         }

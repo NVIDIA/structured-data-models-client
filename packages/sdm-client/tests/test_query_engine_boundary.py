@@ -888,7 +888,7 @@ def two_timestamps() -> pd.DataFrame:
         {
             'oid': range(80),
             'uid': [i % 20 for i in range(80)],
-            'created': pd.date_range('2020-01-01', periods=80, freq='D'),
+            'shipped': pd.date_range('2020-01-01', periods=80, freq='D'),
             'delivered': pd.date_range('2020-02-01', periods=80, freq='D'),
         }
     )
@@ -916,13 +916,33 @@ def test_a_table_with_several_timestamps_is_told_it_was_given_none():
 
 
 def test_the_column_the_remedy_shows_is_shown_as_an_example():
-    """It is the first alphabetically, and reading it as the choice this made
+    """It is the first in the table, and reading it as the choice this made
     would be reading a decision that was deliberately not taken."""
     said = timestamp_warnings(
         {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
         primary_keys={'orders': 'oid', 'users': 'uid'},
     )
-    assert 'only the first of them alphabetically' in said[0]
+    assert "time_columns={'orders': 'shipped'}" in said[0]
+    assert 'only the first of them in the table' in said[0]
+
+
+def test_the_remedy_never_shows_a_column_that_cannot_be_the_time_column():
+    """An empty column sorted first, as `DiscontinuedDate` does in
+    AdventureWorks, and the remedy proposed it."""
+    orders = two_timestamps().assign(
+        DiscontinuedDate=pd.Series(pd.NaT, index=range(80))
+    )
+    said = timestamp_warnings(
+        {'orders': orders, 'users': pd.DataFrame({'uid': range(20)})},
+        primary_keys={'orders': 'oid', 'users': 'uid'},
+    )
+    assert said == [
+        "'orders' has more than one column that could be its time column, "
+        "'shipped' and 'delivered', so it was given none, and a query over a "
+        'window of it is refused. Name the one that says when a row became '
+        "true: time_columns={'orders': 'shipped'} names 'shipped', which is "
+        'only the first of them in the table.'
+    ]
 
 
 def test_a_lone_table_is_not_told_a_window_over_it_is_refused():

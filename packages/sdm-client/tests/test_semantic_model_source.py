@@ -102,6 +102,9 @@ _EXPRESSIONS = {
     'products': {},
 }
 
+# What a MIN/MAX over a whole table answers, where it is not the rows read.
+_RANGES: dict[str, tuple[Any, Any]] = {}
+
 _DESCRIBE = [
     ('line_id', 'int', None),
     ('ordered_at', 'timestamp', None),
@@ -167,6 +170,11 @@ class _Cursor:
             self._rows = [(len(_DATA[name]),)]
             return
         frame = _DATA[name]
+        if sql.startswith('SELECT MIN('):
+            column = re.findall(r'`((?:[^`]|``)+)`', sql)[0]
+            whole = (frame[column].min(), frame[column].max())
+            self._rows = [_RANGES.get(column, whole)]
+            return
         projection = sql.split(' FROM ')[0]
         if ' AS `' in projection:
             columns = re.findall(r'AS `((?:[^`]|``)+)`', projection)
@@ -378,3 +386,59 @@ def test_trusting_the_model_reaches_both_reads(
 
     assert str(graph['order_lines']['tagged'].expr) == 'tag(line_id)'
     assert udf_view == [True, True]
+
+
+# --- a model's time column is checked as a table's is -----------------------
+
+
+@pytest.fixture
+def one_order_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    r"""Every order line read holds one date."""
+    lines = _DATA['order_lines'].assign(ordered_at=pd.Timestamp('2024-01-01'))
+    monkeypatch.setitem(_DATA, 'order_lines', lines)
+
+
+def _time_warnings(source: Any) -> tuple[Schema, list[str]]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+    said = [
+        str(item.message)
+        for item in caught
+        if 'was not taken as the time column' in str(item.message)
+    ]
+    return schema, said
+
+
+def test_a_model_s_constant_time_column_is_refused_and_named(
+    source: Any, one_order_date: None
+) -> None:
+    schema, said = _time_warnings(source)
+
+    assert schema['order_lines'].time_column is None
+    assert said == [
+        'order_lines.ordered_at was not taken as the time column because '
+        'every row holds 2024-01-01 00:00:00. If it does say when a row '
+        "became true, name it: time_columns={'order_lines': 'ordered_at'}."
+    ]
+
+
+def test_a_model_s_column_constant_only_in_the_rows_read_is_kept(
+    source: Any, one_order_date: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sdm_relational_engine.rfm.backend.databricks import DatabricksTable
+
+    # The rows read are capped at what the fake holds, so they may not be
+    # the whole table.
+    rows = len(_DATA['order_lines'])
+    monkeypatch.setattr(DatabricksTable, '_NUM_SAMPLE_ROWS', rows)
+    monkeypatch.setitem(
+        _RANGES,
+        'ordered_at',
+        (pd.Timestamp('2024-01-01'), pd.Timestamp('2024-06-01')),
+    )
+
+    schema, said = _time_warnings(source)
+
+    assert schema['order_lines'].time_column == 'ordered_at'
+    assert said == []

@@ -88,8 +88,8 @@ def test_no_time_column(sample_df: pd.DataFrame) -> None:
 def test_time_column() -> None:
     sample_df = pd.DataFrame(
         {
-            'TIME': ['1990-01-01'],
-            'CREATE': ['1991-01-01'],
+            'TIME': ['1990-01-01', '1990-02-01'],
+            'CREATE': ['1991-01-01', '1991-02-01'],
         }
     )
     table = LocalTable(sample_df, name='users').infer_metadata()
@@ -107,8 +107,8 @@ def test_no_end_time_column(sample_df: pd.DataFrame) -> None:
 def test_end_time_column() -> None:
     sample_df = pd.DataFrame(
         {
-            'CREATE': ['1991-01-01'],
-            'END': ['1992-01-01'],
+            'CREATE': ['1991-01-01', '1991-02-01'],
+            'END': ['1992-01-01', '1992-02-01'],
         }
     )
     table = LocalTable(sample_df, name='users').infer_metadata()

@@ -15,6 +15,7 @@ from predictive_query.schema.common import StrEnum
 from predictive_query.schema.table import Column as ColumnDefinition
 from predictive_query.schema.table import TableDefinition
 from predictive_query.schema.typing import Dtype, Stype
+from predictive_query.time_columns import RejectedTimeColumn
 from sdm_connectors import quote_ident
 from typing_extensions import Self
 
@@ -33,7 +34,9 @@ from sdm_relational_engine.rfm.metadata_inference import (
     infer_dtype,
     infer_primary_key,
     infer_stype,
-    infer_time_column,
+)
+from sdm_relational_engine.rfm.metadata_inference.time_col import (
+    choose_time_column,
 )
 from sdm_relational_engine.utils.environment import in_tmux
 
@@ -96,6 +99,7 @@ class Table(ABC):
         self._end_time_column: str | None = None
         self._declined_primary_keys: tuple[str, ...] = ()
         self._declined_primary_key_rows: int | None = None
+        self._time_column_rejections: tuple[RejectedTimeColumn, ...] = ()
         self._expr_sample_df = pd.DataFrame(index=range(self._NUM_SAMPLE_ROWS))
 
         if columns is None:
@@ -821,12 +825,7 @@ class Table(ABC):
             and column.name != self._end_time_column
         ]
 
-        if time_column := infer_time_column(
-            df=self._get_sample_df(),
-            candidates=candidates,
-        ):
-            self.time_column = time_column
-
+        if time_column := self._infer_time_column_among(candidates):
             if verbose:
                 display.message(
                     f'Inferred time column `{time_column}` for '
@@ -834,6 +833,50 @@ class Table(ABC):
                 )
 
         return self
+
+    def _infer_time_column_among(self, candidates: list[str]) -> str | None:
+        r"""Set the time column inferred among ``candidates``, keeping what
+        was refused and why, and return it.
+        """
+        df = self._get_sample_df()
+        # Only a capped read can hide a second value past its last row.
+        truncated = len(df) == self._NUM_SAMPLE_ROWS
+        time_column, self._time_column_rejections = choose_time_column(
+            df=df,
+            candidates=candidates,
+            full_range=self._full_range if truncated else None,
+        )
+        if time_column:
+            self.time_column = time_column
+        return time_column
+
+    @property
+    def time_column_rejections(self) -> tuple[RejectedTimeColumn, ...]:
+        r"""The timestamp columns :meth:`infer_time_column` refused, each
+        with the reason, so a caller can say why a table has no time column.
+        """
+        return self._time_column_rejections
+
+    def _full_range(self, name: str) -> tuple[object, object] | None:
+        r"""``MIN`` and ``MAX`` of column ``name`` over every row, or
+        ``None`` when this table cannot ask its source.
+        """
+        held = self[name]
+        if held.is_source:
+            column = self._quote_key_column(name)
+        else:
+            # A metric view's dimension is an expression, read as the
+            # sample reads it.
+            column = f'({held.expr})'
+        try:
+            rows = self._fetch_rows(
+                f'SELECT MIN({column}), MAX({column})\n'
+                f'FROM {self._quoted_source_name}'
+            )
+        except Exception:
+            # Only evidence rejects a column, and a failed query is none.
+            return None
+        return rows[0][0], rows[0][1]
 
     def infer_metadata(self, verbose: bool = True) -> Self:
         r"""Infers metadata, *i.e.*, primary keys and time columns, in this

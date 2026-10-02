@@ -75,8 +75,13 @@ def test_the_single_timestamp_column_becomes_the_time_column():
 
 
 def test_two_timestamp_columns_are_ambiguous_so_neither_is_chosen():
-    frame = users().assign(last_seen=lambda f: f['joined'])
+    frame = users().assign(left=lambda f: f['joined'] + pd.Timedelta(days=1))
     assert Schema.from_data({'users': frame})['users'].time_column is None
+
+
+def test_a_last_seen_stamp_is_not_a_rival_for_the_time_column():
+    frame = users().assign(last_seen=lambda f: f['joined'])
+    assert Schema.from_data({'users': frame})['users'].time_column == 'joined'
 
 
 def test_a_foreign_key_is_linked_to_the_table_whose_key_it_names():

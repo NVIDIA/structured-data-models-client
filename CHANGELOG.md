@@ -121,6 +121,21 @@ declare as `1.0.0` and none has published. The heading becomes
 
 ### Fixed
 
+- **A schema may infer a different time column than before.** `from_data`
+  and `from_source` now apply one rule, kept in `predictive_query.time_columns`.
+  Neither takes a timestamp that holds one value in every row, or none, or
+  whose name says when a row was last changed or loaded, such as
+  `ModifiedDate`, `updated_at` or `_fivetran_synced`, even when it is the
+  only one. A `created` stamp is preferred over other timestamps. A column
+  constant in the rows a source table is described from is checked with one
+  `MIN`/`MAX` over the whole table before it is refused. On AdventureWorks
+  `customers` now gets no time column, where `ModifiedDate`, a single date
+  later than every order, made every windowed question about a customer
+  fail, and `sales_order_details` gets `OrderDate` instead of
+  `ModifiedDate`. Each refused column of a table left without a time column
+  is named in an `SDMWarning` with the reason and the `time_columns=`
+  override, and the warning about several candidates no longer suggests one
+  that was refused.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the
