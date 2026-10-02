@@ -613,3 +613,51 @@ def test_a_question_cannot_change_what_the_next_one_is_given(
 
     assert str(graph['users']['age'].stype) == 'numerical'
     assert str(graph['users']['country'].stype) == 'categorical'
+
+
+def _add_members(source: Any, request: pytest.FixtureRequest) -> None:
+    r"""``app_users`` again, every member joining after the last order."""
+    joined = pd.Timestamp('2025-06-01')
+    if source.backend == 'duckdb':
+        source.connection.execute(
+            'CREATE TABLE app_members AS SELECT *, '
+            f"TIMESTAMP '{joined}' AS joined FROM app_users"
+        )
+    elif source.backend == 'sqlite':
+        with source.connection.cursor() as cursor:
+            cursor.adbc_ingest(
+                'app_members', USERS.assign(joined=joined), mode='create'
+            )
+        source.connection.commit()
+    else:
+        connection, namespace = request.getfixturevalue('postgres')
+        connection.execute(
+            f'CREATE TABLE {namespace}.app_members AS SELECT *, '
+            f"TIMESTAMP '{joined}' AS joined FROM {namespace}.app_users"
+        )
+
+
+def test_entities_that_start_after_every_anchor_are_named_as_the_cause(
+    source: Any, request: pytest.FixtureRequest
+) -> None:
+    r"""An entity time column that records an edit puts every entity after
+    the data, so none can be asked about at any anchor. The anchor was blamed,
+    and on Databricks and Snowflake the empty window was bound by NaN.
+    """
+    _add_members(source, request)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        schema = Schema.from_source(
+            source,
+            {'users': 'app_members', 'orders': 'app_orders'},
+            time_columns={'users': 'joined', 'orders': 'ts'},
+        )
+
+    with pytest.raises(StructuredDataError) as raised:
+        PredictiveQuery(QUERY, schema).materialize(indices=[1, 2, 3])
+
+    assert raised.value.code == 'INVALID_REQUEST'
+    message = str(raised.value)
+    assert "No row of 'users' existed at the anchor" in message
+    assert "the earliest 'joined' is 2025-06-01" in message
+    assert 'Pass an earlier anchor_time' not in message

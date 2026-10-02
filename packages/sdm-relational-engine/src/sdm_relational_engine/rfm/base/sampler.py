@@ -476,10 +476,36 @@ class Sampler(ABC):
         whole window cannot be the explanation, though, and a caller sent to
         move it has been handed a remedy that cannot work: there the entity
         filter is what selected nothing.
+
+        Before either, an entity table whose time column starts after the
+        anchor has no entity to ask about at all. A column that records an
+        edit, not a creation, does that, and no anchor in the data helps.
         """
         generic = ' Is your predictive query too restrictive?'
         if not isinstance(anchor_time, pd.Timestamp):
             return generic
+        try:
+            entity_table = query.entity_table
+            column = self.time_column_dict.get(entity_table)
+            earliest = None
+            if column is not None:
+                earliest = self.get_min_time([entity_table])
+            # An all-null column reports pd.Timestamp.max: not a start time.
+            starts_after = (
+                earliest is not None
+                and earliest != pd.Timestamp.max
+                and earliest > anchor_time
+            )
+        except Exception:
+            starts_after = False
+        if starts_after:
+            return (
+                f' No row of {entity_table!r} existed at the anchor: it is '
+                f'{anchor_time}, and the earliest {column!r} is {earliest}. '
+                f'Context examples only ask about an entity that existed by '
+                f'its anchor. If {column!r} does not record when each entity '
+                f'began, set the time column of {entity_table!r} to None.'
+            )
         try:
             aggregations = query.get_all_target_aggregations()
             table_names = sorted(
