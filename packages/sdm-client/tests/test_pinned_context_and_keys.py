@@ -12,7 +12,7 @@ target that is pure noise: a session scored 0.595 where the same rows scored
 one-shot came back 0.455, against a chance rate of 0.5.
 
 A key the caller set to `None` was let through and then discarded, so the
-engine's own guess -- made from a column *name*, without checking uniqueness --
+engine's own guess (made from a column *name*, without checking uniqueness)
 survived, and linking that column was refused for being a primary key the
 caller had explicitly removed.
 
@@ -147,7 +147,7 @@ def handle(pinned_keys) -> object:
         class spec:  # noqa: N801 - a stand-in for a ModelSpec
             model_id = 'kumo-tabular'
 
-        def session_prediction_plan(self, request, outputs):
+        def session_prediction_plan(self, request, outputs, pinned=None):
             return ()
 
     return FittedModel(
@@ -394,7 +394,7 @@ def test_a_session_remembers_the_keys_it_pinned():
 
 def test_a_key_that_cannot_be_cast_gets_the_engines_own_message():
     """The guard below the cast catches `ValueError`, and a cast from a string
-    raises that -- but from a list or a mapping it raises `TypeError`, which
+    raises that, but from a list or a mapping it raises `TypeError`, which
     escaped as a raw pandas complaint past the message written for it."""
     pytest.importorskip('sdm_relational_engine')
 
@@ -448,7 +448,7 @@ def test_a_composite_key_distinguishes_its_parts():
 
 def test_a_composite_overlap_is_reported():
     """Built by hand, because a predictive query cannot name a composite key
-    as its entity -- `FOR EACH` takes one column. The frame path can still
+    as its entity, `FOR EACH` takes one column. The frame path can still
     carry one, and reading only single-column keys meant such a request scored
     pinned rows in silence."""
     from sdm_client.request import Request
@@ -616,7 +616,7 @@ def test_the_moment_counts_only_where_the_answer_moves(
 def test_the_moment_is_read_from_the_task_not_assumed(moment, warns):
     """The engine suffixes the anchor column when a column of the caller's own
     is called that, so looking for the bare name goes blind on exactly the
-    graphs that have one -- and every later call about a pinned entity is a
+    graphs that have one, and every later call about a pinned entity is a
     warning again."""
     anchor = '__kumo_anchor_time_1'
     pinned = keys_in(
@@ -636,7 +636,7 @@ def test_the_moment_is_read_from_the_task_not_assumed(moment, warns):
 
 def test_a_frame_backed_request_has_no_moment_to_compare():
     """The frame-backed half belongs to the single-table route, and a
-    single-table model is not asked for a window over time -- the query is
+    single-table model is not asked for a window over time: the query is
     refused before it reaches here. So there is no moment in the frame to put
     in the key, and `with_anchor` has nothing to do there."""
     rng = np.random.default_rng(0)

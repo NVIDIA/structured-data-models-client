@@ -85,6 +85,12 @@ def init(
     max_retries: int = 3,
     _token: object | None = None,
 ) -> None:
+    r"""Point the engine at an endpoint, on behalf of ``sdm_client``.
+
+    Not callable directly: without the token the client passes, this
+    raises ``RuntimeError`` naming the supported route. Run inference
+    through ``sdm_client`` instead.
+    """
     if _token is not _CLIENT_TOKEN:
         raise RuntimeError(_DIRECT_USE_MESSAGE)
     with global_state._lock:
@@ -129,21 +135,20 @@ def init_client(
     max_retries: int = 3,
     _token: object | None = None,
 ) -> RFMTransport:
-    r"""Configures the engine and returns the client that configuration
-    resolves to, as one atomic step.
+    r"""Configure the engine and resolve its client atomically.
 
     The engine's endpoint and credential live in a process-wide singleton, so
     configuring it and then reading back the resulting client as two steps is a
     race: a second caller configuring a different endpoint in between makes the
     first caller read the second's client. Because
-    :attr:`~sdm_relational_engine.rfm.KumoRelational._api_client` resolves lazily -- at the first
-    HTTP call, after graph materialization and subgraph sampling -- that window
-    is wide enough to matter in practice.
+    :attr:`~sdm_relational_engine.rfm.KumoRelational._api_client` resolves
+    lazily at the first HTTP call, after graph materialization and subgraph
+    sampling, so that window is wide enough to matter in practice.
 
     Resolving under the same lock that guards configuration closes it, provided
     the caller binds the returned client to its prediction rather than reading
-    the global again later. Pass it to :class:`~sdm_relational_engine.rfm.KumoRelational` as
-    ``_client``.
+    the global again later. Pass it to
+    :class:`~sdm_relational_engine.rfm.KumoRelational` as ``_client``.
     """
     if _token is not _CLIENT_TOKEN:
         raise RuntimeError(_DIRECT_USE_MESSAGE)

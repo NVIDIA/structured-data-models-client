@@ -89,7 +89,7 @@ def test_a_second_path_to_the_entity_table_leaves_the_direct_key_alone(
     A group for `events -> users` holds no column of `att` and so answers
     "which column of `att` links to `users`" with nothing. That empty answer
     used to replace the real one found in an earlier group, and the join was
-    then reported missing -- so adding an edge between two other tables broke
+    then reported missing, so adding an edge between two other tables broke
     an aggregation over a third.
     """
     from predictive_query import validate

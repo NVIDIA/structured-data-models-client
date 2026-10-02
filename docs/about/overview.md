@@ -17,23 +17,23 @@ result = client.predict(request, model=KumoTabular())
 result = client.predict(request, model=KumoRelational())
 ```
 
-One call answers with either model. The request itself is gathered for one of
-them -- the two read it differently -- so `materialize(model=...)` says which,
-and defaults to what the schema's shape implies. A model that cannot answer a
-request says so *before* anything is sent, because what a model may be asked is
-declared as data rather than discovered from a 422.
+One call uses either model. Because the models read requests differently, each
+request is gathered for one of them. `materialize(model=...)` selects the model
+and defaults to the one implied by the schema's shape. A model rejects an
+unsupported request *before* anything is sent. Its supported requests are
+declared as data instead of discovered from a 422.
 
 ## Two models today
 
 | Model | For | Needs |
 |---|---|---|
-| `kumo-tabular` | one table | nothing — pure Python, runs anywhere |
+| `kumo-tabular` | one table | nothing (pure Python, runs anywhere) |
 | `kumo-relational` | several related tables, joined as a graph | `sdm-client[relational]`, a native build |
 
 ## When not to use it
 
 - **You want to train a model.** These models do not train. If you need a model
   fitted to your data, this is the wrong tool.
-- **Your data cannot leave your environment.** It can, but only to a NIM you
-  run yourself. Run one and point the client at it.
+- **Your data cannot leave your environment.** Run a NIM in your environment
+  and point the client at it.
 - **You want inference in-process.** Everything here is an HTTP call.

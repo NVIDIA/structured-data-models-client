@@ -143,9 +143,11 @@ def connect(
     r"""Connect to a PostgreSQL database.
 
     Standard ``PG*`` environment variables are used when their corresponding
-    keyword arguments are absent. Passing one explicitly as ``None`` says to
-    leave it to the server rather than to the shell. A PostgreSQL URI or libpq
-    conninfo string can be supplied as ``conninfo``.
+    keyword arguments are absent. Passing one explicitly as ``None`` stops this
+    function reading the variable for it; libpq then reads the same variable
+    itself, so the shell's value still applies. To connect without one, give
+    the value you want. A PostgreSQL URI or libpq conninfo string can be
+    supplied as ``conninfo``.
     """
     check_connect_args('postgres', kwargs, _CONNECT_ARGS)
     given = set(kwargs)

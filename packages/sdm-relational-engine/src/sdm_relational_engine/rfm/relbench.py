@@ -104,7 +104,8 @@ def from_relbench(dataset: str, verbose: bool = True) -> Graph:
     published datasets carry a ``rel-`` prefix, so the archive name rather than
     a stripped one is what identifies a dataset here.
 
-    Requires the ``relbench`` extra (``pip install 'sdm-relational-engine[relbench]'``).
+    Requires the ``relbench`` extra
+    (``pip install 'sdm-relational-engine[relbench]'``).
     """
     dataset = dataset.lower()
     registry = get_registry()

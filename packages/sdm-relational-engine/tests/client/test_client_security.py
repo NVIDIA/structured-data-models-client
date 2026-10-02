@@ -51,7 +51,13 @@ class _Handler(BaseHTTPRequestHandler):
 def _serve() -> Iterator[tuple[ThreadingHTTPServer, str]]:
     server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
     server.received = []
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        # `shutdown()` blocks until the serving loop notices, and the
+        # default poll interval is half a second. Every server in this
+        # file is torn down per test.
+        target=lambda: server.serve_forever(poll_interval=0.01),
+        daemon=True,
+    )
     thread.start()
     try:
         yield server, f'http://127.0.0.1:{server.server_address[1]}'
@@ -246,7 +252,13 @@ def redirect_servers() -> Iterator[tuple[dict, dict]]:
             ('127.0.0.1', 0), _make_redirect_handler(state)
         )
         state['url'] = f'http://localhost:{server.server_address[1]}'
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread = threading.Thread(
+            # `shutdown()` blocks until the serving loop notices, and the
+            # default poll interval is half a second. Every server in this
+            # file is torn down per test.
+            target=lambda: server.serve_forever(poll_interval=0.01),
+            daemon=True,
+        )
         thread.start()
         states.append(state)
         running.append(server)
@@ -340,7 +352,13 @@ def _make_body_handler(state: dict) -> type[BaseHTTPRequestHandler]:
 def _serve_body(body: bytes, gzip_encoded: bool = False) -> Iterator[str]:
     state = {'body': body, 'gzip': gzip_encoded}
     server = ThreadingHTTPServer(('127.0.0.1', 0), _make_body_handler(state))
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        # `shutdown()` blocks until the serving loop notices, and the
+        # default poll interval is half a second. Every server in this
+        # file is torn down per test.
+        target=lambda: server.serve_forever(poll_interval=0.01),
+        daemon=True,
+    )
     thread.start()
     try:
         yield f'http://127.0.0.1:{server.server_address[1]}'

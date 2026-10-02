@@ -3,6 +3,16 @@
 Five distributions, one version, published together. A release is a tag; the
 tag is the only manual step.
 
+The tag has to sit on a commit that is on `main` and whose CI run passed.
+The publish workflow checks both before it builds anything, so a tag on an
+unmerged or failing commit stops there rather than reaching the index.
+
+That check lives in the workflow, and a tag runs the workflow as it was at
+the tagged commit, so it cannot defend against a tag placed on a commit
+older than the check. Two repository settings do, and both are configured
+outside this tree: a tag ruleset limiting who may create `v*`, and required
+reviewers on the `pypi` environment, which hold the upload itself.
+
 ## Before tagging
 
 ```bash
@@ -19,7 +29,8 @@ mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/
 python scripts/check_repo_hygiene.py all
 ```
 
-Then, against running NIMs — a release should not be the first time these run:
+Then, against running NIMs, because a release should not be the first time
+these run:
 
 ```bash
 SDM_TABULAR_URL=... SDM_RELATIONAL_URL=... \
@@ -50,7 +61,7 @@ git tag v1.2.0 && git push origin v1.2.0
 
 That is the whole release. `.github/workflows/publish.yml` builds the four
 pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
-(cp310–cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
+(cp310 to cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
 the engine's `[tool.cibuildwheel]`), and then refuses to
 continue unless **all five** are present and agree with the tag. That check is
 not ceremony: `sdm-client[relational]` pins the engine by exact version, so a
@@ -73,6 +84,6 @@ python -m pypi_attestations verify pypi /tmp/verify/*.whl
 
 ## Yanking
 
-A release that is wrong is yanked, not deleted — deleting it breaks anyone who
+A release that is wrong is yanked, not deleted. Deleting it breaks anyone who
 pinned it, and yanking leaves it installable for them while keeping resolvers
 away from it. Yank on PyPI, then release the fix as a patch.

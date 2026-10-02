@@ -71,8 +71,6 @@ class ProblemTypeValidator:
             and problem_type is None
             and mode is Mode.TRAINING
         ):
-            # If target is multicategorical and problem_type is not specified,
-            # then we respond with an error.
             return ValidationResponse(
                 errors=[
                     ValidationError(
@@ -125,7 +123,6 @@ class ProblemTypeValidator:
                 ]
             )
 
-        # Rank problem requires top_k to be specified.
         if problem_type == ProblemType.RANK and query.top_k is None:
             return ValidationResponse(
                 errors=[

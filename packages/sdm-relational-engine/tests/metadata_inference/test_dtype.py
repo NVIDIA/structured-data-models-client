@@ -97,8 +97,8 @@ def test_infer_dtype_stringlist() -> None:
 
 @pytest.mark.parametrize('dtype', ['uint8', 'uint16', 'uint32', 'uint64'])
 def test_infer_dtype_accepts_every_unsigned_width(dtype: str) -> None:
-    """Only ``uint8`` was mapped, so ``astype('uint32')`` -- a routine memory
-    optimisation, and what an unsigned Parquet column arrives as -- made
+    """Only ``uint8`` was mapped, so ``astype('uint32')``, a routine memory
+    optimisation, and what an unsigned Parquet column arrives as, made
     ``Graph.from_data`` raise. The SQL backends already map ``UINTEGER`` /
     ``UBIGINT`` to ``Dtype.int`` from the catalog, so refusing them here was an
     inconsistency rather than a decision.

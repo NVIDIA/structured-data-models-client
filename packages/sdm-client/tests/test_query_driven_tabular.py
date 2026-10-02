@@ -108,7 +108,7 @@ def test_the_rows_being_scored_are_never_in_the_context():
     """A row must not be both the question and an answered example.
 
     Every row here has a known target, so nothing but the exclusion keeps them
-    apart -- which is exactly the case that leaks if it is not written down.
+    apart, which is exactly the case that leaks if it is not written down.
     """
     scored = [3, 8, 11, 40]
     request = query().materialize(indices=scored)

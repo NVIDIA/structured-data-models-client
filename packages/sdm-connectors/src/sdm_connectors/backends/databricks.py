@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import inspect
 import os
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from sdm_connectors.sql import (
@@ -55,20 +56,111 @@ _ENV_BY_ARG = {
 _DOCUMENTED_KWARGS = frozenset(
     {
         'auth_type',
+        'azure_client_id',
+        'azure_client_secret',
+        'azure_tenant_id',
+        'azure_workspace_resource_id',
         'credentials_provider',
         'experimental_oauth_persistence',
         'oauth_client_id',
         'oauth_client_secret',
+        'identity_federation_client_id',
+        'oauth_jwt_algorithm',
+        'oauth_jwt_key_file',
+        'oauth_jwt_kid',
+        'oauth_jwt_passphrase',
+        'oauth_redirect_port',
         'oauth_redirect_port_range',
         'oauth_scopes',
+        'oauth_token_cache_enabled',
         'password',
+        'token_url',
         'session_configuration',
         'tls_verify',
         'use_cloud_fetch',
+        'use_kernel',
         'user_agent_entry',
         'username',
+        '_tls_client_cert_file',
+        '_tls_client_cert_key_file',
+        '_tls_client_cert_key_password',
+        '_use_cert_as_auth',
     }
 )
+
+
+# What this guard is for: the driver's thrift route, handed nothing it
+# recognises, falls through to an OAuth flow that opens a browser and waits for
+# a human, binding a listening socket while it does. A script that simply
+# forgot its token never returns. Everything else the driver refuses itself,
+# immediately and with a better message than this one could give.
+#
+# So the question is narrow: would this call reach that fallthrough? The names
+# below are the branches the installed driver dispatches on before it, each
+# with the names it reads together. Anything that matches one of them, and
+# anything on the kernel route (which raises rather than waiting) is left
+# to the driver.
+_WAYS_THE_THRIFT_ROUTE_AUTHENTICATES = (
+    frozenset({'access_token'}),
+    frozenset({'credentials_provider'}),
+    frozenset({'auth_type'}),
+    frozenset({'_use_cert_as_auth', '_tls_client_cert_file'}),
+    # Refused by the driver before it reaches any flow. Its sentence says that
+    # this is no longer supported and to use OAuth or an access token, which is
+    # more than this one could say.
+    frozenset({'username'}),
+    frozenset({'password'}),
+)
+
+
+def _an_auth_type_the_driver_knows() -> frozenset[str]:
+    r"""The flows the installed driver dispatches ``auth_type`` on.
+
+    Read from the driver. Any other value falls through to the browser, so
+    accepting `auth_type` on sight let a typo produce exactly the wait this
+    guard exists to prevent.
+    """
+    try:
+        from databricks.sql.auth.auth import AuthType
+
+        return frozenset(member.value for member in AuthType)
+    except Exception:  # noqa: BLE001 - an unknown driver is not a credential
+        return frozenset()
+
+
+_KNOWN_AUTH_TYPES = _an_auth_type_the_driver_knows()
+
+
+#: Naming an OAuth application is choosing the browser flow on purpose. The
+#: driver resolves to it for anything it does not recognise, including an
+#: empty call. The driver cannot tell a deliberate U2M setup from a
+#: forgotten token, and this is the only thing that can: one of them says the
+#: word `oauth`. Not beside a machine-to-machine secret, which asks for
+#: something else and would be quietly downgraded to a browser.
+_AN_OAUTH_APP = frozenset(
+    {'oauth_client_id', 'oauth_redirect_port', 'oauth_redirect_port_range'}
+)
+_MACHINE_TO_MACHINE = frozenset(
+    {'oauth_client_secret', 'oauth_jwt_key_file', 'azure_client_secret'}
+)
+
+
+def _says_how_to_authenticate(given: Mapping[str, Any]) -> bool:
+    r"""Check whether the call reaches a supported authentication route.
+
+    False is the answer that matters: whatever the call names, the driver
+    would fall through to its browser flow. A machine-to-machine secret
+    alone returns False for that reason. It is a credential, but this route
+    does not use it.
+    """
+    named = {name for name, value in given.items() if value}
+    if 'use_kernel' in named:
+        return True
+    if 'auth_type' in named and given['auth_type'] not in _KNOWN_AUTH_TYPES:
+        named = named - {'auth_type'}
+    if _AN_OAUTH_APP & named and not _MACHINE_TO_MACHINE & named:
+        return True
+    return any(way <= named for way in _WAYS_THE_THRIFT_ROUTE_AUTHENTICATES)
 
 
 def _declared_connect_args() -> frozenset[str]:
@@ -101,10 +193,19 @@ def connect(
     r"""Connect to a Databricks SQL warehouse.
 
     ``DATABRICKS_*`` environment variables are used when their corresponding
-    keyword arguments are absent – including ``DATABRICKS_CATALOG`` and
+    keyword arguments are absent, including ``DATABRICKS_CATALOG`` and
     ``DATABRICKS_SCHEMA``, which decide which table a bare name resolves to.
-    Passing one explicitly as ``None`` says to leave it to the workspace
-    rather than to the shell.
+    Passing one explicitly as ``None`` stops this function reading the variable
+    for it, and the key is then not sent at all; for ``catalog`` and ``schema``
+    that leaves the choice to the workspace, and for a credential it leaves no
+    credential, which is refused rather than sent.
+
+    A call that would reach the browser flow without asking for it is
+    refused here. The driver's own answer is to open a browser and wait for
+    a human to finish an OAuth flow, binding a listening socket while it
+    does, so a script that simply forgot the token never returned. Asking
+    for that flow deliberately is allowed through. Such a request names an
+    OAuth application or an ``auth_type`` the driver dispatches on.
 
     The connection carries no partner tag of its own: sdm-client names itself
     on prediction requests only, never on the queries that sample a warehouse.
@@ -116,6 +217,18 @@ def connect(
         if arg not in given and arg not in kwargs:
             kwargs[arg] = os.getenv(env)
     kwargs = {key: value for key, value in kwargs.items() if value is not None}
+    if not _says_how_to_authenticate(kwargs):
+        raise ConnectorError(
+            'connecting to Databricks needs a credential and none was given: '
+            'pass access_token=..., set DATABRICKS_TOKEN, or name '
+            'credentials_provider, an auth_type, an oauth_client_id, or '
+            '_use_cert_as_auth with _tls_client_cert_file. Half of a pair is '
+            'not a credential, and '
+            'neither is a machine-to-machine one on this route: the driver '
+            'resolves what it does not recognise to its browser flow, which '
+            'waits for a human and never returns',
+            code='INVALID_CONNECTOR_ARGS',
+        )
     if 'user_agent_entry' in kwargs:
         _check_user_agent_entry(kwargs['user_agent_entry'])
     return databricks_sql.connect(**kwargs)

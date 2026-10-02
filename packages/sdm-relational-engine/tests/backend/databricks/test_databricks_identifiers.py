@@ -6,7 +6,7 @@ as data, not as SQL text.
 
 Spark honours backslash escapes inside a single-quoted literal, so doubling the
 quote character leaves a name containing ``\'`` able to close the literal and
-run the rest as SQL -- proven live against ``information_schema``. Names in a
+run the rest as SQL, proven live against ``information_schema``. Names in a
 value position are therefore bound; the catalog, which sits in an identifier
 position no bind can fill, is backtick-quoted, a form a backslash cannot escape
 out of.

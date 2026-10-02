@@ -262,25 +262,25 @@ def generate_summary(
 
     .. warning::
 
-        This sends ``query``, ``prediction``, ``cohorts`` and ``subgraphs``
-        -- the last of which carries the **raw cell values** of the explained
-        entity's subgraph -- to the configured chat-completions endpoint.
-        Unless ``base_url`` / ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` says otherwise
-        that endpoint is OpenAI's ``https://api.openai.com/v1/``, a
-        non-NVIDIA service. Callers that must not egress row-level data
-        should not reach this function; set ``skip_summary=True`` on
+        This sends ``query``, ``prediction``, ``cohorts`` and ``subgraphs`` to
+        the configured chat-completions endpoint. The last carries the **raw
+        cell values** of the explained entity's subgraph.
+        Unless ``base_url`` or ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` says
+        otherwise, that endpoint is OpenAI's ``https://api.openai.com/v1/``, a
+        non-NVIDIA service. Callers that must not egress row-level data should
+        not reach this function. Set ``skip_summary=True`` on
         :class:`~sdm_relational_engine.rfm.ExplainConfig`.
 
     Built for OpenAI (default model ``gpt-4.1-mini``), it works with any
     OpenAI-compatible chat-completions endpoint. Configure once via the
-    environment: the API key from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY`` (else
-    ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` (for another
-    endpoint), ``KUMO_RELATIONAL_EXPLAIN_LLM_MODEL``, and ``KUMO_RELATIONAL_EXPLAIN_LLM_TIMEOUT``
-    (seconds); or pass ``base_url`` / ``api_key`` / ``model`` / ``timeout`` (or
-    an already-built ``client``), which take precedence. A slow model just needs
-    a larger timeout; the summary degrades to a short message that names what to
-    set rather than raising, and the structured explanation (``.cohorts`` /
-    ``.subgraphs``) is available regardless.
+    environment: the API key from ``KUMO_RELATIONAL_EXPLAIN_LLM_API_KEY``,
+    ``KUMO_RELATIONAL_EXPLAIN_LLM_BASE_URL`` for another endpoint,
+    ``KUMO_RELATIONAL_EXPLAIN_LLM_MODEL``, and
+    ``KUMO_RELATIONAL_EXPLAIN_LLM_TIMEOUT`` in seconds. Passing ``base_url`` /
+    ``api_key`` / ``model`` / ``timeout`` or an already-built ``client`` takes
+    precedence. A slow model only needs a larger timeout. Instead of raising,
+    the summary degrades to a short message naming what to set, and the
+    structured explanation (``.cohorts`` / ``.subgraphs``) remains available.
     """
     if timeout is None:
         timeout = _env_float(

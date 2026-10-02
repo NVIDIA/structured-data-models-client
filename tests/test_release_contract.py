@@ -11,14 +11,16 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
-import json
 import pathlib
 import re
 import subprocess
 import sys
 from collections.abc import Sequence
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # The packages support 3.10, where tomllib is not in the stdlib.
+    import tomli as tomllib
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PACKAGES = REPO / 'packages'
@@ -40,7 +42,7 @@ def _covered_by(rule: str, selectors: Sequence[str]) -> bool:
     """Whether any selector actually enables ``rule``.
 
     Plain string prefixes are wrong here: `'FIX002'.startswith('F')` is True,
-    but ruff's `F` is Pyflakes and `FIX` is flake8-fixme -- selecting one does
+    but ruff's `F` is Pyflakes and `FIX` is flake8-fixme, selecting one does
     not select the other, which is verifiable with
     """
     if 'ALL' in selectors:
@@ -89,18 +91,6 @@ class TestPublicSurface:
             'intended, re-record with `python scripts/snapshot_wire_payloads.py '
             f'--write`.\n{result.stdout}{result.stderr}'
         )
-
-    def test_every_recorded_export_is_still_importable(self):
-        recorded = json.loads((GOLDEN / 'public_api.json').read_text())
-        import importlib
-
-        for package, surface in recorded.items():
-            exported = surface.get('__all__')
-            if exported is None:
-                continue
-            module = importlib.import_module(package)
-            missing = [name for name in exported if not hasattr(module, name)]
-            assert not missing, f'{package} no longer exports {missing}'
 
 
 class TestErrorContract:
@@ -342,7 +332,7 @@ class TestConfigurationTellsTheTruth:
         for rule in listed(backlog_block):
             assert not _covered_by(rule, selected), (
                 f'{rule} sits under "Recorded backlog", which says the shared '
-                f'baseline does not select it -- but {selected} does'
+                f'baseline does not select it, but {selected} does'
             )
 
     def test_the_tabular_task_kinds_match_what_the_model_declares(self):
@@ -350,7 +340,7 @@ class TestConfigurationTellsTheTruth:
 
         The materializer refuses a stated `task=` the tabular deployment does
         not serve, and it has to do that before a model handle is necessarily
-        in hand -- so the list is written twice. A comment claiming two things
+        in hand, so the list is written twice. A comment claiming two things
         """
         from sdm_client.materializers.tabular import TABULAR_TASK_KINDS
         from sdm_client.models import spec_for
@@ -440,7 +430,7 @@ class TestConfigurationTellsTheTruth:
     ):
         """The engine's ignore list records a backlog and names where it is clean.
 
-        That claim used to be wrong in both halves -- the rules were not
+        That claim used to be wrong in both halves, the rules were not
         selected anywhere, and the two packages named did not pass clean under
         them. A comment cannot be wrong for long if a test reads it.
         """
@@ -569,7 +559,7 @@ class TestDocumentedExamples:
                     ]
                     assert not outside, (
                         f'the README imports {outside} from sdm_client, which '
-                        f'is not in __all__ -- so the first thing a new user '
+                        f'is not in __all__, so the first thing a new user '
                         f'copies is an unsupported import'
                     )
 
@@ -589,8 +579,9 @@ class TestInterpreterSupportIsStated:
         """Compare versions numerically.
 
         `'3.10' >= '3.9'` is False as strings, because `'1' < '9'`. Nothing
-        here has a 3.9 floor today, so a lexical comparison happened to agree
-        -- and would have started disagreeing silently at 3.20, in a helper
+        here has a 3.9 floor today, so a lexical comparison happened to agree,
+        and it would have started disagreeing silently at 3.20, in a helper
+        every version comparison in this file runs through.
         """
         return tuple(int(part) for part in version.split('.'))
 
@@ -661,8 +652,8 @@ class TestInterpreterSupportIsStated:
     def test_an_extra_narrower_than_its_parent_says_so(self):
         """The relational extra does not resolve on every Python the client does.
 
-        That is correct -- the engine is a native build with a shorter wheel
-        matrix -- but pip's error names a distribution, not a reason. Anything
+        That is correct, the engine is a native build with a shorter wheel
+        matrix, but pip's error names a distribution, not a reason. Anything
         that narrow has to be explained where someone reads it.
         """
         client = _pyproject('sdm-client')

@@ -4,18 +4,17 @@
 
 """What the RFM path requires of a transport, and the reply it reads back.
 
-:class:`~sdm_relational_engine.client.client.Client` speaks HTTP to a Universal TFM NIM
-and hands back a ``requests.Response``. A managed-platform transport invokes a
-model served by name and hands back a :class:`ServingResponse` -- no HTTP
-session, no base URL, no ``requests.Response``. None of them derives from
-another.
+:class:`~sdm_relational_engine.client.client.Client` speaks HTTP to a Universal
+TFM NIM and returns a ``requests.Response``. A managed-platform transport
+invokes a model by name and returns a :class:`ServingResponse`, with no HTTP
+session, base URL, or ``requests.Response``. None derives from another.
 
-These are :class:`~typing.Protocol` rather than a union of the concrete classes.
-A union has to name every implementation, so each new platform edits this module
-and drags its dependencies into anything that imports it. The shared call sites
-(``RFMAPI`` and ``raise_on_error``) do not care which transport they hold, only
-that it can be asked for a prediction and closed; structural typing states
-exactly that, and lets a transport be added without touching this file.
+These are :class:`~typing.Protocol` rather than a union of concrete classes. A
+union must name every implementation, so each new platform would edit this
+module and add its dependencies to anything that imports it. The shared call
+sites (``RFMAPI`` and ``raise_on_error``) care only that a transport can make a
+prediction and close. Structural typing states that contract and allows new
+transports without changes here.
 
 ``_request`` is private by convention but is part of this contract: it is the
 seam the RFM path calls, so naming it here makes it a stated requirement rather

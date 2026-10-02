@@ -67,8 +67,7 @@
           "MIN",
           "SUM"
         ],
-        "public_methods": {},
-        "signature": "(*values)"
+        "public_methods": {}
       },
       "Capabilities": {
         "bases": [],
@@ -183,8 +182,7 @@
           "is_string": "(self) -> bool",
           "is_timestamp": "(self) -> bool",
           "is_unsupported": "(self) -> bool"
-        },
-        "signature": "(*values)"
+        }
       },
       "FINE_TUNING": {
         "kind": "Profile"
@@ -206,8 +204,7 @@
           "INFERENCE",
           "TRAINING"
         ],
-        "public_methods": {},
-        "signature": "(*values)"
+        "public_methods": {}
       },
       "PQLParser": {
         "bases": [],
@@ -281,8 +278,7 @@
           "FORECAST",
           "RANK"
         ],
-        "public_methods": {},
-        "signature": "(*values)"
+        "public_methods": {}
       },
       "Profile": {
         "bases": [],
@@ -350,8 +346,7 @@
         ],
         "public_methods": {
           "supports_dtype": "(self, dtype: 'Dtype') -> bool"
-        },
-        "signature": "(*values)"
+        }
       },
       "TABULAR": {
         "kind": "Profile"
@@ -410,8 +405,7 @@
           "get_multilabel_tasks": "() -> list['TaskType']",
           "get_node_pred_tasks": "() -> list['TaskType']",
           "get_ranking_tasks": "() -> list['TaskType']"
-        },
-        "signature": "(*values)"
+        }
       },
       "TimeUnit": {
         "bases": [
@@ -434,8 +428,7 @@
           "SECONDS",
           "WEEKS"
         ],
-        "public_methods": {},
-        "signature": "(*values)"
+        "public_methods": {}
       },
       "TimestampUnit": {
         "bases": [
@@ -454,8 +447,7 @@
           "NANOSECOND",
           "SECOND"
         ],
-        "public_methods": {},
-        "signature": "(*values)"
+        "public_methods": {}
       },
       "ValidatedPredictiveQuery": {
         "bases": [
@@ -586,8 +578,7 @@
           "GET",
           "POST"
         ],
-        "public_methods": {},
-        "signature": "(*values)"
+        "public_methods": {}
       },
       "TFMOperation": {
         "bases": [],

@@ -7,7 +7,7 @@
 Two failures are worth catching separately. Someone editing the generated file
 by hand is caught without needing the contract checked out, so it runs
 everywhere. Drift against the contract itself needs the sibling repository, so
-it skips when that is absent -- which is everywhere except a maintainer's
+it skips when that is absent, which is everywhere except a maintainer's
 machine and the pipeline.
 """
 
@@ -89,7 +89,7 @@ def test_the_model_field_is_a_closed_enum_which_bounds_the_escape_hatch():
     assert len(TFM_MODEL_VALUES) == 2, (
         'the contract now carries a different set of model ids. If it has been '
         'opened to an unbounded string, the client may stop refusing unknown '
-        'ids locally -- see section 0 of the architecture plan.'
+        'ids locally; see docs/about/architecture.md.'
     )
 
 

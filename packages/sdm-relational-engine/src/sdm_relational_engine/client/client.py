@@ -30,8 +30,8 @@ _AUTH_STATUS_CODES = frozenset({401, 403})
 _LOCAL_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
 _MAX_BODY_SNIPPET = 512
 # Mirrors ``sdm_client.core.transport``: well above any real prediction
-# response -- a full-precision float64 column for a million rows is ~25 MB of
-# JSON -- but far below what a compressed hostile body can inflate to.
+# response (a full-precision float64 column for a million rows is ~25 MB of
+# JSON), but far below what a compressed hostile body can inflate to.
 _MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 _RESPONSE_CHUNK_BYTES = 1024 * 1024
 
@@ -59,10 +59,10 @@ def _build_retry(max_retries: int, retry_post: bool = True) -> Retry:
     reached the server cannot have had an effect.
 
     ``read=False`` switches off read retries entirely. A read timeout on a
-    prediction means the NIM may already be running it, and resending duplicates
-    the most expensive work in the system on a GPU that is by hypothesis
-    struggling; the request-level ``predict(num_retries=...)`` is the layer that
-    knows how to pace that, and it treats a timeout as transient. Passing
+    prediction means the NIM may already be running it, and resending
+    duplicates the most expensive work in the system on a GPU that is by
+    hypothesis struggling. The request-level ``predict(num_retries=...)``
+    knows how to pace that and treats a timeout as transient. Passing
     ``False`` rather than ``0`` also re-raises the underlying ``ReadTimeout``
     instead of burying it in a ``MaxRetryError``, which is what lets the caller
     be told to raise their timeout.
@@ -91,9 +91,9 @@ def _build_retry(max_retries: int, retry_post: bool = True) -> Retry:
 def _validate_url(url: str, api_key: str | None) -> None:
     r"""Mirrors ``sdm_client.core.transport._validate_url``.
 
-    This client carries every Kumo Relational prediction, so the guard the client
-    documents has to hold here too rather than only on the path that happens
-    to construct a ``Transport`` first.
+    This client carries every Kumo Relational prediction, so the documented
+    guard must hold here too, not only on the path that constructs a
+    ``Transport`` first.
     """
     if not isinstance(url, str):
         raise ValueError(f'url must be a string, got {type(url).__name__}')
@@ -107,7 +107,7 @@ def _validate_url(url: str, api_key: str | None) -> None:
         raise ValueError(f'url is missing a host, got {shown!r}')
     # A base URL is a scheme, a host and at most a path prefix. Routes are
     # appended to this string, so a query or fragment produces a malformed
-    # request target -- and a credential placed there travels in the request
+    # request target, and a credential placed there travels in the request
     # line, where redaction never sees it.
     if parsed.query or parsed.fragment:
         raise ValueError(
@@ -153,9 +153,9 @@ def redact_url(url: str | None) -> str | None:
 def scrub_userinfo(text: str) -> str:
     r"""Remove any ``user:secret@`` credential from free text.
 
-    The counterpart to :func:`redact_url` for strings that merely *contain* a
-    URL rather than being one -- chiefly the driver exception messages quoted
-    into init errors, which echo back whatever URL was requested.
+    This complements :func:`redact_url` for strings that contain a URL, mainly
+    driver exception messages in initialization errors that echo the requested
+    URL.
     """
     return _USERINFO_RE.sub('', text)
 
@@ -165,15 +165,16 @@ class _Session(requests.Session):
 
     ``requests`` strips only the standard ``Authorization`` header when a
     redirect changes origin; a custom header set on the session is re-sent
-    verbatim. Without this the configured endpoint could hand the API key --
-    and, on a 307/308, the request body -- to any host it names, defeating
+    verbatim. Without this, the configured endpoint could hand the API key and,
+    on a 307/308, the request body to any host it names, defeating
     ``_validate_url``.
 
     The two clients keep their own copy rather than sharing one: the only
     package both depend on is ``sdm-connectors``, which is a SQL-connector
     package with no HTTP surface and no ``requests`` dependency, and
-    ``sdm_relational_engine`` cannot import ``sdm_client`` because the dependency runs the
-    other way. This is the same arrangement as ``_validate_url`` above.
+    ``sdm_relational_engine`` cannot import ``sdm_client`` because the
+    dependency runs the other way. This is the same arrangement as
+    ``_validate_url`` above.
     """
 
     @staticmethod
@@ -234,19 +235,19 @@ class _Session(requests.Session):
 
 
 def _read_capped(response: requests.Response, url: str) -> requests.Response:
-    r"""Reads a streamed response body under a cap, then re-attaches it.
+    r"""Read a streamed response body under a cap, then reattach it.
 
     The client package no longer reads a response body, so this cap lives here
-    alone: it is the only side that parses what a NIM returns. ``requests`` inflates
-    ``Content-Encoding: gzip`` with no ratio limit, so an unbounded read lets a
-    small compressed body expand into hundreds of megabytes of client memory
-    before anything is parsed.
+    alone. This side alone parses what a NIM returns. ``requests`` inflates
+    ``Content-Encoding: gzip`` without a ratio limit, so an unbounded read lets
+    a small compressed body use hundreds of megabytes of client memory before
+    anything is parsed.
 
     The bytes are put back on the response rather than returned, because this
     client hands the ``requests.Response`` itself to its callers, who read it
     with ``.json()``/``.text``/``.content``. Filling ``_content`` is exactly
     what ``Response.content`` does on first access, so a capped response is
-    indistinguishable from an eagerly read one -- including for a second pass
+    indistinguishable from an eagerly read one, including for a second pass
     through ``iter_content``, which replays the stored bytes.
 
     Args:
@@ -330,6 +331,16 @@ def _raise_init_error(url: str, exc: BaseException) -> NoReturn:
 
 
 class NimClient:
+    r"""Speaks the prediction contract to one endpoint.
+
+    The transport under the relational engine: it holds the pooled
+    session, sends requests with the API key attached when there is one,
+    and retries what is worth retrying. A contract request comes back
+    whatever its status, because deciding that a status is an error
+    belongs to the layer above; the probes this makes while connecting
+    raise for themselves.
+    """
+
     def __init__(
         self,
         url: str,
@@ -338,7 +349,7 @@ class NimClient:
         timeout: float | None = None,
         max_retries: int = 3,
     ) -> None:
-        r"""Creates a client for Kumo Relational requests against a Universal TFM NIM.
+        r"""Create a client for requests to a Universal TFM NIM.
 
         NIMs are unauthenticated by contract. ``api_key`` is optional and only
         needed when a deployment adds its own authenticating gateway; when

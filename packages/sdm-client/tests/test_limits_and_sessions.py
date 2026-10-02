@@ -11,6 +11,8 @@ check here exists so the caller reads a sentence instead.
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 
 from sdm_client import KumoRelational, Schema, UnsupportedRequestError
@@ -48,8 +50,8 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     """A pin, not a probe.
 
     These numbers were read from the relational NIM. This asserts they have
-    not drifted in the client, which is all it can do offline -- the live
-    suites are what check the endpoint still agrees.
+    not drifted in the client, which is all it can do offline. The live suites
+    check that the endpoint still agrees.
     """
     assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
@@ -552,3 +554,316 @@ def test_a_session_accepts_a_literal_written_with_the_other_quote():
     assert spelled(double) == spelled(single)
     assert spelled('o.a="x" AND o.b=\'y\'') == spelled('o.a=\'x\' AND o.b="y"')
     assert spelled('o.a="x"') != spelled('o.a="z"')
+
+
+def test_a_frame_built_request_says_when_it_scores_rows_it_shows_the_answers_to():
+    """Both gathered routes take such rows out of the context they send, and a
+    session says so when it cannot. This route did neither."""
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+    from sdm_client.request import (
+        warn_of_rows_scored_from_their_own_answers,
+    )
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [i % 2 for i in range(20)],
+        }
+    )
+
+    def notices(predict):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always', SDMWarning)
+            warn_of_rows_scored_from_their_own_answers(
+                Request(
+                    context=context,
+                    predict=predict,
+                    target='y',
+                    task='classification',
+                )
+            )
+        return [
+            str(item.message)
+            for item in caught
+            if 'being scored' in str(item.message)
+        ]
+
+    overlapping = notices(context.head(3).drop(columns=['y']))
+    assert len(overlapping) == 1
+    assert '3 of the 3 rows being scored' in overlapping[0]
+    assert 'materialize()' in overlapping[0]
+
+    assert notices(pd.DataFrame({'id': [90, 91], 'x': [9.0, 9.1]})) == []
+
+
+def test_a_context_whose_answers_are_missing_is_not_called_a_leak():
+    """A row with no target teaches nothing and gives nothing away."""
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [None] * 3 + [i % 2 for i in range(17)],
+        }
+    )
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always', SDMWarning)
+        Request(
+            context=context,
+            predict=context.head(3).drop(columns=['y']),
+            target='y',
+            task='classification',
+        )
+    assert not [item for item in caught if 'being scored' in str(item.message)]
+
+
+def test_the_session_warning_counts_rows_and_not_keys():
+    """`scored_keys()` returns a set, so duplicate scoring rows disappeared
+    before either number was taken: two rows asking about one pinned entity
+    were reported as one of one."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.client import _warn_scoring_what_was_pinned
+    from sdm_client.wire.keys import _named_by
+
+    context = pd.DataFrame(
+        {'id': [1, 2, 3], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'id'}
+        )
+
+    def said_for(ids):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = Request(
+                context=context,
+                predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
+                schema=schema,
+                target='y',
+                task='classification',
+            )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            _warn_scoring_what_was_pinned(
+                request, frozenset({_named_by([1])}), False
+            )
+        return [str(item.message) for item in caught]
+
+    assert said_for([1, 1, 2])[0].startswith('2 of the 3 rows being scored')
+    assert said_for([1, 1])[0].startswith('2 of the 2 rows being scored')
+    assert said_for([7, 8, 9]) == []
+
+
+def test_a_request_built_to_score_a_session_is_not_warned_about_its_context():
+    """The leak warning is about a pairing that only travels on the one-shot
+    call. Asked where the request is built, it fired about a context a session
+    scoring call never sends, and failed under warnings-as-errors."""
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.core.warnings import SDMWarning
+
+    context = pd.DataFrame(
+        {
+            'id': range(20),
+            'x': [1.0 * i for i in range(20)],
+            'y': [i % 2 for i in range(20)],
+        }
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always', SDMWarning)
+        Request(
+            context=context,
+            predict=context.head(3).drop(columns=['y']),
+            target='y',
+            task='classification',
+        )
+
+    assert not [item for item in caught if 'being scored' in str(item.message)]
+
+
+def test_the_session_warning_knows_one_entity_written_two_ways():
+    """The pinned key is read from an encoded envelope and the scored key from
+    a frame, so an entity pinned as `1` and scored as `1.0` never met, and a
+    session scored rows its context answers without saying so."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.client import _warn_scoring_what_was_pinned
+    from sdm_client.wire.keys import _named_by
+
+    context = pd.DataFrame(
+        {'id': [1, 2, 3], 'x': [0.1, 0.2, 0.3], 'y': [0, 1, 0]}
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': context}, primary_keys={'instance': 'id'}
+        )
+
+    def warned_for(ids):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            request = Request(
+                context=context,
+                predict=pd.DataFrame({'id': ids, 'x': [0.1] * len(ids)}),
+                schema=schema,
+                target='y',
+                task='classification',
+            )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            _warn_scoring_what_was_pinned(
+                request, frozenset({_named_by([1])}), False
+            )
+        return bool(caught)
+
+    for named in ([1], [1.0], pd.array([1.0], dtype='Float64'), ['1']):
+        assert warned_for(named)
+    for named in ([9], [9.0], [1.5]):
+        assert not warned_for(named)
+
+
+def test_a_scoring_call_writes_its_rows_to_the_schema_that_was_pinned():
+    """The schema is not sent again on a scoring call: it was pinned when the
+    session opened. Typing the rows from the half that travels sent `1.0`
+    under a column pinned as `int64`, which the endpoint refused as
+    `SESSION_PREDICT_SCHEMA_MISMATCH`, a failure about a value the caller
+    never wrote and cannot see."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    frame = pd.DataFrame(
+        {
+            'id': range(24),
+            'x': [1.0 * i for i in range(24)],
+            'y': [i % 2 for i in range(24)],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': frame}, primary_keys={'instance': 'id'}
+        )
+        opening = Request(
+            context=frame,
+            predict=frame.head(2)[['id', 'x']],
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+        scoring = Request(
+            context=frame,
+            predict=pd.DataFrame({'id': [1.0, 2.0], 'x': [9.0, 8.0]}),
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    adapter = TabularAdapter()
+    pinned = adapter.session_plan(opening, ('prediction',))
+    assert pinned['schema']['instance_table']['columns']['id']['dtype'] == (
+        'int64'
+    )
+
+    payload = next(
+        iter(adapter.session_prediction_plan(scoring, ('prediction',), pinned))
+    )
+    table = payload['predict']['instance_table']
+    at = table['columns'].index('id')
+    assert [row[at] for row in table['rows']] == [1, 2]
+
+    unpinned = next(
+        iter(adapter.session_prediction_plan(scoring, ('prediction',)))
+    )
+    table = unpinned['predict']['instance_table']
+    at = table['columns'].index('id')
+    assert [row[at] for row in table['rows']] == [1.0, 2.0]
+
+
+@pytest.mark.parametrize(
+    ('pinned_keys', 'scored_keys', 'answers'),
+    [
+        (list(range(24)), [1, 2], True),
+        (list(range(24)), [1.0, 2.0], True),
+        (list(range(24)), ['abc', 'def'], False),
+        ([float(i) for i in range(24)], [1, 2], True),
+        ([float(i) for i in range(24)], ['abc', 'def'], False),
+        ([str(i) for i in range(24)], [1, 2], True),
+        ([str(i) for i in range(24)], ['abc', 'def'], True),
+    ],
+)
+def test_rows_the_pinned_schema_cannot_hold_are_refused_by_name(
+    pinned_keys, scored_keys, answers
+):
+    """Writing the rows to the pinned schema is what makes the call legible to
+    the endpoint, and the only thing that can fail for a reason the caller
+    cannot see: the failure names a dtype they never wrote, or arrives as a
+    bare ValueError from inside pandas."""
+    import pandas as pd
+
+    from sdm_client import Request, Schema
+    from sdm_client.adapters.tabular import TabularAdapter
+    from sdm_client.errors import StructuredDataError
+
+    frame = pd.DataFrame(
+        {
+            'id': pinned_keys,
+            'x': [1.0 * i for i in range(24)],
+            'y': [i % 2 for i in range(24)],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_data(
+            {'instance': frame}, primary_keys={'instance': 'id'}
+        )
+        opening = Request(
+            context=frame,
+            predict=frame.head(2)[['id', 'x']],
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+        scoring = Request(
+            context=frame,
+            predict=pd.DataFrame({'id': scored_keys, 'x': [9.0, 8.0]}),
+            schema=schema,
+            target='y',
+            task='classification',
+        )
+
+    adapter = TabularAdapter()
+    pinned = adapter.session_plan(opening, ('prediction',))
+
+    def plan():
+        return next(
+            iter(
+                adapter.session_prediction_plan(
+                    scoring, ('prediction',), pinned
+                )
+            )
+        )
+
+    if answers:
+        assert plan()['predict']['instance_table']['rows']
+    else:
+        with pytest.raises(StructuredDataError) as raised:
+            plan()
+        assert 'this session pinned' in str(raised.value)
+        assert 'fit()' in str(raised.value)

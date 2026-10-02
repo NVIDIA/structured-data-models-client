@@ -5,8 +5,8 @@
 """The quickstart notebook must keep matching the shipped API.
 
 A notebook is the first thing most people run, and it is the easiest artefact
-to leave behind when an interface moves. This does not execute it -- that needs
-two NIMs -- but it does hold it to the public surface, which is what actually
+to leave behind when an interface moves. This does not execute it (that needs
+two NIMs), but it does hold it to the public surface, which is what actually
 rots.
 """
 

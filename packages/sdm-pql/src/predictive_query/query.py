@@ -36,9 +36,10 @@ from predictive_query.schema.utils import QueryType, maybe_bold
 
 @dataclass
 class ParsedPredictiveQuery:
-    r"""A base class for a predictive query produced by a parser and
-    without any validation or metadata that depends on the schema, such as
-    types and join keys.
+    r"""A predictive query as the parser produced it.
+
+    Carries no schema-dependent data, including types or join keys.
+    :class:`ValidatedPredictiveQuery` is the same query once those are known.
 
     Args:
         entity_ast: The abstract syntax tree corresponding to the entity
@@ -235,9 +236,9 @@ class ParsedPredictiveQuery:
         """
         out = copy.copy(self)
 
-        out.whatif_ast = None  # Remove what-if clauses.
+        out.whatif_ast = None
 
-        if isinstance(out.entity_ast, Filter):  # Remove entity filters:
+        if isinstance(out.entity_ast, Filter):
             assert out.entity_ast is not None
             out.entity_ast = out.entity_ast.target  # type: ignore
 
@@ -248,7 +249,7 @@ class ParsedPredictiveQuery:
             out.target_ast = out.target_ast.left  # type: ignore
 
         if (
-            isinstance(out.target_ast, Condition)  # Remove target condition:
+            isinstance(out.target_ast, Condition)
             and isinstance(out.target_ast.target, Aggregation)
             and isinstance(out.target_ast.op, RelOp)
         ):
@@ -259,6 +260,14 @@ class ParsedPredictiveQuery:
 
 @dataclass
 class ValidatedPredictiveQuery(ParsedPredictiveQuery):
+    r"""A parsed query the validator has accepted, against a schema.
+
+    Adds the types, join keys and task metadata that
+    :class:`ParsedPredictiveQuery` deliberately lacks. It also keeps the
+    :class:`ValidationResponse` that produced them. The response may still
+    carry warnings because only errors stop a query.
+    """
+
     validation_response: ValidationResponse = field(
         default_factory=ValidationResponse
     )

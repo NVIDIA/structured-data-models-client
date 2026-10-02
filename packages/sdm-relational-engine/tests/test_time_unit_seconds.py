@@ -141,7 +141,7 @@ def test_a_pooled_bound_brackets_at_every_anchor(pair, anchor):
     At the 4th of February a month lands earlier than thirty days and at the
     15th of December it lands later, so a bound picked by adding both to one
     fixed date is the wrong way round at every anchor that date does not
-    describe – and a bound inside the calendar window drops rows no later
+    describe, and a bound inside the calendar window drops rows no later
     step can recover.
     """
     from sdm_relational_engine.rfm.base.sampler import (

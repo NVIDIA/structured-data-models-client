@@ -160,6 +160,8 @@ def generate_code(
         '',
         '@dataclass(frozen=True)',
         'class TFMOperation:',
+        '    r"""One operation the contract defines: where it lives and what it carries."""',
+        '',
         '    operation_id: str',
         '    endpoint: Endpoint',
         '    request_schema: str | None = None',
@@ -172,7 +174,15 @@ def generate_code(
     lines.extend(_constant_lines(constants))
     lines.extend(_response_model_lines(schemas))
     lines.extend(_tuple_constant_lines('TFM_SCHEMA_NAMES', schema_names))
-    lines.extend(['', '', 'class TFMOperations:'])
+    lines.extend(
+        [
+            '',
+            '',
+            'class TFMOperations:',
+            '    r"""Every operation in the contract, one attribute each."""',
+            '',
+        ]
+    )
     if operations:
         for operation in operations:
             lines.extend(_operation_lines(operation))
@@ -532,7 +542,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
     a contract that gains or drops a requirement moves this generated code with
     it. A required field is emitted without a default and read strictly, so a
     response missing it raises where it is parsed instead of yielding a model
-    whose ``row_index`` is quietly ``None`` -- that field is the join key the
+    whose ``row_index`` is quietly ``None``. That field is the join key the
     client hands back to callers.
     """
     if not {'PredictionItem', 'PredictionResponse'} <= set(schemas):
@@ -718,7 +728,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '    r"""``value`` as an int, refusing anything that is not already one.',
         '',
         '    ``int()`` accepts a bool and truncates a float, so a `row_index` of',
-        '    ``1.2`` used to become ``1`` -- attaching a prediction meant for no',
+        '    ``1.2`` used to become ``1``, attaching a prediction meant for no',
         '    row to row 1, which a join on `row_index` would then honour.',
         '    """',
         '    if isinstance(value, bool) or not isinstance(value, (int, float)):',
@@ -786,7 +796,7 @@ def _response_model_lines(schemas: dict[str, Any]) -> list[str]:
         '        # A number spelled as a string is accepted: servers do send',
         '        # one, and refusing a value that parses exactly would be a',
         '        # regression with nothing gained. What must not escape is a',
-        '        # raw error from the conversion itself -- `float(10**400)`',
+        '        # raw error from the conversion itself: `float(10**400)`',
         '        # raises OverflowError, which no caller catches.',
         '        raise ResponseContractError(',
         "            f'response carries {value!r} where the contract requires a '",

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 [build-system]
 requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
@@ -6,7 +10,7 @@ build-backend = "setuptools.build_meta"
 name = "sdm-api"
 # The version lives in exactly one place per distribution: `_version.py`, a
 # module holding a single literal and importing nothing. setuptools reads it
-# statically, so building the wheel never imports the package -- which matters
+# statically, so building the wheel never imports the package, which matters
 # because importing these roots pulls pandas, and a build backend that has to
 # import pandas to learn a version number cannot produce a wheel at all.
 dynamic = ["version"]
@@ -30,7 +34,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 # Deliberately dependency-free. Anything that only needs the wire vocabulary --
-# a NIM, a test harness, a future model engine -- picks this up without
+# a NIM, a test harness, a future model engine, picks this up without
 # dragging in a parser runtime.
 dependencies = []
 

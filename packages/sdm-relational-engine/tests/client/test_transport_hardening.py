@@ -17,7 +17,10 @@ from sdm_api.endpoints import Endpoint
 from sdm_relational_engine.client.client import _MAX_BODY_SNIPPET, capped_body
 from sdm_relational_engine.client.rfm import RFMAPI, _path_segment
 from sdm_relational_engine.client.utils import raise_on_error
-from sdm_relational_engine.exceptions import HTTPException
+from sdm_relational_engine.exceptions import (
+    HTTPException,
+    InvalidResponseError,
+)
 
 
 class _Response:
@@ -82,6 +85,25 @@ def test_path_segment_escapes_server_chosen_ids(
     session_id: str, expected: str
 ) -> None:
     assert _path_segment(session_id) == expected
+
+
+@pytest.mark.parametrize('session_id', ['.', '..', ''])
+def test_a_session_id_of_only_dots_is_refused(session_id: str) -> None:
+    r"""``quote`` leaves a dot alone, because it is unreserved, and a
+    resolver then removes ``.`` and ``..``. An empty id contributes no
+    segment at all. None of the three survives as the segment it was
+    written as, so the call would reach a route other than the one named.
+    """
+    with pytest.raises(InvalidResponseError):
+        _path_segment(session_id)
+
+
+@pytest.mark.parametrize('session_id', ['...', '....', 'a.b', '.hidden'])
+def test_a_segment_of_more_than_two_dots_is_ordinary(session_id: str) -> None:
+    r"""A resolver removes ``.`` and ``..`` and no others, so refusing every
+    run of dots would turn away ids a server may legitimately choose.
+    """
+    assert _path_segment(session_id) == session_id
 
 
 def test_session_predict_escapes_the_session_id() -> None:

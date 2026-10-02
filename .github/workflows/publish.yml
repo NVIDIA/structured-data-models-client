@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Publishing to PyPI, without a credential that can be stolen.
 #
 # There is no API token anywhere in this workflow or in the repository's
@@ -33,6 +37,41 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A tag can be put on any commit, including one that never reached a
+      # pull request. The gates run on `main` and on pull requests, so a tag
+      # off `main` is a tag nothing has tested. Checked before the build,
+      # because the upload decision is made from these artifacts.
+      #
+      # This check is not the whole control and cannot be. A tag runs the
+      # workflow as it existed at the tagged commit, so a tag placed on a
+      # commit from before this step existed would not run it. What stops
+      # that is outside the repository: a tag ruleset restricting who may
+      # create `v*`, and required reviewers on the `pypi` environment, which
+      # gate the upload itself. This step makes the common mistake
+      # impossible; those settings make the deliberate one hard.
+      - name: The tag is on main, and main has passed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main. Tag a commit that has been reviewed and merged."
+            exit 1
+          fi
+          # --branch main --event push, because a pull-request run of CI on
+          # this same commit says the branch passed, not that main did.
+          conclusion=$(gh run list --workflow CI --commit "$GITHUB_SHA" \
+            --branch main --event push \
+            --json conclusion --jq '[.[].conclusion] | first // "none"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI for $GITHUB_SHA is '$conclusion', not success. Publishing a commit whose gates did not pass is the one thing this workflow must not do."
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main and its CI passed"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -45,12 +84,12 @@ jobs:
           done
 
       # The engine pins its four siblings by exact version, and at this point in
-      # a release those versions exist only in dist/ -- they are not on PyPI
+      # a release those versions exist only in dist/, not on PyPI
       # yet, and will not be until the publish job runs. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
       # the smoke test fails with "sdm-api was not found" and the release stops
       # before it can publish anything. cibuildwheel copies the directory it
-      # runs from – the repository root – into the container as /project, and
+      # runs from, the repository root, into the container as /project, and
       # the engine's `[tool.cibuildwheel.linux]` points pip at
       # /project/_sibling_wheels.
       - name: Stage the sibling wheels where the engine's test env can see them
@@ -126,9 +165,10 @@ jobs:
           # exact sibling pins resolve to the wheels just built, not to whatever
           # happens to be on PyPI. Without it this describes a previous release,
           # or fails outright before the first one.
-          python -m pip install --find-links dist "./packages/sdm-client[sqlite,duckdb]"
+          python -m pip install --find-links dist \
+            "./packages/sdm-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); n=len(d.get('components',[])); print(f'{n} components'); sys.exit(0 if n else 'empty SBOM')"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors','sdm-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -158,7 +198,7 @@ jobs:
 
   # The SBOM is generated during the build and stripped from the upload,
   # because PyPI takes distributions and nothing else. Without this job it
-  # lived only in the Actions artifact, which expires -- so the inventory a
+  # lived only in the Actions artifact, which expires, so the inventory a
   # consumer needs to accept this into their own supply chain existed for
   # ninety days and then did not. Attached to the release, where it lasts as
   # long as the release does.
@@ -173,7 +213,7 @@ jobs:
           name: distributions
           path: dist/
 
-      # Pushing a tag creates a tag, not a Release -- and `gh release upload`
+      # Pushing a tag creates a tag, not a Release, and `gh release upload`
       # needs the Release to exist. Creating it here rather than asking the
       # releaser to do it by hand keeps RELEASING.md's promise that the tag is
       # the only manual step. `--verify-tag` refuses to invent a release for a

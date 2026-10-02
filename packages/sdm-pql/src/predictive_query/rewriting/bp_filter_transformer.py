@@ -227,12 +227,12 @@ class BPFilterTransformer(FilterSplitter):
                 f' WHERE {editable_field.text}'
             )
             editable_field.text = ''
-            editable_field.bold_text_position = (0, 0)  # No bold text
+            editable_field.bold_text_position = (0, 0)
         elif split_filter.non_applicable_filter is None:
             # If there's no bp_non_applicable_filter, we just use the original
             # untouched text instead of the possibly-rewritten version in
             # split_fitler.bp_applicable_filter
-            # TODO (vid) Make this info-level if possible.
+            # TODO: Make this info-level if possible.
             response.warnings.append(
                 ValidationWarning(
                     title='Target filter applied during batch prediction.',
@@ -273,7 +273,7 @@ class BPFilterTransformer(FilterSplitter):
                 + non_bold_prefix_len
                 + len(str(split_filter.applicable_filter)),
             )
-            # TODO (vid) Make this info-level if possible.
+            # TODO: Make this info-level if possible.
             response.warnings.append(
                 ValidationWarning(
                     title='Target filter applied during batch prediction.',
@@ -323,7 +323,7 @@ class BPFilterTransformer(FilterSplitter):
                 may be modified.
 
         """
-        # TODO (vid): This method should be improved once we start storing
+        # TODO: This method should be improved once we start storing
         # locations in the original query as part of better error reporting.
         # At the moment, this code recovers the query from the parsed tree
         # instead of using `original_query_text`. This is because it's hard
@@ -799,7 +799,7 @@ class BPFilterTransformer(FilterSplitter):
             assert isinstance(combined_target.rhs_target.target, Filter)
             assert combined_filter is not None
             combined_target.rhs_target.target.condition = combined_filter
-            print(f'KOMBINACIJA -- {combined_target}')
+            print(f'KOMBINACIJA: {combined_target}')
         return ValidatedPredictiveQuery(
             entity_ast=prediction_query.entity_ast,
             target_ast=combined_target,
