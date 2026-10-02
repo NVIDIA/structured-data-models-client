@@ -253,6 +253,7 @@ Each warehouse has a class of its own, named for it, so what only one warehouse 
 |---|---|---|
 | Table type | `Table`, holding `data: pd.DataFrame` | `SourceTable`: a source name and column metadata, no rows |
 | Keys and relationships | given, else inferred from values and names | given, else the catalog's constraints, else inferred from names |
+| Keys checked against | every row, in memory | every row, counted in the source unless it enforces the key |
 | Semantic types | inferred from the rows | inferred from a 1,000-row preview, the engine's rule |
 | Sampling at `materialize()` | the engine's `LocalSampler`, in memory | the engine's SQL sampler for that backend |
 | What leaves the source | every row | the sampled rows |

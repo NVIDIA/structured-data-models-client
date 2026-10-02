@@ -145,7 +145,7 @@ def test_an_explicit_key_that_repeats_is_refused():
         )
     message = str(error.value)
     assert 'not unique enough' in message
-    assert '20 of 1020' in message
+    assert '20 of 1,020' in message
 
 
 def test_assigning_a_repeating_key_is_refused_too():
