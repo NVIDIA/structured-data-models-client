@@ -289,3 +289,28 @@ def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:
     assert _unsafe_expr_reason('"MY\\COL" * 2', 'snowflake') is not None
     assert _unsafe_expr_reason("'a\\\\b' || x", 'snowflake') is None
     assert _unsafe_expr_reason('"MY\\COL" * 2', 'databricks') is None
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'NOT escape(x)',
+        'NOT escape(1)',
+        'TRUE AND escape(col)',
+        'x OR escape(y)',
+        'AND NOT escape(x)',
+        'NOT NOT escape(x)',
+        'CASE WHEN escape(x) THEN 1 END',
+    ],
+)
+def test_a_keyword_named_function_after_a_keyword_is_a_call(
+    dialect: str, expr: str
+) -> None:
+    r"""A word in front is not proof the next word is keyword syntax.
+
+    `escape(` after a value is the ESCAPE of a LIKE. After NOT, which takes an
+    expression next, it calls whatever is named, so reading it as a keyword let
+    a user-defined `escape` run under the caller's credentials.
+    """
+    assert _refused(expr, dialect) is not None

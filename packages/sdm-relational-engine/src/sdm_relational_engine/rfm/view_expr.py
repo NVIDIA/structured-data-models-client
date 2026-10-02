@@ -305,24 +305,93 @@ _QUALIFIED = re.compile(r'\.\s*$')
 _TYPE_CONTEXT = re.compile(r'(?:(?<![\w$])as|::)\s*$', flags=re.IGNORECASE)
 
 
+#: The keyword pairs SQL actually writes, as in ``x NOT LIKE ('a')`` and
+#: ``CASE WHEN (...)``. Any other keyword needs a value in front of it
+#: before a word that could name a function counts as one.
+_FOLLOWS_A_KEYWORD = {
+    'not': frozenset(
+        {'between', 'exists', 'ilike', 'in', 'like', 'regexp', 'rlike'}
+    ),
+    'like': frozenset({'all', 'any', 'some'}),
+    'ilike': frozenset({'all', 'any', 'some'}),
+    'rlike': frozenset({'all', 'any', 'some'}),
+    'regexp': frozenset({'all', 'any', 'some'}),
+    'is': frozenset({'distinct'}),
+    'distinct': frozenset({'from'}),
+    'case': frozenset({'when'}),
+    'when': frozenset({'then'}),
+    'then': frozenset({'else', 'when'}),
+    'else': frozenset({'end'}),
+}
+
+
+def _follows_a_value(lead: str) -> bool:
+    r"""Whether ``lead`` ends with something a comparison can be about.
+
+    A value, a closing bracket or a quoted string ends an operand. A keyword
+    does not: after ``NOT`` or ``AND`` the next thing is an expression.
+    """
+    lead = lead.rstrip()
+    if not lead:
+        return False
+    if lead[-1] in ')]' + _QUOTED:
+        return True
+    if not re.match(r'[\w$]', lead[-1]):
+        return False
+    last = _LAST_TOKEN.search(lead)
+    return last is not None and last.group(1).lower() not in _KEYWORDS
+
+
 def _acts_as_keyword(word: str, lead: str) -> bool:
     r"""Whether ``word``, followed by ``(``, is a keyword rather than a call.
 
     Databricks lets most of these words name a function too, so ``escape(x)``
-    calls one. As a keyword each follows a value, a ``)`` or another keyword,
-    as in ``x IN (...)`` and ``TRIM(BOTH ' ' FROM x)``. ``NOT`` and ``CASE``
-    can also begin an expression.
+    calls one. As a keyword each follows a *value*: ``x IN (...)``,
+    ``TRIM(BOTH ' ' FROM x)``.
+
+    What stands in front matters, not merely that something does. After a
+    value, ``escape(`` is the ``ESCAPE`` of a ``LIKE``. After ``NOT``, which
+    takes an expression next, the same text calls a function, and reading it
+    as a keyword let ``NOT escape(secret())`` through.
+
+    A few pairs are real: ``x NOT LIKE (...)`` negates a comparison. Those
+    need the value the comparison is about, so ``NOT regexp(x)`` with nothing
+    in front of it is a call.
 
     Args:
         word: The folded word before ``(``.
         lead: The expression text before ``word``.
     """
-    if word in ('not', 'case'):
+    if word == 'not':
+        # `NOT` names no function in either dialect.
+        return True
+    if word == 'case':
+        # `CASE (x) WHEN ...` compares a value, but only where a `CASE`
+        # may start.
+        return not _follows_a_value(lead)
+    return _in_keyword_position(word, lead)
+
+
+def _in_keyword_position(word: str, lead: str) -> bool:
+    r"""Whether ``word`` sits where a keyword may, given what precedes it.
+
+    After a value, yes. After another keyword, only where SQL writes that
+    pair, and only if that keyword is itself in keyword position: ``IS
+    DISTINCT FROM`` reaches a value through ``IS``, while a bare ``DISTINCT
+    FROM`` does not.
+    """
+    if _follows_a_value(lead):
         return True
     lead = lead.rstrip()
-    return bool(lead) and (
-        lead[-1] in ')]' + _QUOTED or bool(re.match(r'[\w$]', lead[-1]))
-    )
+    previous = _LAST_TOKEN.search(lead)
+    if previous is None:
+        return False
+    before = previous.group(1).lower()
+    if word not in _FOLLOWS_A_KEYWORD.get(before, frozenset()):
+        return False
+    if before == 'case':
+        return True
+    return _in_keyword_position(before, lead[: previous.start()])
 
 
 def _untrusted_call_reason(expr: str, dialect: str) -> str | None:
