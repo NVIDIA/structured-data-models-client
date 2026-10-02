@@ -1172,7 +1172,6 @@ class Graph:
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
             UnsupportedJoinError,
-            check_filter_calls,
             parse_metric_view,
             parse_table_reference,
             read_metric_view_definition,
@@ -1244,7 +1243,6 @@ class Graph:
                 schema=fact_schema,
                 columns=[],
                 primary_key=None,
-                row_filter=spec.filter,
             )
             tables_by_alias: dict[str, DatabricksTable] = {
                 SOURCE_ALIAS: fact_table
@@ -1277,9 +1275,13 @@ class Graph:
                     return []
 
             # Every read of the fact table runs the filter, so it is checked
-            # before the first one.
-            if spec.filter is not None and not trust_expressions:
-                check_filter_calls(spec.filter, _columns_of(SOURCE_ALIAS))
+            # against the table's columns and attached before the first one.
+            if spec.filter is not None:
+                fact_table._row_filter = (
+                    spec.filter.trusted()
+                    if trust_expressions
+                    else spec.filter.checked(_columns_of(SOURCE_ALIAS))
+                )
 
             columns_by_alias: dict[str, list[ColumnSpec]] = defaultdict(list)
             for column_spec in spec.columns:
