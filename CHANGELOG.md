@@ -143,12 +143,15 @@ declare as `1.0.0` and none has published. The heading becomes
   when a row was loaded or synced, such as `_fivetran_synced` or
   `EXTRACTDATE`, nor a date of birth, such as `BirthDate` or `dob`. A stamp
   of the last edit, such as `ModifiedDate`, `updated_at` or `last_login`, is
-  never taken on a table with a primary key, and on one without, read as an
-  append-only log of changes, only when no other timestamp is left. Of
-  several left, a `created` stamp is taken, and otherwise the one whose
-  values start earliest, read over the whole table on a source and leaving
-  out placeholders before 1901 or at 1970-01-01T00:00:00. On a source read
-  in part, one query per table reads every timestamp over the whole table.
+  never taken on a table another table links to, and on one nothing links
+  to, read as an append-only log of changes, only when no other timestamp
+  is left. Of several left, a `created` stamp is taken, and otherwise the
+  one whose values start earliest, read over the whole table on a source
+  and leaving out placeholders before 1901 or at 1970-01-01T00:00:00. A
+  source table with a timestamp and at least as many rows as the preview
+  now costs one more query when it is described: a `MIN`/`MAX`/`COUNT` over
+  the whole table for all its timestamps at once (0.18 s for 8 million rows
+  on Postgres).
   Before, `from_data` took a lone timestamp unchecked and gave a table with
   several none, and `from_source` compared only the rows it read and never
   took a name such as `last_seen`. On AdventureWorks `customers` now gets no
