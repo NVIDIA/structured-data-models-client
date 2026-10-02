@@ -25,6 +25,14 @@ declare as `1.0.0` and none has published. The heading becomes
 - Branch coverage, measured to be read rather than gated on a number.
 - CI jobs that run the suite against the *installed wheel*, audit dependencies,
   and generate an SBOM.
+- A contract check over the request bodies. The rest of the gate works on
+  digests and the response models, so nothing read what the client actually
+  sends. The recorded payloads in `tests/golden/` are now validated against the
+  pinned spec, which catches a renamed key, a dropped section, a value off an
+  enum, and an invented key in any section the contract declares closed. Four
+  request schemas set `additionalProperties: true`, so a key invented inside
+  `output`, `inference`, `task` or `target` stays contractual and is not
+  reported; a test pins that limit so it is not mistaken for coverage.
 - `RuntimeContract.unread_feature_stypes`: the semantic types a deployment
   accepts and its model never reads. The relational model has no text
   processor, so a `text` column is carried, dropped at the model, and

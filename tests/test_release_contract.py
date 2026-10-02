@@ -11,11 +11,14 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import subprocess
 import sys
 from collections.abc import Sequence
+
+import pytest
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -91,6 +94,99 @@ class TestPublicSurface:
             'intended, re-record with `python scripts/snapshot_wire_payloads.py '
             f'--write`.\n{result.stdout}{result.stderr}'
         )
+
+
+CONTRACT = REPO.parent / 'structured-data-api' / 'nim-sd.openapi.yaml'
+
+needs_the_contract = pytest.mark.skipif(
+    not CONTRACT.is_file(),
+    reason='needs structured-data-api checked out beside this repository',
+)
+
+
+def _check_payloads(payloads: pathlib.Path | None = None):
+    command = [
+        sys.executable,
+        str(REPO / 'scripts' / 'check_wire_payloads.py'),
+        '--contract',
+        str(CONTRACT),
+    ]
+    if payloads is not None:
+        command += ['--payloads', str(payloads)]
+    return subprocess.run(command, capture_output=True, text=True)
+
+
+def _doctored(tmp_path: pathlib.Path, mutate) -> pathlib.Path:
+    recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+    entry = recorded['relational/pql-count-aggregation']
+    mutate(entry[0] if isinstance(entry, list) else entry)
+    written = tmp_path / 'wire_payloads.json'
+    written.write_text(json.dumps(recorded))
+    return written
+
+
+class TestTheRequestBodiesAreContractual:
+    """The bodies the client builds, read against the spec they are sent to.
+
+    They are built as plain mappings rather than through the generated models,
+    so nothing but this checks that what goes out is what the contract says.
+    """
+
+    @needs_the_contract
+    def test_every_recorded_body_matches_the_contract(self):
+        result = _check_payloads()
+        assert result.returncode == 0, (
+            f'A recorded request body is not what the contract declares.\n'
+            f'{result.stdout}{result.stderr}'
+        )
+
+    @needs_the_contract
+    @pytest.mark.parametrize(
+        'mutate, said',
+        [
+            (lambda body: body.update(invented_key=1), 'invented_key'),
+            (lambda body: body.update(modle=body.pop('model')), "'model'"),
+            (
+                lambda body: body['output'].update(fields=['predcition']),
+                'predcition',
+            ),
+            (lambda body: body['task'].update(kind=7), 'not of type'),
+            (lambda body: body.pop('schema'), "'schema'"),
+            (lambda body: body['schema'].update(nonsense=1), 'nonsense'),
+        ],
+        ids=[
+            'an invented top-level key',
+            'a renamed required key',
+            'a field off the enum',
+            'a value of the wrong type',
+            'a dropped section',
+            'an invented key in a strict section',
+        ],
+    )
+    def test_a_body_the_contract_does_not_declare_is_refused(
+        self, tmp_path, mutate, said
+    ):
+        result = _check_payloads(_doctored(tmp_path, mutate))
+
+        assert result.returncode == 1
+        assert said in result.stderr
+
+    @needs_the_contract
+    def test_a_permissive_section_is_not_policed(self, tmp_path):
+        """What this check cannot do, pinned so nobody assumes otherwise.
+
+        `OutputSpec` and three others declare `additionalProperties: true`, so
+        a key invented inside them is contractual. Only the contract can
+        change that.
+        """
+        result = _check_payloads(
+            _doctored(
+                tmp_path,
+                lambda body: body['output'].update(statisitc='median'),
+            )
+        )
+
+        assert result.returncode == 0
 
 
 class TestErrorContract:
