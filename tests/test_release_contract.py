@@ -259,14 +259,34 @@ class TestTheRequestBodiesAreContractual:
     @needs_the_contract
     @pytest.mark.parametrize(
         'written, said',
-        [('not json at all', 'is not JSON'), ('[]', 'not calls by name')],
-        ids=['not json', 'not calls by name'],
+        [
+            (b'not json at all', 'is not JSON'),
+            (b'[]', 'not calls by name'),
+            (b'"text"', 'not calls by name'),
+            (b'{"case": 1}', 'not a request body'),
+            (b'{"case": [{}, 2]}', 'not a request body'),
+            (b'\xff\xfe', 'is not UTF-8'),
+            (None, 'cannot be read'),
+        ],
+        ids=[
+            'not json',
+            'a list',
+            'a string',
+            'a scalar call',
+            'a scalar among calls',
+            'not utf-8',
+            'no file at all',
+        ],
     )
     def test_a_recording_it_cannot_read_is_reported_not_raised(
         self, tmp_path, written, said
     ):
+        """A broken recording is the reader's mistake, not a contract failure,
+        and either way a traceback says neither.
+        """
         recording = tmp_path / 'wire_payloads.json'
-        recording.write_text(written)
+        if written is not None:
+            recording.write_bytes(written)
 
         result = _check_payloads(recording)
 

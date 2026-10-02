@@ -96,18 +96,38 @@ def schema_for(body: dict[str, Any]) -> str | None:
 
 
 def recorded_bodies(payloads: Path) -> list[tuple[str, dict[str, Any]]]:
+    r"""The bodies in a recording, as ``name`` and body.
+
+    Every way the file can fail to be a recording is an ``Unreadable``, so a
+    broken file reads as the mistake it is rather than as a contract failure
+    or a traceback.
+    """
     try:
-        recorded = json.loads(payloads.read_text(encoding='utf-8'))
+        text = payloads.read_text(encoding='utf-8')
+    except OSError as error:
+        raise Unreadable(f'{payloads} cannot be read: {error}') from error
+    except UnicodeDecodeError as error:
+        raise Unreadable(f'{payloads} is not UTF-8: {error}') from error
+
+    try:
+        recorded = json.loads(text)
     except json.JSONDecodeError as error:
         raise Unreadable(f'{payloads} is not JSON: {error}') from error
+
     if not isinstance(recorded, dict):
         raise Unreadable(
             f'{payloads} holds {type(recorded).__name__}, not calls by name'
         )
+
     bodies = []
     for name, entry in sorted(recorded.items()):
         calls = entry if isinstance(entry, list) else [entry]
         for position, body in enumerate(calls):
+            if not isinstance(body, dict):
+                raise Unreadable(
+                    f'{name}[{position}] is {type(body).__name__}, not a '
+                    f'request body'
+                )
             bodies.append((f'{name}[{position}]', body))
     return bodies
 
