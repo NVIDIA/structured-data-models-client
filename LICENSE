@@ -264,7 +264,8 @@ enumerated by mermaid's own bundled license manifest.
   The components mermaid declares, transitively.
 
   mermaid 11.15.0 is published as a built file, minified and
-  tree-shaken, and carries no record of what went into it. The components
+  tree-shaken. It names a version for four of its components and nothing
+  for the rest, and no manifest of them at all. The components
   below are the ones it declares transitively, together with those its own
   bundled dependencies inline, which no dependency graph reaches and which
   are named in scripts/mermaid_notices.py.
@@ -432,6 +433,7 @@ enumerated by mermaid's own bundled license manifest.
       Copyright (c) 2024 Viva Republica, Inc.
       Copyright OpenJS Foundation and other contributors <https://openjsf.org/>
       Based on Underscore.js, copyright Jeremy Ashkenas,
+      DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>
     hachure-fill 0.5.2                              License: MIT
       Copyright (c) 2023 Preet Shihn
     iconv-lite 0.6.3                                License: MIT

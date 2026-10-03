@@ -6,7 +6,8 @@
 """Attribute what is inside the vendored mermaid bundle, without guessing.
 
 `mermaid.min.js` is upstream's published build: minified, tree-shaken, and
-carrying no manifest of what went into it. Reading components out of it by hand
+carrying no manifest of what went into it. It states a version for four of its
+components and nothing for the rest. Reading components out of it by hand
 does not converge. Three rounds of it here each missed more, and the ones
 missed last were transitive: `cose-base` reached through two Cytoscape layouts,
 `chevrotain-allstar` through the parser.
@@ -32,7 +33,9 @@ are the ones CI runs:
     --refresh   read npm and rewrite MERMAID_COMPONENTS.json
     --write     render from that file and splice it into both LICENSE files
     --check     render from that file, and verify both LICENSE files carry
-                it, and that each license text it names is present whole
+                it, and that each license this repository relies on is
+                present whole. MPL-2.0 is named but not carried, because
+                the one component under it offers Apache-2.0 instead
 
 A mermaid upgrade is `--refresh` then `--write`, which is also what
 VENDORED.md tells you to do.
@@ -342,75 +345,73 @@ def _satisfying(released: list[str], spec: str) -> list[str] | None:
     return [v for v in released if fits(_version_parts(v))]
 
 
+def _notices_in(body: str) -> list[str]:
+    """Every notice a file carries, each read to its end.
+
+    A notice runs to the blank line after it, to the next notice, or to where
+    the license starts granting, whichever comes first. Stopping at the first
+    line costs the rest: Gruber's "All rights reserved." sits under a URL, the
+    CWI notice wraps onto "The Netherlands. All rights reserved.", and lodash
+    names Underscore on the line below. Running past it costs more, which
+    import-meta-resolve shows: it puts the MIT grant directly under its last
+    notice, with no blank line between.
+    """
+    lines = body.splitlines()
+    found: list[str] = []
+    for position, raw in enumerate(lines):
+        line = raw.strip()
+        if not NOTICE.match(line) or NOT_A_NOTICE.search(line):
+            continue
+        block = [line]
+        for following in lines[position + 1 : position + NOTICE_LINES]:
+            following = following.strip()
+            if (
+                NOTICE.match(following)
+                or NOT_A_NOTICE.search(following)
+                or BODY_OPENS.match(following)
+            ):
+                break
+            if not following:
+                # Microsoft's files put "All rights reserved." under a blank
+                # line, so a blank ends a notice only when nothing of it
+                # follows.
+                rest = lines[position + 1 : position + NOTICE_LINES]
+                if not any(RESERVED.match(x.strip()) for x in rest):
+                    break
+                continue
+            block.append(following)
+        for part in block:
+            if part not in found:
+                found.append(part)
+    return found
+
+
+def _first_file(name: str, version: str, filenames: tuple[str, ...]) -> str:
+    """The first of ``filenames`` the package ships that carries a notice."""
+    for filename in filenames:
+        try:
+            body = _read(f'https://unpkg.com/{name}@{version}/{filename}')
+        except Exception:
+            continue
+        text = body.decode('utf-8', 'replace')
+        if _notices_in(text):
+            return text
+    return ''
+
+
 def notices_of(name: str, version: str) -> tuple[list[str], str]:
     """The copyright notices a package attributes, from its own files.
 
-    Each candidate filename is tried until one yields a notice, so a package
-    that ships an empty or stock license file is not read as having none while
-    another file holds the real one. A package with no notice anywhere is what
-    `refresh` refuses rather than records.
+    A NOTICE file is read as well as the license, not instead of it:
+    es-toolkit keeps its Lodash attribution there and nowhere else.
     """
-    for filename in LICENSE_FILES:
-        try:
-            text = _read(f'https://unpkg.com/{name}@{version}/{filename}')
-        except Exception:
-            continue
-        body = text.decode('utf-8', 'replace')
-        lines = body.splitlines()
-        found: list[str] = []
-        for position, raw in enumerate(lines):
-            line = raw.strip()
-            if not NOTICE.match(line) or NOT_A_NOTICE.search(line):
-                continue
-            # A notice runs to the blank line after it, to the next
-            # notice, or to where the license starts granting, whichever
-            # comes first, and no further than NOTICE_LINES. Stopping at the
-            # first line costs the rest: Gruber's "All rights reserved." sits
-            # under a URL, and the CWI notice wraps onto "The Netherlands.
-            # All rights reserved." Running past it costs more, which
-            # import-meta-resolve shows: it puts the MIT grant directly under
-            # its last notice, with no blank line between.
-            block = [line]
-            for following in lines[position + 1 : position + NOTICE_LINES]:
-                following = following.strip()
-                if (
-                    NOTICE.match(following)
-                    or NOT_A_NOTICE.search(following)
-                    or BODY_OPENS.match(following)
-                ):
-                    break
-                if not following:
-                    # Microsoft's files put "All rights reserved." under a
-                    # blank line, so a blank is only the end if nothing of
-                    # the notice follows it.
-                    rest = lines[position + 1 : position + NOTICE_LINES]
-                    if not any(RESERVED.match(x.strip()) for x in rest):
-                        break
-                    continue
-                block.append(following)
-            for part in block:
-                if part not in found:
-                    found.append(part)
-        if found:
-            return found + _notice_file(name, version), body
-    return _notice_file(name, version), ''
-
-
-def _notice_file(name: str, version: str) -> list[str]:
-    """The notices a package keeps in a NOTICE file beside its license."""
-    for filename in NOTICE_FILES:
-        try:
-            text = _read(f'https://unpkg.com/{name}@{version}/{filename}')
-        except Exception:
-            continue
-        found = [
-            line.strip()
-            for line in text.decode('utf-8', 'replace').splitlines()
-            if NOTICE.match(line.strip()) and not NOT_A_NOTICE.search(line)
-        ]
-        if found:
-            return found
-    return []
+    licence = _first_file(name, version, LICENSE_FILES)
+    notice = _first_file(name, version, NOTICE_FILES)
+    found = _notices_in(licence)
+    for extra in _notices_in(notice):
+        if extra not in found:
+            found.append(extra)
+    return found, licence
 
 
 def refresh() -> int:
@@ -512,7 +513,8 @@ def render() -> str:
         OPENS.rstrip('\n'),
         '',
         f'  mermaid {recorded["mermaid"]} is published as a built file, minified and',
-        '  tree-shaken, and carries no record of what went into it. The components',
+        '  tree-shaken. It names a version for four of its components and nothing',
+        '  for the rest, and no manifest of them at all. The components',
         '  below are the ones it declares transitively, together with those its own',
         '  bundled dependencies inline, which no dependency graph reaches and which',
         '  are named in scripts/mermaid_notices.py.',
