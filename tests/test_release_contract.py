@@ -332,7 +332,17 @@ _COMPONENTS = (
     / 'MERMAID_COMPONENTS.json'
 )
 #: Mirrors scripts/mermaid_notices.py, where the reason for each is written.
-_WITHOUT_A_NOTICE = frozenset({'chevrotain', 'robust-predicates'})
+_WITHOUT_A_NOTICE = frozenset(
+    {
+        'chevrotain',
+        '@chevrotain/types',
+        '@chevrotain/regexp-to-ast',
+        '@chevrotain/gast',
+        '@chevrotain/utils',
+        '@chevrotain/cst-dts-gen',
+        'robust-predicates',
+    }
+)
 
 
 class TestTheNoticesAreComplete:
@@ -362,8 +372,8 @@ class TestTheNoticesAreComplete:
         """A license name is not a notice, and silence is not either."""
         recorded = json.loads(_COMPONENTS.read_text())['components']
         without = {
-            name
-            for name, component in recorded.items()
+            component['name']
+            for component in recorded.values()
             if not component['notices']
         }
 

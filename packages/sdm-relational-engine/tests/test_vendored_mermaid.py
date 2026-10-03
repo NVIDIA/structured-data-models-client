@@ -86,14 +86,14 @@ def test_bundled_license_notices_are_unchanged() -> None:
     ``DOMPurify 3.4.0``, ``lodash/lodash#4.18.1`` and ``Embeddable Minimum
     Strictly-Compliant Promises/A+ 1.1.1 Thenable`` all appear. Rather than
     claim to parse each one, this pins their digest. An upgrade that changes
-    any notice fails here, which is the signal to re-enumerate the LICENSE by
-    hand from the new bundle.
+    any notice fails here, which is the signal to re-record the attribution with
+    `python scripts/mermaid_notices.py --refresh --write`.
     """
     digest = hashlib.sha256(_notice_blocks().encode()).hexdigest()
     assert digest == NOTICE_DIGEST, (
         "the bundle's license notices changed. Re-read them and re-enumerate "
-        'the bundled components in the root LICENSE before updating this '
-        'digest.'
+        'the attribution with scripts/mermaid_notices.py before updating '
+        'this digest.'
     )
 
 
@@ -143,8 +143,9 @@ def test_the_generated_versions_are_the_ones_recorded() -> None:
     generated = licence[licence.index('The components mermaid declares') :]
     generated = generated[: generated.index('MIT License, as it applies')]
 
-    for name, component in recorded.items():
-        assert f'{name} {component["version"]}' in generated, (
-            f'{name} is recorded at {component["version"]} but the LICENSE '
-            f'does not attribute it at that version'
+    for component in recorded.values():
+        attributed = f'{component["name"]} {component["version"]}'
+        assert attributed in generated, (
+            f'{attributed} is recorded but the LICENSE does not attribute it '
+            f'at that version'
         )
