@@ -126,6 +126,7 @@ BUNDLE_RECORDS = {
     'js-yaml': '4.1.1',
     'katex': '0.16.25',
     'cytoscape': '3.33.1',
+    'lodash-es': '4.18.1',
 }
 
 #: Packages whose license file grants more than their metadata declares.
@@ -177,7 +178,10 @@ EXTRA_TERMS = {
 #: line reading "copyright license to reproduce, prepare Derivative Works
 #: of,", which a case-insensitive pattern reads as an attribution and writes
 #: into this repository as though a package had asserted it.
-NOTICE = re.compile(r'^(?:Original [\w.-]+ copyright: )?Copyright\b')
+NOTICE = re.compile(
+    r'^(?:Original [\w.-]+ copyright: )?Copyright\b'
+    r'|^Based on .*\bcopyright\b'
+)
 
 #: Lines that say the word and are not a notice: a license explaining what it
 #: grants, the placeholder in Apache's appendix, and lodash waiving rights
@@ -188,8 +192,8 @@ NOT_A_NOTICE = re.compile(
     re.I,
 )
 
-#: BSD asks for this as part of the notice, and it sits on its own line.
-RESERVED = re.compile(r'^All rights reserved\.?$', re.I)
+#: How far a notice can run past its first line before this stops reading.
+NOTICE_LINES = 4
 
 
 def _read(url: str, attempts: int = 4) -> bytes:
@@ -219,70 +223,89 @@ def _version_parts(version: str) -> list[int]:
 
 
 def resolve(packument: dict[str, Any], spec: str) -> str | None:
-    """A released version satisfying one range, as npm would read it.
+    """A released version satisfying one range, the way npm picks: the highest.
 
-    Not a semver implementation. It handles what mermaid's graph actually
-    uses: exact pins, carets, tildes, a bare major, and comparator ranges,
-    for which it takes the floor rather than guessing at the ceiling. A range
-    it cannot read returns None rather than a wrong answer.
+    Not a semver implementation. It handles what this graph uses: exact pins,
+    carets including the zero-major rule, tildes, partial versions, hyphen
+    ranges, comparator pairs, and alternatives separated by ``||``. A range it
+    cannot read returns None rather than a wrong answer, which is how the
+    hyphen range in d3-sankey was found.
     """
-    spec = spec.split('||')[0].strip()
     released = [
         v for v in packument['versions'] if not re.search(r'[a-zA-Z-]', v)
     ]
-    if not spec or spec == '*':
-        return packument['dist-tags']['latest']
-    if spec in packument['versions']:
-        return spec
+    fitting: list[str] = []
+    for alternative in spec.split('||'):
+        alternative = alternative.strip()
+        if not alternative or alternative == '*':
+            return packument['dist-tags']['latest']
+        if alternative in packument['versions']:
+            fitting.append(alternative)
+            continue
+        matched = _satisfying(released, alternative)
+        if matched is None:
+            return None
+        fitting.extend(matched)
+    return max(fitting, key=_version_parts, default=None)
 
+
+def _satisfying(released: list[str], spec: str) -> list[str] | None:
+    """Every released version one range admits, or None if it is unreadable."""
     hyphen = re.fullmatch(r'([\d.]+)\s+-\s+([\d.]+)', spec)
     if hyphen:
-        # `1 - 2` is >=1.0.0 and <3.0.0: the upper bound is inclusive of the
-        # whole major when it is written as one.
+        # `1 - 2` is >=1.0.0 and <3.0.0: an upper bound written as a bare
+        # major includes that whole major.
         low, high = (_version_parts(part) for part in hyphen.groups())
-        ceiling = high[0] + 1 if high[1:3] == [0, 0] else None
-        fitting = [
+        ceiling = [high[0] + 1] if high[1:3] == [0, 0] else None
+        return [
             v
             for v in released
             if _version_parts(v) >= low
             and (
-                _version_parts(v)[0] < ceiling
+                _version_parts(v)[:1] < ceiling
                 if ceiling is not None
                 else _version_parts(v) <= high
             )
         ]
-        return max(fitting, key=_version_parts, default=None)
+
+    comparators = re.findall(r'([<>]=?)\s*([\d.]+)', spec)
+    if comparators and re.fullmatch(r'[\s<>=\d.]+', spec):
+        kept = released
+        for operator, bound in comparators:
+            edge = _version_parts(bound)
+            kept = [
+                v
+                for v in kept
+                if (_version_parts(v) >= edge if operator == '>=' else None)
+                or (_version_parts(v) > edge if operator == '>' else None)
+                or (_version_parts(v) <= edge if operator == '<=' else None)
+                or (_version_parts(v) < edge if operator == '<' else None)
+            ]
+        return kept
 
     floor = _version_parts(spec)
     if spec.startswith('^'):
-        # A caret below 1.0.0 allows only the patch to move, because a
-        # zero-major minor bump is a breaking change by convention.
+        # A caret below 1.0.0 lets only the patch move: a zero-major minor
+        # bump is a breaking change by convention, and npm reads it that way.
         leading = next((i for i, part in enumerate(floor[:3]) if part), 2)
         fits = lambda p: p[: leading + 1] == floor[: leading + 1] and p >= floor  # noqa: E731
     elif spec.startswith('~'):
         fits = lambda p: p[:2] == floor[:2] and p >= floor  # noqa: E731
-    elif spec[0] in '><=':
-        fits = lambda p: p >= floor  # noqa: E731
     elif re.fullmatch(r'\d+(\.\d+)?', spec):
-        # A partial version is every release that starts with it: `0.6` is
-        # >=0.6.0 and <0.7.0, exactly as a tilde on the same prefix.
         given = len(spec.split('.'))
         fits = lambda p: p[:given] == floor[:given]  # noqa: E731
     else:
         return None
-
-    fitting = [v for v in released if fits(_version_parts(v))]
-    if spec[0] in '><=':
-        return min(fitting, key=_version_parts, default=None)
-    return max(fitting, key=_version_parts, default=None)
+    return [v for v in released if fits(_version_parts(v))]
 
 
 def notices_of(name: str, version: str) -> list[str]:
     """The copyright notices a package's own license file carries.
 
-    The first license file found is the one read. A package that keeps its
-    terms somewhere else entirely reads as having no notice, which `refresh`
-    refuses rather than records.
+    Each candidate filename is tried until one yields a notice, so a package
+    that ships an empty or stock license file is not read as having none while
+    another file holds the real one. A package with no notice anywhere is what
+    `refresh` refuses rather than records.
     """
     for filename in LICENSE_FILES:
         try:
@@ -295,14 +318,20 @@ def notices_of(name: str, version: str) -> list[str]:
             line = raw.strip()
             if not NOTICE.match(line) or NOT_A_NOTICE.search(line):
                 continue
+            # A notice runs to the blank line after it. Stopping at the
+            # first line costs the rest of it: Gruber's "All rights
+            # reserved." sits under a URL, and the CWI notice wraps onto
+            # "The Netherlands. All rights reserved."
             block = [line]
-            for following in lines[position + 1 : position + 3]:
+            for following in lines[position + 1 : position + NOTICE_LINES]:
                 following = following.strip()
-                if RESERVED.match(following):
-                    block.append(following)
+                if (
+                    not following
+                    or NOTICE.match(following)
+                    or NOT_A_NOTICE.search(following)
+                ):
                     break
-                if following:
-                    break
+                block.append(following)
             for part in block:
                 if part not in found:
                     found.append(part)
@@ -435,7 +464,7 @@ LICENSE_TEXTS = {
     'MIT': 'MIT License, as it applies',
     'ISC': 'ISC License, as it applies',
     'BSD-3-Clause': 'BSD 3-Clause License, as it applies',
-    'Apache-2.0': 'Apache License',
+    'Apache-2.0': 'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION',
     'Unlicense': 'unencumbered software',
     'Python-2.0': 'HISTORY OF THE SOFTWARE',
 }

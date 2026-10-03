@@ -89,7 +89,8 @@
       "license": "Python-2.0",
       "name": "argparse",
       "notices": [
-        "Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,"
+        "Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,",
+        "The Netherlands.  All rights reserved."
       ],
       "version": "2.0.1"
     },
@@ -517,7 +518,10 @@
       "notices": [
         "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>",
         "Copyright Node.js contributors. All rights reserved.",
-        "Copyright Joyent, Inc. and other Node contributors. All rights reserved."
+        "Copyright Joyent, Inc. and other Node contributors. All rights reserved.",
+        "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "of this software and associated documentation files (the \"Software\"), to",
+        "deal in the Software without restriction, including without limitation the"
       ],
       "version": "4.2.0"
     },
@@ -589,7 +593,9 @@
       "license": "MIT",
       "name": "lodash-es",
       "notices": [
-        "Copyright OpenJS Foundation and other contributors <https://openjsf.org/>"
+        "Copyright OpenJS Foundation and other contributors <https://openjsf.org/>",
+        "Based on Underscore.js, copyright Jeremy Ashkenas,",
+        "DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>"
       ],
       "version": "4.18.1"
     },
@@ -599,7 +605,9 @@
       "notices": [
         "Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)",
         "Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)",
-        "Copyright \u00a9 2004, John Gruber"
+        "Copyright \u00a9 2004, John Gruber",
+        "http://daringfireball.net/",
+        "All rights reserved."
       ],
       "version": "16.4.2"
     },
@@ -690,20 +698,19 @@
       ],
       "version": "2.3.0"
     },
-    "uuid@11.1.1": {
+    "uuid@14.0.2": {
       "license": "MIT",
       "name": "uuid",
       "notices": [
         "Copyright (c) 2010-2020 Robert Kieffer and other contributors"
       ],
-      "version": "11.1.1"
+      "version": "14.0.2"
     },
     "vscode-jsonrpc@9.0.3": {
       "license": "MIT",
       "name": "vscode-jsonrpc",
       "notices": [
-        "Copyright (c) Microsoft Corporation",
-        "All rights reserved."
+        "Copyright (c) Microsoft Corporation"
       ],
       "version": "9.0.3"
     },
@@ -711,8 +718,7 @@
       "license": "MIT",
       "name": "vscode-languageserver-protocol",
       "notices": [
-        "Copyright (c) Microsoft Corporation",
-        "All rights reserved."
+        "Copyright (c) Microsoft Corporation"
       ],
       "version": "3.18.4"
     },
@@ -720,8 +726,7 @@
       "license": "MIT",
       "name": "vscode-languageserver-textdocument",
       "notices": [
-        "Copyright (c) Microsoft Corporation",
-        "All rights reserved."
+        "Copyright (c) Microsoft Corporation"
       ],
       "version": "1.0.15"
     },
@@ -729,8 +734,7 @@
       "license": "MIT",
       "name": "vscode-languageserver-types",
       "notices": [
-        "Copyright (c) Microsoft Corporation",
-        "All rights reserved."
+        "Copyright (c) Microsoft Corporation"
       ],
       "version": "3.18.4"
     },
@@ -738,8 +742,7 @@
       "license": "MIT",
       "name": "vscode-languageserver",
       "notices": [
-        "Copyright (c) Microsoft Corporation",
-        "All rights reserved."
+        "Copyright (c) Microsoft Corporation"
       ],
       "version": "10.1.2"
     },

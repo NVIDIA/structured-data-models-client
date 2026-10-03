@@ -318,6 +318,7 @@ enumerated by mermaid's own bundled license manifest.
       Copyright (c) 2021 Samuel Gratzl
     argparse 2.0.1                                  License: Python-2.0
       Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,
+      The Netherlands.  All rights reserved.
     chevrotain-allstar 0.5.0                        License: MIT
       Copyright 2022 TypeFox GmbH
     chevrotain 13.2.0                               License: Apache-2.0
@@ -437,6 +438,9 @@ enumerated by mermaid's own bundled license manifest.
       Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>
       Copyright Node.js contributors. All rights reserved.
       Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+      Permission is hereby granted, free of charge, to any person obtaining a copy
+      of this software and associated documentation files (the "Software"), to
+      deal in the Software without restriction, including without limitation the
     internmap 1.0.1                                 License: ISC
       Copyright 2021 Mike Bostock
     internmap 2.0.3                                 License: ISC
@@ -455,10 +459,14 @@ enumerated by mermaid's own bundled license manifest.
       Copyright (c) 2019 iVis@Bilkent
     lodash-es 4.18.1                                License: MIT
       Copyright OpenJS Foundation and other contributors <https://openjsf.org/>
+      Based on Underscore.js, copyright Jeremy Ashkenas,
+      DocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>
     marked 16.4.2                                   License: MIT and BSD-3-Clause
       Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
       Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
       Copyright © 2004, John Gruber
+      http://daringfireball.net/
+      All rights reserved.
       and the Markdown it derives from, License: BSD-3-Clause, whose
       third clause names Markdown rather than the project, and so is
       reproduced here rather than taken from the shared text below:
@@ -513,23 +521,18 @@ enumerated by mermaid's own bundled license manifest.
       Copyright (c) 2024 Tinylibs
     ts-dedent 2.3.0                                 License: MIT
       Copyright (c) 2018 Tamino Martinius
-    uuid 11.1.1                                     License: MIT
+    uuid 14.0.2                                     License: MIT
       Copyright (c) 2010-2020 Robert Kieffer and other contributors
     vscode-jsonrpc 9.0.3                            License: MIT
       Copyright (c) Microsoft Corporation
-      All rights reserved.
     vscode-languageserver-protocol 3.18.4           License: MIT
       Copyright (c) Microsoft Corporation
-      All rights reserved.
     vscode-languageserver-textdocument 1.0.15       License: MIT
       Copyright (c) Microsoft Corporation
-      All rights reserved.
     vscode-languageserver-types 3.18.4              License: MIT
       Copyright (c) Microsoft Corporation
-      All rights reserved.
     vscode-languageserver 10.1.2                    License: MIT
       Copyright (c) Microsoft Corporation
-      All rights reserved.
     vscode-uri 3.1.0                                License: MIT
       Copyright (c) Microsoft
 
