@@ -492,7 +492,9 @@
       "license": "MIT",
       "name": "es-toolkit",
       "notices": [
-        "Copyright (c) 2024 Viva Republica, Inc."
+        "Copyright (c) 2024 Viva Republica, Inc.",
+        "Copyright OpenJS Foundation and other contributors <https://openjsf.org/>",
+        "Based on Underscore.js, copyright Jeremy Ashkenas,"
       ],
       "version": "1.52.0"
     },
@@ -707,7 +709,8 @@
       "license": "MIT",
       "name": "vscode-jsonrpc",
       "notices": [
-        "Copyright (c) Microsoft Corporation"
+        "Copyright (c) Microsoft Corporation",
+        "All rights reserved."
       ],
       "version": "9.0.3"
     },
@@ -715,7 +718,8 @@
       "license": "MIT",
       "name": "vscode-languageserver-protocol",
       "notices": [
-        "Copyright (c) Microsoft Corporation"
+        "Copyright (c) Microsoft Corporation",
+        "All rights reserved."
       ],
       "version": "3.18.4"
     },
@@ -723,7 +727,8 @@
       "license": "MIT",
       "name": "vscode-languageserver-textdocument",
       "notices": [
-        "Copyright (c) Microsoft Corporation"
+        "Copyright (c) Microsoft Corporation",
+        "All rights reserved."
       ],
       "version": "1.0.15"
     },
@@ -731,7 +736,8 @@
       "license": "MIT",
       "name": "vscode-languageserver-types",
       "notices": [
-        "Copyright (c) Microsoft Corporation"
+        "Copyright (c) Microsoft Corporation",
+        "All rights reserved."
       ],
       "version": "3.18.4"
     },
@@ -739,7 +745,8 @@
       "license": "MIT",
       "name": "vscode-languageserver",
       "notices": [
-        "Copyright (c) Microsoft Corporation"
+        "Copyright (c) Microsoft Corporation",
+        "All rights reserved."
       ],
       "version": "10.1.2"
     },

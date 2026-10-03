@@ -32,7 +32,7 @@ are the ones CI runs:
     --refresh   read npm and rewrite MERMAID_COMPONENTS.json
     --write     render from that file and splice it into both LICENSE files
     --check     render from that file, and verify both LICENSE files carry
-                it and the text of every license it names
+                it, and that each license text it names is present whole
 
 A mermaid upgrade is `--refresh` then `--write`, which is also what
 VENDORED.md tells you to do.
@@ -41,6 +41,7 @@ VENDORED.md tells you to do.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -77,10 +78,16 @@ LICENSE_FILES = (
     'LICENSE',
     'LICENSE.md',
     'LICENSE.txt',
+    'License.txt',
     'license',
     'license.md',
     'LICENCE',
 )
+
+#: Read as well as the license, not instead of it. es-toolkit keeps its Lodash
+#: attribution here and nowhere else, and a reader that stops at the license
+#: file does not carry it.
+NOTICE_FILES = ('NOTICE', 'NOTICE.txt', 'NOTICE.md')
 
 #: Packages whose license grants no copyright, so there is none to reproduce.
 #: Requiring one would mean inventing it.
@@ -212,8 +219,11 @@ NOT_A_NOTICE = re.compile(
     re.I,
 )
 
+#: BSD and Microsoft both ask for this line as part of the notice.
+RESERVED = re.compile(r'^All rights reserved\.?$', re.I)
+
 #: How far a notice can run past its first line before this stops reading.
-NOTICE_LINES = 4
+NOTICE_LINES = 5
 
 #: Where a license stops attributing and starts granting. Most files put a
 #: blank line there; import-meta-resolve puts the grant on the line directly
@@ -222,7 +232,9 @@ NOTICE_LINES = 4
 BODY_OPENS = re.compile(
     r'^(?:Permission is hereby|Permission to use|Redistribution and use'
     r'|Licensed under|This software|This is free|THE SOFTWARE'
-    r'|is free software|Everyone is permitted)',
+    r'|is free software|Everyone is permitted)'
+    # A bare license heading, which Microsoft's files put under the notice.
+    r'|^\(?(?:The )?[\w.-]+(?: Style)? Licen[cs]e\)?$',
     re.I,
 )
 
@@ -331,7 +343,7 @@ def _satisfying(released: list[str], spec: str) -> list[str] | None:
 
 
 def notices_of(name: str, version: str) -> tuple[list[str], str]:
-    """The copyright notices a package's own license file carries.
+    """The copyright notices a package attributes, from its own files.
 
     Each candidate filename is tried until one yields a notice, so a package
     that ships an empty or stock license file is not read as having none while
@@ -362,19 +374,43 @@ def notices_of(name: str, version: str) -> tuple[list[str], str]:
             for following in lines[position + 1 : position + NOTICE_LINES]:
                 following = following.strip()
                 if (
-                    not following
-                    or NOTICE.match(following)
+                    NOTICE.match(following)
                     or NOT_A_NOTICE.search(following)
                     or BODY_OPENS.match(following)
                 ):
                     break
+                if not following:
+                    # Microsoft's files put "All rights reserved." under a
+                    # blank line, so a blank is only the end if nothing of
+                    # the notice follows it.
+                    rest = lines[position + 1 : position + NOTICE_LINES]
+                    if not any(RESERVED.match(x.strip()) for x in rest):
+                        break
+                    continue
                 block.append(following)
             for part in block:
                 if part not in found:
                     found.append(part)
         if found:
-            return found, body
-    return [], ''
+            return found + _notice_file(name, version), body
+    return _notice_file(name, version), ''
+
+
+def _notice_file(name: str, version: str) -> list[str]:
+    """The notices a package keeps in a NOTICE file beside its license."""
+    for filename in NOTICE_FILES:
+        try:
+            text = _read(f'https://unpkg.com/{name}@{version}/{filename}')
+        except Exception:
+            continue
+        found = [
+            line.strip()
+            for line in text.decode('utf-8', 'replace').splitlines()
+            if NOTICE.match(line.strip()) and not NOT_A_NOTICE.search(line)
+        ]
+        if found:
+            return found
+    return []
 
 
 def refresh() -> int:
@@ -484,9 +520,9 @@ def render() -> str:
         '  This is not an inventory of the file. It is broader in one direction,',
         '  since tree-shaking drops some of what is declared, and it cannot be shown',
         '  complete in the other, since a published bundle records nothing about',
-        '  what went into it. Everything reachable is attributed, because naming a',
-        '  component that was dropped costs nothing and omitting one that was kept',
-        '  is the failure that matters.',
+        '  what went into it. Every component reached is attributed, because',
+        '  naming one that was dropped costs nothing and omitting one that was',
+        '  kept is the failure that matters.',
         '',
         '  A package appears once per version reached, because two paths can want',
         '  different majors under different terms: d3-array is BSD-3-Clause at 2',
@@ -514,43 +550,67 @@ def render() -> str:
     return '\n'.join(lines) + '\n'
 
 
-#: Lines only the full text of each license contains, all of which must be
-#: present. One line is not enough: `Apache License` appears in this file's
-#: own prose, so checking for it passed with the whole Apache body deleted.
-#: Several lines, spread through each text, is what makes a deletion show.
+#: Where each license's text starts in the LICENSE files, and the digest of
+#: that whole text. A digest rather than a few marker lines: markers prove a
+#: heading survived, not a license. Checking for "Apache License" passed with
+#: the entire Apache body deleted, and checking several lines still passed
+#: when a line between them was removed.
 #:
-#: MPL-2.0 is deliberately absent: its text is not here, and the only
+#: An intended edit to a license text changes these, which is the point: no
+#: license text in this repository should change without someone saying so.
+#:
+#: MPL-2.0 is deliberately absent. Its text is not here, and the only
 #: component under it offers Apache-2.0 as an alternative, which is.
 LICENSE_TEXTS = {
+    'Apache-2.0': (
+        '                                 Apache License',
+        '0562fa4aac3117f03567a3bd743c8f8912cd5ed9b7cbac688e12b5fad8ee904f',
+    ),
     'MIT': (
-        'Permission is hereby granted, free of charge',
-        'The above copyright notice and this permission notice shall be',
-        'THE SOFTWARE IS PROVIDED "AS IS"',
+        'MIT License, as it applies',
+        '200733a15f7f9cbdfcd9b7fea1355db2d4be3c26e0ce962cbe3132531a370844',
     ),
     'ISC': (
-        'Permission to use, copy, modify, and/or distribute this software',
-        'THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS',
+        'ISC License, as it applies',
+        '1b22bfdf49100d9ea646e310da72f94e4972c103b9212619ccb57d2f0978f32d',
     ),
     'BSD-3-Clause': (
-        'Redistribution and use in source and binary forms',
-        'Neither the name of the copyright holder nor the names',
-        'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS',
-    ),
-    'Apache-2.0': (
-        'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION',
-        'Grant of Copyright License',
-        'Disclaimer of Warranty',
-        'END OF TERMS AND CONDITIONS',
+        'BSD 3-Clause License, as it applies',
+        'c1b5c68e2fb9cb95aa2a82500224618104e3a7c0f5d45cbd154217ea645f3511',
     ),
     'Unlicense': (
-        'unencumbered software released into the public domain',
-        'In jurisdictions that recognize copyright laws',
+        'The Unlicense, as it applies',
+        'b0fa2daa9f3381915fb83d4b242a39e1c8e8a0a15089d9bc7873870e1421c1f5',
     ),
     'Python-2.0': (
-        'HISTORY OF THE SOFTWARE',
-        'PYTHON SOFTWARE FOUNDATION LICENSE',
+        'Python Software Foundation License 2.0, as it applies',
+        'bd4dcda37c4da0fe5c1820974e3798f755a09ab2389f33044d18641df781ac69',
     ),
 }
+
+
+def _license_text(licence: str, name: str) -> str | None:
+    """One license's whole text, as it sits in a LICENSE file.
+
+    It runs from its heading to the next heading, or for Apache, which opens
+    the file, to where the attribution begins.
+    """
+    heading, _ = LICENSE_TEXTS[name]
+    if heading not in licence:
+        return None
+    start = licence.index(heading)
+    ends = [
+        licence.index(other)
+        for other, _ in LICENSE_TEXTS.values()
+        if other in licence and licence.index(other) > start
+    ]
+    if 'THIRD-PARTY SOFTWARE BUNDLED' in licence:
+        after = licence.index('THIRD-PARTY SOFTWARE BUNDLED')
+        if after > start:
+            ends.append(after)
+    return (
+        licence[start : min(ends)].strip() if ends else licence[start:].strip()
+    )
 
 
 def texts_missing_for(licence: str) -> list[str]:
@@ -579,8 +639,13 @@ def texts_missing_for(licence: str) -> list[str]:
 
 
 def _carries(licence: str, name: str) -> bool:
-    markers = LICENSE_TEXTS.get(name)
-    return bool(markers) and all(marker in licence for marker in markers)
+    if name not in LICENSE_TEXTS:
+        return False
+    text = _license_text(licence, name)
+    if text is None:
+        return False
+    digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    return digest == LICENSE_TEXTS[name][1]
 
 
 def splice(text: str, section: str) -> str:
