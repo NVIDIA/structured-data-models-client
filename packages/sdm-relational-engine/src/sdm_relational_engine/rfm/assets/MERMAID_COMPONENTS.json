@@ -289,7 +289,7 @@
       "version": "3.1.2"
     },
     "d3-geo@3.1.1": {
-      "license": "ISC",
+      "license": "ISC and MIT",
       "name": "d3-geo",
       "notices": [
         "Copyright 2010-2024 Mike Bostock",
@@ -364,7 +364,7 @@
       "version": "0.12.3"
     },
     "d3-scale-chromatic@3.1.0": {
-      "license": "ISC",
+      "license": "ISC and Apache-2.0",
       "name": "d3-scale-chromatic",
       "notices": [
         "Copyright 2010-2024 Mike Bostock",
@@ -518,10 +518,7 @@
       "notices": [
         "Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>",
         "Copyright Node.js contributors. All rights reserved.",
-        "Copyright Joyent, Inc. and other Node contributors. All rights reserved.",
-        "Permission is hereby granted, free of charge, to any person obtaining a copy",
-        "of this software and associated documentation files (the \"Software\"), to",
-        "deal in the Software without restriction, including without limitation the"
+        "Copyright Joyent, Inc. and other Node contributors. All rights reserved."
       ],
       "version": "4.2.0"
     },

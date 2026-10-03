@@ -372,7 +372,7 @@ enumerated by mermaid's own bundled license manifest.
       Copyright 2010-2021 Mike Bostock
     d3-format 3.1.2                                 License: ISC
       Copyright 2010-2026 Mike Bostock
-    d3-geo 3.1.1                                    License: ISC
+    d3-geo 3.1.1                                    License: ISC and MIT
       Copyright 2010-2024 Mike Bostock
       Copyright 2008-2012 Charles Karney
     d3-hierarchy 3.1.2                              License: ISC
@@ -393,7 +393,7 @@ enumerated by mermaid's own bundled license manifest.
     d3-sankey 0.12.3                                License: BSD-3-Clause
       Copyright 2015, Mike Bostock
       All rights reserved.
-    d3-scale-chromatic 3.1.0                        License: ISC
+    d3-scale-chromatic 3.1.0                        License: ISC and Apache-2.0
       Copyright 2010-2024 Mike Bostock
       Copyright 2002 Cynthia Brewer, Mark Harrower, and The Pennsylvania State University
     d3-scale 4.0.2                                  License: ISC
@@ -438,9 +438,6 @@ enumerated by mermaid's own bundled license manifest.
       Copyright (c) Titus Wormer <mailto:tituswormer@gmail.com>
       Copyright Node.js contributors. All rights reserved.
       Copyright Joyent, Inc. and other Node contributors. All rights reserved.
-      Permission is hereby granted, free of charge, to any person obtaining a copy
-      of this software and associated documentation files (the "Software"), to
-      deal in the Software without restriction, including without limitation the
     internmap 1.0.1                                 License: ISC
       Copyright 2021 Mike Bostock
     internmap 2.0.3                                 License: ISC

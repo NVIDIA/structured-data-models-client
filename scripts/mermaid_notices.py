@@ -31,7 +31,8 @@ are the ones CI runs:
 
     --refresh   read npm and rewrite MERMAID_COMPONENTS.json
     --write     render from that file and splice it into both LICENSE files
-    --check     render from that file and verify both LICENSE files carry it
+    --check     render from that file, and verify both LICENSE files carry
+                it and the text of every license it names
 
 A mermaid upgrade is `--refresh` then `--write`, which is also what
 VENDORED.md tells you to do.
@@ -132,7 +133,26 @@ BUNDLE_RECORDS = {
 #: Packages whose license file grants more than their metadata declares.
 #: marked is MIT, but the Markdown it derives from is BSD-3-Clause and its
 #: notice travels in the same file.
-ALSO_LICENSED = {'marked': 'MIT and BSD-3-Clause'}
+ALSO_LICENSED = {
+    'marked': 'MIT and BSD-3-Clause',
+    'd3-geo': 'ISC and MIT',
+    'd3-scale-chromatic': 'ISC and Apache-2.0',
+}
+
+#: A line only one license writes, used to notice when a package's file grants
+#: more than its metadata declares. d3-geo says ISC and carries GeographicLib
+#: under MIT; d3-scale-chromatic says ISC and carries ColorBrewer under
+#: Apache-2.0. Neither is visible in package metadata, so `refresh` reads the
+#: file for them rather than trusting the declaration.
+SIGNATURES = {
+    'MIT': 'Permission is hereby granted, free of charge',
+    'Apache-2.0': 'Licensed under the Apache License',
+    'BSD-3-Clause': 'Redistribution and use in source and binary forms',
+    'ISC': 'Permission to use, copy, modify, and/or distribute',
+    'MPL-2.0': 'Mozilla Public License',
+    'Unlicense': 'unencumbered software released into the public domain',
+    'Python-2.0': 'PYTHON SOFTWARE FOUNDATION LICENSE',
+}
 
 #: Terms a package carries that the shared license texts below do not
 #: reproduce. Markdown's third clause names Markdown rather than the project
@@ -194,6 +214,17 @@ NOT_A_NOTICE = re.compile(
 
 #: How far a notice can run past its first line before this stops reading.
 NOTICE_LINES = 4
+
+#: Where a license stops attributing and starts granting. Most files put a
+#: blank line there; import-meta-resolve puts the grant on the line directly
+#: under the last notice, and without this the grant is recorded as though it
+#: were part of the attribution.
+BODY_OPENS = re.compile(
+    r'^(?:Permission is hereby|Permission to use|Redistribution and use'
+    r'|Licensed under|This software|This is free|THE SOFTWARE'
+    r'|is free software|Everyone is permitted)',
+    re.I,
+)
 
 
 def _read(url: str, attempts: int = 4) -> bytes:
@@ -299,7 +330,7 @@ def _satisfying(released: list[str], spec: str) -> list[str] | None:
     return [v for v in released if fits(_version_parts(v))]
 
 
-def notices_of(name: str, version: str) -> list[str]:
+def notices_of(name: str, version: str) -> tuple[list[str], str]:
     """The copyright notices a package's own license file carries.
 
     Each candidate filename is tried until one yields a notice, so a package
@@ -312,16 +343,21 @@ def notices_of(name: str, version: str) -> list[str]:
             text = _read(f'https://unpkg.com/{name}@{version}/{filename}')
         except Exception:
             continue
-        lines = text.decode('utf-8', 'replace').splitlines()
+        body = text.decode('utf-8', 'replace')
+        lines = body.splitlines()
         found: list[str] = []
         for position, raw in enumerate(lines):
             line = raw.strip()
             if not NOTICE.match(line) or NOT_A_NOTICE.search(line):
                 continue
-            # A notice runs to the blank line after it. Stopping at the
-            # first line costs the rest of it: Gruber's "All rights
-            # reserved." sits under a URL, and the CWI notice wraps onto
-            # "The Netherlands. All rights reserved."
+            # A notice runs to the blank line after it, to the next
+            # notice, or to where the license starts granting, whichever
+            # comes first, and no further than NOTICE_LINES. Stopping at the
+            # first line costs the rest: Gruber's "All rights reserved." sits
+            # under a URL, and the CWI notice wraps onto "The Netherlands.
+            # All rights reserved." Running past it costs more, which
+            # import-meta-resolve shows: it puts the MIT grant directly under
+            # its last notice, with no blank line between.
             block = [line]
             for following in lines[position + 1 : position + NOTICE_LINES]:
                 following = following.strip()
@@ -329,6 +365,7 @@ def notices_of(name: str, version: str) -> list[str]:
                     not following
                     or NOTICE.match(following)
                     or NOT_A_NOTICE.search(following)
+                    or BODY_OPENS.match(following)
                 ):
                     break
                 block.append(following)
@@ -336,8 +373,8 @@ def notices_of(name: str, version: str) -> list[str]:
                 if part not in found:
                     found.append(part)
         if found:
-            return found
-    return []
+            return found, body
+    return [], ''
 
 
 def refresh() -> int:
@@ -379,16 +416,37 @@ def refresh() -> int:
             if (dependency, dependency_spec) not in seen:
                 queue.append((dependency, dependency_spec))
 
-    silent = []
+    silent, undeclared = [], []
     for key, component in components.items():
-        component['notices'] = notices_of(
+        component['notices'], body = notices_of(
             component['name'], component['version']
         )
+        declared = set(
+            re.split(
+                r'\s+(?:AND|OR|and|or)\s+',
+                str(component['license'] or '').strip('()'),
+            )
+        )
+        beyond = {
+            name
+            for name, signature in SIGNATURES.items()
+            if signature.lower() in body.lower()
+        } - declared
+        if beyond:
+            undeclared.append((key, sorted(beyond)))
         if (
             not component['notices']
             and component['name'] not in WITHOUT_A_NOTICE
         ):
             silent.append(key)
+    if undeclared:
+        print(
+            f'{undeclared} carry license terms their metadata does not '
+            f'declare. Read each file and record the whole expression in '
+            f'ALSO_LICENSED.',
+            file=sys.stderr,
+        )
+        return 1
     if silent:
         print(
             f'{silent} have no copyright line and are not recorded as having '
@@ -456,17 +514,42 @@ def render() -> str:
     return '\n'.join(lines) + '\n'
 
 
-#: A line only the full text of each license contains, so that carrying the
-#: text can be checked rather than assumed. MPL-2.0 is deliberately absent:
-#: its text is not here, and the only component under it offers Apache-2.0
-#: as an alternative, which is.
+#: Lines only the full text of each license contains, all of which must be
+#: present. One line is not enough: `Apache License` appears in this file's
+#: own prose, so checking for it passed with the whole Apache body deleted.
+#: Several lines, spread through each text, is what makes a deletion show.
+#:
+#: MPL-2.0 is deliberately absent: its text is not here, and the only
+#: component under it offers Apache-2.0 as an alternative, which is.
 LICENSE_TEXTS = {
-    'MIT': 'MIT License, as it applies',
-    'ISC': 'ISC License, as it applies',
-    'BSD-3-Clause': 'BSD 3-Clause License, as it applies',
-    'Apache-2.0': 'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION',
-    'Unlicense': 'unencumbered software',
-    'Python-2.0': 'HISTORY OF THE SOFTWARE',
+    'MIT': (
+        'Permission is hereby granted, free of charge',
+        'The above copyright notice and this permission notice shall be',
+        'THE SOFTWARE IS PROVIDED "AS IS"',
+    ),
+    'ISC': (
+        'Permission to use, copy, modify, and/or distribute this software',
+        'THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS',
+    ),
+    'BSD-3-Clause': (
+        'Redistribution and use in source and binary forms',
+        'Neither the name of the copyright holder nor the names',
+        'THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS',
+    ),
+    'Apache-2.0': (
+        'TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION',
+        'Grant of Copyright License',
+        'Disclaimer of Warranty',
+        'END OF TERMS AND CONDITIONS',
+    ),
+    'Unlicense': (
+        'unencumbered software released into the public domain',
+        'In jurisdictions that recognize copyright laws',
+    ),
+    'Python-2.0': (
+        'HISTORY OF THE SOFTWARE',
+        'PYTHON SOFTWARE FOUNDATION LICENSE',
+    ),
 }
 
 
@@ -496,8 +579,8 @@ def texts_missing_for(licence: str) -> list[str]:
 
 
 def _carries(licence: str, name: str) -> bool:
-    marker = LICENSE_TEXTS.get(name)
-    return marker is not None and marker in licence
+    markers = LICENSE_TEXTS.get(name)
+    return bool(markers) and all(marker in licence for marker in markers)
 
 
 def splice(text: str, section: str) -> str:

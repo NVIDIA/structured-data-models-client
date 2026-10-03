@@ -403,17 +403,27 @@ class TestTheNoticesAreComplete:
         notices. They differ only in the path each gives for the bundle.
         """
 
-        def notices(path):
+        def attribution(path):
             text = (REPO / path).read_text()
             text = text[text.index('THIRD-PARTY SOFTWARE BUNDLED') :]
-            return [
-                line
-                for line in text.splitlines()
-                if 'opyright' in line or 'License:' in line
-            ]
+            # Every line, not the ones that look like notices: a URL or an
+            # "All rights reserved." is part of a notice too, and comparing
+            # only the lines carrying the word let those drift apart.
+            lines = text.splitlines()
+            return [line for line in lines if not line.endswith('.min.js')]
 
-        assert notices('LICENSE') == notices(
-            'packages/sdm-relational-engine/LICENSE'
+        root = attribution('LICENSE')
+        engine = attribution(_ENGINE_LICENSE)
+        differing = [
+            (a, b) for a, b in zip(root, engine, strict=False) if a != b
+        ]
+
+        assert len(root) == len(engine), (
+            f'the two license files carry {len(root)} and {len(engine)} '
+            f'lines of attribution; they should carry the same'
+        )
+        assert not [pair for pair in differing if not set(pair[0]) <= {'-'}], (
+            f'the two license files disagree: {differing[:3]}'
         )
 
 
