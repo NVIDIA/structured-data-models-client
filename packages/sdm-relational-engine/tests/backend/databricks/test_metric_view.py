@@ -2018,3 +2018,59 @@ dimensions:
     assert strip_alias_qualifier("source.a || 'source.b'", 'source') == (
         "a || 'source.b'"
     )
+
+
+_LAST_LOGIN_YAML = """
+version: "1.1"
+source: cat.sch.order_lines
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+dimensions:
+  - name: product_line
+    expr: source.product_line
+  - name: last_login
+    expr: customers.last_login
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+"""
+
+
+def test_from_databricks_metric_view_refuses_an_edit_stamp_on_a_join(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The view joins `customers` to its source, so a customer is an entity
+    edited in place and its `last_login` is no customer's time.
+    """
+    logins = pd.date_range('2025-01-01', periods=10, freq='D')
+    monkeypatch.setitem(
+        _DATA, 'customers', _DATA['customers'].assign(last_login=logins)
+    )
+    monkeypatch.setitem(
+        _COLUMN_TYPES,
+        'customers',
+        {**_COLUMN_TYPES['customers'], 'last_login': 'timestamp'},
+    )
+    describe_rows = _metric_view(
+        _LAST_LOGIN_YAML,
+        {
+            'product_line': 'string',
+            'last_login': 'timestamp',
+            'total_amount': 'double measure',
+        },
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(describe_rows),
+            verbose=False,
+        )
+
+    assert any(edge.dst_table == 'customers' for edge in graph.edges)
+    choice = graph['customers'].time_column_choice
+    assert choice is not None and choice.fallback == 'last_login'
+    assert graph['customers'].time_column is None
