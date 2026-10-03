@@ -264,7 +264,7 @@ enumerated by mermaid's own bundled license manifest.
   The components mermaid declares, transitively.
 
   mermaid 11.15.0 is published as a built file, minified and
-  tree-shaken. It names a version for four of its components and nothing
+  tree-shaken. It names a version for 5 of its components and nothing
   for the rest, and no manifest of them at all. The components
   below are the ones it declares transitively, together with those its own
   bundled dependencies inline, which no dependency graph reaches and which

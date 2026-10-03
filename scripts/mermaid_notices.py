@@ -6,8 +6,8 @@
 """Attribute what is inside the vendored mermaid bundle, without guessing.
 
 `mermaid.min.js` is upstream's published build: minified, tree-shaken, and
-carrying no manifest of what went into it. It states a version for four of its
-components and nothing for the rest. Reading components out of it by hand
+carrying no manifest of what went into it. It states a version for the few
+components in `BUNDLE_RECORDS` and nothing for the rest. Reading components out of it by hand
 does not converge. Three rounds of it here each missed more, and the ones
 missed last were transitive: `cose-base` reached through two Cytoscape layouts,
 `chevrotain-allstar` through the parser.
@@ -513,7 +513,8 @@ def render() -> str:
         OPENS.rstrip('\n'),
         '',
         f'  mermaid {recorded["mermaid"]} is published as a built file, minified and',
-        '  tree-shaken. It names a version for four of its components and nothing',
+        f'  tree-shaken. It names a version for {len(BUNDLE_RECORDS)} of its '
+        f'components and nothing',
         '  for the rest, and no manifest of them at all. The components',
         '  below are the ones it declares transitively, together with those its own',
         '  bundled dependencies inline, which no dependency graph reaches and which',
