@@ -1428,6 +1428,7 @@ class Graph:
             table._infer_time_column_among(candidates)
 
         msgs.extend(graph._drop_invalid_edges())
+        graph._settle_time_columns()
         graph.validate()
 
         if verbose:
@@ -1721,6 +1722,7 @@ class Graph:
                 )
 
         msgs.extend(graph._drop_invalid_edges())
+        graph._settle_time_columns()
         graph.validate()
 
         if verbose:
@@ -2375,6 +2377,7 @@ class Graph:
             for marked in getattr(self, '_inferred_edges', ())
             if marked != (src_table, fkey, dst_table)
         )
+        self._settle_time_columns()
 
         return self
 
@@ -2415,6 +2418,7 @@ class Graph:
             raise ValueError(f'{edge} is not present in the graph')
 
         self._edges.remove(edge)
+        self._settle_time_columns()
 
         return self
 

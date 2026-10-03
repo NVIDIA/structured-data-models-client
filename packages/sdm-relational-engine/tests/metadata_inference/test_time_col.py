@@ -220,3 +220,40 @@ def test_a_graph_refuses_an_edit_stamp_on_a_table_an_edge_points_at():
     inferred = Graph(tables=tables()).infer_metadata(verbose=False)
     inferred.infer_links(verbose=False)
     assert inferred['users'].time_column is None
+
+
+def _users_and_orders() -> dict[str, pd.DataFrame]:
+    """No link can be inferred: `orders.buyer` names no table."""
+    return {
+        'users': pd.DataFrame({'user_id': range(4), 'last_login': HOURS[:4]}),
+        'orders': pd.DataFrame({'order_id': range(8), 'buyer': [0, 1] * 4}),
+    }
+
+
+def test_linking_a_table_settles_its_edit_stamp_again():
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    assert graph.edges == []
+    assert graph['users'].time_column is not None
+    assert graph['users'].time_column.name == 'last_login'
+
+    graph.link('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None
+
+    graph.unlink('orders', 'buyer', 'users')
+    assert graph['users'].time_column is not None
+    assert graph['users'].time_column.name == 'last_login'
+
+
+@pytest.mark.parametrize('given', ['last_login', None])
+def test_a_time_column_set_by_hand_is_never_settled(given):
+    """Set to the column inference took, or to none, it is the caller's."""
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph['users'].time_column = given
+
+    graph.link('orders', 'buyer', 'users')
+    held = graph['users'].time_column
+    assert (held and held.name) == given
+
+    graph.unlink('orders', 'buyer', 'users')
+    held = graph['users'].time_column
+    assert (held and held.name) == given

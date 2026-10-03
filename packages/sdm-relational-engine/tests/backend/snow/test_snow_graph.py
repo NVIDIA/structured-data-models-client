@@ -4,6 +4,8 @@
 
 import math
 import re
+import sys
+import warnings
 
 import pandas as pd
 import pytest
@@ -671,3 +673,42 @@ def test_lagged_targets_for_no_entities_ask_the_warehouse_nothing(
     assert list(lagged.columns) == ['__kumo_arl0__', '__kumo_arl1__']
     assert len(lagged) == 0
     assert not [sql for sql in connection.statements if 'FLATTEN' in sql]
+
+
+def test_semantic_view_refuses_an_edit_stamp_on_a_table_it_relates_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`RACKS` relates to `DATACENTERS`, so a datacenter is an entity edited
+    in place and its `LAST_LOGIN` is no datacenter's time.
+    """
+    datacenters = _DATA['DATACENTERS'].assign(
+        LAST_LOGIN=pd.date_range('2025-01-01', periods=4, freq='D')
+    )
+    monkeypatch.setitem(_DATA, 'DATACENTERS', datacenters)
+    monkeypatch.setitem(
+        _COLUMN_TYPES,
+        'DATACENTERS',
+        {**_COLUMN_TYPES['DATACENTERS'], 'LAST_LOGIN': 'TIMESTAMP_NTZ(9)'},
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        '_SEMANTIC_VIEW_YAML',
+        _SEMANTIC_VIEW_YAML.replace(
+            '      - name: COUNTRY\n',
+            '      - name: LAST_LOGIN\n'
+            '        expr: datacenters.LAST_LOGIN\n'
+            '        data_type: TIMESTAMP_NTZ(9)\n'
+            '      - name: COUNTRY\n',
+        ),
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        graph = Graph.from_snowflake_semantic_view(
+            'GPU_FLEET_SV', connection=_FakeConnection(), verbose=False
+        )
+
+    assert [edge.dst_table for edge in graph.edges] == ['DATACENTERS']
+    choice = graph['DATACENTERS'].time_column_choice
+    assert choice is not None and choice.fallback == 'LAST_LOGIN'
+    assert graph['DATACENTERS'].time_column is None

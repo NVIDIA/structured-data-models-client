@@ -102,6 +102,9 @@ class Table(ABC):
         self._declined_primary_keys: tuple[str, ...] = ()
         self._declined_primary_key_rows: int | None = None
         self._time_column_choice: TimeColumnChoice | None = None
+        # Whether the time column, or its absence, is still the one
+        # inference chose: any assignment from outside it says otherwise.
+        self._time_column_inferred = False
         self._expr_sample_df = pd.DataFrame(index=range(self._NUM_SAMPLE_ROWS))
 
         if columns is None:
@@ -598,6 +601,7 @@ class Table(ABC):
 
     @time_column.setter
     def time_column(self, name: str | None) -> None:
+        self._time_column_inferred = False
         if name is not None and name == self._primary_key:
             raise ValueError(
                 f"Cannot specify column '{name}' as a time "
@@ -850,6 +854,7 @@ class Table(ABC):
         )
         if time_column := self._time_column_choice.column:
             self.time_column = time_column
+        self._time_column_inferred = True
         return time_column
 
     @property
@@ -863,15 +868,16 @@ class Table(ABC):
     def _settle_time_column(self, linked: bool) -> None:
         r"""Take or refuse a lone edit stamp by whether another table links
         to this one, once the graph's edges say. A time column set by hand
-        since inference is left alone.
+        since inference, to a column or to ``None``, is left alone.
         """
         choice = self._time_column_choice
-        if choice is None or self._time_column != choice.column:
+        if choice is None or not self._time_column_inferred:
             return
         settled = choice.for_links(linked)
         if settled != choice:
             self._time_column_choice = settled
             self.time_column = settled.column
+            self._time_column_inferred = True
 
     def _full_range(self, names: Sequence[str]) -> TableRange | None:
         r"""The row count, and ``MIN``, ``MAX`` and ``COUNT`` of each column
