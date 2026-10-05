@@ -93,7 +93,9 @@ def complete(path: Path) -> list[bool]:
     and are checked as code, but nothing can execute them. The rest are
     whole programs, and the difference is decidable here rather than
     declared: an example is complete when every name it reads was bound by
-    an earlier one or by itself.
+    an earlier one or by itself. A fragment that reuses a name an earlier
+    example bound is run, and fails there rather than passing quietly, which
+    is why the connections in those blocks are named for what they are.
     """
     known: set[str] = set()
     whether: list[bool] = []

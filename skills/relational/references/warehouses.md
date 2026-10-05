@@ -146,8 +146,10 @@ from databricks.sdk import WorkspaceClient
 from sdm_connectors import DatabricksSource
 from sdm_connectors.databricks import warehouse
 
-connection = warehouse(warehouse_id, workspace=WorkspaceClient())
-source = DatabricksSource(connection, catalog='main', schema='sales')
+databricks_connection = warehouse(warehouse_id, workspace=WorkspaceClient())
+source = DatabricksSource(
+    databricks_connection, catalog='main', schema='sales'
+)
 ```
 
 You close what it hands back.
@@ -169,7 +171,9 @@ so it can be the source itself:
 from sdm_client import Schema
 from sdm_connectors import DatabricksSource
 
-source = DatabricksSource(connection, catalog='sales', schema='public')
+source = DatabricksSource(
+    databricks_connection, catalog='sales', schema='public'
+)
 schema = Schema.from_source(source.semantic_model('sales_metrics'))
 ```
 
@@ -218,11 +222,11 @@ else is refused, `format='json'` included:
 ```python
 from sdm_connectors import read
 
-orders = read(
-    's3://bucket/orders.parquet',
-    storage_options={'key': '...', 'secret': '...'},
-)
+orders = read('s3://bucket/orders.parquet', storage_options=credentials)
 ```
+
+`storage_options` is a dictionary handed to the filesystem underneath, which
+is where a key and a secret go.
 
 That is a DataFrame like any other, so it goes to `Schema.from_data`.
 
