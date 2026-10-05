@@ -22,6 +22,20 @@ that column's type, and `materialize(task=...)` settles it when whole numbers
 could be either a label or a quantity.
 
 ```python
+import pandas as pd
+from sdm_client import KumoTabular, PredictiveQuery, Schema
+
+customers = pd.DataFrame(
+    {
+        'customer_id': range(40),
+        'spend': [10.0 + i for i in range(40)],
+        'churn': [i % 2 for i in range(40)],
+    }
+)
+schema = Schema.from_data(
+    {'customers': customers}, primary_keys={'customers': 'customer_id'}
+)
+
 request = PredictiveQuery(
     'PREDICT customers.churn FOR EACH customers.customer_id', schema
 ).materialize(indices=[7, 12, 3], model=KumoTabular())

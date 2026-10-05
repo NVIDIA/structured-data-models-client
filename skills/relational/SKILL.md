@@ -174,8 +174,10 @@ its own, and they are in
 
 ## Asking the same context more than once
 
-`fit()` pins the gathered context in the endpoint's memory and answers from it
-repeatedly, which is worth doing when the gathering is the expensive part:
+`fit()` uploads a context once and pins it in the endpoint's memory; every
+later call on the handle sends only the rows to score. Gathering still happens
+here, in `materialize()`, so what a session saves is sending the context again,
+which is worth doing when several questions share one:
 
 ```python
 with SDMClient(url='http://localhost:8000', timeout=600) as client:
@@ -198,6 +200,12 @@ ask again, not what comes back.
 
 A session lives in one process's memory on the endpoint, so a deployment
 behind several replicas needs the calls for one session to reach the same one.
+
+The context is chosen once, when it is pinned, so a row scored later is sitting
+in it with its answer already shown. `fit(request, model=..., holdout=ids)`
+names every row the session will go on to score and holds all of them back
+while there is still a context to hold them out of. There is no remedy
+afterwards: a context cannot be changed once pinned.
 A ranking and a forecast cannot be fitted at all; see
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
 

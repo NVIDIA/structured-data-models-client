@@ -126,6 +126,8 @@ open and no credential to handle.
 In a Databricks notebook, pass `spark`:
 
 ```python
+from sdm_connectors import DatabricksSource
+
 source = DatabricksSource(spark, catalog='main', schema='sales')
 ```
 
@@ -140,6 +142,8 @@ carries both:
 
 ```python
 from databricks.sdk import WorkspaceClient
+
+from sdm_connectors import DatabricksSource
 from sdm_connectors.databricks import warehouse
 
 connection = warehouse(warehouse_id, workspace=WorkspaceClient())
@@ -151,6 +155,8 @@ You close what it hands back.
 In a Snowflake notebook, a Snowpark `session` passes as it is:
 
 ```python
+from sdm_connectors import SnowflakeSource
+
 source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
 ```
 
@@ -160,6 +166,9 @@ A metric view already names the tables a question is about and how they join,
 so it can be the source itself:
 
 ```python
+from sdm_client import Schema
+from sdm_connectors import DatabricksSource
+
 source = DatabricksSource(connection, catalog='sales', schema='public')
 schema = Schema.from_source(source.semantic_model('sales_metrics'))
 ```
@@ -209,7 +218,10 @@ else is refused, `format='json'` included:
 ```python
 from sdm_connectors import read
 
-orders = read('s3://bucket/orders.parquet', storage_options={...})
+orders = read(
+    's3://bucket/orders.parquet',
+    storage_options={'key': '...', 'secret': '...'},
+)
 ```
 
 That is a DataFrame like any other, so it goes to `Schema.from_data`.

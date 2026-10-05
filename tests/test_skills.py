@@ -19,6 +19,7 @@ about a deployment rather than about this client.
 from __future__ import annotations
 
 import ast
+import builtins
 import os
 import re
 from pathlib import Path
@@ -35,6 +36,7 @@ SKILLS = Path(__file__).parents[1] / 'skills'
 RETIRED = ('run_mode=', 'explain=')
 
 FENCE = re.compile(r'^```(\w*)\n(.*?)^```', re.MULTILINE | re.DOTALL)
+PREDICTS = re.compile(r'\b\w+\.predict\(')
 LINK = re.compile(r'\]\(([^)]+)\)')
 
 
@@ -56,25 +58,82 @@ def test_there_is_a_skill_for_each_model():
     assert (SKILLS / 'README.md').exists()
 
 
+def bound_by(source: str) -> set[str]:
+    """Every name an example leaves behind for the ones after it."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                names.add(alias.asname or alias.name.split('.')[0])
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+    return names
+
+
+def unbound_in(source: str, known: set[str]) -> set[str]:
+    loaded = {
+        node.id
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+    }
+    return loaded - known - set(dir(builtins))
+
+
+def complete(path: Path) -> list[bool]:
+    """For each example, whether it can run on its own by then.
+
+    A reference about a warehouse has to show a Databricks session and a
+    Snowflake one, and neither exists to run against; those blocks are code
+    and are checked as code, but nothing can execute them. The rest are
+    whole programs, and the difference is decidable here rather than
+    declared: an example is complete when every name it reads was bound by
+    an earlier one or by itself.
+    """
+    known: set[str] = set()
+    whether: list[bool] = []
+    for source in fences(path, 'python'):
+        whether.append(not unbound_in(source, known | bound_by(source)))
+        if whether[-1]:
+            known |= bound_by(source)
+    return whether
+
+
 @pytest.mark.parametrize('path', documents(), ids=str)
-def test_a_document_that_runs_something_shows_what_came_back(path):
+def test_an_example_that_predicts_can_be_run(path):
+    """An incomplete example cannot be checked against an endpoint, so one
+    that predicts would be the one claim nothing stands behind."""
+    for index, (source, runs) in enumerate(
+        zip(fences(path, 'python'), complete(path))
+    ):
+        if PREDICTS.search(source):
+            assert runs, (
+                f'{path.name} example {index} predicts and reads '
+                f'{sorted(unbound_in(source, bound_by(source)))}, which '
+                f'nothing before it binds, so no endpoint can be asked to '
+                f'confirm what it prints'
+            )
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_an_example_that_predicts_shows_what_came_back(path):
     """An example with no answer under it leaves its shape to be guessed.
 
-    The two references were the only files whose examples stopped at
-    materialize(), and the ranking's return shape -- two columns, one of them
-    dicts -- was the least guessable thing in the set.
+    Per example, not per document: the ranking's return shape -- two columns,
+    one of them dicts -- was the least guessable thing in the set, and it sat
+    in a file that already carried somebody else's verified block.
     """
-    runnable = [
-        source
-        for source in fences(path, 'python')
-        if 'client.predict(' in source or 'fitted.predict(' in source
-    ]
-    if not runnable:
-        return
-    assert '**Verified**' in without_comments(path), (
-        f'{path.name} runs a prediction and shows no output; paste what it '
-        f'printed under a **Verified** line'
-    )
+    for index, (source, shown) in enumerate(examples(path)):
+        if PREDICTS.search(source):
+            assert shown is not None, (
+                f'{path.name} example {index} predicts and shows no output; '
+                f'paste what it printed under a **Verified** line'
+            )
 
 
 @pytest.mark.parametrize('name', ['tabular', 'relational'])
@@ -1794,7 +1853,14 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
     pd = pytest.importorskip('pandas')
     namespace: dict[str, object] = {'pd': pd}
     checked = 0
+    runs = complete(path)
     for index, (code, shown) in enumerate(examples(path)):
+        if not runs[index]:
+            assert shown is None, (
+                f'{path.name} example {index} reads a name nothing binds and '
+                f'shows output anyway; nothing could have printed it'
+            )
+            continue
         printed = io.StringIO()
         with redirect_stdout(printed):
             exec(  # noqa: S102 - running the documentation is the test
@@ -1853,9 +1919,11 @@ def test_a_quoted_refusal_from_the_endpoint_is_the_refusal(query, said, schema):
 @pytest.mark.skipif(
     not TABULAR_URL, reason='set SDM_TABULAR_URL to a kumo-tabular NIM'
 )
-def test_the_tabular_examples_print_what_the_skill_shows():
-    path = SKILLS / 'tabular' / 'SKILL.md'
-    assert_every_example_prints_what_it_shows(path, TABULAR_URL)
+@pytest.mark.parametrize(
+    'name', ['tabular/SKILL.md', 'tabular/references/pql.md']
+)
+def test_the_tabular_examples_print_what_the_skill_shows(name):
+    assert_every_example_prints_what_it_shows(SKILLS / name, TABULAR_URL)
 
 
 @pytest.mark.live_nim
@@ -1868,11 +1936,13 @@ def test_the_tabular_examples_print_what_the_skill_shows():
         'relational/SKILL.md',
         'relational/pql.md',
         'relational/references/beyond-one-answer.md',
+        'relational/references/warehouses.md',
         'README.md',
     ],
 )
 def test_the_relational_examples_print_what_the_skill_shows(name):
     pytest.importorskip('sdm_relational_engine')
+    pytest.importorskip('duckdb')
     assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
 
 
