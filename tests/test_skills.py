@@ -105,8 +105,14 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     )
     inside = False
     previous = ''
+    said_last = ''
     for number, line in enumerate(body.splitlines(), start=1):
         where = f'{path.name}:{number}'
+        if line == '```python':
+            assert '**Verified**' not in said_last, (
+                f'{where} gives verified output a python fence, which makes '
+                f'it an example instead and pairs it with nothing'
+            )
         if not inside and line.startswith('|'):
             assert previous == '' or previous.startswith('|'), (
                 f'{where} begins a table with no blank line above it; under a '
@@ -114,6 +120,8 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'here as a table'
             )
         previous = line
+        if line.strip():
+            said_last = line
         if line.lstrip().startswith(('```', '~~~')):
             allowed = ('```',) if inside else ('```', '```python')
             assert line in allowed, (
@@ -973,8 +981,10 @@ def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
     assert f'at least {low}' in refused(low - 1), (
         f'{clause} does not say {low} is its least'
     )
-    assert str(high) in refused(high + 1), (
-        f'{clause} does not say {high} is its most'
+    said = refused(high + 1)
+    assert re.search(rf'maximum[^.]*\b{high}\b', said), (
+        f'{clause} does not say {high} is its most; it says {said!r}, which '
+        f'may be the fan-out cap rather than the bound in the table'
     )
 
 
