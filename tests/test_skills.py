@@ -274,11 +274,15 @@ def reaching_this_client(path: Path) -> set[str]:
         grew = False
         for tree in trees:
             for node in ast.walk(tree):
+                sources: list[ast.AST] = []
+                targets: list[ast.AST] = []
                 if isinstance(node, ast.Assign):
-                    sources, targets = [node.value], node.targets
+                    sources, targets = [node.value], list(node.targets)
                 elif isinstance(node, ast.NamedExpr):
                     sources, targets = [node.value], [node.target]
                 elif isinstance(node, ast.AnnAssign):
+                    if node.value is None:
+                        continue
                     sources, targets = [node.value], [node.target]
                 elif isinstance(node, ast.With):
                     sources = [item.context_expr for item in node.items]
@@ -307,7 +311,6 @@ def reaching_this_client(path: Path) -> set[str]:
                 if not any(
                     isinstance(inner, ast.Name) and inner.id in reachable
                     for source in sources
-                    if source is not None
                     for inner in ast.walk(source)
                 ):
                     continue
