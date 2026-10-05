@@ -225,6 +225,11 @@ def _dotted(node: ast.expr) -> str | None:
     return '.'.join(reversed(parts))
 
 
+#: What `type X = ...` builds, which stands for its value rather than being a
+#: type of its own. Absent before Python 3.12.
+_ALIAS = getattr(typing, 'TypeAliasType', None)
+
+
 def _quoted_within(annotation: object) -> list[str]:
     """The forward references inside an annotation that is already an object.
 
@@ -249,6 +254,9 @@ def _quoted_within(annotation: object) -> list[str]:
         if isinstance(node, list):
             for item in node:
                 walk(item)
+            return
+        if _ALIAS is not None and isinstance(node, _ALIAS):
+            walk(node.__value__)
             return
         origin = typing.get_origin(node)
         if origin is typing.Literal:
@@ -362,9 +370,18 @@ class _InternalTypes:
             for inner in (obj.__bound__, *obj.__constraints__):
                 self._type(where, inner)
             return
-        if not inspect.isclass(obj) and typing.get_origin(obj) is not None:
-            self._type(where, typing.get_origin(obj))
-            for argument in typing.get_args(obj):
+        if _ALIAS is not None and isinstance(obj, _ALIAS):
+            self._type(where, obj.__value__)
+            return
+        origin = typing.get_origin(obj)
+        if not inspect.isclass(obj) and origin is not None:
+            self._type(where, origin)
+            if origin is typing.Literal:
+                return
+            arguments = typing.get_args(obj)
+            if origin is Annotated:
+                arguments = arguments[:1]
+            for argument in arguments:
                 for one in (
                     argument if isinstance(argument, list) else [argument]
                 ):
