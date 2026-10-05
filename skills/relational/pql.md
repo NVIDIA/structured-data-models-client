@@ -165,7 +165,7 @@ language most likely to be read wrongly, so it is worth being blunt.
 
 `indices` names the entities to score, by key. One of `indices` or `predict` is
 always required — there is no all-rows default, because it would silently score
-a whole table — and `predict=<frame>` scores rows the tables do not contain,
+a whole table — and `predict=` takes a frame of rows the tables do not hold,
 which only a single-table schema supports.
 
 Two clauses look like they narrow that set, and neither does:

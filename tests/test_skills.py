@@ -138,11 +138,12 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'{where} opens a fence part-way along a line, after a list '
                 f'marker or otherwise; a fence begins its own line'
             )
-            assert not line.lstrip().startswith(
-                '<'
+            assert not re.search(
+                r'<[a-zA-Z/]', line
             ) or line.lstrip().startswith('<!--'), (
-                f'{where} is raw HTML, which renders as a table or a code '
-                f'block and is read here as nothing'
+                f'{where} holds raw HTML, which renders as a table or a code '
+                f'block and is read here as nothing. It need not begin the '
+                f'line to do that'
             )
             for marker in ('<!--', '-->'):
                 assert (
@@ -156,36 +157,45 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     assert not inside, f'{path.name} leaves a fence open'
 
 
-#: Every table each document holds, by its header row. Exhaustive on purpose:
-#: a table this file does not read is one that can say the opposite of a table
-#: it does, and a reader has no way to tell which of the two was checked.
+#: Every table each document holds, by its header row, and whether anything
+#: here reads it. Exhaustive on purpose: an unlisted table can say the
+#: opposite of a listed one and a reader cannot tell which was checked. The
+#: two marked False are prose -- which skill to load, and a refusal beside its
+#: cause -- with nothing in them to put to the client; listing them says so
+#: rather than leaving them to look checked.
 EVERY_TABLE = {
-    'skills/README.md': [['Skill', 'Model', 'Use it when']],
+    'skills/README.md': [(['Skill', 'Model', 'Use it when'], False)],
     'skills/relational/SKILL.md': [
-        ['', '`kumo-relational`'],
-        ['Limit', 'Value'],
-        ['Refusal', 'Cause'],
+        (['', '`kumo-relational`'], True),
+        (['Limit', 'Value'], True),
+        (['Refusal', 'Cause'], False),
     ],
     'skills/relational/pql.md': [
-        ['Clause', 'Least', 'Most'],
-        ['Target', 'Task', 'Calls'],
-        ['Aggregation', ''],
-        ['Comparison', ''],
+        (['Clause', 'Least', 'Most'], True),
+        (['Target', 'Task', 'Calls'], True),
+        (['Aggregation', ''], True),
+        (['Comparison', ''], True),
     ],
     'skills/tabular/SKILL.md': [
-        ['', '`kumo-tabular`'],
-        ['Refusal', 'Cause'],
+        (['', '`kumo-tabular`'], True),
+        (['Refusal', 'Cause'], False),
     ],
 }
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
-def test_every_table_in_a_skill_is_one_this_file_reads(path):
-    """A new table has to be wired up here before it can be shipped."""
+def test_every_table_in_a_skill_is_accounted_for(path):
+    """A new table has to be listed here before it can be shipped.
+
+    Listed, and marked as read or not. Most carry something that can be put
+    to the client and are; two are prose and say so, which is better than
+    sitting among the others looking checked.
+    """
     where = str(path.relative_to(SKILLS.parent))
-    assert [one[0] for one in tables(path)] == EVERY_TABLE[where], (
-        f'{path.name} holds tables {[one[0] for one in tables(path)]} and '
-        f'this file accounts for {EVERY_TABLE[where]}'
+    held = [one[0] for one in tables(path)]
+    assert held == [head for head, _ in EVERY_TABLE[where]], (
+        f'{path.name} holds tables {held} and this file accounts for '
+        f'{[head for head, _ in EVERY_TABLE[where]]}'
     )
 
 

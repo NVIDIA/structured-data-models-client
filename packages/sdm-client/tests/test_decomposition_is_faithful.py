@@ -1281,3 +1281,23 @@ def test_a_ranking_reports_a_bad_outputs_the_way_every_route_does(outputs):
     said = str(raised.value)
     assert 'sequence of field names' in said
     assert "'p', 'r', 'e'" not in said
+
+
+def test_ranking_a_column_is_refused_rather_than_crashing():
+    """A ranking has to be over a window, and saying so is the refusal.
+
+    The language takes `RANK` over a multicategorical column, and there is
+    nothing in such a query to ask one candidate at a time about. Reaching
+    the decomposition with no aggregation used to raise AttributeError, which
+    no caller can catch for: every other refusal here is a
+    StructuredDataError.
+    """
+    schema = shop()
+    column = schema.tables['users'].columns['seg']
+    schema.tables['users'].columns['seg'] = type(column)(
+        'seg', dtype=column.dtype, stype='multicategorical'
+    )
+    with pytest.raises(StructuredDataError, match='ranks a column'):
+        PredictiveQuery(
+            'PREDICT users.seg RANK TOP 2 FOR EACH users.uid', schema
+        ).materialize(indices=[1], candidates=pd.Series(list('abc')))
