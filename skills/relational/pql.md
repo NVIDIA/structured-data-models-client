@@ -163,9 +163,22 @@ answers:
 | Answered on numbers and times only | `<`, `<=`, `>`, `>=` |
 | Parsed, then refused | `LIKE`, `NOT LIKE`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IS IN` |
 
-**A string can only be matched, never ordered or searched.** `=`, `!=` and
-`IN` are the whole of it. Ordering one is refused, and so is looking inside
-one:
+**The rows above are about a string the model reads as a label.** A string
+column with more than 64 distinct values is read as `text` instead, and then
+no comparison works on it at all, not even `=`:
+
+```
+Operations on a text column are not supported in the foundation model queries
+yet.
+```
+
+The model does not read a `text` column as a feature either, so a free-text
+column is along for the ride whichever way you come at it. Give the model the
+label you would have searched for, as its own column.
+
+**A string the model does read as a label can only be matched, never ordered
+or searched.** `=`, `!=` and `IN` are the whole of it. Ordering one is
+refused, and so is looking inside one:
 
 ```
 Operation < between strings is not supported in the foundation model queries.

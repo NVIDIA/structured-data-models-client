@@ -158,16 +158,34 @@ def test_no_example_hides_in_a_plain_fence(path):
     # like prose.
     reachable = set(sdm_client.__all__) | {'sdm_client'}
     for source in fences(path, 'python'):
-        for node in ast.walk(ast.parse(source)):
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 module = getattr(node, 'module', None) or ''
-                if module != 'sdm_client' and not module.startswith(
-                    'sdm_client.'
-                ):
-                    continue
-                reachable.update(
-                    alias.asname or alias.name for alias in node.names
-                )
+                if module == 'sdm_client' or module.startswith('sdm_client.'):
+                    reachable.update(
+                        alias.asname or alias.name for alias in node.names
+                    )
+        # Not only what is imported: a name bound to the result of calling
+        # one, like `client = SDMClient(...)`, reaches the next block too.
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                continue
+            if not any(
+                isinstance(inner, ast.Name) and inner.id in reachable
+                for inner in ast.walk(node.value)
+                if node.value is not None
+            ):
+                continue
+            targets = (
+                node.targets if isinstance(node, ast.Assign) else [node.target]
+            )
+            reachable.update(
+                bound.id
+                for target in targets
+                for bound in ast.walk(target)
+                if isinstance(bound, ast.Name)
+            )
     exported = reachable
     for index, source in enumerate(fences(path, '')):
         try:
@@ -287,6 +305,33 @@ def schema():
     )
 
 
+@pytest.fixture
+def schema_with_text():
+    pytest.importorskip('sdm_relational_engine')
+    pd = pytest.importorskip('pandas')
+    from sdm_client import Relationship, Schema
+
+    users = pd.DataFrame({'user_id': range(12)})
+    orders = pd.DataFrame(
+        {
+            'order_id': range(120),
+            'user_id': [i % 12 for i in range(120)],
+            'note': [f'a free note number {i}' for i in range(120)],
+            'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+        }
+    )
+    schema = Schema.from_data(
+        {'users': users, 'orders': orders},
+        primary_keys={'users': 'user_id', 'orders': 'order_id'},
+        time_columns={'orders': 'ordered_at'},
+        relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
+    )
+    assert str(schema.tables['orders'].columns['note'].stype) == 'text', (
+        'the fixture no longer has a text column to ask about'
+    )
+    return schema
+
+
 def resolve(query, schema, **extra):
     from sdm_client import KumoRelational, PredictiveQuery
 
@@ -317,11 +362,11 @@ def without_comments(path: Path) -> str:
     inside = False
     for line in path.read_text(encoding='utf-8').splitlines(keepends=True):
         if hiding:
-            if '-->' in line:
-                hiding = False
-                kept.append(line.split('-->', 1)[1])
-            continue
-        if not inside and '<!--' in line:
+            if '-->' not in line:
+                continue
+            hiding = False
+            line = line.split('-->', 1)[1]
+        if not inside and '<!--' in line:  # noqa: SIM102
             rest = line
             while '<!--' in rest:
                 before, rest = rest.split('<!--', 1)
@@ -378,6 +423,11 @@ def tables(path: Path) -> list[list[list[str]]]:
             )
             ruled = True
             continue
+        assert not current or len(cells) == len(current[0]), (
+            f'{path.name} gives a row {len(cells)} cells under a header of '
+            f'{len(current[0])}, which renders ragged and is read here as '
+            f'though it lined up'
+        )
         current.append(cells)
     if current:
         assert ruled, f'{path.name} has a table with no rule under it'
@@ -708,6 +758,29 @@ def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
         f'pql.md lists {comparison} under {row!r} and it behaves like '
         f'{belongs[0]!r}'
     )
+
+
+def test_a_text_column_cannot_be_compared_at_all(schema_with_text):
+    """The rule beneath the comparison table.
+
+    Past 64 distinct values a string is read as text rather than as a label,
+    and then no comparison reaches it, which no row of that table would tell
+    you.
+    """
+    from sdm_client.errors import StructuredDataError
+
+    for condition in (
+        "orders.note = 'x'",
+        "orders.note != 'x'",
+        "orders.note IN ('x', 'y')",
+        'orders.note IS NULL',
+    ):
+        with pytest.raises(StructuredDataError, match='text column'):
+            resolve(
+                f'PREDICT COUNT(orders.* WHERE {condition}, 0, 30, days) '
+                f'FOR EACH users.user_id',
+                schema_with_text,
+            )
 
 
 def test_a_ranking_is_capped_at_twenty_candidates(schema):
