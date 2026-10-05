@@ -29,6 +29,7 @@ customers = pd.DataFrame(
     {
         'customer_id': range(40),
         'spend': [10.0 + i for i in range(40)],
+        'segment': list('abcd') * 10,
         'churn': [i % 2 for i in range(40)],
     }
 )

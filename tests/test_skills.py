@@ -1671,20 +1671,18 @@ ON_ONE_TABLE = {
 
 @pytest.fixture
 def one_table():
-    pd = pytest.importorskip('pandas')
-    from sdm_client import Schema
+    """The schema the tabular reference builds, run out of the reference.
 
-    customers = pd.DataFrame(
-        {
-            'customer_id': range(30),
-            'spend': [100.0 + 10 * i for i in range(30)],
-            'segment': list('abc') * 10,
-            'churn': [i % 2 for i in range(30)],
-        }
-    )
-    return Schema.from_data(
-        {'customers': customers}, primary_keys={'customers': 'customer_id'}
-    )
+    A fixture of its own would answer for columns the document does not
+    define, and every refusal quoted there is about a column it names.
+    """
+    pytest.importorskip('pandas')
+    code, _ = examples(TABULAR_PQL)[0]
+    namespace: dict[str, object] = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        exec(code, namespace)  # noqa: S102 - running the documentation
+    return namespace['schema']
 
 
 def test_the_tabular_clause_table_is_every_clause_it_refuses(one_table):
