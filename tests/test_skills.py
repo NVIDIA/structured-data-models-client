@@ -78,6 +78,18 @@ def test_every_link_resolves(path):
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
+def test_verified_output_is_marked_one_way(path):
+    """``**Verified**`` is how a block is paired with the example above it.
+
+    ``__Verified__`` renders identically and would pair with nothing, so a
+    block marked that way would quietly go unchecked.
+    """
+    assert '__Verified__' not in path.read_text(encoding='utf-8'), (
+        f'{path.name} marks an output with __Verified__; use **Verified**'
+    )
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
 def test_every_example_parses(path):
     for index, source in enumerate(fences(path, 'python')):
         try:
@@ -154,6 +166,7 @@ def schema():
             'user_id': [i % 12 for i in range(120)],
             'item': [i % 4 for i in range(120)],
             'price': [10.0 + i for i in range(120)],
+            'channel': ['web', 'app', 'store'] * 40,
             'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
         }
     )
@@ -185,6 +198,18 @@ PQL = SKILLS / 'relational' / 'pql.md'
 ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
 
 
+HIDDEN = re.compile(r'<!--.*?-->|^```.*?^```', re.DOTALL | re.MULTILINE)
+
+
+def rendered(path: Path) -> str:
+    """The document as a reader sees it: no comments, no fenced blocks.
+
+    A table inside either is not a table anyone reads, and checking one would
+    be validating text that is not on the page.
+    """
+    return HIDDEN.sub('', path.read_text(encoding='utf-8'))
+
+
 def tables(path: Path) -> list[list[list[str]]]:
     """Every table in a document, each as its rows, each row as its cells.
 
@@ -195,7 +220,7 @@ def tables(path: Path) -> list[list[list[str]]]:
     found: list[list[list[str]]] = []
     current: list[list[str]] = []
     ruled = False
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in rendered(path).splitlines():
         stripped = line.strip()
         if not (stripped.startswith('|') and stripped.endswith('|')):
             if current:
@@ -221,6 +246,31 @@ def rows(path: Path) -> list[list[str]]:
     return [row for one in tables(path) for row in one]
 
 
+def table(path: Path, label: str) -> dict[str, list[str]]:
+    """The one table holding a row labelled ``label``, as label to cells."""
+    matched = [
+        one for one in tables(path) if any(row[0] == label for row in one)
+    ]
+    assert len(matched) == 1, (
+        f'{path.name} has {len(matched)} tables with a {label!r} row'
+    )
+    collected: dict[str, list[str]] = {}
+    for cells in matched[0]:
+        assert cells[0] not in collected, (
+            f'{path.name} lists {cells[0]!r} twice'
+        )
+        collected[cells[0]] = cells[1:]
+    return collected
+
+
+def heading(path: Path, label: str) -> list[str]:
+    """The header row of the table holding ``label``, as its cells."""
+    for one in tables(path):
+        if any(row[0] == label for row in one):
+            return one[0]
+    raise AssertionError(f'{path.name} has no {label!r} row')
+
+
 def backticked(cell: str) -> list[str]:
     return re.findall(r'`([^`]+)`', cell)
 
@@ -241,17 +291,12 @@ def task_table() -> list[tuple[str, str]]:
     return pairs
 
 
-def aggregation_table() -> tuple[list[str], list[str]]:
-    answered: list[str] = []
-    refused: list[str] = []
-    for cells in rows(PQL):
-        if len(cells) != 2:
-            continue
-        if cells[0] == 'Answered':
-            answered = backticked(cells[1])
-        elif cells[0].startswith('Parsed'):
-            refused = backticked(cells[1])
-    assert answered and refused, 'pql.md no longer lists its aggregations'
+def answered_and_refused(heading: str) -> tuple[list[str], list[str]]:
+    """The two halves of a table in ``pql.md`` split that way."""
+    shown = table(PQL, heading)
+    answered = backticked(shown['Answered'][0])
+    refused = backticked(shown['Parsed, then refused'][0])
+    assert answered and refused, f'pql.md lists no {heading.lower()}s'
     return answered, refused
 
 
@@ -294,7 +339,8 @@ def test_a_single_question_is_one_part(schema):
     assert request.parts is None
 
 
-ANSWERED, REFUSED = aggregation_table()
+ANSWERED, REFUSED = answered_and_refused('Aggregation')
+ANSWERED_OPS, REFUSED_OPS = answered_and_refused('Comparison')
 
 
 @pytest.mark.parametrize('aggregation', ANSWERED)
@@ -325,6 +371,53 @@ def test_an_aggregation_the_skill_warns_about_is_refused(aggregation, schema):
     )
     with pytest.raises(StructuredDataError, match='not supported'):
         resolve(query, schema)
+
+
+#: A condition using each comparison, written the way that operator takes one.
+AS_A_CONDITION = {
+    '=': 'orders.price = 50',
+    '!=': 'orders.price != 50',
+    '<': 'orders.price < 50',
+    '<=': 'orders.price <= 50',
+    '>': 'orders.price > 50',
+    '>=': 'orders.price >= 50',
+    'IS': 'orders.price IS NULL',
+    'IS NOT': 'orders.price IS NOT NULL',
+    'IN': 'orders.item IN (1, 2)',
+    'IS IN': 'orders.item IS IN (1, 2)',
+    'LIKE': "orders.channel LIKE 'w%'",
+    'NOT LIKE': "orders.channel NOT LIKE '%w%'",
+    'CONTAINS': "orders.channel CONTAINS 'e'",
+    'NOT CONTAINS': "orders.channel NOT CONTAINS 'e'",
+    'STARTS WITH': "orders.channel STARTS WITH 'w'",
+    'ENDS WITH': "orders.channel ENDS WITH 'b'",
+}
+
+
+def filtered(comparison: str) -> str:
+    assert comparison in AS_A_CONDITION, (
+        f'pql.md lists {comparison!r} and this test does not know how to '
+        f'write a condition with it'
+    )
+    return (
+        f'PREDICT COUNT(orders.* WHERE {AS_A_CONDITION[comparison]}, 0, 30, '
+        f'days) FOR EACH users.user_id'
+    )
+
+
+@pytest.mark.parametrize('comparison', ANSWERED_OPS)
+def test_a_comparison_the_skill_promises_is_answered(comparison, schema):
+    assert resolve(filtered(comparison), schema).task.kind == 'regression'
+
+
+@pytest.mark.parametrize('comparison', REFUSED_OPS)
+def test_a_comparison_the_skill_warns_about_is_refused(comparison, schema):
+    """Every one of these parses and is then refused, which is why the skill
+    lists them separately rather than leaving them out."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='not supported|deprecated'):
+        resolve(filtered(comparison), schema)
 
 
 def test_a_window_in_the_past_is_refused(schema):
@@ -393,14 +486,14 @@ EXAMPLE = re.compile(
 def examples(path: Path) -> list[tuple[str, str | None]]:
     """Runnable examples and what each is said to print, in document order.
 
-    A fence holding ``...`` is a shape rather than a program, and the two
-    capability calls need a connection to say anything, so neither is run.
+    Everything but a fence holding ``...``, which is a shape rather than a
+    program. The capability blocks print nothing to compare, but they are run:
+    they are the first thing an agent is told to do.
     """
     return [
         (match['code'], match['shown'])
         for match in EXAMPLE.finditer(path.read_text(encoding='utf-8'))
         if '...' not in match['code']
-        and 'client.capabilities(' not in match['code']
     ]
 
 
@@ -463,31 +556,6 @@ def test_the_relational_examples_print_what_the_skill_shows():
 # --- What the tables in the skills claim ----------------------------------
 
 
-def table(path: Path, label: str) -> dict[str, list[str]]:
-    """The one table holding a row labelled ``label``, as label to cells."""
-    matched = [
-        one for one in tables(path) if any(row[0] == label for row in one)
-    ]
-    assert len(matched) == 1, (
-        f'{path.name} has {len(matched)} tables with a {label!r} row'
-    )
-    collected: dict[str, list[str]] = {}
-    for cells in matched[0]:
-        assert cells[0] not in collected, (
-            f'{path.name} lists {cells[0]!r} twice'
-        )
-        collected[cells[0]] = cells[1:]
-    return collected
-
-
-def heading(path: Path, label: str) -> list[str]:
-    """The header row of the table holding ``label``, as its cells."""
-    for one in tables(path):
-        if any(row[0] == label for row in one):
-            return one[0]
-    raise AssertionError(f'{path.name} has no {label!r} row')
-
-
 @pytest.mark.parametrize(
     'name, model_name',
     [('tabular', 'KumoTabular'), ('relational', 'KumoRelational')],
@@ -500,7 +568,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
     with SDMClient(url='http://localhost:8000') as client:
         capabilities = client.capabilities(model)
     path = SKILLS / name / 'SKILL.md'
-    assert capabilities.model in heading(path, 'Tasks')[1], (
+    assert backticked(heading(path, 'Tasks')[1]) == [capabilities.model], (
         f'{name} heads its table with the wrong model'
     )
     shown = table(path, 'Tasks')
@@ -512,11 +580,10 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         'Relationships': capabilities.relationships,
         'Sessions': capabilities.sessions,
     }
-    if 'Explanations' in shown:
-        said['Explanations'] = 'explanation' in capabilities.outputs
-    if 'Context rows' in shown:
+    if name == 'tabular':
         from sdm_client.models import TABULAR_LIMITS
 
+        said['Explanations'] = 'explanation' in capabilities.outputs
         said['Context rows'] = TABULAR_LIMITS['context_rows_max']
     assert set(shown) == set(said), (
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'

@@ -11,13 +11,13 @@ PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
 [ ASSUMING <condition> ]
 ```
 
-`CLASSIFY` is in the language and **not reachable on these models**. It takes
-only a multicategorical target, a column holding a list of labels per row, and
-this client refuses to send such a column at all:
+`CLASSIFY` is in the language and **not reachable on these models**. It asks a
+multilabel question, and the refusal says both why and what to ask instead:
 
 ```
-users.tags holds a container (list), and a nested column is not something this
-client can send. Multi-label targets are not supported by these models
+Foundation Model queries do not support multilabel tasks. Use `LIST_DISTINCT`
+on a foreign key column to make a link prediction query. To make predictions
+with this query, train a new model.
 ```
 
 So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`.
@@ -57,7 +57,7 @@ The language has nine. **The foundation model answers six of them**, which is
 the distinction that matters, because the other three parse and are then
 refused:
 
-| | |
+| Aggregation | |
 |---|---|
 | Answered | `SUM`, `AVG`, `MIN`, `MAX`, `COUNT`, `LIST_DISTINCT` |
 | Parsed, then refused | `COUNT_DISTINCT`, `FIRST`, `LAST` |
@@ -138,10 +138,30 @@ from narrowing the entities:
 PREDICT COUNT(orders.* WHERE orders.price > 50, 0, 30, days) FOR EACH users.user_id
 ```
 
-Comparisons are `=`, `!=`, `<`, `<=`, `>`, `>=`, `IS`, `IS NOT`, `IN`,
-`IS IN`, `LIKE`, `NOT LIKE`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`,
-`ENDS WITH`, combined with `AND`, `OR`, `NOT` and parentheses. A list is
-written `(1, 2, 3)` and needs at least two elements.
+As with the aggregations, the language offers more comparisons than the model
+answers:
+
+| Comparison | |
+|---|---|
+| Answered | `=`, `!=`, `<`, `<=`, `>`, `>=`, `IS`, `IS NOT`, `IN` |
+| Parsed, then refused | `LIKE`, `NOT LIKE`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IS IN` |
+
+**There is no string matching.** Every operation that compares text is refused:
+
+```
+Operation CONTAINS between strings is not supported in the foundation model
+queries.
+```
+
+Compare a string with `=` or `IN` against the values it actually takes.
+`IS IN` is the old spelling of `IN` and says so:
+
+```
+Operator IS IN is deprecated. Please use operator `IN` instead.
+```
+
+Combine conditions with `AND`, `OR`, `NOT` and parentheses. A list is written
+`(1, 2, 3)` and needs at least two elements.
 
 ## Asking a counterfactual
 
