@@ -103,9 +103,10 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     for number, line in enumerate(body.splitlines(), start=1):
         where = f'{path.name}:{number}'
         if not inside and line.startswith('|'):
-            assert not previous.lstrip().startswith(('-', '*', '+')), (
-                f'{where} begins a table directly under a list item, where it '
-                f'renders as more of that item and is read here as a table'
+            assert previous == '' or previous.startswith('|'), (
+                f'{where} begins a table with no blank line above it; under a '
+                f'list or a paragraph it renders as more of that and is read '
+                f'here as a table'
             )
         previous = line
         if line.lstrip().startswith(('```', '~~~')):
@@ -250,6 +251,10 @@ def test_no_example_hides_in_a_plain_fence(path):
                 reachable |= bound
     exported = reachable
     for index, source in enumerate(fences(path, '')):
+        assert '>>>' not in source, (
+            f'{path.name} block {index} is a transcript; an example is a '
+            f'program in a python fence, and a transcript runs nowhere'
+        )
         try:
             tree = ast.parse(source)
         except SyntaxError:
