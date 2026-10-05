@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from predictive_query.time_columns import RejectedTimeColumn
-from sdm_relational_engine.rfm import Graph, LocalTable, TimeColumnWarning
+from sdm_relational_engine.rfm import Edge, Graph, LocalTable, TimeColumnWarning
 from sdm_relational_engine.rfm.metadata_inference import infer_time_column
 
 duckdb = pytest.importorskip('duckdb')
@@ -356,4 +356,48 @@ def test_a_refused_stamp_put_to_another_use_is_not_taken_back(change):
         graph['users'].remove_column('last_login')
 
     graph.unlink('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None
+
+
+def _shared_users_and_orders() -> tuple[LocalTable, LocalTable]:
+    users = LocalTable(
+        pd.DataFrame({'uid': range(4), 'ModifiedDate': HOURS[:4]}),
+        name='users',
+    )
+    orders = LocalTable(
+        pd.DataFrame({'oid': range(8), 'uid': [0, 1] * 4}), name='orders'
+    )
+    return users, orders
+
+
+def test_a_table_in_two_graphs_has_each_graph_s_time_column():
+    """Manush's case on !37: `users` is linked to in g1 and alone in g2,
+    and the one table object is read through both.
+    """
+    users, orders = _shared_users_and_orders()
+    g1 = Graph([users, orders])
+    g1.link('orders', 'uid', 'users')
+    g1.infer_metadata(verbose=False)
+    assert users.time_column is None
+
+    g2 = Graph([users])
+    held = g2['users'].time_column
+    assert held is not None
+    assert held.name == 'ModifiedDate'
+
+    assert g1.tables['users'].time_column is None
+    assert g1._to_api_graph_definition().tables['users'].time_col is None
+    held = g2.tables['users'].time_column
+    assert held is not None
+    assert held.name == 'ModifiedDate'
+
+
+def test_an_edge_added_past_link_is_settled_when_the_graph_is_read():
+    users, orders = _shared_users_and_orders()
+    graph = Graph([users, orders])
+    graph.infer_metadata(verbose=False)
+    held = graph['users'].time_column
+    assert held is not None
+
+    graph.edges.append(Edge('orders', 'uid', 'users'))
     assert graph['users'].time_column is None
