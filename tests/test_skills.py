@@ -1901,6 +1901,37 @@ def test_a_source_reads_the_catalogs_own_keys():
     )
 
 
+def test_describing_a_source_reads_a_thousand_rows_of_it():
+    """What the reference says leaves the warehouse before any prediction.
+
+    Counted by giving the source more rows than the sample takes and asking
+    what was read: a table left in place is not a table nothing is read from.
+    """
+    duckdb = pytest.importorskip('duckdb')
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client import Schema
+    from sdm_connectors import DuckDBSource
+    from sdm_relational_engine.rfm.base.table import Table
+
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
+    )
+    schema = Schema.from_source(
+        DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
+    )
+    assert Table._NUM_SAMPLE_ROWS == 1000, (
+        f'the sample is {Table._NUM_SAMPLE_ROWS} rows and both files say a '
+        f'thousand'
+    )
+    sampled = schema._engine_tables._tables['t']._source_sample_df
+    read = len(sampled)
+    assert read == 1000, (
+        f'describing a 5,000-row source read {read} rows, and the reference '
+        f'says up to a thousand of each leave the warehouse'
+    )
+
+
 def test_a_source_type_is_chosen_for_you():
     """``Source(connection)`` picks the backend, which the reference offers."""
     duckdb = pytest.importorskip('duckdb')

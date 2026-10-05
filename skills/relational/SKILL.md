@@ -138,8 +138,9 @@ the fact and would leak the future into the past. Pass
 `time_columns={'t': None}` to say a table has no time column at all.
 
 For tables that stay in a warehouse, `Schema.from_source` describes them in
-place and `materialize()` samples them with SQL, so only the rows a prediction
-needs ever leave. Snowflake, Databricks, Postgres, DuckDB and SQLite, metric
+place and `materialize()` samples them with SQL, so the whole table never
+leaves -- up to a thousand rows of each for reading its columns, and after that
+only the rows a prediction needs. Snowflake, Databricks, Postgres, DuckDB and SQLite, metric
 views, and a notebook's own session are in
 [`references/warehouses.md`](references/warehouses.md).
 
