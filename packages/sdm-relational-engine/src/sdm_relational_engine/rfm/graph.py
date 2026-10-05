@@ -302,6 +302,13 @@ class Graph:
         >>> # Validate graph:
         >>> graph.validate()
 
+    A graph holds the tables it is given, not copies, so a table put in two
+    graphs is one table in both: a key or semantic type set through one is
+    set in the other. The one exception is a lone edit stamp, which
+    inference takes on a table nothing links to and refuses on one
+    something does; it is settled for the graph the table is read through.
+    Pass ``table.copy()`` to give a graph a table of its own.
+
     Build directly from a data source instead of :class:`Table` objects with
     :meth:`from_data`, :meth:`from_snowflake`,
     :meth:`from_snowflake_semantic_view`, :meth:`from_databricks`,
@@ -2005,7 +2012,14 @@ class Graph:
 
     @property
     def tables(self) -> dict[str, Table]:
-        r"""Returns the dictionary of table objects."""
+        r"""Returns the dictionary of table objects.
+
+        The tables are the ones given, not copies. A lone edit stamp that
+        inference left to the links is settled for this graph as they are
+        read, so a table in two graphs has each graph's time column when
+        read through it.
+        """
+        self._settle_time_columns()
         return self._tables
 
     def add_table(self, table: Table) -> Self:
@@ -2132,10 +2146,20 @@ class Graph:
         second a log of changes.
 
         Called whenever a table or an edge is added or removed, since either
-        can change which tables something links to.
+        can change which tables something links to, and whenever the tables
+        are read through this graph: a table put in two graphs is one object,
+        linked to in one and maybe not the other, and the graph it is read
+        through decides.
         """
-        linked = {edge.dst_table for edge in self.edges}
-        for name, table in self.tables.items():
+        waiting = [
+            (name, table)
+            for name, table in self._tables.items()
+            if table._time_column_waits_on_links
+        ]
+        if not waiting:
+            return
+        linked = {edge.dst_table for edge in self._edges}
+        for name, table in waiting:
             table._settle_time_column(name in linked)
 
     # Edges ###################################################################

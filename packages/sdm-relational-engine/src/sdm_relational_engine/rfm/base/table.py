@@ -892,6 +892,18 @@ class Table(ABC):
         """
         return self._time_column_choice
 
+    @property
+    def _time_column_waits_on_links(self) -> bool:
+        r"""Whether inference left this table's time column to the graph's
+        links, a lone edit stamp, and nothing has set it since.
+        """
+        choice = self._time_column_choice
+        return (
+            choice is not None
+            and choice.fallback is not None
+            and self._time_column_inferred
+        )
+
     def _settle_time_column(self, linked: bool) -> None:
         r"""Take or refuse a lone edit stamp by whether another table links
         to this one, once the graph's edges say. A time column set by hand
