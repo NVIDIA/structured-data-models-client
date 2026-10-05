@@ -33,20 +33,24 @@ use upper case for the language and lower case for your names.
 Each line below was resolved against a schema and the resulting
 `request.task.kind` read back:
 
-| Target | Task | |
+| Target | Task | Calls |
 |---|---|---|
-| `COUNT(orders.*, 0, 30, days)` | `regression` | |
-| `SUM(orders.price, 0, 30, days)` | `regression` | |
-| `COUNT(orders.*, 0, 30, days) > 2` | `binary_classification` | |
-| `users.segment` | `multiclass_classification` | a column of three values |
-| `COUNT(orders.*, 0, 30, days) FORECAST 3 TIMEFRAMES` | `regression` | once per step |
-| `LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2` | `binary_classification` | once per candidate |
+| `COUNT(orders.*, 0, 30, days)` | `regression` | `1` |
+| `SUM(orders.price, 0, 30, days)` | `regression` | `1` |
+| `COUNT(orders.*, 0, 30, days) > 2` | `binary_classification` | `1` |
+| `users.segment` | `multiclass_classification` | `1` |
+| `COUNT(orders.*, 0, 30, days) FORECAST 3 TIMEFRAMES` | `regression` | `3` |
+| `LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2` | `binary_classification` | `4` |
+
+`users.segment` holds three values, which is what makes it a multiclass
+question rather than a binary one.
 
 The last two are worth reading twice. A forecast and a ranking are not single
 calls with their own task kind: a forecast is asked as one regression per step,
-and a ranking as one classification per candidate. `request.parts` holds those
-calls and is `None` when there is only one, while `request.context_rows` and
-`request.predict_rows` count across all of them.
+and a ranking as one classification per candidate — three steps and four
+candidates in the rows above. `request.parts` holds those calls and is `None`
+when there is only one, while `request.context_rows` and `request.predict_rows`
+count across all of them.
 
 So a comparison makes a classification out of a quantity. `COUNT(...) > 2` asks
 whether, not how many, and that is usually the question worth asking.
@@ -108,11 +112,7 @@ not happened.
 ## Which entities get scored
 
 **`materialize()` decides that, not the query.** This is the part of the
-language most likely to be read wrongly, so it is worth being blunt:
-
-```
-PredictiveQuery(query, schema).materialize(indices=[1, 2, 3], model=...)
-```
+language most likely to be read wrongly, so it is worth being blunt.
 
 `indices` names the entities to score, by key. One of `indices` or `predict` is
 always required — there is no all-rows default, because it would silently score

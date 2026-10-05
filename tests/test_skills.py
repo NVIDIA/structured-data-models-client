@@ -101,10 +101,12 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     for number, line in enumerate(body.splitlines(), start=1):
         where = f'{path.name}:{number}'
         if line.lstrip().startswith(('```', '~~~')):
-            assert line in ('```', '```python'), (
-                f'{where} opens or closes a fence as {line.strip()!r}; a '
-                f'fence is ``` at the margin, and the only language named is '
-                f'python, because every python block here is run'
+            allowed = ('```',) if inside else ('```', '```python')
+            assert line in allowed, (
+                f'{where} {"closes" if inside else "opens"} a fence as '
+                f'{line.strip()!r}; a fence is ``` at the margin, only an '
+                f'opening one names a language, and python is the only name, '
+                f'because every python block here is run'
             )
             inside = not inside
         elif not inside:
@@ -139,6 +141,30 @@ def test_verified_output_is_marked_one_way(path):
         f'{path.name} writes "Verified" some way other than **Verified**, '
         f'which renders the same and pairs with no example'
     )
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_no_example_hides_in_a_plain_fence(path):
+    """A plain fence is for output and refusals, never for code.
+
+    Only a ``python`` block is run, so moving an example into a plain fence
+    would take it out of every check at once while still reading as an
+    example. A plain fence that parses as Python and reaches for this client
+    is that move.
+    """
+    exported = set(sdm_client.__all__)
+    for index, source in enumerate(fences(path, '')):
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue  # output, a refusal, a query: not code, which is the rule
+        named = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        }
+        assert not named & exported, (
+            f'{path.name} block {index} is in a plain fence and uses '
+            f'{sorted(named & exported)}; tag it python so it is run'
+        )
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
@@ -251,12 +277,24 @@ ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
 
 
 COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
-FENCED = re.compile(r'^```.*?^```', re.DOTALL | re.MULTILINE)
+FENCED = re.compile(r'^```[a-z]*\n.*?^```$', re.DOTALL | re.MULTILINE)
 
 
 def without_comments(path: Path) -> str:
-    """The document without what a reader never sees."""
-    return COMMENT.sub('', path.read_text(encoding='utf-8'))
+    """The document without what a reader never sees.
+
+    Outside fences only. Inside one, ``<!--`` is four characters a reader
+    sees, and taking them out would quietly rewrite an example and the output
+    it is compared against.
+    """
+    body = path.read_text(encoding='utf-8')
+    kept, at = [], 0
+    for block in FENCED.finditer(body):
+        kept.append(COMMENT.sub('', body[at : block.start()]))
+        kept.append(block.group(0))
+        at = block.end()
+    kept.append(COMMENT.sub('', body[at:]))
+    return ''.join(kept)
 
 
 def rendered(path: Path) -> str:
@@ -353,20 +391,20 @@ def listed(cell: str) -> list[str]:
     return found
 
 
-def task_table() -> list[tuple[str, str]]:
+def task_table() -> list[tuple[str, str, int]]:
     """The target-decides-the-task table, read out of ``pql.md`` itself.
 
     Parsed rather than copied: a table that drifts from the client is the
     failure this file exists to catch, and a copy here would drift with it.
     """
-    table = [
-        (backticked(cells[0]), backticked(cells[1]))
-        for cells in rows(PQL)
-        if len(cells) == 3 and backticked(cells[1])
+    shown = table(PQL, 'Target')
+    del shown['Target']  # the header
+    read = [
+        (listed(target)[0], listed(cells[0])[0], int(listed(cells[1])[0]))
+        for target, cells in shown.items()
     ]
-    pairs = [(target[0], kind[0]) for target, kind in table if target and kind]
-    assert len(pairs) == 6, f'pql.md task table has {len(pairs)} rows, not 6'
-    return pairs
+    assert len(read) == 6, f'pql.md task table has {len(read)} rows, not 6'
+    return read
 
 
 def answered_and_refused(heading: str) -> tuple[list[str], list[str]]:
@@ -378,13 +416,23 @@ def answered_and_refused(heading: str) -> tuple[list[str], list[str]]:
     return answered, refused
 
 
-@pytest.mark.parametrize('target, kind', task_table(), ids=lambda v: v[:40])
-def test_the_target_decides_the_task(target, kind, schema):
-    """Every row of the table in ``pql.md``, asked for real."""
+@pytest.mark.parametrize(
+    'target, kind, calls', task_table(), ids=lambda v: str(v)[:40]
+)
+def test_the_target_decides_the_task(target, kind, calls, schema):
+    """Every row of the table in ``pql.md``, asked for real.
+
+    The call count is read from the table too. A forecast and a ranking are
+    several calls and the rest are one, which is the row that is easiest to
+    write down wrongly and the hardest to notice.
+    """
     pd = pytest.importorskip('pandas')
     extra = {'candidates': pd.Series(range(4))} if 'RANK' in target else {}
-    query = f'PREDICT {target} FOR EACH users.user_id'
-    assert resolve(query, schema, **extra).task.kind == kind
+    request = resolve(
+        f'PREDICT {target} FOR EACH users.user_id', schema, **extra
+    )
+    assert request.task.kind == kind
+    assert len(request.parts or (request,)) == calls
 
 
 def test_a_ranking_is_asked_as_a_classification_per_candidate(schema):
