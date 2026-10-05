@@ -177,7 +177,8 @@ its own, and they are in
 `fit()` uploads a context once and pins it in the endpoint's memory; every
 later call on the handle sends only the rows to score. Gathering still happens
 here, in `materialize()`, so what a session saves is sending the context again,
-which is worth doing when several questions share one:
+which is worth doing when one question is asked of more rows than a single call
+scores:
 
 ```python
 with SDMClient(url='http://localhost:8000', timeout=600) as client:
@@ -197,6 +198,11 @@ with SDMClient(url='http://localhost:8000', timeout=600) as client:
 
 The same answers the one-shot call gave: a session changes what it costs to
 ask again, not what comes back.
+
+One context is one question. A later call on the handle has to ask the pinned
+query, task, target and entity table; anything else is refused and the refusal
+names which of them differs. Another question over the same tables is another
+`fit()`.
 
 A session lives in one process's memory on the endpoint, so a deployment
 behind several replicas needs the calls for one session to reach the same one.
@@ -239,7 +245,7 @@ change. The ones worth knowing:
 
 | Refusal | Cause |
 |---|---|
-| a candidate's context holds one class | every gathered entity reached it, or none did, so there is nothing to tell apart; widen with `num_context_samples` or ask over a table of pairs |
+| every candidate's context holds one class | each gathered entity reached it, or none did, so there is nothing to tell apart and nothing is sent; widen with `num_context_samples` or ask over a table of pairs. One such candidate among several is dropped with a warning instead, and named on `result.unscored_candidates` |
 | no entity existed at the anchor | the entity table's time column starts after the anchor, so nothing existed to ask about |
 | more entities than the model scores | split them across calls |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |

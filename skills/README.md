@@ -55,8 +55,11 @@ these files and asks the client whether they are still true: both capability
 tables against `capabilities()`, the relational limits against the shipped
 constants, the task each query resolves to, the aggregations that are answered
 and the ones that are refused, and the names every example imports. Run with
-`-m live_nim` and two endpoint URLs, it also re-runs every example and compares
-what it printed to the block pasted beneath it.
+`-m live_nim` and two endpoint URLs, it also re-runs every example that can be
+run and compares what it printed to the block pasted beneath it. An example
+that reads a name no example before it binds is a fragment -- a Databricks
+session, a Snowflake one -- and those are checked as code but executed
+nowhere, so none of them is allowed to show output.
 
 Where a skill says the client allows something the endpoint refuses, that gap
 is the point and is stated as such. If a claim here contradicts the code, the

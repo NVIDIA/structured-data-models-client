@@ -11,9 +11,10 @@ task they claim, and the refusals they promise are the refusals that happen.
 Most of it needs no endpoint: the tables are read out of the markdown and put
 to the client, which answers without connecting. The rest is marked
 ``live_nim`` and needs one of each model, through ``SDM_TABULAR_URL`` and
-``SDM_RELATIONAL_URL``. Those re-run every example and compare what it printed
-to the block pasted beneath it, and probe the handful of claims the skills make
-about a deployment rather than about this client.
+``SDM_RELATIONAL_URL``. Those re-run every example that can be run -- see
+``complete()`` -- and compare what it printed to the block pasted beneath it,
+and probe the handful of claims the skills make about a deployment rather than
+about this client.
 """
 
 from __future__ import annotations
@@ -2214,3 +2215,37 @@ def test_the_relational_endpoint_refuses_an_explanation(target, schema):
                 model=KumoRelational(),
                 outputs=['prediction', 'explanation'],
             )
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not RELATIONAL_URL,
+    reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
+)
+def test_a_session_answers_only_the_question_it_pinned(schema):
+    """The sentence beside the session example: one context is one question.
+
+    It takes an endpoint because a session only exists once one has pinned
+    it, and what the skill promises is the refusal naming which field differs.
+    """
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    pinned = resolve(
+        'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', schema
+    )
+    other = resolve(
+        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id', schema
+    )
+    with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
+        fitted = client.fit(pinned, model=KumoRelational())
+        try:
+            with pytest.raises(
+                StructuredDataError, match='the query pinned'
+            ) as raised:
+                fitted.predict(other)
+        finally:
+            fitted.close()
+    assert 'SUM(orders.price' in str(raised.value), (
+        'the refusal does not name the question that was asked instead'
+    )

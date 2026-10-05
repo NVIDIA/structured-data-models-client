@@ -56,9 +56,11 @@ required: it is what says which rows are scored.
 | `WHERE` on the entity | refused |
 | `ASSUMING` | refused |
 
-The last three are refused by the language itself, whatever the model. The
-first four are this model's own, and two of them are worth seeing, because
-both are ordinary relational queries.
+Every one of them is the tabular profile of the language refusing, not the
+grammar: the relational model takes all seven, within the bounds
+[`../../relational/pql.md`](../../relational/pql.md) gives each of them.
+Three are worth seeing here, because all three are queries somebody would
+reasonably write.
 
 A comparison is a target the relational model answers and this one will not,
 and the refusal says what to do instead:
