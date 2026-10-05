@@ -126,6 +126,23 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'written with outer pipes, because one without them renders '
                 f'as a table and is read here as prose'
             )
+            assert '```' not in line, (
+                f'{where} opens a fence part-way along a line, after a list '
+                f'marker or otherwise; a fence begins its own line'
+            )
+            assert not line.startswith('<') or line.startswith('<!--'), (
+                f'{where} is raw HTML, which renders as a table or a code '
+                f'block and is read here as nothing'
+            )
+            for marker in ('<!--', '-->'):
+                assert (
+                    marker not in line
+                    or line.strip().startswith(marker)
+                    or line.strip().endswith(marker)
+                ), (
+                    f'{where} writes {marker} part-way along a line, where a '
+                    f'code span may render it and this file will not'
+                )
     assert not inside, f'{path.name} leaves a fence open'
 
 
