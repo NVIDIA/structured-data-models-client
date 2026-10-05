@@ -22,6 +22,7 @@ from .diagnostics import (
 )
 from .explain.result import ExplainConfig, Explanation
 from .graph import Edge as Edge
+from .base.table import TimeColumnWarning
 from .graph import Graph, ViewConversionWarning
 from .inference.task import TaskTable
 from .rfm import KumoRelational, MaterializedPredictionRequest
@@ -43,6 +44,7 @@ __all__ = [
     'TableSanitizationReport',
     'TaskReferenceError',
     'TaskTable',
+    'TimeColumnWarning',
     'ViewConversionWarning',
     'close_client',
     'init',

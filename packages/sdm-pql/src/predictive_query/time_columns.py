@@ -296,6 +296,20 @@ class TimeColumnChoice:
         )
 
 
+def taken_unchecked(table: str, doubt: RejectedTimeColumn, clear: str) -> str:
+    r"""Say that ``doubt``, a column of :attr:`TimeColumnChoice.unconfirmed`,
+    was taken as ``table``'s time column, and that ``clear`` undoes it.
+
+    The client and the engine both say it, each with its own override.
+    """
+    return (
+        f'{table}.{doubt.column} was taken as the time column although '
+        f'{doubt.why}, because the query over the whole table failed and the '
+        f'rows past them were not checked. If the whole table is like that, '
+        f'clear it: {clear}.'
+    )
+
+
 class ColumnRange(NamedTuple):
     r"""A column's ``MIN``, ``MAX`` and ``COUNT`` over every row of its
     table.

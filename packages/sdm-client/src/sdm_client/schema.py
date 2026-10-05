@@ -43,6 +43,7 @@ import pandas as pd
 from predictive_query.time_columns import (
     TimeColumnChoice,
     choose_time_column,
+    taken_unchecked,
 )
 
 from sdm_client.core import dates
@@ -2214,11 +2215,7 @@ def _warn_how_time_columns_were_inferred(
                     f'became true, clear it: time_columns={{{name!r}: None}}.'
                 )
             lines.extend(
-                f'{name}.{column} was taken as the time column although '
-                f'{doubt.why}, because the query over the whole table '
-                f'failed and the rows past them were not checked. If the '
-                f'whole table is like that, clear it: '
-                f'time_columns={{{name!r}: None}}.'
+                taken_unchecked(name, doubt, f'time_columns={{{name!r}: None}}')
                 for doubt in choice.unconfirmed
                 if doubt.column == column
             )

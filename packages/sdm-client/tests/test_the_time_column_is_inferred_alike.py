@@ -443,10 +443,17 @@ def test_a_column_the_whole_table_could_not_check_is_kept_and_named(
         return fetch(self, sql)
 
     monkeypatch.setattr(DuckDBTable, '_fetch_rows', timed_out)
-    schema, said = _described(
-        lambda: Schema.from_source(build_duckdb(_frames({'ordered': ONE_DAY})))
-    )
+    source = build_duckdb(_frames({'ordered': ONE_DAY}))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(source)
     assert schema['orders'].time_column == 'ordered'
+    # Said once, by the schema, not again by the engine it reads through.
+    said = [
+        str(item.message)
+        for item in caught
+        if 'orders.ordered' in str(item.message)
+    ]
     assert said == [
         TIME_COLUMN_NOTICE
         + '- customers.ModifiedDate was not taken as the time column because '

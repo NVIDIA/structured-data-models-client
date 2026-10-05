@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from predictive_query.time_columns import RejectedTimeColumn
-from sdm_relational_engine.rfm import Graph, LocalTable
+from sdm_relational_engine.rfm import Graph, LocalTable, TimeColumnWarning
 from sdm_relational_engine.rfm.metadata_inference import infer_time_column
 
 duckdb = pytest.importorskip('duckdb')
@@ -175,7 +175,8 @@ def test_a_failed_check_keeps_the_column():
         raise RuntimeError('PERMISSION_DENIED')
 
     table._fetch_rows = refused  # type: ignore[method-assign]
-    table.infer_time_column(verbose=False)
+    with pytest.warns(TimeColumnWarning, match='t.t_dat was taken'):
+        table.infer_time_column(verbose=False)
 
     assert table.time_column is not None
     assert table.time_column.name == 't_dat'
@@ -184,6 +185,38 @@ def test_a_failed_check_keeps_the_column():
     assert table.time_column_choice.unconfirmed == (
         RejectedTimeColumn('t_dat', 'constant', late[0]),
     )
+
+
+def test_a_column_kept_without_the_check_is_said_on_the_engine_path():
+    """`Graph.from_duckdb` has no schema to warn for it, so the engine
+    says it, in the client's words.
+    """
+    late = [pd.Timestamp('2023-01-01')] * ROWS
+    connection = duckdb.connect()
+    connection.register(
+        'frame', pd.DataFrame({'id': range(ROWS), 't_dat': late})
+    )
+    connection.execute('CREATE TABLE orders AS SELECT * FROM frame')
+    fetch = DuckDBTable._fetch_rows
+
+    def timed_out(self: DuckDBTable, sql: str) -> list[tuple]:
+        if sql.startswith('SELECT COUNT(*), MIN('):
+            raise RuntimeError('canceling statement due to statement timeout')
+        return fetch(self, sql)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(DuckDBTable, '_fetch_rows', timed_out)
+        with pytest.warns(TimeColumnWarning) as caught:
+            graph = Graph.from_duckdb(connection, ['orders'], verbose=False)
+
+    assert graph['orders'].time_column is not None
+    assert [str(item.message) for item in caught] == [
+        'orders.t_dat was taken as the time column although every one of '
+        'the 1,000 rows read holds 2023-01-01 00:00:00, because the query '
+        'over the whole table failed and the rows past them were not '
+        'checked. If the whole table is like that, clear it: '
+        "graph['orders'].time_column = None."
+    ]
 
 
 def test_a_graph_refuses_an_edit_stamp_on_a_table_an_edge_points_at():

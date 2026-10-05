@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import copy
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from functools import cached_property
@@ -20,6 +21,7 @@ from predictive_query.time_columns import (
     TableRange,
     TimeColumnChoice,
     choose_time_column,
+    taken_unchecked,
 )
 from sdm_connectors import quote_ident
 from typing_extensions import Self
@@ -43,6 +45,17 @@ from sdm_relational_engine.rfm.metadata_inference import (
 from sdm_relational_engine.utils.environment import in_tmux
 
 _DERIVED_KEY_PREFIX = composite_key.DERIVED_PREFIX
+
+
+class TimeColumnWarning(UserWarning):
+    r"""Warn that a time column was taken on the rows read alone.
+
+    When the query over the whole table fails, a column the rows read hold
+    one value in, or mostly no value, is kept, since the first rows of a
+    table kept in time order often share one day. The category lets a
+    caller that says this itself, such as ``sdm_client.Schema``, keep the
+    engine from saying it again.
+    """
 
 
 class MissingType(StrEnum):
@@ -858,6 +871,17 @@ class Table(ABC):
         if time_column := self._time_column_choice.column:
             self.time_column = time_column
         self._time_column_inferred = True
+        for doubt in self._time_column_choice.unconfirmed:
+            if doubt.column == time_column:
+                warnings.warn(
+                    taken_unchecked(
+                        self.name,
+                        doubt,
+                        f'graph[{self.name!r}].time_column = None',
+                    ),
+                    TimeColumnWarning,
+                    stacklevel=2,
+                )
         return time_column
 
     @property
