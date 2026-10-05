@@ -108,10 +108,8 @@ not happened.
 **`materialize()` decides that, not the query.** This is the part of the
 language most likely to be read wrongly, so it is worth being blunt:
 
-```python
-request = PredictiveQuery(query, schema).materialize(
-    indices=[1, 2, 3], model=KumoRelational()
-)
+```
+PredictiveQuery(query, schema).materialize(indices=[1, 2, 3], model=...)
 ```
 
 `indices` names the entities to score, by key. One of `indices` or `predict` is
@@ -155,15 +153,16 @@ answers:
 | Answered | `=`, `!=`, `<`, `<=`, `>`, `>=`, `IS`, `IS NOT`, `IN` |
 | Parsed, then refused | `LIKE`, `NOT LIKE`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IS IN` |
 
-**There is no string matching.** Every operation that compares text is refused:
+**There is no pattern matching.** A string compares fine with `=`, `!=` or
+`IN`; what is refused is every operator that looks *inside* it:
 
 ```
 Operation CONTAINS between strings is not supported in the foundation model
 queries.
 ```
 
-Compare a string with `=` or `IN` against the values it actually takes.
-`IS IN` is the old spelling of `IN` and says so:
+So match a string against the values it actually takes, rather than a prefix
+or a substring of them. `IS IN` is the old spelling of `IN` and says so:
 
 ```
 Operator IS IN is deprecated. Please use operator `IN` instead.

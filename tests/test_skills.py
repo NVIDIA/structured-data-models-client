@@ -57,6 +57,17 @@ def test_there_is_a_skill_for_each_model():
 
 
 @pytest.mark.parametrize('name', ['tabular', 'relational'])
+def test_a_skill_shows_output_it_has_run(name):
+    """Each skill has to stake something on a live endpoint.
+
+    The live suite compares every **Verified** block to what the example
+    printed; a skill with none would pass it by having claimed nothing.
+    """
+    body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
+    assert '**Verified**' in body, f'{name} marks no output as verified'
+
+
+@pytest.mark.parametrize('name', ['tabular', 'relational'])
 def test_a_skill_announces_itself(name):
     """An agent finds a skill by its frontmatter, so it has to be there."""
     body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
@@ -81,11 +92,15 @@ def test_every_link_resolves(path):
 def test_verified_output_is_marked_one_way(path):
     """``**Verified**`` is how a block is paired with the example above it.
 
-    ``__Verified__`` renders identically and would pair with nothing, so a
-    block marked that way would quietly go unchecked.
+    ``__Verified__`` and ``<strong>Verified</strong>`` render the same and
+    pair with nothing, so a block marked either way would go unchecked. The
+    word is counted rather than the spellings listed: there is no end to the
+    ways to embolden a word, and only one of them is read here.
     """
-    assert '__Verified__' not in path.read_text(encoding='utf-8'), (
-        f'{path.name} marks an output with __Verified__; use **Verified**'
+    body = path.read_text(encoding='utf-8')
+    assert body.count('Verified') == body.count('**Verified**'), (
+        f'{path.name} writes "Verified" some way other than **Verified**, '
+        f'which renders the same and pairs with no example'
     )
 
 
@@ -198,7 +213,10 @@ PQL = SKILLS / 'relational' / 'pql.md'
 ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
 
 
-HIDDEN = re.compile(r'<!--.*?-->|^```.*?^```', re.DOTALL | re.MULTILINE)
+HIDDEN = re.compile(
+    r'<!--.*?-->|^ {0,3}(?P<fence>`{3,}|~{3,}).*?^ {0,3}(?P=fence)',
+    re.DOTALL | re.MULTILINE,
+)
 
 
 def rendered(path: Path) -> str:
@@ -263,11 +281,15 @@ def table(path: Path, label: str) -> dict[str, list[str]]:
     return collected
 
 
-def heading(path: Path, label: str) -> list[str]:
-    """The header row of the table holding ``label``, as its cells."""
+def heading(path: Path, label: str) -> str:
+    """What the table holding ``label`` puts above its second column."""
     for one in tables(path):
         if any(row[0] == label for row in one):
-            return one[0]
+            assert len(one[0]) == 2, (
+                f'{path.name} gives the {label!r} table {len(one[0])} '
+                f'columns, and only the second is read'
+            )
+            return one[0][1]
     raise AssertionError(f'{path.name} has no {label!r} row')
 
 
@@ -431,6 +453,22 @@ def test_a_window_in_the_past_is_refused(schema):
         )
 
 
+def test_classify_is_refused_as_multilabel(schema):
+    """The clause pql.md calls unreachable, and the reason it gives.
+
+    The reason has been wrong twice: once as a target-type rule, once as the
+    client refusing to send a list column. It is the task that is refused.
+    """
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='multilabel'):
+        resolve(
+            'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) CLASSIFY '
+            'FOR EACH users.user_id',
+            schema,
+        )
+
+
 def test_an_aggregation_without_a_window_is_refused(schema):
     """The language allows it; the model has no static aggregation."""
     from sdm_client.errors import StructuredDataError
@@ -494,15 +532,24 @@ EXAMPLE = re.compile(
 def examples(path: Path) -> list[tuple[str, str | None]]:
     """Runnable examples and what each is said to print, in document order.
 
-    Everything but a fence holding ``...``, which is a shape rather than a
-    program. The capability blocks print nothing to compare, but they are run:
-    they are the first thing an agent is told to do.
+    Everything but a sketch, which is a block holding a literal ``...`` where
+    a value belongs. Read as an ellipsis rather than as three characters: a
+    block is not a sketch for mentioning them in a string. The capability
+    blocks print nothing to compare, but they are run: they are the first
+    thing an agent is told to do.
     """
     return [
         (match['code'], match['shown'])
         for match in EXAMPLE.finditer(path.read_text(encoding='utf-8'))
-        if '...' not in match['code']
+        if not sketch(match['code'])
     ]
+
+
+def sketch(source: str) -> bool:
+    return any(
+        isinstance(node, ast.Constant) and node.value is Ellipsis
+        for node in ast.walk(ast.parse(source))
+    )
 
 
 def assert_every_example_prints_what_it_shows(path: Path, url: str):
@@ -534,7 +581,6 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
             f'{printed.getvalue()}'
         )
     marked = path.read_text(encoding='utf-8').count('**Verified**')
-    assert marked, f'{path.name} marks nothing as verified'
     assert checked == marked, (
         f'{path.name} marks {marked} outputs as verified and {checked} of '
         f'them sit where an example can be paired with them'
@@ -554,10 +600,11 @@ def test_the_tabular_examples_print_what_the_skill_shows():
 @pytest.mark.skipif(
     not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
 )
-def test_the_relational_examples_print_what_the_skill_shows():
+@pytest.mark.parametrize('name', ['SKILL.md', 'pql.md'])
+def test_the_relational_examples_print_what_the_skill_shows(name):
     pytest.importorskip('sdm_relational_engine')
     assert_every_example_prints_what_it_shows(
-        SKILLS / 'relational' / 'SKILL.md', RELATIONAL_URL
+        SKILLS / 'relational' / name, RELATIONAL_URL
     )
 
 
@@ -576,7 +623,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
     with SDMClient(url='http://localhost:8000') as client:
         capabilities = client.capabilities(model)
     path = SKILLS / name / 'SKILL.md'
-    assert backticked(heading(path, 'Tasks')[1]) == [capabilities.model], (
+    assert backticked(heading(path, 'Tasks')) == [capabilities.model], (
         f'{name} heads its table with the wrong model'
     )
     shown = table(path, 'Tasks')
@@ -597,6 +644,10 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
     )
     for label, truth in said.items():
+        assert len(shown[label]) == 1, (
+            f'{name} gives {label!r} {len(shown[label])} columns, and only '
+            f'the first is read'
+        )
         cell = shown[label][0]
         if isinstance(truth, bool):
             assert cell == ('yes' if truth else 'no'), (
@@ -637,7 +688,7 @@ def test_the_limits_table_is_the_shipped_limits():
         'the client enforces a limit this table does not account for'
     )
     path = SKILLS / 'relational' / 'SKILL.md'
-    assert heading(path, 'Limit') == ['Limit', 'Value']
+    assert heading(path, 'Limit') == 'Value'
     shown = table(path, 'Limit')
     shown.pop('Limit')  # the header
     assert set(shown) == set(LIMIT_ROWS), (
@@ -654,22 +705,40 @@ def test_the_limits_table_is_the_shipped_limits():
         )
 
 
-def test_the_aggregations_are_all_of_them():
-    """Answered plus refused must be the language, or the skill omits one.
-
-    Read off the grammar rather than a list here: an aggregation added to the
-    language and to neither column is one an agent would never learn about.
-    """
+def spelled_in_the_grammar(token: str) -> set[str]:
+    """Every operator ``token`` covers, as the grammar spells it."""
     import predictive_query
 
-    grammar = (
+    body = (
         Path(predictive_query.__file__).parent / 'grammar' / 'PQLGrammar.g4'
-    )
-    body = grammar.read_text(encoding='utf-8')
-    block = body[body.index('AGGR:') : body.index(';', body.index('AGGR:'))]
-    every = {name for name in re.findall(r"'(\w+)'", block) if name.isupper()}
-    assert every == set(ANSWERED) | set(REFUSED), (
-        'the grammar and pql.md disagree about what the aggregations are'
+    ).read_text(encoding='utf-8')
+    at = body.index(f'{token}:')
+    block = body[at : body.index(';', at)]
+    # The grammar spells each word operator twice, upper and lower. One
+    # spelling is enough to compare against, and a symbol has only the one.
+    return {
+        name for name in re.findall(r"'([^']+)'", block) if name == name.upper()
+    }
+
+
+@pytest.mark.parametrize(
+    'token, answered, refused',
+    [
+        ('AGGR', ANSWERED, REFUSED),
+        ('REL_OP', ANSWERED_OPS, REFUSED_OPS),
+    ],
+)
+def test_the_table_accounts_for_the_whole_language(token, answered, refused):
+    """Answered plus refused must be the language, or the skill omits one.
+
+    Read off the grammar rather than a list here: an operator added to the
+    language and to neither column is one an agent would never learn about,
+    and one quietly dropped from a table would go unnoticed.
+    """
+    every = spelled_in_the_grammar(token)
+    assert every == set(answered) | set(refused), (
+        f'the grammar and pql.md disagree about {token}: '
+        f'{sorted(every ^ (set(answered) | set(refused)))}'
     )
 
 
