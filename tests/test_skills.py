@@ -72,14 +72,11 @@ def test_a_skill_shows_output_it_has_run(name):
 @pytest.mark.parametrize('name', ['tabular', 'relational'])
 def test_a_skill_announces_itself(name):
     """An agent finds a skill by its frontmatter, so it has to be there."""
+    yaml = pytest.importorskip('yaml')
     body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
     assert body.startswith('---\n'), f'{name} opens with no frontmatter'
-    closed = body.index('\n---\n', 3)
-    front = dict(
-        line.split(': ', 1)
-        for line in body[4:closed].splitlines()
-        if ': ' in line
-    )
+    front = yaml.safe_load(body[4 : body.index('\n---\n', 3)])
+    assert isinstance(front, dict), f'{name} frontmatter is not a mapping'
     assert front.get('name') == f'sdm-{name}', (
         f'{name} is announced as {front.get("name")!r}'
     )
@@ -160,11 +157,12 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'{where} writes an HTML entity, which renders as a character '
                 f'this file reads as the escape it is written with'
             )
-            assert '--!>' not in line, (
-                f'{where} writes --!>, which closes the comment a browser '
-                f'sees and not the block Markdown is parsing, so the two '
-                f'disagree about what the document says'
-            )
+            for abrupt in ('--!>', '<!-->', '<!--->'):
+                assert abrupt not in line, (
+                    f'{where} writes {abrupt}, which a renderer and this file '
+                    f'disagree about the end of, so the document says one '
+                    f'thing on the page and another here'
+                )
             for marker in ('<!--', '-->'):
                 assert (
                     marker not in line
@@ -1223,7 +1221,9 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
             f'{path.name} example {index} shows\n{shown}\nand printed\n'
             f'{printed.getvalue()}'
         )
-    marked = without_comments(path).count('**Verified**')
+    marked = len(
+        re.findall(r'\*\*Verified\*\*[^\n]*\n\n```\n', without_comments(path))
+    )
     assert checked == marked, (
         f'{path.name} marks {marked} outputs as verified and {checked} of '
         f'them sit where an example can be paired with them'
@@ -1243,12 +1243,12 @@ def test_the_tabular_examples_print_what_the_skill_shows():
 @pytest.mark.skipif(
     not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
 )
-@pytest.mark.parametrize('name', ['SKILL.md', 'pql.md'])
+@pytest.mark.parametrize(
+    'name', ['relational/SKILL.md', 'relational/pql.md', 'README.md']
+)
 def test_the_relational_examples_print_what_the_skill_shows(name):
     pytest.importorskip('sdm_relational_engine')
-    assert_every_example_prints_what_it_shows(
-        SKILLS / 'relational' / name, RELATIONAL_URL
-    )
+    assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
 
 
 # --- What the tables in the skills claim ----------------------------------
