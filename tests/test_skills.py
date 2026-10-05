@@ -111,9 +111,9 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
             )
             inside = not inside
         elif not inside:
-            assert not line.startswith('    '), (
-                f'{where} is indented four spaces, which renders as code and '
-                f'is read here as prose'
+            assert not line.startswith(('    ', '\t')), (
+                f'{where} is indented, by spaces or by a tab, which renders '
+                f'as code and is read here as prose'
             )
             assert not line.lstrip().startswith('>'), (
                 f'{where} is a blockquote, and a fence or a table inside one '
@@ -214,6 +214,9 @@ def test_no_example_hides_in_a_plain_fence(path):
                 ]
             elif isinstance(node, ast.For):
                 sources, targets = [node.iter], [node.target]
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                sources = list(node.body)
+                targets = [ast.Name(id=node.name, ctx=ast.Store())]
             else:
                 continue
             if not any(
@@ -510,6 +513,15 @@ def backticked(cell: str) -> list[str]:
     return re.findall(r'`([^`]+)`', cell)
 
 
+def only(cell: str) -> str:
+    """The one code span in a cell read for a single value."""
+    found = listed(cell)
+    assert len(found) == 1, (
+        f'{cell!r} is read as one value and holds {len(found)}'
+    )
+    return found[0]
+
+
 def listed(cell: str) -> list[str]:
     """The code spans in a cell that is nothing but code spans.
 
@@ -538,7 +550,7 @@ def task_table() -> list[tuple[str, str, int]]:
     )
     del shown['Target']
     read = [
-        (listed(target)[0], listed(cells[0])[0], int(listed(cells[1])[0]))
+        (only(target), only(cells[0]), int(only(cells[1])))
         for target, cells in shown.items()
     ]
     assert len(read) == 6, f'pql.md task table has {len(read)} rows, not 6'
@@ -820,6 +832,67 @@ def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
         )
 
 
+#: The bounds pql.md gives the two clauses, read out of it.
+CLAUSES = table(PQL, 'Clause')
+
+
+@pytest.mark.parametrize('clause', ['RANK TOP k', 'FORECAST n TIMEFRAMES'])
+def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
+    """Both ends, and each refusal has to name the bound written down.
+
+    Asking past a bound that is too generous is refused anyway, by the real
+    one, so a wrong number would pass a check that only looked for a refusal.
+    """
+    pd = pytest.importorskip('pandas')
+    from sdm_client.errors import StructuredDataError
+
+    low, high = (
+        int(only(cell).replace(',', '')) for cell in CLAUSES[f'`{clause}`'][:2]
+    )
+    if clause == 'RANK TOP k':
+        target = 'LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP {}'
+        extra = {'candidates': pd.Series(range(4))}
+    else:
+        target = 'COUNT(orders.*, 0, 30, days) FORECAST {} TIMEFRAMES'
+        extra = {}
+
+    def refused(value: int) -> str:
+        with pytest.raises(StructuredDataError) as raised:
+            resolve(
+                f'PREDICT {target.format(value)} FOR EACH users.user_id',
+                schema,
+                **extra,
+            )
+        return str(raised.value)
+
+    # The refusal names the bound, which is what pins the number written
+    # down: asking past a bound that is merely too generous is refused too.
+    assert f'at least {low}' in refused(low - 1), (
+        f'{clause} does not say {low} is its least'
+    )
+    assert str(high) in refused(high + 1), (
+        f'{clause} does not say {high} is its most'
+    )
+
+
+def test_a_forecast_takes_only_a_numerical_forward_target(schema):
+    """The third column of that table, which a bound alone would not say."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='numerical targets'):
+        resolve(
+            'PREDICT COUNT(orders.*, 0, 30, days) > 2 FORECAST 2 TIMEFRAMES '
+            'FOR EACH users.user_id',
+            schema,
+        )
+    with pytest.raises(StructuredDataError, match='forward-looking'):
+        resolve(
+            'PREDICT users.segment FORECAST 2 TIMEFRAMES FOR EACH '
+            'users.user_id',
+            schema,
+        )
+
+
 def test_a_text_column_cannot_be_compared_at_all(schema_with_text):
     """The rule beneath the comparison table.
 
@@ -1030,7 +1103,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
     with SDMClient(url='http://localhost:8000') as client:
         capabilities = client.capabilities(model)
     path = SKILLS / name / 'SKILL.md'
-    assert listed(heading(path, 'Tasks')) == [capabilities.model], (
+    assert only(heading(path, 'Tasks')) == capabilities.model, (
         f'{name} heads its table with the wrong model'
     )
     shown = table(path, 'Tasks')
@@ -1103,9 +1176,7 @@ def test_the_limits_table_is_the_shipped_limits():
         f'{sorted(set(shown) ^ set(LIMIT_ROWS))}'
     )
     for label, key in LIMIT_ROWS.items():
-        cell = listed(shown[label][0])
-        assert len(cell) == 1, f'{label!r} shows {cell}'
-        value = int(cell[0].replace(',', ''))
+        value = int(only(shown[label][0]).replace(',', ''))
         assert value == RELATIONAL_LIMITS[key], (
             f'{label!r} says {value}, the client enforces '
             f'{RELATIONAL_LIMITS[key]}'

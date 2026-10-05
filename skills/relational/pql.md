@@ -20,12 +20,28 @@ on a foreign key column to make a link prediction query. To make predictions
 with this query, train a new model.
 ```
 
-So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`.
-**`k` may be at most 20**, and asking for more says so:
+So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`,
+and each is narrower than it looks:
+
+| Clause | Least | Most | Of a target that is |
+|---|---|---|---|
+| `RANK TOP k` | `1` | `20` | a `LIST_DISTINCT` over a foreign key |
+| `FORECAST n TIMEFRAMES` | `1` | `10000` | numerical, over a forward window |
+
+Past the top of either range the refusal names the bound:
 
 ```
 Top k 21 exceeds maximum foundation model supported value of 20. To list more
 candidates, train a new model.
+FORECAST 10001 TIMEFRAMES exceeds the maximum of 10000.
+```
+
+A forecast asks the same quantity again and again, so neither a plain column
+nor a comparison can be forecast:
+
+```
+FORECAST is only supported for numerical targets.
+FORECAST can only be used with targets that have a forward-looking time range
 ```
 
 Every query names columns as `table.column`, and `table.*` for the rows of a
