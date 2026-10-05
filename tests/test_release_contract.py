@@ -241,6 +241,13 @@ def _dotted(node: ast.expr) -> str | None:
 #: type of its own. Absent before Python 3.12.
 _ALIAS = getattr(typing, 'TypeAliasType', None)
 
+#: How to read the signatures an overloaded function offers. Absent before
+#: Python 3.11, which keeps no registry of them, and `typing_extensions` does
+#: not help: it records only what its own `overload` decorated, and the source
+#: here uses `typing`'s. So on 3.10 the check reads every other place a type
+#: is named and none of the overloads.
+_OVERLOADS = getattr(typing, 'get_overloads', None)
+
 
 def _quoted_within(annotation: object) -> list[str]:
     """The forward references inside an annotation that is already an object.
@@ -535,10 +542,7 @@ class _InternalTypes:
         module = getattr(function, '__module__', None) or ''
         if module.split('.')[0] not in FIRST_PARTY:
             return
-        try:
-            offered = typing.get_overloads(function) or []  # type: ignore[arg-type]
-        except Exception:
-            offered = []
+        offered = _OVERLOADS(function) if _OVERLOADS is not None else []
         for form in [function, *offered]:
             try:
                 written = inspect.signature(form)  # type: ignore[arg-type]
@@ -620,6 +624,10 @@ class TestPublicSurface:
             'HANDED_OUT_THOUGH_NOT_EXPORTED with the reason:\n'
             + '\n'.join(exposed)
         )
+        if _OVERLOADS is None:
+            # Nothing an overload names was read, so nothing reached only
+            # that way can be called unused.
+            return
         stale = sorted(HANDED_OUT_THOUGH_NOT_EXPORTED - finder.allowed)
         assert not stale, (
             'Nothing public hands these out any more, so they no longer need '
