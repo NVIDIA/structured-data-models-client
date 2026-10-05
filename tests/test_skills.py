@@ -1,0 +1,427 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""The agent skills must keep matching the shipped client.
+
+A skill is read by something that cannot check it. Everything here is the
+check: the names the skills import exist, the queries they teach resolve to the
+task they claim, and the refusals they promise are the refusals that happen.
+
+Nothing here needs an endpoint. The live output pasted into the skills was
+verified by hand; what rots without noticing is the client-side half, and that
+is what runs below.
+"""
+
+from __future__ import annotations
+
+import ast
+import os
+import re
+from pathlib import Path
+
+import pytest
+import sdm_client
+
+SKILLS = Path(__file__).parents[1] / 'skills'
+
+#: Arguments earlier generations of this client took. The retired *type* names
+#: are covered repo-wide by ``scripts/check_repo_hygiene.py retired``; these two
+#: are keyword arguments it does not look for, and both are easy to reach for:
+#: an explanation is an output here, and a run mode is derived from the limits.
+RETIRED = ('run_mode=', 'explain=')
+
+FENCE = re.compile(r'^```(\w*)\n(.*?)^```', re.MULTILINE | re.DOTALL)
+LINK = re.compile(r'\]\(([^)]+)\)')
+
+
+def documents() -> list[Path]:
+    return sorted(SKILLS.rglob('*.md'))
+
+
+def fences(path: Path, language: str) -> list[str]:
+    return [
+        body
+        for tag, body in FENCE.findall(path.read_text(encoding='utf-8'))
+        if tag == language
+    ]
+
+
+def test_there_is_a_skill_for_each_model():
+    assert (SKILLS / 'tabular' / 'SKILL.md').exists()
+    assert (SKILLS / 'relational' / 'SKILL.md').exists()
+    assert (SKILLS / 'README.md').exists()
+
+
+@pytest.mark.parametrize('name', ['tabular', 'relational'])
+def test_a_skill_announces_itself(name):
+    """An agent finds a skill by its frontmatter, so it has to be there."""
+    body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
+    assert body.startswith('---\n')
+    front = body.split('---\n')[1]
+    assert f'name: sdm-{name}' in front
+    assert 'description:' in front
+    assert 'Triggers:' in front, 'nothing would load this skill'
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_every_link_resolves(path):
+    for target in LINK.findall(path.read_text(encoding='utf-8')):
+        if target.startswith(('http://', 'https://', '#')):
+            continue
+        assert (path.parent / target).resolve().exists(), (
+            f'{path.name} links to {target}, which is not there'
+        )
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_every_example_parses(path):
+    for index, source in enumerate(fences(path, 'python')):
+        try:
+            ast.parse(source)
+        except SyntaxError as error:  # pragma: no cover - failing is the point
+            pytest.fail(f'{path.name} example {index} does not parse: {error}')
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_every_name_an_example_imports_is_exported(path):
+    for source in fences(path, 'python'):
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.module != 'sdm_client':
+                continue
+            missing = [
+                alias.name
+                for alias in node.names
+                if not hasattr(sdm_client, alias.name)
+            ]
+            assert not missing, (
+                f'{path.name} imports {missing} from sdm_client, which does '
+                f'not export them'
+            )
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+@pytest.mark.parametrize('retired', RETIRED)
+def test_no_example_calls_a_retired_interface(path, retired):
+    """Examples only. The prose names several of these to warn against them,
+    and a check that cannot tell the two apart would forbid saying so."""
+    for source in fences(path, 'python'):
+        assert retired not in source, (
+            f'{path.name} shows {retired!r} in an example, and this client '
+            f'does not have it'
+        )
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_no_example_trains_anything(path):
+    """Both models are in-context learners: there is nothing to train, so an
+    example reaching for a training API would be teaching a different product.
+    ``fit()`` is the exception and is not training; it pins a context."""
+    for source in fences(path, 'python'):
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            called = node.func
+            if not isinstance(called, ast.Attribute):
+                continue
+            assert called.attr not in {'train', 'fine_tune', 'evaluate'}, (
+                f'{path.name} calls {called.attr}(), which this client has no '
+                f'notion of'
+            )
+            if called.attr == 'fit':
+                assert isinstance(called.value, ast.Name), (
+                    f'{path.name} calls fit() on something other than a client'
+                )
+
+
+# --- What the queries in the skills actually do ---------------------------
+
+
+@pytest.fixture
+def schema():
+    pytest.importorskip('sdm_relational_engine')
+    pd = pytest.importorskip('pandas')
+    from sdm_client import Relationship, Schema
+
+    users = pd.DataFrame({'user_id': range(12), 'segment': list('abc') * 4})
+    orders = pd.DataFrame(
+        {
+            'order_id': range(120),
+            'user_id': [i % 12 for i in range(120)],
+            'item': [i % 4 for i in range(120)],
+            'price': [10.0 + i for i in range(120)],
+            'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+        }
+    )
+    items = pd.DataFrame({'item': range(4), 'kind': list('abcd')})
+    return Schema.from_data(
+        {'users': users, 'orders': orders, 'items': items},
+        primary_keys={
+            'users': 'user_id',
+            'orders': 'order_id',
+            'items': 'item',
+        },
+        time_columns={'orders': 'ordered_at'},
+        relationships=[
+            Relationship('orders', 'user_id', 'users', 'user_id'),
+            Relationship('orders', 'item', 'items', 'item'),
+        ],
+    )
+
+
+def resolve(query, schema, **extra):
+    from sdm_client import KumoRelational, PredictiveQuery
+
+    return PredictiveQuery(query, schema).materialize(
+        indices=[1, 2], model=KumoRelational(), **extra
+    )
+
+
+PQL = SKILLS / 'relational' / 'pql.md'
+ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
+
+
+def rows(path: Path) -> list[list[str]]:
+    """Every table row in a document, as its stripped cells."""
+    found = []
+    for line in ROW.findall(path.read_text(encoding='utf-8')):
+        cells = [cell.strip() for cell in line.split('|')]
+        if any(set(cell) <= {'-', ':'} and cell for cell in cells):
+            continue
+        found.append(cells)
+    return found
+
+
+def backticked(cell: str) -> list[str]:
+    return re.findall(r'`([^`]+)`', cell)
+
+
+def task_table() -> list[tuple[str, str]]:
+    """The target-decides-the-task table, read out of ``pql.md`` itself.
+
+    Parsed rather than copied: a table that drifts from the client is the
+    failure this file exists to catch, and a copy here would drift with it.
+    """
+    table = [
+        (backticked(cells[0]), backticked(cells[1]))
+        for cells in rows(PQL)
+        if len(cells) == 3 and backticked(cells[1])
+    ]
+    pairs = [(target[0], kind[0]) for target, kind in table if target and kind]
+    assert len(pairs) == 6, f'pql.md task table has {len(pairs)} rows, not 6'
+    return pairs
+
+
+def aggregation_table() -> tuple[list[str], list[str]]:
+    answered: list[str] = []
+    refused: list[str] = []
+    for cells in rows(PQL):
+        if len(cells) != 2:
+            continue
+        if cells[0] == 'Answered':
+            answered = backticked(cells[1])
+        elif cells[0].startswith('Parsed'):
+            refused = backticked(cells[1])
+    assert answered and refused, 'pql.md no longer lists its aggregations'
+    return answered, refused
+
+
+@pytest.mark.parametrize('target, kind', task_table(), ids=lambda v: v[:40])
+def test_the_target_decides_the_task(target, kind, schema):
+    """Every row of the table in ``pql.md``, asked for real."""
+    pd = pytest.importorskip('pandas')
+    extra = {'candidates': pd.Series(range(4))} if 'RANK' in target else {}
+    query = f'PREDICT {target} FOR EACH users.user_id'
+    assert resolve(query, schema, **extra).task.kind == kind
+
+
+def test_a_ranking_is_asked_as_a_classification_per_candidate(schema):
+    pd = pytest.importorskip('pandas')
+    request = resolve(
+        'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2 '
+        'FOR EACH users.user_id',
+        schema,
+        candidates=pd.Series(range(4)),
+    )
+    assert request.task.kind == 'binary_classification'
+    assert request.parts is not None
+    assert len(request.parts) == 4
+
+
+def test_a_forecast_is_asked_once_per_step(schema):
+    request = resolve(
+        'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 3 TIMEFRAMES '
+        'FOR EACH users.user_id',
+        schema,
+    )
+    assert request.parts is not None
+    assert len(request.parts) == 3
+
+
+def test_a_single_question_is_one_part(schema):
+    request = resolve(
+        'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', schema
+    )
+    assert request.parts is None
+
+
+ANSWERED, REFUSED = aggregation_table()
+
+
+@pytest.mark.parametrize('aggregation', ANSWERED)
+def test_an_aggregation_the_skill_promises_is_answered(aggregation, schema):
+    """A numeric aggregation of a numeric column. ``COUNT`` takes the rows and
+    ``LIST_DISTINCT`` takes a key, so each is asked in the form it has."""
+    pd = pytest.importorskip('pandas')
+    if aggregation == 'COUNT':
+        target, extra, kind = 'COUNT(orders.*, 0, 30, days)', {}, 'regression'
+    elif aggregation == 'LIST_DISTINCT':
+        target = 'LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2'
+        extra = {'candidates': pd.Series(range(4))}
+        kind = 'binary_classification'
+    else:
+        target = f'{aggregation}(orders.price, 0, 30, days)'
+        extra, kind = {}, 'regression'
+    query = f'PREDICT {target} FOR EACH users.user_id'
+    assert resolve(query, schema, **extra).task.kind == kind
+
+
+@pytest.mark.parametrize('aggregation', REFUSED)
+def test_an_aggregation_the_skill_warns_about_is_refused(aggregation, schema):
+    from sdm_client.errors import StructuredDataError
+
+    query = (
+        f'PREDICT {aggregation}(orders.price, 0, 30, days) '
+        f'FOR EACH users.user_id'
+    )
+    with pytest.raises(StructuredDataError, match='not supported'):
+        resolve(query, schema)
+
+
+def test_a_window_in_the_past_is_refused(schema):
+    """The rule ``pql.md`` leads with, because it is the one people hit."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='in the past'):
+        resolve(
+            'PREDICT COUNT(orders.*, -30, 0, days) FOR EACH users.user_id',
+            schema,
+        )
+
+
+def test_a_static_assumption_is_refused(schema):
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='no time range'):
+        resolve(
+            'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id '
+            "ASSUMING users.segment = 'a'",
+            schema,
+        )
+
+
+def test_a_temporal_assumption_is_answered(schema):
+    request = resolve(
+        'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id '
+        'ASSUMING SUM(orders.price, 0, 30, days) > 100',
+        schema,
+    )
+    assert request.task.kind == 'regression'
+
+
+def test_the_tabular_model_refuses_a_second_table(schema):
+    """The sentence ``skills/tabular/SKILL.md`` quotes."""
+    from sdm_client import KumoTabular, PredictiveQuery
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='single table'):
+        PredictiveQuery(
+            'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[1, 2], model=KumoTabular())
+
+
+# --- The examples, run ----------------------------------------------------
+
+
+TABULAR_URL = os.environ.get('SDM_TABULAR_URL')
+RELATIONAL_URL = os.environ.get('SDM_RELATIONAL_URL')
+
+#: The placeholder every example points at, swapped for a real one below.
+PLACEHOLDER = 'http://localhost:8000'
+
+
+def examples(path: Path) -> list[str]:
+    """Runnable examples, in the order a reader meets them.
+
+    A fence holding ``...`` is a shape rather than a program, and the two
+    capability calls need a connection to say anything, so neither is run.
+    """
+    return [
+        source
+        for source in fences(path, 'python')
+        if '...' not in source and 'client.capabilities(' not in source
+    ]
+
+
+def run(path: Path, url: str) -> str:
+    """Every example in one document, sharing one namespace as a reader does."""
+    import io
+    from contextlib import redirect_stdout
+
+    pd = pytest.importorskip('pandas')
+    namespace: dict[str, object] = {'pd': pd}
+    printed = io.StringIO()
+    for index, source in enumerate(examples(path)):
+        with redirect_stdout(printed):
+            exec(  # noqa: S102 - running the documentation is the test
+                compile(
+                    source.replace(PLACEHOLDER, url), f'{path}#{index}', 'exec'
+                ),
+                namespace,
+            )
+    return printed.getvalue()
+
+
+def assert_every_verified_block_is_what_it_printed(path: Path, output: str):
+    """Output marked **Verified** has to be the output, character for character.
+
+    Pasted results are the first thing to rot, and a number that drifted is
+    worse than no number: it reads as measured.
+    """
+    body = path.read_text(encoding='utf-8')
+    blocks = [
+        text
+        for marker, text in re.findall(
+            r'\*\*(Verified)\*\*[^\n]*\n\n```\n(.*?)```', body, re.DOTALL
+        )
+    ]
+    assert blocks, f'{path.name} marks nothing as verified'
+    for block in blocks:
+        assert block.strip() in output, (
+            f'{path.name} shows output that running it did not produce:\n'
+            f'{block}'
+        )
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not TABULAR_URL, reason='set SDM_TABULAR_URL to a kumo-tabular NIM'
+)
+def test_the_tabular_examples_print_what_the_skill_shows():
+    path = SKILLS / 'tabular' / 'SKILL.md'
+    assert_every_verified_block_is_what_it_printed(path, run(path, TABULAR_URL))
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
+)
+def test_the_relational_examples_print_what_the_skill_shows():
+    pytest.importorskip('sdm_relational_engine')
+    path = SKILLS / 'relational' / 'SKILL.md'
+    assert_every_verified_block_is_what_it_printed(
+        path, run(path, RELATIONAL_URL)
+    )
