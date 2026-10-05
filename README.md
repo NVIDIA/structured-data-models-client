@@ -62,6 +62,10 @@ Five distributions, released together on one version.
 | `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
 | `sdm-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
 
+`sdm-pql` is an internal dependency of `sdm-client`, not a supported API, and
+its `predictive_query` package can change in any release. Write PQL with
+`sdm_client.PredictiveQuery`.
+
 Only `sdm-relational-engine` is native. The other four are pure Python and
 install anywhere, on 3.10 through 3.14.
 

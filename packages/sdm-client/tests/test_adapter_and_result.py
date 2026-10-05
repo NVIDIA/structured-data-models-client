@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 
 from sdm_client import (
-    KumoRelational,
     PredictionResult,
     Request,
     UnsupportedRequestError,
@@ -19,6 +18,7 @@ from sdm_client import (
 from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
+from sdm_client.models import KUMO_RELATIONAL
 
 
 def context(rows: int = 6, **columns) -> pd.DataFrame:
@@ -215,7 +215,7 @@ def test_a_regression_target_is_not_counted():
 
 
 def test_the_ceiling_is_declared_where_the_other_limits_are():
-    assert KumoRelational().spec.runtime.limits['classes_max'] == 10
+    assert KUMO_RELATIONAL.runtime.limits['classes_max'] == 10
 
 
 def test_an_unsupported_dtype_refusal_names_the_columns():

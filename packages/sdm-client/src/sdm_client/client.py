@@ -89,10 +89,32 @@ class FittedModel:
     named. The rows have been uploaded and live on the endpoint, so
     keeping a second encoded copy for the lifetime of the handle would hold a
     whole dataset for nothing.
+
+    It is not constructed directly. What it is built from is how the client
+    talks to a model and what the session pinned, none of which is public.
     """
 
-    def __init__(
-        self,
+    _client: SDMClient
+    _adapter: ModelAdapter
+    _session_id: str
+    _outputs: tuple[str, ...]
+    _named_outputs: tuple[str, ...] | None
+    _pinned_keys: frozenset[Any]
+    _pinned_over_a_window: bool
+    _held_back: int
+    _pinned: dict[str, Any]
+    _question: Question | None
+    _closed: bool
+
+    def __init__(self) -> None:
+        raise TypeError(
+            'a FittedModel is returned by SDMClient.fit(), not constructed '
+            'directly'
+        )
+
+    @classmethod
+    def _open(
+        cls,
         client: SDMClient,
         adapter: ModelAdapter,
         session_id: str,
@@ -103,20 +125,23 @@ class FittedModel:
         pinned_over_a_window: bool = False,
         held_back: int = 0,
         question: Question | None = None,
-    ) -> None:
-        self._client = client
-        self._adapter = adapter
-        self._session_id = session_id
-        self._outputs = outputs
-        self._named_outputs = (
+    ) -> FittedModel:
+        r"""The handle for a session ``SDMClient.fit`` has just created."""
+        fitted = cls.__new__(cls)
+        fitted._client = client
+        fitted._adapter = adapter
+        fitted._session_id = session_id
+        fitted._outputs = outputs
+        fitted._named_outputs = (
             None if named_outputs is None else tuple(named_outputs)
         )
-        self._pinned_keys = pinned_keys
-        self._pinned_over_a_window = pinned_over_a_window
-        self._held_back = held_back
-        self._pinned = pinned or {}
-        self._question = question
-        self._closed = False
+        fitted._pinned_keys = pinned_keys
+        fitted._pinned_over_a_window = pinned_over_a_window
+        fitted._held_back = held_back
+        fitted._pinned = pinned or {}
+        fitted._question = question
+        fitted._closed = False
+        return fitted
 
     @property
     def session_id(self) -> str:
@@ -438,7 +463,7 @@ class SDMClient:
         or a value per step, rather than handed back as the several answers
         it took.
         """
-        rewritten = request.decomposition
+        rewritten = request._decomposition
         assert rewritten is not None
         ranking = rewritten.kind == RANKING
         unscored: frozenset[int] = frozenset()
@@ -644,7 +669,7 @@ class SDMClient:
                 code='INVALID_RESPONSE',
                 details={'response_keys': sorted(created)},
             )
-        fitted = FittedModel(
+        fitted = FittedModel._open(
             self,
             adapter,
             str(session_id),
@@ -1218,7 +1243,7 @@ def _refuse_to_pin_a_rewritten_question(request: Request) -> None:
     part and give back something shaped like the whole question. Refusing says
     what to do instead.
     """
-    rewritten = request.decomposition
+    rewritten = request._decomposition
     if rewritten is None:
         return
     raise StructuredDataError(

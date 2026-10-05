@@ -28,6 +28,7 @@ from sdm_client import (
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.base import check_request_against_model, required_capabilities
 from sdm_client.errors import StructuredDataError
+from sdm_client.models import KUMO_RELATIONAL, KUMO_TABULAR
 
 
 def context(n: int = 20) -> pd.DataFrame:
@@ -146,9 +147,7 @@ def test_required_capabilities_are_switched_on_only_by_what_is_needed():
 def test_tabular_refuses_a_relational_request_before_sending_it():
     request = a_relational_request()
     with pytest.raises(UnsupportedRequestError) as error:
-        check_request_against_model(
-            request, KumoTabular().spec, ('prediction',)
-        )
+        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
     message = str(error.value)
     assert 'kumo-tabular' in message
     assert 'relationships' in message or 'multiple_tables' in message
@@ -156,7 +155,7 @@ def test_tabular_refuses_a_relational_request_before_sending_it():
 
 def test_relational_accepts_the_same_relational_request():
     check_request_against_model(
-        a_relational_request(), KumoRelational().spec, ('prediction',)
+        a_relational_request(), KUMO_RELATIONAL, ('prediction',)
     )
 
 
@@ -172,19 +171,17 @@ def test_related_frames_are_refused_where_they_are_offered():
 def test_a_task_kind_the_model_does_not_serve_is_refused():
     request = simple_request(task='binary_classification')
     with pytest.raises(UnsupportedRequestError) as error:
-        check_request_against_model(
-            request, KumoTabular().spec, ('prediction',)
-        )
+        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
     # Tabular takes only the coarse kind and decides binary itself.
     assert 'binary_classification' in str(error.value)
-    check_request_against_model(request, KumoRelational().spec, ('prediction',))
+    check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
 
 
 def test_an_output_field_the_model_cannot_produce_is_refused_by_name():
     request = simple_request()
     with pytest.raises(UnsupportedRequestError) as error:
         check_request_against_model(
-            request, KumoTabular().spec, ('prediction', 'explanation')
+            request, KUMO_TABULAR, ('prediction', 'explanation')
         )
     message = str(error.value)
     assert 'explanation' in message

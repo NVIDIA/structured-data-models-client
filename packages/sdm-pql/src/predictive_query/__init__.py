@@ -11,6 +11,9 @@ A predictive query states a prediction as text, the way SQL states a lookup::
 This package turns that text into a validated syntax tree, checked against the
 schema it is written for. It runs no model and reads no data.
 
+It is an internal dependency of ``sdm-client``, not a supported API, and any
+release may change it. Write PQL with ``sdm_client.PredictiveQuery``.
+
 The three stages::
 
     text  --PQLParser-->  ParsedPredictiveQuery

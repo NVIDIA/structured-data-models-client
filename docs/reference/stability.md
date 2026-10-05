@@ -6,7 +6,8 @@ promises has promised everything.
 
 ## What is public
 
-Public is what a distribution's top-level `__all__` names, and nothing else:
+Public is what the `__all__` of a package in the table below names, and
+nothing else:
 
 ```python
 import sdm_client
@@ -19,18 +20,23 @@ Concretely, the public surface is:
 |---|---|
 | `sdm_client` | Everything in `sdm_client.__all__`: the client, `Schema`, `Request`, `PredictiveQuery`, the model handles, `PredictionResult`, the exception types and `SDMWarning` |
 | `sdm_api` | Everything in `sdm_api.__all__`: the wire vocabulary |
-| `predictive_query` | Everything in `predictive_query.__all__`: the parser, AST, validators and profiles |
 | `sdm_connectors` | Everything in `sdm_connectors.__all__` |
 | `sdm_connectors.databricks` | Everything in `sdm_connectors.databricks.__all__`: `warehouse` and `lakebase` |
 | `sdm_relational_engine` | Reached through `sdm_client`. Import it directly at your own risk |
 
 Not public, and free to change in any release:
 
-- Any name beginning with `_`, at any depth.
-- Any submodule not re-exported from the top level, including
-  `sdm_client.core.transport`,
+- Any name beginning with `_`, at any depth, except the dunders a package
+  exports: `__version__` is public where the table above lists the package.
+- Any submodule the table above does not name and the top level does not
+  re-export, including `sdm_client.core.transport`,
   `sdm_client.adapters`, `sdm_client.materializers` and `sdm_client.wire`.
   Their contents are implementation details, however stable they look.
+- The `predictive_query` package, which the `sdm-pql` distribution installs.
+  `sdm-client` depends on it to parse and validate PQL, but it is not a
+  supported API. Write PQL with `sdm_client.PredictiveQuery`.
+- How a `FittedModel` is constructed. `SDMClient.fit()` returns one, and
+  calling the class yourself raises `TypeError`.
 - The exact text of an exception or warning message. Branch on the exception
   **type** and on `StructuredDataError.code`, never on the message. Codes are
   public; prose is not.
@@ -64,12 +70,14 @@ request that was previously sent. The changelog identifies the change.
 repository has been published, and none of the five distributions exists on
 PyPI. These promises begin at 1.0.0; they do not apply earlier.
 
-This distinction matters. The release containing this document also renames
-two names from `predictive_query.__all__`
-(`GraphDefinition` and `Edge`, now `SchemaDefinition` and `Relationship`) with
-no deprecation period, which the rule below would otherwise forbid. There is no
-period to serve: nobody can be holding the old names, and shipping aliases that
-warn from the first release would be deprecating something that was never
+This distinction matters. Before the first release, this document made
+`predictive_query` public, along with `sdm_client.ModelSpec`,
+`sdm_client.RuntimeContract`, the model handles' `spec` attribute,
+`Request.decomposition` and the arguments `FittedModel` was constructed with.
+The first release takes all of them off the public surface with no deprecation
+period, which the rule below would otherwise forbid. There is no period to
+serve: nobody can be holding names that were never published, and warning about
+them from the first release would be deprecating something that was never
 available. Everything after 1.0.0 gets the full treatment.
 
 ## Deprecation
@@ -104,3 +112,17 @@ the same commit, making the change visible in review. The wire payloads of
 canonical requests are similarly recorded in
 `tests/golden/wire_payloads.json`, because what the endpoint receives is part
 of the contract too.
+
+A public name may not hand out a type that is not public. The same test file
+reads every type a public signature, dataclass field, property or class
+attribute names, and the value every public class attribute holds, and fails
+when one is this project's and not exported. Types from the standard library
+and third-party packages pass.
+
+What a name declares is what is read. A value a call produces is not, and
+cannot be: an unannotated property, or a field whose default factory returns
+something its annotation does not name, is beyond anything read from source.
+Those are caught in review rather than here.
+
+The few internal types a public name still hands out are listed in that test,
+each with the reason it stays.

@@ -282,7 +282,7 @@ def forecast_through_the_client(explanations, requested):
         'forecast', tuple((f'q{i}', i) for i in range(1, len(explanations) + 1))
     )
     request = SimpleNamespace(
-        decomposition=rewritten,
+        _decomposition=rewritten,
         parts=tuple(object() for _ in explanations),
     )
     answers = [

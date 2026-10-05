@@ -20,7 +20,7 @@ defaults to what the schema's shape implies.
 """
 
 from sdm_client._version import __version__
-from sdm_client.base import ModelCapabilities, ModelSpec, RuntimeContract
+from sdm_client.base import ModelCapabilities
 from sdm_client.client import FittedModel, SDMClient
 from sdm_client.core.warnings import SDMWarning
 from sdm_client.errors import (
@@ -51,13 +51,11 @@ __all__ = [
     'MissingExtraError',
     'Model',
     'ModelCapabilities',
-    'ModelSpec',
     'NimRequestError',
     'PredictionResult',
     'PredictiveQuery',
     'Relationship',
     'Request',
-    'RuntimeContract',
     'Schema',
     'Split',
     'SDMClient',

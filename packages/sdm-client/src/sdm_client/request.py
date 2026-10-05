@@ -311,6 +311,15 @@ class Request:
 
     query: str | None = None
 
+    # How this question was rewritten, when it had to be: the kind of question
+    # that was asked, what each part asks after (a candidate or a step) as the
+    # caller gave it, and how many candidates a ranking keeps. Re-deriving any
+    # of this from the query text would read a key as a string, and would call
+    # a forecast over a table named `rank_events` a ranking. Internal, because
+    # it is how the client puts the parts' answers together, not something a
+    # caller reads: `parts` and `asked` say what a caller needs to see.
+    _decomposition: Decomposition | None = None
+
     def __init__(
         self,
         context: pd.DataFrame,
@@ -640,18 +649,6 @@ class Request:
         asked for is the one they make between them, not any one of them.
         """
         return getattr(self, '_parts', None)
-
-    @property
-    def decomposition(self) -> Decomposition | None:
-        r"""How this question was rewritten, if it had to be.
-
-        Holds the kind of question that was asked, what each part asks after
-        (a candidate or a step) as the caller gave it, and how many
-        candidates a ranking keeps. Re-deriving any of this from the query
-        text would read a key as a string, and would call a forecast over a
-        table named ``rank_events`` a ranking.
-        """
-        return getattr(self, '_decomposition', None)
 
     @property
     def asked(self) -> str | None:

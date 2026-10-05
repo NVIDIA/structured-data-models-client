@@ -163,6 +163,12 @@ no manifest to re-record, and no dependency swap pending. It imports as
 `predictive_query`, which is a name inherited from that period rather than one
 this layout would choose today.
 
+None of it is public API. Users write PQL through `sdm_client.PredictiveQuery`,
+and [the stability page](../reference/stability.md) lists `predictive_query`
+with the internals, so any release may change it. The same holds for
+`ModelSpec`, the `RuntimeContract` it carries, and `ModelAdapter` below: they
+are how the client is built, not names it exports.
+
 ### Who owns which types
 
 | Type | Owner | Why |

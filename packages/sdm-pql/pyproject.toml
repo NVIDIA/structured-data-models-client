@@ -14,7 +14,7 @@ name = "sdm-pql"
 # because importing these roots pulls pandas, and a build backend that has to
 # import pandas to learn a version number cannot produce a wheel at all.
 dynamic = ["version"]
-description = "Predictive Query Language for the NVIDIA Structured Data Models client: grammar, parser, validator, AST and model profiles"
+description = "Predictive Query Language parser and validator used inside the NVIDIA Structured Data Models client; not a supported API"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]

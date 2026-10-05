@@ -11,14 +11,21 @@ the configuration files make about themselves are true. Those are the failures
 
 from __future__ import annotations
 
+import ast
+import builtins
+import importlib
 import importlib.util
+import inspect
 import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+import typing
 from collections.abc import Sequence
+from types import ModuleType
+from typing import Annotated, NamedTuple
 
 import pytest
 
@@ -78,6 +85,515 @@ def _run(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _public_packages() -> list[ModuleType]:
+    """The packages the snapshot records, which are the public ones."""
+    return [
+        importlib.import_module(name)
+        for name in json.loads((GOLDEN / 'public_api.json').read_text())
+    ]
+
+
+#: Every top-level package this repository ships, public or not.
+FIRST_PARTY = frozenset(
+    {
+        'predictive_query',
+        'sdm_api',
+        'sdm_client',
+        'sdm_connectors',
+        'sdm_relational_engine',
+    }
+)
+
+#: Installed beside the public packages and not public themselves
+#: (docs/reference/stability.md), so a public package may not re-export from
+#: them or build a public class on one of their classes either.
+INTERNAL_PACKAGES = frozenset({'predictive_query', 'sdm_relational_engine'})
+
+#: Types a public name hands out that no public package exports. Each stays for
+#: the reason beside it, and an entry nothing hands out any more fails, so the
+#: list can only shrink.
+HANDED_OUT_THOUGH_NOT_EXPORTED = frozenset(
+    {
+        # What `PredictionResult.items` holds, as its docstring says: the
+        # contract's own response item, generated into `sdm_api` from the
+        # OpenAPI document. Its fields are the wire's and move only with the
+        # contract. Exporting it, or wrapping it in a type of the client's
+        # own, is a decision about the result type rather than a leak to close.
+        'sdm_api.generated.tfm_api.PredictionItem',
+        # What `DatabricksSource.connection` is for a source built from a Spark
+        # session: the session shaped like a Databricks SQL connection, so
+        # sampling has one interface to run through. The connector's typing
+        # check pins that type, so changing it is a change to sources.
+        'sdm_connectors.backends.spark.SparkConnection',
+        # What each `Source` overload says its connection must look like. They
+        # are protocols, matched by shape: a caller passes a live connection
+        # and never names, imports or builds one of these. Exporting seven
+        # names to describe an argument nobody writes would be a larger
+        # promise than the one it closes.
+        'sdm_connectors._types.DatabricksLike',
+        'sdm_connectors._types.DuckDBLike',
+        'sdm_connectors._types.PostgresLike',
+        'sdm_connectors._types.SQLiteLike',
+        'sdm_connectors._types.SnowflakeLike',
+        'sdm_connectors._types.SnowparkLike',
+        'sdm_connectors._types.SparkLike',
+    }
+)
+
+_UNKNOWN = object()
+
+
+class _Unimported(NamedTuple):
+    """A name in a first-party module that only its source can describe."""
+
+    module: str
+    name: str
+    #: The text of the alias it is, or ``'class'``.
+    definition: str
+
+
+def _source_tree(module_name: str) -> ast.Module | None:
+    """A module's source, parsed without importing it.
+
+    Not importing matters: a backend imports its optional driver at the top,
+    and a test run without the driver still has to say what the backend's
+    names are.
+    """
+    try:
+        spec = importlib.util.find_spec(module_name)
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.origin or not spec.origin.endswith('.py'):
+        return None
+    return ast.parse(pathlib.Path(spec.origin).read_text())
+
+
+def _top_level_imports(tree: ast.Module) -> dict[str, tuple[str, str | None]]:
+    """What each name a module imports at its top level, or only under
+    ``TYPE_CHECKING``, is imported from: ``(module, attribute)``.
+
+    An annotation under ``from __future__ import annotations`` is a string, and
+    a name imported only for the type checker is not there at runtime to look
+    up, so the source says where it comes from.
+    """
+    found: dict[str, tuple[str, str | None]] = {}
+    pending: list[ast.stmt] = list(tree.body)
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.If, ast.Try)):
+            pending.extend(node.body)
+            pending.extend(node.orelse)
+        elif (
+            isinstance(node, ast.ImportFrom) and node.module and not node.level
+        ):
+            for alias in node.names:
+                found[alias.asname or alias.name] = (node.module, alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    found[alias.asname] = (alias.name, None)
+                else:
+                    head = alias.name.split('.')[0]
+                    found[head] = (head, None)
+    return found
+
+
+def _defined_in_source(tree: ast.Module, name: str) -> str | None:
+    """How a module's source defines ``name``, when it is not there to look
+    up: the text of a type alias, ``'class'``, or ``None``.
+
+    An alias over an optional driver exists only under ``TYPE_CHECKING``, and
+    a module that cannot be imported has nothing to look up at all.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return 'class'
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+            and node.value is not None
+        ):
+            return ast.unparse(node.value)
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name
+        ):
+            return ast.unparse(node.value)
+    return None
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """``a.b.C`` for a name or attribute node, or ``None`` for anything else."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return '.'.join(reversed(parts))
+
+
+#: What `type X = ...` builds, which stands for its value rather than being a
+#: type of its own. Absent before Python 3.12.
+_ALIAS = getattr(typing, 'TypeAliasType', None)
+
+#: How to read the signatures an overloaded function offers. Absent before
+#: Python 3.11, which keeps no registry of them, and `typing_extensions` does
+#: not help: it records only what its own `overload` decorated, and the source
+#: here uses `typing`'s. So on 3.10 the check reads every other place a type
+#: is named and none of the overloads.
+_OVERLOADS = getattr(typing, 'get_overloads', None)
+
+
+def _quoted_within(annotation: object) -> list[str]:
+    """The forward references inside an annotation that is already an object.
+
+    Without postponed annotations `list['X']` is a generic alias holding the
+    plain string `'X'`, which walking its arguments as types steps over. The
+    strings are collected here and read as the names they are.
+
+    The same three shapes the written form has to tell apart appear here too:
+    a `Literal`'s arguments are values, an `Annotated`'s metadata is whatever
+    the caller attached, and a `Callable` keeps its parameters in a plain list
+    rather than among its arguments.
+    """
+    found: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, str):
+            found.append(node)
+            return
+        if isinstance(node, typing.ForwardRef):
+            found.append(node.__forward_arg__)
+            return
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        if _ALIAS is not None and isinstance(node, _ALIAS):
+            walk(node.__value__)
+            return
+        origin = typing.get_origin(node)
+        if origin is typing.Literal:
+            return
+        arguments = typing.get_args(node)
+        if origin is Annotated:
+            arguments = arguments[:1]
+        for argument in arguments:
+            walk(argument)
+
+    walk(annotation)
+    return found
+
+
+def _named_in(annotation: str) -> list[str]:
+    """Every name an annotation written as a string refers to.
+
+    A quoted string in an annotation is a forward reference and names a type.
+    Under `Literal` it is a value and names nothing, and under `Annotated`
+    only the first argument is a type, the rest being metadata the caller
+    attached. Removing every quoted run instead, which is what this did, took
+    the forward reference with it: a return written `-> 'Decomposition'` read
+    as naming nothing at all, while the same annotation without the quotes
+    was read.
+
+    An annotation that will not parse falls back to every word in it, rather
+    than to nothing, which would read as naming no type at all.
+    """
+    try:
+        tree = ast.parse(annotation, mode='eval')
+    except SyntaxError:
+        stripped = re.sub(r"'[^']*'|\"[^\"]*\"", '', annotation)
+        return re.findall(r'[A-Za-z_][\w.]*', stripped)
+
+    found: list[str] = []
+
+    def walk(node: ast.expr, in_literal: bool) -> None:
+        if isinstance(node, ast.Subscript):
+            base = (_dotted(node.value) or '').split('.')[-1]
+            walk(node.value, in_literal)
+            if base == 'Annotated':
+                inside = node.slice
+                first = (
+                    inside.elts[0] if isinstance(inside, ast.Tuple) else inside
+                )
+                walk(first, in_literal)
+                return
+            walk(node.slice, in_literal or base == 'Literal')
+            return
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, str) and not in_literal:
+                found.extend(_named_in(node.value))
+            return
+        dotted = _dotted(node)
+        if dotted is not None:
+            found.append(dotted)
+            return
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.expr):
+                walk(child, in_literal)
+
+    walk(tree.body, False)
+    return found
+
+
+class _InternalTypes:
+    """Every place a public package names or hands out a type that is not
+    public.
+
+    Public is a name in the ``__all__`` of a public package. A type from the
+    standard library or a third-party package is not this project's to promise
+    and passes. Read from every exported name: a function's signature, and a
+    class's constructor, methods, properties, class-level annotations
+    (dataclass fields among them) and the values of its public attributes,
+    along every first-party class in its MRO. A class this project defines
+    must be public itself to appear there.
+    """
+
+    def __init__(self, packages: Sequence[ModuleType]) -> None:
+        self.packages = packages
+        self.public = {
+            id(getattr(module, name)): f'{module.__name__}.{name}'
+            for module in packages
+            for name in module.__all__
+        }
+        self.found: list[str] = []
+        self.allowed: set[str] = set()
+        self._walked: set[int] = set()
+        self._trees: dict[str, ast.Module | None] = {}
+        self._imported: dict[str, dict[str, tuple[str, str | None]]] = {}
+
+    def run(self) -> list[str]:
+        for module in self.packages:
+            for name in module.__all__:
+                obj = getattr(module, name)
+                where = f'{module.__name__}.{name}'
+                if _ALIAS is not None and isinstance(obj, _ALIAS):
+                    self._type(where, obj)
+                    continue
+                if inspect.isclass(obj) or inspect.isroutine(obj):
+                    self._type(where, obj)
+                if inspect.isclass(obj):
+                    self._class(where, obj)
+                elif inspect.isroutine(obj):
+                    self._signature(where, obj)
+                else:
+                    self._type(f'{where} holds', type(obj))
+        return self.found
+
+    def _type(self, where: str, obj: object) -> None:
+        if obj is None or obj is Ellipsis or isinstance(obj, (str, int)):
+            return  # `None`, or a `Literal` argument
+        if isinstance(obj, typing.TypeVar):
+            for inner in (obj.__bound__, *obj.__constraints__):
+                self._type(where, inner)
+            return
+        if _ALIAS is not None and isinstance(obj, _ALIAS):
+            self._type(where, obj.__value__)
+            return
+        origin = typing.get_origin(obj)
+        if not inspect.isclass(obj) and origin is not None:
+            self._type(where, origin)
+            if origin is typing.Literal:
+                return
+            arguments = typing.get_args(obj)
+            if origin is Annotated:
+                arguments = arguments[:1]
+            for argument in arguments:
+                for one in (
+                    argument if isinstance(argument, list) else [argument]
+                ):
+                    self._type(where, one)
+            return
+        module = getattr(obj, '__module__', None) or ''
+        root = module.split('.')[0]
+        if root not in FIRST_PARTY:
+            return
+        qualified = f'{module}.{getattr(obj, "__qualname__", obj)}'
+        if id(obj) in self.public:
+            if root in INTERNAL_PACKAGES:
+                self.found.append(
+                    f'{where}: {qualified} comes from {root}, which is not '
+                    f'public'
+                )
+            return
+        if qualified in HANDED_OUT_THOUGH_NOT_EXPORTED:
+            self.allowed.add(qualified)
+            return
+        self.found.append(f'{where}: {qualified} is not public')
+
+    def _annotation(self, where: str, annotation: object, module: str) -> None:
+        if annotation is inspect.Parameter.empty:
+            return
+        if not isinstance(annotation, str):
+            for quoted in _quoted_within(annotation):
+                self._written(where, quoted, module)
+            self._type(where, annotation)
+            return
+        self._written(where, annotation, module)
+
+    def _written(self, where: str, annotation: str, module: str) -> None:
+        """Read an annotation written as a string, in ``module``."""
+        for dotted in _named_in(annotation):
+            if dotted in {'None', 'True', 'False'}:
+                continue
+            resolved = self._resolve(dotted, module)
+            if resolved is _UNKNOWN:
+                self.found.append(
+                    f'{where}: cannot tell what {dotted!r} is, so cannot '
+                    f'tell whether it is public'
+                )
+            elif isinstance(resolved, _Unimported):
+                self._unimported(where, resolved)
+            elif resolved is not None:
+                self._type(where, resolved)
+
+    def _resolve(self, dotted: str, module_name: str) -> object:
+        """What ``dotted`` names in ``module_name``: the object, ``None`` for
+        a name from outside this project, an ``_Unimported`` for a name only
+        the source can say anything about, or ``_UNKNOWN``.
+        """
+        loaded = sys.modules.get(module_name)
+        head, *rest = dotted.split('.')
+        imports = self._imports(module_name)
+        if loaded is not None and head in vars(loaded):
+            obj = vars(loaded)[head]
+        elif head in imports:
+            source, attribute = imports[head]
+            if source.split('.')[0] not in FIRST_PARTY:
+                return None
+            if attribute is None:
+                try:
+                    obj = importlib.import_module(source)
+                except ImportError:
+                    return _UNKNOWN
+            else:
+                obj = self._lookup(source, attribute)
+                if obj is _UNKNOWN or isinstance(obj, _Unimported):
+                    return obj
+        elif loaded is None and self._tree(module_name) is not None:
+            return self._lookup(module_name, head)
+        elif hasattr(builtins, head):
+            return None
+        else:
+            return _UNKNOWN
+        for part in rest:
+            if isinstance(obj, ModuleType):
+                if obj.__name__.split('.')[0] not in FIRST_PARTY:
+                    return None
+            obj = getattr(obj, part, _UNKNOWN)
+            if obj is _UNKNOWN:
+                return _UNKNOWN
+        return None if isinstance(obj, ModuleType) else obj
+
+    def _lookup(self, module_name: str, name: str) -> object:
+        """``name`` in a first-party module, imported if it can be, and read
+        from its source if it cannot or defines ``name`` only for the type
+        checker."""
+        try:
+            module: ModuleType | None = importlib.import_module(module_name)
+        except ImportError:
+            module = None
+        if module is not None and hasattr(module, name):
+            return getattr(module, name)
+        tree = self._tree(module_name)
+        defined = None if tree is None else _defined_in_source(tree, name)
+        if defined is None:
+            return _UNKNOWN
+        return _Unimported(module_name, name, defined)
+
+    def _unimported(self, where: str, found: _Unimported) -> None:
+        if found.definition != 'class':
+            self._annotation(where, found.definition, found.module)
+            return
+        # A class whose module cannot be imported here cannot be exported by
+        # a package that was, so it is not public.
+        qualified = f'{found.module}.{found.name}'
+        if qualified in HANDED_OUT_THOUGH_NOT_EXPORTED:
+            self.allowed.add(qualified)
+        else:
+            self.found.append(f'{where}: {qualified} is not public')
+
+    def _tree(self, module_name: str) -> ast.Module | None:
+        if module_name not in self._trees:
+            self._trees[module_name] = _source_tree(module_name)
+        return self._trees[module_name]
+
+    def _imports(self, module_name: str) -> dict[str, tuple[str, str | None]]:
+        if module_name not in self._imported:
+            tree = self._tree(module_name)
+            self._imported[module_name] = (
+                {} if tree is None else _top_level_imports(tree)
+            )
+        return self._imported[module_name]
+
+    def _signature(self, where: str, function: object) -> None:
+        """Read what a function declares, over every form a caller sees.
+
+        An overloaded function's implementation says `Any`, which is what a
+        caller is kept away from. The overloads are the signatures they are
+        offered, and the types they name are the promise.
+        """
+        function = inspect.unwrap(function)  # type: ignore[arg-type]
+        module = getattr(function, '__module__', None) or ''
+        if module.split('.')[0] not in FIRST_PARTY:
+            return
+        offered = _OVERLOADS(function) if _OVERLOADS is not None else []
+        for form in [function, *offered]:
+            try:
+                written = inspect.signature(form)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                continue
+            for parameter in written.parameters.values():
+                self._annotation(
+                    f'{where}({parameter.name})', parameter.annotation, module
+                )
+            self._annotation(f'{where} ->', written.return_annotation, module)
+
+    def _class(self, where: str, owner: type) -> None:
+        if id(owner) in self._walked:
+            return
+        self._walked.add(id(owner))
+        # A base of this project's own is read below as part of the class, so
+        # a private one is an implementation detail. A base from a package
+        # that is not public would tie a public class to it.
+        for base in owner.__mro__[1:]:
+            if (base.__module__ or '').split('.')[0] in INTERNAL_PACKAGES:
+                self.found.append(
+                    f'{where} inherits {base.__module__}.{base.__qualname__}'
+                )
+        for defined_on in owner.__mro__:
+            module = defined_on.__module__ or ''
+            if module.split('.')[0] not in FIRST_PARTY:
+                continue
+            annotations = vars(defined_on).get('__annotations__', {})
+            for name, hint in annotations.items():
+                if not name.startswith('_'):
+                    self._annotation(f'{where}.{name}', hint, module)
+            for name, member in vars(defined_on).items():
+                dunder = name.startswith('__') and name.endswith('__')
+                if name.startswith('_') and not dunder:
+                    continue
+                at = f'{where}.{name}'
+                if isinstance(member, property):
+                    for accessor in (member.fget, member.fset):
+                        if accessor is not None:
+                            self._signature(at, accessor)
+                elif isinstance(member, (staticmethod, classmethod)):
+                    self._signature(at, member.__func__)
+                elif inspect.isfunction(member):
+                    self._signature(at, member)
+                elif inspect.isclass(member):
+                    if not dunder:
+                        self._type(at, member)
+                elif not dunder:
+                    self._type(f'{at} holds', type(member))
+
+
 class TestPublicSurface:
     """What a caller can name, and what the endpoint receives."""
 
@@ -88,6 +604,106 @@ class TestPublicSurface:
             '`python scripts/snapshot_public_api.py --write` and say so in the '
             f'changelog.\n{result.stdout}{result.stderr}'
         )
+
+    def test_no_public_name_names_a_type_that_is_not_public(self):
+        """A type a caller is handed is one the caller can rely on.
+
+        The snapshot records signatures as text, and records a property or an
+        attribute by its name alone, so a public name could return or hold a
+        type nobody exports, and the type would be public in all but name:
+        `predictive_query.Profile` through `ModelSpec`, `ModelSpec` through a
+        model handle's `spec`, `Decomposition` through `Request`. This reads
+        the annotations and the values themselves.
+        """
+        finder = _InternalTypes(_public_packages())
+        exposed = finder.run()
+        assert not exposed, (
+            'These public names name or hand out a type that is not public '
+            '(docs/reference/stability.md). Make the name private, make the '
+            'type public on purpose, or, if it truly must stay, add it to '
+            'HANDED_OUT_THOUGH_NOT_EXPORTED with the reason:\n'
+            + '\n'.join(exposed)
+        )
+        if _OVERLOADS is None:
+            # Nothing an overload names was read, so nothing reached only
+            # that way can be called unused.
+            return
+        stale = sorted(HANDED_OUT_THOUGH_NOT_EXPORTED - finder.allowed)
+        assert not stale, (
+            'Nothing public hands these out any more, so they no longer need '
+            f'an exception in HANDED_OUT_THOUGH_NOT_EXPORTED: {stale}'
+        )
+
+    def test_the_check_finds_each_way_a_type_is_handed_out(
+        self, tmp_path, monkeypatch
+    ):
+        """The check above passing means something only if it can fail.
+
+        A probe module poses as part of `sdm_client` and hands out internal
+        types each way the check reads, beside a function that names only
+        public and third-party types and must pass.
+
+        `quoted` writes its return as a string, which is a forward reference
+        and names a type. `labelled` writes strings under `Literal`, which are
+        values and name nothing. Removing every quoted run read the first as
+        naming nothing at all.
+        """
+        probe = tmp_path / '_leak_probe.py'
+        probe.write_text(
+            'from __future__ import annotations\n'
+            'import dataclasses\n'
+            'from typing import TYPE_CHECKING, Literal\n'
+            'import pandas as pd\n'
+            'from predictive_query import Profile, validate\n'
+            'from sdm_client.models import KUMO_TABULAR\n'
+            'from sdm_client.request import Request\n'
+            'if TYPE_CHECKING:\n'
+            '    from sdm_client.base import ModelAdapter, ModelSpec\n'
+            '    from sdm_client.decompose import Decomposition\n'
+            '__all__ = [\n'
+            "    'Field', 'Handle', 'Inherits', 'fine', 'labelled', 'mystery',\n"
+            "    'quoted', 'rewritten',\n"
+            "    'validate',\n"
+            ']\n'
+            'def rewritten() -> Decomposition | None: ...\n'
+            'def quoted() -> "Decomposition": ...\n'
+            "def labelled(x: Literal['a', 'b']) -> int: ...\n"
+            'def mystery() -> NotDefinedAnywhere: ...\n'
+            'def fine(frame: pd.DataFrame, n: int) -> list[Request]: ...\n'
+            'class Handle:\n'
+            '    spec = KUMO_TABULAR\n'
+            '    def __init__(self, adapter: ModelAdapter) -> None: ...\n'
+            '    @property\n'
+            '    def described(self) -> ModelSpec: ...\n'
+            '@dataclasses.dataclass\n'
+            'class Field:\n'
+            '    profile: Profile\n'
+            'class Inherits(Profile):\n'
+            '    pass\n'
+        )
+        name = 'sdm_client._leak_probe'
+        spec = importlib.util.spec_from_file_location(name, probe)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, name, module)
+        spec.loader.exec_module(module)
+
+        found = '\n'.join(_InternalTypes([*_public_packages(), module]).run())
+
+        expected = [
+            '_leak_probe.rewritten ->: sdm_client.decompose.Decomposition',
+            '_leak_probe.quoted ->: sdm_client.decompose.Decomposition',
+            "_leak_probe.mystery ->: cannot tell what 'NotDefinedAnywhere'",
+            '_leak_probe.Handle.spec holds: sdm_client.base.ModelSpec',
+            '_leak_probe.Handle.__init__(adapter): sdm_client.base.ModelAdapter',
+            '_leak_probe.Handle.described ->: sdm_client.base.ModelSpec',
+            '_leak_probe.Field.profile: predictive_query.profiles.Profile',
+            '_leak_probe.Inherits inherits predictive_query',
+            '_leak_probe.validate: predictive_query.api.validate comes from',
+        ]
+        missed = [line for line in expected if line not in found]
+        assert not missed, f'not reported: {missed}\nreported:\n{found}'
+        assert '_leak_probe.fine' not in found, found
 
     def test_the_wire_payloads_match_the_recorded_snapshot(self):
         result = _run('snapshot_wire_payloads.py')

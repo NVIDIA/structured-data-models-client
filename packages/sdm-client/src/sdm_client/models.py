@@ -151,18 +151,18 @@ KUMO_RELATIONAL = ModelSpec(
 class Model:
     r"""Base for the model handles. Not useful on its own."""
 
-    spec: ModelSpec
+    _spec: ModelSpec
 
     @property
     def name(self) -> str:
         r"""The model id sent on the wire."""
-        return self.spec.model_id
+        return self._spec.model_id
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Model) and other.spec is self.spec
+        return isinstance(other, Model) and other._spec is self._spec
 
     def __hash__(self) -> int:
-        return hash(self.spec.model_id)
+        return hash(self._spec.model_id)
 
     def __repr__(self) -> str:
         return f'{type(self).__name__}()'
@@ -179,7 +179,7 @@ class KumoTabular(Model):
     request, so it ships in the base install and runs anywhere.
     """
 
-    spec = KUMO_TABULAR
+    _spec = KUMO_TABULAR
 
 
 class KumoRelational(Model):
@@ -192,7 +192,7 @@ class KumoRelational(Model):
     sampling it is heavy client-side work that lives in a native package.
     """
 
-    spec = KUMO_RELATIONAL
+    _spec = KUMO_RELATIONAL
 
 
 #: Every model this client can send to, by id.
@@ -213,7 +213,7 @@ def spec_for(model: str | Model) -> ModelSpec:
     and the limits it is checked against. The id
     it names is a closed enum on the wire. One this module did not declare
     is refused here rather than gathering work that cannot be sent. ``Model``
-    itself declares ``spec`` without defining one, so a bare ``Model()`` gets
+    itself declares ``_spec`` without defining one, so a bare ``Model()`` gets
     that same refusal rather than an ``AttributeError``.
 
     Args:
@@ -225,7 +225,7 @@ def spec_for(model: str | Model) -> ModelSpec:
         StructuredDataError: If ``model`` is neither a handle nor an id.
     """
     if isinstance(model, Model):
-        spec = getattr(model, 'spec', None)
+        spec = getattr(model, '_spec', None)
         if isinstance(spec, ModelSpec) and MODELS.get(spec.model_id) is spec:
             return spec
         named = getattr(spec, 'model_id', None) or type(model).__name__

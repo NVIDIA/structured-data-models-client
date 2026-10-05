@@ -15,7 +15,7 @@ declare as `1.0.0` and none has published. The heading becomes
 
 - `docs/reference/stability.md`: the compatibility contract, saying what is public,
   what a version bump means, and the deprecation path. Enforced rather than
-  stated: `tests/golden/` records the exported surface of every distribution and
+  stated: `tests/golden/` records the exported surface of every public package and
   the wire payloads of four canonical requests, and `tests/test_release_contract.py`
   compares them on every run.
 - `RELEASING.md`, and a publish workflow using PyPI Trusted Publishing with PEP
@@ -35,10 +35,6 @@ declare as `1.0.0` and none has published. The heading becomes
   test pins that, so the check is not mistaken for coverage it does not give.
   Rules the spec states in prose rather than in a schema are not read either,
   and neither are OpenAPI's own formats, which are not JSON Schema assertions.
-- `RuntimeContract.unread_feature_stypes`: the semantic types a deployment
-  accepts and its model never reads. The relational model has no text
-  processor, so a `text` column is carried, dropped at the model, and
-  contributes nothing; naming the types makes that sayable rather than silent.
 - `FittedModel` carries the question its context was pinned for, so a session
   can refuse a request that asks something else rather than answering the
   pinned question in its place.
@@ -260,9 +256,9 @@ declare as `1.0.0` and none has published. The heading becomes
   compared the query text, which a request built from frames has not got, which
   `task=` does not change, and which two spellings of one string literal write
   differently. A frame-built request scored against a session answered the
-  pinned question. The question is now assembled from the request. The only
-  visible change is the annotation of `FittedModel.__init__`'s `question`
-  parameter, on a type `fit()` returns and nobody constructs.
+  pinned question. The question is now assembled from the request, and
+  nothing visible changes: `fit()` builds the handle, and `FittedModel` is not
+  constructed directly.
 - **A ranking candidate is written as its column travels**, not as its own
   value, so a small key drawn from a column whose values straddle int64 is
   still written as that column's text rather than as a number it does not hold.
@@ -307,12 +303,14 @@ declare as `1.0.0` and none has published. The heading becomes
   multi-label.
 
 - **A column the model cannot read is named rather than silently dropped.**
-  A `text` feature column reaches the relational model and is ignored there.
-  Holding content fixed and varying only the semantic type, the same
-  determining column scores 1.00 as `categorical` and chance as `text`. The
-  request still succeeds, because a model that answers from graph structure
-  alone should not refuse over an unreadable attribute, but the columns that
-  carried nothing are now named.
+  A `text` feature column reaches the relational model and is ignored there,
+  because the model has no text processor. Holding content fixed and varying
+  only the semantic type, the same determining column scores 1.00 as
+  `categorical` and chance as `text`. The request still succeeds, because a
+  model that answers from graph structure alone should not refuse over an
+  unreadable attribute, but an `SDMWarning` now names each `text` feature
+  column a request for `KumoRelational` carries. It says to type the column
+  categorical if its values are labels rather than prose, or to leave it out.
 
 - **A time column the caller never named can no longer be acquired.** The
   engine guessed keys and time columns from column *names*, and the guess could
@@ -502,6 +500,19 @@ A filter on the source table's own columns now limits every read of that table: 
 A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
 The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
 `parameters` and `materialization` are still left out with a message.
+
+**`predictive_query` is not public API.**
+`sdm-pql` installs it because `sdm-client` parses and validates PQL with it, and any release may change it.
+Write PQL with `sdm_client.PredictiveQuery`.
+`ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and `KumoTabular` and `KumoRelational` have no public `spec` attribute.
+`RuntimeContract`, the part of a `ModelSpec` that describes a deployment, is internal too, since nothing public takes or returns one.
+`Model.name` and `SDMClient.capabilities()` describe a model.
+
+**Nothing public hands out a type that is not public.**
+`Request.decomposition` is gone: it returned the client's own record of how a ranking or a forecast is asked in parts, and `Request.parts` and `Request.asked` say what was asked.
+`FittedModel` is returned by `SDMClient.fit()` and is not constructed directly, since what it is built from is internal; calling the class raises `TypeError`.
+`tests/test_release_contract.py` now fails when a public signature, dataclass field, property or class attribute names a type this project does not export.
+Two exceptions remain and are listed there with their reasons: `PredictionResult.items` holds the contract's generated `PredictionItem`, and a `DatabricksSource` built from a Spark session returns the session wrapped as a connection.
 
 ### Notes for a reviewer
 

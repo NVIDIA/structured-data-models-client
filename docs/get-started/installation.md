@@ -64,3 +64,6 @@ Five distributions, released together on one version.
 | `sdm-pql` | `predictive_query` | The Predictive Query Language |
 | `sdm-connectors` | `sdm_connectors` | Reading tables from sqlite, duckdb, PostgreSQL, Snowflake, Databricks, S3 |
 | `sdm-relational-engine` | `sdm_relational_engine` | The relational driver (native) |
+
+`sdm-pql` is an internal dependency of `sdm-client`, not a supported API, and its `predictive_query` package can change in any release.
+Write PQL with `sdm_client.PredictiveQuery`.

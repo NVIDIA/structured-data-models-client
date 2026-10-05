@@ -265,7 +265,7 @@ def test_a_fit_time_output_list_is_not_read_again_later():
     from sdm_client.client import FittedModel
 
     named = ['prediction', 'quantiles']
-    fitted = FittedModel(
+    fitted = FittedModel._open(
         client=None,
         adapter=None,
         session_id='s1',
@@ -414,7 +414,7 @@ def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
     import numpy as np
     import pandas as pd
 
-    from sdm_client import KumoTabular, Request, UnsupportedRequestError
+    from sdm_client import Request, UnsupportedRequestError
     from sdm_client.base import check_request_against_model
 
     rng = np.random.default_rng(0)
@@ -429,16 +429,14 @@ def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
     )
 
     with pytest.raises(UnsupportedRequestError, match='12,500'):
-        check_request_against_model(
-            request, KumoTabular().spec, ('prediction',)
-        )
+        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
 
 
 def test_a_context_within_the_cap_is_not_refused():
     import numpy as np
     import pandas as pd
 
-    from sdm_client import KumoTabular, Request
+    from sdm_client import Request
     from sdm_client.base import check_request_against_model
 
     rng = np.random.default_rng(0)
@@ -451,7 +449,7 @@ def test_a_context_within_the_cap_is_not_refused():
         task='classification',
     )
 
-    check_request_against_model(request, KumoTabular().spec, ('prediction',))
+    check_request_against_model(request, KUMO_TABULAR, ('prediction',))
 
 
 # --- a context this client emptied is not sent -----------------------------
