@@ -67,6 +67,8 @@ hygiene:
   script:
     - apt-get update -qq && apt-get install -y -qq git
     - python scripts/check_repo_hygiene.py all  # spdx, internal refs, retired APIs
+    # The third-party attribution is generated; this reads no network.
+    - python scripts/mermaid_notices.py --check
 
 test:
   stage: test

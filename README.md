@@ -136,9 +136,22 @@ first-party source maintained in this repository.
 
 ## License
 
-Apache-2.0. Each package carries its own copy of `LICENSE` so its
-`pyproject.toml` can reference it; those copies are the same terms as the root
-file, not additional ones.
+Apache-2.0, in [`LICENSE`](LICENSE). Third-party notices for the one vendored
+tree are in the same file, under "Third-party software bundled in this
+repository".
+
+Each package carries its own copy so its `pyproject.toml` can reference one,
+which is what puts the license inside each wheel. They are the same terms as
+the root file, not additional ones:
+
+- [`packages/sdm-api/LICENSE`](packages/sdm-api/LICENSE)
+- [`packages/sdm-client/LICENSE`](packages/sdm-client/LICENSE)
+- [`packages/sdm-connectors/LICENSE`](packages/sdm-connectors/LICENSE)
+- [`packages/sdm-pql/LICENSE`](packages/sdm-pql/LICENSE)
+- [`packages/sdm-relational-engine/LICENSE`](packages/sdm-relational-engine/LICENSE)
+
+Contributions are welcome and are signed off under the Developer Certificate of
+Origin; see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Documentation
 
