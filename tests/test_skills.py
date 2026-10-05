@@ -73,11 +73,19 @@ def test_a_skill_shows_output_it_has_run(name):
 def test_a_skill_announces_itself(name):
     """An agent finds a skill by its frontmatter, so it has to be there."""
     body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
-    assert body.startswith('---\n')
-    front = body.split('---\n')[1]
-    assert f'name: sdm-{name}' in front
-    assert 'description:' in front
-    assert 'Triggers:' in front, 'nothing would load this skill'
+    assert body.startswith('---\n'), f'{name} opens with no frontmatter'
+    closed = body.index('\n---\n', 3)
+    front = dict(
+        line.split(': ', 1)
+        for line in body[4:closed].splitlines()
+        if ': ' in line
+    )
+    assert front.get('name') == f'sdm-{name}', (
+        f'{name} is announced as {front.get("name")!r}'
+    )
+    assert 'Triggers:' in front.get('description', ''), (
+        f'{name} gives no triggers, so nothing would load it'
+    )
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
@@ -152,7 +160,12 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'{where} writes an HTML entity, which renders as a character '
                 f'this file reads as the escape it is written with'
             )
-            for marker in ('<!--', '-->', '--!>'):
+            assert '--!>' not in line, (
+                f'{where} writes --!>, which closes the comment a browser '
+                f'sees and not the block Markdown is parsing, so the two '
+                f'disagree about what the document says'
+            )
+            for marker in ('<!--', '-->'):
                 assert (
                     marker not in line
                     or line.strip().startswith(marker)
@@ -482,23 +495,21 @@ def without_comments(path: Path) -> str:
     inside = False
     for line in path.read_text(encoding='utf-8').splitlines(keepends=True):
         if hiding:
-            closed = re.search(r'--!?>', line)
-            if closed is None:
+            if '-->' not in line:
                 continue
             hiding = False
-            line = line[closed.end() :]
+            line = line.split('-->', 1)[1]
         if not inside and '<!--' in line:  # noqa: SIM102
             rest = line
             while '<!--' in rest:
                 before, rest = rest.split('<!--', 1)
                 kept.append(before)
-                closed = re.search(r'--!?>', rest)
-                if closed is None:
+                if '-->' not in rest:
                     hiding = True
                     rest = ''
                     kept.append('\n')
                     break
-                rest = rest[closed.end() :]
+                rest = rest.split('-->', 1)[1]
             kept.append(rest)
             continue
         if line.startswith('```'):
