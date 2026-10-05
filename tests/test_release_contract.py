@@ -25,7 +25,7 @@ import sys
 import typing
 from collections.abc import Sequence
 from types import ModuleType
-from typing import NamedTuple
+from typing import Annotated, NamedTuple
 
 import pytest
 
@@ -231,6 +231,11 @@ def _quoted_within(annotation: object) -> list[str]:
     Without postponed annotations `list['X']` is a generic alias holding the
     plain string `'X'`, which walking its arguments as types steps over. The
     strings are collected here and read as the names they are.
+
+    The same three shapes the written form has to tell apart appear here too:
+    a `Literal`'s arguments are values, an `Annotated`'s metadata is whatever
+    the caller attached, and a `Callable` keeps its parameters in a plain list
+    rather than among its arguments.
     """
     found: list[str] = []
 
@@ -241,7 +246,17 @@ def _quoted_within(annotation: object) -> list[str]:
         if isinstance(node, typing.ForwardRef):
             found.append(node.__forward_arg__)
             return
-        for argument in typing.get_args(node):
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+            return
+        origin = typing.get_origin(node)
+        if origin is typing.Literal:
+            return
+        arguments = typing.get_args(node)
+        if origin is Annotated:
+            arguments = arguments[:1]
+        for argument in arguments:
             walk(argument)
 
     walk(annotation)
