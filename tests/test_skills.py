@@ -24,6 +24,7 @@ import builtins
 import importlib
 import os
 import re
+import warnings
 from pathlib import Path
 
 import pytest
@@ -1362,9 +1363,15 @@ def test_a_category_is_multiclass_however_few_values_it_holds(schema):
         time_columns={'orders': 'ordered_at'},
         relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
     )
-    kind = resolve(
-        'PREDICT users.segment FOR EACH users.user_id', numbers
-    ).payloads[0]['task']['kind']
+    with warnings.catch_warnings(record=True) as said:
+        warnings.simplefilter('always')
+        kind = resolve(
+            'PREDICT users.segment FOR EACH users.user_id', numbers
+        ).payloads[0]['task']['kind']
+    assert any('two whole numbers' in str(one.message) for one in said), (
+        'from_data asked a regression of ones and zeroes and said nothing, '
+        'and pql.md says it warns that it is doing so'
+    )
     assert kind == 'regression', (
         f'two whole numbers resolved to {kind}, and pql.md says a binary '
         f'question comes from a comparison and from nothing else'
@@ -1410,12 +1417,20 @@ def test_a_warehouse_reads_the_same_whole_numbers_as_a_category():
         time_columns={'orders': 'ordered_at'},
         relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
     )
-    kind = resolve(
-        'PREDICT users.segment FOR EACH users.user_id', schema
-    ).payloads[0]['task']['kind']
+    with warnings.catch_warnings(record=True) as said:
+        warnings.simplefilter('always')
+        kind = resolve(
+            'PREDICT users.segment FOR EACH users.user_id', schema
+        ).payloads[0]['task']['kind']
     assert kind == 'multiclass_classification', (
         f'a warehouse column of ones and zeroes resolved to {kind}, and '
         f'pql.md says a source reads few distinct values as a category'
+    )
+    assert not [
+        one for one in said if 'two whole numbers' in str(one.message)
+    ], (
+        'the warehouse path warned about whole numbers, and pql.md says it '
+        'asks the multiclass question without warning'
     )
 
 

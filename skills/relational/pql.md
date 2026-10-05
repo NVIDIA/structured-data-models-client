@@ -216,7 +216,7 @@ That is the one rule that catches people, because the past is where the data
 is. The past is what the model reads as context; the query asks about what has
 not happened.
 
-## One hop, and no further, for a plain column
+## No hop at all, for a plain column
 
 A column reached across a relationship cannot be named directly, as a target
 or in a filter — `PREDICT items.kind FOR EACH orders.order_id` is refused, and
