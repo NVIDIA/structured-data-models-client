@@ -196,6 +196,7 @@ EVERY_TABLE = {
         (['Limit', 'Value'], True),
         (['Refusal', 'Cause'], False),
     ],
+    'skills/relational/references/beyond-one-answer.md': [],
     'skills/relational/pql.md': [
         (['Clause', 'Least', 'Most'], True),
         (['Target', 'Task', 'Calls'], True),

@@ -8,6 +8,7 @@ and almost nothing transfers between them.
 | [`tabular/SKILL.md`](tabular/SKILL.md) | `kumo-tabular` | The question is about rows of one table |
 | [`relational/SKILL.md`](relational/SKILL.md) | `kumo-relational` | The question is about an entity and what it is linked to |
 | [`relational/pql.md`](relational/pql.md) | | Writing the predictive query itself |
+| [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | | Rankings, forecasts and explanations |
 
 Load one. An agent answering a question about a single table does not need the
 relational material, and the four task kinds that make the relational model
