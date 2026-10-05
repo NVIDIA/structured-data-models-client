@@ -186,6 +186,9 @@ What a target may be without a window is a column, as `users.segment` is, or
 a condition over one: `PREDICT users.segment = 'a' FOR EACH users.user_id` is a
 binary classification and needs no window. It is aggregating that needs one.
 
+`start` must be strictly smaller than `end`: `0, 0` and `30, 30` are refused,
+and so is `30, 0`, which asks backwards.
+
 **The window is the future, and both ends must be non-negative.** `0, 30, days`
 is the thirty days after the anchor — and the anchor is **not today**. Left
 unsaid it is the latest timestamp in the table the target aggregates, so on
@@ -202,6 +205,25 @@ PREDICT COUNT(orders.*, -30, 0, days) FOR EACH users.user_id
 That is the one rule that catches people, because the past is where the data
 is. The past is what the model reads as context; the query asks about what has
 not happened.
+
+## One hop, and no further, for a plain column
+
+A column reached across a relationship cannot be named directly, as a target
+or in a filter — `PREDICT items.kind FOR EACH orders.order_id` is refused, and
+so is `COUNT(orders.* WHERE items.kind = 'a', 0, 30, days)`:
+
+```
+PREDICT items.kind FOR EACH orders.order_id
+→ Static references to columns from other tables that implicitly contain a
+  foreign key to primary key connection are not supported in foundation model
+  queries. Your query implicitly requires a join orders.item -> items.item.
+  Please remove the reference to table items and retry, or train a new model
+  instead of the foundation model.
+```
+
+Aggregating across a relationship is what the language is for, and that is
+fine: `COUNT(orders.*, 0, 30, days) FOR EACH users.user_id` crosses the same
+join. It is naming the far column as a value that is not.
 
 ## Which entities get scored
 

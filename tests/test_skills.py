@@ -1087,7 +1087,7 @@ def transcripts() -> list[tuple[str, list[str]]]:
         if current:
             said.append(current)
         found.append((asked[0], said))
-    assert len(found) == 7, f'pql.md shows {len(found)} transcripts, not 7'
+    assert len(found) == 8, f'pql.md shows {len(found)} transcripts, not 8'
     return found
 
 
@@ -1234,6 +1234,34 @@ def test_asking_for_the_mean_changes_the_request(schema):
         resolve(query, schema).payloads
         != resolve(query, schema, prediction_statistic='mean').payloads
     ), 'prediction_statistic changed nothing, and the skill says it chooses'
+
+
+@pytest.mark.parametrize(
+    'window', ['0, 0', '30, 0', '30, 30'], ids=['empty', 'backwards', 'same']
+)
+def test_a_window_must_start_before_it_ends(window, schema):
+    """The rule beside non-negative, which it does not follow from."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='needs to be smaller'):
+        resolve(
+            f'PREDICT COUNT(orders.*, {window}, days) FOR EACH users.user_id',
+            schema,
+        )
+
+
+def test_a_column_across_a_relationship_cannot_be_named(schema):
+    """Aggregating over a join is the point; naming a column across one is
+    refused, as a target and inside a filter alike."""
+    from sdm_client.errors import StructuredDataError
+
+    for query in (
+        'PREDICT items.kind FOR EACH orders.order_id',
+        "PREDICT COUNT(orders.* WHERE items.kind = 'a', 0, 30, days) "
+        'FOR EACH users.user_id',
+    ):
+        with pytest.raises(StructuredDataError, match='Static references'):
+            resolve(query, schema)
 
 
 def test_a_ranking_takes_only_a_foreign_key(schema):
