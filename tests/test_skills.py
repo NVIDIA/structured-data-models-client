@@ -197,20 +197,32 @@ def test_no_example_hides_in_a_plain_fence(path):
                     reachable.update(
                         alias.asname or alias.name for alias in node.names
                     )
-        # Not only what is imported: a name bound to the result of calling
-        # one, like `client = SDMClient(...)`, reaches the next block too.
+        # Not only what is imported: a name bound from one, by assignment or
+        # by `with ... as`, reaches the next block too.
         for node in ast.walk(tree):
-            if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            if isinstance(node, ast.Assign):
+                sources, targets = [node.value], node.targets
+            elif isinstance(node, ast.AnnAssign):
+                sources, targets = [node.value], [node.target]
+            elif isinstance(node, ast.With):
+                # The context expressions, not the body they wrap.
+                sources = [item.context_expr for item in node.items]
+                targets = [
+                    item.optional_vars
+                    for item in node.items
+                    if item.optional_vars is not None
+                ]
+            elif isinstance(node, ast.For):
+                sources, targets = [node.iter], [node.target]
+            else:
                 continue
             if not any(
                 isinstance(inner, ast.Name) and inner.id in reachable
-                for inner in ast.walk(node.value)
-                if node.value is not None
+                for source in sources
+                if source is not None
+                for inner in ast.walk(source)
             ):
                 continue
-            targets = (
-                node.targets if isinstance(node, ast.Assign) else [node.target]
-            )
             reachable.update(
                 bound.id
                 for target in targets
@@ -372,10 +384,8 @@ def resolve(query, schema, **extra):
 
 
 PQL = SKILLS / 'relational' / 'pql.md'
-ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
 
 
-COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
 FENCED = re.compile(r'^```[a-z]*\n.*?^```$', re.DOTALL | re.MULTILINE)
 
 
@@ -466,10 +476,6 @@ def tables(path: Path) -> list[list[list[str]]]:
     return found
 
 
-def rows(path: Path) -> list[list[str]]:
-    return [row for one in tables(path) for row in one]
-
-
 def table(path: Path, label: str) -> dict[str, list[str]]:
     """The one table holding a row labelled ``label``, as label to cells."""
     matched = [
@@ -539,13 +545,18 @@ def task_table() -> list[tuple[str, str, int]]:
     return read
 
 
-def answered_and_refused(heading: str) -> tuple[list[str], list[str]]:
-    """The two halves of a table in ``pql.md`` split that way."""
+def split_table(heading: str, *rows: str) -> list[list[str]]:
+    """A table in ``pql.md`` whose rows are exactly ``rows``, in order.
+
+    Exactly: a row this does not read is a row that can say the opposite of
+    the ones it does.
+    """
     shown = table(PQL, heading)
-    answered = listed(shown['Answered'][0])
-    refused = listed(shown['Parsed, then refused'][0])
-    assert answered and refused, f'pql.md lists no {heading.lower()}s'
-    return answered, refused
+    assert list(shown) == [heading, *rows], (
+        f'pql.md gives the {heading.lower()} table the rows {list(shown)[1:]} '
+        f'and this reads {list(rows)}'
+    )
+    return [listed(shown[row][0]) for row in rows]
 
 
 @pytest.mark.parametrize(
@@ -597,12 +608,16 @@ def test_a_single_question_is_one_part(schema):
     assert request.parts is None
 
 
-ANSWERED, REFUSED = answered_and_refused('Aggregation')
+ANSWERED, REFUSED = split_table(
+    'Aggregation', 'Answered', 'Parsed, then refused'
+)
 
-COMPARISONS = table(PQL, 'Answered on any value')
-ANY_VALUE = listed(COMPARISONS['Answered on any value'][0])
-ORDERED = listed(COMPARISONS['Answered on numbers and times only'][0])
-REFUSED_OPS = listed(COMPARISONS['Parsed, then refused'][0])
+ANY_VALUE, ORDERED, REFUSED_OPS = split_table(
+    'Comparison',
+    'Answered on any value',
+    'Answered on numbers and times only',
+    'Parsed, then refused',
+)
 
 
 @pytest.mark.parametrize('aggregation', ANSWERED)
@@ -690,33 +705,33 @@ AS_A_CONDITION = {
         "orders.channel IS IN ('web', 'app')",
     ),
     'LIKE': (
-        "orders.channel LIKE 'w%'",
-        "orders.channel LIKE 'w%'",
+        "orders.price LIKE 'w%'",
+        "orders.ordered_at LIKE 'w%'",
         "orders.channel LIKE 'w%'",
     ),
     'NOT LIKE': (
-        "orders.channel NOT LIKE '%w%'",
-        "orders.channel NOT LIKE '%w%'",
+        "orders.price NOT LIKE '%w%'",
+        "orders.ordered_at NOT LIKE '%w%'",
         "orders.channel NOT LIKE '%w%'",
     ),
     'CONTAINS': (
-        "orders.channel CONTAINS 'e'",
-        "orders.channel CONTAINS 'e'",
+        "orders.price CONTAINS 'e'",
+        "orders.ordered_at CONTAINS 'e'",
         "orders.channel CONTAINS 'e'",
     ),
     'NOT CONTAINS': (
-        "orders.channel NOT CONTAINS 'e'",
-        "orders.channel NOT CONTAINS 'e'",
+        "orders.price NOT CONTAINS 'e'",
+        "orders.ordered_at NOT CONTAINS 'e'",
         "orders.channel NOT CONTAINS 'e'",
     ),
     'STARTS WITH': (
-        "orders.channel STARTS WITH 'w'",
-        "orders.channel STARTS WITH 'w'",
+        "orders.price STARTS WITH 'w'",
+        "orders.ordered_at STARTS WITH 'w'",
         "orders.channel STARTS WITH 'w'",
     ),
     'ENDS WITH': (
-        "orders.channel ENDS WITH 'b'",
-        "orders.channel ENDS WITH 'b'",
+        "orders.price ENDS WITH 'b'",
+        "orders.ordered_at ENDS WITH 'b'",
         "orders.channel ENDS WITH 'b'",
     ),
 }
