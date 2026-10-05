@@ -150,10 +150,11 @@ Twenty rows in, three named, and `request.context_rows` is 17: the scored rows
 are held out of their own context. `materialize()` also samples down to the
 10,000-row cap.
 
-On this model the language is cut down to a column of one table as the target.
-No aggregation, no window, no forecast, no ranking. A schema with a second
-table is refused and names the model that can answer it. The full language is
-in [`../relational/pql.md`](../relational/pql.md).
+On this model the language is cut down to a column of one table as the target:
+no aggregation, no window, no comparison, no forecast, no ranking, no entity
+filter. A schema with a second table is refused and names the model that can
+answer it. [`references/pql.md`](references/pql.md) is the whole of it, with
+each refusal quoted.
 
 ## Asking the same context more than once
 
@@ -208,3 +209,8 @@ names what to change.
 | relationships | this model reads one table; use `kumo-relational` |
 
 Catch `StructuredDataError` to catch all of them.
+
+## Then
+
+- [`references/pql.md`](references/pql.md) — the query language on one table
+- [`../relational/SKILL.md`](../relational/SKILL.md) — when the question is about an entity and what it links to

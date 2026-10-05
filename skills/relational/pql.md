@@ -330,21 +330,9 @@ ASSUMING users.segment = 'a'
 
 ## On kumo-tabular
 
-The same language, cut down to what one table can answer: a column of that
-table as the target, and nothing else. No aggregation across a relationship, no
-window, no forecast, no ranking, no entity filter, no `ASSUMING`.
-
-```
-PREDICT customers.churn FOR EACH customers.id
-```
-
-A schema with a second table is refused before a request is built, and names
-the model that can answer it:
-
-```
-kumo-tabular answers from a single table, and this schema has 2.
-Pass model=KumoRelational() to gather them as a graph
-```
+The same language, cut down to a column of one table as the target. Every
+clause above is refused there. It has its own reference:
+[`../tabular/references/pql.md`](../tabular/references/pql.md).
 
 ## When it will not parse
 

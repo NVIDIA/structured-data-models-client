@@ -207,6 +207,7 @@ EVERY_TABLE = {
         (['', '`kumo-tabular`'], True),
         (['Refusal', 'Cause'], False),
     ],
+    'skills/tabular/references/pql.md': [(['Clause', 'On one table'], True)],
 }
 
 
@@ -1422,6 +1423,108 @@ def test_a_temporal_assumption_is_answered(schema):
         schema,
     )
     assert request.task.kind == 'regression'
+
+
+TABULAR_PQL = SKILLS / 'tabular' / 'references' / 'pql.md'
+
+#: Each row of the clause table in tabular/references/pql.md, written as a
+#: query over one table. The claim is that every one is refused there, and
+#: several of them are ordinary relational queries.
+ON_ONE_TABLE = {
+    '`COUNT`, `SUM`, any aggregation': (
+        'PREDICT COUNT(customers.*, 0, 30, days) FOR EACH customers.customer_id'
+    ),
+    'a window, `0, 30, days`': (
+        'PREDICT SUM(customers.spend, 0, 30, days) '
+        'FOR EACH customers.customer_id'
+    ),
+    'a comparison target, `spend > 200`': (
+        'PREDICT customers.spend > 200 FOR EACH customers.customer_id'
+    ),
+    '`RANK TOP k`': (
+        'PREDICT customers.segment RANK TOP 2 FOR EACH customers.customer_id'
+    ),
+    '`FORECAST n TIMEFRAMES`': (
+        'PREDICT customers.spend FORECAST 2 TIMEFRAMES '
+        'FOR EACH customers.customer_id'
+    ),
+    '`WHERE` on the entity': (
+        'PREDICT customers.churn FOR EACH customers.customer_id '
+        "WHERE customers.segment = 'a'"
+    ),
+    '`ASSUMING`': (
+        'PREDICT customers.churn FOR EACH customers.customer_id '
+        "ASSUMING customers.segment = 'a'"
+    ),
+}
+
+
+@pytest.fixture
+def one_table():
+    pd = pytest.importorskip('pandas')
+    from sdm_client import Schema
+
+    customers = pd.DataFrame(
+        {
+            'customer_id': range(30),
+            'spend': [100.0 + 10 * i for i in range(30)],
+            'segment': list('abc') * 10,
+            'churn': [i % 2 for i in range(30)],
+        }
+    )
+    return Schema.from_data(
+        {'customers': customers}, primary_keys={'customers': 'customer_id'}
+    )
+
+
+def test_the_tabular_clause_table_is_every_clause_it_refuses(one_table):
+    """Read the table out of the reference, and ask for every row of it."""
+    shown = table(TABULAR_PQL, 'Clause')
+    del shown['Clause']
+    assert set(shown) == set(ON_ONE_TABLE), (
+        f'tabular/references/pql.md lists {sorted(set(shown) ^ set(ON_ONE_TABLE))} '
+        f'that this does not ask about'
+    )
+    assert all(cells == ['refused'] for cells in shown.values()), (
+        'every row of that table says refused, and one of them does not'
+    )
+
+
+@pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
+def test_a_clause_the_tabular_reference_calls_refused_is(clause, one_table):
+    from sdm_client import KumoTabular, PredictiveQuery
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError):
+        PredictiveQuery(ON_ONE_TABLE[clause], one_table).materialize(
+            indices=[1, 2], model=KumoTabular()
+        )
+
+
+def test_a_plain_column_is_what_the_tabular_reference_promises(one_table):
+    """The one shape it says works, in all three of its forms."""
+    from sdm_client import KumoTabular, PredictiveQuery
+
+    for query, kind in (
+        (
+            'PREDICT customers.churn FOR EACH customers.customer_id',
+            'classification',
+        ),
+        (
+            'PREDICT customers.spend FOR EACH customers.customer_id',
+            'regression',
+        ),
+        (
+            'PREDICT customers.churn FOR customers.customer_id IN (1, 2)',
+            'classification',
+        ),
+    ):
+        request = PredictiveQuery(query, one_table).materialize(
+            indices=[1, 2], model=KumoTabular()
+        )
+        assert request.task.kind == kind, (
+            f'{query} resolved {request.task.kind}'
+        )
 
 
 def test_the_tabular_model_refuses_a_second_table(schema):
