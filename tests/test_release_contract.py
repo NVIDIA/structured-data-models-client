@@ -125,6 +125,18 @@ HANDED_OUT_THOUGH_NOT_EXPORTED = frozenset(
         # sampling has one interface to run through. The connector's typing
         # check pins that type, so changing it is a change to sources.
         'sdm_connectors.backends.spark.SparkConnection',
+        # What each `Source` overload says its connection must look like. They
+        # are protocols, matched by shape: a caller passes a live connection
+        # and never names, imports or builds one of these. Exporting seven
+        # names to describe an argument nobody writes would be a larger
+        # promise than the one it closes.
+        'sdm_connectors._types.DatabricksLike',
+        'sdm_connectors._types.DuckDBLike',
+        'sdm_connectors._types.PostgresLike',
+        'sdm_connectors._types.SQLiteLike',
+        'sdm_connectors._types.SnowflakeLike',
+        'sdm_connectors._types.SnowparkLike',
+        'sdm_connectors._types.SparkLike',
     }
 )
 
@@ -353,6 +365,9 @@ class _InternalTypes:
             for name in module.__all__:
                 obj = getattr(module, name)
                 where = f'{module.__name__}.{name}'
+                if _ALIAS is not None and isinstance(obj, _ALIAS):
+                    self._type(where, obj)
+                    continue
                 if inspect.isclass(obj) or inspect.isroutine(obj):
                     self._type(where, obj)
                 if inspect.isclass(obj):
@@ -510,19 +525,30 @@ class _InternalTypes:
         return self._imported[module_name]
 
     def _signature(self, where: str, function: object) -> None:
+        """Read what a function declares, over every form a caller sees.
+
+        An overloaded function's implementation says `Any`, which is what a
+        caller is kept away from. The overloads are the signatures they are
+        offered, and the types they name are the promise.
+        """
         function = inspect.unwrap(function)  # type: ignore[arg-type]
         module = getattr(function, '__module__', None) or ''
         if module.split('.')[0] not in FIRST_PARTY:
             return
         try:
-            written = inspect.signature(function)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return
-        for parameter in written.parameters.values():
-            self._annotation(
-                f'{where}({parameter.name})', parameter.annotation, module
-            )
-        self._annotation(f'{where} ->', written.return_annotation, module)
+            offered = typing.get_overloads(function) or []  # type: ignore[arg-type]
+        except Exception:
+            offered = []
+        for form in [function, *offered]:
+            try:
+                written = inspect.signature(form)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                continue
+            for parameter in written.parameters.values():
+                self._annotation(
+                    f'{where}({parameter.name})', parameter.annotation, module
+                )
+            self._annotation(f'{where} ->', written.return_annotation, module)
 
     def _class(self, where: str, owner: type) -> None:
         if id(owner) in self._walked:
