@@ -1163,6 +1163,16 @@ def test_the_anchor_defaults_to_the_latest_row(schema):
     asked = PredictiveQuery(query, schema).materialize(
         indices=[1], model=KumoRelational()
     )
+    latest = max(
+        pd.Timestamp(one).tz_localize(None)
+        for payload in asked.payloads
+        for one in anchors(payload['predict']['instance_table'])
+    )
+    newest = pd.date_range('2026-01-01', periods=120, freq='D').max()
+    assert latest == newest, (
+        f'the window is anchored at {latest} and the newest order is '
+        f'{newest}; the skill says the anchor is the latest row'
+    )
     elsewhere = PredictiveQuery(query, schema).materialize(
         indices=[1],
         model=KumoRelational(),
@@ -1171,6 +1181,15 @@ def test_the_anchor_defaults_to_the_latest_row(schema):
     assert asked.payloads != elsewhere.payloads, (
         'anchor_time changed nothing, and the skill says it moves the window'
     )
+
+
+def anchors(table) -> list:
+    """Every __kumo_anchor_time a sent table carries."""
+    columns = table.get('columns') or []
+    if '__kumo_anchor_time' not in columns:
+        return []
+    at = columns.index('__kumo_anchor_time')
+    return [row[at] for row in table.get('rows') or []]
 
 
 @pytest.mark.parametrize(
@@ -1700,10 +1719,17 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
 #: will not. Asked of the endpoint, so a deployment that gains or loses one
 #: fails here rather than making the skill quietly wrong.
 SERVED = {
-    'COUNT(orders.*, 0, 30, days)': (('prediction', 'quantiles'), 'quantile_'),
+    'COUNT(orders.*, 0, 30, days)': (
+        ('prediction', 'quantiles'),
+        tuple(f'quantile_0.{one}' for one in range(1, 10)),
+    ),
     'COUNT(orders.*, 0, 30, days) > 2': (
         ('prediction', 'probabilities'),
-        'probability_',
+        ('probability_False', 'probability_True'),
+    ),
+    'users.segment': (
+        ('prediction', 'probabilities'),
+        ('probability_a', 'probability_b', 'probability_c'),
     ),
 }
 
@@ -1733,15 +1759,16 @@ def test_the_relational_endpoint_serves_the_matrix_the_skill_gives(
     from sdm_client import KumoRelational, SDMClient
     from sdm_client.errors import StructuredDataError
 
-    outputs, column = SERVED[target]
+    outputs, columns = SERVED[target]
     request = resolve(f'PREDICT {target} FOR EACH users.user_id', schema)
     with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
         shown = client.predict(
             request, model=KumoRelational(), outputs=list(outputs)
         ).to_pandas()
         assert 'prediction' in shown.columns, f'{target} gave no prediction'
-        assert any(str(name).startswith(column) for name in shown.columns), (
-            f'{target} gave no {column}* columns, only {list(shown.columns)}'
+        named = {str(one) for one in shown.columns}
+        assert set(columns) <= named, (
+            f'{target} gave {sorted(named)}, and the skill shows {columns}'
         )
         for field in not_served(outputs):
             with pytest.raises(StructuredDataError, match=field):
@@ -1753,10 +1780,7 @@ def test_the_relational_endpoint_serves_the_matrix_the_skill_gives(
     not RELATIONAL_URL,
     reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
 )
-@pytest.mark.parametrize(
-    'target',
-    ['COUNT(orders.*, 0, 30, days)', 'COUNT(orders.*, 0, 30, days) > 2'],
-)
+@pytest.mark.parametrize('target', sorted(SERVED), ids=lambda v: v[:30])
 def test_the_relational_endpoint_refuses_an_explanation(target, schema):
     """The gap the skill leads with: the client sends it, the endpoint will
     not serve it. If a deployment starts serving one, this fails and the
