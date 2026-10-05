@@ -279,3 +279,27 @@ def test_a_refused_time_column_leaves_the_inferred_one_as_it_was(given, error):
 
     graph.link('orders', 'buyer', 'users')
     assert graph['users'].time_column is None
+
+
+def test_removing_the_last_table_that_links_to_another_settles_it():
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph.link('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None
+
+    del graph['orders']
+    held = graph['users'].time_column
+    assert held is not None
+    assert held.name == 'last_login'
+
+
+def test_a_table_added_from_another_graph_is_settled_by_this_one():
+    linked = Graph.from_data(_users_and_orders(), verbose=False)
+    linked.link('orders', 'buyer', 'users')
+    users = linked['users']
+    assert users.time_column is None
+
+    alone = Graph(tables=[])
+    alone.add_table(users)
+    held = alone['users'].time_column
+    assert held is not None
+    assert held.name == 'last_login'
