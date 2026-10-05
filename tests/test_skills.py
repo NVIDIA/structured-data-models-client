@@ -1084,7 +1084,7 @@ def transcripts() -> list[tuple[str, list[str]]]:
         if current:
             said.append(current)
         found.append((asked[0], said))
-    assert len(found) >= 5, f'pql.md shows {len(found)} transcripts'
+    assert len(found) == 6, f'pql.md shows {len(found)} transcripts, not 6'
     return found
 
 
@@ -1109,10 +1109,24 @@ def test_a_quoted_refusal_is_the_refusal(query, said, schema):
     with pytest.raises(StructuredDataError) as raised:
         resolve(query, schema, **extra)
     whole = ' '.join(str(raised.value).split())
+    at = 0
     for quoted in said:
-        for part in quoted.split(' ... '):
-            assert ' '.join(part.split()) in whole, (
+        parts = [
+            ' '.join(one.split())
+            for one in re.split(r'\s\.\.\.(?:\s|$)', quoted)
+        ]
+        for part in parts:
+            if not part:
+                continue
+            found = whole.find(part, at)
+            assert found >= 0, (
                 f'pql.md shows {part!r} and the client says {whole!r}'
+            )
+            at = found + len(part)
+        if parts[-1]:
+            assert whole.endswith(parts[-1]) or quoted is not said[-1], (
+                f'pql.md stops quoting at {parts[-1]!r} while the client goes '
+                f'on to say {whole[at:]!r}; write ... to elide it'
             )
 
 
@@ -1228,6 +1242,23 @@ def test_classify_is_refused_as_multilabel(schema):
         StructuredDataError, match='static multilabel classification'
     ):
         resolve('PREDICT users.segment CLASSIFY FOR EACH users.user_id', schema)
+
+
+def test_a_window_without_a_unit_is_days(schema):
+    """The second form pql.md gives an aggregation, and what it means.
+
+    Asked without a unit the request has to be the one asked in days, which
+    is the claim; that it merely resolves would not say which unit it took.
+    """
+    asked = {
+        unit: resolve(
+            f'PREDICT COUNT(orders.*, 0, 30{unit}) FOR EACH users.user_id',
+            schema,
+        ).payloads
+        for unit in ('', ', days', ', hours')
+    }
+    assert asked[''] == asked[', days']
+    assert asked[''] != asked[', hours']
 
 
 def test_an_aggregation_without_a_window_is_refused(schema):

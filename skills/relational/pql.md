@@ -150,10 +150,12 @@ foreign key, which is a ranking.
 
 ```
 AGGR(column, start, end, unit)
+AGGR(column, start, end)
 ```
 
 `start` and `end` are a window measured from the moment being asked about, and
 `unit` is one of `days`, `weeks`, `months`, `hours`, `minutes`, `seconds`.
+Leave it out and the window is in days.
 
 **The window is not optional.** The language also allows `AGGR(column)`, and
 the model will not answer it:
@@ -309,6 +311,7 @@ Read the column number: it points at the token, not at the clause.
 ```
 PREDICT COUNT(orders.*, 0, 30, days, 3) FOR EACH users.user_id
 → Invalid Syntax ... Could not process the text: ","; in line 1 and col 35
+  ...
 ```
 
 That one is a forecast written as a fifth argument. Forecasts are
