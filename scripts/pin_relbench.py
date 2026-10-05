@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,8 @@ REPOSITORIES = (
 )
 
 HUB = 'https://huggingface.co'
+
+_NEXT_LINK = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
 
 OUTPUT = (
     Path(__file__).resolve().parents[1]
@@ -69,10 +72,10 @@ def _tree(repository: str, revision: str) -> list[dict[str, Any]]:
     while url is not None:
         body, link = _get(url)
         entries.extend(json.loads(body))
-        # The listing is paged; the next page is only named in this header.
-        url = None
-        if 'rel="next"' in link:
-            url = link.split('<', 1)[1].split('>', 1)[0]
+        # The listing is paged; the next page is only named in this header,
+        # which may list other relations (prev, first) alongside it.
+        found = _NEXT_LINK.search(link)
+        url = found.group(1) if found else None
     return [entry for entry in entries if entry['type'] == 'file']
 
 
