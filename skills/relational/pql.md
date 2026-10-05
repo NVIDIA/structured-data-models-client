@@ -116,12 +116,18 @@ Each line below was resolved against a schema and the resulting
 | `COUNT(orders.*, 0, 30, days) FORECAST 3 TIMEFRAMES` | `regression` | `3` |
 | `LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2` | `binary_classification` | `4` |
 
-`users.segment` is multiclass because of how it is stored, not how many
+`users.segment` is multiclass because of how the schema reads it, not how many
 values it holds: a column read as a category is a multiclass question even
-holding two. A binary one comes from a comparison, and from nothing else here
--- a column of whole numbers is a regression however few of them there are,
-and a column of ones and zeroes warns that it is being read that way and tells
-you how to say otherwise: `schema['users']['segment'].stype = 'categorical'`.
+holding two. A binary one comes from a comparison and from nothing else here.
+
+Whole numbers are the case to check, because the two ways of building a schema
+read them differently. `Schema.from_data` keeps a column of ones and zeroes
+numeric, asks it as a regression, and warns that it is doing so.
+`Schema.from_source` reads the same column out of a warehouse as a category,
+because few distinct values in a sampled column is what a category looks like
+there, and asks it as a multiclass question without warning. Either way the
+column says which it is, and saying so settles it:
+`schema['users']['segment'].stype = 'categorical'`.
 
 The last two are worth reading twice. A forecast and a ranking are not single
 calls with their own task kind: a forecast is asked as one regression per step,

@@ -1380,6 +1380,45 @@ def test_a_category_is_multiclass_however_few_values_it_holds(schema):
     )
 
 
+def test_a_warehouse_reads_the_same_whole_numbers_as_a_category():
+    """The other half of that paragraph, and the reason it is written.
+
+    The same column, built the two ways a schema can be built, resolves to two
+    different tasks. An agent that read only the from_data half would ask a
+    regression of a warehouse and get a multiclass question.
+    """
+    duckdb = pytest.importorskip('duckdb')
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import Relationship, Schema
+    from sdm_connectors import DuckDBSource
+
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE users AS SELECT i AS user_id, '
+        '(i % 2)::INTEGER AS segment FROM range(60) x(i)'
+    )
+    connection.execute(
+        'CREATE TABLE orders AS SELECT i AS order_id, (i % 60) AS user_id, '
+        "TIMESTAMP '2026-01-01' + INTERVAL (i) DAY AS ordered_at "
+        'FROM range(300) y(i)'
+    )
+    schema = Schema.from_source(
+        DuckDBSource(connection),
+        {'users': 'users', 'orders': 'orders'},
+        primary_keys={'users': 'user_id', 'orders': 'order_id'},
+        time_columns={'orders': 'ordered_at'},
+        relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
+    )
+    kind = resolve(
+        'PREDICT users.segment FOR EACH users.user_id', schema
+    ).payloads[0]['task']['kind']
+    assert kind == 'multiclass_classification', (
+        f'a warehouse column of ones and zeroes resolved to {kind}, and '
+        f'pql.md says a source reads few distinct values as a category'
+    )
+
+
 def test_asking_for_the_mean_changes_the_request(schema):
     """The other option the skill tells a reader to reach for.
 
