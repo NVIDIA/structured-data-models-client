@@ -1665,6 +1665,9 @@ def test_a_source_reads_the_catalogs_own_keys():
     finds them and ``from_data`` over the same rows does not.
     """
     duckdb = pytest.importorskip('duckdb')
+    # Schema.from_source needs the engine, which is the extra this very
+    # reference says the connector alone does not bring.
+    pytest.importorskip('sdm_relational_engine')
     from sdm_client import Schema
     from sdm_connectors import DuckDBSource
 
