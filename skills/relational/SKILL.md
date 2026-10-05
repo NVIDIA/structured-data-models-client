@@ -165,8 +165,9 @@ it must fit the 1,000-row context budget.
 
 ## Asking for more than one answer each
 
-A ranking, a forecast and an explanation are each asked as several calls, and
-each has limits and refusals of its own. They are in
+A ranking is a call per candidate and a forecast a call per step; an
+explanation is an output, over one scored row. Each has limits and refusals of
+its own, and they are in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
 
 ## Reading the answer

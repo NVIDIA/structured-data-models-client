@@ -1552,7 +1552,13 @@ def test_the_tabular_examples_print_what_the_skill_shows():
     not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
 )
 @pytest.mark.parametrize(
-    'name', ['relational/SKILL.md', 'relational/pql.md', 'README.md']
+    'name',
+    [
+        'relational/SKILL.md',
+        'relational/pql.md',
+        'relational/references/beyond-one-answer.md',
+        'README.md',
+    ],
 )
 def test_the_relational_examples_print_what_the_skill_shows(name):
     pytest.importorskip('sdm_relational_engine')

@@ -1,9 +1,41 @@
 # Rankings, forecasts and explanations
 
-Three questions that are not one prediction per entity: a ranking is a
-call per candidate, a forecast a call per step, and an explanation covers
-one scored row. [`../SKILL.md`](../SKILL.md) is the plain path; this is
-what sits beyond it.
+Three questions that are not one prediction per entity.
+[`../SKILL.md`](../SKILL.md) is the plain path; this is what sits beyond it,
+and it builds its own schema so it can be read on its own:
+
+```python
+import pandas as pd
+from sdm_client import (
+    KumoRelational,
+    PredictiveQuery,
+    Relationship,
+    SDMClient,
+    Schema,
+)
+
+users = pd.DataFrame({'user_id': range(12), 'segment': ['a', 'b'] * 6})
+orders = pd.DataFrame(
+    {
+        'order_id': range(120),
+        'user_id': [i % 12 for i in range(120)],
+        'item': [i % 4 for i in range(120)],
+        'price': [10.0 + i for i in range(120)],
+        'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+    }
+)
+items = pd.DataFrame({'item': range(4), 'kind': list('abcd')})
+
+schema = Schema.from_data(
+    {'users': users, 'orders': orders, 'items': items},
+    primary_keys={'users': 'user_id', 'orders': 'order_id', 'items': 'item'},
+    time_columns={'orders': 'ordered_at'},
+    relationships=[
+        Relationship('orders', 'user_id', 'users', 'user_id'),
+        Relationship('orders', 'item', 'items', 'item'),
+    ],
+)
+```
 
 A ranking asks which of a set of candidates an entity will reach, and comes
 back as a list in one row rather than a row per candidate, because expanding it
