@@ -213,6 +213,57 @@ def _defined_in_source(tree: ast.Module, name: str) -> str | None:
     return None
 
 
+def _dotted(node: ast.expr) -> str | None:
+    """``a.b.C`` for a name or attribute node, or ``None`` for anything else."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return '.'.join(reversed(parts))
+
+
+def _named_in(annotation: str) -> list[str]:
+    """Every name an annotation written as a string refers to.
+
+    A quoted string in an annotation is a forward reference and names a type.
+    Under `Literal` it is a value and names nothing. Removing every quoted run
+    instead, which is what this did, took the forward reference with it: a
+    return written `-> 'Decomposition'` read as naming nothing at all, while
+    the same annotation without the quotes was read.
+    """
+    try:
+        tree = ast.parse(annotation, mode='eval')
+    except SyntaxError:
+        return []
+
+    found: list[str] = []
+
+    def walk(node: ast.expr, in_literal: bool) -> None:
+        if isinstance(node, ast.Subscript):
+            base = _dotted(node.value) or ''
+            walk(node.value, in_literal)
+            values = in_literal or base.split('.')[-1] == 'Literal'
+            walk(node.slice, values)
+            return
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, str) and not in_literal:
+                found.extend(_named_in(node.value))
+            return
+        dotted = _dotted(node)
+        if dotted is not None:
+            found.append(dotted)
+            return
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.expr):
+                walk(child, in_literal)
+
+    walk(tree.body, False)
+    return found
+
+
 class _InternalTypes:
     """Every place a public package names or hands out a type that is not
     public.
@@ -292,9 +343,7 @@ class _InternalTypes:
         if not isinstance(annotation, str):
             self._type(where, annotation)
             return
-        # A `Literal`'s strings are values, not names.
-        names = re.sub(r"'[^']*'|\"[^\"]*\"", '', annotation)
-        for dotted in re.findall(r'[A-Za-z_][\w.]*', names):
+        for dotted in _named_in(annotation):
             if dotted in {'None', 'True', 'False'}:
                 continue
             resolved = self._resolve(dotted, module)
@@ -486,12 +535,17 @@ class TestPublicSurface:
         A probe module poses as part of `sdm_client` and hands out internal
         types each way the check reads, beside a function that names only
         public and third-party types and must pass.
+
+        `quoted` writes its return as a string, which is a forward reference
+        and names a type. `labelled` writes strings under `Literal`, which are
+        values and name nothing. Removing every quoted run read the first as
+        naming nothing at all.
         """
         probe = tmp_path / '_leak_probe.py'
         probe.write_text(
             'from __future__ import annotations\n'
             'import dataclasses\n'
-            'from typing import TYPE_CHECKING\n'
+            'from typing import TYPE_CHECKING, Literal\n'
             'import pandas as pd\n'
             'from predictive_query import Profile, validate\n'
             'from sdm_client.models import KUMO_TABULAR\n'
@@ -500,10 +554,13 @@ class TestPublicSurface:
             '    from sdm_client.base import ModelAdapter, ModelSpec\n'
             '    from sdm_client.decompose import Decomposition\n'
             '__all__ = [\n'
-            "    'Field', 'Handle', 'Inherits', 'fine', 'mystery', 'rewritten',\n"
+            "    'Field', 'Handle', 'Inherits', 'fine', 'labelled', 'mystery',\n"
+            "    'quoted', 'rewritten',\n"
             "    'validate',\n"
             ']\n'
             'def rewritten() -> Decomposition | None: ...\n'
+            'def quoted() -> "Decomposition": ...\n'
+            "def labelled(x: Literal['a', 'b']) -> int: ...\n"
             'def mystery() -> NotDefinedAnywhere: ...\n'
             'def fine(frame: pd.DataFrame, n: int) -> list[Request]: ...\n'
             'class Handle:\n'
@@ -528,6 +585,7 @@ class TestPublicSurface:
 
         expected = [
             '_leak_probe.rewritten ->: sdm_client.decompose.Decomposition',
+            '_leak_probe.quoted ->: sdm_client.decompose.Decomposition',
             "_leak_probe.mystery ->: cannot tell what 'NotDefinedAnywhere'",
             '_leak_probe.Handle.spec holds: sdm_client.base.ModelSpec',
             '_leak_probe.Handle.__init__(adapter): sdm_client.base.ModelAdapter',

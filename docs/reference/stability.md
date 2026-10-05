@@ -26,9 +26,10 @@ Concretely, the public surface is:
 
 Not public, and free to change in any release:
 
-- Any name beginning with `_`, at any depth.
-- Any submodule not re-exported from the top level, including
-  `sdm_client.core.transport`,
+- Any name beginning with `_`, at any depth, except the dunders a package
+  exports: `__version__` is public where the table above lists the package.
+- Any submodule the table above does not name and the top level does not
+  re-export, including `sdm_client.core.transport`,
   `sdm_client.adapters`, `sdm_client.materializers` and `sdm_client.wire`.
   Their contents are implementation details, however stable they look.
 - The `predictive_query` package, which the `sdm-pql` distribution installs.
@@ -114,7 +115,14 @@ of the contract too.
 
 A public name may not hand out a type that is not public. The same test file
 reads every type a public signature, dataclass field, property or class
-attribute names, and fails when one is this project's and not exported, so an
-internal type cannot become public by being returned. Types from the standard
-library and third-party packages pass. The few internal types a public name
-still hands out are listed in that test, each with the reason it stays.
+attribute names, and the value every public class attribute holds, and fails
+when one is this project's and not exported. Types from the standard library
+and third-party packages pass.
+
+What a name declares is what is read. A value a call produces is not, and
+cannot be: an unannotated property, or a field whose default factory returns
+something its annotation does not name, is beyond anything read from source.
+Those are caught in review rather than here.
+
+The few internal types a public name still hands out are listed in that test,
+each with the reason it stays.
