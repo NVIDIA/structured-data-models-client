@@ -23,9 +23,9 @@ Foundation Model queries do not support static multilabel classification. To
 make predictions with this query, train a new model.
 ```
 
-Written other ways it is refused earlier, by a rule that has nothing to do
-with `CLASSIFY` — an aggregation the model does not answer, or a target with
-no window. Either way there is no query it completes.
+Written any other way it is refused before the clause is reached, by whichever
+rule the target breaks first. There is no query `CLASSIFY` completes, so the
+thing to know is not which refusal comes back but that one always does.
 
 So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`,
 and each is narrower than it looks:

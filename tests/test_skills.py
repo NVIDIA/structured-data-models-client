@@ -138,12 +138,17 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'{where} opens a fence part-way along a line, after a list '
                 f'marker or otherwise; a fence begins its own line'
             )
-            assert not re.search(
-                r'<[a-zA-Z/!?]', line
-            ) or line.lstrip().startswith('<!--'), (
+            bare_comment = re.fullmatch(r'\s*(<!--.*|.*-->|<!--.*-->)\s*', line)
+            assert not re.search(r'<[a-zA-Z/!?]', line) or (
+                bare_comment and not re.search(r'<[a-zA-Z/]', line)
+            ), (
                 f'{where} holds raw HTML, which renders as a table or a code '
                 f'block and is read here as nothing. It need not begin the '
                 f'line to do that'
+            )
+            assert not re.search(r'&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);', line), (
+                f'{where} writes an HTML entity, which renders as a character '
+                f'this file reads as the escape it is written with'
             )
             for marker in ('<!--', '-->'):
                 assert (
@@ -260,6 +265,8 @@ def test_no_example_hides_in_a_plain_fence(path):
             for node in ast.walk(tree):
                 if isinstance(node, ast.Assign):
                     sources, targets = [node.value], node.targets
+                elif isinstance(node, ast.NamedExpr):
+                    sources, targets = [node.value], [node.target]
                 elif isinstance(node, ast.AnnAssign):
                     sources, targets = [node.value], [node.target]
                 elif isinstance(node, ast.With):
