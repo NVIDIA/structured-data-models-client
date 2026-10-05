@@ -75,11 +75,20 @@ foreign key, which is a ranking.
 
 ```
 AGGR(column, start, end, unit)
-AGGR(column)
 ```
 
 `start` and `end` are a window measured from the moment being asked about, and
 `unit` is one of `days`, `weeks`, `months`, `hours`, `minutes`, `seconds`.
+
+**The window is not optional.** The language also allows `AGGR(column)`, and
+the model will not answer it:
+
+```
+TARGET aggregation SUM(orders.price) is missing a time range. A foundation
+model has no static aggregation
+```
+
+A target with no window has to be a plain column, as `users.segment` is.
 
 **The window is the future, and both ends must be non-negative.** `0, 30, days`
 is the next thirty days. A target reaching backwards is refused:

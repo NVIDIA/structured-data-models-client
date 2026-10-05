@@ -431,6 +431,14 @@ def test_a_window_in_the_past_is_refused(schema):
         )
 
 
+def test_an_aggregation_without_a_window_is_refused(schema):
+    """The language allows it; the model has no static aggregation."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='static aggregation'):
+        resolve('PREDICT SUM(orders.price) FOR EACH users.user_id', schema)
+
+
 def test_a_static_assumption_is_refused(schema):
     from sdm_client.errors import StructuredDataError
 
