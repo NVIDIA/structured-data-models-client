@@ -56,6 +56,27 @@ def test_there_is_a_skill_for_each_model():
     assert (SKILLS / 'README.md').exists()
 
 
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_a_document_that_runs_something_shows_what_came_back(path):
+    """An example with no answer under it leaves its shape to be guessed.
+
+    The two references were the only files whose examples stopped at
+    materialize(), and the ranking's return shape -- two columns, one of them
+    dicts -- was the least guessable thing in the set.
+    """
+    runnable = [
+        source
+        for source in fences(path, 'python')
+        if 'client.predict(' in source or 'fitted.predict(' in source
+    ]
+    if not runnable:
+        return
+    assert '**Verified**' in without_comments(path), (
+        f'{path.name} runs a prediction and shows no output; paste what it '
+        f'printed under a **Verified** line'
+    )
+
+
 @pytest.mark.parametrize('name', ['tabular', 'relational'])
 def test_a_skill_shows_output_it_has_run(name):
     """Each skill has to stake something on a live endpoint.
@@ -190,7 +211,10 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
 #: cause -- with nothing in them to put to the client; listing them says so
 #: rather than leaving them to look checked.
 EVERY_TABLE = {
-    'skills/README.md': [(['Skill', 'Model', 'Use it when'], False)],
+    'skills/README.md': [
+        (['Skill', 'Model', 'Load it when'], False),
+        (['Reference', ''], False),
+    ],
     'skills/relational/SKILL.md': [
         (['', '`kumo-relational`'], True),
         (['Limit', 'Value'], True),

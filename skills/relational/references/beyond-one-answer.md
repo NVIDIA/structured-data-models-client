@@ -47,7 +47,29 @@ request = PredictiveQuery(
     'FOR EACH users.user_id',
     schema,
 ).materialize(indices=[1, 2], candidates=items['item'], model=KumoRelational())
+
+with SDMClient(url='http://localhost:8000', timeout=600) as client:
+    print(client.predict(request, model=KumoRelational()).to_pandas())
 ```
+
+**Verified** against a live endpoint:
+
+```
+   row_index  id prediction                                           rankings
+0          0   1     [1, 3]  [{'candidate': 1, 'score': 0.9960135221481323}...
+1          1   2     [2, 3]  [{'candidate': 2, 'score': 0.9957279562950134}...
+```
+
+**Two columns carry the ranking.** `prediction` is the candidates in order,
+as a bare list; `rankings` is the same order with a score each, as
+`{'candidate', 'score'}` dicts. Neither is asked for: a ranking brings both
+without an `outputs=` argument.
+
+`candidates` is the set to rank: every value an entity might reach, as a
+Series or a plain list. It is required, and the refusal names it if you forget.
+Each candidate costs a call, so the 200-call fan-out is counted in candidates,
+not in `k`.
+
 
 A candidate whose gathered context holds only one answer cannot be scored, so
 it is left out of the ranking and named on `result.unscored_candidates`, with a

@@ -3,19 +3,27 @@
 Two skills, one per model, because the two models answer different questions
 and almost nothing transfers between them.
 
-| Skill | Model | Use it when |
+Start at one of these two. Each is enough on its own to ask a first question.
+
+| Skill | Model | Load it when |
 |---|---|---|
 | [`tabular/SKILL.md`](tabular/SKILL.md) | `kumo-tabular` | The question is about rows of one table |
 | [`relational/SKILL.md`](relational/SKILL.md) | `kumo-relational` | The question is about an entity and what it is linked to |
-| [`relational/pql.md`](relational/pql.md) | | Writing the predictive query itself |
-| [`tabular/references/pql.md`](tabular/references/pql.md) | | The same language on one table, and what it refuses |
-| [`relational/references/warehouses.md`](relational/references/warehouses.md) | | Tables that stay in a warehouse, and metric views |
-| [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | | Rankings, forecasts and explanations |
 
-Load one. An agent answering a question about a single table does not need the
+An agent answering a question about a single table does not need the
 relational material, and the four task kinds that make the relational model
 what it is — the two shapes of classification, forecasting and link prediction
 — are not on the tabular one at all.
+
+Each skill names the references it needs. They stand on their own, so one can
+be loaded without the skill it belongs to:
+
+| Reference | |
+|---|---|
+| [`relational/pql.md`](relational/pql.md) | Writing the predictive query |
+| [`tabular/references/pql.md`](tabular/references/pql.md) | The same language on one table, and what it refuses |
+| [`relational/references/warehouses.md`](relational/references/warehouses.md) | Tables that stay in a warehouse, and metric views |
+| [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | Rankings, forecasts and explanations |
 
 ## What these models are
 

@@ -1,6 +1,6 @@
 ---
 name: sdm-relational
-description: "Ask kumo-relational a question about an entity and the records linked to it: write the question as a predictive query over a schema of related tables, covering classification, regression, forecasting and link prediction. Triggers: kumo-relational, KumoRelational, PREDICT, FOR EACH, predictive query, PQL, Schema.from_data, Schema.from_source, Relationship, ranking, forecast, link prediction, explanation."
+description: "Ask kumo-relational a question about an entity and the records linked to it: write the question as a predictive query over a schema of related tables, covering classification, regression, forecasting and link prediction. Triggers: kumo-relational, KumoRelational, PREDICT, FOR EACH, predictive query, PQL, Schema.from_data, Schema.from_source, Relationship, ranking, forecast, link prediction, explanation, Snowflake, Databricks, warehouse, metric view, semantic view, SQL, catalog."
 ---
 
 # Asking kumo-relational
@@ -172,9 +172,39 @@ explanation is an output, over one scored row. Each has limits and refusals of
 its own, and they are in
 [`references/beyond-one-answer.md`](references/beyond-one-answer.md).
 
+## Asking the same context more than once
+
+`fit()` pins the gathered context in the endpoint's memory and answers from it
+repeatedly, which is worth doing when the gathering is the expensive part:
+
+```python
+with SDMClient(url='http://localhost:8000', timeout=600) as client:
+    fitted = client.fit(request, model=KumoRelational())
+    print(fitted.predict(request).to_pandas())
+    fitted.close()
+```
+
+**Verified** against a live endpoint:
+
+```
+   row_index  id  prediction
+0          0   1    2.173828
+1          1   2    2.181641
+2          2   3    2.212891
+```
+
+The same answers the one-shot call gave: a session changes what it costs to
+ask again, not what comes back.
+
+A session lives in one process's memory on the endpoint, so a deployment
+behind several replicas needs the calls for one session to reach the same one.
+A ranking and a forecast cannot be fitted at all; see
+[`references/beyond-one-answer.md`](references/beyond-one-answer.md).
+
 ## Reading the answer
 
-`result.to_pandas()` gives one row per entity, except a forecast, which gives
+`predict()` gives a `PredictionResult`. Its `to_pandas()` gives one row per
+entity, except a forecast, which gives
 one per entity per step, and a ranking, which gives a list in one row.
 
 A regression's `prediction` is the **median** of the predicted distribution,
@@ -182,9 +212,21 @@ not the mean. Ask for the mean with
 `materialize(..., prediction_statistic='mean')` when predictions will be summed
 across entities, since medians do not add up.
 
-## When it refuses
+## When it warns, and when it refuses
 
-Everything is a `StructuredDataError` or a subclass, and each names what to
+A warning is this client answering, but not as asked: a context row that
+carried the answer, an entity filter that does not narrow what is scored, a
+candidate it could not score. They are all `SDMWarning`, so they can be caught
+or raised:
+
+```python
+import warnings
+from sdm_client import SDMWarning
+
+warnings.simplefilter('error', SDMWarning)
+```
+
+A refusal is a `StructuredDataError` or a subclass, and each names what to
 change. The ones worth knowing:
 
 | Refusal | Cause |

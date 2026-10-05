@@ -40,13 +40,30 @@ adbc_driver_sqlite.dbapi.connect(); got Connection
 
 ```python
 import duckdb
-from sdm_client import KumoRelational, PredictiveQuery, Relationship, Schema
+import pandas as pd
+from sdm_client import KumoRelational, PredictiveQuery, Relationship, SDMClient, Schema
 from sdm_connectors import DuckDBSource
 
-source = DuckDBSource(duckdb.connect('shop.db'))
+connection = duckdb.connect()
+connection.register('users', pd.DataFrame({'user_id': range(12)}))
+connection.register(
+    'orders',
+    pd.DataFrame(
+        {
+            'order_id': range(120),
+            'user_id': [i % 12 for i in range(120)],
+            'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+        }
+    ),
+)
+connection.execute('CREATE TABLE u AS SELECT * FROM users')
+connection.execute('CREATE TABLE o AS SELECT * FROM orders')
+
+source = DuckDBSource(connection)
 
 schema = Schema.from_source(
     source,
+    {'users': 'u', 'orders': 'o'},
     primary_keys={'users': 'user_id', 'orders': 'order_id'},
     time_columns={'orders': 'ordered_at'},
     relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
@@ -55,7 +72,24 @@ schema = Schema.from_source(
 request = PredictiveQuery(
     'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', schema
 ).materialize(indices=[1, 2], model=KumoRelational())
+
+with SDMClient(url='http://localhost:8000', timeout=600) as client:
+    print(client.predict(request, model=KumoRelational()).to_pandas())
 ```
+
+**Verified** against a live endpoint:
+
+```
+   row_index  id  prediction
+0          0   1    2.415527
+1          1   2    2.410645
+```
+
+From there it is the same as any other request: the answer comes back keyed by
+`row_index` and the entity, as [`../SKILL.md`](../SKILL.md) describes.
+
+`duckdb.connect()` with no argument gives an in-memory database, which is the
+quickest way to try this.
 
 Given no `tables`, it discovers what the namespace holds. Given a mapping, it
 takes those and renames them: `Schema.from_source(source, {'people': 'users'})`
@@ -70,6 +104,19 @@ check, which is one statement that scans each eligible table.
 **`duckdb.connect('shop.db')` creates the file if it is not there**, so a
 mistyped path gives an empty database and a schema that holds no table. Pass
 `read_only=True` and it refuses the missing path instead.
+
+## A warning from the engine to ignore
+
+Sampling a DuckDB or SQLite source prints a suggestion from the engine:
+
+```
+we strongly suggest to create indices ... e.g., automatically by instantiating
+Kumo Relational via KumoRelational(graph, optimize=True).
+```
+
+**That API is not this one.** `KumoRelational()` here takes no arguments and
+there is no graph object to pass it. The message is the engine talking about
+its own surface; nothing in this client acts on it.
 
 ## Inside the warehouse's own notebook
 
