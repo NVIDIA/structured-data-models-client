@@ -54,7 +54,9 @@ promises, and a different build will print different ones.
 these files and asks the client whether they are still true: both capability
 tables against `capabilities()`, the relational limits against the shipped
 constants, the task each query resolves to, the aggregations that are answered
-and the ones that are refused, and the names every example imports. Run with
+and the ones that are refused, and the names every example imports from this project -- `sdm_client`,
+`sdm_connectors` and its `databricks` module, which for a fragment is the
+only check its imports get. Run with
 `-m live_nim` and two endpoint URLs, it also re-runs every example that can be
 run and compares what it printed to the block pasted beneath it. An example
 that reads a name no example before it binds is a fragment -- a Databricks

@@ -26,8 +26,9 @@ first call raises `MissingExtraError`.
 `Source(connection)` picks the right one for you when you would rather not
 name it. Lakebase is `PostgresSource`, with the `lakebase` extra and
 `sdm_connectors.databricks.lakebase(endpoint, database=..., workspace=...)`,
-which mints the credential and gives back a psycopg connection. `database` is
-required and keyword-only, as `workspace` is.
+which mints the credential and gives back a psycopg connection. Both keywords are
+keyword-only; `database` is required, and `workspace` falls back to an ambient
+`WorkspaceClient()` when it is left out.
 
 **SQLite is the one that catches people.** It wants an ADBC connection, not the
 standard library's `sqlite3`:

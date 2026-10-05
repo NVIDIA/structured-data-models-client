@@ -1795,15 +1795,20 @@ def test_read_takes_the_formats_the_reference_names():
     (where / 'x.parquet.gz').write_bytes(
         gzip.compress((where / 'x.parquet').read_bytes())
     )
-    with pytest.raises(ConnectorError):
+    with pytest.raises(ConnectorError) as raised:
         read(where / 'x.parquet.gz')
+    assert 'unsupported file format' not in str(raised.value), (
+        'the compressed Parquet was refused by its name, and the reference '
+        'says it is taken as Parquet and fails on the file'
+    )
+    assert 'failed to read' in str(raised.value)
     (where / 'x.json').write_text(json.dumps([{'a': 1}]), encoding='utf-8')
     with pytest.raises(ConnectorError, match='unsupported file format'):
         read(where / 'x.json')
 
 
 def test_lakebase_wants_the_database_the_reference_names():
-    """Both keywords the reference shows, required and keyword-only."""
+    """Both keywords the reference shows, and which of them is required."""
     import inspect
 
     from sdm_connectors.databricks import lakebase
@@ -1814,6 +1819,10 @@ def test_lakebase_wants_the_database_the_reference_names():
         'database has a default, and the reference says it is required'
     )
     assert taken['workspace'].kind is inspect.Parameter.KEYWORD_ONLY
+    assert taken['workspace'].default is None, (
+        'workspace is required, and the reference says it falls back to an '
+        'ambient WorkspaceClient'
+    )
 
 
 def test_a_source_reads_the_catalogs_own_keys():
