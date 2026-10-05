@@ -498,7 +498,10 @@ result.explanation  # None unless you asked for it
 ```
 
 Explanations are an **output field**, not a method. Ask for one with
-`outputs=[..., "explanation"]`; there is no `explain=` argument.
+`outputs=[..., "explanation"]`; there is no `explain=` argument. That is the
+shape of the call — whether a deployment answers it is a separate question,
+and the shipping relational build does not. See [What a deployment actually
+serves](#what-a-deployment-actually-serves).
 
 The DataFrame's shape depends on the **task**, not the model. Verified against
 a live endpoint: classification and multiclass both give **one row per
@@ -516,10 +519,9 @@ otherwise on `row_index`.
 
 ### What each model can produce
 
-The contract defines seven output fields. **This table is read from the
-servers**, not from the source document. The tabular adapter and the relational
-NIM's universal adapter each declare their own
-capabilities, and this mirrors what they answer:
+The contract defines seven output fields. **This table is what the client
+declares** — what `capabilities()` reports and what it will put on the wire.
+It is not what any one deployment answers; see below.
 
 | Output | `kumo-relational` | `kumo-tabular` |
 |---|---|---|
@@ -531,22 +533,40 @@ capabilities, and this mirrors what they answer:
 | `embeddings` | ✅ | ❌ |
 | `explanation` | ✅ | ❌ |
 
-> **Read from the servers, not from a specification.** The relational adapter
-> advertises `scores` and returns it; the tabular adapter advertises only
-> `prediction`, `probabilities` and `quantiles`. Where a written matrix
-> disagreed with a running endpoint, the endpoint won, and `ModelSpec.runtime`
-> records what it answered.
+Asking a model for a field it does not declare fails client-side, naming what
+it does declare.
 
-Asking a model for a field it does not produce fails client-side, naming what
-it does produce.
+### What a deployment actually serves
 
-> **A second relational build serves less.** The table above is the broader
-> build. A narrower build of the same model id serves only classification and
-> regression, and produces only `prediction`, `probabilities` and `quantiles`.
-> The client declares the broader one, because the contract has no capabilities
-> route. `/v1/models` returns an id and nothing else, and refusing locally what
-> one deployment can answer would be worse than letting the other say no.
-> Discovered by running against both.
+**The client declares the broader of the relational builds, and a deployment
+may serve less.** The contract has no capabilities route — `/v1/models`
+returns an id and nothing else — so the client cannot ask, and refusing
+locally what one deployment can answer would be worse than letting another say
+no. The narrowing is per *task*, and the endpoint says so with
+`422 UNSUPPORTED_OUTPUT`.
+
+Measured against the shipping relational deployment, which is the narrower
+build:
+
+| Task | Served |
+|---|---|
+| `regression` | `prediction`, `quantiles` |
+| `binary_classification` | `prediction`, `probabilities` |
+| `multiclass_classification` | `prediction`, `probabilities` |
+
+So `scores`, `rankings`, `embeddings` and `explanation` are declared by the
+client and refused by that deployment on every task. `rankings` is the one
+that still works end to end: `RANK TOP k` is decomposed into a classification
+per candidate, so the ranking is assembled here rather than asked for.
+
+`forecasting` and `temporal_link_prediction` are declared as tasks and are not
+served either — a forecast is sent as a regression per step, and a bare
+`LIST_DISTINCT` is refused outright.
+
+`skills/relational/SKILL.md` carries the same matrix for an agent, and
+`tests/test_skills.py` asks the endpoint for every one of these on every task,
+so a deployment that gains or loses an output fails the suite rather than
+leaving the document wrong.
 
 ---
 
