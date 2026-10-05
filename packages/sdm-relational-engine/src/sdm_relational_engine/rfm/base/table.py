@@ -871,12 +871,18 @@ class Table(ABC):
     def _settle_time_column(self, linked: bool) -> None:
         r"""Take or refuse a lone edit stamp by whether another table links
         to this one, once the graph's edges say. A time column set by hand
-        since inference, to a column or to ``None``, is left alone.
+        since inference, to a column or to ``None``, is left alone, and so
+        is a stamp since removed or made the end time column or key.
         """
         choice = self._time_column_choice
         if choice is None or not self._time_column_inferred:
             return
         settled = choice.for_links(linked)
+        if settled.column is not None and (
+            settled.column not in self
+            or settled.column in (self._primary_key, self._end_time_column)
+        ):
+            return
         if settled != choice:
             self._time_column_choice = settled
             self.time_column = settled.column

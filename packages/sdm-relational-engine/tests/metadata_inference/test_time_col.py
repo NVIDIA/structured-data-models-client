@@ -303,3 +303,19 @@ def test_a_table_added_from_another_graph_is_settled_by_this_one():
     held = alone['users'].time_column
     assert held is not None
     assert held.name == 'last_login'
+
+
+@pytest.mark.parametrize('change', ['end_time_column', 'remove_column'])
+def test_a_refused_stamp_put_to_another_use_is_not_taken_back(change):
+    """`last_login`, refused while `orders` links to `users`, is made the
+    end time column or removed, and unlinking leaves it so.
+    """
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph.link('orders', 'buyer', 'users')
+    if change == 'end_time_column':
+        graph['users'].end_time_column = 'last_login'
+    else:
+        graph['users'].remove_column('last_login')
+
+    graph.unlink('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None
