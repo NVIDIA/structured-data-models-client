@@ -251,10 +251,16 @@ def test_no_example_hides_in_a_plain_fence(path):
                 reachable |= bound
     exported = reachable
     for index, source in enumerate(fences(path, '')):
-        assert '>>>' not in source, (
-            f'{path.name} block {index} is a transcript; an example is a '
-            f'program in a python fence, and a transcript runs nowhere'
-        )
+        # Whatever it parses as. A transcript -- `>>>`, `In [1]:` -- parses
+        # as nothing and would otherwise read as output. A refusal quoted in
+        # a plain fence may well name this client, so the giveaway is the
+        # shape of a program rather than the mention.
+        for giveaway in ('import ', '>>>', 'In ['):
+            assert giveaway not in source, (
+                f'{path.name} block {index} is in a plain fence and writes '
+                f'{giveaway!r}; an example is a program in a python fence, '
+                f'and anything else runs nowhere'
+            )
         try:
             tree = ast.parse(source)
         except SyntaxError:
@@ -502,12 +508,22 @@ def tables(path: Path) -> list[list[list[str]]]:
 
 
 def table(path: Path, label: str) -> dict[str, list[str]]:
-    """The one table holding a row labelled ``label``, as label to cells."""
+    """The one table holding a row labelled ``label``, as label to cells.
+
+    One: a second table repeating a label this file reads would sit beside the
+    checked one saying the opposite, and only the first would be read.
+    """
     matched = [
         one for one in tables(path) if any(row[0] == label for row in one)
     ]
     assert len(matched) == 1, (
         f'{path.name} has {len(matched)} tables with a {label!r} row'
+    )
+    heads = [tuple(one[0]) for one in tables(path)]
+    repeated = {head for head in heads if heads.count(head) > 1}
+    assert not repeated, (
+        f'{path.name} heads two tables alike ({sorted(repeated)}); a second '
+        f'one can say the opposite and only the first is read'
     )
     collected: dict[str, list[str]] = {}
     for cells in matched[0]:
@@ -1003,8 +1019,12 @@ def test_a_text_column_cannot_be_compared_at_all(schema_with_text):
             )
 
 
-def test_a_ranking_is_capped_at_twenty_candidates(schema):
-    """The cap pql.md quotes. It is the model's, not the language's."""
+def test_a_rankings_top_k_is_capped(schema):
+    """The cap pql.md quotes on ``k``, which is how many come back ranked.
+
+    Not on how many candidates are considered; that is the fan-out, and it is
+    checked separately.
+    """
     pd = pytest.importorskip('pandas')
     from sdm_client.errors import StructuredDataError
 
@@ -1036,12 +1056,23 @@ def test_classify_is_refused_as_multilabel(schema):
     """
     from sdm_client.errors import StructuredDataError
 
-    with pytest.raises(StructuredDataError, match='multilabel'):
+    with pytest.raises(StructuredDataError, match='multilabel tasks'):
         resolve(
             'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) CLASSIFY '
             'FOR EACH users.user_id',
             schema,
         )
+    # The other way to write a target CLASSIFY would take: a column of its
+    # own, declared the one stype the clause accepts. Refused in its own
+    # words, which the skill quotes beside the first.
+    column = schema.tables['users'].columns['segment']
+    schema.tables['users'].columns['segment'] = type(column)(
+        'segment', dtype=column.dtype, stype='multicategorical'
+    )
+    with pytest.raises(
+        StructuredDataError, match='static multilabel classification'
+    ):
+        resolve('PREDICT users.segment CLASSIFY FOR EACH users.user_id', schema)
 
 
 def test_an_aggregation_without_a_window_is_refused(schema):
