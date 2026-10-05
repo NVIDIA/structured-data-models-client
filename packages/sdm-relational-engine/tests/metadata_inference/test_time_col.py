@@ -257,3 +257,25 @@ def test_a_time_column_set_by_hand_is_never_settled(given):
     graph.unlink('orders', 'buyer', 'users')
     held = graph['users'].time_column
     assert (held and held.name) == given
+
+
+@pytest.mark.parametrize(
+    ('given', 'error'),
+    [('user_id', ValueError), ('missing', KeyError)],
+)
+def test_a_refused_time_column_leaves_the_inferred_one_as_it_was(given, error):
+    """The primary key, or a column the table lacks, is refused, and the
+    column inference took is still inference's to settle.
+    """
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph['users'].primary_key = 'user_id'
+    with pytest.raises(error):
+        graph['users'].time_column = given
+
+    held = graph['users'].time_column
+    assert held is not None
+    assert held.name == 'last_login'
+    assert held._is_time_column
+
+    graph.link('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None

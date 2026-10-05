@@ -601,7 +601,8 @@ class Table(ABC):
 
     @time_column.setter
     def time_column(self, name: str | None) -> None:
-        self._time_column_inferred = False
+        # Every check runs before anything changes, so a refused name leaves
+        # the table as it was, an inferred column still marked inferred.
         if name is not None and name == self._primary_key:
             raise ValueError(
                 f"Cannot specify column '{name}' as a time "
@@ -614,7 +615,10 @@ class Table(ABC):
                 f'column since it is already defined to be an '
                 f'end time column'
             )
+        if name is not None:
+            self[name].stype = Stype.timestamp
 
+        self._time_column_inferred = False
         if self.time_column is not None:
             self.time_column._is_time_column = False
 
@@ -622,7 +626,6 @@ class Table(ABC):
             self._time_column = None
             return
 
-        self[name].stype = Stype.timestamp
         self[name]._is_time_column = True
         self._time_column = name
 
