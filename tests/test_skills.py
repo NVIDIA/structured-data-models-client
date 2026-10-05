@@ -197,6 +197,9 @@ EVERY_TABLE = {
         (['Refusal', 'Cause'], False),
     ],
     'skills/relational/references/beyond-one-answer.md': [],
+    'skills/relational/references/warehouses.md': [
+        (['Source', 'Connection it takes', 'Namespace', 'Extra'], True)
+    ],
     'skills/relational/pql.md': [
         (['Clause', 'Least', 'Most'], True),
         (['Target', 'Task', 'Calls'], True),
@@ -1525,6 +1528,84 @@ def test_a_plain_column_is_what_the_tabular_reference_promises(one_table):
         assert request.task.kind == kind, (
             f'{query} resolved {request.task.kind}'
         )
+
+
+WAREHOUSES = SKILLS / 'relational' / 'references' / 'warehouses.md'
+
+
+def test_the_source_table_is_every_source_there_is():
+    """Each row names a source, the connection it takes and its extra.
+
+    Read from the package rather than copied: a backend added, renamed or
+    given a different driver has to reach the reference.
+    """
+    import sdm_connectors
+
+    shown = table(WAREHOUSES, 'Source')
+    del shown['Source']
+    named = {only(row) for row in shown}
+    exported = {
+        name
+        for name in sdm_connectors.__all__
+        if name.endswith('Source') and name != 'Source'
+    }
+    assert named == exported, (
+        f'warehouses.md lists {sorted(named ^ exported)} that sdm_connectors '
+        f'does not, or the other way about'
+    )
+    for row, cells in shown.items():
+        source = getattr(sdm_connectors, only(row))
+        takes, _namespace, extra = cells
+        assert source._BACKEND == only(extra), (
+            f'{only(row)} is the {source._BACKEND} backend and the table says '
+            f'{only(extra)}'
+        )
+        driver = re.search(r'`([a-z_.]+\([^`]*\))`', takes)
+        assert driver and driver[1].split('(')[0] in source._TAKES, (
+            f'{only(row)} takes "{source._TAKES}" and the table says {takes!r}'
+        )
+
+
+def test_every_extra_the_warehouse_reference_names_is_one_you_can_install():
+    """A `pip install` that names an extra nobody publishes teaches a dead end."""
+    import tomllib
+
+    declared = set(
+        tomllib.loads(
+            (
+                Path(__file__).parents[1]
+                / 'packages'
+                / 'sdm-client'
+                / 'pyproject.toml'
+            ).read_text(encoding='utf-8')
+        )['project']['optional-dependencies']
+    )
+    shown = table(WAREHOUSES, 'Source')
+    del shown['Source']
+    named = {only(cells[2]) for cells in shown.values()} | {'lakebase', 's3'}
+    assert named <= declared, (
+        f'warehouses.md names extras {sorted(named - declared)}, which '
+        f'sdm-client does not declare'
+    )
+
+
+def test_a_source_given_the_wrong_connection_says_which_it_wants():
+    """The SQLite trap the reference leads with, and the message it quotes."""
+    import sqlite3
+
+    from sdm_connectors import ConnectorError, SQLiteSource
+
+    with pytest.raises(ConnectorError, match='adbc_driver_sqlite'):
+        SQLiteSource(sqlite3.connect(':memory:'))
+
+
+def test_a_connector_error_is_not_a_structured_data_error():
+    """The reference says catching one does not catch the other."""
+    from sdm_client.errors import StructuredDataError
+    from sdm_connectors import ConnectorError, MissingBackendError
+
+    assert not issubclass(ConnectorError, StructuredDataError)
+    assert issubclass(MissingBackendError, ConnectorError)
 
 
 def test_the_tabular_model_refuses_a_second_table(schema):

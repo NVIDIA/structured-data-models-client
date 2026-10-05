@@ -139,7 +139,9 @@ the fact and would leak the future into the past. Pass
 
 For tables that stay in a warehouse, `Schema.from_source` describes them in
 place and `materialize()` samples them with SQL, so only the rows a prediction
-needs ever leave.
+needs ever leave. Snowflake, Databricks, Postgres, DuckDB and SQLite, metric
+views, and a notebook's own session are in
+[`references/warehouses.md`](references/warehouses.md).
 
 ## Which rows get scored
 

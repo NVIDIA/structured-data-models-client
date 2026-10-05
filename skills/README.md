@@ -9,6 +9,7 @@ and almost nothing transfers between them.
 | [`relational/SKILL.md`](relational/SKILL.md) | `kumo-relational` | The question is about an entity and what it is linked to |
 | [`relational/pql.md`](relational/pql.md) | | Writing the predictive query itself |
 | [`tabular/references/pql.md`](tabular/references/pql.md) | | The same language on one table, and what it refuses |
+| [`relational/references/warehouses.md`](relational/references/warehouses.md) | | Tables that stay in a warehouse, and metric views |
 | [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | | Rankings, forecasts and explanations |
 
 Load one. An agent answering a question about a single table does not need the
