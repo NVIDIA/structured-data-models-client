@@ -225,28 +225,63 @@ def _dotted(node: ast.expr) -> str | None:
     return '.'.join(reversed(parts))
 
 
+def _quoted_within(annotation: object) -> list[str]:
+    """The forward references inside an annotation that is already an object.
+
+    Without postponed annotations `list['X']` is a generic alias holding the
+    plain string `'X'`, which walking its arguments as types steps over. The
+    strings are collected here and read as the names they are.
+    """
+    found: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, str):
+            found.append(node)
+            return
+        if isinstance(node, typing.ForwardRef):
+            found.append(node.__forward_arg__)
+            return
+        for argument in typing.get_args(node):
+            walk(argument)
+
+    walk(annotation)
+    return found
+
+
 def _named_in(annotation: str) -> list[str]:
     """Every name an annotation written as a string refers to.
 
     A quoted string in an annotation is a forward reference and names a type.
-    Under `Literal` it is a value and names nothing. Removing every quoted run
-    instead, which is what this did, took the forward reference with it: a
-    return written `-> 'Decomposition'` read as naming nothing at all, while
-    the same annotation without the quotes was read.
+    Under `Literal` it is a value and names nothing, and under `Annotated`
+    only the first argument is a type, the rest being metadata the caller
+    attached. Removing every quoted run instead, which is what this did, took
+    the forward reference with it: a return written `-> 'Decomposition'` read
+    as naming nothing at all, while the same annotation without the quotes
+    was read.
+
+    An annotation that will not parse falls back to every word in it, rather
+    than to nothing, which would read as naming no type at all.
     """
     try:
         tree = ast.parse(annotation, mode='eval')
     except SyntaxError:
-        return []
+        stripped = re.sub(r"'[^']*'|\"[^\"]*\"", '', annotation)
+        return re.findall(r'[A-Za-z_][\w.]*', stripped)
 
     found: list[str] = []
 
     def walk(node: ast.expr, in_literal: bool) -> None:
         if isinstance(node, ast.Subscript):
-            base = _dotted(node.value) or ''
+            base = (_dotted(node.value) or '').split('.')[-1]
             walk(node.value, in_literal)
-            values = in_literal or base.split('.')[-1] == 'Literal'
-            walk(node.slice, values)
+            if base == 'Annotated':
+                inside = node.slice
+                first = (
+                    inside.elts[0] if isinstance(inside, ast.Tuple) else inside
+                )
+                walk(first, in_literal)
+                return
+            walk(node.slice, in_literal or base == 'Literal')
             return
         if isinstance(node, ast.Constant):
             if isinstance(node.value, str) and not in_literal:
@@ -341,8 +376,14 @@ class _InternalTypes:
         if annotation is inspect.Parameter.empty:
             return
         if not isinstance(annotation, str):
+            for quoted in _quoted_within(annotation):
+                self._written(where, quoted, module)
             self._type(where, annotation)
             return
+        self._written(where, annotation, module)
+
+    def _written(self, where: str, annotation: str, module: str) -> None:
+        """Read an annotation written as a string, in ``module``."""
         for dotted in _named_in(annotation):
             if dotted in {'None', 'True', 'False'}:
                 continue
