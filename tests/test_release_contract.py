@@ -70,9 +70,9 @@ def _distributions() -> list[str]:
     )
 
 
-def _run(script: str) -> subprocess.CompletedProcess[str]:
+def _run(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(REPO / 'scripts' / script)],
+        [sys.executable, str(REPO / 'scripts' / script), *arguments],
         capture_output=True,
         text=True,
     )
@@ -319,6 +319,112 @@ class TestTheRequestBodiesAreContractual:
         )
 
         assert result.returncode == 0
+
+
+_ENGINE_LICENSE = 'packages/sdm-relational-engine/LICENSE'
+_COMPONENTS = (
+    PACKAGES
+    / 'sdm-relational-engine'
+    / 'src'
+    / 'sdm_relational_engine'
+    / 'rfm'
+    / 'assets'
+    / 'MERMAID_COMPONENTS.json'
+)
+#: Mirrors scripts/mermaid_notices.py, where the reason for each is written.
+_WITHOUT_A_NOTICE = frozenset(
+    {
+        'chevrotain',
+        '@chevrotain/types',
+        '@chevrotain/regexp-to-ast',
+        '@chevrotain/gast',
+        '@chevrotain/utils',
+        '@chevrotain/cst-dts-gen',
+        'robust-predicates',
+    }
+)
+
+
+class TestTheNoticesAreComplete:
+    """What an open-source release has to say about what it ships.
+
+    The licenses of the bundled components ask for their copyright lines to be
+    reproduced where they have one. Naming a component and its license is not
+    that.
+    """
+
+    def test_the_license_files_carry_what_was_recorded(self):
+        """The attribution is generated, so it cannot drift from its source.
+
+        Hand-enumeration of the bundle did not converge: three rounds of it
+        each missed more components, and the ones missed last were reached
+        through other bundles rather than declared.
+        """
+        result = _run('mermaid_notices.py', '--check')
+
+        assert result.returncode == 0, (
+            'The license files no longer carry the attribution rendered from '
+            'MERMAID_COMPONENTS.json. Run `python scripts/mermaid_notices.py '
+            f'--write`.\n{result.stdout}{result.stderr}'
+        )
+
+    def test_every_recorded_component_has_a_notice_or_a_reason(self):
+        """A license name is not a notice, and silence is not either."""
+        recorded = json.loads(_COMPONENTS.read_text())['components']
+        without = {
+            component['name']
+            for component in recorded.values()
+            if not component['notices']
+        }
+
+        assert without <= _WITHOUT_A_NOTICE, (
+            f'{sorted(without - _WITHOUT_A_NOTICE)} are attributed but carry '
+            f'no copyright notice and are not recorded as having none'
+        )
+        assert len(recorded) > 50, (
+            f'only {len(recorded)} components recorded, which is fewer than '
+            f"mermaid's closure reaches; the refresh may have been truncated"
+        )
+
+    def test_the_readme_links_every_package_license(self):
+        """A reader looking for the terms of one package should not have to
+        guess that each directory holds its own copy.
+        """
+        readme = (REPO / 'README.md').read_text()
+        packages = sorted(p.name for p in PACKAGES.iterdir() if p.is_dir())
+
+        for package in packages:
+            link = f'packages/{package}/LICENSE'
+            assert link in readme, f'the README does not link {link}'
+            assert (REPO / link).is_file(), f'{link} is linked but missing'
+
+    def test_the_engine_license_says_what_the_root_one_says(self):
+        """The engine ships the bundle, so its own copy carries the same
+        notices. They differ only in the path each gives for the bundle.
+        """
+
+        def attribution(path):
+            text = (REPO / path).read_text()
+            text = text[text.index('THIRD-PARTY SOFTWARE BUNDLED') :]
+            # Every line, not the ones that look like notices: a URL or an
+            # "All rights reserved." is part of a notice too, and comparing
+            # only the lines carrying the word let those drift apart.
+            lines = text.splitlines()
+            return [line for line in lines if not line.endswith('.min.js')]
+
+        root = attribution('LICENSE')
+        engine = attribution(_ENGINE_LICENSE)
+        differing = [
+            (a, b) for a, b in zip(root, engine, strict=False) if a != b
+        ]
+
+        assert len(root) == len(engine), (
+            f'the two license files carry {len(root)} and {len(engine)} '
+            f'lines of attribution; they should carry the same'
+        )
+        assert not [pair for pair in differing if not set(pair[0]) <= {'-'}], (
+            f'the two license files disagree: {differing[:3]}'
+        )
 
 
 class TestErrorContract:
