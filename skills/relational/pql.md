@@ -122,15 +122,16 @@ Two clauses look like they narrow that set, and neither does:
 - `FOR users.user_id IN (1, 2)` is **overridden by `indices`**, without a
   warning. Asked with `indices=[3]`, entity 3 is what comes back.
 - `FOR EACH users.user_id WHERE users.segment = 'a'` selects the **labelled
-  examples the model learns from**, not the entities scored. The client says so
-  when you combine the two:
+  examples the model learns from**, not the entities scored.
 
-  ```
-  the entity filter "users.segment = 'a'" selects the labelled examples the
-  model learns from, and does not narrow the 1 rows named for scoring. Those
-  are scored as given, whether or not they satisfy it. Pass only indices that
-  satisfy the condition if that is what you meant.
-  ```
+The client says so when you combine the second of those with `indices`:
+
+```
+the entity filter "users.segment = 'a'" selects the labelled examples the
+model learns from, and does not narrow the 1 rows named for scoring. Those are
+scored as given, whether or not they satisfy it. Pass only indices that
+satisfy the condition if that is what you meant.
+```
 
 So to score a particular set of entities, pass that set as `indices`. Use the
 entity filter to choose what the model learns from, which is a different
@@ -150,19 +151,23 @@ answers:
 
 | Comparison | |
 |---|---|
-| Answered | `=`, `!=`, `<`, `<=`, `>`, `>=`, `IS`, `IS NOT`, `IN` |
+| Answered on any value | `=`, `!=`, `IS`, `IS NOT`, `IN` |
+| Answered on numbers and times only | `<`, `<=`, `>`, `>=` |
 | Parsed, then refused | `LIKE`, `NOT LIKE`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `ENDS WITH`, `IS IN` |
 
-**There is no pattern matching.** A string compares fine with `=`, `!=` or
-`IN`; what is refused is every operator that looks *inside* it:
+**A string can only be matched, never ordered or searched.** `=`, `!=` and
+`IN` are the whole of it. Ordering one is refused, and so is looking inside
+one:
 
 ```
+Operation < between strings is not supported in the foundation model queries.
 Operation CONTAINS between strings is not supported in the foundation model
 queries.
 ```
 
-So match a string against the values it actually takes, rather than a prefix
-or a substring of them. `IS IN` is the old spelling of `IN` and says so:
+So match a string against the values it actually takes, rather than a prefix,
+a substring, or a range of them. `IS IN` is the old spelling of `IN` and says
+so:
 
 ```
 Operator IS IN is deprecated. Please use operator `IN` instead.

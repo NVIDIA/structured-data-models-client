@@ -79,6 +79,36 @@ def test_a_skill_announces_itself(name):
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
+def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
+    """Fences are ```` ``` ```` at the margin, and nothing is indented code.
+
+    Markdown also accepts tilde fences, longer fences, fences indented up to
+    three spaces, and four-space indented code blocks. This file reads one
+    form of each, so rather than teach three regexes the whole of CommonMark,
+    the documents are held to the form they already use. A table or an example
+    written any other way would be read by a renderer and not by these tests,
+    or the other way about.
+    """
+    inside = False
+    for number, line in enumerate(
+        path.read_text(encoding='utf-8').splitlines(), start=1
+    ):
+        where = f'{path.name}:{number}'
+        if line.lstrip().startswith(('```', '~~~')):
+            assert re.fullmatch(r'```[a-z]*', line), (
+                f'{where} opens or closes a fence as {line.strip()!r}; write '
+                f'it as ``` at the margin, optionally naming a language'
+            )
+            inside = not inside
+        elif not inside:
+            assert not line.startswith('    '), (
+                f'{where} is indented four spaces, which renders as code and '
+                f'is read here as prose'
+            )
+    assert not inside, f'{path.name} leaves a fence open'
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
 def test_every_link_resolves(path):
     for target in LINK.findall(path.read_text(encoding='utf-8')):
         if target.startswith(('http://', 'https://', '#')):
@@ -362,7 +392,11 @@ def test_a_single_question_is_one_part(schema):
 
 
 ANSWERED, REFUSED = answered_and_refused('Aggregation')
-ANSWERED_OPS, REFUSED_OPS = answered_and_refused('Comparison')
+
+COMPARISONS = table(PQL, 'Answered on any value')
+ANY_VALUE = backticked(COMPARISONS['Answered on any value'][0])
+ORDERED = backticked(COMPARISONS['Answered on numbers and times only'][0])
+REFUSED_OPS = backticked(COMPARISONS['Parsed, then refused'][0])
 
 
 @pytest.mark.parametrize('aggregation', ANSWERED)
@@ -395,41 +429,82 @@ def test_an_aggregation_the_skill_warns_about_is_refused(aggregation, schema):
         resolve(query, schema)
 
 
-#: A condition using each comparison, written the way that operator takes one.
+#: A condition using each comparison, against a number and against a string.
+#: Both operands matter: four of these are answered on one and refused on the
+#: other, which is the distinction the table draws.
 AS_A_CONDITION = {
-    '=': 'orders.price = 50',
-    '!=': 'orders.price != 50',
-    '<': 'orders.price < 50',
-    '<=': 'orders.price <= 50',
-    '>': 'orders.price > 50',
-    '>=': 'orders.price >= 50',
-    'IS': 'orders.price IS NULL',
-    'IS NOT': 'orders.price IS NOT NULL',
-    'IN': 'orders.item IN (1, 2)',
-    'IS IN': 'orders.item IS IN (1, 2)',
-    'LIKE': "orders.channel LIKE 'w%'",
-    'NOT LIKE': "orders.channel NOT LIKE '%w%'",
-    'CONTAINS': "orders.channel CONTAINS 'e'",
-    'NOT CONTAINS': "orders.channel NOT CONTAINS 'e'",
-    'STARTS WITH': "orders.channel STARTS WITH 'w'",
-    'ENDS WITH': "orders.channel ENDS WITH 'b'",
+    '=': ('orders.price = 50', "orders.channel = 'web'"),
+    '!=': ('orders.price != 50', "orders.channel != 'web'"),
+    '<': ('orders.price < 50', "orders.channel < 'web'"),
+    '<=': ('orders.price <= 50', "orders.channel <= 'web'"),
+    '>': ('orders.price > 50', "orders.channel > 'web'"),
+    '>=': ('orders.price >= 50', "orders.channel >= 'web'"),
+    'IS': ('orders.price IS NULL', 'orders.channel IS NULL'),
+    'IS NOT': ('orders.price IS NOT NULL', 'orders.channel IS NOT NULL'),
+    'IN': ('orders.item IN (1, 2)', "orders.channel IN ('web', 'app')"),
+    'IS IN': ('orders.item IS IN (1, 2)', "orders.channel IS IN ('web')"),
+    'LIKE': ("orders.channel LIKE 'w%'", "orders.channel LIKE 'w%'"),
+    'NOT LIKE': (
+        "orders.channel NOT LIKE '%w%'",
+        "orders.channel NOT LIKE '%w%'",
+    ),
+    'CONTAINS': (
+        "orders.channel CONTAINS 'e'",
+        "orders.channel CONTAINS 'e'",
+    ),
+    'NOT CONTAINS': (
+        "orders.channel NOT CONTAINS 'e'",
+        "orders.channel NOT CONTAINS 'e'",
+    ),
+    'STARTS WITH': (
+        "orders.channel STARTS WITH 'w'",
+        "orders.channel STARTS WITH 'w'",
+    ),
+    'ENDS WITH': (
+        "orders.channel ENDS WITH 'b'",
+        "orders.channel ENDS WITH 'b'",
+    ),
 }
 
 
-def filtered(comparison: str) -> str:
+def filtered(comparison: str, against: str) -> str:
     assert comparison in AS_A_CONDITION, (
         f'pql.md lists {comparison!r} and this test does not know how to '
         f'write a condition with it'
     )
+    side = 0 if against == 'a number' else 1
     return (
-        f'PREDICT COUNT(orders.* WHERE {AS_A_CONDITION[comparison]}, 0, 30, '
-        f'days) FOR EACH users.user_id'
+        f'PREDICT COUNT(orders.* WHERE '
+        f'{AS_A_CONDITION[comparison][side]}, 0, 30, days) '
+        f'FOR EACH users.user_id'
     )
 
 
-@pytest.mark.parametrize('comparison', ANSWERED_OPS)
-def test_a_comparison_the_skill_promises_is_answered(comparison, schema):
-    assert resolve(filtered(comparison), schema).task.kind == 'regression'
+@pytest.mark.parametrize('against', ['a number', 'a string'])
+@pytest.mark.parametrize('comparison', ANY_VALUE)
+def test_a_comparison_answered_on_any_value_is(comparison, against, schema):
+    assert (
+        resolve(filtered(comparison, against), schema).task.kind == 'regression'
+    )
+
+
+@pytest.mark.parametrize('comparison', ORDERED)
+def test_a_comparison_answered_on_numbers_is(comparison, schema):
+    assert (
+        resolve(filtered(comparison, 'a number'), schema).task.kind
+        == 'regression'
+    )
+
+
+@pytest.mark.parametrize('comparison', ORDERED)
+def test_a_comparison_answered_on_numbers_is_refused_on_a_string(
+    comparison, schema
+):
+    """The row's whole point: these four order a number and not a string."""
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='between strings'):
+        resolve(filtered(comparison, 'a string'), schema)
 
 
 @pytest.mark.parametrize('comparison', REFUSED_OPS)
@@ -439,7 +514,7 @@ def test_a_comparison_the_skill_warns_about_is_refused(comparison, schema):
     from sdm_client.errors import StructuredDataError
 
     with pytest.raises(StructuredDataError, match='not supported|deprecated'):
-        resolve(filtered(comparison), schema)
+        resolve(filtered(comparison, 'a string'), schema)
 
 
 def test_a_window_in_the_past_is_refused(schema):
@@ -725,7 +800,7 @@ def spelled_in_the_grammar(token: str) -> set[str]:
     'token, answered, refused',
     [
         ('AGGR', ANSWERED, REFUSED),
-        ('REL_OP', ANSWERED_OPS, REFUSED_OPS),
+        ('REL_OP', ANY_VALUE + ORDERED, REFUSED_OPS),
     ],
 )
 def test_the_table_accounts_for_the_whole_language(token, answered, refused):
