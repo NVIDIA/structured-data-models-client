@@ -130,7 +130,9 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'{where} opens a fence part-way along a line, after a list '
                 f'marker or otherwise; a fence begins its own line'
             )
-            assert not line.startswith('<') or line.startswith('<!--'), (
+            assert not line.lstrip().startswith(
+                '<'
+            ) or line.lstrip().startswith('<!--'), (
                 f'{where} is raw HTML, which renders as a table or a code '
                 f'block and is read here as nothing'
             )
@@ -442,7 +444,7 @@ def tables(path: Path) -> list[list[list[str]]]:
             current, ruled = [], False
             continue
         cells = [cell.strip() for cell in stripped[1:-1].split('|')]
-        if all('-' in cell and set(cell) <= {'-', ':'} for cell in cells):
+        if all(re.fullmatch(r':?-+:?', cell) for cell in cells):
             assert len(current) == 1, (
                 f'{path.name} rules a table under {len(current)} rows'
             )
@@ -685,7 +687,7 @@ AS_A_CONDITION = {
     'IS IN': (
         'orders.item IS IN (1, 2)',
         'orders.ordered_at IS IN (2026-02-01, 2026-03-01)',
-        "orders.channel IS IN ('web')",
+        "orders.channel IS IN ('web', 'app')",
     ),
     'LIKE': (
         "orders.channel LIKE 'w%'",
@@ -743,14 +745,20 @@ ROW_MEANS = {
 }
 
 
-def answers(comparison: str, against: str, schema) -> bool:
+def refusal(comparison: str, against: str, schema) -> str | None:
+    """Why a condition was refused, or ``None`` if it was answered.
+
+    The reason matters. A condition refused for being malformed looks exactly
+    like one refused for naming an operator the model will not answer, and
+    only the second is what a row of that table claims.
+    """
     from sdm_client.errors import StructuredDataError
 
     try:
         resolve(filtered(comparison, against), schema)
-    except StructuredDataError:
-        return False
-    return True
+    except StructuredDataError as error:
+        return str(error)
+    return None
 
 
 @pytest.mark.parametrize(
@@ -774,10 +782,11 @@ def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
     the row, which is then compared with the row it is written in. Moving one
     operator between rows fails here.
     """
-    found = tuple(
-        answers(comparison, against, schema)
+    why = {
+        against: refusal(comparison, against, schema)
         for against in ('a number', 'a time', 'a string')
-    )
+    }
+    found = tuple(why[against] is None for against in why)
     belongs = [name for name, shape in ROW_MEANS.items() if shape == found]
     assert belongs, (
         f'{comparison} is answered {found} against a number, a time and a '
@@ -787,6 +796,13 @@ def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
         f'pql.md lists {comparison} under {row!r} and it behaves like '
         f'{belongs[0]!r}'
     )
+    if row == 'Parsed, then refused':
+        # On the operand it is for, and for being itself: a condition the
+        # parser rejected as malformed would otherwise read as this row.
+        assert re.search('not supported|deprecated', why['a string'] or ''), (
+            f'{comparison} is listed as parsed and then refused, and what it '
+            f'actually says is {why["a string"]!r}'
+        )
 
 
 def test_a_text_column_cannot_be_compared_at_all(schema_with_text):
