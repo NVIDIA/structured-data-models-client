@@ -12,8 +12,8 @@ PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
 ```
 
 `CLASSIFY` is in the language and **not reachable on these models**. It asks a
-multilabel question, and the refusal says so whichever way the target is
-written — over a window, or as a column declared multicategorical:
+multilabel question. Written the two ways that get as far as the task, over a
+window and as a column declared multicategorical, it is refused for being one:
 
 ```
 Foundation Model queries do not support multilabel tasks. Use `LIST_DISTINCT`
@@ -22,6 +22,10 @@ with this query, train a new model.
 Foundation Model queries do not support static multilabel classification. To
 make predictions with this query, train a new model.
 ```
+
+Written other ways it is refused earlier, by a rule that has nothing to do
+with `CLASSIFY` — an aggregation the model does not answer, or a target with
+no window. Either way there is no query it completes.
 
 So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`,
 and each is narrower than it looks:

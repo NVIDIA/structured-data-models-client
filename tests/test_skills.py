@@ -139,7 +139,7 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'marker or otherwise; a fence begins its own line'
             )
             assert not re.search(
-                r'<[a-zA-Z/]', line
+                r'<[a-zA-Z/!?]', line
             ) or line.lstrip().startswith('<!--'), (
                 f'{where} holds raw HTML, which renders as a table or a code '
                 f'block and is read here as nothing. It need not begin the '
@@ -272,13 +272,20 @@ def test_no_example_hides_in_a_plain_fence(path):
                     ]
                 elif isinstance(node, ast.For):
                     sources, targets = [node.iter], [node.target]
-                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    sources = [
-                        *node.body,
-                        *node.decorator_list,
-                        *node.args.defaults,
-                        *[one for one in node.args.kw_defaults if one],
-                    ]
+                elif isinstance(
+                    node,
+                    (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+                ):
+                    # The body, and everything the definition itself names: a
+                    # base class, a decorator, a default argument.
+                    sources = [*node.body, *node.decorator_list]
+                    if isinstance(node, ast.ClassDef):
+                        sources += [*node.bases, *node.keywords]
+                    else:
+                        sources += [
+                            *node.args.defaults,
+                            *[one for one in node.args.kw_defaults if one],
+                        ]
                     targets = [ast.Name(id=node.name, ctx=ast.Store())]
                 else:
                     continue
