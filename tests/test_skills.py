@@ -251,14 +251,11 @@ def test_verified_output_is_marked_one_way(path):
     )
 
 
-@pytest.mark.parametrize('path', documents(), ids=str)
-def test_no_example_hides_in_a_plain_fence(path):
-    """A plain fence is for output and refusals, never for code.
+def reaching_this_client(path: Path) -> set[str]:
+    """Every name in a document's examples that holds something of ours.
 
-    Only a ``python`` block is run, so moving an example into a plain fence
-    would take it out of every check at once while still reading as an
-    example. A plain fence that parses as Python and reaches for this client
-    is that move.
+    Imports, aliases, and whatever those get bound to, to a fixed point: a
+    name may be bound after the thing that uses it.
     """
     reachable = set(sdm_client.__all__) | {'sdm_client', 'pandas'}
     trees: list[ast.Module] = []
@@ -322,7 +319,19 @@ def test_no_example_hides_in_a_plain_fence(path):
                 }
                 grew = grew or not bound <= reachable
                 reachable |= bound
-    exported = reachable
+    return reachable
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_no_example_hides_in_a_plain_fence(path):
+    """A plain fence is for output and refusals, never for code.
+
+    Only a ``python`` block is run, so moving an example into a plain fence
+    would take it out of every check at once while still reading as an
+    example. A plain fence that parses as Python and reaches for this client
+    is that move.
+    """
+    exported = reaching_this_client(path)
     for index, source in enumerate(fences(path, '')):
         for giveaway in ('import ', '>>>', 'In ['):
             assert giveaway not in source, (
@@ -405,8 +414,12 @@ def test_no_example_trains_anything(path):
                 f'notion of'
             )
             if called.attr == 'fit':
-                assert isinstance(called.value, ast.Name), (
-                    f'{path.name} calls fit() on something other than a client'
+                receiver = called.value
+                assert isinstance(
+                    receiver, ast.Name
+                ) and receiver.id in reaching_this_client(path), (
+                    f'{path.name} calls fit() on something other than a '
+                    f'client, and only a client has one to call'
                 )
 
 
@@ -1232,7 +1245,7 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
             f'{printed.getvalue()}'
         )
     marked = len(
-        re.findall(r'\*\*Verified\*\*[^\n]*\n\n```\n', without_comments(path))
+        re.findall(r'^\*\*Verified\*\*', without_comments(path), re.MULTILINE)
     )
     assert checked == marked, (
         f'{path.name} marks {marked} outputs as verified and {checked} of '
