@@ -182,15 +182,33 @@ PQL = SKILLS / 'relational' / 'pql.md'
 ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
 
 
-def rows(path: Path) -> list[list[str]]:
-    """Every table row in a document, as its stripped cells."""
-    found = []
-    for line in ROW.findall(path.read_text(encoding='utf-8')):
-        cells = [cell.strip() for cell in line.split('|')]
-        if any(set(cell) <= {'-', ':'} and cell for cell in cells):
+def tables(path: Path) -> list[list[list[str]]]:
+    """Every table in a document, each as its rows, each row as its cells.
+
+    Grouped rather than flattened: two tables separated by a paragraph read as
+    one otherwise, and a check for a row absent from the first then passes on
+    finding it in the second.
+    """
+    found: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        stripped = line.strip()
+        if not (stripped.startswith('|') and stripped.endswith('|')):
+            if current:
+                found.append(current)
+                current = []
             continue
-        found.append(cells)
+        cells = [cell.strip() for cell in stripped[1:-1].split('|')]
+        if any(cell and set(cell) <= {'-', ':'} for cell in cells):
+            continue
+        current.append(cells)
+    if current:
+        found.append(current)
     return found
+
+
+def rows(path: Path) -> list[list[str]]:
+    return [row for one in tables(path) for row in one]
 
 
 def backticked(cell: str) -> list[str]:
@@ -352,57 +370,59 @@ RELATIONAL_URL = os.environ.get('SDM_RELATIONAL_URL')
 PLACEHOLDER = 'http://localhost:8000'
 
 
-def examples(path: Path) -> list[str]:
-    """Runnable examples, in the order a reader meets them.
+#: An example, and the block pasted beneath it if that block is marked
+#: **Verified**. Pairing them is the point: comparing against everything the
+#: document printed lets a block match output belonging to another example.
+EXAMPLE = re.compile(
+    r'^```python\n(?P<code>.*?)^```\n'
+    r'(?:\n\*\*Verified\*\*[^\n]*\n\n```\n(?P<shown>.*?)^```\n)?',
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def examples(path: Path) -> list[tuple[str, str | None]]:
+    """Runnable examples and what each is said to print, in document order.
 
     A fence holding ``...`` is a shape rather than a program, and the two
     capability calls need a connection to say anything, so neither is run.
     """
     return [
-        source
-        for source in fences(path, 'python')
-        if '...' not in source and 'client.capabilities(' not in source
+        (match['code'], match['shown'])
+        for match in EXAMPLE.finditer(path.read_text(encoding='utf-8'))
+        if '...' not in match['code']
+        and 'client.capabilities(' not in match['code']
     ]
 
 
-def run(path: Path, url: str) -> str:
-    """Every example in one document, sharing one namespace as a reader does."""
+def assert_every_example_prints_what_it_shows(path: Path, url: str):
+    """Output marked **Verified** has to be what that example printed.
+
+    Pasted results are the first thing to rot, and a number that drifted is
+    worse than no number: it reads as measured.
+    """
     import io
     from contextlib import redirect_stdout
 
     pd = pytest.importorskip('pandas')
     namespace: dict[str, object] = {'pd': pd}
-    printed = io.StringIO()
-    for index, source in enumerate(examples(path)):
+    checked = 0
+    for index, (code, shown) in enumerate(examples(path)):
+        printed = io.StringIO()
         with redirect_stdout(printed):
             exec(  # noqa: S102 - running the documentation is the test
                 compile(
-                    source.replace(PLACEHOLDER, url), f'{path}#{index}', 'exec'
+                    code.replace(PLACEHOLDER, url), f'{path}#{index}', 'exec'
                 ),
                 namespace,
             )
-    return printed.getvalue()
-
-
-def assert_every_verified_block_is_what_it_printed(path: Path, output: str):
-    """Output marked **Verified** has to be the output, character for character.
-
-    Pasted results are the first thing to rot, and a number that drifted is
-    worse than no number: it reads as measured.
-    """
-    body = path.read_text(encoding='utf-8')
-    blocks = [
-        text
-        for marker, text in re.findall(
-            r'\*\*(Verified)\*\*[^\n]*\n\n```\n(.*?)```', body, re.DOTALL
+        if shown is None:
+            continue
+        checked += 1
+        assert printed.getvalue().strip() == shown.strip(), (
+            f'{path.name} example {index} shows\n{shown}\nand printed\n'
+            f'{printed.getvalue()}'
         )
-    ]
-    assert blocks, f'{path.name} marks nothing as verified'
-    for block in blocks:
-        assert block.strip() in output, (
-            f'{path.name} shows output that running it did not produce:\n'
-            f'{block}'
-        )
+    assert checked, f'{path.name} marks nothing as verified'
 
 
 @pytest.mark.live_nim
@@ -411,7 +431,7 @@ def assert_every_verified_block_is_what_it_printed(path: Path, output: str):
 )
 def test_the_tabular_examples_print_what_the_skill_shows():
     path = SKILLS / 'tabular' / 'SKILL.md'
-    assert_every_verified_block_is_what_it_printed(path, run(path, TABULAR_URL))
+    assert_every_example_prints_what_it_shows(path, TABULAR_URL)
 
 
 @pytest.mark.live_nim
@@ -420,21 +440,29 @@ def test_the_tabular_examples_print_what_the_skill_shows():
 )
 def test_the_relational_examples_print_what_the_skill_shows():
     pytest.importorskip('sdm_relational_engine')
-    path = SKILLS / 'relational' / 'SKILL.md'
-    assert_every_verified_block_is_what_it_printed(
-        path, run(path, RELATIONAL_URL)
+    assert_every_example_prints_what_it_shows(
+        SKILLS / 'relational' / 'SKILL.md', RELATIONAL_URL
     )
 
 
 # --- What the tables in the skills claim ----------------------------------
 
 
-def listed(path: Path, label: str) -> set[str]:
-    """The backticked values of the row beginning with ``label``."""
-    for cells in rows(path):
-        if cells and cells[0] == label:
-            return set(backticked(cells[1]))
-    raise AssertionError(f'{path.name} has no {label!r} row')
+def table(path: Path, label: str) -> dict[str, list[str]]:
+    """The one table holding a row labelled ``label``, as label to cells."""
+    matched = [
+        one for one in tables(path) if any(row[0] == label for row in one)
+    ]
+    assert len(matched) == 1, (
+        f'{path.name} has {len(matched)} tables with a {label!r} row'
+    )
+    collected: dict[str, list[str]] = {}
+    for cells in matched[0]:
+        assert cells[0] not in collected, (
+            f'{path.name} lists {cells[0]!r} twice'
+        )
+        collected[cells[0]] = cells[1:]
+    return collected
 
 
 @pytest.mark.parametrize(
@@ -442,20 +470,40 @@ def listed(path: Path, label: str) -> set[str]:
     [('tabular', 'KumoTabular'), ('relational', 'KumoRelational')],
 )
 def test_the_capability_table_is_the_clients_own(name, model_name):
-    """Both skills print a capability table. It has to be the real one."""
+    """Every row of the table both skills open with, against the client."""
     from sdm_client import SDMClient
 
     model = getattr(sdm_client, model_name)()
     with SDMClient(url='http://localhost:8000') as client:
         capabilities = client.capabilities(model)
-    path = SKILLS / name / 'SKILL.md'
-    assert listed(path, 'Tasks') == set(capabilities.tasks)
-    assert listed(path, 'Outputs') == set(capabilities.outputs)
+    shown = table(SKILLS / name / 'SKILL.md', 'Tasks')
+    shown.pop('', None)  # the header, which labels the column not a row
+    said = {
+        'Tasks': set(capabilities.tasks),
+        'Outputs': set(capabilities.outputs),
+        'Several tables': capabilities.multiple_tables,
+        'Relationships': capabilities.relationships,
+        'Sessions': capabilities.sessions,
+    }
+    extra = set(shown) - set(said) - {'Explanations', 'Context rows'}
+    assert not extra, f'{name} shows rows nothing checks: {sorted(extra)}'
+    for label, truth in said.items():
+        assert label in shown, f'{name} no longer shows {label!r}'
+        cell = shown[label][0]
+        if isinstance(truth, bool):
+            assert cell == ('yes' if truth else 'no'), (
+                f'{name} says {label} is {cell!r}'
+            )
+        else:
+            assert set(backticked(cell)) == truth, (
+                f'{name} lists the wrong {label.lower()}'
+            )
 
 
 #: Each row of the limits table in ``skills/relational/SKILL.md``, against the
-#: constant it reports. Every key is spoken for: a limit the client enforces
-#: and the skill does not mention is a refusal an agent cannot see coming.
+#: constant it reports. Every key is spoken for in both directions: a limit the
+#: client enforces and the skill omits is a refusal an agent cannot see coming,
+#: and a row naming no limit is a number nobody is holding to anything.
 LIMIT_ROWS = {
     'context rows, by default': 'context_rows_fast',
     'context rows, with `num_context_samples`': 'context_rows_max',
@@ -476,11 +524,16 @@ def test_the_limits_table_is_the_shipped_limits():
     assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
         'the client enforces a limit this table does not account for'
     )
-    path = SKILLS / 'relational' / 'SKILL.md'
+    shown = table(SKILLS / 'relational' / 'SKILL.md', 'Limit')
+    shown.pop('Limit')  # the header
+    assert set(shown) == set(LIMIT_ROWS), (
+        'the limits table and the limits no longer line up: '
+        f'{sorted(set(shown) ^ set(LIMIT_ROWS))}'
+    )
     for label, key in LIMIT_ROWS.items():
-        shown = listed(path, label)
-        assert len(shown) == 1, f'{label!r} shows {shown}'
-        value = int(shown.pop().replace(',', ''))
+        cell = backticked(shown[label][0])
+        assert len(cell) == 1, f'{label!r} shows {cell}'
+        value = int(cell[0].replace(',', ''))
         assert value == RELATIONAL_LIMITS[key], (
             f'{label!r} says {value}, the client enforces '
             f'{RELATIONAL_LIMITS[key]}'
@@ -504,3 +557,77 @@ def test_the_aggregations_are_all_of_them():
     assert every == set(ANSWERED) | set(REFUSED), (
         'the grammar and pql.md disagree about what the aggregations are'
     )
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not TABULAR_URL, reason='set SDM_TABULAR_URL to a kumo-tabular NIM'
+)
+def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
+    """``quantiles`` on a regression, ``probabilities`` on a classification.
+
+    The skill says the endpoint narrows what the client would send, so the
+    narrowing is what is asked about here, not the client's own table.
+    """
+    from sdm_client import KumoTabular, Request, SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    pd = pytest.importorskip('pandas')
+    rows_in = pd.DataFrame(
+        {
+            'age': [31.0, 44.5, 28.0, 51.0, 39.0, 35.0],
+            'spend': [120.0, 430.0, 90.0, 510.0, 260.0, 300.0],
+            'churn': [0, 1, 0, 1, 0, 1],
+        }
+    )
+    to_score = pd.DataFrame({'age': [33.0, 47.0], 'spend': [150.0, 480.0]})
+    with SDMClient(url=TABULAR_URL) as client:
+        labelled = Request(
+            context=rows_in,
+            predict=to_score,
+            target='churn',
+            task='classification',
+        )
+        with pytest.raises(StructuredDataError, match='quantiles'):
+            client.predict(labelled, model=KumoTabular(), outputs=['quantiles'])
+        quantity = Request(
+            context=rows_in.drop(columns='churn'),
+            predict=to_score.drop(columns='spend'),
+            target='spend',
+            task='regression',
+        )
+        answer = client.predict(
+            quantity, model=KumoTabular(), outputs=['prediction', 'quantiles']
+        )
+    deciles = [
+        name
+        for name in answer.to_pandas().columns
+        if str(name).startswith('quantile_')
+    ]
+    assert len(deciles) == 9, f'quantiles came back as {deciles}'
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not RELATIONAL_URL,
+    reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
+)
+@pytest.mark.parametrize(
+    'target',
+    ['COUNT(orders.*, 0, 30, days)', 'COUNT(orders.*, 0, 30, days) > 2'],
+)
+def test_the_relational_endpoint_refuses_an_explanation(target, schema):
+    """The gap the skill leads with: the client sends it, the endpoint will
+    not serve it. If a deployment starts serving one, this fails and the
+    skill is the thing to change."""
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    request = resolve(f'PREDICT {target} FOR EACH users.user_id', schema)
+    with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
+        with pytest.raises(StructuredDataError, match='explanation'):
+            client.predict(
+                request,
+                model=KumoRelational(),
+                outputs=['prediction', 'explanation'],
+            )

@@ -83,18 +83,38 @@ That is the one rule that catches people, because the past is where the data
 is. The past is what the model reads as context; the query asks about what has
 not happened.
 
-## Which entities
+## Which entities get scored
 
-`FOR EACH users.user_id` asks about entities of that table, and
-`materialize(indices=[...])` says which ones. `indices` is always required:
-there is no all-rows default, because it would silently score a whole table.
-`FOR users.user_id IN (1, 2)` narrows the query to those entities but does not
-replace it. A filter narrows them too:
+**`materialize()` decides that, not the query.** This is the part of the
+language most likely to be read wrongly, so it is worth being blunt:
 
+```python
+request = PredictiveQuery(query, schema).materialize(
+    indices=[1, 2, 3], model=KumoRelational()
+)
 ```
-PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id
-WHERE users.segment = 'a'
-```
+
+`indices` names the entities to score, by key. One of `indices` or `predict` is
+always required — there is no all-rows default, because it would silently score
+a whole table — and `predict=<frame>` scores rows the tables do not contain,
+which only a single-table schema supports.
+
+Two clauses look like they narrow that set, and neither does:
+
+- `FOR users.user_id IN (1, 2)` is **overridden by `indices`**, without a
+  warning. Asked with `indices=[3]`, entity 3 is what comes back.
+- `FOR EACH users.user_id WHERE users.segment = 'a'` selects the **labelled
+  examples the model learns from**, not the entities scored. The client says so
+  when you combine the two:
+
+  ```
+  the entity filter "users.segment = 'a'" selects the labelled examples the
+  model learns from, and does not narrow the 1 row being scored
+  ```
+
+So to score a particular set of entities, pass that set as `indices`. Use the
+entity filter to choose what the model learns from, which is a different
+question and a useful one.
 
 ## Filtering what is counted
 
