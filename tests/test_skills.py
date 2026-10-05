@@ -99,8 +99,15 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
         f'read as unclosed'
     )
     inside = False
+    previous = ''
     for number, line in enumerate(body.splitlines(), start=1):
         where = f'{path.name}:{number}'
+        if not inside and line.startswith('|'):
+            assert not previous.lstrip().startswith(('-', '*', '+')), (
+                f'{where} begins a table directly under a list item, where it '
+                f'renders as more of that item and is read here as a table'
+            )
+        previous = line
         if line.lstrip().startswith(('```', '~~~')):
             allowed = ('```',) if inside else ('```', '```python')
             assert line in allowed, (
@@ -904,21 +911,35 @@ def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
     )
 
 
-def test_a_fan_out_past_two_hundred_calls_is_refused(schema):
+def test_a_fan_out_past_the_quoted_number_of_calls_is_refused(schema):
     """The cap a reader meets before either clause's own bound.
 
     A forecast of 10,000 steps is inside the language's range and is refused
-    for what it would cost, which is the number worth knowing.
+    for what it would cost. A ranking costs a call per candidate, not per
+    ``k``, so both are asked here: the number is read out of the prose rather
+    than written twice.
     """
+    pd = pytest.importorskip('pandas')
     from sdm_client.decompose import MOST_PARTS
     from sdm_client.errors import StructuredDataError
 
-    assert MOST_PARTS == 200, 'pql.md quotes 200 as the number of calls'
+    said = re.search(r'past (\d+) of them', PQL.read_text(encoding='utf-8'))
+    assert said and int(said[1]) == MOST_PARTS, (
+        f'pql.md names {said and said[1]} calls and the client allows '
+        f'{MOST_PARTS}'
+    )
     with pytest.raises(StructuredDataError, match=str(MOST_PARTS)):
         resolve(
             f'PREDICT COUNT(orders.*, 0, 30, days) FORECAST '
             f'{MOST_PARTS + 1} TIMEFRAMES FOR EACH users.user_id',
             schema,
+        )
+    with pytest.raises(StructuredDataError, match=str(MOST_PARTS)):
+        resolve(
+            'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2 '
+            'FOR EACH users.user_id',
+            schema,
+            candidates=pd.Series(range(MOST_PARTS + 1)),
         )
 
 
