@@ -151,7 +151,10 @@ declare as `1.0.0` and none has published. The heading becomes
   source table with a timestamp and at least as many rows as the preview
   now costs one more query when it is described: a `MIN`/`MAX`/`COUNT` over
   the whole table for all its timestamps at once (0.18 s for 8 million rows
-  on Postgres).
+  on Postgres). When that query fails, as a timeout on a large view can, a
+  column the rows read would refuse is kept, behind any they do not, since
+  the first rows of a table kept in time order often share one day, and the
+  warning names it when it is taken.
   Before, `from_data` took a lone timestamp unchecked and gave a table with
   several none, and `from_source` compared only the rows it read and never
   took a name such as `last_seen`. On AdventureWorks `customers` now gets no

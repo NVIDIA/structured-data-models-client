@@ -2034,6 +2034,8 @@ class Graph:
             )
 
         self._tables[table.name] = table
+        # A table settled in another graph may be linked differently here.
+        self._settle_time_columns()
 
         return self
 
@@ -2056,6 +2058,8 @@ class Graph:
             for edge in self._edges
             if edge.src_table != name and edge.dst_table != name
         ]
+        # Its edges may have been the last links to another table.
+        self._settle_time_columns()
 
         return self
 
@@ -2126,6 +2130,9 @@ class Graph:
         r"""Refuse a lone edit stamp on a table an edge points at, and take
         it on one none does: the first is an entity edited in place, the
         second a log of changes.
+
+        Called whenever a table or an edge is added or removed, since either
+        can change which tables something links to.
         """
         linked = {edge.dst_table for edge in self.edges}
         for name, table in self.tables.items():

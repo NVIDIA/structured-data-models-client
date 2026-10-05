@@ -601,7 +601,8 @@ class Table(ABC):
 
     @time_column.setter
     def time_column(self, name: str | None) -> None:
-        self._time_column_inferred = False
+        # Every check runs before anything changes, so a refused name leaves
+        # the table as it was, an inferred column still marked inferred.
         if name is not None and name == self._primary_key:
             raise ValueError(
                 f"Cannot specify column '{name}' as a time "
@@ -614,7 +615,10 @@ class Table(ABC):
                 f'column since it is already defined to be an '
                 f'end time column'
             )
+        if name is not None:
+            self[name].stype = Stype.timestamp
 
+        self._time_column_inferred = False
         if self.time_column is not None:
             self.time_column._is_time_column = False
 
@@ -622,7 +626,6 @@ class Table(ABC):
             self._time_column = None
             return
 
-        self[name].stype = Stype.timestamp
         self[name]._is_time_column = True
         self._time_column = name
 
@@ -868,12 +871,18 @@ class Table(ABC):
     def _settle_time_column(self, linked: bool) -> None:
         r"""Take or refuse a lone edit stamp by whether another table links
         to this one, once the graph's edges say. A time column set by hand
-        since inference, to a column or to ``None``, is left alone.
+        since inference, to a column or to ``None``, is left alone, and so
+        is a stamp since removed or made the end time column or key.
         """
         choice = self._time_column_choice
         if choice is None or not self._time_column_inferred:
             return
         settled = choice.for_links(linked)
+        if settled.column is not None and (
+            settled.column not in self
+            or settled.column in (self._primary_key, self._end_time_column)
+        ):
+            return
         if settled != choice:
             self._time_column_choice = settled
             self.time_column = settled.column
@@ -899,7 +908,9 @@ class Table(ABC):
                 f'SELECT {", ".join(selects)}\nFROM {self._quoted_source_name}'
             )
         except Exception:
-            # Only evidence rejects a column, and a failed query is none.
+            # A timeout on a large view, most often. The rows read then say
+            # what they can, and a column they would refuse is kept and
+            # named as unconfirmed.
             return None
         count, *ranges = rows[0]
         return TableRange(

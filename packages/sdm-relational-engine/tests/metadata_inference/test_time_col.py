@@ -165,7 +165,9 @@ def test_every_column_is_checked_in_one_query():
 
 
 def test_a_failed_check_keeps_the_column():
-    """Only evidence refuses a column, and a warehouse error is none."""
+    """The rows read are no proof that a column never changes, and the
+    choice says what they hold.
+    """
     late = [pd.Timestamp('2023-01-01')] * ROWS
     table = _duckdb_table(pd.DataFrame({'id': range(ROWS), 't_dat': late}))
 
@@ -179,6 +181,9 @@ def test_a_failed_check_keeps_the_column():
     assert table.time_column.name == 't_dat'
     assert table.time_column_choice is not None
     assert table.time_column_choice.rejected == ()
+    assert table.time_column_choice.unconfirmed == (
+        RejectedTimeColumn('t_dat', 'constant', late[0]),
+    )
 
 
 def test_a_graph_refuses_an_edit_stamp_on_a_table_an_edge_points_at():
@@ -257,3 +262,65 @@ def test_a_time_column_set_by_hand_is_never_settled(given):
     graph.unlink('orders', 'buyer', 'users')
     held = graph['users'].time_column
     assert (held and held.name) == given
+
+
+@pytest.mark.parametrize(
+    ('given', 'error'),
+    [('user_id', ValueError), ('missing', KeyError)],
+)
+def test_a_refused_time_column_leaves_the_inferred_one_as_it_was(given, error):
+    """The primary key, or a column the table lacks, is refused, and the
+    column inference took is still inference's to settle.
+    """
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph['users'].primary_key = 'user_id'
+    with pytest.raises(error):
+        graph['users'].time_column = given
+
+    held = graph['users'].time_column
+    assert held is not None
+    assert held.name == 'last_login'
+    assert held._is_time_column
+
+    graph.link('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None
+
+
+def test_removing_the_last_table_that_links_to_another_settles_it():
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph.link('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None
+
+    del graph['orders']
+    held = graph['users'].time_column
+    assert held is not None
+    assert held.name == 'last_login'
+
+
+def test_a_table_added_from_another_graph_is_settled_by_this_one():
+    linked = Graph.from_data(_users_and_orders(), verbose=False)
+    linked.link('orders', 'buyer', 'users')
+    users = linked['users']
+    assert users.time_column is None
+
+    alone = Graph(tables=[])
+    alone.add_table(users)
+    held = alone['users'].time_column
+    assert held is not None
+    assert held.name == 'last_login'
+
+
+@pytest.mark.parametrize('change', ['end_time_column', 'remove_column'])
+def test_a_refused_stamp_put_to_another_use_is_not_taken_back(change):
+    """`last_login`, refused while `orders` links to `users`, is made the
+    end time column or removed, and unlinking leaves it so.
+    """
+    graph = Graph.from_data(_users_and_orders(), verbose=False)
+    graph.link('orders', 'buyer', 'users')
+    if change == 'end_time_column':
+        graph['users'].end_time_column = 'last_login'
+    else:
+        graph['users'].remove_column('last_login')
+
+    graph.unlink('orders', 'buyer', 'users')
+    assert graph['users'].time_column is None

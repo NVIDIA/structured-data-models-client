@@ -2177,8 +2177,9 @@ def _warn_how_time_columns_were_inferred(
     A guess about a column's name or values decides what the model may know
     at the moment it answers, so it is said out loud: a column taken as the
     earliest of several, a stamp of the last edit taken as the only timestamp
-    left, and, for a table left without a time column, each timestamp refused
-    and why. That table fails its first windowed query, and the refusal
+    left, one taken although the rows read hold one value or mostly none,
+    because the query over the whole table failed, and, for a table left
+    without a time column, each timestamp refused and why. That table fails its first windowed query, and the refusal
     cannot say which of its columns inference passed over.
 
     Only where something could be windowed: a lone table is asked
@@ -2212,6 +2213,15 @@ def _warn_how_time_columns_were_inferred(
                     f'so it reads as a log of changes. If it does not say when a row '
                     f'became true, clear it: time_columns={{{name!r}: None}}.'
                 )
+            lines.extend(
+                f'{name}.{column} was taken as the time column although '
+                f'{doubt.why}, because the query over the whole table '
+                f'failed and the rows past them were not checked. If the '
+                f'whole table is like that, clear it: '
+                f'time_columns={{{name!r}: None}}.'
+                for doubt in choice.unconfirmed
+                if doubt.column == column
+            )
         elif column is None:
             lines.extend(
                 f'{name}.{rejected.column} was not taken as the time column '
