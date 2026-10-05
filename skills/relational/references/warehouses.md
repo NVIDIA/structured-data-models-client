@@ -25,8 +25,9 @@ first call raises `MissingExtraError`.
 
 `Source(connection)` picks the right one for you when you would rather not
 name it. Lakebase is `PostgresSource`, with the `lakebase` extra and
-`sdm_connectors.databricks.lakebase(endpoint, workspace=...)`, which mints the
-credential and gives back a psycopg connection.
+`sdm_connectors.databricks.lakebase(endpoint, database=..., workspace=...)`,
+which mints the credential and gives back a psycopg connection. `database` is
+required and keyword-only, as `workspace` is.
 
 **SQLite is the one that catches people.** It wants an ADBC connection, not the
 standard library's `sqlite3`:
@@ -214,10 +215,10 @@ source.semantic_model('sales_metrics').
 
 ## A file, rather than a connection
 
-`read()` takes a path and gives a DataFrame. CSV and Parquet only, by suffix
-(`.csv`, `.txt`, `.parquet`, `.parq`, `.pq`, optionally compressed) or a
-Parquet directory, local or on object storage with the `s3` extra. Anything
-else is refused, `format='json'` included:
+`read()` takes a path and gives a DataFrame. CSV and Parquet only, by suffix:
+`.csv` or `.txt`, compressed or not, and `.parquet`, `.parq` or `.pq`
+uncompressed, or a Parquet directory, local or on object storage with the `s3`
+extra. Anything else is refused, `format='json'` included:
 
 ```python
 from sdm_connectors import read
@@ -227,6 +228,11 @@ orders = read('s3://bucket/orders.parquet', storage_options=credentials)
 
 `storage_options` is a dictionary handed to the filesystem underneath, which
 is where a key and a secret go.
+
+A compression suffix on a Parquet name is taken as Parquet and read as one, so
+`orders.parquet.gz` fails on the file rather than on the name. Compress the CSV
+if it has to be compressed, or leave the Parquet as it is -- it is compressed
+inside already.
 
 That is a DataFrame like any other, so it goes to `Schema.from_data`.
 

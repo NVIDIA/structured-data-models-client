@@ -116,8 +116,10 @@ Each line below was resolved against a schema and the resulting
 | `COUNT(orders.*, 0, 30, days) FORECAST 3 TIMEFRAMES` | `regression` | `3` |
 | `LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2` | `binary_classification` | `4` |
 
-`users.segment` holds three values, which is what makes it a multiclass
-question rather than a binary one.
+`users.segment` is multiclass because of how it is stored, not how many
+values it holds: a column read as a category is a multiclass question even
+holding two. What makes a binary one is a comparison, or whole numbers read as
+labels.
 
 The last two are worth reading twice. A forecast and a ranking are not single
 calls with their own task kind: a forecast is asked as one regression per step,

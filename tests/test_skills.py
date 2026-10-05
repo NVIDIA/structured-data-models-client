@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import importlib
 import os
 import re
 from pathlib import Path
@@ -483,20 +484,35 @@ def test_every_example_parses(path):
             pytest.fail(f'{path.name} example {index} does not parse: {error}')
 
 
+#: Every module of ours an example may import from, and where to look for the
+#: names it takes. A fragment is never executed, so an import inside one is
+#: checked only here.
+OURS = ('sdm_client', 'sdm_connectors', 'sdm_connectors.databricks')
+
+
+def exported_by(module: str) -> set[str]:
+    imported = importlib.import_module(module)
+    return set(
+        getattr(imported, '__all__', None)
+        or [name for name in dir(imported) if not name.startswith('_')]
+    )
+
+
 @pytest.mark.parametrize('path', documents(), ids=str)
-def test_every_name_an_example_imports_is_exported(path):
+@pytest.mark.parametrize('module', OURS)
+def test_every_name_an_example_imports_is_exported(path, module):
+    exported = exported_by(module)
     for source in fences(path, 'python'):
         for node in ast.walk(ast.parse(source)):
             if not isinstance(node, ast.ImportFrom):
                 continue
-            if node.module != 'sdm_client':
+            if node.module != module:
                 continue
-            exported = set(sdm_client.__all__)
             missing = [
                 alias.name for alias in node.names if alias.name not in exported
             ]
             assert not missing, (
-                f'{path.name} imports {missing} from sdm_client, which does '
+                f'{path.name} imports {missing} from {module}, which does '
                 f'not export them'
             )
 
@@ -1313,6 +1329,33 @@ def test_a_request_in_several_parts_cannot_be_fitted(
             client.fit(request, model=KumoRelational())
 
 
+def test_a_category_is_multiclass_however_few_values_it_holds(schema):
+    """The sentence under the task table.
+
+    The fixture holds three values and the skill's own schema holds two, so
+    counting them would read as the rule it is not: the stype decides.
+    """
+    pd = pytest.importorskip('pandas')
+
+    from sdm_client import Relationship, Schema
+
+    users = pd.DataFrame({'user_id': range(12), 'segment': ['a', 'b'] * 6})
+    assert len(set(users['segment'])) == 2
+    two = Schema.from_data(
+        {'users': users, 'orders': schema.tables['orders'].data},
+        primary_keys={'users': 'user_id', 'orders': 'order_id'},
+        time_columns={'orders': 'ordered_at'},
+        relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
+    )
+    kind = resolve(
+        'PREDICT users.segment FOR EACH users.user_id', two
+    ).payloads[0]['task']['kind']
+    assert kind == 'multiclass_classification', (
+        f'a two-value category resolved to {kind}, and pql.md says the way it '
+        f'is stored decides rather than how many values it holds'
+    )
+
+
 def test_asking_for_the_mean_changes_the_request(schema):
     """The other option the skill tells a reader to reach for.
 
@@ -1725,7 +1768,13 @@ def test_a_source_given_the_wrong_connection_says_which_it_wants():
 
 
 def test_read_takes_the_formats_the_reference_names():
-    """CSV and Parquet, and the refusal the reference quotes for anything else."""
+    """CSV and Parquet, and the refusal the reference quotes for anything else.
+
+    Compression is the asymmetry the reference spells out: a suffix on a CSV
+    is read through, and one on a Parquet is still read as Parquet and fails
+    on the bytes.
+    """
+    import gzip
     import json
     import tempfile
 
@@ -1739,9 +1788,32 @@ def test_read_takes_the_formats_the_reference_names():
     frame.to_parquet(where / 'x.parquet')
     assert len(read(where / 'x.csv')) == 3
     assert len(read(where / 'x.parquet')) == 3
+    (where / 'x.csv.gz').write_bytes(
+        gzip.compress((where / 'x.csv').read_bytes())
+    )
+    assert len(read(where / 'x.csv.gz')) == 3
+    (where / 'x.parquet.gz').write_bytes(
+        gzip.compress((where / 'x.parquet').read_bytes())
+    )
+    with pytest.raises(ConnectorError):
+        read(where / 'x.parquet.gz')
     (where / 'x.json').write_text(json.dumps([{'a': 1}]), encoding='utf-8')
     with pytest.raises(ConnectorError, match='unsupported file format'):
         read(where / 'x.json')
+
+
+def test_lakebase_wants_the_database_the_reference_names():
+    """Both keywords the reference shows, required and keyword-only."""
+    import inspect
+
+    from sdm_connectors.databricks import lakebase
+
+    taken = inspect.signature(lakebase).parameters
+    assert taken['database'].kind is inspect.Parameter.KEYWORD_ONLY
+    assert taken['database'].default is inspect.Parameter.empty, (
+        'database has a default, and the reference says it is required'
+    )
+    assert taken['workspace'].kind is inspect.Parameter.KEYWORD_ONLY
 
 
 def test_a_source_reads_the_catalogs_own_keys():
