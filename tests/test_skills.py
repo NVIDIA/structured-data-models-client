@@ -152,7 +152,7 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'{where} writes an HTML entity, which renders as a character '
                 f'this file reads as the escape it is written with'
             )
-            for marker in ('<!--', '-->'):
+            for marker in ('<!--', '-->', '--!>'):
                 assert (
                     marker not in line
                     or line.strip().startswith(marker)
@@ -241,26 +241,17 @@ def test_no_example_hides_in_a_plain_fence(path):
     example. A plain fence that parses as Python and reaches for this client
     is that move.
     """
-    # Names the python blocks bind to something of this client's. The live
-    # runner shares one namespace across a document, so an alias bound in one
-    # block reaches a later one; a plain fence using it would otherwise look
-    # like prose.
-    # `pd` too: the runner hands every example pandas, so a plain fence using
-    # it is a program that would have run and did not.
-    reachable = set(sdm_client.__all__) | {'sdm_client', 'pd'}
+    reachable = set(sdm_client.__all__) | {'sdm_client', 'pandas'}
     trees: list[ast.Module] = []
     for source in fences(path, 'python'):
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 module = getattr(node, 'module', None) or ''
-                if module == 'sdm_client' or module.startswith('sdm_client.'):
-                    reachable.update(
-                        alias.asname or alias.name for alias in node.names
-                    )
-        # Not only what is imported: a name bound from one, by assignment or
-        # by `with ... as`, reaches the next block too. Repeated to a fixed
-        # point, because a name may be bound after the thing that uses it.
+                for alias in node.names:
+                    named = module or alias.name
+                    if named.split('.')[0] in {'sdm_client', 'pandas'}:
+                        reachable.add(alias.asname or alias.name)
         trees.append(tree)
     grew = True
     while grew:
@@ -274,7 +265,6 @@ def test_no_example_hides_in_a_plain_fence(path):
                 elif isinstance(node, ast.AnnAssign):
                     sources, targets = [node.value], [node.target]
                 elif isinstance(node, ast.With):
-                    # The context expressions, not the body they wrap.
                     sources = [item.context_expr for item in node.items]
                     targets = [
                         item.optional_vars
@@ -287,8 +277,6 @@ def test_no_example_hides_in_a_plain_fence(path):
                     node,
                     (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
                 ):
-                    # The body, and everything the definition itself names: a
-                    # base class, a decorator, a default argument.
                     sources = [*node.body, *node.decorator_list]
                     if isinstance(node, ast.ClassDef):
                         sources += [*node.bases, *node.keywords]
@@ -317,10 +305,6 @@ def test_no_example_hides_in_a_plain_fence(path):
                 reachable |= bound
     exported = reachable
     for index, source in enumerate(fences(path, '')):
-        # Whatever it parses as. A transcript -- `>>>`, `In [1]:` -- parses
-        # as nothing and would otherwise read as output. A refusal quoted in
-        # a plain fence may well name this client, so the giveaway is the
-        # shape of a program rather than the mention.
         for giveaway in ('import ', '>>>', 'In ['):
             assert giveaway not in source, (
                 f'{path.name} block {index} is in a plain fence and writes '
@@ -330,7 +314,7 @@ def test_no_example_hides_in_a_plain_fence(path):
         try:
             tree = ast.parse(source)
         except SyntaxError:
-            continue  # output, a refusal, a query: not code, which is the rule
+            continue
         reached = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Name):
@@ -338,7 +322,6 @@ def test_no_example_hides_in_a_plain_fence(path):
             elif isinstance(node, ast.Attribute):
                 reached.add(node.attr)
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                # The name as written, not as bound: an alias renames it.
                 reached.update(alias.name for alias in node.names)
                 reached.add(getattr(node, 'module', None) or '')
         assert not reached & exported, (
@@ -499,21 +482,23 @@ def without_comments(path: Path) -> str:
     inside = False
     for line in path.read_text(encoding='utf-8').splitlines(keepends=True):
         if hiding:
-            if '-->' not in line:
+            closed = re.search(r'--!?>', line)
+            if closed is None:
                 continue
             hiding = False
-            line = line.split('-->', 1)[1]
+            line = line[closed.end() :]
         if not inside and '<!--' in line:  # noqa: SIM102
             rest = line
             while '<!--' in rest:
                 before, rest = rest.split('<!--', 1)
                 kept.append(before)
-                if '-->' not in rest:
+                closed = re.search(r'--!?>', rest)
+                if closed is None:
                     hiding = True
                     rest = ''
                     kept.append('\n')
                     break
-                rest = rest.split('-->', 1)[1]
+                rest = rest[closed.end() :]
             kept.append(rest)
             continue
         if line.startswith('```'):
@@ -918,8 +903,6 @@ def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
         f'{belongs[0]!r}'
     )
     if row == 'Parsed, then refused':
-        # On the operand it is for, and for being itself: a condition the
-        # parser rejected as malformed would otherwise read as this row.
         assert re.search('not supported|deprecated', why['a string'] or ''), (
             f'{comparison} is listed as parsed and then refused, and what it '
             f'actually says is {why["a string"]!r}'
@@ -978,8 +961,6 @@ def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
             )
         return str(raised.value)
 
-    # The refusal names the bound, which is what pins the number written
-    # down: asking past a bound that is merely too generous is refused too.
     assert f'at least {low}' in refused(low - 1), (
         f'{clause} does not say {low} is its least'
     )
@@ -1118,9 +1099,6 @@ def test_classify_is_refused_as_multilabel(schema):
             'FOR EACH users.user_id',
             schema,
         )
-    # The other way to write a target CLASSIFY would take: a column of its
-    # own, declared the one stype the clause accepts. Refused in its own
-    # words, which the skill quotes beside the first.
     column = schema.tables['users'].columns['segment']
     schema.tables['users'].columns['segment'] = type(column)(
         'segment', dtype=column.dtype, stype='multicategorical'
@@ -1230,10 +1208,7 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
         if shown is None:
             continue
         checked += 1
-        # Only the newline the fence adds. Indentation is the output: a
-        # frame's columns line up, and a block that lost that alignment would
-        # otherwise read as the one that was run.
-        assert printed.getvalue().rstrip('\n') == shown.rstrip('\n'), (
+        assert printed.getvalue() == shown, (
             f'{path.name} example {index} shows\n{shown}\nand printed\n'
             f'{printed.getvalue()}'
         )
@@ -1284,7 +1259,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         f'{name} heads its table with the wrong model'
     )
     shown = table(path, 'Tasks')
-    shown.pop('', None)  # the header, which labels the column not a row
+    shown.pop('', None)
     said: dict[str, object] = {
         'Tasks': set(capabilities.tasks),
         'Outputs': set(capabilities.outputs),
@@ -1347,7 +1322,7 @@ def test_the_limits_table_is_the_shipped_limits():
     path = SKILLS / 'relational' / 'SKILL.md'
     assert heading(path, 'Limit') == 'Value'
     shown = table(path, 'Limit')
-    shown.pop('Limit')  # the header
+    shown.pop('Limit')
     assert set(shown) == set(LIMIT_ROWS), (
         'the limits table and the limits no longer line up: '
         f'{sorted(set(shown) ^ set(LIMIT_ROWS))}'
@@ -1369,8 +1344,6 @@ def spelled_in_the_grammar(token: str) -> set[str]:
     ).read_text(encoding='utf-8')
     at = body.index(f'{token}:')
     block = body[at : body.index(';', at)]
-    # The grammar spells each word operator twice, upper and lower. One
-    # spelling is enough to compare against, and a symbol has only the one.
     return {
         name for name in re.findall(r"'([^']+)'", block) if name == name.upper()
     }

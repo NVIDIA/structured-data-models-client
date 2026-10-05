@@ -204,10 +204,6 @@ def _per_candidate(
     """
     aggregation = query.get_final_target_aggregation()
     if aggregation is None:
-        # A ranking over a column rather than over a window. The language
-        # takes it where the column is multicategorical, and there is nothing
-        # here to ask one candidate at a time about; without this it was an
-        # AttributeError, which is not an error anyone can catch for.
         raise StructuredDataError(
             'a ranking is asked one candidate at a time, about what an '
             'entity reaches in a window, and this one ranks a column '
