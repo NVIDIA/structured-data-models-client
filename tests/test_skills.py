@@ -1931,6 +1931,20 @@ def test_describing_a_source_reads_a_thousand_rows_of_it():
         f'says up to a thousand of each leave the warehouse'
     )
 
+    connection.execute(
+        'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
+    )
+    smaller = Schema.from_source(
+        DuckDBSource(connection),
+        {'small': 'small'},
+        primary_keys={'small': 'id'},
+    )
+    whole = len(smaller._engine_tables._tables['small']._source_sample_df)
+    assert whole == 12, (
+        f'a 12-row source gave {whole} rows, and the reference says all of a '
+        f'table that small is what leaves'
+    )
+
 
 def test_a_source_type_is_chosen_for_you():
     """``Source(connection)`` picks the backend, which the reference offers."""

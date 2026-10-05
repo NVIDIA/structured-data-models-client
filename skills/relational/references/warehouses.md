@@ -2,12 +2,12 @@
 
 `Schema.from_data` wants DataFrames you already hold. `Schema.from_source`
 describes tables where they are, and `materialize()` samples them with SQL, so
-the whole table never leaves the warehouse.
+what leaves the warehouse is bounded rather than the table.
 
-Some of it does. `Schema.from_source` reads up to a thousand rows of each
-selected table there and then, to work out what its columns hold, and
-`check_keys` adds a scan per eligible table. After that only the rows a
-prediction needs leave.
+Bounded, not nothing. `Schema.from_source` reads up to a thousand rows of each
+selected table there and then, to work out what its columns hold -- all of a
+table that holds a thousand or fewer -- and `check_keys` adds a scan per
+eligible table. After that only the rows a prediction needs leave.
 
 Everything else is the same afterwards: the schema, the query, the request.
 
