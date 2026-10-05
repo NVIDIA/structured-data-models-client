@@ -1154,6 +1154,69 @@ def test_a_quoted_refusal_is_the_refusal(query, said, schema):
         )
 
 
+def test_the_anchor_defaults_to_the_latest_row(schema):
+    """What "the next thirty days" is counted from, which is not today."""
+    pd = pytest.importorskip('pandas')
+    from sdm_client import KumoRelational, PredictiveQuery
+
+    query = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
+    asked = PredictiveQuery(query, schema).materialize(
+        indices=[1], model=KumoRelational()
+    )
+    elsewhere = PredictiveQuery(query, schema).materialize(
+        indices=[1],
+        model=KumoRelational(),
+        anchor_time=pd.Timestamp('2026-09-01'),
+    )
+    assert asked.payloads != elsewhere.payloads, (
+        'anchor_time changed nothing, and the skill says it moves the window'
+    )
+
+
+@pytest.mark.parametrize(
+    'target, candidates',
+    [
+        ('COUNT(orders.*, 0, 30, days) FORECAST 2 TIMEFRAMES', 0),
+        ('LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 2', 3),
+    ],
+    ids=['forecast', 'ranking'],
+)
+def test_a_request_in_several_parts_cannot_be_fitted(
+    target, candidates, schema
+):
+    """The sentence the skill adds beside sessions.
+
+    Both are several questions, each wanting the context its own labels come
+    from, and a session pins one. Refused where it is built, before any
+    endpoint sees it.
+    """
+    pd = pytest.importorskip('pandas')
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    extra = {'candidates': pd.Series(range(candidates))} if candidates else {}
+    request = resolve(
+        f'PREDICT {target} FOR EACH users.user_id', schema, **extra
+    )
+    with SDMClient(url='http://localhost:8000') as client:
+        with pytest.raises(StructuredDataError, match='session'):
+            client.fit(request, model=KumoRelational())
+
+
+def test_asking_for_the_mean_changes_the_request(schema):
+    """The other option the skill tells a reader to reach for.
+
+    materialize takes it through **options, so a misspelling would be
+    forwarded and ignored rather than refused; asking that it change the
+    request is what catches that.
+    """
+    query = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
+    assert (
+        resolve(query, schema).payloads
+        != resolve(query, schema, prediction_statistic='mean').payloads
+    ), 'prediction_statistic changed nothing, and the skill says it chooses'
+
+
 def test_a_ranking_takes_only_a_foreign_key(schema):
     """The shape a ranking's target has to be, as the skill quotes it."""
     pd = pytest.importorskip('pandas')
@@ -1630,6 +1693,59 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
         if str(name).startswith('quantile_')
     ]
     assert len(deciles) == 9, f'quantiles came back as {deciles}'
+
+
+#: The output matrix skills/relational/SKILL.md gives for the deployment:
+#: what each task is served, and everything the client would send that it
+#: will not. Asked of the endpoint, so a deployment that gains or loses one
+#: fails here rather than making the skill quietly wrong.
+SERVED = {
+    'COUNT(orders.*, 0, 30, days)': (('prediction', 'quantiles'), 'quantile_'),
+    'COUNT(orders.*, 0, 30, days) > 2': (
+        ('prediction', 'probabilities'),
+        'probability_',
+    ),
+}
+
+
+def not_served(outputs: tuple[str, ...]) -> list[str]:
+    """Everything the client would send this task that the skill says the
+    deployment will not serve: its whole advertised list, less what is.
+
+    Derived rather than listed, so the set cannot quietly shrink to whatever
+    the endpoint happens to allow.
+    """
+    advertised = set(
+        listed(table(SKILLS / 'relational' / 'SKILL.md', 'Tasks')['Outputs'][0])
+    )
+    return sorted(advertised - set(outputs))
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not RELATIONAL_URL,
+    reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
+)
+@pytest.mark.parametrize('target', sorted(SERVED), ids=lambda v: v[:30])
+def test_the_relational_endpoint_serves_the_matrix_the_skill_gives(
+    target, schema
+):
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    outputs, column = SERVED[target]
+    request = resolve(f'PREDICT {target} FOR EACH users.user_id', schema)
+    with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
+        shown = client.predict(
+            request, model=KumoRelational(), outputs=list(outputs)
+        ).to_pandas()
+        assert 'prediction' in shown.columns, f'{target} gave no prediction'
+        assert any(str(name).startswith(column) for name in shown.columns), (
+            f'{target} gave no {column}* columns, only {list(shown.columns)}'
+        )
+        for field in not_served(outputs):
+            with pytest.raises(StructuredDataError, match=field):
+                client.predict(request, model=KumoRelational(), outputs=[field])
 
 
 @pytest.mark.live_nim

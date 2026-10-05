@@ -1,7 +1,9 @@
 # Writing the query
 
-A predictive query is the question. The task is never an argument: it follows
-from what the query asks for, and getting the query right is the whole job.
+A predictive query is the question. On the relational model the task is never
+an argument: it follows from what the query asks for, and getting the query
+right is the whole job. (On `kumo-tabular`, where a target of whole numbers
+could be either, `materialize(task=...)` settles it.)
 
 ## The shape
 
@@ -185,7 +187,11 @@ a condition over one: `PREDICT users.segment = 'a' FOR EACH users.user_id` is a
 binary classification and needs no window. It is aggregating that needs one.
 
 **The window is the future, and both ends must be non-negative.** `0, 30, days`
-is the next thirty days. A target reaching backwards is refused:
+is the thirty days after the anchor — and the anchor is **not today**. Left
+unsaid it is the latest timestamp in the table the target aggregates, so on
+data that stops in April you are asking about May, whenever you run it. Say
+`materialize(..., anchor_time=pd.Timestamp('2026-09-01'))` to ask from a
+moment of your choosing. A target reaching backwards is refused:
 
 ```
 PREDICT COUNT(orders.*, -30, 0, days) FOR EACH users.user_id

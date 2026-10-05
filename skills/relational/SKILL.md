@@ -56,6 +56,14 @@ The task is not an argument. It follows from the query: see
 
 ## The whole interface
 
+`KumoRelational` needs the engine, which is an extra:
+
+```
+pip install 'sdm-client[relational]'
+```
+
+Without it the first call raises `MissingExtraError` naming that command.
+
 ```python
 import pandas as pd
 from sdm_client import (
@@ -171,8 +179,8 @@ request = PredictiveQuery(
 
 A candidate whose gathered context holds only one answer cannot be scored, so
 it is left out of the ranking and named on `result.unscored_candidates`, with a
-warning. That is common: a candidate nothing in the sampled context ever
-reached has no example to learn from. The ranking still fills `TOP k` from
+warning. That happens when the labels do not vary — every entity in the sample
+reached that candidate, or none did — and the second is the common one. The ranking still fills `TOP k` from
 whatever was scored, and comes back shorter only when fewer than `k` candidates
 survive — so a short list means check `result.unscored_candidates`, and a full
 one does not mean every candidate was considered.
@@ -206,6 +214,10 @@ with SDMClient(url='http://localhost:8000', timeout=600) as client:
 `forecast_step` counts from one, and `row_index` repeats, so neither alone
 identifies a row: a forecast is keyed by the pair.
 
+Neither can be fitted into a session. Each part needs the context its own
+labels come from, so a ranking and a forecast are asked with `predict()` and
+`fit()` refuses them.
+
 An explanation is asked for as an output, `outputs=[..., 'explanation']`, never
 an `explain=` argument, and read from `result.explanation`. It covers one
 scored row at a time. A ranking refuses it locally, and the shipping endpoint
@@ -228,7 +240,7 @@ change. The ones worth knowing:
 
 | Refusal | Cause |
 |---|---|
-| a candidate's context holds one class | nothing in the sample reached it; widen with `num_context_samples` or ask over a table of pairs |
+| a candidate's context holds one class | every gathered entity reached it, or none did, so there is nothing to tell apart; widen with `num_context_samples` or ask over a table of pairs |
 | no entity existed at the anchor | the entity table's time column starts after the anchor, so nothing existed to ask about |
 | more entities than the model scores | split them across calls |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
