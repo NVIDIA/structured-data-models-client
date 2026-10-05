@@ -152,7 +152,23 @@ def test_no_example_hides_in_a_plain_fence(path):
     example. A plain fence that parses as Python and reaches for this client
     is that move.
     """
-    exported = set(sdm_client.__all__)
+    # Names the python blocks bind to something of this client's. The live
+    # runner shares one namespace across a document, so an alias bound in one
+    # block reaches a later one; a plain fence using it would otherwise look
+    # like prose.
+    reachable = set(sdm_client.__all__) | {'sdm_client'}
+    for source in fences(path, 'python'):
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                module = getattr(node, 'module', None) or ''
+                if module != 'sdm_client' and not module.startswith(
+                    'sdm_client.'
+                ):
+                    continue
+                reachable.update(
+                    alias.asname or alias.name for alias in node.names
+                )
+    exported = reachable
     for index, source in enumerate(fences(path, '')):
         try:
             tree = ast.parse(source)
@@ -168,10 +184,9 @@ def test_no_example_hides_in_a_plain_fence(path):
                 # The name as written, not as bound: an alias renames it.
                 reached.update(alias.name for alias in node.names)
                 reached.add(getattr(node, 'module', None) or '')
-        assert not reached & (exported | {'sdm_client'}), (
+        assert not reached & exported, (
             f'{path.name} block {index} is in a plain fence and uses '
-            f'{sorted(reached & (exported | {"sdm_client"}))}; tag it python '
-            f'so it is run'
+            f'{sorted(reached & exported)}; tag it python so it is run'
         )
 
 
@@ -307,13 +322,17 @@ def without_comments(path: Path) -> str:
                 kept.append(line.split('-->', 1)[1])
             continue
         if not inside and '<!--' in line:
-            before, rest = line.split('<!--', 1)
-            kept.append(before)
-            if '-->' in rest:
-                kept.append(rest.split('-->', 1)[1])
-            else:
-                hiding = True
-                kept.append('\n')
+            rest = line
+            while '<!--' in rest:
+                before, rest = rest.split('<!--', 1)
+                kept.append(before)
+                if '-->' not in rest:
+                    hiding = True
+                    rest = ''
+                    kept.append('\n')
+                    break
+                rest = rest.split('-->', 1)[1]
+            kept.append(rest)
             continue
         if line.startswith('```'):
             inside = not inside
@@ -352,6 +371,10 @@ def tables(path: Path) -> list[list[list[str]]]:
         if all('-' in cell and set(cell) <= {'-', ':'} for cell in cells):
             assert len(current) == 1, (
                 f'{path.name} rules a table under {len(current)} rows'
+            )
+            assert len(cells) == len(current[0]), (
+                f'{path.name} rules {len(current[0])} columns with '
+                f'{len(cells)}, which renders as a paragraph, not a table'
             )
             ruled = True
             continue
@@ -631,43 +654,60 @@ def filtered(comparison: str, against: str) -> str:
     )
 
 
-@pytest.mark.parametrize('against', ['a number', 'a time', 'a string'])
-@pytest.mark.parametrize('comparison', ANY_VALUE)
-def test_a_comparison_answered_on_any_value_is(comparison, against, schema):
-    assert (
-        resolve(filtered(comparison, against), schema).task.kind == 'regression'
-    )
+#: Each row of the comparison table, and what being in it claims: whether a
+#: condition using that operator is answered against a number, a time and a
+#: string.
+ROW_MEANS = {
+    'Answered on any value': (True, True, True),
+    'Answered on numbers and times only': (True, True, False),
+    'Parsed, then refused': (False, False, False),
+}
 
 
-@pytest.mark.parametrize('against', ['a number', 'a time'])
-@pytest.mark.parametrize('comparison', ORDERED)
-def test_a_comparison_answered_on_numbers_and_times_is(
-    comparison, against, schema
-):
-    assert (
-        resolve(filtered(comparison, against), schema).task.kind == 'regression'
-    )
-
-
-@pytest.mark.parametrize('comparison', ORDERED)
-def test_a_comparison_answered_on_numbers_and_times_refuses_a_string(
-    comparison, schema
-):
-    """The row's whole point: these four order a number and not a string."""
+def answers(comparison: str, against: str, schema) -> bool:
     from sdm_client.errors import StructuredDataError
 
-    with pytest.raises(StructuredDataError, match='between strings'):
-        resolve(filtered(comparison, 'a string'), schema)
+    try:
+        resolve(filtered(comparison, against), schema)
+    except StructuredDataError:
+        return False
+    return True
 
 
-@pytest.mark.parametrize('comparison', REFUSED_OPS)
-def test_a_comparison_the_skill_warns_about_is_refused(comparison, schema):
-    """Every one of these parses and is then refused, which is why the skill
-    lists them separately rather than leaving them out."""
-    from sdm_client.errors import StructuredDataError
+@pytest.mark.parametrize(
+    'comparison, row',
+    [
+        (comparison, row)
+        for row, names in (
+            ('Answered on any value', ANY_VALUE),
+            ('Answered on numbers and times only', ORDERED),
+            ('Parsed, then refused', REFUSED_OPS),
+        )
+        for comparison in names
+    ],
+)
+def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
+    """Asked three ways, and the answers decide the row.
 
-    with pytest.raises(StructuredDataError, match='not supported|deprecated'):
-        resolve(filtered(comparison, 'a string'), schema)
+    Reading the table and testing each row on the operand that row talks
+    about is circular: it confirms whatever the table says. Every operator is
+    asked against a number, a time and a string, and the three answers pick
+    the row, which is then compared with the row it is written in. Moving one
+    operator between rows fails here.
+    """
+    found = tuple(
+        answers(comparison, against, schema)
+        for against in ('a number', 'a time', 'a string')
+    )
+    belongs = [name for name, shape in ROW_MEANS.items() if shape == found]
+    assert belongs, (
+        f'{comparison} is answered {found} against a number, a time and a '
+        f'string, and no row of the table says that'
+    )
+    assert belongs == [row], (
+        f'pql.md lists {comparison} under {row!r} and it behaves like '
+        f'{belongs[0]!r}'
+    )
 
 
 def test_a_ranking_is_capped_at_twenty_candidates(schema):
