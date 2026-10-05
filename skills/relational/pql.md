@@ -6,10 +6,21 @@ from what the query asks for, and getting the query right is the whole job.
 ## The shape
 
 ```
-PREDICT <target> [ RANK TOP k | FORECAST n TIMEFRAMES ]
+PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
 (FOR EACH | FOR) <entity>
 [ ASSUMING <condition> ]
 ```
+
+`CLASSIFY` is in the language and **not reachable on these models**. It takes
+only a multicategorical target, a column holding a list of labels per row, and
+this client refuses to send such a column at all:
+
+```
+users.tags holds a container (list), and a nested column is not something this
+client can send. Multi-label targets are not supported by these models
+```
+
+So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`.
 
 Every query names columns as `table.column`, and `table.*` for the rows of a
 table rather than a column of it. A keyword may be written in upper case or in
@@ -33,8 +44,8 @@ Each line below was resolved against a schema and the resulting
 
 The last two are worth reading twice. A forecast and a ranking are not single
 calls with their own task kind: a forecast is asked as one regression per step,
-and a ranking as one classification per candidate. `request.parts` holds those calls
-and is `None` when there is only one, while `request.context_rows` and
+and a ranking as one classification per candidate. `request.parts` holds those
+calls and is `None` when there is only one, while `request.context_rows` and
 `request.predict_rows` count across all of them.
 
 So a comparison makes a classification out of a quantity. `COUNT(...) > 2` asks
@@ -109,7 +120,9 @@ Two clauses look like they narrow that set, and neither does:
 
   ```
   the entity filter "users.segment = 'a'" selects the labelled examples the
-  model learns from, and does not narrow the 1 row being scored
+  model learns from, and does not narrow the 1 rows named for scoring. Those
+  are scored as given, whether or not they satisfy it. Pass only indices that
+  satisfy the condition if that is what you meant.
   ```
 
 So to score a particular set of entities, pass that set as `indices`. Use the

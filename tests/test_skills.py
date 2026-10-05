@@ -8,9 +8,12 @@ A skill is read by something that cannot check it. Everything here is the
 check: the names the skills import exist, the queries they teach resolve to the
 task they claim, and the refusals they promise are the refusals that happen.
 
-Nothing here needs an endpoint. The live output pasted into the skills was
-verified by hand; what rots without noticing is the client-side half, and that
-is what runs below.
+Most of it needs no endpoint: the tables are read out of the markdown and put
+to the client, which answers without connecting. The rest is marked
+``live_nim`` and needs one of each model, through ``SDM_TABULAR_URL`` and
+``SDM_RELATIONAL_URL``. Those re-run every example and compare what it printed
+to the block pasted beneath it, and probe the handful of claims the skills make
+about a deployment rather than about this client.
 """
 
 from __future__ import annotations
@@ -191,18 +194,25 @@ def tables(path: Path) -> list[list[list[str]]]:
     """
     found: list[list[list[str]]] = []
     current: list[list[str]] = []
+    ruled = False
     for line in path.read_text(encoding='utf-8').splitlines():
         stripped = line.strip()
         if not (stripped.startswith('|') and stripped.endswith('|')):
             if current:
+                assert ruled, f'{path.name} has a table with no rule under it'
                 found.append(current)
-                current = []
+            current, ruled = [], False
             continue
         cells = [cell.strip() for cell in stripped[1:-1].split('|')]
-        if any(cell and set(cell) <= {'-', ':'} for cell in cells):
+        if all(cell and set(cell) <= {'-', ':'} for cell in cells):
+            assert len(current) == 1, (
+                f'{path.name} rules a table under {len(current)} rows'
+            )
+            ruled = True
             continue
         current.append(cells)
     if current:
+        assert ruled, f'{path.name} has a table with no rule under it'
         found.append(current)
     return found
 
@@ -422,7 +432,12 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
             f'{path.name} example {index} shows\n{shown}\nand printed\n'
             f'{printed.getvalue()}'
         )
-    assert checked, f'{path.name} marks nothing as verified'
+    marked = path.read_text(encoding='utf-8').count('**Verified**')
+    assert marked, f'{path.name} marks nothing as verified'
+    assert checked == marked, (
+        f'{path.name} marks {marked} outputs as verified and {checked} of '
+        f'them sit where an example can be paired with them'
+    )
 
 
 @pytest.mark.live_nim
@@ -465,6 +480,14 @@ def table(path: Path, label: str) -> dict[str, list[str]]:
     return collected
 
 
+def heading(path: Path, label: str) -> list[str]:
+    """The header row of the table holding ``label``, as its cells."""
+    for one in tables(path):
+        if any(row[0] == label for row in one):
+            return one[0]
+    raise AssertionError(f'{path.name} has no {label!r} row')
+
+
 @pytest.mark.parametrize(
     'name, model_name',
     [('tabular', 'KumoTabular'), ('relational', 'KumoRelational')],
@@ -476,22 +499,36 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
     model = getattr(sdm_client, model_name)()
     with SDMClient(url='http://localhost:8000') as client:
         capabilities = client.capabilities(model)
-    shown = table(SKILLS / name / 'SKILL.md', 'Tasks')
+    path = SKILLS / name / 'SKILL.md'
+    assert capabilities.model in heading(path, 'Tasks')[1], (
+        f'{name} heads its table with the wrong model'
+    )
+    shown = table(path, 'Tasks')
     shown.pop('', None)  # the header, which labels the column not a row
-    said = {
+    said: dict[str, object] = {
         'Tasks': set(capabilities.tasks),
         'Outputs': set(capabilities.outputs),
         'Several tables': capabilities.multiple_tables,
         'Relationships': capabilities.relationships,
         'Sessions': capabilities.sessions,
     }
-    extra = set(shown) - set(said) - {'Explanations', 'Context rows'}
-    assert not extra, f'{name} shows rows nothing checks: {sorted(extra)}'
+    if 'Explanations' in shown:
+        said['Explanations'] = 'explanation' in capabilities.outputs
+    if 'Context rows' in shown:
+        from sdm_client.models import TABULAR_LIMITS
+
+        said['Context rows'] = TABULAR_LIMITS['context_rows_max']
+    assert set(shown) == set(said), (
+        f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
+    )
     for label, truth in said.items():
-        assert label in shown, f'{name} no longer shows {label!r}'
         cell = shown[label][0]
         if isinstance(truth, bool):
             assert cell == ('yes' if truth else 'no'), (
+                f'{name} says {label} is {cell!r}'
+            )
+        elif isinstance(truth, int):
+            assert int(cell.replace(',', '')) == truth, (
                 f'{name} says {label} is {cell!r}'
             )
         else:
@@ -524,7 +561,9 @@ def test_the_limits_table_is_the_shipped_limits():
     assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
         'the client enforces a limit this table does not account for'
     )
-    shown = table(SKILLS / 'relational' / 'SKILL.md', 'Limit')
+    path = SKILLS / 'relational' / 'SKILL.md'
+    assert heading(path, 'Limit') == ['Limit', 'Value']
+    shown = table(path, 'Limit')
     shown.pop('Limit')  # the header
     assert set(shown) == set(LIMIT_ROWS), (
         'the limits table and the limits no longer line up: '
@@ -567,7 +606,9 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
     """``quantiles`` on a regression, ``probabilities`` on a classification.
 
     The skill says the endpoint narrows what the client would send, so the
-    narrowing is what is asked about here, not the client's own table.
+    narrowing is what is asked about here, not the client's own table. Both
+    directions: an endpoint that began serving the wrong one would make the
+    skill wrong, and should fail here rather than go unnoticed.
     """
     from sdm_client import KumoTabular, Request, SDMClient
     from sdm_client.errors import StructuredDataError
@@ -596,6 +637,10 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
             target='spend',
             task='regression',
         )
+        with pytest.raises(StructuredDataError, match='probabilities'):
+            client.predict(
+                quantity, model=KumoTabular(), outputs=['probabilities']
+            )
         answer = client.predict(
             quantity, model=KumoTabular(), outputs=['prediction', 'quantiles']
         )
