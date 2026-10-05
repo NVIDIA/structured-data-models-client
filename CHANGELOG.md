@@ -131,8 +131,7 @@ declare as `1.0.0` and none has published. The heading becomes
 ### Fixed
 
 - **A schema may infer a different time column than before.** `from_data`
-  and `from_source` now both call one function,
-  `predictive_query.time_columns.choose_time_column`, so the same rows get
+  and `from_source` now choose it by one internal rule, so the same rows get
   the same time column either way. It never takes a timestamp that is empty
   in more than half the table's rows, or holds one value in every row that
   holds one (unless the table has a single row), nor one whose name says
