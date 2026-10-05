@@ -24,7 +24,8 @@ PREDICT COUNT(orders.*, 0, 30, days) CLASSIFY FOR EACH users.user_id
   'LIST_DISTINCT' aggregation.
 ```
 
-Take one of those and it is refused for being multilabel instead — as a
+Two of the targets it suggests are `FIRST` and `LAST`, which this model does
+not answer at all. The other two are refused for being multilabel — as a
 `LIST_DISTINCT`:
 
 ```
@@ -146,7 +147,21 @@ PREDICT FIRST(orders.channel, 0, 30, days) FOR EACH users.user_id
 
 The second line of that refusal is a rule of its own: **aggregate a number, not
 a category.** The one way to ask about a category is `LIST_DISTINCT` over a
-foreign key, which is a ranking.
+foreign key.
+
+**Give that one `RANK TOP k`.** Without the clause it is a link prediction,
+which the client builds natively and the deployment has no task for:
+
+```
+PREDICT LIST_DISTINCT(orders.item, 0, 30, days) FOR EACH users.user_id
+→ [422 UNSUPPORTED_TASK] task 'temporal_link_prediction' not supported by
+  model 'kumo-relational'; supported: ['classification',
+  'binary_classification',
+  'multiclass_classification', 'regression'].
+```
+
+That is what `RANK` is for: it asks the same question as one classification
+per candidate, which the endpoint does serve.
 
 ```
 AGGR(column, start, end, unit)

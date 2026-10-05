@@ -668,6 +668,9 @@ def listed(cell: str) -> list[str]:
         f'{cell!r} is read as a list of code spans and is not one; write it '
         f'as `a`, `b`, `c` with nothing else in the cell'
     )
+    assert len(found) == len(set(found)), (
+        f'{cell!r} names something twice, and is read as a set'
+    )
     return found
 
 
@@ -1084,8 +1087,14 @@ def transcripts() -> list[tuple[str, list[str]]]:
         if current:
             said.append(current)
         found.append((asked[0], said))
-    assert len(found) == 6, f'pql.md shows {len(found)} transcripts, not 6'
+    assert len(found) == 7, f'pql.md shows {len(found)} transcripts, not 7'
     return found
+
+
+def from_the_endpoint(said: list[str]) -> bool:
+    """Whether a transcript quotes a deployment's refusal rather than this
+    client's. The deployment's carry the status it answered with."""
+    return any(re.match(r'\[?\d{3}\b', one) for one in said)
 
 
 #: The one transcript whose query needs a column the fixture does not build.
@@ -1093,7 +1102,9 @@ NEEDS_MULTICATEGORICAL = 'PREDICT users.segment CLASSIFY FOR EACH users.user_id'
 
 
 @pytest.mark.parametrize(
-    'query, said', transcripts(), ids=lambda v: str(v)[:40]
+    'query, said',
+    [one for one in transcripts() if not from_the_endpoint(one[1])],
+    ids=lambda v: str(v)[:40],
 )
 def test_a_quoted_refusal_is_the_refusal(query, said, schema):
     """Run what pql.md shows being asked, and read back what it shows."""
@@ -1123,11 +1134,24 @@ def test_a_quoted_refusal_is_the_refusal(query, said, schema):
                 f'pql.md shows {part!r} and the client says {whole!r}'
             )
             at = found + len(part)
-        if parts[-1]:
-            assert whole.endswith(parts[-1]) or quoted is not said[-1], (
-                f'pql.md stops quoting at {parts[-1]!r} while the client goes '
-                f'on to say {whole[at:]!r}; write ... to elide it'
-            )
+        if not parts[-1]:
+            continue
+        rest = (
+            whole[at:]
+            if quoted is said[-1]
+            else whole[
+                at : whole.find(
+                    ' '.join(
+                        said[said.index(quoted) + 1].split(' ... ')[0].split()
+                    ),
+                    at,
+                )
+            ]
+        )
+        assert not re.sub(r'row \d+, column \d+:|[\s;.]', '', rest), (
+            f'pql.md stops quoting at {parts[-1]!r} while the client goes on '
+            f'to say {rest!r}; write ... to elide it'
+        )
 
 
 def test_a_ranking_takes_only_a_foreign_key(schema):
@@ -1371,6 +1395,36 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
         f'{path.name} marks {marked} outputs as verified and {checked} of '
         f'them sit where an example can be paired with them'
     )
+
+
+@pytest.mark.live_nim
+@pytest.mark.skipif(
+    not RELATIONAL_URL,
+    reason='set SDM_RELATIONAL_URL to a kumo-relational NIM',
+)
+@pytest.mark.parametrize(
+    'query, said',
+    [one for one in transcripts() if from_the_endpoint(one[1])],
+    ids=lambda v: str(v)[:40],
+)
+def test_a_quoted_refusal_from_the_endpoint_is_the_refusal(query, said, schema):
+    """The transcripts pql.md shows the deployment answering, asked of it.
+
+    A link prediction is built here and refused there, so it takes an
+    endpoint to see; the rest of the transcripts never leave this machine.
+    """
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import StructuredDataError
+
+    request = resolve(query, schema)
+    with SDMClient(url=RELATIONAL_URL, timeout=600) as client:
+        with pytest.raises(StructuredDataError) as raised:
+            client.predict(request, model=KumoRelational())
+    whole = ' '.join(str(raised.value).split())
+    for quoted in said:
+        assert ' '.join(quoted.split()) in whole, (
+            f'pql.md shows {quoted!r} and the endpoint says {whole!r}'
+        )
 
 
 @pytest.mark.live_nim
