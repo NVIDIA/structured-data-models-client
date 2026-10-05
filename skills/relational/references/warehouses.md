@@ -109,8 +109,15 @@ only where there are no constraints. `check_keys=False` skips the uniqueness
 check, which is one statement that scans each eligible table.
 
 **`duckdb.connect('shop.db')` creates the file if it is not there**, so a
-mistyped path gives an empty database and a schema that holds no table. Pass
-`read_only=True` and it refuses the missing path instead.
+mistyped path gives an empty database, and describing it is refused for being
+empty rather than for the path being wrong:
+
+```
+DuckDBSource() holds no table to describe
+```
+
+Pass `read_only=True` and the connection refuses the missing path instead,
+which says what actually went wrong.
 
 ## A warning from the engine to ignore
 

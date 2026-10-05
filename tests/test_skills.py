@@ -1355,6 +1355,30 @@ def test_a_category_is_multiclass_however_few_values_it_holds(schema):
         f'is stored decides rather than how many values it holds'
     )
 
+    users['segment'] = [0, 1] * 6
+    numbers = Schema.from_data(
+        {'users': users, 'orders': schema.tables['orders'].data},
+        primary_keys={'users': 'user_id', 'orders': 'order_id'},
+        time_columns={'orders': 'ordered_at'},
+        relationships=[Relationship('orders', 'user_id', 'users', 'user_id')],
+    )
+    kind = resolve(
+        'PREDICT users.segment FOR EACH users.user_id', numbers
+    ).payloads[0]['task']['kind']
+    assert kind == 'regression', (
+        f'two whole numbers resolved to {kind}, and pql.md says a binary '
+        f'question comes from a comparison and from nothing else'
+    )
+
+    numbers['users']['segment'].stype = 'categorical'
+    kind = resolve(
+        'PREDICT users.segment FOR EACH users.user_id', numbers
+    ).payloads[0]['task']['kind']
+    assert kind == 'multiclass_classification', (
+        f'saying the column is a category left it as {kind}, and pql.md tells '
+        f'a reader to say so that way'
+    )
+
 
 def test_asking_for_the_mean_changes_the_request(schema):
     """The other option the skill tells a reader to reach for.
@@ -1943,6 +1967,36 @@ def test_describing_a_source_reads_a_thousand_rows_of_it():
     assert whole == 12, (
         f'a 12-row source gave {whole} rows, and the reference says all of a '
         f'table that small is what leaves'
+    )
+
+
+def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
+    """The mistyped DuckDB path, which gives an empty database rather than none.
+
+    The refusal names the source and not the path, which is the whole reason
+    the reference tells a reader to pass ``read_only=True``.
+    """
+    duckdb = pytest.importorskip('duckdb')
+    pytest.importorskip('sdm_relational_engine')
+
+    from sdm_client import Schema
+    from sdm_client.errors import StructuredDataError
+    from sdm_connectors import DuckDBSource
+
+    quoted = [
+        block
+        for block in fences(WAREHOUSES, '')
+        if 'no table to describe' in block
+    ]
+    assert len(quoted) == 1, (
+        'warehouses.md quotes that refusal once, and this found '
+        f'{len(quoted)} of it'
+    )
+    said = quoted[0].strip()
+    with pytest.raises(StructuredDataError) as raised:
+        Schema.from_source(DuckDBSource(duckdb.connect()))
+    assert said in ' '.join(str(raised.value).split()), (
+        f'warehouses.md quotes {said!r} and the refusal is {raised.value}'
     )
 
 

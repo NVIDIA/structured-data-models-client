@@ -118,8 +118,10 @@ Each line below was resolved against a schema and the resulting
 
 `users.segment` is multiclass because of how it is stored, not how many
 values it holds: a column read as a category is a multiclass question even
-holding two. What makes a binary one is a comparison, or whole numbers read as
-labels.
+holding two. A binary one comes from a comparison, and from nothing else here
+-- a column of whole numbers is a regression however few of them there are,
+and a column of ones and zeroes warns that it is being read that way and tells
+you how to say otherwise: `schema['users']['segment'].stype = 'categorical'`.
 
 The last two are worth reading twice. A forecast and a ranking are not single
 calls with their own task kind: a forecast is asked as one regression per step,
