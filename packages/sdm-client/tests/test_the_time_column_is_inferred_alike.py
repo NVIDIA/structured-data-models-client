@@ -426,6 +426,40 @@ def test_a_table_given_its_time_column_is_not_told_about_the_others() -> None:
     assert not any('- orders.' in notice for notice in said)
 
 
+def test_a_column_the_whole_table_could_not_check_is_kept_and_named(
+    build_duckdb: Build, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The query over the whole table times out, as it can on a large
+    view. Every row read holds one day, which the first rows of a table
+    kept in time order often do, so the column is kept, and said.
+    """
+    from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable
+
+    fetch = DuckDBTable._fetch_rows
+
+    def timed_out(self: DuckDBTable, sql: str) -> list[tuple]:
+        if sql.startswith('SELECT COUNT(*), MIN('):
+            raise RuntimeError('canceling statement due to statement timeout')
+        return fetch(self, sql)
+
+    monkeypatch.setattr(DuckDBTable, '_fetch_rows', timed_out)
+    schema, said = _described(
+        lambda: Schema.from_source(build_duckdb(_frames({'ordered': ONE_DAY})))
+    )
+    assert schema['orders'].time_column == 'ordered'
+    assert said == [
+        TIME_COLUMN_NOTICE
+        + '- customers.ModifiedDate was not taken as the time column because '
+        'every row holds 2025-09-11 00:00:00. If it does say when a row '
+        "became true, name it: time_columns={'customers': 'ModifiedDate'}.\n"
+        '- orders.ordered was taken as the time column although every one of '
+        'the 1,000 rows read holds 2025-09-11 00:00:00, because the query '
+        'over the whole table failed and the rows past them were not '
+        'checked. If the whole table is like that, clear it: '
+        "time_columns={'orders': None}."
+    ]
+
+
 def test_a_customer_can_be_counted_once_its_edit_stamp_is_refused(
     build_duckdb: Build,
 ) -> None:

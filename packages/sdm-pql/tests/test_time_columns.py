@@ -338,7 +338,35 @@ def test_a_value_held_once_is_checked_against_the_whole_table():
 
 
 def test_a_table_that_cannot_be_asked_keeps_its_column():
-    assert _choose(lambda name: None, joined=ONE_DAY).column == 'joined'
+    """rel-hm's `t_dat` holds one date in its first 1000 rows and not
+    past them, so the rows read are no proof, but they are said.
+    """
+    choice = _choose(lambda name: None, joined=ONE_DAY)
+    assert choice.column == 'joined'
+    assert choice.rejected == ()
+    assert choice.unconfirmed == (
+        RejectedTimeColumn('joined', 'constant', ONE_DAY[0]),
+    )
+    assert choice.unconfirmed[0].why == (
+        'every one of the 4 rows read holds 2025-09-11 00:00:00'
+    )
+
+
+def test_a_table_that_cannot_be_asked_says_what_the_rows_read_hold():
+    sparse = pd.Series([pd.NaT, pd.NaT, pd.NaT, DAYS[0]])
+    choice = _choose(lambda name: None, cancelled_at=sparse, ordered=DAYS)
+    assert choice.column == 'ordered'
+    assert [(doubt.column, doubt.why) for doubt in choice.unconfirmed] == [
+        ('cancelled_at', '3 of the 4 rows read hold no value')
+    ]
+    assert _choose(lambda name: None, ordered=DAYS).unconfirmed == ()
+    # Still ahead of a stamp of the last edit.
+    assert _choose(lambda name: None, t_dat=ONE_DAY, updated=DAYS).column == (
+        't_dat'
+    )
+    assert _choose(lambda name: None, joined=NO_DAY).unconfirmed[0].why == (
+        'none of the 4 rows read holds a value'
+    )
 
 
 def test_a_creation_stamp_is_preferred_over_another_timestamp():

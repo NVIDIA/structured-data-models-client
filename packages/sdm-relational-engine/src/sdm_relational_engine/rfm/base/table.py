@@ -908,7 +908,9 @@ class Table(ABC):
                 f'SELECT {", ".join(selects)}\nFROM {self._quoted_source_name}'
             )
         except Exception:
-            # Only evidence rejects a column, and a failed query is none.
+            # A timeout on a large view, most often. The rows read then say
+            # what they can, and a column they would refuse is kept and
+            # named as unconfirmed.
             return None
         count, *ranges = rows[0]
         return TableRange(

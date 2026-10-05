@@ -18,6 +18,12 @@ began. Of several left, a `created` stamp is taken, and otherwise the one
 whose values start earliest, placeholders such as 1900-01-01 or 1970-01-01
 left out.
 
+Whether a column is empty or holds one value is read over every row of the
+table. When the query that reads it fails, a column the rows read would
+refuse is kept behind any they do not, and what they say of it is returned
+for the caller to warn about: the first rows of a table kept in time order
+often share one day, so they are no proof.
+
 :func:`choose_time_column` is the one rule both inference paths apply: the
 client's, which reads a frame, and the relational engine's, which reads a
 source. It sits here because both already import this distribution and
@@ -180,6 +186,9 @@ class RejectedTimeColumn:
             one or the reason is not ``'constant'``.
         missing: How many rows hold no value, when the reason is the values.
         rows: How many rows the table has, when the reason is the values.
+        whole: Whether ``missing`` and ``rows`` count every row of the
+            table. ``False`` when they count only the rows read, because
+            the query over every row failed.
     """
 
     column: str
@@ -189,6 +198,7 @@ class RejectedTimeColumn:
     value: object = None
     missing: int = field(default=0, compare=False)
     rows: int = field(default=0, compare=False)
+    whole: bool = field(default=True, compare=False)
 
     @property
     def why(self) -> str:
@@ -201,6 +211,8 @@ class RejectedTimeColumn:
             return 'it looks like when a row was loaded, not when it began'
         if self.reason == 'birth_date':
             return 'it looks like a date of birth, not when a row began'
+        if not self.whole:
+            return self._why_in_rows_read
         if self.reason == 'sparse':
             return f'{self.missing:,} of its {self.rows:,} rows hold no value'
         if self.value is None:
@@ -211,6 +223,24 @@ class RejectedTimeColumn:
                 f'{_as_timestamp(self.value)}'
             )
         return f'every row holds {_as_timestamp(self.value)}'
+
+    @property
+    def _why_in_rows_read(self) -> str:
+        if self.reason == 'sparse':
+            return (
+                f'{self.missing:,} of the {self.rows:,} rows read hold no value'
+            )
+        if self.value is None:
+            return f'none of the {self.rows:,} rows read holds a value'
+        if self.missing:
+            return (
+                f'every one of the {self.rows:,} rows read that holds a value '
+                f'holds {_as_timestamp(self.value)}'
+            )
+        return (
+            f'every one of the {self.rows:,} rows read holds '
+            f'{_as_timestamp(self.value)}'
+        )
 
 
 @dataclass(frozen=True)
@@ -229,6 +259,9 @@ class TimeColumnChoice:
         refused: Every column screened out, each with its reason, in table
             order, a lone edit stamp taken as the last resort included.
         fallback: The lone edit stamp left, when no other timestamp was.
+        unconfirmed: Every column the rows read would refuse for its values
+            but that was kept, because the query over every row failed,
+            each with what the rows read say.
     """
 
     column: str | None
@@ -236,6 +269,7 @@ class TimeColumnChoice:
     among: tuple[str, ...]
     refused: tuple[RejectedTimeColumn, ...]
     fallback: str | None = None
+    unconfirmed: tuple[RejectedTimeColumn, ...] = ()
 
     @property
     def rejected(self) -> tuple[RejectedTimeColumn, ...]:
@@ -303,6 +337,11 @@ def choose_time_column(
     is preferred, and of several the one whose values start earliest is
     taken, the first in table order on a tie.
 
+    When the query over every row fails, a column the rows read would
+    refuse for its values is kept, behind every column they do not but
+    ahead of a lone stamp of the last edit, and named in
+    :attr:`TimeColumnChoice.unconfirmed`.
+
     Args:
         frame: The rows read, holding every candidate.
         candidates: The timestamp columns, in table order.
@@ -325,18 +364,28 @@ def choose_time_column(
         ],
     )
     rejected: dict[str, RejectedTimeColumn] = {}
+    unconfirmed: list[RejectedTimeColumn] = []
     plain: list[str] = []
+    doubted: list[str] = []
     edited: list[str] = []
     for name in candidates:
         if is_load_stamp(name):
             rejected[name] = RejectedTimeColumn(name, 'load_stamp')
-        elif is_birth_date(name):
+            continue
+        if is_birth_date(name):
             rejected[name] = RejectedTimeColumn(name, 'birth_date')
-        elif refused := _refused_for_values(name, frame, whole):
+            continue
+        refused = _refused_for_values(name, frame, whole)
+        if refused is not None and refused.whole:
             rejected[name] = refused
-        elif is_edit_stamp(name):
+            continue
+        if refused is not None:
+            unconfirmed.append(refused)
+        if is_edit_stamp(name):
             rejected[name] = RejectedTimeColumn(name, 'edit_stamp')
             edited.append(name)
+        elif refused is not None:
+            doubted.append(name)
         else:
             plain.append(name)
 
@@ -346,9 +395,15 @@ def choose_time_column(
         among: Sequence[str],
     ) -> TimeColumnChoice:
         return TimeColumnChoice(
-            column, how, tuple(among), tuple(rejected.values())
+            column,
+            how,
+            tuple(among),
+            tuple(rejected.values()),
+            unconfirmed=tuple(unconfirmed),
         )
 
+    # A column the rows read cast doubt on is taken only when no other is.
+    plain = plain or doubted
     if not plain:
         if len(edited) == 1:
             last_resort = replace(chosen(None, None, ()), fallback=edited[0])
@@ -387,28 +442,34 @@ def _refused_for_values(
     every row of the table holds.
 
     A single value is no evidence that a column never changes, so a one-row
-    table keeps its timestamp. A table that cannot be asked keeps its column
-    too: only evidence refuses one.
+    table keeps its timestamp. When the table was asked and did not answer,
+    what the rows read say is returned with ``whole`` false, for the caller
+    to keep the column and say so.
     """
     present = frame[name].dropna()
     rows, held = len(frame), len(present)
     first = present.iloc[0] if held else None
     same = held > 0 and bool((present == first).all())
-    if whole.can_ask:
-        seen = whole(name)
-        if seen is None or whole.read is None:
-            return None
+    seen = whole(name)
+    if seen is not None and whole.read is not None:
         rows, held = whole.read.rows, seen.held
         same = held > 0 and bool(seen.low == seen.high)
         # The value read keeps the type the rows were read as.
         first = seen.low if first is None else first
+    every_row = seen is not None or not whole.can_ask
     missing = rows - held
     if held == 0:
-        return RejectedTimeColumn(name, 'constant', None, missing, rows)
+        return RejectedTimeColumn(
+            name, 'constant', None, missing, rows, every_row
+        )
     if 2 * missing > rows:
-        return RejectedTimeColumn(name, 'sparse', None, missing, rows)
+        return RejectedTimeColumn(
+            name, 'sparse', None, missing, rows, every_row
+        )
     if rows > 1 and same:
-        return RejectedTimeColumn(name, 'constant', first, missing, rows)
+        return RejectedTimeColumn(
+            name, 'constant', first, missing, rows, every_row
+        )
     return None
 
 

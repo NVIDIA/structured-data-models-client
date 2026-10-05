@@ -165,7 +165,9 @@ def test_every_column_is_checked_in_one_query():
 
 
 def test_a_failed_check_keeps_the_column():
-    """Only evidence refuses a column, and a warehouse error is none."""
+    """The rows read are no proof that a column never changes, and the
+    choice says what they hold.
+    """
     late = [pd.Timestamp('2023-01-01')] * ROWS
     table = _duckdb_table(pd.DataFrame({'id': range(ROWS), 't_dat': late}))
 
@@ -179,6 +181,9 @@ def test_a_failed_check_keeps_the_column():
     assert table.time_column.name == 't_dat'
     assert table.time_column_choice is not None
     assert table.time_column_choice.rejected == ()
+    assert table.time_column_choice.unconfirmed == (
+        RejectedTimeColumn('t_dat', 'constant', late[0]),
+    )
 
 
 def test_a_graph_refuses_an_edit_stamp_on_a_table_an_edge_points_at():
