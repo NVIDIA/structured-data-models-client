@@ -188,6 +188,7 @@ def test_no_example_hides_in_a_plain_fence(path):
     # block reaches a later one; a plain fence using it would otherwise look
     # like prose.
     reachable = set(sdm_client.__all__) | {'sdm_client'}
+    trees: list[ast.Module] = []
     for source in fences(path, 'python'):
         tree = ast.parse(source)
         for node in ast.walk(tree):
@@ -198,40 +199,48 @@ def test_no_example_hides_in_a_plain_fence(path):
                         alias.asname or alias.name for alias in node.names
                     )
         # Not only what is imported: a name bound from one, by assignment or
-        # by `with ... as`, reaches the next block too.
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                sources, targets = [node.value], node.targets
-            elif isinstance(node, ast.AnnAssign):
-                sources, targets = [node.value], [node.target]
-            elif isinstance(node, ast.With):
-                # The context expressions, not the body they wrap.
-                sources = [item.context_expr for item in node.items]
-                targets = [
-                    item.optional_vars
-                    for item in node.items
-                    if item.optional_vars is not None
-                ]
-            elif isinstance(node, ast.For):
-                sources, targets = [node.iter], [node.target]
-            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                sources = list(node.body)
-                targets = [ast.Name(id=node.name, ctx=ast.Store())]
-            else:
-                continue
-            if not any(
-                isinstance(inner, ast.Name) and inner.id in reachable
-                for source in sources
-                if source is not None
-                for inner in ast.walk(source)
-            ):
-                continue
-            reachable.update(
-                bound.id
-                for target in targets
-                for bound in ast.walk(target)
-                if isinstance(bound, ast.Name)
-            )
+        # by `with ... as`, reaches the next block too. Repeated to a fixed
+        # point, because a name may be bound after the thing that uses it.
+        trees.append(tree)
+    grew = True
+    while grew:
+        grew = False
+        for tree in trees:
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    sources, targets = [node.value], node.targets
+                elif isinstance(node, ast.AnnAssign):
+                    sources, targets = [node.value], [node.target]
+                elif isinstance(node, ast.With):
+                    # The context expressions, not the body they wrap.
+                    sources = [item.context_expr for item in node.items]
+                    targets = [
+                        item.optional_vars
+                        for item in node.items
+                        if item.optional_vars is not None
+                    ]
+                elif isinstance(node, ast.For):
+                    sources, targets = [node.iter], [node.target]
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    sources = list(node.body)
+                    targets = [ast.Name(id=node.name, ctx=ast.Store())]
+                else:
+                    continue
+                if not any(
+                    isinstance(inner, ast.Name) and inner.id in reachable
+                    for source in sources
+                    if source is not None
+                    for inner in ast.walk(source)
+                ):
+                    continue
+                bound = {
+                    name.id
+                    for target in targets
+                    for name in ast.walk(target)
+                    if isinstance(name, ast.Name)
+                }
+                grew = grew or not bound <= reachable
+                reachable |= bound
     exported = reachable
     for index, source in enumerate(fences(path, '')):
         try:
@@ -457,10 +466,11 @@ def tables(path: Path) -> list[list[list[str]]]:
             current, ruled = [], False
             continue
         cells = [cell.strip() for cell in stripped[1:-1].split('|')]
-        if all(re.fullmatch(r':?-+:?', cell) for cell in cells):
-            assert len(current) == 1, (
-                f'{path.name} rules a table under {len(current)} rows'
-            )
+        if (
+            not ruled
+            and len(current) == 1
+            and all(re.fullmatch(r':?-+:?', cell) for cell in cells)
+        ):
             assert len(cells) == len(current[0]), (
                 f'{path.name} rules {len(current[0])} columns with '
                 f'{len(cells)}, which renders as a paragraph, not a table'
@@ -833,7 +843,28 @@ def test_a_comparison_is_in_the_row_it_belongs_in(comparison, row, schema):
 
 
 #: The bounds pql.md gives the two clauses, read out of it.
-CLAUSES = table(PQL, 'Clause')
+def clause_table() -> dict[str, tuple[int, int]]:
+    """The two clauses and the ends of their ranges, read out of ``pql.md``."""
+    shown = table(PQL, 'Clause')
+    assert list(shown) == [
+        'Clause',
+        '`RANK TOP k`',
+        '`FORECAST n TIMEFRAMES`',
+    ], f'pql.md gives the clause table the rows {list(shown)[1:]}'
+    assert shown['Clause'] == ['Least', 'Most'], (
+        f'pql.md heads the clause table Clause, {shown["Clause"]}'
+    )
+    return {
+        only(row): (
+            int(only(cells[0]).replace(',', '')),
+            int(only(cells[1]).replace(',', '')),
+        )
+        for row, cells in shown.items()
+        if row != 'Clause'
+    }
+
+
+CLAUSES = clause_table()
 
 
 @pytest.mark.parametrize('clause', ['RANK TOP k', 'FORECAST n TIMEFRAMES'])
@@ -846,9 +877,7 @@ def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
     pd = pytest.importorskip('pandas')
     from sdm_client.errors import StructuredDataError
 
-    low, high = (
-        int(only(cell).replace(',', '')) for cell in CLAUSES[f'`{clause}`'][:2]
-    )
+    low, high = CLAUSES[clause]
     if clause == 'RANK TOP k':
         target = 'LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP {}'
         extra = {'candidates': pd.Series(range(4))}
@@ -875,8 +904,22 @@ def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
     )
 
 
+def test_a_ranking_takes_only_a_foreign_key(schema):
+    """The shape a ranking's target has to be, as the skill quotes it."""
+    pd = pytest.importorskip('pandas')
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='not multicategorical'):
+        resolve(
+            'PREDICT SUM(orders.price, 0, 30, days) RANK TOP 2 '
+            'FOR EACH users.user_id',
+            schema,
+            candidates=pd.Series(range(4)),
+        )
+
+
 def test_a_forecast_takes_only_a_numerical_forward_target(schema):
-    """The third column of that table, which a bound alone would not say."""
+    """The shape a forecast's target has to be, in both its refusals."""
     from sdm_client.errors import StructuredDataError
 
     with pytest.raises(StructuredDataError, match='numerical targets'):
