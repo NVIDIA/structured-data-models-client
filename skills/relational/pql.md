@@ -177,8 +177,10 @@ column is along for the ride whichever way you come at it. Give the model the
 label you would have searched for, as its own column.
 
 **A string the model does read as a label can only be matched, never ordered
-or searched.** `=`, `!=` and `IN` are the whole of it. Ordering one is
-refused, and so is looking inside one:
+or searched.** The five in the first row are the whole of it, and all five ask
+the same kind of question: is this value one of these. `IS` and `IS NOT` take
+a value as readily as `NULL`. Ordering a string is refused, and so is looking
+inside one:
 
 ```
 Operation < between strings is not supported in the foundation model queries.

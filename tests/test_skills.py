@@ -90,7 +90,8 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     the documents are held to the form they already use. A table or an example
     written any other way would be read by a renderer and not by these tests,
     or the other way about: a ``py`` block would look like an example and run
-    as nothing.
+    as nothing, and a fence inside a blockquote or a table without its outer
+    pipes renders as itself while every check here steps over it.
     """
     body = path.read_text(encoding='utf-8')
     assert body.endswith('\n'), (
@@ -113,6 +114,17 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
             assert not line.startswith('    '), (
                 f'{where} is indented four spaces, which renders as code and '
                 f'is read here as prose'
+            )
+            assert not line.lstrip().startswith('>'), (
+                f'{where} is a blockquote, and a fence or a table inside one '
+                f'renders as itself and is read here as prose'
+            )
+            assert '|' not in line or (
+                line.startswith('|') and line.rstrip().endswith('|')
+            ), (
+                f'{where} holds a pipe and is not a table row; a table is '
+                f'written with outer pipes, because one without them renders '
+                f'as a table and is read here as prose'
             )
     assert not inside, f'{path.name} leaves a fence open'
 
