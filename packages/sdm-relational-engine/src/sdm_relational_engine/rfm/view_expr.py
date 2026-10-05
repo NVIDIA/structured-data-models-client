@@ -290,12 +290,32 @@ _TYPE_NAMES = frozenset(
 )  # fmt: skip
 
 # Read without parentheses, these return the session's identity or clock.
+_SESSION_WORDS = frozenset(
+    {
+        'current_catalog', 'current_database', 'current_date',
+        'current_path', 'current_role', 'current_schema', 'current_time',
+        'current_timestamp', 'current_user', 'localtime', 'localtimestamp',
+        'session_user', 'user',
+    }
+)  # fmt: skip
 _SESSION_VALUES = re.compile(
     r'(?<![\w$.\ue000])'
-    r'(current_(?:catalog|database|date|path|role|schema|time|timestamp|user)'
-    r'|localtime|localtimestamp|session_user|user)\b(?!\s*\()',
+    rf'({"|".join(sorted(_SESSION_WORDS))})\b(?!\s*\()',
     flags=re.IGNORECASE,
 )
+# Quoting the word does not keep it from the session: on a DBSQL 2026.38
+# warehouse `user` and `CURRENT_DATE`, in backticks and with no column of
+# that name, answer the session user and today. A column of the name wins
+# for every session word quoted, `current_path` included. How Snowflake
+# reads a quoted session word is not documented, so none is excused there.
+_QUOTED_NAME = {
+    'databricks': re.compile(r'`((?:``|[^`])*)`'),
+    'snowflake': re.compile(r'"((?:""|[^"])*)"'),
+}
+_COLUMN_OVER_QUOTED_SESSION = {
+    'databricks': _SESSION_WORDS,
+    'snowflake': frozenset(),
+}
 
 # The session words a column of the same name overrides. On a DBSQL 2026.38
 # warehouse each reads the column, bare or nested, in a comparison, a CASE,
@@ -747,10 +767,10 @@ def _untrusted_call_reason(
     built-in like ``secret()``, ``http_request()`` or ``SYSTEM$WAIT()``, would
     otherwise run with the caller's credentials every time a graph samples.
     Qualified and quoted names, and ``IDENTIFIER()``, are refused since they
-    can name anything. Session values (``current_user``) are refused too: a
-    column must not change with who reads it. A session word that one of
-    ``columns`` also names reads that column where the dialect lets the
-    column win, and is accepted there.
+    can name anything. Session values (``current_user``), bare or quoted,
+    are refused too: a column must not change with who reads it. A session
+    word that one of ``columns`` also names reads that column where the
+    dialect lets the column win, and is accepted there.
 
     Every ``(`` is checked, and fails closed: it must open a group, follow
     a keyword, give a type its parameters, or call a trusted function. So a
@@ -809,4 +829,12 @@ def _untrusted_call_reason(
     for session in _SESSION_VALUES.finditer(text):
         if session.group(1).lower() not in overridden:
             return f"it reads the session value '{session.group(1)}'"
+    overridden = named & _COLUMN_OVER_QUOTED_SESSION[dialect]
+    for quoted in _QUOTED_EXPR_TEXT.finditer(expr):
+        name = _QUOTED_NAME[dialect].fullmatch(quoted.group())
+        if name is None or _QUALIFIED.search(expr[: quoted.start()]):
+            continue
+        word = name.group(1).lower()
+        if word in _SESSION_WORDS and word not in overridden:
+            return f'it reads the session value {quoted.group()}'
     return None
