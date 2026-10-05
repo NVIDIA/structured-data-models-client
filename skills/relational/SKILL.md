@@ -28,9 +28,9 @@ with SDMClient(url='http://localhost:8000') as client:
 
 `capabilities()` is the client's own table, tagged `source='sdk'`, and needs no
 connection. It is the wider of the two: a deployment may refuse something the
-client is willing to ask.
+client is willing to ask. What the client will send:
 
-| | `kumo-relational`, per the client |
+| | `kumo-relational` |
 |---|---|
 | Tasks | `binary_classification`, `classification`, `multiclass_classification`, `regression`, `forecasting`, `temporal_link_prediction` |
 | Outputs | `prediction`, `probabilities`, `quantiles`, `rankings`, `scores`, `embeddings`, `explanation` |
@@ -114,8 +114,8 @@ it is there, otherwise on `row_index`, and never on row order.
 A `Schema` says which tables exist, how they are keyed, which column carries
 each table's time, and how they link.
 
-```python
-schema = Schema.from_data(frames, primary_keys=..., time_columns=..., relationships=...)
+```
+Schema.from_data(frames, primary_keys=, time_columns=, relationships=)
 ```
 
 `Relationship(from_table, from_column, to_table, to_column)` points from the

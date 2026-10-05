@@ -45,7 +45,7 @@ def documents() -> list[Path]:
 def fences(path: Path, language: str) -> list[str]:
     return [
         body
-        for tag, body in FENCE.findall(path.read_text(encoding='utf-8'))
+        for tag, body in FENCE.findall(without_comments(path))
         if tag == language
     ]
 
@@ -61,9 +61,11 @@ def test_a_skill_shows_output_it_has_run(name):
     """Each skill has to stake something on a live endpoint.
 
     The live suite compares every **Verified** block to what the example
-    printed; a skill with none would pass it by having claimed nothing.
+    printed; a skill with none would pass it by having claimed nothing, and
+    one whose blocks are all commented out would pass by claiming it where
+    nobody reads.
     """
-    body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
+    body = without_comments(SKILLS / name / 'SKILL.md')
     assert '**Verified**' in body, f'{name} marks no output as verified'
 
 
@@ -87,17 +89,22 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     form of each, so rather than teach three regexes the whole of CommonMark,
     the documents are held to the form they already use. A table or an example
     written any other way would be read by a renderer and not by these tests,
-    or the other way about.
+    or the other way about: a ``py`` block would look like an example and run
+    as nothing.
     """
+    body = path.read_text(encoding='utf-8')
+    assert body.endswith('\n'), (
+        f'{path.name} ends without a newline, and a fence closing there is '
+        f'read as unclosed'
+    )
     inside = False
-    for number, line in enumerate(
-        path.read_text(encoding='utf-8').splitlines(), start=1
-    ):
+    for number, line in enumerate(body.splitlines(), start=1):
         where = f'{path.name}:{number}'
         if line.lstrip().startswith(('```', '~~~')):
-            assert re.fullmatch(r'```[a-z]*', line), (
-                f'{where} opens or closes a fence as {line.strip()!r}; write '
-                f'it as ``` at the margin, optionally naming a language'
+            assert line in ('```', '```python'), (
+                f'{where} opens or closes a fence as {line.strip()!r}; a '
+                f'fence is ``` at the margin, and the only language named is '
+                f'python, because every python block here is run'
             )
             inside = not inside
         elif not inside:
@@ -243,10 +250,13 @@ PQL = SKILLS / 'relational' / 'pql.md'
 ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
 
 
-HIDDEN = re.compile(
-    r'<!--.*?-->|^ {0,3}(?P<fence>`{3,}|~{3,}).*?^ {0,3}(?P=fence)',
-    re.DOTALL | re.MULTILINE,
-)
+COMMENT = re.compile(r'<!--.*?-->', re.DOTALL)
+FENCED = re.compile(r'^```.*?^```', re.DOTALL | re.MULTILINE)
+
+
+def without_comments(path: Path) -> str:
+    """The document without what a reader never sees."""
+    return COMMENT.sub('', path.read_text(encoding='utf-8'))
 
 
 def rendered(path: Path) -> str:
@@ -255,7 +265,7 @@ def rendered(path: Path) -> str:
     A table inside either is not a table anyone reads, and checking one would
     be validating text that is not on the page.
     """
-    return HIDDEN.sub('', path.read_text(encoding='utf-8'))
+    return FENCED.sub('', without_comments(path))
 
 
 def tables(path: Path) -> list[list[list[str]]]:
@@ -324,7 +334,23 @@ def heading(path: Path, label: str) -> str:
 
 
 def backticked(cell: str) -> list[str]:
+    """Every code span in a cell, whatever else the cell holds."""
     return re.findall(r'`([^`]+)`', cell)
+
+
+def listed(cell: str) -> list[str]:
+    """The code spans in a cell that is nothing but code spans.
+
+    Only the spans were read once, and the rest of the cell ignored, so a cell
+    could name the right values and take them back in prose beside them. A
+    cell this is read from is the list and nothing else.
+    """
+    found = backticked(cell)
+    assert cell == ', '.join(f'`{value}`' for value in found), (
+        f'{cell!r} is read as a list of code spans and is not one; write it '
+        f'as `a`, `b`, `c` with nothing else in the cell'
+    )
+    return found
 
 
 def task_table() -> list[tuple[str, str]]:
@@ -346,8 +372,8 @@ def task_table() -> list[tuple[str, str]]:
 def answered_and_refused(heading: str) -> tuple[list[str], list[str]]:
     """The two halves of a table in ``pql.md`` split that way."""
     shown = table(PQL, heading)
-    answered = backticked(shown['Answered'][0])
-    refused = backticked(shown['Parsed, then refused'][0])
+    answered = listed(shown['Answered'][0])
+    refused = listed(shown['Parsed, then refused'][0])
     assert answered and refused, f'pql.md lists no {heading.lower()}s'
     return answered, refused
 
@@ -394,9 +420,9 @@ def test_a_single_question_is_one_part(schema):
 ANSWERED, REFUSED = answered_and_refused('Aggregation')
 
 COMPARISONS = table(PQL, 'Answered on any value')
-ANY_VALUE = backticked(COMPARISONS['Answered on any value'][0])
-ORDERED = backticked(COMPARISONS['Answered on numbers and times only'][0])
-REFUSED_OPS = backticked(COMPARISONS['Parsed, then refused'][0])
+ANY_VALUE = listed(COMPARISONS['Answered on any value'][0])
+ORDERED = listed(COMPARISONS['Answered on numbers and times only'][0])
+REFUSED_OPS = listed(COMPARISONS['Parsed, then refused'][0])
 
 
 @pytest.mark.parametrize('aggregation', ANSWERED)
@@ -429,38 +455,87 @@ def test_an_aggregation_the_skill_warns_about_is_refused(aggregation, schema):
         resolve(query, schema)
 
 
-#: A condition using each comparison, against a number and against a string.
-#: Both operands matter: four of these are answered on one and refused on the
-#: other, which is the distinction the table draws.
+#: A condition using each comparison, against a number, a time and a string.
+#: The operand matters: four of these are answered on the first two and
+#: refused on the third, which is the distinction the table draws.
 AS_A_CONDITION = {
-    '=': ('orders.price = 50', "orders.channel = 'web'"),
-    '!=': ('orders.price != 50', "orders.channel != 'web'"),
-    '<': ('orders.price < 50', "orders.channel < 'web'"),
-    '<=': ('orders.price <= 50', "orders.channel <= 'web'"),
-    '>': ('orders.price > 50', "orders.channel > 'web'"),
-    '>=': ('orders.price >= 50', "orders.channel >= 'web'"),
-    'IS': ('orders.price IS NULL', 'orders.channel IS NULL'),
-    'IS NOT': ('orders.price IS NOT NULL', 'orders.channel IS NOT NULL'),
-    'IN': ('orders.item IN (1, 2)', "orders.channel IN ('web', 'app')"),
-    'IS IN': ('orders.item IS IN (1, 2)', "orders.channel IS IN ('web')"),
-    'LIKE': ("orders.channel LIKE 'w%'", "orders.channel LIKE 'w%'"),
+    '=': (
+        'orders.price = 50',
+        'orders.ordered_at = 2026-02-01',
+        "orders.channel = 'web'",
+    ),
+    '!=': (
+        'orders.price != 50',
+        'orders.ordered_at != 2026-02-01',
+        "orders.channel != 'web'",
+    ),
+    '<': (
+        'orders.price < 50',
+        'orders.ordered_at < 2026-02-01',
+        "orders.channel < 'web'",
+    ),
+    '<=': (
+        'orders.price <= 50',
+        'orders.ordered_at <= 2026-02-01',
+        "orders.channel <= 'web'",
+    ),
+    '>': (
+        'orders.price > 50',
+        'orders.ordered_at > 2026-02-01',
+        "orders.channel > 'web'",
+    ),
+    '>=': (
+        'orders.price >= 50',
+        'orders.ordered_at >= 2026-02-01',
+        "orders.channel >= 'web'",
+    ),
+    'IS': (
+        'orders.price IS NULL',
+        'orders.ordered_at IS NULL',
+        'orders.channel IS NULL',
+    ),
+    'IS NOT': (
+        'orders.price IS NOT NULL',
+        'orders.ordered_at IS NOT NULL',
+        'orders.channel IS NOT NULL',
+    ),
+    'IN': (
+        'orders.item IN (1, 2)',
+        'orders.ordered_at IN (2026-02-01, 2026-03-01)',
+        "orders.channel IN ('web', 'app')",
+    ),
+    'IS IN': (
+        'orders.item IS IN (1, 2)',
+        'orders.ordered_at IS IN (2026-02-01, 2026-03-01)',
+        "orders.channel IS IN ('web')",
+    ),
+    'LIKE': (
+        "orders.channel LIKE 'w%'",
+        "orders.channel LIKE 'w%'",
+        "orders.channel LIKE 'w%'",
+    ),
     'NOT LIKE': (
+        "orders.channel NOT LIKE '%w%'",
         "orders.channel NOT LIKE '%w%'",
         "orders.channel NOT LIKE '%w%'",
     ),
     'CONTAINS': (
         "orders.channel CONTAINS 'e'",
         "orders.channel CONTAINS 'e'",
+        "orders.channel CONTAINS 'e'",
     ),
     'NOT CONTAINS': (
+        "orders.channel NOT CONTAINS 'e'",
         "orders.channel NOT CONTAINS 'e'",
         "orders.channel NOT CONTAINS 'e'",
     ),
     'STARTS WITH': (
         "orders.channel STARTS WITH 'w'",
         "orders.channel STARTS WITH 'w'",
+        "orders.channel STARTS WITH 'w'",
     ),
     'ENDS WITH': (
+        "orders.channel ENDS WITH 'b'",
         "orders.channel ENDS WITH 'b'",
         "orders.channel ENDS WITH 'b'",
     ),
@@ -472,7 +547,7 @@ def filtered(comparison: str, against: str) -> str:
         f'pql.md lists {comparison!r} and this test does not know how to '
         f'write a condition with it'
     )
-    side = 0 if against == 'a number' else 1
+    side = ['a number', 'a time', 'a string'].index(against)
     return (
         f'PREDICT COUNT(orders.* WHERE '
         f'{AS_A_CONDITION[comparison][side]}, 0, 30, days) '
@@ -480,7 +555,7 @@ def filtered(comparison: str, against: str) -> str:
     )
 
 
-@pytest.mark.parametrize('against', ['a number', 'a string'])
+@pytest.mark.parametrize('against', ['a number', 'a time', 'a string'])
 @pytest.mark.parametrize('comparison', ANY_VALUE)
 def test_a_comparison_answered_on_any_value_is(comparison, against, schema):
     assert (
@@ -488,16 +563,18 @@ def test_a_comparison_answered_on_any_value_is(comparison, against, schema):
     )
 
 
+@pytest.mark.parametrize('against', ['a number', 'a time'])
 @pytest.mark.parametrize('comparison', ORDERED)
-def test_a_comparison_answered_on_numbers_is(comparison, schema):
+def test_a_comparison_answered_on_numbers_and_times_is(
+    comparison, against, schema
+):
     assert (
-        resolve(filtered(comparison, 'a number'), schema).task.kind
-        == 'regression'
+        resolve(filtered(comparison, against), schema).task.kind == 'regression'
     )
 
 
 @pytest.mark.parametrize('comparison', ORDERED)
-def test_a_comparison_answered_on_numbers_is_refused_on_a_string(
+def test_a_comparison_answered_on_numbers_and_times_refuses_a_string(
     comparison, schema
 ):
     """The row's whole point: these four order a number and not a string."""
@@ -607,24 +684,16 @@ EXAMPLE = re.compile(
 def examples(path: Path) -> list[tuple[str, str | None]]:
     """Runnable examples and what each is said to print, in document order.
 
-    Everything but a sketch, which is a block holding a literal ``...`` where
-    a value belongs. Read as an ellipsis rather than as three characters: a
-    block is not a sketch for mentioning them in a string. The capability
-    blocks print nothing to compare, but they are run: they are the first
-    thing an agent is told to do.
+    All of them. A block tagged ``python`` in a skill is a program that runs;
+    anything that is only the shape of one is written in a plain fence, so
+    there is no rule here about which blocks to skip and no way to write a
+    block that quietly opts out. Read from the document with its comments
+    stripped, because an example nobody can see is not evidence of anything.
     """
     return [
         (match['code'], match['shown'])
-        for match in EXAMPLE.finditer(path.read_text(encoding='utf-8'))
-        if not sketch(match['code'])
+        for match in EXAMPLE.finditer(without_comments(path))
     ]
-
-
-def sketch(source: str) -> bool:
-    return any(
-        isinstance(node, ast.Constant) and node.value is Ellipsis
-        for node in ast.walk(ast.parse(source))
-    )
 
 
 def assert_every_example_prints_what_it_shows(path: Path, url: str):
@@ -655,7 +724,7 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
             f'{path.name} example {index} shows\n{shown}\nand printed\n'
             f'{printed.getvalue()}'
         )
-    marked = path.read_text(encoding='utf-8').count('**Verified**')
+    marked = without_comments(path).count('**Verified**')
     assert checked == marked, (
         f'{path.name} marks {marked} outputs as verified and {checked} of '
         f'them sit where an example can be paired with them'
@@ -698,7 +767,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
     with SDMClient(url='http://localhost:8000') as client:
         capabilities = client.capabilities(model)
     path = SKILLS / name / 'SKILL.md'
-    assert backticked(heading(path, 'Tasks')) == [capabilities.model], (
+    assert listed(heading(path, 'Tasks')) == [capabilities.model], (
         f'{name} heads its table with the wrong model'
     )
     shown = table(path, 'Tasks')
@@ -733,7 +802,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
                 f'{name} says {label} is {cell!r}'
             )
         else:
-            assert set(backticked(cell)) == truth, (
+            assert set(listed(cell)) == truth, (
                 f'{name} lists the wrong {label.lower()}'
             )
 
@@ -771,7 +840,7 @@ def test_the_limits_table_is_the_shipped_limits():
         f'{sorted(set(shown) ^ set(LIMIT_ROWS))}'
     )
     for label, key in LIMIT_ROWS.items():
-        cell = backticked(shown[label][0])
+        cell = listed(shown[label][0])
         assert len(cell) == 1, f'{label!r} shows {cell}'
         value = int(cell[0].replace(',', ''))
         assert value == RELATIONAL_LIMITS[key], (

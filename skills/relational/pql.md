@@ -88,7 +88,9 @@ TARGET aggregation SUM(orders.price) is missing a time range. A foundation
 model has no static aggregation
 ```
 
-A target with no window has to be a plain column, as `users.segment` is.
+What a target may be without a window is a column, as `users.segment` is, or
+a condition over one: `PREDICT users.segment = 'a' FOR EACH users.user_id` is a
+binary classification and needs no window. It is aggregating that needs one.
 
 **The window is the future, and both ends must be non-negative.** `0, 30, days`
 is the next thirty days. A target reaching backwards is refused:
