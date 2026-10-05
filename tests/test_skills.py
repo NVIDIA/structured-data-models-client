@@ -1622,15 +1622,52 @@ def test_the_tabular_clause_table_is_every_clause_it_refuses(one_table):
     )
 
 
-#: The four the reference calls this model's own, which have to be refused in
-#: its own words. The other three the language refuses whatever the model, so
-#: a plain refusal is all they prove.
+#: The four whose refusal names this model, which have to be refused in those
+#: words. The other three are refused on a single table for more than one
+#: reason at once, so a plain refusal is all they prove here; what makes all
+#: seven the tabular profile's rather than the grammar's is read off the
+#: profiles themselves, below.
 ITS_OWN = {
     '`COUNT`, `SUM`, any aggregation': 'tabular model predicts',
     'a window, `0, 30, days`': 'tabular model predicts',
     'a comparison target, `spend > 200`': 'tabular model predicts',
     '`WHERE` on the entity': 'tabular model scores the rows it is given',
 }
+
+
+#: Each row of that table, and the capability the language switches off for
+#: it. Two of them are the same switch: an aggregation carries a window.
+BY_CAPABILITY = {
+    '`COUNT`, `SUM`, any aggregation': 'temporal',
+    'a window, `0, 30, days`': 'temporal',
+    'a comparison target, `spend > 200`': 'derived_targets',
+    '`RANK TOP k`': 'link_prediction',
+    '`FORECAST n TIMEFRAMES`': 'forecasting',
+    '`WHERE` on the entity': 'entity_filters',
+    '`ASSUMING`': 'counterfactuals',
+}
+
+
+@pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
+def test_a_clause_refused_on_one_table_is_the_tabular_profiles_doing(clause):
+    """The sentence under that table: all seven are the profile refusing.
+
+    The reference used to call three of them the grammar's, whatever the
+    model, which the relational reference contradicts by teaching them. Asked
+    of the profiles rather than of a query, because a query on a single table
+    is refused for several reasons at once and the message names one.
+    """
+    from predictive_query.profiles import RELATIONAL, TABULAR
+
+    capability = BY_CAPABILITY[clause]
+    assert getattr(TABULAR.capabilities, capability) is False, (
+        f'the tabular profile allows {capability}, and the reference says '
+        f'{clause} is refused on one table'
+    )
+    assert getattr(RELATIONAL.capabilities, capability) is True, (
+        f'the relational profile refuses {capability} too, and the reference '
+        f'says the relational model takes all seven'
+    )
 
 
 @pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
@@ -1801,7 +1838,10 @@ def test_read_takes_the_formats_the_reference_names():
         'the compressed Parquet was refused by its name, and the reference '
         'says it is taken as Parquet and fails on the file'
     )
-    assert 'failed to read' in str(raised.value)
+    assert 'Parquet' in str(raised.value), (
+        'the failure does not name Parquet, so nothing says the compressed '
+        'file was dispatched to the Parquet reader rather than the CSV one'
+    )
     (where / 'x.json').write_text(json.dumps([{'a': 1}]), encoding='utf-8')
     with pytest.raises(ConnectorError, match='unsupported file format'):
         read(where / 'x.json')

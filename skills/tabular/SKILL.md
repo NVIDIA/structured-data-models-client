@@ -11,7 +11,8 @@ back a row at a time.
 
 Load [`../relational/SKILL.md`](../relational/SKILL.md) instead when the
 question is about an entity and the records linked to it. The two models share
-a client and nothing else.
+this client's objects -- `Schema`, `PredictiveQuery`, `Request` -- and the
+language. What differs is almost everything that can be asked in it.
 
 ## What it can be asked
 
