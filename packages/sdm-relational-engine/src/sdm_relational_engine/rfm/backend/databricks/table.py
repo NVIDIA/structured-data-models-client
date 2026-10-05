@@ -29,6 +29,7 @@ from sdm_relational_engine.rfm.base import (
     Table,
 )
 from sdm_relational_engine.rfm.base.table import MissingType
+from sdm_relational_engine.rfm.view_expr import _SESSION_WORDS
 
 # Databricks quotes SQL identifiers with backticks rather than double quotes:
 BACKTICK = '`'
@@ -138,13 +139,25 @@ class DatabricksTable(Table):
         """
         names = [self._catalog, self._schema, self._source_name]
         name = '.'.join([quote_ident(name, BACKTICK) for name in names])
-        if self._row_filter is None:
+        # Databricks reads a column named like a session word, `user` say,
+        # quoted or not, as the session value once the column is renamed or
+        # dropped, rather than failing. Whatever was decided on the columns
+        # read here, such as which words of a view's expression are columns,
+        # would then silently stop holding. So once they are read, each is
+        # named through the table, and a missing one fails the statement.
+        read = self.__dict__.get('_source_column_dict', {})
+        columns = '*'
+        if any(col.lower() in _SESSION_WORDS for col in read):
+            columns = ', '.join(
+                f'{SOURCE_ALIAS}.{quote_ident(col, BACKTICK)}' for col in read
+            )
+        elif self._row_filter is None:
             return name
+        where = ''
+        if self._row_filter is not None:
+            where = f' WHERE ({self._row_filter})'
         # Left unaliased, since Databricks refuses `(...) AS x TABLESAMPLE`.
-        return (
-            f'(SELECT * FROM {name} AS {SOURCE_ALIAS} '
-            f'WHERE ({self._row_filter}))'
-        )
+        return f'(SELECT {columns} FROM {name} AS {SOURCE_ALIAS}{where})'
 
     @property
     def _quoted_catalog(self) -> str:

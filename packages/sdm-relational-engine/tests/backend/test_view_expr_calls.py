@@ -745,6 +745,63 @@ def test_only_the_session_words_a_column_names_are_excused() -> None:
     assert "session value 'current_user'" in refused
 
 
+_QUOTES = {'databricks': '`', 'snowflake': '"'}
+
+
+@pytest.mark.parametrize('dialect', _DIALECTS)
+@pytest.mark.parametrize('position', _SESSION_POSITIONS)
+@pytest.mark.parametrize(
+    'word', ['user', 'CURRENT_USER', 'session_user', 'Current_Date']
+)
+def test_a_quoted_session_value_is_refused(
+    dialect: str, position: str, word: str
+) -> None:
+    r"""Quoting does not keep a session word from the session: Databricks
+    answers `user`, in backticks, with the session user when no column of
+    that name is in scope.
+    """
+    quote = _QUOTES[dialect]
+    expr = position.format(f'{quote}{word}{quote}')
+    refused = _untrusted_call_reason(expr, dialect, columns=('x',))
+    assert refused is not None
+    assert f'session value {quote}{word}{quote}' in refused
+
+
+@pytest.mark.parametrize('word', _SESSION_WORDS)
+def test_a_quoted_column_named_like_a_session_value_is_read_on_databricks(
+    word: str,
+) -> None:
+    r"""Quoted, every session word reads a column of its name on Databricks,
+    `current_path` too.
+    """
+    expr = f"upper(`{word.upper()}`) = 'a'"
+    assert _untrusted_call_reason(expr, 'databricks', columns=(word,)) is None
+
+
+def test_snowflake_refuses_a_quoted_session_value_even_over_a_column() -> None:
+    refused = _untrusted_call_reason('"USER"', 'snowflake', columns=('user',))
+    assert refused is not None
+
+
+@pytest.mark.parametrize(
+    ('dialect', 'expr'),
+    [
+        ('databricks', 's.`user`'),
+        ('databricks', '`s`.`current_date`'),
+        ('databricks', '"user"'),
+        ('snowflake', 's."USER"'),
+        ('snowflake', "'user'"),
+    ],
+)
+def test_a_quoted_field_or_literal_is_no_session_value(
+    dialect: str, expr: str
+) -> None:
+    r"""A quoted name behind a `.` is a field, and on Databricks
+    double-quoted text is a string.
+    """
+    assert _untrusted_call_reason(expr, dialect, columns=('s',)) is None
+
+
 def test_a_lambda_parameter_does_not_excuse_a_session_value() -> None:
     r"""A lambda parameter is in scope only inside its lambda, so a session
     word outside it still reads the session.

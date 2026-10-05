@@ -1859,6 +1859,48 @@ def test_a_row_filter_is_set_only_before_a_row_is_read() -> None:
     assert table.row_filter == "status = 'VALID'"
 
 
+def test_a_column_named_like_a_session_word_is_named_through_the_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Databricks reads `user` as the session user once the column is gone,
+    so every read names the columns it was given through the table, where a
+    renamed or dropped one fails the statement instead.
+    """
+    from sdm_relational_engine.rfm.backend.databricks import DatabricksTable
+
+    monkeypatch.setitem(
+        _COLUMN_TYPES, 'logins', {'login_id': 'string', 'USER': 'string'}
+    )
+    table = DatabricksTable(
+        _FakeConnection(),
+        name='logins',
+        catalog='cat',
+        schema='sch',
+        columns=[],
+        primary_key=None,
+    )
+    # Nothing was read yet, so nothing could rest on a column:
+    assert table._quoted_source_name == '`cat`.`sch`.`logins`'
+
+    assert 'USER' in table._source_column_dict
+    assert table._quoted_source_name == (
+        '(SELECT source.`login_id`, source.`USER` '
+        'FROM `cat`.`sch`.`logins` AS source)'
+    )
+    table.row_filter = "user = 'a'"
+    assert table._quoted_source_name == (
+        '(SELECT source.`login_id`, source.`USER` '
+        "FROM `cat`.`sch`.`logins` AS source WHERE (user = 'a'))"
+    )
+
+    # Other tables are read as before:
+    regions = DatabricksTable(
+        _FakeConnection(), name='regions', catalog='cat', schema='sch'
+    )
+    assert 'name' in regions._source_column_dict
+    assert regions._quoted_source_name == '`cat`.`sch`.`regions`'
+
+
 def test_a_join_filter_refuses_the_metric_view() -> None:
     definition = _METRIC_VIEW_YAML.replace(
         "filter: source.status = 'VALID'", "filter: customers.segment = 'gold'"
