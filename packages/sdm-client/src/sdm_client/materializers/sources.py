@@ -11,7 +11,9 @@ it. Both must agree on which columns a table has and where it lives.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import warnings
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
@@ -108,6 +110,18 @@ def wire_dtype(engine_dtype: Any) -> str | None:
     return _WIRE_DTYPE.get(str(engine_dtype))
 
 
+@contextmanager
+def _schema_says_time_columns() -> Iterator[None]:
+    r"""Keep the engine from warning about a time column it kept unchecked:
+    the schema says that, with its own override, in one notice.
+    """
+    from sdm_relational_engine.rfm import TimeColumnWarning
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', TimeColumnWarning)
+        yield
+
+
 def engine_graph(
     source: Any, tables: Mapping[str, str] | None, *, infer_metadata: bool
 ) -> Graph:
@@ -139,7 +153,8 @@ def engine_graph(
         ]
     )
     try:
-        return _read(source, specs, infer_metadata)
+        with _schema_says_time_columns():
+            return _read(source, specs, infer_metadata)
     except NoTablesFoundError as error:
         # The engine's own advice names its API, which cannot fill a namespace.
         raise StructuredDataError(
@@ -241,9 +256,14 @@ def semantic_model_graph(model: Any) -> Graph:
             'relational', 'sdm-relational-engine'
         ) from error
 
+    with _schema_says_time_columns():
+        return _model_graph(Graph, model)
+
+
+def _model_graph(graph_type: type[Graph], model: Any) -> Graph:
     namespace = model.namespace
     if model.backend == 'databricks':
-        return Graph.from_databricks_metric_view(
+        return graph_type.from_databricks_metric_view(
             model.name,
             model.connection,
             catalog=namespace.get('catalog'),
@@ -262,7 +282,7 @@ def semantic_model_graph(model: Any) -> Graph:
         name = (
             model.name if '.' in model.name else '.'.join([*parts, model.name])
         )
-        return Graph.from_snowflake_semantic_view(
+        return graph_type.from_snowflake_semantic_view(
             name,
             model.connection,
             verbose=False,
