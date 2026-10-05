@@ -254,9 +254,14 @@ def test_verified_output_is_marked_one_way(path):
         f'with no example'
     )
     for number, line in enumerate(body.splitlines(), start=1):
-        assert '**Verified**' not in line or line.startswith('**Verified**'), (
-            f'{path.name}:{number} puts **Verified** after something else on '
-            f'the line, where it still reads as a label and pairs with nothing'
+        if 'Verified' not in line:
+            continue
+        marker = line.startswith('**Verified**')
+        prose = not set(line) & set('*[]`_')
+        assert marker or prose, (
+            f'{path.name}:{number} emphasises or links Verified somewhere '
+            f'other than the start of a line, where it reads as a label and '
+            f'pairs with nothing'
         )
 
 
@@ -1051,6 +1056,64 @@ def test_a_fan_out_past_the_quoted_number_of_calls_is_refused(schema):
             schema,
             candidates=pd.Series(range(MOST_PARTS + 1)),
         )
+
+
+def transcripts() -> list[tuple[str, list[str]]]:
+    """Every ``query → refusal`` block in ``pql.md``, as query and refusals.
+
+    The refusals quoted through that file were pasted by hand. Executing the
+    ones written beside their query turns them from a transcript into a claim
+    the client has to keep making.
+    """
+    found = []
+    for block in fences(PQL, ''):
+        lines = block.splitlines()
+        if not lines or not lines[0].startswith('PREDICT'):
+            continue
+        asked = [line for line in lines if not line.startswith(('→', ' '))]
+        if len(asked) != 1 or not any(line.startswith('→') for line in lines):
+            continue
+        said, current = [], ''
+        for line in lines[1:]:
+            if line.startswith('→'):
+                if current:
+                    said.append(current)
+                current = line[1:].strip()
+            elif line.startswith(' '):
+                current += ' ' + line.strip()
+        if current:
+            said.append(current)
+        found.append((asked[0], said))
+    assert len(found) >= 5, f'pql.md shows {len(found)} transcripts'
+    return found
+
+
+#: The one transcript whose query needs a column the fixture does not build.
+NEEDS_MULTICATEGORICAL = 'PREDICT users.segment CLASSIFY FOR EACH users.user_id'
+
+
+@pytest.mark.parametrize(
+    'query, said', transcripts(), ids=lambda v: str(v)[:40]
+)
+def test_a_quoted_refusal_is_the_refusal(query, said, schema):
+    """Run what pql.md shows being asked, and read back what it shows."""
+    pd = pytest.importorskip('pandas')
+    from sdm_client.errors import StructuredDataError
+
+    if query == NEEDS_MULTICATEGORICAL:
+        column = schema.tables['users'].columns['segment']
+        schema.tables['users'].columns['segment'] = type(column)(
+            'segment', dtype=column.dtype, stype='multicategorical'
+        )
+    extra = {'candidates': pd.Series(range(4))} if 'RANK' in query else {}
+    with pytest.raises(StructuredDataError) as raised:
+        resolve(query, schema, **extra)
+    whole = ' '.join(str(raised.value).split())
+    for quoted in said:
+        for part in quoted.split(' ... '):
+            assert ' '.join(part.split()) in whole, (
+                f'pql.md shows {part!r} and the client says {whole!r}'
+            )
 
 
 def test_a_ranking_takes_only_a_foreign_key(schema):

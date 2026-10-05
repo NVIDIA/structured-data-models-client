@@ -12,26 +12,38 @@ PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
 ```
 
 `CLASSIFY` is in the language and **not reachable on these models**. It takes
-a multicategorical target, a column holding a list of labels per row, and that
-is the one thing the models will not answer about. So it refuses either way
-round. An ordinary target is not multicategorical:
+a multicategorical target, and that is the one thing these models will not
+answer about, so every way of writing it refuses. An ordinary target is not
+multicategorical, and the refusal lists what would have been:
 
 ```
-Target 'COUNT(orders.*, 0, 30, days)' is not multicategorical. Either drop the
-problem type CLASSIFY OR change the target to a multicategorical column
+PREDICT COUNT(orders.*, 0, 30, days) CLASSIFY FOR EACH users.user_id
+→ Target 'COUNT(orders.*, 0, 30, days)' is not multicategorical. Either drop
+  the problem type CLASSIFY OR change the target to a multicategorical column,
+  'LAST'/'FIRST' aggregation of a multicategorical column, or a
+  'LIST_DISTINCT' aggregation.
 ```
 
-And a multicategorical one asks a multilabel question:
+Take one of those and it is refused for being multilabel instead — as a
+`LIST_DISTINCT`:
 
 ```
-Foundation Model queries do not support multilabel tasks. Use `LIST_DISTINCT`
-on a foreign key column to make a link prediction query.
-Foundation Model queries do not support static multilabel classification. To
-make predictions with this query, train a new model.
+PREDICT LIST_DISTINCT(orders.item, 0, 30, days) CLASSIFY FOR EACH users.user_id
+→ Foundation Model queries do not support multilabel tasks. Use
+  `LIST_DISTINCT` on a foreign key column to make a link prediction query. To
+  make predictions with this query, train a new model.
 ```
 
-There is no query it completes. Drop the clause, and rank a `LIST_DISTINCT`
-over a foreign key if what you wanted was several answers.
+or as a column declared multicategorical:
+
+```
+PREDICT users.segment CLASSIFY FOR EACH users.user_id
+→ Foundation Model queries do not support static multilabel classification.
+  To make predictions with this query, train a new model.
+```
+
+Drop the clause. If what you wanted was several answers, rank a
+`LIST_DISTINCT` over a foreign key.
 
 So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`,
 and each is narrower than it looks:
