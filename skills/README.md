@@ -33,7 +33,7 @@ train, so each skill is about describing the data and asking the question.
 
 Every claim in these files was read from the shipped code, or run.
 
-Output marked **Verified** was produced by running the example above it against
+Output marked Verified was produced by running the example above it against
 a live endpoint and pasting the result back. Read those blocks for their shape
 — the columns, how they are keyed, how many rows come back. The numbers in them
 are one deployment's answers on made-up data, not anything this client

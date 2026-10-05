@@ -237,18 +237,27 @@ def test_every_link_resolves(path):
 
 @pytest.mark.parametrize('path', documents(), ids=str)
 def test_verified_output_is_marked_one_way(path):
-    """``**Verified**`` is how a block is paired with the example above it.
+    """``**Verified**`` at the start of a line labels the block beneath it.
 
-    ``__Verified__`` and ``<strong>Verified</strong>`` render the same and
-    pair with nothing, so a block marked either way would go unchecked. The
-    word is counted rather than the spellings listed: there is no end to the
-    ways to embolden a word, and only one of them is read here.
+    Anything else that renders as an emphasised Verified -- ``__Verified__``,
+    a heading, a bullet -- still reads as a label on the page and pairs with
+    nothing here. The HTML and entity forms are refused by the markdown
+    policy; these are the rest.
     """
     body = path.read_text(encoding='utf-8')
-    assert body.count('Verified') == body.count('**Verified**'), (
-        f'{path.name} writes "Verified" some way other than **Verified**, '
-        f'which renders the same and pairs with no example'
+    assert '__Verified__' not in body, (
+        f'{path.name} writes __Verified__, which renders as **Verified** and '
+        f'pairs with no example'
     )
+    assert not re.search(r'(?<!\*)\*Verified\*(?!\*)', body), (
+        f'{path.name} writes *Verified*, which reads as a label and pairs '
+        f'with no example'
+    )
+    for number, line in enumerate(body.splitlines(), start=1):
+        assert '**Verified**' not in line or line.startswith('**Verified**'), (
+            f'{path.name}:{number} puts **Verified** after something else on '
+            f'the line, where it still reads as a label and pairs with nothing'
+        )
 
 
 def reaching_this_client(path: Path) -> set[str]:
@@ -293,6 +302,14 @@ def reaching_this_client(path: Path) -> set[str]:
                     ]
                 elif isinstance(node, ast.For):
                     sources, targets = [node.iter], [node.target]
+                elif isinstance(node, ast.Call) and isinstance(
+                    node.func, ast.Attribute
+                ):
+                    sources = [
+                        *node.args,
+                        *(one.value for one in node.keywords),
+                    ]
+                    targets = [node.func.value]
                 elif isinstance(
                     node,
                     (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
@@ -809,14 +826,14 @@ AS_A_CONDITION = {
         "orders.channel >= 'web'",
     ),
     'IS': (
-        'orders.price IS NULL',
-        'orders.ordered_at IS NULL',
-        'orders.channel IS NULL',
+        'orders.price IS 50',
+        'orders.ordered_at IS 2026-02-01',
+        "orders.channel IS 'web'",
     ),
     'IS NOT': (
-        'orders.price IS NOT NULL',
-        'orders.ordered_at IS NOT NULL',
-        'orders.channel IS NOT NULL',
+        'orders.price IS NOT 50',
+        'orders.ordered_at IS NOT 2026-02-01',
+        "orders.channel IS NOT 'web'",
     ),
     'IN': (
         'orders.item IN (1, 2)',
@@ -1128,6 +1145,12 @@ def test_classify_is_refused_as_multilabel(schema):
     """
     from sdm_client.errors import StructuredDataError
 
+    with pytest.raises(StructuredDataError, match='not multicategorical'):
+        resolve(
+            'PREDICT COUNT(orders.*, 0, 30, days) CLASSIFY '
+            'FOR EACH users.user_id',
+            schema,
+        )
     with pytest.raises(StructuredDataError, match='multilabel tasks'):
         resolve(
             'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) CLASSIFY '

@@ -11,21 +11,27 @@ PREDICT <target> [ RANK TOP k | CLASSIFY | FORECAST n TIMEFRAMES ]
 [ ASSUMING <condition> ]
 ```
 
-`CLASSIFY` is in the language and **not reachable on these models**. It asks a
-multilabel question. Written the two ways that get as far as the task, over a
-window and as a column declared multicategorical, it is refused for being one:
+`CLASSIFY` is in the language and **not reachable on these models**. It takes
+a multicategorical target, a column holding a list of labels per row, and that
+is the one thing the models will not answer about. So it refuses either way
+round. An ordinary target is not multicategorical:
+
+```
+Target 'COUNT(orders.*, 0, 30, days)' is not multicategorical. Either drop the
+problem type CLASSIFY OR change the target to a multicategorical column
+```
+
+And a multicategorical one asks a multilabel question:
 
 ```
 Foundation Model queries do not support multilabel tasks. Use `LIST_DISTINCT`
-on a foreign key column to make a link prediction query. To make predictions
-with this query, train a new model.
+on a foreign key column to make a link prediction query.
 Foundation Model queries do not support static multilabel classification. To
 make predictions with this query, train a new model.
 ```
 
-Written any other way it is refused before the clause is reached, by whichever
-rule the target breaks first. There is no query `CLASSIFY` completes, so the
-thing to know is not which refusal comes back but that one always does.
+There is no query it completes. Drop the clause, and rank a `LIST_DISTINCT`
+over a foreign key if what you wanted was several answers.
 
 So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`,
 and each is narrower than it looks:
