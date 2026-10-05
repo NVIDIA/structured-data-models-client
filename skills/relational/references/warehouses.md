@@ -19,8 +19,14 @@ connection its own driver makes, and says so if given another.
 | `DuckDBSource` | `duckdb.connect()` | — | `duckdb` |
 | `SQLiteSource` | `adbc_driver_sqlite.dbapi.connect()` | — | `sqlite` |
 
-Install the one you need: `pip install 'sdm-client[databricks]'`. Lakebase is
-`PostgresSource` with the `lakebase` extra.
+Install the connector **and** the engine, since `Schema.from_source` needs it:
+`pip install 'sdm-client[relational,databricks]'`. With the connector alone the
+first call raises `MissingExtraError`.
+
+`Source(connection)` picks the right one for you when you would rather not
+name it. Lakebase is `PostgresSource`, with the `lakebase` extra and
+`sdm_connectors.databricks.lakebase(endpoint, workspace=...)`, which mints the
+credential and gives back a psycopg connection.
 
 **SQLite is the one that catches people.** It wants an ADBC connection, not the
 standard library's `sqlite3`:
@@ -56,8 +62,14 @@ takes those and renames them: `Schema.from_source(source, {'people': 'users'})`
 gives a schema of one table called `people`.
 
 `primary_keys`, `time_columns` and `relationships` work as they do for
-`from_data`, and are inferred the same way when left out. `check_keys=False`
-skips the uniqueness check, which costs a query per table.
+`from_data`. Left out, a source infers more than a frame can: it reads the
+catalog's own primary and foreign keys first, and falls back to column names
+only where there are no constraints. `check_keys=False` skips the uniqueness
+check, which is one statement that scans each eligible table.
+
+**`duckdb.connect('shop.db')` creates the file if it is not there**, so a
+mistyped path gives an empty database and a schema that holds no table. Pass
+`read_only=True` and it refuses the missing path instead.
 
 ## Inside the warehouse's own notebook
 
@@ -105,17 +117,22 @@ source = DatabricksSource(connection, catalog='sales', schema='public')
 schema = Schema.from_source(source.semantic_model('sales_metrics'))
 ```
 
-Snowflake's semantic views work the same way, through the same method. Both
-are what the Open Semantic Interchange and dbt call a semantic model.
+Snowflake's semantic views are reached the same way, through the same method.
+Both are what the Open Semantic Interchange and dbt call a semantic model, but
+they are not shaped alike, so what a schema takes differs.
 
-What a schema takes from one:
+From a **Databricks metric view**:
 
 - its source table, named as it is in the catalog
 - each join, as a table named after the join
 - each dimension, as a column of the table it reads
 - its `filter`, limiting the rows of the source table
 
-What it leaves out:
+From a **Snowflake semantic view**: its logical tables, the relationships
+between them, and their dimensions, time dimensions and facts. A fact becomes
+a column.
+
+What neither contributes:
 
 - **measures and metrics**, because they are aggregations rather than row
   values. Ask for them in the query instead: a measure that sums an amount is
@@ -126,14 +143,21 @@ What it leaves out:
   time a request is gathered. Pass `trust_expressions=True` to keep them, and
   read them first.
 
-A metric view is also skipped by plain auto-discovery, by design. Name it
-through `semantic_model()`; listing it as an ordinary table surfaces a raw
-server error.
+A metric view is skipped by plain auto-discovery, by design. Naming one as an
+ordinary table is refused, and the refusal says what to do:
+
+```
+'sales_metrics' is a metric view, not a table: its measures are aggregations
+with no value per row. Read it as a semantic model instead, with
+source.semantic_model('sales_metrics').
+```
 
 ## A file, rather than a connection
 
-`read()` takes a path and gives a DataFrame, for Parquet, CSV and the rest,
-local or on object storage with the `s3` extra:
+`read()` takes a path and gives a DataFrame. CSV and Parquet only, by suffix
+(`.csv`, `.txt`, `.parquet`, `.parq`, `.pq`, optionally compressed) or a
+Parquet directory, local or on object storage with the `s3` extra. Anything
+else is refused, `format='json'` included:
 
 ```python
 from sdm_connectors import read
@@ -142,6 +166,10 @@ orders = read('s3://bucket/orders.parquet', storage_options={...})
 ```
 
 That is a DataFrame like any other, so it goes to `Schema.from_data`.
+
+`read_table(connection, table=...)` or `read_table(connection, query=...)`
+does the same from a connection, for one flat table, without building a
+source.
 
 ## When it refuses
 

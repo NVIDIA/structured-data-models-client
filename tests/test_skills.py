@@ -1493,15 +1493,43 @@ def test_the_tabular_clause_table_is_every_clause_it_refuses(one_table):
     )
 
 
+#: The four the reference calls this model's own, which have to be refused in
+#: its own words. The other three the language refuses whatever the model, so
+#: a plain refusal is all they prove.
+ITS_OWN = {
+    '`COUNT`, `SUM`, any aggregation': 'tabular model predicts',
+    'a window, `0, 30, days`': 'tabular model predicts',
+    'a comparison target, `spend > 200`': 'tabular model predicts',
+    '`WHERE` on the entity': 'tabular model scores the rows it is given',
+}
+
+
 @pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
 def test_a_clause_the_tabular_reference_calls_refused_is(clause, one_table):
     from sdm_client import KumoTabular, PredictiveQuery
     from sdm_client.errors import StructuredDataError
 
-    with pytest.raises(StructuredDataError):
+    with pytest.raises(StructuredDataError) as raised:
         PredictiveQuery(ON_ONE_TABLE[clause], one_table).materialize(
             indices=[1, 2], model=KumoTabular()
         )
+    said = ITS_OWN.get(clause)
+    if said:
+        assert said in str(raised.value), (
+            f'{clause} is refused by {str(raised.value)[:120]!r}, which is '
+            f'not this model saying so'
+        )
+
+
+def test_for_without_a_selector_is_refused(one_table):
+    """The grammar note: FOR EACH, or FOR ... IN, and FOR alone is neither."""
+    from sdm_client import KumoTabular, PredictiveQuery
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='must specify one or'):
+        PredictiveQuery(
+            'PREDICT customers.churn FOR customers.customer_id', one_table
+        ).materialize(indices=[1], model=KumoTabular())
 
 
 def test_a_plain_column_is_what_the_tabular_reference_promises(one_table):
@@ -1553,9 +1581,20 @@ def test_the_source_table_is_every_source_there_is():
         f'warehouses.md lists {sorted(named ^ exported)} that sdm_connectors '
         f'does not, or the other way about'
     )
+    import inspect
+
     for row, cells in shown.items():
         source = getattr(sdm_connectors, only(row))
-        takes, _namespace, extra = cells
+        takes, namespace, extra = cells
+        wants = {
+            name
+            for name in inspect.signature(source).parameters
+            if name != 'connection'
+        }
+        assert set(backticked(namespace)) == wants, (
+            f'{only(row)} takes the namespace {sorted(wants)} and the table '
+            f'says {backticked(namespace)}'
+        )
         assert source._BACKEND == only(extra), (
             f'{only(row)} is the {source._BACKEND} backend and the table says '
             f'{only(extra)}'
@@ -1597,6 +1636,67 @@ def test_a_source_given_the_wrong_connection_says_which_it_wants():
 
     with pytest.raises(ConnectorError, match='adbc_driver_sqlite'):
         SQLiteSource(sqlite3.connect(':memory:'))
+
+
+def test_read_takes_the_formats_the_reference_names():
+    """CSV and Parquet, and the refusal the reference quotes for anything else."""
+    import json
+    import tempfile
+
+    from sdm_connectors import ConnectorError, read
+
+    pd = pytest.importorskip('pandas')
+    pytest.importorskip('pyarrow')
+    where = Path(tempfile.mkdtemp())
+    frame = pd.DataFrame({'a': [1, 2, 3]})
+    frame.to_csv(where / 'x.csv', index=False)
+    frame.to_parquet(where / 'x.parquet')
+    assert len(read(where / 'x.csv')) == 3
+    assert len(read(where / 'x.parquet')) == 3
+    (where / 'x.json').write_text(json.dumps([{'a': 1}]), encoding='utf-8')
+    with pytest.raises(ConnectorError, match='unsupported file format'):
+        read(where / 'x.json')
+
+
+def test_a_source_reads_the_catalogs_own_keys():
+    """The reference says a source infers more than a frame can.
+
+    Names no naming rule would resolve, declared as constraints: the source
+    finds them and ``from_data`` over the same rows does not.
+    """
+    duckdb = pytest.importorskip('duckdb')
+    from sdm_client import Schema
+    from sdm_connectors import DuckDBSource
+
+    connection = duckdb.connect()
+    connection.execute('CREATE TABLE a (ref INTEGER PRIMARY KEY, v INTEGER)')
+    connection.execute(
+        'CREATE TABLE b (own INTEGER PRIMARY KEY, points_at INTEGER '
+        'REFERENCES a(ref))'
+    )
+    connection.execute('INSERT INTO a VALUES (1, 10), (2, 20)')
+    connection.execute('INSERT INTO b VALUES (1, 1), (2, 2)')
+
+    assert Schema.from_source(DuckDBSource(connection)).relationships, (
+        'the catalog declares a foreign key and the source found none'
+    )
+    assert not Schema.from_data(
+        {
+            name: connection.execute(f'SELECT * FROM {name}').df()
+            for name in ('a', 'b')
+        }
+    ).relationships, (
+        'from_data found a relationship names alone do not give, so the '
+        'reference is wrong that the catalog is what adds it'
+    )
+
+
+def test_a_source_type_is_chosen_for_you():
+    """``Source(connection)`` picks the backend, which the reference offers."""
+    duckdb = pytest.importorskip('duckdb')
+    from sdm_connectors import DuckDBSource, Source
+
+    assert isinstance(Source(duckdb.connect()), DuckDBSource)
 
 
 def test_a_connector_error_is_not_a_structured_data_error():

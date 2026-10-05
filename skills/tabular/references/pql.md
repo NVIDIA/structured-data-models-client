@@ -8,8 +8,14 @@ and the refusals say so.
 ## The whole of it
 
 ```
-PREDICT <table>.<column> (FOR EACH | FOR) <table>.<key>
+PREDICT <table>.<column> FOR EACH <table>.<key>
+PREDICT <table>.<column> FOR <table>.<key> IN (...)
 ```
+
+`FOR` needs a selector. `FOR customers.customer_id` on its own is refused:
+*"When using "FOR" in foundation model queries, you must specify one or
+multiple entities to make the prediction"*. `FOR EACH` is the one to reach
+for.
 
 The target is a column of the table, stored as it stands. The task follows from
 that column's type, and `materialize(task=...)` settles it when whole numbers
@@ -36,7 +42,9 @@ required: it is what says which rows are scored.
 | `WHERE` on the entity | refused |
 | `ASSUMING` | refused |
 
-Two of those are worth seeing, because both are ordinary relational queries.
+The last three are refused by the language itself, whatever the model. The
+first four are this model's own, and two of them are worth seeing, because
+both are ordinary relational queries.
 
 A comparison is a target the relational model answers and this one will not,
 and the refusal says what to do instead:
