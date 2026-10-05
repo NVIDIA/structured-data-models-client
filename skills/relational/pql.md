@@ -21,6 +21,12 @@ with this query, train a new model.
 ```
 
 So the two clauses worth knowing are `RANK TOP k` and `FORECAST n TIMEFRAMES`.
+**`k` may be at most 20**, and asking for more says so:
+
+```
+Top k 21 exceeds maximum foundation model supported value of 20. To list more
+candidates, train a new model.
+```
 
 Every query names columns as `table.column`, and `table.*` for the rows of a
 table rather than a column of it. A keyword may be written in upper case or in

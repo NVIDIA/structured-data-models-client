@@ -158,12 +158,20 @@ def test_no_example_hides_in_a_plain_fence(path):
             tree = ast.parse(source)
         except SyntaxError:
             continue  # output, a refusal, a query: not code, which is the rule
-        named = {
-            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
-        }
-        assert not named & exported, (
+        reached = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                reached.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                reached.add(node.attr)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                # The name as written, not as bound: an alias renames it.
+                reached.update(alias.name for alias in node.names)
+                reached.add(getattr(node, 'module', None) or '')
+        assert not reached & (exported | {'sdm_client'}), (
             f'{path.name} block {index} is in a plain fence and uses '
-            f'{sorted(named & exported)}; tag it python so it is run'
+            f'{sorted(reached & (exported | {"sdm_client"}))}; tag it python '
+            f'so it is run'
         )
 
 
@@ -283,17 +291,33 @@ FENCED = re.compile(r'^```[a-z]*\n.*?^```$', re.DOTALL | re.MULTILINE)
 def without_comments(path: Path) -> str:
     """The document without what a reader never sees.
 
-    Outside fences only. Inside one, ``<!--`` is four characters a reader
-    sees, and taking them out would quietly rewrite an example and the output
-    it is compared against.
+    A comment opened outside a fence runs until it closes, fences and all,
+    which is what a renderer does with it; a ``<!--`` inside one is four
+    characters on the page and stays. Scanned in one pass rather than by
+    stripping between fences, because a comment that opens before a fence and
+    closes after it belongs to neither side.
     """
-    body = path.read_text(encoding='utf-8')
-    kept, at = [], 0
-    for block in FENCED.finditer(body):
-        kept.append(COMMENT.sub('', body[at : block.start()]))
-        kept.append(block.group(0))
-        at = block.end()
-    kept.append(COMMENT.sub('', body[at:]))
+    kept: list[str] = []
+    hiding = False
+    inside = False
+    for line in path.read_text(encoding='utf-8').splitlines(keepends=True):
+        if hiding:
+            if '-->' in line:
+                hiding = False
+                kept.append(line.split('-->', 1)[1])
+            continue
+        if not inside and '<!--' in line:
+            before, rest = line.split('<!--', 1)
+            kept.append(before)
+            if '-->' in rest:
+                kept.append(rest.split('-->', 1)[1])
+            else:
+                hiding = True
+                kept.append('\n')
+            continue
+        if line.startswith('```'):
+            inside = not inside
+        kept.append(line)
     return ''.join(kept)
 
 
@@ -325,7 +349,7 @@ def tables(path: Path) -> list[list[list[str]]]:
             current, ruled = [], False
             continue
         cells = [cell.strip() for cell in stripped[1:-1].split('|')]
-        if all(cell and set(cell) <= {'-', ':'} for cell in cells):
+        if all('-' in cell and set(cell) <= {'-', ':'} for cell in cells):
             assert len(current) == 1, (
                 f'{path.name} rules a table under {len(current)} rows'
             )
@@ -398,7 +422,11 @@ def task_table() -> list[tuple[str, str, int]]:
     failure this file exists to catch, and a copy here would drift with it.
     """
     shown = table(PQL, 'Target')
-    del shown['Target']  # the header
+    assert shown['Target'] == ['Task', 'Calls'], (
+        f'pql.md heads the task table Target, {shown["Target"]}, and this '
+        f'reads it as Target, Task, Calls'
+    )
+    del shown['Target']
     read = [
         (listed(target)[0], listed(cells[0])[0], int(listed(cells[1])[0]))
         for target, cells in shown.items()
@@ -640,6 +668,20 @@ def test_a_comparison_the_skill_warns_about_is_refused(comparison, schema):
 
     with pytest.raises(StructuredDataError, match='not supported|deprecated'):
         resolve(filtered(comparison, 'a string'), schema)
+
+
+def test_a_ranking_is_capped_at_twenty_candidates(schema):
+    """The cap pql.md quotes. It is the model's, not the language's."""
+    pd = pytest.importorskip('pandas')
+    from sdm_client.errors import StructuredDataError
+
+    with pytest.raises(StructuredDataError, match='maximum foundation model'):
+        resolve(
+            'PREDICT LIST_DISTINCT(orders.item, 0, 30, days) RANK TOP 21 '
+            'FOR EACH users.user_id',
+            schema,
+            candidates=pd.Series(range(4)),
+        )
 
 
 def test_a_window_in_the_past_is_refused(schema):
