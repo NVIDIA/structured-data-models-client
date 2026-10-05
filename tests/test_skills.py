@@ -156,6 +156,39 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     assert not inside, f'{path.name} leaves a fence open'
 
 
+#: Every table each document holds, by its header row. Exhaustive on purpose:
+#: a table this file does not read is one that can say the opposite of a table
+#: it does, and a reader has no way to tell which of the two was checked.
+EVERY_TABLE = {
+    'skills/README.md': [['Skill', 'Model', 'Use it when']],
+    'skills/relational/SKILL.md': [
+        ['', '`kumo-relational`'],
+        ['Limit', 'Value'],
+        ['Refusal', 'Cause'],
+    ],
+    'skills/relational/pql.md': [
+        ['Clause', 'Least', 'Most'],
+        ['Target', 'Task', 'Calls'],
+        ['Aggregation', ''],
+        ['Comparison', ''],
+    ],
+    'skills/tabular/SKILL.md': [
+        ['', '`kumo-tabular`'],
+        ['Refusal', 'Cause'],
+    ],
+}
+
+
+@pytest.mark.parametrize('path', documents(), ids=str)
+def test_every_table_in_a_skill_is_one_this_file_reads(path):
+    """A new table has to be wired up here before it can be shipped."""
+    where = str(path.relative_to(SKILLS.parent))
+    assert [one[0] for one in tables(path)] == EVERY_TABLE[where], (
+        f'{path.name} holds tables {[one[0] for one in tables(path)]} and '
+        f'this file accounts for {EVERY_TABLE[where]}'
+    )
+
+
 @pytest.mark.parametrize('path', documents(), ids=str)
 def test_every_link_resolves(path):
     for target in LINK.findall(path.read_text(encoding='utf-8')):
@@ -230,7 +263,12 @@ def test_no_example_hides_in_a_plain_fence(path):
                 elif isinstance(node, ast.For):
                     sources, targets = [node.iter], [node.target]
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    sources = list(node.body)
+                    sources = [
+                        *node.body,
+                        *node.decorator_list,
+                        *node.args.defaults,
+                        *[one for one in node.args.kw_defaults if one],
+                    ]
                     targets = [ast.Name(id=node.name, ctx=ast.Store())]
                 else:
                     continue
@@ -508,22 +546,12 @@ def tables(path: Path) -> list[list[list[str]]]:
 
 
 def table(path: Path, label: str) -> dict[str, list[str]]:
-    """The one table holding a row labelled ``label``, as label to cells.
-
-    One: a second table repeating a label this file reads would sit beside the
-    checked one saying the opposite, and only the first would be read.
-    """
+    """The one table holding a row labelled ``label``, as label to cells."""
     matched = [
         one for one in tables(path) if any(row[0] == label for row in one)
     ]
     assert len(matched) == 1, (
         f'{path.name} has {len(matched)} tables with a {label!r} row'
-    )
-    heads = [tuple(one[0]) for one in tables(path)]
-    repeated = {head for head in heads if heads.count(head) > 1}
-    assert not repeated, (
-        f'{path.name} heads two tables alike ({sorted(repeated)}); a second '
-        f'one can say the opposite and only the first is read'
     )
     collected: dict[str, list[str]] = {}
     for cells in matched[0]:
