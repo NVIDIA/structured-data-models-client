@@ -904,6 +904,24 @@ def test_a_clause_is_refused_outside_the_range_the_skill_gives(clause, schema):
     )
 
 
+def test_a_fan_out_past_two_hundred_calls_is_refused(schema):
+    """The cap a reader meets before either clause's own bound.
+
+    A forecast of 10,000 steps is inside the language's range and is refused
+    for what it would cost, which is the number worth knowing.
+    """
+    from sdm_client.decompose import MOST_PARTS
+    from sdm_client.errors import StructuredDataError
+
+    assert MOST_PARTS == 200, 'pql.md quotes 200 as the number of calls'
+    with pytest.raises(StructuredDataError, match=str(MOST_PARTS)):
+        resolve(
+            f'PREDICT COUNT(orders.*, 0, 30, days) FORECAST '
+            f'{MOST_PARTS + 1} TIMEFRAMES FOR EACH users.user_id',
+            schema,
+        )
+
+
 def test_a_ranking_takes_only_a_foreign_key(schema):
     """The shape a ranking's target has to be, as the skill quotes it."""
     pd = pytest.importorskip('pandas')

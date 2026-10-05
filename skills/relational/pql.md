@@ -28,6 +28,21 @@ and each is narrower than it looks:
 | `RANK TOP k` | `1` | `20` |
 | `FORECAST n TIMEFRAMES` | `1` | `10000` |
 
+**The client stops you first.** A ranking is a call per candidate and a
+forecast a call per step, and past 200 calls it refuses rather than spend the
+afternoon:
+
+```
+10000 forecast steps means 10000 calls, one for each, because the model has no
+task that answers them together. That is past the 200 this will do without
+being told to; ask about fewer, or raise sdm_client.decompose.MOST_PARTS if
+the wait is what you want.
+```
+
+So the ranges above are the language's. In practice a forecast runs to 200
+steps unless you say otherwise, and a ranking is capped at 20 well before it
+matters.
+
 Past the top of either range the refusal names the bound:
 
 ```
