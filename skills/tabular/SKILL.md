@@ -1,6 +1,6 @@
 ---
 name: sdm-tabular
-description: "Ask kumo-tabular a question about rows of one table: classification or regression over labelled rows and rows to score, with no relationships and no predictive query language. Triggers: kumo-tabular, KumoTabular, single table prediction, tabular classification, tabular regression, score these rows, Request(context=, predict=)."
+description: "Ask kumo-tabular a question about rows of one table: classification or regression over labelled rows and rows to score, with no relationships and no time windows. Triggers: kumo-tabular, KumoTabular, single table prediction, tabular classification, tabular regression, score these rows, Request(context=, predict=), PredictiveQuery on one table."
 ---
 
 # Asking kumo-tabular

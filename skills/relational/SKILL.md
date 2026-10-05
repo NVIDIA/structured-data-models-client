@@ -141,12 +141,19 @@ would break rather than letting the endpoint return a 500.
 
 | Limit | Value |
 |---|---|
-| context rows | 1,000 by default, up to 10,000 with `num_context_samples` |
-| rows scored at once | 1,000, or 200 for `temporal_link_prediction` |
-| rows scored with an explanation | 1 |
-| tables in a schema | 15 |
-| hops gathered | 6 |
-| classes | 10 |
+| context rows, by default | `1,000` |
+| context rows, with `num_context_samples` | `10,000` |
+| rows scored at once | `1,000` |
+| rows scored for a link prediction | `200` |
+| rows scored with an explanation | `1` |
+| tables in the gathered graph | `15` |
+| hops gathered | `6` |
+| classes | `10` |
+
+**The table limit is on the graph a request carries, not on the schema.** A
+schema may describe far more than fifteen tables; what counts is how many the
+query actually reaches. An explanation has a second limit besides its one row:
+it must fit the 1,000-row context budget.
 
 ## Rankings, forecasts and explanations
 
@@ -164,9 +171,11 @@ request = PredictiveQuery(
 
 A candidate whose gathered context holds only one answer cannot be scored, so
 it is left out of the ranking and named on `result.unscored_candidates`, with a
-warning. The ranking is then shorter than the `TOP` you asked for. That is
-common: a candidate nothing in the sampled context ever reached has no example
-to learn from.
+warning. That is common: a candidate nothing in the sampled context ever
+reached has no example to learn from. The ranking still fills `TOP k` from
+whatever was scored, and comes back shorter only when fewer than `k` candidates
+survive — so a short list means check `result.unscored_candidates`, and a full
+one does not mean every candidate was considered.
 
 A forecast asks the same question over several future windows, one call per
 step, and gives a row per entity per step. The clause goes after the target:

@@ -10,15 +10,21 @@ and almost nothing transfers between them.
 | [`relational/pql.md`](relational/pql.md) | | Writing the predictive query itself |
 
 Load one. An agent answering a question about a single table does not need the
-relational material, and the relational model's six task kinds do not exist on
-the tabular one.
+relational material, and the four task kinds that make the relational model
+what it is — the two shapes of classification, forecasting and link prediction
+— are not on the tabular one at all.
 
 ## What these models are
 
 Neither model is trained on your data. Both are in-context learners: a request
-carries labelled rows as context and unlabelled rows to score, the model reads
-both in one forward pass, and nothing is fitted or stored. There is no training
-job, no checkpoint and no model registry. A question is asked and answered.
+carries labelled rows as context and unlabelled rows to score, and the model
+reads both in one forward pass. No weights are fitted, and nothing you send
+changes the model. There is no training job and no model registry.
+
+A session is the one thing that is held: `fit()` pins a context in the
+endpoint's memory so later calls can reuse it, and it stays there until
+`close()` or until it expires. That is a cache of what you sent, not anything
+learned from it.
 
 That is what decides the shape of every example here: there is nothing to
 train, so each skill is about describing the data and asking the question.
@@ -28,12 +34,18 @@ train, so each skill is about describing the data and asking the question.
 Every claim in these files was read from the shipped code, or run.
 
 Output marked **Verified** was produced by running the example above it against
-a live endpoint and pasting the result back. Everything else that can be
-checked without an endpoint is checked by
-[`../tests/test_skills.py`](../tests/test_skills.py), which reads the tables
-out of these files and asks the client whether they are still true: the task
-each query resolves to, the aggregations that are answered and the ones that
-are refused, and the names every example imports.
+a live endpoint and pasting the result back. Read those blocks for their shape
+— the columns, how they are keyed, how many rows come back. The numbers in them
+are one deployment's answers on made-up data, not anything this client
+promises, and a different build will print different ones.
+
+[`../tests/test_skills.py`](../tests/test_skills.py) reads the tables out of
+these files and asks the client whether they are still true: both capability
+tables against `capabilities()`, the relational limits against the shipped
+constants, the task each query resolves to, the aggregations that are answered
+and the ones that are refused, and the names every example imports. Run with
+`-m live_nim` and two endpoint URLs, it also re-runs every example and compares
+what it printed to the block pasted beneath it.
 
 Where a skill says the client allows something the endpoint refuses, that gap
 is the point and is stated as such. If a claim here contradicts the code, the

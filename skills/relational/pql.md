@@ -12,8 +12,10 @@ PREDICT <target> [ RANK TOP k | FORECAST n TIMEFRAMES ]
 ```
 
 Every query names columns as `table.column`, and `table.*` for the rows of a
-table rather than a column of it. Keywords are case-insensitive; the examples
-here use upper case for the language and lower case for your names.
+table rather than a column of it. A keyword may be written in upper case or in
+lower case, and in nothing in between: `PREDICT` and `predict` both parse,
+`Predict` does not, and nor does a time unit spelled `Days`. The examples here
+use upper case for the language and lower case for your names.
 
 ## The target decides the task
 
@@ -84,8 +86,10 @@ not happened.
 ## Which entities
 
 `FOR EACH users.user_id` asks about entities of that table, and
-`materialize(indices=[...])` says which ones. `FOR users.user_id IN (1, 2)`
-names them in the query instead. A filter narrows them:
+`materialize(indices=[...])` says which ones. `indices` is always required:
+there is no all-rows default, because it would silently score a whole table.
+`FOR users.user_id IN (1, 2)` narrows the query to those entities but does not
+replace it. A filter narrows them too:
 
 ```
 PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id

@@ -91,10 +91,9 @@ def test_every_name_an_example_imports_is_exported(path):
                 continue
             if node.module != 'sdm_client':
                 continue
+            exported = set(sdm_client.__all__)
             missing = [
-                alias.name
-                for alias in node.names
-                if not hasattr(sdm_client, alias.name)
+                alias.name for alias in node.names if alias.name not in exported
             ]
             assert not missing, (
                 f'{path.name} imports {missing} from sdm_client, which does '
@@ -424,4 +423,84 @@ def test_the_relational_examples_print_what_the_skill_shows():
     path = SKILLS / 'relational' / 'SKILL.md'
     assert_every_verified_block_is_what_it_printed(
         path, run(path, RELATIONAL_URL)
+    )
+
+
+# --- What the tables in the skills claim ----------------------------------
+
+
+def listed(path: Path, label: str) -> set[str]:
+    """The backticked values of the row beginning with ``label``."""
+    for cells in rows(path):
+        if cells and cells[0] == label:
+            return set(backticked(cells[1]))
+    raise AssertionError(f'{path.name} has no {label!r} row')
+
+
+@pytest.mark.parametrize(
+    'name, model_name',
+    [('tabular', 'KumoTabular'), ('relational', 'KumoRelational')],
+)
+def test_the_capability_table_is_the_clients_own(name, model_name):
+    """Both skills print a capability table. It has to be the real one."""
+    from sdm_client import SDMClient
+
+    model = getattr(sdm_client, model_name)()
+    with SDMClient(url='http://localhost:8000') as client:
+        capabilities = client.capabilities(model)
+    path = SKILLS / name / 'SKILL.md'
+    assert listed(path, 'Tasks') == set(capabilities.tasks)
+    assert listed(path, 'Outputs') == set(capabilities.outputs)
+
+
+#: Each row of the limits table in ``skills/relational/SKILL.md``, against the
+#: constant it reports. Every key is spoken for: a limit the client enforces
+#: and the skill does not mention is a refusal an agent cannot see coming.
+LIMIT_ROWS = {
+    'context rows, by default': 'context_rows_fast',
+    'context rows, with `num_context_samples`': 'context_rows_max',
+    'rows scored at once': 'predict_rows_max',
+    'rows scored for a link prediction': (
+        'predict_rows_temporal_link_prediction'
+    ),
+    'rows scored with an explanation': 'explanation_predict_rows',
+    'tables in the gathered graph': 'tables_max',
+    'hops gathered': 'hops_max',
+    'classes': 'classes_max',
+}
+
+
+def test_the_limits_table_is_the_shipped_limits():
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
+        'the client enforces a limit this table does not account for'
+    )
+    path = SKILLS / 'relational' / 'SKILL.md'
+    for label, key in LIMIT_ROWS.items():
+        shown = listed(path, label)
+        assert len(shown) == 1, f'{label!r} shows {shown}'
+        value = int(shown.pop().replace(',', ''))
+        assert value == RELATIONAL_LIMITS[key], (
+            f'{label!r} says {value}, the client enforces '
+            f'{RELATIONAL_LIMITS[key]}'
+        )
+
+
+def test_the_aggregations_are_all_of_them():
+    """Answered plus refused must be the language, or the skill omits one.
+
+    Read off the grammar rather than a list here: an aggregation added to the
+    language and to neither column is one an agent would never learn about.
+    """
+    import predictive_query
+
+    grammar = (
+        Path(predictive_query.__file__).parent / 'grammar' / 'PQLGrammar.g4'
+    )
+    body = grammar.read_text(encoding='utf-8')
+    block = body[body.index('AGGR:') : body.index(';', body.index('AGGR:'))]
+    every = {name for name in re.findall(r"'(\w+)'", block) if name.isupper()}
+    assert every == set(ANSWERED) | set(REFUSED), (
+        'the grammar and pql.md disagree about what the aggregations are'
     )
