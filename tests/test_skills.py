@@ -111,7 +111,7 @@ def test_an_example_that_predicts_can_be_run(path):
     """An incomplete example cannot be checked against an endpoint, so one
     that predicts would be the one claim nothing stands behind."""
     for index, (source, runs) in enumerate(
-        zip(fences(path, 'python'), complete(path))
+        zip(fences(path, 'python'), complete(path), strict=True)
     ):
         if PREDICTS.search(source):
             assert runs, (
