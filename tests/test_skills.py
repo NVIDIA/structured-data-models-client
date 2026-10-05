@@ -146,7 +146,9 @@ def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
                 f'block and is read here as nothing. It need not begin the '
                 f'line to do that'
             )
-            assert not re.search(r'&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);', line), (
+            assert not re.search(
+                r'&(#\d+|#[xX][0-9a-fA-F]+|[a-zA-Z]+);', line
+            ), (
                 f'{where} writes an HTML entity, which renders as a character '
                 f'this file reads as the escape it is written with'
             )
@@ -243,7 +245,9 @@ def test_no_example_hides_in_a_plain_fence(path):
     # runner shares one namespace across a document, so an alias bound in one
     # block reaches a later one; a plain fence using it would otherwise look
     # like prose.
-    reachable = set(sdm_client.__all__) | {'sdm_client'}
+    # `pd` too: the runner hands every example pandas, so a plain fence using
+    # it is a program that would have run and did not.
+    reachable = set(sdm_client.__all__) | {'sdm_client', 'pd'}
     trees: list[ast.Module] = []
     for source in fences(path, 'python'):
         tree = ast.parse(source)
@@ -1226,7 +1230,10 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
         if shown is None:
             continue
         checked += 1
-        assert printed.getvalue().strip() == shown.strip(), (
+        # Only the newline the fence adds. Indentation is the output: a
+        # frame's columns line up, and a block that lost that alignment would
+        # otherwise read as the one that was run.
+        assert printed.getvalue().rstrip('\n') == shown.rstrip('\n'), (
             f'{path.name} example {index} shows\n{shown}\nand printed\n'
             f'{printed.getvalue()}'
         )
