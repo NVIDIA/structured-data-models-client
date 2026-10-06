@@ -21,7 +21,7 @@ import pytest
 import sdm_client
 
 NOTEBOOK = (
-    Path(__file__).parents[3] / 'examples' / 'sdm_client_quickstart.ipynb'
+    Path(__file__).parents[3] / 'examples' / 'local' / 'quickstart.ipynb'
 )
 
 # Interfaces earlier generations of this client had. None of them exist here,
