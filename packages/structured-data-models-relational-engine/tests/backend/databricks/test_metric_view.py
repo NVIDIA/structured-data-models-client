@@ -652,6 +652,24 @@ def test_resolve_join_keys_unqualified() -> None:
     ) == ('source', 'dim_id', 'id')
 
 
+def test_resolve_join_keys_unqualified_means_the_joined_table() -> None:
+    r"""In `source.CustomerID = CustomerID` Databricks reads `CustomerID` as
+    the joined table's, though the source has one too, and both of the
+    view's entity tables were dropped as unresolvable.
+    """
+    join = _join(
+        (
+            JoinKeyRef(qualifier='source', column='CustomerID'),
+            JoinKeyRef(qualifier=None, column='customerid'),
+        )
+    )
+    assert resolve_join_keys(
+        join,
+        child_columns={'CustomerID', 'name'},
+        parent_columns={'CustomerID', 'amount'},
+    ) == ('source', 'CustomerID', 'customerid')
+
+
 def test_resolve_join_keys_unresolvable() -> None:
     ambiguous = _join(
         (

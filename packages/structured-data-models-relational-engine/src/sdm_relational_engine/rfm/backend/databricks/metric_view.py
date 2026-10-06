@@ -1158,8 +1158,10 @@ def resolve_join_keys(
     ``other_alias`` is the alias of the non-child side of the join, either
     :attr:`MetricViewJoin.parent_alias` or :obj:`SOURCE_ALIAS`. Unqualified
     column references are resolved by their (unambiguous) membership in the
-    child or parent table. Names are compared without regard to case, as
-    Databricks compares them, and the keys come back as written.
+    child or parent table, the child first: Databricks reads an unqualified
+    column of a join's ``on`` as one of the joined table. Names are compared
+    without regard to case, as Databricks compares them, and the keys come
+    back as written.
 
     Raises:
         UnsupportedJoinError: If the condition cannot be resolved.
@@ -1181,11 +1183,9 @@ def resolve_join_keys(
             if qualifier == SOURCE_ALIAS:
                 return SOURCE_ALIAS
             return None
-        in_child = ref.column.lower() in child_folded
-        in_parent = ref.column.lower() in parent_folded
-        if in_child and not in_parent:
+        if ref.column.lower() in child_folded:
             return join.alias
-        if in_parent and not in_child:
+        if ref.column.lower() in parent_folded:
             return join.parent_alias
         return None
 
