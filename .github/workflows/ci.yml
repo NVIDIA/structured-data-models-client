@@ -210,7 +210,9 @@ jobs:
           VERSION=$(cat dist/VERSION)
           pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
-      - run: pip install --upgrade twine && twine check dist/*
+      # The wheels only: dist/ also carries VERSION for the jobs downstream,
+      # and twine refuses anything that is not a distribution.
+      - run: pip install --upgrade twine && twine check dist/*.whl
       - uses: actions/upload-artifact@v4
         with:
           name: wheels
