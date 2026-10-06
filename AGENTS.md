@@ -44,8 +44,9 @@ complete example and compares what it printed to the block pasted beneath it.
 A `**Verified**` block is a claim that an endpoint produced exactly that. Do
 not write one by hand, and do not edit the numbers in one.
 
-An example that reads a name no earlier example binds is a fragment: it is
-checked as code and executed nowhere, and may not show output.
+An example is complete when every name it reads was bound by itself or by an
+earlier complete example. One that is not is a fragment: it is checked as code,
+executed nowhere, and may not show output.
 
 ## Generated files
 
@@ -54,8 +55,14 @@ Regenerate these; never edit them:
 - `packages/structured-data-models-api/src/sdm_api/generated/` -- regenerate
   with `scripts/generate_sdm_api.py`, which also writes `PROVENANCE.json`. A
   change to the generator itself changes the recorded hash.
-- The third-party attribution in `LICENSE` and `NOTICE` --
-  `scripts/mermaid_notices.py --write`, checked with `--check`.
+- The third-party attribution in the two `LICENSE` files, the root one and the
+  engine's -- `scripts/mermaid_notices.py --write`, checked with `--check`. It
+  renders `rfm/assets/MERMAID_COMPONENTS.json`, which `--refresh` regenerates;
+  neither touches `NOTICE`.
+- `rfm/assets/relbench_registry.json` -- `scripts/pin_relbench.py`. It pins
+  source commits and table digests.
+- The ANTLR output in `predictive_query/grammar/`. Edit `PQLGrammar.g4` and
+  regenerate; everything beside it is produced.
 - `tests/golden/` -- the exported surface and the recorded wire payloads.
 
 ## Gates that fail on prose
