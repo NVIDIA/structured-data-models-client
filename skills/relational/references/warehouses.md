@@ -178,8 +178,7 @@ source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
 
 ## A metric view, or a semantic view
 
-A metric view already names the tables a question is about and how they join,
-so it can be the source itself:
+A metric view already names the tables a question is about and how they join, so it can be the source itself:
 
 ```python
 from sdm_client import Schema
@@ -192,30 +191,44 @@ schema = Schema.from_source(source.semantic_model('sales_metrics'))
 ```
 
 Snowflake's semantic views are reached the same way, through the same method.
-Both are what the Open Semantic Interchange and dbt call a semantic model, but
-they are not shaped alike, so what a schema takes differs.
+Both are what the Open Semantic Interchange and dbt call a semantic model, but they are not shaped alike, so what a schema takes differs.
 
 From a **Databricks metric view**:
 
-- its source table, named as it is in the catalog
-- each join, as a table named after the join
-- each dimension, as a column of the table it reads
-- its `filter`, limiting the rows of the source table
+- its source table, named as it is in the catalog;
+- each join, nested ones too, as a table named after the join and keyed by the column it joins on;
+- each dimension, as a column of the table it reads, and a wildcard such as `source.*` or `customers.* EXCEPT (rowguid)` as the columns it stands for;
+- the columns a measure aggregates, when it reads one table, added to that table where no dimension names them, so a query can aggregate them too;
+- its `filter`, limiting every read of the source table;
+- each parameter the filter or a dimension references, read as its default, as a query of the view without arguments reads it.
 
-From a **Snowflake semantic view**: its logical tables, the relationships
-between them, and their dimensions, time dimensions and facts. A fact becomes
-a column.
+The source table's time column is a date the view holds, chosen as for any table, with two differences.
+A dimension that truncates or casts a date, such as `DATE_TRUNC('MONTH', OrderDate)`, is offered as the column it truncates, added when no dimension names it, so a 30-day window counts days rather than months.
+The date a window measure orders by is offered first, as the time axis the view's author chose.
 
-What neither contributes:
+From a **Snowflake semantic view**: its logical tables, the relationships between them, and their dimensions, time dimensions and facts.
+A fact becomes a column.
 
-- **measures and metrics**, because they are aggregations rather than row
-  values. Ask for them in the query instead: a measure that sums an amount is
-  `SUM(orders.amount, 0, 30, days)`.
-- **a filter on a joined table**, which is refused rather than ignored.
-- **dimensions whose expressions call functions beyond the pure built-ins**,
-  left out with a message. They would run as SQL under your credentials every
-  time a request is gathered. Pass `trust_expressions=True` to keep them, and
-  read them first.
+**Measures and metrics** are not columns, since they are aggregations rather than row values.
+Ask for them in the query instead.
+Converting a metric view reports what it chose and what it left out in one `SDMWarning`, including the aggregation matching each simple measure, such as `'revenue' is SUM(order_lines.LineTotal, 0, 30, days)`.
+
+Left out, each with a message in that warning:
+
+- a join on more than one column or on an expression, which one graph link cannot express;
+- a join whose table cannot be read, being missing, empty, unreadable or itself a metric view;
+- a join whose key repeats a value, since a graph table holds one row per key;
+- with each of those joins, the tables and dimensions that hang off it, all named;
+- a dimension calling functions beyond the pure built-ins, which would run as SQL under your credentials every time a request is gathered; pass `trust_expressions=True` to keep it, and read it first;
+- a dimension referencing a parameter with no default, `materialization`, and `fields` beside `dimensions`, which Databricks ignores as well;
+- a column whose name holds a dot, a backtick or a line break, which no predictive query can name.
+
+Refused, with a `StructuredDataError` (`INVALID_REQUEST`) whose message names the way out:
+
+- a filter on a joined table, or on a parameter with no default: create a regular view with that `WHERE` clause and point the metric view's source at it;
+- a filter calling functions beyond the pure built-ins, unless `trust_expressions=True`;
+- a SQL query as the source: create a regular view over the query instead;
+- another metric view as the source: point the source at its underlying table.
 
 A metric view is skipped by plain auto-discovery, by design. Naming one as an
 ordinary table is refused, and the refusal says what to do:

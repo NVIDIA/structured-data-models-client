@@ -184,4 +184,9 @@ SDM_RELATIONAL_URL=http://localhost:8001 \
 
 # against real warehouses
 python -m pytest packages/structured-data-models-connectors/tests -m live_warehouse -q
+
+# metric view variants, created and dropped in a schema you may write to,
+# beside the DATABRICKS_* variables the engine's live tests read
+SDM_MV_TEST_SCHEMA=main.scratch python -m pytest -q \
+  packages/structured-data-models-relational-engine/tests/backend/databricks/test_live_metric_view_variants.py
 ```
