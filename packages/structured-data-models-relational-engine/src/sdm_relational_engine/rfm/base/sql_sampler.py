@@ -376,10 +376,13 @@ class SQLSampler(Sampler):
                     continue
 
                 # Collect the slices of data sampled in the previous hop
-                # (but maintain only required key information):
+                # (but maintain only required key information). A column
+                # linking to two tables, as a role-playing join does, is
+                # selected once:
                 cols = [fkey for fkey, _ in self.foreign_key_dict[table]]
                 if table in self.primary_key_dict:
                     cols.append(self.primary_key_dict[table])
+                cols = list(dict.fromkeys(cols))
                 dfs = [df[cols] for df in dfs_dict[table][offset_dict[table] :]]
                 df = (
                     pd.concat(

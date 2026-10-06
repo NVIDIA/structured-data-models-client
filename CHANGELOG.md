@@ -200,6 +200,9 @@ declare as `1.0.0` and none has published. The heading becomes
   Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message.
   Measures stay out of the graph, and are only read, never run.
   One conversion message lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
+- **A column linking to two tables no longer fails sampling.**
+  A metric view that joins one table twice under two names, such as a buyer and a recipient both read from `customers`, links one column to two tables, and every prediction failed with `operands could not be broadcast`, since the sampler selected the column once per link.
+  It is now selected once.
 - **What a semantic model loses, or why it is refused, reaches `Schema.from_source` as the client says everything else.**
   The engine's conversion messages arrived as its own `ViewConversionWarning`, which filtering `SDMWarning` let through, attributed to this client's module rather than the call; they are now one `SDMWarning` at the caller.
   A model the engine refuses, for a filter on a joined table, a query as its source or any other reason, raised the engine's `ValueError`; it is now a `StructuredDataError` (`INVALID_REQUEST`) carrying the engine's message, with the model's name in `details`.
