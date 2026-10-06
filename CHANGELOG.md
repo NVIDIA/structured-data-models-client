@@ -210,7 +210,9 @@ declare as `1.0.0` and none has published. The heading becomes
   Such a column, with a dot, a backtick or a line break in its name, is now left out with an `SDMWarning` naming it.
 - **A `DECIMAL(p, 0)` key is read as the integer its type says.**
   A warehouse column such as H&M's `DECIMAL(38, 0)` ids was described as an integer but read as decimals, which no type inference takes, so a question about a metric view or a table holding one failed when its rows were read.
-  Decimal columns are now read as 64-bit integers where their scale is 0 or their type says integer, and as floats otherwise; one past 64 bits is left as it was.
+  A decimal column is now read as a 64-bit integer where its declared type says integer, or none is declared and its scale is 0, and as a float where its declared type says float, or none is declared and its scale is not 0; one past 64 bits is left as it was.
+  A decimal column declared a string, such as a `DECIMAL(38, 0)` identifier, is read as its exact digits, and one declared any other type is left as it was.
+  An in-memory table holding Arrow decimals, as a frame read from a warehouse does, now builds too, taking the same integer or float type.
 - **A metric view with both `fields` and `dimensions` reads only `dimensions`, as Databricks does.**
   Both lists were read, adding dimensions no query of the view can see; `fields` is now left out with a message.
 - **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**

@@ -1130,18 +1130,28 @@ class Table(ABC):
         import pyarrow as pa
 
         def _from_decimal(ser: pd.Series, dtype: Dtype | None) -> pd.Series:
-            r"""A decimal column as the integer or float its data type says.
+            r"""A decimal column as the number or string its data type says.
 
             A warehouse reads a `DECIMAL(38, 0)` key as a decimal, which no
-            type inference takes, though its data type says integer. One that
-            does not fit 64 bits is left as it is.
+            type inference takes, though its data type says integer. Only a
+            column whose data type is unset, an integer or a float is read as
+            a number, an integer where it says so, or where unset and the
+            scale is 0, and one that does not fit 64 bits is left as it is.
+            One declared a string, such as a `DECIMAL(38, 0)` identifier, is
+            read as the exact digits, since a float holds only about 16 of
+            them. Any other column is left as it is.
             """
             arrow_type = ser.dtype.pyarrow_dtype
             if dtype is None:
-                integer = arrow_type.scale == 0
+                target = pa.int64() if arrow_type.scale == 0 else pa.float64()
+            elif dtype.is_int():
+                target = pa.int64()
+            elif dtype.is_float():
+                target = pa.float64()
+            elif dtype == Dtype.string:
+                target = pa.string()
             else:
-                integer = dtype.is_int()
-            target = pa.int64() if integer else pa.float64()
+                return ser
             try:
                 return ser.astype(pd.ArrowDtype(target))
             except (ValueError, TypeError, ArithmeticError):

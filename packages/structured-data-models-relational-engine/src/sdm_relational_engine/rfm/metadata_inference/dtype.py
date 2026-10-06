@@ -102,6 +102,11 @@ def infer_dtype(ser: pd.Series) -> Dtype:
                 return Dtype.stringlist
             if pa.types.is_null(elem_dtype):
                 return Dtype.floatlist
+        if pa.types.is_decimal(ser.dtype.pyarrow_dtype):
+            # As a SQL backend reads `DECIMAL(p, 0)` and `DECIMAL(p, s)`:
+            if ser.dtype.pyarrow_dtype.scale == 0:
+                return Dtype.int
+            return Dtype.float
 
     if isinstance(ser.dtype, np.dtype):
         dtype_str = str(ser.dtype).lower()
