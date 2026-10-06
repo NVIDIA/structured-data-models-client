@@ -1248,6 +1248,7 @@ class Graph:
         )
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
+            MetricViewWildcard,
             UnsupportedJoinError,
             parse_metric_view,
             parse_table_reference,
@@ -1363,7 +1364,16 @@ class Graph:
 
             columns_by_alias: dict[str, list[ColumnSpec]] = defaultdict(list)
             for column_spec in spec.columns:
-                if unquote_ident(column_spec.expr) == column_spec.name:
+                if isinstance(column_spec, MetricViewWildcard):
+                    # Databricks refuses a view whose wildcards name a column
+                    # twice, so one that exists names each once.
+                    excluded = {name.lower() for name in column_spec.excluded}
+                    columns_by_alias[column_spec.alias].extend(
+                        ColumnSpec(name=name)
+                        for name in _columns_of(column_spec.alias)
+                        if name.lower() not in excluded
+                    )
+                elif unquote_ident(column_spec.expr) == column_spec.name:
                     columns_by_alias[column_spec.alias].append(
                         ColumnSpec(name=column_spec.name)
                     )

@@ -182,6 +182,9 @@ declare as `1.0.0` and none has published. The heading becomes
   A join's key became the joined table's primary key unchecked, and neither Databricks nor the view checks it.
   It is now counted where the rows are, through the view's filter for the source table, with one query per join, and a key that repeats, or holds no value at all, drops the join with a message showing a repeated value.
   Rows with no key are left alone: no join reaches them, and sampling leaves them out.
+- **A metric view's wildcard dimensions become columns.**
+  `- expr: source.*`, `- expr: <join>.*` and either with `EXCEPT (a, b)` were dropped as missing a name.
+  They now stand for the columns of their table, each named as the column, as Databricks expands them.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the

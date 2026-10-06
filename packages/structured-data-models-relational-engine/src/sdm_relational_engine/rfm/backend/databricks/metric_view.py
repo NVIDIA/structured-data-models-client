@@ -32,6 +32,13 @@ _TABLE_REFERENCE_RE = re.compile(
 _CHAIN = rf'(?:{_IDENT})(?:\s*\.\s*(?:{_IDENT}))*'
 _JOIN_CONDITION_RE = re.compile(rf'\s*({_CHAIN})\s*=\s*({_CHAIN})\s*$')
 _IDENT_RE = re.compile(_IDENT)
+# `- expr: source.*` or `- expr: customers.* EXCEPT (a, b)`, which Databricks
+# expands into one dimension per column, each named as the column.
+_WILDCARD_RE = re.compile(
+    rf'\s*({_CHAIN})\s*\.\s*\*'
+    rf'(?:\s*EXCEPT\s*\(\s*({_CHAIN}(?:\s*,\s*{_CHAIN})*)\s*\))?\s*$',
+    flags=re.IGNORECASE,
+)
 # Double quotes delimit a string, not a name, in Databricks SQL.
 _STRING_LITERAL_RE = re.compile(
     r"'(?:''|\\[\s\S]|[^'\\])*'|\"(?:\"\"|\\[\s\S]|[^\"\\])*\""
@@ -104,6 +111,21 @@ class MetricViewColumn:
     expr: str
 
 
+@dataclass(frozen=True)
+class MetricViewWildcard:
+    r"""A metric view dimension ``<alias>.*``, which stands for every column
+    of its table but those it excepts, each named as the column.
+
+    Args:
+        alias: The alias of the table, either :obj:`SOURCE_ALIAS` or a join
+            alias.
+        excluded: The columns named by its ``EXCEPT``, if any.
+    """
+
+    alias: str
+    excluded: tuple[str, ...] = ()
+
+
 @dataclass
 class MetricViewSpec:
     r"""The graph-relevant parts of a metric view definition.
@@ -111,7 +133,8 @@ class MetricViewSpec:
     Args:
         source: The parsed name parts of the source (fact) table.
         joins: All convertible joins, parents before children.
-        columns: All dimensions resolved onto a single table.
+        columns: All dimensions resolved onto a single table, in order. A
+            wildcard is expanded once its table's columns are known.
         messages: Human-readable messages for every dropped element.
         filter: The view's ``filter``, a condition on the source table's
             columns, if it has one.
@@ -119,7 +142,7 @@ class MetricViewSpec:
 
     source: tuple[str, ...]
     joins: list[MetricViewJoin]
-    columns: list[MetricViewColumn]
+    columns: list[MetricViewColumn | MetricViewWildcard]
     messages: list[str]
     filter: MetricViewFilter | None = None
 
@@ -427,7 +450,7 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
 
     row_filter = _check_filter(cfg.get('filter'), candidates)
 
-    columns: list[MetricViewColumn] = []
+    columns: list[MetricViewColumn | MetricViewWildcard] = []
     defined: dict[str, str] = {}
     dim_cfgs = list(cfg.get('dimensions') or []) + list(cfg.get('fields') or [])
     for dim_cfg in dim_cfgs:
@@ -439,6 +462,33 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
 
         name = dim_cfg.get('name')
         expr = dim_cfg.get('expr')
+        if isinstance(expr, str) and (wildcard := _WILDCARD_RE.match(expr)):
+            path = tuple(
+                unquote_ident(part).lower()
+                for part in _IDENT_RE.findall(wildcard.group(1))
+            )
+            aliases_of = {
+                tuple(part.lower() for part in path_): alias_
+                for path_, alias_ in candidates
+            }
+            wildcard_alias = aliases_of.get(path)
+            if wildcard_alias is None:
+                messages.append(
+                    f"Failed to add dimension '{expr.strip()}' since it "
+                    f'references no table of the view'
+                )
+            elif wildcard_alias != SOURCE_ALIAS and wildcard_alias not in kept:
+                messages.append(
+                    f"Failed to add dimension '{expr.strip()}' since it "
+                    f"references the skipped join '{wildcard_alias}'"
+                )
+            else:
+                excluded = tuple(
+                    unquote_ident(_IDENT_RE.findall(chain)[-1])
+                    for chain in re.findall(_CHAIN, wildcard.group(2) or '')
+                )
+                columns.append(MetricViewWildcard(wildcard_alias, excluded))
+            continue
         if not isinstance(name, str) or not isinstance(expr, str):
             messages.append(
                 f'Failed to add dimension {dim_cfg!r} since it '

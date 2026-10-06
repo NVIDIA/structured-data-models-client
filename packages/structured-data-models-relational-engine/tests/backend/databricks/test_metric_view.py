@@ -23,6 +23,7 @@ try:
         JoinKeyRef,
         MetricViewFilter,
         MetricViewJoin,
+        MetricViewWildcard,
         UnsupportedFilterError,
         UnsupportedJoinError,
         parse_join_condition,
@@ -2492,3 +2493,89 @@ def test_a_one_to_many_join_counts_the_key_of_the_filtered_source(
     assert graph['order_lines'].primary_key is None
     (message,) = [m for m in graph.conversion_messages if "join 'refunds'" in m]
     assert "key 'line_id' is not unique in table 'order_lines'" in message
+
+
+def test_parse_metric_view_wildcards() -> None:
+    spec = parse_metric_view("""
+source: cat.sch.orders
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+    joins:
+      - name: regions
+        source: cat.sch.regions
+        on: customers.region_id = regions.region_id
+  - name: promos
+    source: SELECT * FROM cat.sch.promos
+    on: source.promo_id = promos.promo_id
+dimensions:
+  - expr: source.*
+  - name: tier
+    expr: UPPER(customers.segment)
+  - expr: customers.* except (`segment`, customers.region_id)
+  - expr: customers . regions.*
+  - expr: Source.* EXCEPT(amount)
+  - expr: promos.*
+  - expr: nowhere.*
+measures:
+  - expr: source.*
+""")
+
+    assert spec.columns == [
+        MetricViewWildcard('source'),
+        spec.columns[1],
+        MetricViewWildcard('customers', ('segment', 'region_id')),
+        MetricViewWildcard('regions'),
+        MetricViewWildcard('source', ('amount',)),
+    ]
+    assert spec.columns[1].name == 'tier'
+    assert spec.messages[-2:] == [
+        "Failed to add dimension 'promos.*' since it references the skipped "
+        "join 'promos'",
+        "Failed to add dimension 'nowhere.*' since it references no table of "
+        'the view',
+    ]
+
+
+_WILDCARD_YAML = """
+version: 0.1
+source: cat.sch.order_lines
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+dimensions:
+  - name: order_month
+    expr: DATE_TRUNC('MONTH', source.order_date)
+  - expr: source.* EXCEPT (ORDER_DATE, `promo_id`)
+  - expr: customers.* EXCEPT (customer_id)
+"""
+
+
+def test_a_wildcard_dimension_stands_for_the_columns_of_its_table() -> None:
+    graph = _convert(
+        _FakeConnection(
+            _metric_view(_WILDCARD_YAML, {'order_month': 'timestamp'})
+        )
+    )
+
+    fact = graph['order_lines']
+    assert [column.name for column in fact.columns] == [
+        'order_month',
+        'line_id',
+        'order_id',
+        'customer_id',
+        'product_id',
+        'product_line',
+        'status',
+        'amount',
+    ]
+    assert all(fact[name].expr is None for name in ('line_id', 'amount'))
+    assert {column.name for column in graph['customers'].columns} == {
+        'region_id',
+        'segment',
+        'customer_id',
+    }
+    assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
+    assert graph.conversion_messages == ()
