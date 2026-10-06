@@ -858,9 +858,10 @@ _EXPRESSION_KEYWORDS = frozenset(
     }
 )  # fmt: skip
 # Functions whose first argument may be a datetime unit, as a bare word.
-_UNIT_FIRST = frozenset(
-    {'extract', 'timestampadd', 'timestampdiff', 'dateadd', 'datediff'}
-)
+_UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
+# These take a unit first only in their three-argument form: `datediff(a,
+# b)` reads two values.
+_UNIT_FIRST_OF_THREE = frozenset({'dateadd', 'datediff'})
 # A raw string, `r'...'`, takes no escapes.
 _TOKEN = re.compile(
     r"""(?P<string>[rR]'[^']*'|[rR]"[^"]*"|'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*")
@@ -912,6 +913,15 @@ def _closing(tokens: list[_Token], at: int) -> int:
             if depth == 0:
                 return index
     return len(tokens) - 1
+
+
+def _arguments(tokens: list[_Token], at: int) -> int:
+    r"""How many arguments the call whose ``(`` is at ``at`` is given."""
+    commas, depth = 0, 0
+    for token in tokens[at : _closing(tokens, at)]:
+        depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(token.text, 0)
+        commas += token.text == ',' and depth == 1
+    return commas + 1
 
 
 def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
@@ -996,13 +1006,11 @@ def name_references(expr: str) -> list[NameReference]:
         chain = tokens[index : last + 1 : 2]
         after = tokens[last + 1] if last + 1 < len(tokens) else None
         bare = len(chain) == 1 and token.kind == 'word'
-        is_type = previous is not None and (
-            previous.text == '::'
-            or (
-                previous.folded == 'as'
-                and bool(openers)
-                and openers[-1] in ('cast', 'try_cast')
-            )
+        # After AS stands a type in a cast, and a name given elsewhere, as
+        # in `struct(a AS f)`.
+        after_as = previous is not None and previous.folded == 'as'
+        is_type = (previous is not None and previous.text == '::') or (
+            after_as and bool(openers) and openers[-1] in ('cast', 'try_cast')
         )
         is_unit = (
             bare
@@ -1013,7 +1021,13 @@ def name_references(expr: str) -> list[NameReference]:
                     previous is not None
                     and previous.text == '('
                     and len(openers) > 0
-                    and openers[-1] in _UNIT_FIRST
+                    and (
+                        openers[-1] in _UNIT_FIRST
+                        or (
+                            openers[-1] in _UNIT_FIRST_OF_THREE
+                            and _arguments(tokens, index - 1) == 3
+                        )
+                    )
                 )
             )
         )
@@ -1025,6 +1039,7 @@ def name_references(expr: str) -> list[NameReference]:
             skip_to = _closing(tokens, last + 1)
         if not (
             is_type
+            or after_as
             or is_unit
             or index <= skip_to
             or (after is not None and after.text in ('(', '=>'))

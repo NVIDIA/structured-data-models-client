@@ -3001,10 +3001,23 @@ measures:
             '/ COUNT(DISTINCT SalesOrderID)',
             ['LineTotal', 'UnitPrice', 'SalesOrderID'],
         ),
+        (
+            'SUM(datediff(day, shipped) + datediff(DAY, a, b)) '
+            '+ COUNT(DISTINCT struct(order_ts AS f))',
+            ['day', 'shipped', 'a', 'b', 'order_ts'],
+        ),
         # A dimension, a measure and two tables: no one table's columns.
         ('SUM(qty * products.ListPrice) / MEASURE(m) + SUM(promos.d)', []),
     ],
-    ids=['cast-joined', 'cast-date', 'lambda', 'interval', 'filter', 'mixed'],
+    ids=[
+        'cast-joined',
+        'cast-date',
+        'lambda',
+        'interval',
+        'filter',
+        'date-function',
+        'mixed',
+    ],
 )
 def test_a_measure_reads_the_columns_it_names(
     expr: str, inputs: list[Any]
