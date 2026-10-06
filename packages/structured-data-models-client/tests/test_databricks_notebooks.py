@@ -34,10 +34,11 @@ def _python(source: str) -> str:
     )
 
 
-def test_there_are_notebooks_for_the_catalog_and_for_lakebase() -> None:
+def test_there_is_a_notebook_for_each_way_in() -> None:
     assert {path.name for path in NOTEBOOKS} >= {
-        'sdm_client_adventureworks.ipynb',
-        'sdm_client_lakebase.ipynb',
+        'adventureworks_relational.ipynb',
+        'adventureworks_tabular.ipynb',
+        'lakebase_relational.ipynb',
     }
 
 
