@@ -1609,8 +1609,14 @@ class Graph:
             def _read_join(alias: str, rows: bool = False) -> bool:
                 r"""Whether a joined table can be used, its columns read, and
                 its rows if ``rows``.
+
+                A join under one that cannot be used goes with it, so it is
+                never read.
                 """
-                if alias in unusable:
+                parent = joins_by_alias[alias].parent_alias
+                if alias in unusable or (
+                    parent != SOURCE_ALIAS and not _read_join(parent, rows)
+                ):
                     return False
                 table = _table(alias)
                 try:
@@ -1775,10 +1781,7 @@ class Graph:
             # the count reads the columns by the view's names.
             keyed: dict[tuple[str, str], str] = {}
             for join in spec.joins:
-                if (
-                    not _read_join(join.alias, rows=True)
-                    or join.parent_alias in unusable
-                ):
+                if not _read_join(join.alias, rows=True):
                     continue
                 try:
                     one_alias, one_key, _, _ = _join_ends(join)

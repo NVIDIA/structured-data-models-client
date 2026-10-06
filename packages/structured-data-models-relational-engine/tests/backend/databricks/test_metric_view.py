@@ -2452,6 +2452,8 @@ def test_a_join_whose_table_cannot_be_used_is_left_out(
     (regions,) = [m for m in said if "'region_name'" in m]
     assert reason in customers and customers.count("'customers'") == 1
     assert "'customers'" in regions and "'region_code'" in regions
+    # The join nested in it is never read, so cannot fail the conversion.
+    assert not any('`regions`' in sql for sql in connection.sql_log)
 
 
 @pytest.mark.parametrize(
