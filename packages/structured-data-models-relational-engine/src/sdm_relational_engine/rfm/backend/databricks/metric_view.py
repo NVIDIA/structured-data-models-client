@@ -806,7 +806,7 @@ def parse_metric_view(
     if isinstance(row_filter, str):
         substituted, referenced = _substitute_parameters(row_filter, parameters)
         if reason := _unusable_parameter(referenced):
-            _refuse_filter(row_filter, reason)
+            _refuse_filter(row_filter, reason, default_helps=True)
         row_filter = substituted
         used.update((parameter.name, parameter) for parameter in referenced)
     row_filter = _check_filter(row_filter, candidates)
@@ -1085,7 +1085,11 @@ def _check_filter(
 
 
 def _refuse_filter(
-    row_filter: Any, reason: str, *, trusting_helps: bool = False
+    row_filter: Any,
+    reason: str,
+    *,
+    trusting_helps: bool = False,
+    default_helps: bool = False,
 ) -> NoReturn:
     r"""Refuses the view for its filter, and says the ways out.
 
@@ -1094,8 +1098,12 @@ def _refuse_filter(
         reason: Why, as a clause.
         trusting_helps: Whether ``trust_expressions=True`` would accept it,
             as for a call to a function other than a pure built-in.
+        default_helps: Whether a default for the parameter it reads would
+            let it be read.
     """
     hatch = ''
+    if default_helps:
+        hatch = ', or give the parameter a default of its type'
     if trusting_helps:
         hatch = (
             ', or pass trust_expressions=True to apply it if you trust '

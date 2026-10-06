@@ -2753,11 +2753,11 @@ def test_a_parameter_is_read_as_its_default() -> None:
 
 
 def test_a_filter_on_a_parameter_with_no_default_is_refused() -> None:
-    with pytest.raises(
-        UnsupportedFilterError,
-        match="parameter 'required', which has no default",
-    ):
+    with pytest.raises(UnsupportedFilterError) as caught:
         parse_metric_view(_PARAMETER_YAML.format(filter='qty > required'))
+
+    assert "parameter 'required', which has no default" in str(caught.value)
+    assert 'give the parameter a default' in str(caught.value)
 
 
 @pytest.mark.parametrize(
