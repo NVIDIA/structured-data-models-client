@@ -442,16 +442,21 @@ relational model was refused it and nothing the caller passed could say
 otherwise. Gathering and sending disagree loudly now: each adapter refuses a
 request gathered for the other before it is sent.
 
-**Tabular PQL has no key to name, and that is decided, not open.** `FOR EACH`
-today must name a primary key, and a tabular frame has none. For a tabular
-question
-`Schema` synthesizes a request-local row id for a keyless table. This real,
-positional column is never sent as data or exposed in the result, which carries
-`row_index`. `FOR EACH users.<synthetic>` then validates unchanged, so the PQL
-validator is **not** relaxed and no query that is illegal today becomes legal.
-"Unseen" means a row that is not in the tables the schema was built from. `FOR EACH` enumerates rows that *are* there,
-so PQL text alone can never produce them. The rows are an input, not a
-derivation. This is why the direct builder supports tabular in v1.
+**Tabular PQL names a real key.** `FOR EACH` must name a primary key, and
+nothing is synthesized for a frame that has none: such a schema is refused,
+with the refusal saying the entity is not a primary key. A keyless frame is the
+direct `Request` path, which needs no key because it names the two halves
+itself. Give the frame a key and the same question can be asked either way.
+
+The query never says which rows are scored. `materialize` does, and it takes
+exactly one of `indices=`, naming rows already in the table, or `predict=`,
+passing rows you hold. That second form is what lets a tabular question score
+rows the schema has never seen.
+
+"Unseen" means a row that is not in the tables the schema was built from. PQL
+text alone can never produce one: the rows are an input, not a derivation,
+which is why `predict=` exists and why the direct builder answers a tabular
+question without a query at all.
 
 ---
 

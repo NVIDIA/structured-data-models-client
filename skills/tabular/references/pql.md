@@ -42,8 +42,9 @@ request = PredictiveQuery(
 ).materialize(indices=[7, 12, 3], model=KumoTabular())
 ```
 
-`FOR customers.customer_id IN (1, 2)` works too, and `indices` is still
-required: it is what says which rows are scored.
+`FOR customers.customer_id IN (1, 2)` works too. The query never says which
+rows are scored; `materialize` does, and it takes exactly one of `indices=` to
+name rows already in the table or `predict=` to pass rows you hold.
 
 ## What the relational language has and this does not
 
