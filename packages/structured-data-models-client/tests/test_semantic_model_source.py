@@ -666,3 +666,30 @@ def test_no_relationship_is_inferred_beside_a_model_s_joins(
     )
     schema = _schema(source, relationships=[*schema.relationships, asked])
     assert asked in schema.relationships
+
+
+def test_a_dimension_no_query_can_name_is_left_out_and_named(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""`order_lines.a.b` reads as a column `a` of a table `order_lines.a`,
+    so a dimension named `a.b` refused the whole schema.
+    """
+    view = _VIEW.replace('name: discounted', 'name: "is.discounted"')
+    _with_view(monkeypatch, view)
+    monkeypatch.setitem(
+        _EXPRESSIONS,
+        'order_lines',
+        {'is.discounted': lambda df: df['discount'] > 0},
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    assert 'is.discounted' not in schema['order_lines'].columns
+    assert 'quantity' in schema['order_lines'].columns
+    (said,) = [w for w in caught if "'is.discounted'" in str(w.message)]
+    assert said.category is SDMWarning
+    assert 'a predictive query cannot name a column holding a dot' in str(
+        said.message
+    )

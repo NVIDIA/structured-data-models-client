@@ -205,6 +205,9 @@ declare as `1.0.0` and none has published. The heading becomes
   Dimensions, join keys and join names now match their columns and tables in any case, and a column keeps the view's spelling, the one a question about the view uses, so every read names it so; a key no dimension names keeps its table's.
 - **An unqualified column in a metric view join's `on` is the joined table's, as Databricks reads it.**
   `on: source.CustomerID = CustomerID` was refused as unresolvable when both tables have a `CustomerID`, dropping the join and its entity table.
+- **A column no predictive query can name is left out of a source's schema, not the whole schema.**
+  A metric view dimension named `a.b` refused `Schema.from_source` with "invalid characters", since `table.a.b` cannot be said in a predictive query.
+  Such a column, with a dot, a backtick or a line break in its name, is now left out with an `SDMWarning` naming it.
 - **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**
   `Schema.from_source(source.semantic_model(...))` also inferred relationships from column names, so a snowflake view's lines, holding `CustomerID`, gained a link straight to `customers` beside the path through orders, and churn questions failed with an `IndexError`.
   No relationship is now inferred beside a semantic model's joins; pass `relationships=` to add one.

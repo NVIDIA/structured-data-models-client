@@ -542,8 +542,7 @@ class _TableShape:
                 f'The name {name!r} must be a non-empty string.',
                 code='INVALID_REQUEST',
             )
-        invalid_chars = ['`', '\n', '\r', '.']
-        name_invalid_chars = [char for char in invalid_chars if char in name]
+        name_invalid_chars = _invalid_name_chars(name)
         if len(name_invalid_chars) > 0:
             raise StructuredDataError(
                 f'The name {name!r} contains '
@@ -1639,6 +1638,15 @@ def _require_one_kind_of_table(
         _require_a_source(source)
 
 
+# What a name in a predictive query cannot hold: `table.column` splits at the
+# dot, and a backtick or line break ends the name.
+_INVALID_NAME_CHARS = ('`', '\n', '\r', '.')
+
+
+def _invalid_name_chars(name: str) -> list[str]:
+    return [char for char in _INVALID_NAME_CHARS if char in name]
+
+
 def _describe_source_table(
     engine_table: Any, source_name: str, *, name: str | None = None
 ) -> SourceTable:
@@ -1648,13 +1656,18 @@ def _describe_source_table(
     binary or a duration, is left out and named, rather than refusing the
     whole table:
     the caller cannot change a warehouse table's columns to suit a request, and
-    the engine then leaves it unread as well.
+    the engine then leaves it unread as well. So is a column whose name a
+    predictive query cannot say, such as a metric view's dimension `a.b`.
     """
     from sdm_client.materializers.sources import wire_dtype
 
     columns: dict[str, Column] = {}
     unreadable: list[str] = []
+    unnamable: list[str] = []
     for engine_column in engine_table.columns:
+        if _invalid_name_chars(engine_column.name):
+            unnamable.append(repr(engine_column.name))
+            continue
         dtype = wire_dtype(engine_column.dtype)
         stype = str(getattr(engine_column.stype, 'value', engine_column.stype))
         if dtype is None or stype not in SEMANTIC_TYPES:
@@ -1665,6 +1678,14 @@ def _describe_source_table(
         warnings.warn(
             f'{name or engine_table.name} leaves out {", ".join(unreadable)}: a '
             f'request carries one scalar value per cell, and these hold none',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    if unnamable:
+        warnings.warn(
+            f'{name or engine_table.name} leaves out {", ".join(unnamable)}: '
+            f'a predictive query cannot name a column holding a dot, a '
+            f'backtick or a line break',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
