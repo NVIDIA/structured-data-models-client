@@ -27,6 +27,7 @@ pytest.importorskip('yaml')
 
 from databricks.sql.client import Connection  # noqa: E402
 from sdm_connectors import DatabricksSource, SemanticModel  # noqa: E402
+from sdm_relational_engine import ViewConversionError  # noqa: E402
 
 from sdm_client import (  # noqa: E402
     Relationship,
@@ -612,6 +613,27 @@ def test_a_model_the_engine_refuses_is_an_invalid_request(
     assert caught.value.code == 'INVALID_REQUEST'
     assert said in caught.value.message
     assert caught.value.details == {'model': 'sales_mv'}
+    assert isinstance(caught.value.__cause__, ViewConversionError)
+
+
+def test_a_failure_that_is_not_a_refusal_is_not_an_invalid_request(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Every `ValueError`, a pandas or numpy failure inside the engine
+    among them, became `INVALID_REQUEST`, telling the caller to change a
+    model that has nothing wrong with it.
+    """
+    from sdm_relational_engine.rfm import Graph
+
+    def _fails(self: Any) -> None:
+        raise ValueError('operands could not be broadcast together')
+
+    monkeypatch.setattr(Graph, 'validate', _fails)
+
+    with pytest.raises(ValueError, match='could not be broadcast') as caught:
+        _schema(source)
+
+    assert not isinstance(caught.value, StructuredDataError)
 
 
 def test_no_relationship_is_inferred_beside_a_model_s_joins(

@@ -72,6 +72,17 @@ class MetricViewAsTableError(KumoRelationalError, ValueError):
         self.name = name
 
 
+class ViewConversionError(KumoRelationalError, ValueError):
+    r"""A metric or semantic view is refused as a graph, for what it is.
+
+    Raised for the view itself, not for a failure reading it: a filter on a
+    joined table, a query as its source, a metric view as its source, a
+    definition that is no metric view's. The message says what to change in
+    the view. A ``ValueError`` as well, which these refusals were raised as
+    before.
+    """
+
+
 class NoEligibleEntityError(KumoRelationalError, ValueError):
     r"""No entity existed at the anchor, so nothing could be asked about.
 

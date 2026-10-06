@@ -35,6 +35,7 @@ from sdm_relational_engine.exceptions import (
     KumoRelationalError,
     MetricViewAsTableError,
     NoTablesFoundError,
+    ViewConversionError,
 )
 from sdm_relational_engine.rfm.base import (
     Column,
@@ -1459,9 +1460,13 @@ class Graph:
                 regardless.
 
         Raises:
+            ViewConversionError: If the view is refused for what it is, with
+                what to change: a query or a metric view as its source, a
+                join name that collides with the source table's, or one of
+                the below. A ``ValueError`` as well.
             UnsupportedFilterError: If the view's filter references a joined
                 table or a parameter with no default, or is not a safe scalar
-                condition.
+                condition. A :class:`ViewConversionError`.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
@@ -1491,7 +1496,7 @@ class Graph:
         try:
             name_parts = parse_table_reference(metric_view_name)
             if name_parts is None:
-                raise ValueError(
+                raise ViewConversionError(
                     f"Invalid metric view name '{metric_view_name}'"
                 )
             if len(name_parts) == 1 and schema is not None:
@@ -1511,7 +1516,7 @@ class Graph:
                 elif len(parts) == 1 and view_catalog and view_schema:
                     parts = (view_catalog, view_schema, *parts)
                 if len(parts) != 3:
-                    raise ValueError(
+                    raise ViewConversionError(
                         f'Could not fully qualify table '
                         f"'{'.'.join(parts)}' referenced by "
                         f"metric view '{metric_view_name}'"
@@ -1539,7 +1544,7 @@ class Graph:
                     try:
                         table._source_column_dict  # noqa: B018
                     except MetricViewAsTableError as error:
-                        raise ValueError(
+                        raise ViewConversionError(
                             f"'{table.source_name}' is a metric view; "
                             f'{_METRIC_VIEW_ON_METRIC_VIEW}, point its source '
                             f'at the underlying table'
@@ -1564,7 +1569,7 @@ class Graph:
 
             fact_table = _fact_table(spec.source)
             if any(join.alias == fact_table.name for join in spec.joins):
-                raise ValueError(
+                raise ViewConversionError(
                     f"Cannot convert metric view '{metric_view_name}' into a "
                     f"graph since the join name '{fact_table.name}' collides "
                     f'with the name of the source table'

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from sdm_relational_engine.exceptions import KumoRelationalError
+from sdm_relational_engine.exceptions import ViewConversionError
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
@@ -193,13 +193,13 @@ _SIMPLE_MEASURE_RE = re.compile(
 )
 
 
-class UnsupportedJoinError(KumoRelationalError, ValueError):
+class UnsupportedJoinError(ViewConversionError):
     r"""Raised when a metric view join cannot be converted into a graph
     edge.
     """
 
 
-class UnsupportedFilterError(KumoRelationalError, ValueError):
+class UnsupportedFilterError(ViewConversionError):
     r"""Raised when a metric view's filter cannot be applied to its source
     table.
     """
@@ -677,8 +677,8 @@ def parse_metric_view(
             ``None``, no column shadows a parameter.
 
     Raises:
-        ValueError: If the definition is not a YAML mapping, misses a source,
-            or defines a SQL query as its source.
+        ViewConversionError: If the definition is not a YAML mapping,
+            misses a source, or defines a SQL query as its source.
         UnsupportedFilterError: If the filter references a joined table or a
             parameter with no default, or is not a safe scalar condition.
     """
@@ -686,14 +686,18 @@ def parse_metric_view(
 
     cfg = yaml.safe_load(definition)
     if not isinstance(cfg, dict):
-        raise ValueError('The metric view definition is not a YAML mapping')
+        raise ViewConversionError(
+            'The metric view definition is not a YAML mapping'
+        )
 
     source = cfg.get('source')
     if source is None:
-        raise ValueError("The metric view definition misses a 'source'")
+        raise ViewConversionError(
+            "The metric view definition misses a 'source'"
+        )
     source_ref = parse_table_reference(source)
     if source_ref is None:
-        raise ValueError(
+        raise ViewConversionError(
             f'Unsupported metric view source {source!r}. Only plain table '
             f'names are supported as the source of a metric view when '
             f'converting it into a graph. Create a regular view with this '
@@ -1304,8 +1308,8 @@ def read_metric_view_definition(
     like a detail, such as ``Type`` or ``View Text``, cannot stand in for it.
 
     Raises:
-        ValueError: If the relation is not a metric view or exposes no
-            definition.
+        ViewConversionError: If the relation is not a metric view or
+            exposes no definition.
     """
     with connection.cursor() as cursor:
         cursor.execute(f'DESCRIBE TABLE EXTENDED {quoted_name}')
@@ -1323,14 +1327,14 @@ def read_metric_view_definition(
         details.setdefault(name, value)
 
     if details.get('Type') != 'METRIC_VIEW':
-        raise ValueError(
+        raise ViewConversionError(
             f"'{quoted_name}' is not a metric view "
             f"(got type '{details.get('Type', 'UNKNOWN')}')"
         )
 
     definition = details.get('View Text')
     if not definition:
-        raise ValueError(
+        raise ViewConversionError(
             f"Could not read the definition of metric view '{quoted_name}'"
         )
 

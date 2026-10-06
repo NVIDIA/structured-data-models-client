@@ -27,6 +27,7 @@ from sdm_relational_engine.exceptions import (
     NoTablesFoundError,
     TableNotFoundError,
     UnknownDatasetError,
+    ViewConversionError,
 )
 from sdm_relational_engine.utils.environment import (
     in_jupyter_notebook as in_jupyter_notebook,
@@ -57,6 +58,7 @@ __all__ = [
     'Stype',
     'TableNotFoundError',
     'UnknownDatasetError',
+    'ViewConversionError',
     '__version__',
     'global_state',
     'init',
