@@ -133,9 +133,10 @@ pip install 'structured-data-models-client[snowflake]'      # one backend (also 
 pip install 'structured-data-models-client[all]'            # relational + every backend
 ```
 
-`[explain]` and `[relbench]` stay outside `[all]` and must be requested by
-name. `[explain]` posts row data to a third-party LLM, so installing it is
-deliberate.
+`[explain]` and `[relbench]` are the engine's own extras, not the client's, so
+they are asked for as `structured-data-models-relational-engine[explain]`.
+Neither is in `[all]`: `[explain]` posts row data to a third-party LLM, so
+installing it is deliberate.
 
 ### Why `structured-data-models-pql` is separate
 
@@ -150,9 +151,8 @@ exactly one owner and nothing has to translate between two spellings of the
 same enum.
 
 The tree is first-party source of this repository, maintained here under
-Apache-2.0. It was briefly carried as a vendored copy of a separate internal
-repository; that repository is being retired, so there is no upstream to track,
-no manifest to re-record, and no dependency swap pending. It imports as
+Apache-2.0. There is no upstream to track and no manifest to re-record. It
+imports as
 `predictive_query`, which is a name inherited from that period rather than one
 this layout would choose today.
 
@@ -562,7 +562,7 @@ leaving the document wrong.
 
 ## 6. Adding a model
 
-Three pieces. Two are cheap; one is a contract change we do not own.
+Three pieces. Two are cheap; one is a change to the wire contract.
 
 **1. The contract must accommodate the model, which requires more than an id.**
 `PredictionRequest.model` is a closed enum, so at minimum a new model needs an
@@ -692,7 +692,7 @@ reference and not here, so the two pages disagreed about what the client does.
 
 ---
 
-## 8. Where this code came from
+## 8. Why it looks familiar
 
 Most of this client is not new. It consolidates implementations that already
 existed at NVIDIA, were in production, and had been hardened and tested
@@ -719,7 +719,7 @@ URL are stripped everywhere the URL is rendered.
 
 | Thing | Why | What would change it |
 |---|---|---|
-| Timeseries, anomaly, Tesseract models | Not asked for yet | A NIM serves one; profiles already exist, plus a contract MR (§6) |
+| Timeseries and anomaly models | No NIM serves one through this contract | A NIM serves one; profiles already exist, plus a contract MR (§6) |
 | The model reading the warehouse itself | The wire requires embedded data | The contract gains source references |
 | Arrow IPC | The wire is JSON-arrays-only everywhere | The contract activates it |
 

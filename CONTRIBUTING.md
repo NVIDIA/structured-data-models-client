@@ -68,24 +68,21 @@ This makes the change visible in review:
 .venv/bin/python scripts/snapshot_wire_payloads.py --write
 ```
 
-## Testing
+## Testing against something live
+
+The two commands above need nothing running. These need an endpoint, and are
+deselected by default:
 
 ```bash
-# everything that needs nothing running, and opens no sockets
-python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
-                packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests \
-  -q -m 'not live_nim and not live_warehouse and not socket'
-
-# the native engine, from the repository root
-python -m pytest packages/structured-data-models-relational-engine/tests -q
-
-# against a NIM you are running
+# a NIM you are running
 SDM_TABULAR_URL=http://localhost:8000 \
 SDM_RELATIONAL_URL=http://localhost:8001 \
-  python -m pytest packages/structured-data-models-client/tests -m live_nim -q
+  .venv/bin/python -m pytest packages/structured-data-models-client/tests \
+    -m live_nim -q
 
-# against real warehouses
-python -m pytest packages/structured-data-models-connectors/tests -m live_warehouse -q
+# real warehouses, with credentials in the environment
+.venv/bin/python -m pytest \
+  packages/structured-data-models-connectors/tests -m live_warehouse -q
 ```
 
 ## Third-party code
