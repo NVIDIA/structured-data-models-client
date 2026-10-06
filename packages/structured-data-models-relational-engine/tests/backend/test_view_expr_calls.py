@@ -188,6 +188,8 @@ def _refused(expr: str, dialect: str) -> str | None:
         # Names the old pattern never recognised as names:
         '1f(x)',
         'x + 9secret(x)',
+        # A Snowflake name may hold `$`, so `a$$` opens no literal:
+        'a$$ + secret(x) + b$$',
         'fünf(x)',
         '函数(x)',
         'a[0](x)',

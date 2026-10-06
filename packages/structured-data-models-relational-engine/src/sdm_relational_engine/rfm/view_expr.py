@@ -15,16 +15,115 @@ from dataclasses import dataclass
 
 _UNSAFE_EXPR_TOKENS = (';', '--', '/*', '*/', '|>', '->>')
 _EXPR_QUOTE_DELIMITERS = ('$$', "'", '"', '`')
-_QUOTED_EXPR_TEXT = re.compile(
-    '|'.join(
-        [
-            r'\$\$[\s\S]*?\$\$',
-            r"'(?:''|\\[\s\S]|[^'\\])*'",
-            r'"(?:""|\\[\s\S]|[^"\\])*"',
-            r'`(?:``|[^`])*`',
-        ]
-    )
+
+
+@dataclass(frozen=True)
+class _Token:
+    kind: str
+    text: str
+    start: int
+    end: int
+
+    @property
+    def folded(self) -> str:
+        return self.text.lower() if self.kind == 'word' else ''
+
+
+# How each dialect splits an expression into tokens, in the order tried. Every
+# check reads quoted text through these, so no two can disagree about where a
+# literal ends. A `string` is data, and a `quoted` token is a name.
+_ESCAPED_STRING = r"'(?:''|\\[\s\S]|[^'\\])*'"
+_ESCAPED_DOUBLE = r'"(?:""|\\[\s\S]|[^"\\])*"'
+_BACKTICKED = r'`(?:``|[^`])*`'
+_DOLLARS = r'\$\$[\s\S]*?\$\$'
+_WORD = r'[A-Za-z_][\w$]*'
+_LEXEMES = {
+    # A raw string, `r'...'`, takes no escapes: `r'x\'` ends at its second
+    # quote. Double quotes delimit a string, not a name.
+    'databricks': (
+        (
+            'string',
+            rf"[rR]'[^']*'|[rR]\"[^\"]*\"|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}",
+        ),
+        ('quoted', _BACKTICKED),
+    ),
+    # Double quotes delimit a name, which takes no escapes. Snowflake
+    # refuses a backtick, so reading one as a quote hides nothing from it.
+    'snowflake': (
+        ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}'),
+        ('quoted', rf'"(?:""|[^"])*"|{_BACKTICKED}'),
+    ),
+    # What a check that knows no dialect reads as quoted.
+    None: (
+        ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}'),
+        ('quoted', _BACKTICKED),
+    ),
+}
+# A word may hold `$`, as a Snowflake name does, so `a$$` opens no literal.
+_LEXEMES_EVERYWHERE = (
+    ('number', r'(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*'),
+    ('word', _WORD),
+    ('punct', r'<=>|<=|>=|<>|::|->|=>|[.:(),\[\]<>]'),
+    ('space', r'\s+'),
+    ('other', r'[\s\S]'),
 )
+
+
+def _lexer(
+    lexemes: tuple[tuple[str, str], ...],
+) -> tuple[re.Pattern[str], list[str]]:
+    r"""One pattern trying each of ``lexemes`` in turn, and their kinds by
+    group.
+    """
+    pattern = '|'.join(f'({lexeme})' for _, lexeme in lexemes)
+    return re.compile(pattern), [kind for kind, _ in lexemes]
+
+
+_LEXERS = {
+    dialect: _lexer((*own, *_LEXEMES_EVERYWHERE))
+    for dialect, own in _LEXEMES.items()
+}
+
+
+def _lex(expr: str, dialect: str | None = 'databricks') -> list[_Token]:
+    r"""The tokens of ``expr`` as ``dialect`` reads them, spaces left out.
+
+    A quote that is never closed is a token of kind ``other``.
+    """
+    pattern, kinds = _LEXERS[dialect]
+    tokens: list[_Token] = []
+    for match in pattern.finditer(expr):
+        kind = kinds[(match.lastindex or 1) - 1]
+        if kind != 'space':
+            tokens.append(_Token(kind, match.group(), *match.span()))
+    return tokens
+
+
+def _masked(expr: str, dialect: str | None, mask: str) -> str:
+    r"""``expr`` with each string literal and quoted name replaced by
+    ``mask``.
+    """
+    out: list[str] = []
+    last = 0
+    for token in _lex(expr, dialect):
+        if token.kind in ('string', 'quoted'):
+            out += [expr[last : token.start], mask]
+            last = token.end
+    out.append(expr[last:])
+    return ''.join(out)
+
+
+def string_literals(expr: str) -> list[tuple[int, int]]:
+    r"""Where each string literal of a Databricks expression starts and
+    ends.
+    """
+    return [
+        (token.start, token.end)
+        for token in _lex(expr)
+        if token.kind == 'string'
+    ]
+
+
 _UNSAFE_EXPR_KEYWORDS = re.compile(
     r'(?<![\w.])'
     r'(?:(?:select|table|update|delete|merge|create|alter|drop|grant|revoke'
@@ -51,14 +150,13 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     not become invisible just because this function believes it is quoted.
 
     Deciding what counts as quoted is itself dialect-specific, and getting it
-    wrong defeats the guard. Snowflake also has ``$$...$$``, and both
-    Snowflake and Databricks honour backslash escapes inside a literal. A
-    payload using ``$$`` or ``\'`` shifts where a doubling-only reader sees the
-    literal end and can smuggle a sub-query through the gap, so both forms are
-    recognised. A remaining delimiter means this function and the warehouse
-    disagree about string boundaries, so it fails closed. This also refuses a
-    quoted name ending in a lone backslash, which is invalid on Databricks and
-    exotic on Snowflake.
+    wrong defeats the guard. Snowflake also has ``$$...$$``, both warehouses
+    honour backslash escapes inside a literal, and a Databricks raw string,
+    ``r'...'``, takes none. A payload using ``$$``, ``\'`` or ``r'\'`` shifts
+    where a reader missing that form sees the literal end, and can smuggle a
+    sub-query through the gap, so each dialect is read as it lexes. A
+    remaining delimiter means this function and the warehouse disagree about
+    string boundaries, so it fails closed.
 
     ``INSERT`` and ``TRUNCATE`` are also ordinary Snowflake scalar functions,
     and as statements are always followed by ``INTO``/``TABLE`` rather than by
@@ -87,10 +185,10 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     if dialect == 'databricks' and '$$' in expr:
         return "it contains '$$', which Databricks SQL does not quote with"
     if dialect == 'snowflake':
-        for quoted in _QUOTED_EXPR_TEXT.findall(expr):
-            if quoted.startswith('"') and '\\' in quoted:
+        for quoted in _lex(expr, dialect):
+            if quoted.text.startswith('"') and '\\' in quoted.text:
                 return 'it has a backslash inside a double-quoted name'
-    unquoted = _QUOTED_EXPR_TEXT.sub(' ', expr)
+    unquoted = _masked(expr, dialect, ' ')
     for delimiter in _EXPR_QUOTE_DELIMITERS:
         if delimiter in unquoted:
             return (
@@ -309,10 +407,6 @@ _SESSION_VALUES = re.compile(
 # that name, answer the session user and today. A column of the name wins
 # for every session word quoted, `current_path` included. How Snowflake
 # reads a quoted session word is not documented, so none is excused there.
-_QUOTED_NAME = {
-    'databricks': re.compile(r'`((?:``|[^`])*)`'),
-    'snowflake': re.compile(r'"((?:""|[^"])*)"'),
-}
 _COLUMN_OVER_QUOTED_SESSION = {
     'databricks': _SESSION_WORDS,
     'snowflake': frozenset(),
@@ -796,7 +890,7 @@ def _untrusted_call_reason(
             Pass ``()`` where none are known, and no bare word is a value.
     """
     trusted = _TRUSTED_FUNCTIONS[dialect]
-    text = _QUOTED_EXPR_TEXT.sub(_QUOTED, expr)
+    text = _masked(expr, dialect, _QUOTED)
     named = frozenset(column.lower() for column in columns)
     visible = named | _lambda_parameters(text)
     for index, char in enumerate(text):
@@ -835,13 +929,12 @@ def _untrusted_call_reason(
         if session.group(1).lower() not in overridden:
             return f"it reads the session value '{session.group(1)}'"
     overridden = named & _COLUMN_OVER_QUOTED_SESSION[dialect]
-    for quoted in _QUOTED_EXPR_TEXT.finditer(expr):
-        name = _QUOTED_NAME[dialect].fullmatch(quoted.group())
-        if name is None or _QUALIFIED.search(expr[: quoted.start()]):
+    for quoted in _lex(expr, dialect):
+        if quoted.kind != 'quoted' or _QUALIFIED.search(expr[: quoted.start]):
             continue
-        word = name.group(1).lower()
+        word = _unquoted(quoted).lower()
         if word in _SESSION_WORDS and word not in overridden:
-            return f'it reads the session value {quoted.group()}'
+            return f'it reads the session value {quoted.text}'
     return None
 
 
@@ -862,16 +955,6 @@ _UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
 # These take a unit first only in their three-argument form: `datediff(a,
 # b)` reads two values.
 _UNIT_FIRST_OF_THREE = frozenset({'dateadd', 'datediff'})
-# A raw string, `r'...'`, takes no escapes.
-_TOKEN = re.compile(
-    r"""(?P<string>[rR]'[^']*'|[rR]"[^"]*"|'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*")
-    |(?P<quoted>`(?:``|[^`])*`)
-    |(?P<number>(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*)
-    |(?P<word>[A-Za-z_][\w$]*)
-    |(?P<punct><=>|<=|>=|<>|::|->|=>|[.:(),\[\]<>])
-    |(?P<other>\S)""",
-    flags=re.VERBOSE,
-)
 
 
 @dataclass(frozen=True)
@@ -887,18 +970,6 @@ class NameReference:
     parts: tuple[str, ...]
     span: tuple[int, int]
     bare: bool
-
-
-@dataclass(frozen=True)
-class _Token:
-    kind: str
-    text: str
-    start: int
-    end: int
-
-    @property
-    def folded(self) -> str:
-        return self.text.lower() if self.kind == 'word' else ''
 
 
 def _closing(tokens: list[_Token], at: int) -> int:
@@ -960,10 +1031,7 @@ def name_references(expr: str) -> list[NameReference]:
     named argument, a lambda's parameter and a JSON path step, so a word of
     the grammar is never read as a column or a parameter.
     """
-    tokens = [
-        _Token(match.lastgroup or '', match.group(), *match.span())
-        for match in _TOKEN.finditer(expr)
-    ]
+    tokens = _lex(expr)
     scopes = _lambda_scopes(tokens)
     # Who opened each group still open, by name where a call did.
     openers: list[str] = []
@@ -1067,5 +1135,6 @@ def name_references(expr: str) -> list[NameReference]:
 
 def _unquoted(token: _Token) -> str:
     if token.kind == 'quoted':
-        return token.text[1:-1].replace('``', '`')
+        quote = token.text[0]
+        return token.text[1:-1].replace(quote * 2, quote)
     return token.text

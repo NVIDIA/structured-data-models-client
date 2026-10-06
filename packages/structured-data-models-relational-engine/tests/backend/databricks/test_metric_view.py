@@ -431,6 +431,8 @@ dimensions:
         "`order status` IN ('a', 'b')",
         "source.note <> 'customers.segment'",
         "UPPER(source.status) = 'VALID' AND source.amount BETWEEN 1 AND 9",
+        # A raw string takes no escapes, so this one ends in a backslash.
+        "source.note <> r'C:\\dir\\'",
     ],
 )
 def test_parse_metric_view_source_filter(row_filter: str) -> None:
@@ -458,6 +460,11 @@ def test_parse_metric_view_source_filter(row_filter: str) -> None:
         ('source.customer_id IN (TABLE cat.sch.vip)', "keyword 'TABLE'"),
         ('source.amount > 0; DROP TABLE x', "contains ';'"),
         ('source.note = $$x$$', "'$$'"),
+        (
+            "r'x\\' = source.note OR source.customer_id IN "
+            "(SELECT customer_id FROM cat.sch.vip) OR 'a\\'b' = source.note",
+            "keyword 'SELECT'",
+        ),
     ],
 )
 def test_parse_metric_view_refuses_a_filter(
@@ -490,6 +497,11 @@ _FACT_COLUMNS = ('status', 'amount', 'order status', 'note', 'token')
         ('escape(source.note)', "calls 'escape'"),
         ('note FOO escape(token)', "calls 'escape'"),
         ('upper(note) FILTER (WHERE from(token))', "calls 'from'"),
+        (
+            "r'x\\' IS NOT NULL AND secret('scope', 'key') IS NOT NULL "
+            "AND 'a\\'b' IS NOT NULL",
+            "calls 'secret'",
+        ),
     ],
 )
 def test_a_checked_filter_refuses_a_call(row_filter: str, reason: str) -> None:

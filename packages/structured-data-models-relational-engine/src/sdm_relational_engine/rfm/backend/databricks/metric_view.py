@@ -24,6 +24,7 @@ from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
     name_references,
+    string_literals,
 )
 
 if TYPE_CHECKING:
@@ -49,10 +50,6 @@ _WILDCARD_RE = re.compile(
     rf'\s*({_CHAIN})\s*\.\s*\*'
     rf'(?:\s*EXCEPT\s*\(\s*({_CHAIN}(?:\s*,\s*{_CHAIN})*)\s*\))?\s*$',
     flags=re.IGNORECASE,
-)
-# Double quotes delimit a string, not a name, in Databricks SQL.
-_STRING_LITERAL_RE = re.compile(
-    r"'(?:''|\\[\s\S]|[^'\\])*'|\"(?:\"\"|\\[\s\S]|[^\"\\])*\""
 )
 
 _INTEGER_TYPES = {
@@ -111,7 +108,7 @@ def _column_under(expr: str) -> str | None:
         # `.+` reaches past a parenthesis that closes early, as in
         # `date(a) - date(b)`, so what it holds must balance.
         depth = 0
-        for char in _STRING_LITERAL_RE.sub("''", inner):
+        for char in _masked_strings(inner):
             depth += {'(': 1, ')': -1}.get(char, 0)
             if depth < 0:
                 break
@@ -429,11 +426,24 @@ def _sub_outside_strings(
     """
     out: list[str] = []
     last = 0
-    for match in _STRING_LITERAL_RE.finditer(expr):
-        out.append(pattern.sub(repl, expr[last : match.start()]))
-        out.append(match.group())
-        last = match.end()
+    for start, end in string_literals(expr):
+        out.append(pattern.sub(repl, expr[last:start]))
+        out.append(expr[start:end])
+        last = end
     out.append(pattern.sub(repl, expr[last:]))
+    return ''.join(out)
+
+
+def _masked_strings(expr: str) -> str:
+    r"""``expr`` with each string literal emptied, so no text in one reads
+    as SQL.
+    """
+    out: list[str] = []
+    last = 0
+    for start, end in string_literals(expr):
+        out += [expr[last:start], "''"]
+        last = end
+    out.append(expr[last:])
     return ''.join(out)
 
 
@@ -441,7 +451,7 @@ def references_alias(expr: str, alias: str | Sequence[str]) -> bool:
     r"""Returns ``True`` if the expression references a column of the given
     table alias or join path outside its string literals.
     """
-    masked = _STRING_LITERAL_RE.sub("''", expr)
+    masked = _masked_strings(expr)
     return _path_pattern(_to_path(alias)).search(masked) is not None
 
 
@@ -1010,7 +1020,7 @@ def _aggregation(
     aggregate of a column or dimension of the source table, or a count of
     its rows.
     """
-    match = _SIMPLE_MEASURE_RE.fullmatch(_STRING_LITERAL_RE.sub("''", expr))
+    match = _SIMPLE_MEASURE_RE.fullmatch(_masked_strings(expr))
     if match is None or 'window' in cfg:
         return None
     function, distinct, argument = match.groups()
@@ -1074,7 +1084,7 @@ def _check_filter(
         reason = _unsafe_expr_reason(row_filter, 'databricks')
     if reason is None:
         assert isinstance(row_filter, str)
-        masked = _STRING_LITERAL_RE.sub("''", row_filter)
+        masked = _masked_strings(row_filter)
         for path, alias in candidates:
             if alias != SOURCE_ALIAS and references_alias(masked, path):
                 reason = f"it references the joined table '{alias}'"
