@@ -61,8 +61,9 @@ Regenerate these; never edit them:
   neither touches `NOTICE`.
 - `rfm/assets/relbench_registry.json` -- `scripts/pin_relbench.py`. It pins
   source commits and table digests.
-- The ANTLR output in `predictive_query/grammar/`. Edit `PQLGrammar.g4` and
-  regenerate; everything beside it is produced.
+- The ANTLR output in `predictive_query/grammar/`: the `.py`, `.tokens` and
+  `.interp` files. Edit `PQLGrammar.g4` and regenerate. The `README.md` and
+  `__init__.py` there are hand-written.
 - `tests/golden/` -- the exported surface and the recorded wire payloads.
 
 ## Gates that fail on prose
