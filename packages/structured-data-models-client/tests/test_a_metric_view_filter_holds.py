@@ -150,6 +150,13 @@ class _Cursor:
             return
 
         frame = self._relation(sql)
+        if count := re.match(r'SELECT (\d+) AS k, COUNT\(\*\) AS n', sql):
+            # A join's key, counted over the rows the relation holds:
+            values = frame[re.search(r'COUNT\(DISTINCT `(\w+)`\)', sql)[1]]
+            self._rows = [
+                (int(count[1]), len(values), values.nunique(), 0),
+            ]
+            return
         if sql.upper().startswith('SELECT COUNT(*)'):
             self._rows = [(len(frame),)]
             return

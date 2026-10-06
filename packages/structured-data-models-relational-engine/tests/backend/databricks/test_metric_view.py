@@ -938,6 +938,16 @@ class _FakeCursor:
             self._rows = [(len(_DATA[table]),)]
             return
 
+        if key_count := re.match(r'SELECT (\d+) AS k, COUNT\(\*\) AS n', sql):
+            self._rows = [(int(key_count.group(1)), *self._key_count(sql))]
+            return
+
+        if 'HAVING COUNT(*) > 1' in sql:
+            key = self._key(sql, r'SELECT `((?:[^`]|``)+)`')
+            values = self._frame(sql)[key].dropna()
+            self._rows = [(value,) for value in values[values.duplicated()]]
+            return
+
         table = re.search(r'FROM `([^`]+)`\.`([^`]+)`\.`([^`]+)`', sql)
         assert table is not None, f'Unexpected SQL: {sql}'
         assert table.group(1) == _CATALOG and table.group(2) == _SCHEMA
@@ -963,6 +973,29 @@ class _FakeCursor:
         self._arrow = pa.Table.from_pandas(
             pd.DataFrame(columns), preserve_index=False
         )
+
+    @staticmethod
+    def _frame(sql: str) -> pd.DataFrame:
+        table = re.search(
+            r'FROM \(?(?:SELECT \* FROM )?`[^`]+`\.`[^`]+`\.`([^`]+)`', sql
+        )
+        assert table is not None, f'Unexpected SQL: {sql}'
+        return _DATA[table.group(1)]
+
+    @staticmethod
+    def _key(sql: str, pattern: str) -> str:
+        key = re.search(pattern, sql)
+        assert key is not None, f'Unexpected SQL: {sql}'
+        return key.group(1).replace('``', '`')
+
+    def _key_count(self, sql: str) -> tuple[int, int, int]:
+        r"""The rows, distinct keys and missing keys of one table, as the
+        `UNION ALL` part counting a key reads them. The filter, if any, is
+        not applied, as nothing here applies it.
+        """
+        key = self._key(sql, r'COUNT\(DISTINCT `((?:[^`]|``)+)`\)')
+        values = self._frame(sql)[key]
+        return len(values), int(values.nunique()), int(values.isna().sum())
 
     def fetchall(self) -> list:
         return self._rows
@@ -2384,3 +2417,78 @@ def test_an_unreadable_fact_table_aborts_and_closes_the_connection(
             verbose=False,
         )
     assert connection.closed
+
+
+def test_a_join_on_a_key_that_repeats_is_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Neither Databricks nor the view checks that a many-to-one join meets
+    one row, so a key that repeats made one customer of two rows.
+    """
+    customers = _DATA['customers']
+    monkeypatch.setitem(
+        _DATA, 'customers', pd.concat([customers, customers.iloc[[3]]])
+    )
+
+    graph = _convert(_FakeConnection(_joined_view()))
+
+    message = _keeps_the_rest_without_customers(graph)
+    assert "key 'customer_id' is not unique in table 'customers'" in message
+    assert "1 of 11 rows repeat a value, e.g. 'C3'" in message
+
+
+def test_a_key_missing_from_some_rows_still_joins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""No join reaches a row with no key, and sampling leaves it out, so
+    such rows are no reason to drop the join.
+    """
+    customers = _DATA['customers'].copy()
+    customers.loc[len(customers)] = [None, 'R0', 'gold']
+    customers.loc[len(customers)] = [None, 'R1', 'gold']
+    monkeypatch.setitem(_DATA, 'customers', customers)
+
+    graph = _convert(_FakeConnection(_joined_view()))
+
+    assert graph['customers'].primary_key is not None
+    assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
+    assert graph.conversion_messages == ()
+
+
+def test_a_join_on_a_key_with_no_value_is_dropped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        _DATA, 'customers', _DATA['customers'].assign(customer_id=None)
+    )
+
+    graph = _convert(_FakeConnection(_joined_view()))
+
+    message = _keeps_the_rest_without_customers(graph)
+    assert "key 'customer_id' holds no value" in message
+
+
+def test_a_one_to_many_join_counts_the_key_of_the_filtered_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""One-to-many makes the parent the table keyed, here the fact table, so
+    its key is counted over the rows its filter holds.
+    """
+    connection = _FakeConnection()
+    _convert(connection)
+
+    (counted,) = [
+        sql for sql in connection.sql_log if 'COUNT(DISTINCT `line_id`)' in sql
+    ]
+    assert "WHERE (source.status = 'VALID')" in counted
+
+    lines = _DATA['order_lines']
+    monkeypatch.setitem(
+        _DATA, 'order_lines', lines.assign(line_id=lines['order_id'])
+    )
+    graph = _convert(_FakeConnection())
+
+    assert 'refunds' not in graph.tables
+    assert graph['order_lines'].primary_key is None
+    (message,) = [m for m in graph.conversion_messages if "join 'refunds'" in m]
+    assert "key 'line_id' is not unique in table 'order_lines'" in message

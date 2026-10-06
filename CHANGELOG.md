@@ -178,6 +178,10 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A metric view joined to a table that cannot be read converts without that join.**
   A joined table that was missing, empty, unreadable or itself a metric view failed the whole conversion when a dimension referenced it, and so did one failing dimension expression or a column of a type with no graph equivalent.
   Now the join, or the column, is left out with a conversion message; only a source table that cannot be read fails the conversion, and that failure now closes a connection the conversion opened.
+- **A metric view join whose key repeats is left out, rather than making one entity of several rows.**
+  A join's key became the joined table's primary key unchecked, and neither Databricks nor the view checks it.
+  It is now counted where the rows are, through the view's filter for the source table, with one query per join, and a key that repeats, or holds no value at all, drops the join with a message showing a repeated value.
+  Rows with no key are left alone: no join reaches them, and sampling leaves them out.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the

@@ -41,6 +41,7 @@ from sdm_relational_engine.rfm.base import (
     DataBackend,
     Table,
     composite_key,
+    count_keys,
 )
 from sdm_relational_engine.rfm.base.casting import CastMixin
 from sdm_relational_engine.rfm.base.utils import Timedelta
@@ -217,6 +218,32 @@ def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
                 f"'{table.name}': {error}"
             )
     return msgs
+
+
+def _join_key_reason(table: Table, key: str) -> str | None:
+    r"""Why ``key`` cannot be the primary key a view's join gives ``table``,
+    or ``None`` if it can.
+
+    A many-to-one join promises one row of ``table`` per key, and neither
+    Databricks nor a view checks it. A key that repeats would make one entity
+    of several rows, so it is counted where the rows are. A row with no key
+    is one no join reaches, and sampling leaves it out, so it is not counted
+    against the key.
+    """
+    (count,) = count_keys([(table, (key,))])
+    if count.rows is None or count.distinct is None:
+        return None
+    if count.distinct == 0:
+        return f"its key '{key}' holds no value in table '{table.name}'"
+    if count.repeats > 0:
+        example = '' if count.example is None else f', e.g. {count.example!r}'
+        return (
+            f"its key '{key}' is not unique in table '{table.name}': "
+            f'{count.repeats:,} of {count.rows:,} rows repeat a value'
+            f'{example}. A graph table needs one row per key, so point the '
+            f"join at a table or view with one row per '{key}'"
+        )
+    return None
 
 
 class ViewConversionWarning(UserWarning):
@@ -1428,6 +1455,14 @@ class Graph:
                             f"Failed to add join '{join.alias}' since table "
                             f"'{one_table.name}' already uses "
                             f"'{one_table._primary_key}' as its primary key"
+                        )
+
+                    # A key set here was counted then, so it is counted once.
+                    if one_table._primary_key is None and (
+                        reason := _join_key_reason(one_table, one_key)
+                    ):
+                        raise UnsupportedJoinError(
+                            f"Failed to add join '{join.alias}' since {reason}"
                         )
 
                     for key_table, key in (
