@@ -205,7 +205,7 @@ declare as `1.0.0` and none has published. The heading becomes
   One conversion note lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
 - **A metric view's names are matched without regard to case, as Databricks matches them.**
   A view naming `source.SALESORDERID` or joining `on: source.CUSTOMERID = CUSTOMERS.CUSTOMERID` over columns spelled `SalesOrderID` and `CustomerID` failed the conversion with `Column 'SALESORDERID' does not exist`.
-  Dimensions, join keys and join names now match their columns and tables in any case, and a column keeps the view's spelling, the one a question about the view uses, so every read names it so; a key no dimension names takes the spelling of the join's condition.
+  Dimensions, join keys and join names now match their columns and tables in any case, and a column keeps the view's spelling, the one a question about the view uses, so every read names it so; a key no dimension, wildcard or measure names, in any case, takes the spelling of the join's condition.
 - **An unqualified column in a metric view join's `on` is the joined table's, as Databricks reads it.**
   `on: source.CustomerID = CustomerID` was refused as unresolvable when both tables have a `CustomerID`, dropping the join and its entity table.
 - **A column no predictive query can name is left out of a source's schema, not the whole schema.**

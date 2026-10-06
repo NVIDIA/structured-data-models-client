@@ -3487,3 +3487,46 @@ measures:
     assert "Read the parameter 'floor' as its default '1'" in parameter
     assert "'total_amount' is SUM(order_lines.amount" in measures
     assert "Took 'order_date' as the time column" in time_column
+
+
+@pytest.mark.parametrize(
+    'names_it',
+    [
+        '  - expr: source.*',
+        '  - name: product_line\n    expr: source.product_line\n'
+        '  - name: segment\n    expr: customers.segment\n'
+        'measures:\n  - name: buyers\n    expr: COUNT(DISTINCT customer_id)',
+    ],
+    ids=['wildcard', 'measure-input'],
+)
+def test_a_join_key_keeps_the_spelling_the_view_names_it_by(
+    names_it: str,
+) -> None:
+    r"""A wildcard or a measure input names `customer_id` as the table spells
+    it, as Databricks does, but the join's `source.CUSTOMER_ID` renamed the
+    column, and the wildcard's or measure's own column then failed to be
+    added as no column of the table.
+    """
+    definition = f"""
+version: 1.1
+source: cat.sch.order_lines
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.CUSTOMER_ID = customers.customer_id
+dimensions:
+{names_it}
+"""
+    graph = _convert(
+        _FakeConnection(
+            _metric_view(
+                definition, {'product_line': 'string', 'segment': 'string'}
+            )
+        )
+    )
+
+    fact = graph['order_lines']
+    assert fact.has_column('customer_id')
+    assert not fact.has_column('CUSTOMER_ID')
+    assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
+    assert graph.conversion_messages == ()

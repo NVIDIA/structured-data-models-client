@@ -1680,7 +1680,8 @@ class Graph:
                         )
 
             # A join key is named as the view's condition spells it, where
-            # no dimension already names it.
+            # no dimension, wildcard or measure already names it in any
+            # case: Databricks names the column as those do.
             for join in spec.joins:
                 try:
                     other_alias, other_key, child_key = resolve_join_keys(
@@ -1696,10 +1697,15 @@ class Graph:
                 ):
                     folded = {name.lower(): name for name in _columns_of(alias)}
                     real = folded.get(key.lower())
+                    named = any(
+                        spec_.name.lower() == key.lower()
+                        for spec_ in columns_by_alias[alias]
+                    )
                     if (
                         real is not None
                         and real != key
                         and real not in renames[alias]
+                        and not named
                     ):
                         renames[alias][real] = key
 
