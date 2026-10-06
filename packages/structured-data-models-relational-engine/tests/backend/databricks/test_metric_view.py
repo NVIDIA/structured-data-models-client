@@ -3035,6 +3035,16 @@ measures:
         ),
         # A dimension, a measure and two tables: no one table's columns.
         ('SUM(qty * products.ListPrice) / MEASURE(m) + SUM(promos.d)', []),
+        # Databricks reads a column named like a keyword where an operand is.
+        (
+            'SUM(filter) / COUNT(DISTINCT case) + MAX(from) * any',
+            ['filter', 'case', 'from', 'any'],
+        ),
+        (
+            'SUM(x) OVER (ORDER BY last ROWS BETWEEN UNBOUNDED PRECEDING '
+            'AND CURRENT ROW)',
+            ['x', 'last'],
+        ),
     ],
     ids=[
         'cast-joined',
@@ -3044,6 +3054,8 @@ measures:
         'filter',
         'date-function',
         'mixed',
+        'keyword-named',
+        'window-frame',
     ],
 )
 def test_a_measure_reads_the_columns_it_names(

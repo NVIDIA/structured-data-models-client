@@ -938,7 +938,9 @@ def _untrusted_call_reason(
     return None
 
 
-# Words of a Databricks expression that are grammar, so name no value. A
+# Words of a Databricks expression that may be grammar. On a DBSQL 2026.38
+# warehouse a column may take each of these names but `true`, `false` and
+# `null`, and is read where an operand stands: `SUM(filter)`, `case + 1`. A
 # datetime unit is grammar only where a unit stands, so is not among them.
 _EXPRESSION_KEYWORDS = frozenset(
     {
@@ -950,6 +952,30 @@ _EXPRESSION_KEYWORDS = frozenset(
         'then', 'true', 'unbounded', 'when', 'where',
     }
 )  # fmt: skip
+_LITERAL_WORDS = frozenset({'true', 'false', 'null'})
+# Keywords an operand follows, as in `NOT x` and `COUNT(DISTINCT x)`.
+_TAKE_AN_OPERAND = frozenset(
+    {
+        'all', 'and', 'between', 'by', 'case', 'distinct', 'else', 'from',
+        'ilike', 'interval', 'like', 'not', 'or', 'rlike', 'then', 'when',
+        'where',
+    }
+)  # fmt: skip
+# Keywords that may follow an operand, as in `x IS NULL` and `ORDER BY x ASC`.
+_FOLLOW_AN_OPERAND = frozenset(
+    {
+        'and', 'as', 'asc', 'between', 'collate', 'desc', 'div', 'else', 'end',
+        'escape', 'for', 'from', 'ilike', 'in', 'is', 'like', 'not', 'nulls',
+        'or', 'range', 'regexp', 'rlike', 'rows', 'then', 'when',
+    }
+)  # fmt: skip
+# Databricks reads these as grammar before a sign: `SELECT all + 1` is 1.
+_BEFORE_A_SIGN = frozenset({'all', 'distinct', 'not'})
+_OPERATORS = frozenset({'<=>', '<=', '>=', '<>', '<', '>', '->', '=>'})
+# What a window's frame says, grammar anywhere inside `OVER (...)`.
+_FRAME_WORDS = frozenset(
+    {'current', 'following', 'preceding', 'range', 'row', 'rows', 'unbounded'}
+)
 # Functions whose first argument may be a datetime unit, as a bare word.
 _UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
 # These take a unit first only in their three-argument form: `datediff(a,
@@ -1024,15 +1050,62 @@ def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
     return scopes
 
 
+def _grammar(tokens: list[_Token]) -> set[int]:
+    r"""Where in ``tokens`` a keyword is grammar rather than a column.
+
+    A keyword names a column only where a lone operand stands: after an
+    operator, an opening bracket, a comma or a keyword taking an operand,
+    and before an operator, a closing bracket, a comma or a keyword that
+    may follow an operand.
+    """
+    grammar: set[int] = set()
+    openers: list[str] = []
+    for index, token in enumerate(tokens):
+        previous = tokens[index - 1] if index > 0 else None
+        after = tokens[index + 1] if index + 1 < len(tokens) else None
+        if token.text in '([':
+            openers.append(previous.folded if previous else '')
+        elif token.text in ')]' and openers:
+            openers.pop()
+        word = token.folded
+        if word not in _EXPRESSION_KEYWORDS:
+            continue
+        opens = (
+            previous is None
+            or previous.kind == 'other'
+            or previous.text in ('(', '[', ',', *_OPERATORS)
+            or (index - 1 in grammar and previous.folded in _TAKE_AN_OPERAND)
+        )
+        closes = (
+            after is None
+            or (after.kind == 'other' and word not in _BEFORE_A_SIGN)
+            or after.text in (')', ']', ',', '[', '::', *_OPERATORS)
+            or after.folded in _FOLLOW_AN_OPERAND
+        )
+        # `CASE WHEN` opens a searched case, unless a `CASE` comes first.
+        if word == 'case' and after is not None and after.folded == 'when':
+            closes = previous is not None and previous.folded == 'case'
+        in_frame = bool(openers) and openers[-1] == 'over'
+        if (
+            word in _LITERAL_WORDS
+            or not (opens and closes)
+            or (in_frame and word in _FRAME_WORDS)
+        ):
+            grammar.add(index)
+    return grammar
+
+
 def name_references(expr: str) -> list[NameReference]:
     r"""The names a Databricks expression reads as values.
 
-    That leaves out a function's name, a type, a keyword, a datetime unit, a
-    named argument, a lambda's parameter and a JSON path step, so a word of
-    the grammar is never read as a column or a parameter.
+    That leaves out a function's name, a type, a keyword where it is
+    grammar, a datetime unit, a named argument, a lambda's parameter and a
+    JSON path step, so a word of the grammar is never read as a column or a
+    parameter.
     """
     tokens = _lex(expr)
     scopes = _lambda_scopes(tokens)
+    grammar = _grammar(tokens)
     # Who opened each group still open, by name where a call did.
     openers: list[str] = []
     # Where a datetime unit may stand: after an INTERVAL's operand, a
@@ -1112,7 +1185,7 @@ def name_references(expr: str) -> list[NameReference]:
             or index <= skip_to
             or (after is not None and after.text in ('(', '=>'))
             or (previous is not None and previous.text == ':')
-            or (bare and token.folded in _EXPRESSION_KEYWORDS)
+            or (bare and index in grammar)
             or (bare and token.folded == 'to' and index - 1 in unit_after)
             or (
                 bare
