@@ -521,6 +521,7 @@ Now a column whose expression calls anything but a pure, deterministic built-in 
 Qualified and quoted function names, `IDENTIFIER()`, and session values such as `current_user` and `current_date` are left out the same way.
 `source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
 Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
+A metric view's comments are dropped first, as Databricks drops them, and Snowflake's `//` counts as a comment.
 It also refuses parentheses that do not balance outside quoted text, since a stray `)` could close the query the expression is spliced into.
 Some allowed built-ins are costly or read the session time zone; `docs/about/architecture.md` lists them.
 A keyword before `(`, as in `x IN (1)`, counts as grammar only after something known to be a value: a literal, a closing bracket, quoted text, a qualified name, or a column of the table the expression runs on.

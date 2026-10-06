@@ -25,6 +25,7 @@ from sdm_relational_engine.rfm.view_expr import (
     _untrusted_call_reason,
     name_references,
     string_literals,
+    strip_comments,
 )
 
 if TYPE_CHECKING:
@@ -620,6 +621,13 @@ def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
     return None
 
 
+def _sql(value: Any) -> Any:
+    r"""An expression of the definition without its comments, which
+    Databricks drops, or ``value`` itself if it is no string.
+    """
+    return strip_comments(value) if isinstance(value, str) else value
+
+
 def parse_metric_view(
     definition: str,
     parameter_types: Mapping[str, str] | None = None,
@@ -635,6 +643,8 @@ def parse_metric_view(
     :attr:`MetricViewSpec.messages`, or as a join in
     :attr:`MetricViewSpec.skipped_joins`. Each parameter read as its
     default is in :attr:`MetricViewSpec.notes`.
+
+    A comment in an expression is dropped, as Databricks drops it.
 
     A parameter a dimension or the filter references is read as its default,
     as a query of the view without arguments reads it. A dimension
@@ -775,7 +785,7 @@ def parse_metric_view(
                 )
             else:
                 on_cfg = join_cfg.get('on', join_cfg.get(True))
-                parsed = parse_join_condition(on_cfg)
+                parsed = parse_join_condition(_sql(on_cfg))
                 if parsed is None:
                     _skip(
                         'only single-column equality join conditions are '
@@ -812,7 +822,7 @@ def parse_metric_view(
     candidates.append(((SOURCE_ALIAS,), SOURCE_ALIAS))
     candidates.sort(key=lambda candidate: len(candidate[0]), reverse=True)
 
-    row_filter = cfg.get('filter')
+    row_filter = _sql(cfg.get('filter'))
     if isinstance(row_filter, str):
         substituted, referenced = _substitute_parameters(row_filter, parameters)
         if reason := _unusable_parameter(referenced):
@@ -839,7 +849,7 @@ def parse_metric_view(
             continue
 
         name = dim_cfg.get('name')
-        expr = dim_cfg.get('expr')
+        expr = _sql(dim_cfg.get('expr'))
         if isinstance(expr, str) and (wildcard := _WILDCARD_RE.match(expr)):
             path = tuple(
                 unquote_ident(part).lower()
@@ -970,7 +980,7 @@ def _read_measures(
     for cfg in measure_cfgs if isinstance(measure_cfgs, list) else []:
         if not isinstance(cfg, dict):
             continue
-        name, expr = cfg.get('name'), cfg.get('expr')
+        name, expr = cfg.get('name'), _sql(cfg.get('expr'))
         if not isinstance(name, str) or not isinstance(expr, str):
             continue
         inputs: list[tuple[str, str]] = []

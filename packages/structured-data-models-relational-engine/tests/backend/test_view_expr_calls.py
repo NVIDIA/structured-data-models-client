@@ -296,6 +296,13 @@ def test_databricks_has_no_dollar_quoting() -> None:
     assert _unsafe_expr_reason("CONCAT('$$', x)", 'databricks') is not None
 
 
+def test_snowflake_refuses_a_line_comment_written_with_slashes() -> None:
+    # Spliced into a select list, it would comment out the table read.
+    assert _unsafe_expr_reason('X FROM PAYROLL //', 'snowflake') is not None
+    assert _unsafe_expr_reason('X / 2', 'snowflake') is None
+    assert _unsafe_expr_reason("CONCAT('a//b', x)", 'databricks') is None
+
+
 def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:
     assert _unsafe_expr_reason('"MY COL" * 2', 'snowflake') is None
     assert _unsafe_expr_reason('"MY\\COL" * 2', 'snowflake') is not None

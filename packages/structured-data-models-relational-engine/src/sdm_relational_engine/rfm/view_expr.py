@@ -39,8 +39,10 @@ _DOLLARS = r'\$\$[\s\S]*?\$\$'
 _WORD = r'[A-Za-z_][\w$]*'
 _LEXEMES = {
     # A raw string, `r'...'`, takes no escapes: `r'x\'` ends at its second
-    # quote. Double quotes delimit a string, not a name.
+    # quote. Double quotes delimit a string, not a name. A line comment goes
+    # on past a backslash ending its line, as Databricks reads it.
     'databricks': (
+        ('comment', r'--(?:\\\n|[^\r\n])*'),
         (
             'string',
             rf"[rR]'[^']*'|[rR]\"[^\"]*\"|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}",
@@ -50,17 +52,20 @@ _LEXEMES = {
     # Double quotes delimit a name, which takes no escapes. Snowflake
     # refuses a backtick, so reading one as a quote hides nothing from it.
     'snowflake': (
+        ('comment', r'(?:--|//)[^\r\n]*'),
         ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}'),
         ('quoted', rf'"(?:""|[^"])*"|{_BACKTICKED}'),
     ),
     # What a check that knows no dialect reads as quoted.
     None: (
+        ('comment', r'--[^\r\n]*'),
         ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}'),
         ('quoted', _BACKTICKED),
     ),
 }
 # A word may hold `$`, as a Snowflake name does, so `a$$` opens no literal.
 _LEXEMES_EVERYWHERE = (
+    ('open', r'/\*'),
     ('number', r'(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*'),
     ('word', _WORD),
     ('punct', r'<=>|<=|>=|<>|::|->|=>|[.:(),\[\]<>]'),
@@ -85,18 +90,57 @@ _LEXERS = {
 }
 
 
+def _comment_end(expr: str, start: int, nested: bool) -> int | None:
+    r"""Where the ``/*`` comment at ``start`` ends, or ``None`` if it never
+    does. Databricks nests one such comment in another.
+    """
+    depth, at = 1, start + 2
+    while depth:
+        close = expr.find('*/', at)
+        if close < 0:
+            return None
+        open_ = expr.find('/*', at, close) if nested else -1
+        depth += 1 if open_ >= 0 else -1
+        at = open_ + 2 if open_ >= 0 else close + 2
+    return at
+
+
 def _lex(expr: str, dialect: str | None = 'databricks') -> list[_Token]:
     r"""The tokens of ``expr`` as ``dialect`` reads them, spaces left out.
 
-    A quote that is never closed is a token of kind ``other``.
+    A quote or ``/*`` that is never closed is a token of kind ``other``.
     """
     pattern, kinds = _LEXERS[dialect]
     tokens: list[_Token] = []
-    for match in pattern.finditer(expr):
-        kind = kinds[(match.lastindex or 1) - 1]
+    at = 0
+    while at < len(expr):
+        # Some lexeme matches any character, so a match always exists.
+        match = pattern.match(expr, at)
+        assert match is not None
+        kind, end = kinds[(match.lastindex or 1) - 1], match.end()
+        if kind == 'open':
+            close = _comment_end(expr, at, nested=dialect == 'databricks')
+            kind, end = ('comment', close) if close else ('other', at + 1)
         if kind != 'space':
-            tokens.append(_Token(kind, match.group(), *match.span()))
+            tokens.append(_Token(kind, expr[at:end], at, end))
+        at = end
     return tokens
+
+
+def strip_comments(expr: str) -> str:
+    r"""A Databricks expression with each comment replaced by a space.
+
+    A comment hides nothing from a check of what is left, and what is left
+    is what runs, so a call written inside one is never executed.
+    """
+    out: list[str] = []
+    last = 0
+    for token in _lex(expr):
+        if token.kind == 'comment':
+            out += [expr[last : token.start], ' ']
+            last = token.end
+    out.append(expr[last:])
+    return ''.join(out).strip()
 
 
 def _masked(expr: str, dialect: str | None, mask: str) -> str:
@@ -184,6 +228,9 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     # Databricks has no `$$` literal, and quotes no name with a backslash.
     if dialect == 'databricks' and '$$' in expr:
         return "it contains '$$', which Databricks SQL does not quote with"
+    # Snowflake also comments out the rest of a line with `//`.
+    if dialect == 'snowflake' and '//' in expr:
+        return "it contains '//'"
     if dialect == 'snowflake':
         for quoted in _lex(expr, dialect):
             if quoted.text.startswith('"') and '\\' in quoted.text:
@@ -1103,7 +1150,7 @@ def name_references(expr: str) -> list[NameReference]:
     JSON path step, so a word of the grammar is never read as a column or a
     parameter.
     """
-    tokens = _lex(expr)
+    tokens = [token for token in _lex(expr) if token.kind != 'comment']
     scopes = _lambda_scopes(tokens)
     grammar = _grammar(tokens)
     # Who opened each group still open, by name where a call did.
