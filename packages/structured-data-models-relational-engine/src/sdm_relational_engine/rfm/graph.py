@@ -1196,6 +1196,11 @@ class Graph:
         regular view with that ``WHERE`` clause and point the metric view's
         source at it.
 
+        A parameter the filter or a dimension references is read as its
+        default, as a query of the view without arguments reads it. A filter
+        on a parameter with no default refuses the view, and a dimension on
+        one is dropped with a warning.
+
         Dimension expressions later run as SQL under your warehouse
         credentials, making the view definition executable input. Expressions
         with a statement separator, comment, or sub-query are not plain scalar
@@ -1240,7 +1245,8 @@ class Graph:
 
         Raises:
             UnsupportedFilterError: If the view's filter references a joined
-                table, or is not a safe scalar condition.
+                table or a parameter with no default, or is not a safe scalar
+                condition.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
@@ -1281,7 +1287,9 @@ class Graph:
 
             description = read_metric_view_definition(connection, quoted_name)
             view_catalog, view_schema = description.catalog, description.schema
-            spec = parse_metric_view(description.definition)
+            spec = parse_metric_view(
+                description.definition, description.parameters
+            )
             msgs = list(spec.messages)
 
             def _table_parts(parts: tuple[str, ...]) -> tuple[str, str, str]:

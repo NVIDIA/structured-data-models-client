@@ -185,6 +185,10 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A metric view's wildcard dimensions become columns.**
   `- expr: source.*`, `- expr: <join>.*` and either with `EXCEPT (a, b)` were dropped as missing a name.
   They now stand for the columns of their table, each named as the column, as Databricks expands them.
+- **A metric view parameter is read as its default.**
+  A filter or dimension referencing a parameter, such as `source.qty >= min_qty`, ran with the bare name, which no table has.
+  The default is now written in as a literal of the parameter's type, checked against that type, and the expression guard runs on the result.
+  A dimension referencing a parameter with no default, or one whose type has no literal, is left out with a message naming it, and a filter referencing one refuses the view.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the
@@ -516,7 +520,8 @@ The filter decides which rows a metric view holds, and it used to be reported as
 A filter on the source table's own columns now limits every read of that table: its preview, its row count, its time range, entity sampling and each lookup read `(SELECT * FROM <source> AS source WHERE (<filter>))` instead of the table.
 A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
 The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
-`parameters` and `materialization` are still left out with a message.
+A parameter the filter or a dimension references is read as its default, as a query of the view without arguments reads it, and a filter on a parameter with no default refuses the view.
+`materialization` is still left out with a message.
 
 **`predictive_query` is not public API.**
 `structured-data-models-pql` installs it because `structured-data-models-client` parses and validates PQL with it, and any release may change it.

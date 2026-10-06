@@ -2579,3 +2579,217 @@ def test_a_wildcard_dimension_stands_for_the_columns_of_its_table() -> None:
     }
     assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
     assert graph.conversion_messages == ()
+
+
+_PARAMETER_YAML = """
+version: 1.1
+source: cat.sch.orders
+parameters:
+  - name: min_qty
+    data_type: INT
+    default: 1
+  - name: since
+    data_type: DATE
+    default: 2024-01-31
+  - name: required
+    data_type: INT
+filter: {filter}
+dimensions:
+  - name: big
+    expr: source.qty >= MIN_QTY
+  - name: recent
+    expr: order_date >= since
+  - name: untouched
+    expr: CONCAT('min_qty', source.min_qty, `min_qty`, s . min_qty)
+  - name: needy
+    expr: qty > required
+"""
+
+
+def test_a_parameter_is_read_as_its_default() -> None:
+    spec = parse_metric_view(
+        _PARAMETER_YAML.format(filter='source.qty >= min_qty')
+    )
+
+    assert spec.filter is not None
+    assert spec.filter.trusted() == "source.qty >= CAST('1' AS INT)"
+    assert [(c.name, c.expr) for c in spec.columns] == [
+        ('big', "qty >= CAST('1' AS INT)"),
+        ('recent', "order_date >= CAST('2024-01-31' AS DATE)"),
+        ('untouched', "CONCAT('min_qty', min_qty, `min_qty`, s . min_qty)"),
+    ]
+    assert spec.messages == [
+        "Failed to add dimension 'needy' since it references the parameter "
+        "'required', which has no default",
+        "Read the parameter 'min_qty' as its default '1', as a query of the "
+        'view without arguments does',
+        "Read the parameter 'since' as its default '2024-01-31', as a query "
+        'of the view without arguments does',
+    ]
+
+
+def test_a_parameter_the_view_does_not_use_says_nothing() -> None:
+    spec = parse_metric_view(
+        _PARAMETER_YAML.format(filter='qty > 0').replace(
+            '\n  - name: needy\n    expr: qty > required\n', '\n'
+        )
+    )
+
+    assert not any('required' in message for message in spec.messages)
+
+
+def test_a_filter_on_a_parameter_with_no_default_is_refused() -> None:
+    with pytest.raises(
+        UnsupportedFilterError,
+        match="parameter 'required', which has no default",
+    ):
+        parse_metric_view(_PARAMETER_YAML.format(filter='qty > required'))
+
+
+def test_the_described_type_of_a_parameter_wins() -> None:
+    spec = parse_metric_view(
+        _PARAMETER_YAML.format(filter='qty >= min_qty'),
+        {'min_qty': 'bigint'},
+    )
+
+    assert spec.filter is not None
+    assert spec.filter.trusted() == "qty >= CAST('1' AS BIGINT)"
+
+
+@pytest.mark.parametrize(
+    'data_type, default, literal',
+    [
+        ('INT', '5', "CAST('5' AS INT)"),
+        ('bigint', "'-7'", "CAST('-7' AS BIGINT)"),
+        ('DOUBLE', '1.5', "CAST('1.5' AS DOUBLE)"),
+        ('DECIMAL(10, 2)', "'3.10'", "CAST('3.10' AS DECIMAL(10, 2))"),
+        ('STRING', '"O\'Brien \\\\ co"', "CAST('O\\'Brien \\\\ co' AS STRING)"),
+        ('STRING', '2024-01-31', "CAST('2024-01-31' AS STRING)"),
+        ('BOOLEAN', 'true', "CAST('true' AS BOOLEAN)"),
+        (
+            'TIMESTAMP',
+            '2024-01-31 10:00:00',
+            "CAST('2024-01-31 10:00:00' AS TIMESTAMP)",
+        ),
+        (
+            'timestamp_ntz',
+            "'2024-01-31T10:00'",
+            "CAST('2024-01-31 10:00:00' AS TIMESTAMP_NTZ)",
+        ),
+    ],
+)
+def test_a_default_is_a_typed_literal(
+    data_type: str, default: str, literal: str
+) -> None:
+    spec = parse_metric_view(f"""
+source: cat.sch.orders
+parameters:
+  - name: p
+    data_type: {data_type}
+    default: {default}
+filter: x = p
+""")
+
+    assert spec.filter is not None
+    assert spec.filter.trusted() == f'x = {literal}'
+
+
+@pytest.mark.parametrize(
+    'data_type, default, reason',
+    [
+        ('INT', 'abc', "its default 'abc' is not of type INT"),
+        ('INT', 'true', 'its default True is not of type INT'),
+        ('INT', '1.5', 'its default 1.5 is not of type INT'),
+        ('DATE', 'yesterday', "its default 'yesterday' is not of type DATE"),
+        ('DOUBLE', '.nan', 'its default nan is not of type DOUBLE'),
+        ('BINARY', 'abc', "its type 'BINARY' has no literal here"),
+        ('ARRAY<INT>', '[1]', "its type 'ARRAY<INT>' has no literal here"),
+    ],
+)
+def test_a_default_that_is_no_value_of_its_type_is_refused(
+    data_type: str, default: str, reason: str
+) -> None:
+    spec = parse_metric_view(f"""
+source: cat.sch.orders
+parameters:
+  - name: p
+    data_type: {data_type}
+    default: {default}
+dimensions:
+  - name: d
+    expr: x = p
+""")
+
+    assert spec.columns == []
+    assert spec.messages == [
+        f"Failed to add dimension 'd' since it references the parameter "
+        f"'p', which {reason}"
+    ]
+
+
+def test_a_substituted_filter_is_still_checked() -> None:
+    r"""A default is the view author's text, and is escaped into a literal,
+    but what runs is still held to the same rules.
+    """
+    yaml_ = """
+source: cat.sch.orders
+parameters:
+  - name: p
+    data_type: STRING
+    default: "x'); DROP TABLE t; --"
+filter: status = p
+"""
+    with pytest.raises(UnsupportedFilterError, match="contains ';'"):
+        parse_metric_view(yaml_)
+
+
+def test_a_default_passes_the_function_check() -> None:
+    spec = parse_metric_view("""
+source: cat.sch.order_lines
+parameters:
+  - name: floor
+    data_type: DECIMAL(10,2)
+    default: 12.5
+filter: amount >= floor
+""")
+
+    assert spec.filter is not None
+    assert spec.filter.checked(['amount']) == (
+        "amount >= CAST('12.5' AS DECIMAL(10,2))"
+    )
+
+
+def test_a_metric_view_reads_a_parameter_in_its_filter_and_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expr_df = _EXPR_DATA['order_lines'].assign(big=True)
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+    definition = """
+version: 1.1
+source: cat.sch.order_lines
+parameters:
+  - name: min_amount
+    data_type: INT
+    default: 20
+filter: amount >= min_amount
+dimensions:
+  - name: product_line
+    expr: source.product_line
+  - name: big
+    expr: source.amount >= min_amount * 2
+"""
+    rows = _metric_view(
+        definition, {'product_line': 'string', 'big': 'boolean'}
+    )
+    at = rows.index(('', '', None)) + 1
+    rows[at:at] = [('# Parameters', '', None), ('min_amount', 'bigint', None)]
+
+    graph = _convert(_FakeConnection(rows))
+
+    fact = graph['order_lines']
+    assert fact.row_filter == "amount >= CAST('20' AS BIGINT)"
+    assert str(fact['big'].expr) == "amount >= CAST('20' AS BIGINT) * 2"
+    assert graph.conversion_messages == (
+        "Read the parameter 'min_amount' as its default '20', as a query of "
+        'the view without arguments does',
+    )

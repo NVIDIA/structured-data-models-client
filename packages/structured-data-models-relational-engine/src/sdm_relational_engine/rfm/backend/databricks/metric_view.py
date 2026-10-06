@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import datetime
 import re
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from sdm_relational_engine.exceptions import KumoRelationalError
@@ -43,6 +45,31 @@ _WILDCARD_RE = re.compile(
 _STRING_LITERAL_RE = re.compile(
     r"'(?:''|\\[\s\S]|[^'\\])*'|\"(?:\"\"|\\[\s\S]|[^\"\\])*\""
 )
+# A string literal or a backticked name, neither of which is a parameter.
+_QUOTED_RE = re.compile(rf'{_STRING_LITERAL_RE.pattern}|`(?:[^`]|``)*`')
+# A bare name, with what makes it part of a qualified name, a call, a named
+# argument or a lambda rather than a reference of its own.
+_BARE_NAME_RE = re.compile(
+    r'(?P<dot>\.\s*)?(?<![\w$])(?P<name>[A-Za-z_]\w*)(?![\w$])'
+    r'(?P<after>(?=\s*(?:[.(]|=>|->)))?'
+)
+
+_INTEGER_TYPES = {
+    'tinyint',
+    'byte',
+    'smallint',
+    'short',
+    'int',
+    'integer',
+    'bigint',
+    'long',
+}
+_FLOAT_TYPES = {'float', 'real', 'double'}
+_TIMESTAMP_TYPES = {'timestamp', 'timestamp_ntz', 'timestamp_ltz'}
+_DECIMAL_TYPE_RE = re.compile(
+    r'(?:decimal|dec|numeric)(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?'
+)
+_STRING_TYPE_RE = re.compile(r'string|(?:var)?char\(\s*\d+\s*\)')
 
 
 class UnsupportedJoinError(KumoRelationalError, ValueError):
@@ -269,15 +296,17 @@ def _sub_outside_strings(
     pattern: re.Pattern[str],
     repl: str | Callable[[re.Match[str]], str],
     expr: str,
+    quoted: re.Pattern[str] = _STRING_LITERAL_RE,
 ) -> str:
-    r"""``pattern.sub(repl, expr)`` with every string literal left as is.
+    r"""``pattern.sub(repl, expr)`` with every string literal, or whatever
+    else ``quoted`` matches, left as is.
 
     A literal holding `source.` or a field's name is data, and rewriting it
     changes the values the view declares.
     """
     out: list[str] = []
     last = 0
-    for match in _STRING_LITERAL_RE.finditer(expr):
+    for match in quoted.finditer(expr):
         out.append(pattern.sub(repl, expr[last : match.start()]))
         out.append(match.group())
         last = match.end()
@@ -301,15 +330,182 @@ def strip_alias_qualifier(expr: str, alias: str | Sequence[str]) -> str:
     return _sub_outside_strings(pattern, '', expr).strip()
 
 
-def parse_metric_view(definition: str) -> MetricViewSpec:
+@dataclass(frozen=True)
+class _Parameter:
+    r"""A metric view parameter, as a query of the view without arguments
+    reads it.
+
+    Args:
+        name: The parameter's name.
+        literal: Its default as a typed SQL literal, or ``None``.
+        text: Its default as text, or why it has no ``literal``.
+    """
+
+    name: str
+    literal: str | None
+    text: str
+
+
+def _sql_string(text: str) -> str:
+    r"""A Databricks string literal holding ``text``.
+
+    Databricks reads two adjacent literals as one, so ``'it''s'`` is ``its``.
+    A quote is therefore escaped with a backslash, as is a backslash.
+    """
+    escaped = text.replace('\\', '\\\\').replace("'", "\\'")
+    return f"'{escaped}'"
+
+
+def _default_text(data_type: str, default: Any) -> str:
+    r"""The text a parameter's default casts from, checked against its type
+    so that nothing but the value reaches the SQL.
+
+    Raises:
+        ValueError: If the default is not a value of the type, or the type
+            has no literal here.
+    """
+    folded = ' '.join(data_type.lower().split())
+    if isinstance(default, bool):
+        if folded == 'boolean' or _STRING_TYPE_RE.fullmatch(folded):
+            return 'true' if default else 'false'
+    elif folded == 'boolean':
+        if str(default).strip().lower() in ('true', 'false'):
+            return str(default).strip().lower()
+    elif folded in _INTEGER_TYPES:
+        if isinstance(default, int) or re.fullmatch(
+            r'[+-]?\d+', str(default).strip()
+        ):
+            return str(int(default))
+    elif folded in _FLOAT_TYPES or _DECIMAL_TYPE_RE.fullmatch(folded):
+        try:
+            number = Decimal(str(default).strip())
+        except InvalidOperation:
+            number = None
+        if number is not None and number.is_finite():
+            return format(number, 'f')
+    elif _STRING_TYPE_RE.fullmatch(folded):
+        if isinstance(default, datetime.date):
+            return default.isoformat()
+        return str(default)
+    elif folded == 'date':
+        if isinstance(default, datetime.date) and not isinstance(
+            default, datetime.datetime
+        ):
+            return default.isoformat()
+        try:
+            day = datetime.date.fromisoformat(str(default).strip())
+            return day.isoformat()
+        except ValueError:
+            pass
+    elif folded in _TIMESTAMP_TYPES:
+        if isinstance(default, datetime.datetime):
+            return default.isoformat(' ')
+        if isinstance(default, datetime.date):
+            return default.isoformat()
+        try:
+            moment = datetime.datetime.fromisoformat(str(default).strip())
+            return moment.isoformat(' ')
+        except ValueError:
+            pass
+    else:
+        raise ValueError(f"its type '{data_type}' has no literal here")
+    raise ValueError(f'its default {default!r} is not of type {data_type}')
+
+
+def _read_parameters(
+    parameter_cfgs: Any, parameter_types: Mapping[str, str]
+) -> dict[str, _Parameter]:
+    r"""Reads the ``parameters`` section, by folded name.
+
+    Args:
+        parameter_cfgs: The ``parameters`` section, if any.
+        parameter_types: Each parameter's type as Databricks describes it,
+            which wins over the one written in the definition.
+    """
+    types = {name.lower(): type_ for name, type_ in parameter_types.items()}
+    parameters: dict[str, _Parameter] = {}
+    if not isinstance(parameter_cfgs, list):
+        return parameters
+    for parameter_cfg in parameter_cfgs:
+        if not isinstance(parameter_cfg, dict):
+            continue
+        name = parameter_cfg.get('name')
+        if not isinstance(name, str):
+            continue
+        data_type = types.get(name.lower(), parameter_cfg.get('data_type'))
+        default = parameter_cfg.get('default')
+        if default is None:
+            parameter = _Parameter(name, None, 'has no default')
+        elif not isinstance(data_type, str):
+            parameter = _Parameter(name, None, 'has no type')
+        else:
+            try:
+                text = _default_text(data_type, default)
+            except ValueError as error:
+                parameter = _Parameter(name, None, str(error))
+            else:
+                sql_type = ' '.join(data_type.split()).upper()
+                literal = f'CAST({_sql_string(text)} AS {sql_type})'
+                parameter = _Parameter(name, literal, text)
+        parameters[name.lower()] = parameter
+    return parameters
+
+
+def _substitute_parameters(
+    expr: str, parameters: Mapping[str, _Parameter]
+) -> tuple[str, list[_Parameter]]:
+    r"""Replaces each reference to a parameter with its default.
+
+    A parameter is referenced by its bare name, so a qualified name, a call,
+    a named argument, a string literal or a backticked name is left as is.
+
+    Returns:
+        The expression, and every parameter it references, in order.
+    """
+    used: dict[str, _Parameter] = {}
+
+    def _replace(match: re.Match[str]) -> str:
+        parameter = parameters.get(match.group('name').lower())
+        if (
+            parameter is None
+            or match.group('dot') is not None
+            or match.group('after') is not None
+        ):
+            return match.group()
+        used.setdefault(parameter.name, parameter)
+        return parameter.literal or match.group()
+
+    if parameters:
+        expr = _sub_outside_strings(_BARE_NAME_RE, _replace, expr, _QUOTED_RE)
+    return expr, list(used.values())
+
+
+def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
+    r"""Why an expression referencing ``used`` cannot be read, or ``None``."""
+    for parameter in used:
+        if parameter.literal is None:
+            return (
+                f"it references the parameter '{parameter.name}', which "
+                f'{parameter.text}'
+            )
+    return None
+
+
+def parse_metric_view(
+    definition: str, parameter_types: Mapping[str, str] | None = None
+) -> MetricViewSpec:
     r"""Parses a metric view YAML definition into its graph-relevant parts.
 
     Measures define aggregations rather than row-level values, and are
     therefore never part of the returned specification. Elements that cannot
     be represented in a graph (SQL query join sources, composite or
     non-equality join conditions, dimensions referencing multiple tables,
-    parameters, and materializations) are dropped and reported in
+    and materializations) are dropped and reported in
     :attr:`MetricViewSpec.messages`.
+
+    A parameter a dimension or the filter references is read as its default,
+    as a query of the view without arguments reads it. A dimension
+    referencing a parameter with no default is dropped.
 
     The ``filter`` decides which rows the view holds, so it is never dropped:
     it is returned to be applied to the source table, or the view is refused.
@@ -319,12 +515,14 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
 
     Args:
         definition: The YAML definition.
+        parameter_types: The type of each parameter as Databricks describes
+            it, which wins over the one the definition names.
 
     Raises:
         ValueError: If the definition is not a YAML mapping, misses a source,
             or defines a SQL query as its source.
-        UnsupportedFilterError: If the filter references a joined table, or
-            is not a safe scalar condition.
+        UnsupportedFilterError: If the filter references a joined table or a
+            parameter with no default, or is not a safe scalar condition.
     """
     import yaml
 
@@ -344,12 +542,13 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
         )
 
     messages: list[str] = []
-    for key in ('parameters', 'materialization'):
-        if key in cfg:
-            messages.append(
-                f"Ignored the '{key}' section since it cannot "
-                f'be represented in a graph'
-            )
+    if 'materialization' in cfg:
+        messages.append(
+            "Ignored the 'materialization' section since it cannot "
+            'be represented in a graph'
+        )
+    parameters = _read_parameters(cfg.get('parameters'), parameter_types or {})
+    used: dict[str, _Parameter] = {}
 
     joins: list[MetricViewJoin] = []
     aliases: set[str] = set()
@@ -448,7 +647,14 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
     candidates.append(((SOURCE_ALIAS,), SOURCE_ALIAS))
     candidates.sort(key=lambda candidate: len(candidate[0]), reverse=True)
 
-    row_filter = _check_filter(cfg.get('filter'), candidates)
+    row_filter = cfg.get('filter')
+    if isinstance(row_filter, str):
+        substituted, referenced = _substitute_parameters(row_filter, parameters)
+        if reason := _unusable_parameter(referenced):
+            _refuse_filter(row_filter, reason)
+        row_filter = substituted
+        used.update((parameter.name, parameter) for parameter in referenced)
+    row_filter = _check_filter(row_filter, candidates)
 
     columns: list[MetricViewColumn | MetricViewWildcard] = []
     defined: dict[str, str] = {}
@@ -496,6 +702,12 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
             )
             continue
 
+        expr, referenced = _substitute_parameters(expr, parameters)
+        if reason := _unusable_parameter(referenced):
+            messages.append(f"Failed to add dimension '{name}' since {reason}")
+            continue
+        used.update((parameter.name, parameter) for parameter in referenced)
+
         for field_name, field_expr in defined.items():
             expr = _sub_outside_strings(
                 _field_pattern(field_name),
@@ -530,6 +742,12 @@ def parse_metric_view(definition: str) -> MetricViewSpec:
                 alias=alias,
                 expr=expr,
             )
+        )
+
+    for parameter in used.values():
+        messages.append(
+            f"Read the parameter '{parameter.name}' as its default "
+            f"'{parameter.text}', as a query of the view without arguments does"
         )
 
     return MetricViewSpec(
