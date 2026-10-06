@@ -181,6 +181,44 @@ def _view_expr_message(
     )
 
 
+def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
+    r"""Adds a view's columns to ``table``, leaving out each one that cannot
+    be added on its own, and returns why for each.
+
+    A table's expressions are sampled in one query, so a single failing
+    expression, or a column of a type with no graph equivalent, fails the
+    others with it. In that case nothing of the batch is kept, and the
+    columns are added one at a time instead.
+
+    Args:
+        table: The table, whose rows can already be read.
+        columns: The columns to add.
+    """
+    before = set(table._column_dict)
+    try:
+        table.add_columns(columns)
+        return []
+    except Warning:
+        raise
+    except Exception:
+        for name in list(table._column_dict):
+            if name not in before:
+                table.remove_column(name)
+
+    msgs: list[str] = []
+    for column in columns:
+        try:
+            table.add_column(column)
+        except Warning:
+            raise
+        except Exception as error:
+            msgs.append(
+                f"Failed to add column '{column.name}' to table "
+                f"'{table.name}': {error}"
+            )
+    return msgs
+
+
 class ViewConversionWarning(UserWarning):
     r"""Warn that parts of a view could not be represented in a :class:`Graph`.
 
@@ -1120,6 +1158,11 @@ class Graph:
         aggregations with a predictive query. Other unrepresentable elements
         are dropped with a warning.
 
+        A joined table that cannot be read, because it is missing, empty or
+        not readable to you, drops its join with a warning, and a column that
+        cannot be added, such as an expression that fails, drops alone. Only a
+        source table that cannot be read fails the conversion.
+
         The view's ``filter`` is applied to the fact table, so every read of it
         sees only the rows the view holds. A filter on a joined table cannot
         be, and the view is refused rather than read unfiltered: create a
@@ -1277,7 +1320,9 @@ class Graph:
                 # so here it shows no columns.
                 try:
                     return list(_table(alias)._source_column_dict)
-                except ValueError:
+                except Warning:
+                    raise
+                except Exception:
                     return []
 
             # Every read of the fact table runs the filter, so it is checked
@@ -1314,6 +1359,153 @@ class Graph:
                     )
 
             graph = cls(tables=[])
+
+            # A failure to read the fact table aborts. A joined table that
+            # cannot be read, or a column that cannot be added, is dropped
+            # below with its reason instead.
+            fact_table._source_sample_df  # noqa: B018
+            msgs.extend(
+                _add_view_columns(
+                    fact_table, columns_by_alias.get(SOURCE_ALIAS, [])
+                )
+            )
+            graph.add_table(fact_table)
+            table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
+
+            for join in spec.joins:
+                parent_table = table_dict.get(join.parent_alias)
+                if parent_table is None:
+                    msgs.append(
+                        f"Failed to add join '{join.alias}' since its "
+                        f"parent join '{join.parent_alias}' was not "
+                        f'added'
+                    )
+                    continue
+
+                try:
+                    table = _table(join.alias)
+                    table._source_column_dict  # noqa: B018
+                    table._source_sample_df  # noqa: B018
+                except Warning:
+                    raise
+                except Exception as error:
+                    msgs.append(
+                        f"Failed to add join '{join.alias}' since its table "
+                        f'could not be read: {error}'
+                    )
+                    continue
+
+                # Adding a join mutates tables that are already part of the
+                # graph, so record every mutation and undo it in full in case
+                # the join is rejected - a dropped join must not leave any
+                # trace behind:
+                undo_columns: list[tuple[Table, str, Column | None]] = []
+                undo_primary_key: tuple[Table, str, Stype] | None = None
+                join_msgs = _add_view_columns(
+                    table, columns_by_alias.get(join.alias, [])
+                )
+
+                try:
+                    other_alias, other_key, child_key = resolve_join_keys(
+                        join,
+                        child_columns=table._source_column_dict,
+                        parent_columns=parent_table._source_column_dict,
+                    )
+                    other_table = table_dict[other_alias]
+
+                    if join.cardinality == 'many_to_one':
+                        one_table, one_key = table, child_key
+                        many_table, many_key = other_table, other_key
+                    else:
+                        one_table, one_key = other_table, other_key
+                        many_table, many_key = table, child_key
+
+                    if (
+                        one_table._primary_key is not None
+                        and one_table._primary_key != one_key
+                    ):
+                        raise UnsupportedJoinError(
+                            f"Failed to add join '{join.alias}' since table "
+                            f"'{one_table.name}' already uses "
+                            f"'{one_table._primary_key}' as its primary key"
+                        )
+
+                    for key_table, key in (
+                        (one_table, one_key),
+                        (many_table, many_key),
+                    ):
+                        if not key_table.has_column(key):
+                            key_table.add_column(key)
+                            undo_columns.append((key_table, key, None))
+                        elif not key_table[key].is_source:
+                            undo_columns.append(
+                                (key_table, key, key_table[key])
+                            )
+                            key_table.remove_column(key)
+                            key_table.add_column(key)
+                            join_msgs.append(
+                                f"Replaced the derived column '{key}' of table "
+                                f"'{key_table.name}' with its physical source "
+                                f"column since join '{join.alias}' references "
+                                f'it as a key'
+                            )
+
+                    if one_table._primary_key is None:
+                        undo_primary_key = (
+                            one_table,
+                            one_key,
+                            one_table[one_key].stype,
+                        )
+                        one_table.primary_key = one_key
+
+                    graph.add_table(table)
+                    table_dict[join.alias] = table
+                    graph.link(many_table.name, many_key, one_table.name)
+                    msgs.extend(join_msgs)
+                except Warning:
+                    raise
+                except Exception as error:
+                    if table_dict.get(join.alias) is table:
+                        graph.remove_table(join.alias)
+                        del table_dict[join.alias]
+                    if undo_primary_key is not None:
+                        undo_table, undo_key, undo_stype = undo_primary_key
+                        undo_table.primary_key = None
+                        undo_table[undo_key].stype = undo_stype
+                    for undo_table, undo_key, undo_column in reversed(
+                        undo_columns
+                    ):
+                        if undo_table.has_column(undo_key):
+                            undo_table.remove_column(undo_key)
+                        if undo_column is not None:
+                            undo_table._column_dict[undo_key] = undo_column
+                    if isinstance(error, UnsupportedJoinError):
+                        msgs.append(str(error))
+                    else:
+                        msgs.append(
+                            f"Failed to add join '{join.alias}' since "
+                            f'its keys could not be linked: {error}'
+                        )
+
+            for table in graph.tables.values():
+                candidates = [
+                    column.name
+                    for column in table.columns
+                    if column.stype == Stype.timestamp
+                ]
+                if len(candidates) == 0:
+                    continue
+                table._infer_time_column_among(candidates)
+
+            msgs.extend(graph._drop_invalid_edges())
+            graph._settle_time_columns()
+            graph.validate()
+
+            if verbose:
+                graph.print_metadata()
+                graph.print_links()
+
+            graph._conversion_messages = tuple(msgs)
         except BaseException as error:
             if internal_connection:
                 connection.close()
@@ -1323,125 +1515,6 @@ class Graph:
         if internal_connection:
             graph._connection = connection
 
-        fact_table.add_columns(columns_by_alias.get(SOURCE_ALIAS, []))
-        graph.add_table(fact_table)
-        table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
-
-        for join in spec.joins:
-            parent_table = table_dict.get(join.parent_alias)
-            if parent_table is None:
-                msgs.append(
-                    f"Failed to add join '{join.alias}' since its "
-                    f"parent join '{join.parent_alias}' was not "
-                    f'added'
-                )
-                continue
-
-            table = _table(join.alias)
-            table.add_columns(columns_by_alias.get(join.alias, []))
-
-            # Adding a join mutates tables that are already part of the graph,
-            # so record every mutation and undo it in full in case the join is
-            # rejected - a dropped join must not leave any trace behind:
-            undo_columns: list[tuple[Table, str, Column | None]] = []
-            undo_primary_key: tuple[Table, str, Stype] | None = None
-            join_msgs: list[str] = []
-
-            try:
-                other_alias, other_key, child_key = resolve_join_keys(
-                    join,
-                    child_columns=table._source_column_dict,
-                    parent_columns=parent_table._source_column_dict,
-                )
-                other_table = table_dict[other_alias]
-
-                if join.cardinality == 'many_to_one':
-                    one_table, one_key = table, child_key
-                    many_table, many_key = other_table, other_key
-                else:
-                    one_table, one_key = other_table, other_key
-                    many_table, many_key = table, child_key
-
-                if (
-                    one_table._primary_key is not None
-                    and one_table._primary_key != one_key
-                ):
-                    raise UnsupportedJoinError(
-                        f"Failed to add join '{join.alias}' since table "
-                        f"'{one_table.name}' already uses "
-                        f"'{one_table._primary_key}' as its primary key"
-                    )
-
-                for key_table, key in (
-                    (one_table, one_key),
-                    (many_table, many_key),
-                ):
-                    if not key_table.has_column(key):
-                        key_table.add_column(key)
-                        undo_columns.append((key_table, key, None))
-                    elif not key_table[key].is_source:
-                        undo_columns.append((key_table, key, key_table[key]))
-                        key_table.remove_column(key)
-                        key_table.add_column(key)
-                        join_msgs.append(
-                            f"Replaced the derived column '{key}' of table "
-                            f"'{key_table.name}' with its physical source "
-                            f"column since join '{join.alias}' references "
-                            f'it as a key'
-                        )
-
-                if one_table._primary_key is None:
-                    undo_primary_key = (
-                        one_table,
-                        one_key,
-                        one_table[one_key].stype,
-                    )
-                    one_table.primary_key = one_key
-
-                graph.add_table(table)
-                table_dict[join.alias] = table
-                graph.link(many_table.name, many_key, one_table.name)
-                msgs.extend(join_msgs)
-            except ValueError as error:
-                if table_dict.get(join.alias) is table:
-                    graph.remove_table(join.alias)
-                    del table_dict[join.alias]
-                if undo_primary_key is not None:
-                    undo_table, undo_key, undo_stype = undo_primary_key
-                    undo_table.primary_key = None
-                    undo_table[undo_key].stype = undo_stype
-                for undo_table, undo_key, undo_column in reversed(undo_columns):
-                    if undo_table.has_column(undo_key):
-                        undo_table.remove_column(undo_key)
-                    if undo_column is not None:
-                        undo_table._column_dict[undo_key] = undo_column
-                if isinstance(error, UnsupportedJoinError):
-                    msgs.append(str(error))
-                else:
-                    msgs.append(
-                        f"Failed to add join '{join.alias}' since "
-                        f'its keys could not be linked: {error}'
-                    )
-
-        for table in graph.tables.values():
-            candidates = [
-                column.name
-                for column in table.columns
-                if column.stype == Stype.timestamp
-            ]
-            if len(candidates) == 0:
-                continue
-            table._infer_time_column_among(candidates)
-
-        msgs.extend(graph._drop_invalid_edges())
-        graph._settle_time_columns()
-        graph.validate()
-
-        if verbose:
-            graph.print_metadata()
-            graph.print_links()
-
-        graph._conversion_messages = tuple(msgs)
         if len(msgs) > 0:
             title = (
                 f'Could not fully convert the metric view definition '

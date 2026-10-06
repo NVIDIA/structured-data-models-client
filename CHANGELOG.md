@@ -175,6 +175,9 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A metric view parameter named `Type`, `View Text`, `Catalog` or `Database` no longer stands in for the view's own detail.**
   `DESCRIBE TABLE EXTENDED` lists parameters before the details, and the first row of each name was read, so such a view was refused as not a metric view.
   The description is now read section by section, on a SQL warehouse and a Spark session alike.
+- **A metric view joined to a table that cannot be read converts without that join.**
+  A joined table that was missing, empty, unreadable or itself a metric view failed the whole conversion when a dimension referenced it, and so did one failing dimension expression or a column of a type with no graph equivalent.
+  Now the join, or the column, is left out with a conversion message; only a source table that cannot be read fails the conversion, and that failure now closes a connection the conversion opened.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the
