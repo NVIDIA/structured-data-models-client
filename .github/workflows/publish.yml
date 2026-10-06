@@ -35,6 +35,11 @@ jobs:
     if: github.ref_type == 'tag'
     permissions:
       contents: read
+      # The gate below asks the API whether CI passed on this commit, which
+      # needs more than the empty default at the top of this file. Without it
+      # `gh run list` is a 403, `set -e` stops the job, and no release can be
+      # built at all.
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
