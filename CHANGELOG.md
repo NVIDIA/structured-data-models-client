@@ -194,7 +194,7 @@ declare as `1.0.0` and none has published. The heading becomes
   A source or joined table that is itself a metric view got the advice to read it with `semantic_model`, which is what the caller had done.
   The message now says a metric view on a metric view is not supported and to point the source, or the join, at the underlying table; such a join is dropped, such a source refuses the view.
   A query as the source, or as a join's source, is still refused, now with the way out: a regular view over the query.
-  A join dropped for its condition, such as one on two columns, now names the graph tables and dimensions lost with it, instead of one message per dimension.
+  A dropped join now names the graph tables and dimensions lost with it, whether it is dropped for its condition, such as one on two columns, or while converting, for a table that cannot be read, a key that repeats or a parent join dropped before it.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the

@@ -1260,8 +1260,10 @@ class Graph:
         )
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
+            MetricViewJoin,
             MetricViewWildcard,
             UnsupportedJoinError,
+            _skipped_join_message,
             parse_metric_view,
             parse_table_reference,
             read_metric_view_definition,
@@ -1442,13 +1444,25 @@ class Graph:
             graph.add_table(fact_table)
             table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
 
+            def _drop_join(join: MetricViewJoin, reason: str) -> None:
+                r"""Reports a join dropped, with the table and dimensions
+                that go with it, which a question may have been asked of.
+                """
+                dimensions = [
+                    column.name for column in columns_by_alias[join.alias]
+                ]
+                msgs.append(
+                    _skipped_join_message(
+                        join.alias, reason, [join.alias], dimensions
+                    )
+                )
+
             for join in spec.joins:
                 parent_table = table_dict.get(join.parent_alias)
                 if parent_table is None:
-                    msgs.append(
-                        f"Failed to add join '{join.alias}' since its "
-                        f"parent join '{join.parent_alias}' was not "
-                        f'added'
+                    _drop_join(
+                        join,
+                        f"its parent join '{join.parent_alias}' was not added",
                     )
                     continue
 
@@ -1459,18 +1473,15 @@ class Graph:
                 except Warning:
                     raise
                 except MetricViewAsTableError:
-                    msgs.append(
-                        f"Failed to add join '{join.alias}' since "
+                    _drop_join(
+                        join,
                         f"'{table.source_name}' is a metric view; "
                         f"{_METRIC_VIEW_ON_METRIC_VIEW}, point the join's "
-                        f'source at the underlying table'
+                        f'source at the underlying table',
                     )
                     continue
                 except Exception as error:
-                    msgs.append(
-                        f"Failed to add join '{join.alias}' since its table "
-                        f'could not be read: {error}'
-                    )
+                    _drop_join(join, f'its table could not be read: {error}')
                     continue
 
                 # Adding a join mutates tables that are already part of the
@@ -1566,11 +1577,13 @@ class Graph:
                         if undo_column is not None:
                             undo_table._column_dict[undo_key] = undo_column
                     if isinstance(error, UnsupportedJoinError):
-                        msgs.append(str(error))
+                        # Its message names the join, which `_drop_join`
+                        # names again.
+                        prefix = f"Failed to add join '{join.alias}' since "
+                        _drop_join(join, str(error).removeprefix(prefix))
                     else:
-                        msgs.append(
-                            f"Failed to add join '{join.alias}' since "
-                            f'its keys could not be linked: {error}'
+                        _drop_join(
+                            join, f'its keys could not be linked: {error}'
                         )
 
             for table in graph.tables.values():

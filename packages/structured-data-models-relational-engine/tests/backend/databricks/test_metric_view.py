@@ -2825,8 +2825,9 @@ def test_a_join_on_a_metric_view_is_dropped_for_what_it_is(
     graph = _convert(_FakeConnection(_joined_view()))
 
     assert _keeps_the_rest_without_customers(graph) == (
-        "Failed to add join 'customers' since 'cat.sch.customers' is a "
-        'metric view; a metric view built on another metric view is not '
+        "Failed to add join 'customers', and with it the table 'customers' "
+        "and the dimension 'customer_segment', since 'cat.sch.customers' is "
+        'a metric view; a metric view built on another metric view is not '
         "supported, point the join's source at the underlying table"
     )
 
@@ -2874,4 +2875,40 @@ dimensions:
     assert graph.conversion_messages == (
         "Read the parameter 'floor' as its default '1', as a query of the "
         'view without arguments does',
+    )
+
+
+def test_a_join_dropped_while_converting_names_the_dimensions_lost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Dropping `customers` drops `regions`, which hangs off it, and the
+    dimensions on both, which a question may have been asked of.
+    """
+    monkeypatch.setitem(_DATA, 'customers', _DATA['customers'].iloc[:0])
+
+    graph = _convert(_FakeConnection())
+
+    customers, regions = [
+        m
+        for m in graph.conversion_messages
+        if m.startswith(
+            ("Failed to add join 'customers'", "Failed to add join 'regions'")
+        )
+    ]
+    assert customers.startswith(
+        "Failed to add join 'customers', and with it the table 'customers' "
+        "and the dimension 'customer_segment', since its table could not be "
+        'read'
+    )
+    assert regions == (
+        "Failed to add join 'regions', and with it the table 'regions' and "
+        "the dimensions 'region_name' and 'region_code', since its parent "
+        "join 'customers' was not added"
+    )
+    (unlinked,) = [
+        m for m in graph.conversion_messages if "join 'payments'" in m
+    ]
+    assert unlinked.startswith(
+        "Failed to add join 'payments', and with it the table 'payments', "
+        'since its keys could not be linked'
     )
