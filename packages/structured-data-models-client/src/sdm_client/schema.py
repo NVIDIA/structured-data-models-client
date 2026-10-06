@@ -867,6 +867,7 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
+        self._conversion_notes: tuple[str, ...] = ()
 
     @property
     def source(self) -> Source | None:
@@ -876,6 +877,20 @@ class Schema:
         because sampling runs against one: see :meth:`from_source`.
         """
         return self._source
+
+    @property
+    def conversion_notes(self) -> tuple[str, ...]:
+        r"""How :meth:`from_source` read a semantic model where nothing was
+        lost, which no warning repeats.
+
+        For a Databricks metric view: the predictive query aggregation that
+        matches each simple measure, such as
+        ``'revenue' is SUM(order_lines.LineTotal, 0, 30, days)``, the time
+        column taken in place of a date the view truncates, and each
+        parameter read as its default. What a model loses is said in an
+        :class:`SDMWarning` instead. Empty for every other schema.
+        """
+        return self._conversion_notes
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Hold an assigned relationship to the same standard as a passed one.
@@ -921,7 +936,14 @@ class Schema:
         schema of frames.
         """
         object.__setattr__(
-            self, '__dict__', {'_source': None, '_engine_tables': None, **state}
+            self,
+            '__dict__',
+            {
+                '_source': None,
+                '_engine_tables': None,
+                '_conversion_notes': (),
+                **state,
+            },
         )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
@@ -975,6 +997,7 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
+        copied._conversion_notes = self._conversion_notes
         return copied
 
     @classmethod
@@ -1116,7 +1139,9 @@ class Schema:
         named as the model names them. No relationship is inferred from
         column names beside the model's own joins, which would give a table
         a second path the model never declared; pass ``relationships`` to
-        add one.
+        add one. What the model has that a schema cannot hold is said in one
+        :class:`SDMWarning`, and how it was read where nothing was lost, such
+        as the aggregation each measure is, is in :attr:`conversion_notes`.
 
         Everything that differs between warehouses belongs to the source, so
         this reads the same whichever one the tables are in. A schema has
@@ -1166,8 +1191,10 @@ class Schema:
         read = EngineTables()
         engine_tables: dict[str, Any] | None = None
         chose: dict[str, TimeColumnChoice | None] = {}
+        notes: tuple[str, ...] = ()
         if is_semantic_model(source):
             graph = semantic_model_graph(source)
+            notes = graph.conversion_notes
             read.keep({name: graph[name] for name in graph.tables})
             offered = list(graph.tables)
             chosen = (
@@ -1252,6 +1279,7 @@ class Schema:
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, links, source=source)
         schema._engine_tables = read
+        schema._conversion_notes = notes
         schema._mark_key_columns()
         _warn_how_time_columns_were_inferred(schema, chose, time_columns)
         _warn_two_ways_to_reach_one_table(built, schema.relationships)

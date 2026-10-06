@@ -251,9 +251,10 @@ def semantic_model_graph(model: Any) -> Graph:
     they keep the same columns.
 
     What the model has that a graph cannot hold is said in one
-    :class:`SDMWarning`, and a model the engine refuses, for a filter on a
-    joined table say, is refused with a :class:`StructuredDataError` that
-    carries the engine's reason.
+    :class:`SDMWarning`, and nothing is said for a model that loses nothing:
+    how it was read is in the graph's ``conversion_notes``. A model the
+    engine refuses, for a filter on a joined table say, is refused with a
+    :class:`StructuredDataError` that carries the engine's reason.
     """
     try:
         from sdm_relational_engine.rfm import Graph, ViewConversionWarning

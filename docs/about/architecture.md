@@ -333,7 +333,7 @@ An earlier draft took `metric_view=` on `from_source`, which put one vendor's wo
 The engine turns the view into its graph: the source becomes a table named as it is in the catalog, each join a table named after the join, each dimension a column of the table it reads, and each join a relationship to the key it names.
 An expression dimension stays an expression, computed in the warehouse when the table is sampled, so `materialize()` rebuilds the tables from the view and then keeps only what the schema kept.
 Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
-The columns a measure over one table aggregates are added to that table, and the conversion message names the aggregation matching each simple measure, so `revenue` can be asked as `SUM(order_lines.LineTotal, 0, 30, days)`.
+The columns a measure over one table aggregates are added to that table, and a conversion note, which no warning repeats, names the aggregation matching each simple measure, so `revenue` can be asked as `SUM(order_lines.LineTotal, 0, 30, days)`.
 A wildcard dimension such as `source.* EXCEPT (rowguid)` becomes the columns it stands for, as Databricks expands it.
 A dimension truncating or casting a date stands for the column it truncates when the time column is chosen, so windows count days, not months.
 A join whose table cannot be read, or whose key repeats, is left out with the tables and dimensions hanging off it; only a source table that cannot be read fails the conversion.

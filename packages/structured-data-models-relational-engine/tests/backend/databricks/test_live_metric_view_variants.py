@@ -6,7 +6,7 @@ r"""Metric views written the ways people write them, converted live.
 
 Each test creates one metric view over the AdventureWorks tables, converts it
 with :meth:`Graph.from_databricks_metric_view`, checks the graph and its
-conversion messages, and drops the view and its helper views again, whether or
+conversion messages and notes, and drops the view and its helper views again, whether or
 not the checks pass. Every variant changes one thing about the baseline star.
 
 Opt-in on top of the ``DATABRICKS_*`` variables of the other live tests:
@@ -25,7 +25,8 @@ Predictions need an endpoint, so they are left to the example notebook.
 import os
 import re
 import uuid
-from collections.abc import Generator
+import warnings
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -68,7 +69,7 @@ _LINE_DIMS = (
 _CUSTOMER_DIMS = ('TerritoryID', 'StoreID')
 _PRODUCT_DIMS = ('Color', 'ListPrice', 'ProductLine')
 
-# The message every variant gets, since each has measures: it names the PQL
+# The note every variant gets, since each has measures: it names the PQL
 # aggregation that matches each one.
 _MEASURES = (
     r'Left the measures to the predictive query.*'
@@ -134,10 +135,17 @@ class Views:
         return name
 
     def read(self, name: str) -> Graph:
-        with pytest.warns(ViewConversionWarning):
-            return Graph.from_databricks_metric_view(
+        r"""The view's graph, which warns once if, and only if, the view
+        loses something.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            graph = Graph.from_databricks_metric_view(
                 name, connection=self.connection, verbose=False
             )
+        said = [w for w in caught if w.category is ViewConversionWarning]
+        assert len(said) == (1 if graph.conversion_messages else 0), said
+        return graph
 
     def convert(self, document: dict[str, Any]) -> Graph:
         return self.read(self.create_metric_view(document))
@@ -250,10 +258,13 @@ def _assert_graph(
     graph: Graph,
     tables: dict[str, Expected],
     edges: set[Edge],
-    *messages: str,
+    *,
+    notes: Sequence[str] = (_MEASURES,),
+    lost: Sequence[str] = (),
 ) -> None:
-    r"""The graph has exactly ``tables`` and ``edges``, and one conversion
-    message matching each pattern in ``messages``, and no other.
+    r"""The graph has exactly ``tables`` and ``edges``, one conversion note
+    matching each pattern in ``notes`` and one conversion message, saying
+    what the view lost, matching each pattern in ``lost``, and no others.
     """
     got = {
         name: Expected(
@@ -265,18 +276,21 @@ def _assert_graph(
     }
     assert got == tables
     assert set(graph.edges) == edges
-    said = graph.conversion_messages
-    assert len(said) == len(messages), said
-    for pattern in messages:
-        assert any(re.search(pattern, message) for message in said), (
-            pattern,
-            said,
-        )
+    for said, patterns in (
+        (graph.conversion_notes, notes),
+        (graph.conversion_messages, lost),
+    ):
+        assert len(said) == len(patterns), said
+        for pattern in patterns:
+            assert any(re.search(pattern, message) for message in said), (
+                pattern,
+                said,
+            )
 
 
 def test_star(views: Views) -> None:
     graph = views.convert(_star(views))
-    _assert_graph(graph, _star_tables(views), _star_edges(views), _MEASURES)
+    _assert_graph(graph, _star_tables(views), _star_edges(views))
 
 
 def test_version_1_1_with_semantic_metadata(views: Views) -> None:
@@ -303,7 +317,7 @@ def test_version_1_1_with_semantic_metadata(views: Views) -> None:
     }
 
     graph = views.convert(document)
-    _assert_graph(graph, _star_tables(views), _star_edges(views), _MEASURES)
+    _assert_graph(graph, _star_tables(views), _star_edges(views))
 
 
 def test_joins_with_using(views: Views) -> None:
@@ -313,7 +327,7 @@ def test_joins_with_using(views: Views) -> None:
         join['using'] = [key]
 
     graph = views.convert(document)
-    _assert_graph(graph, _star_tables(views), _star_edges(views), _MEASURES)
+    _assert_graph(graph, _star_tables(views), _star_edges(views))
 
 
 def test_wildcards(views: Views) -> None:
@@ -346,7 +360,7 @@ def test_wildcards(views: Views) -> None:
             views.columns('products') - stamps - product_dates,
         ),
     }
-    _assert_graph(graph, tables, _star_edges(views), _MEASURES)
+    _assert_graph(graph, tables, _star_edges(views))
 
 
 def test_snowflake(views: Views) -> None:
@@ -387,7 +401,7 @@ def test_snowflake(views: Views) -> None:
         Edge('orders', 'CustomerID', 'customers'),
         Edge(views.fact, 'ProductID', 'products'),
     }
-    _assert_graph(graph, tables, edges, _MEASURES)
+    _assert_graph(graph, tables, edges)
 
 
 def test_role_playing(views: Views) -> None:
@@ -422,7 +436,7 @@ def test_role_playing(views: Views) -> None:
         Edge(views.fact, 'CustomerID', 'account'),
         Edge(views.fact, 'ProductID', 'products'),
     }
-    _assert_graph(graph, tables, edges, _MEASURES)
+    _assert_graph(graph, tables, edges)
 
 
 def test_month_beside_raw_date(views: Views) -> None:
@@ -439,9 +453,11 @@ def test_month_beside_raw_date(views: Views) -> None:
         graph,
         tables,
         _star_edges(views),
-        _MEASURES,
-        r"Took 'OrderDate' as the time column .* since 'Order Month' "
-        r'truncates or casts it',
+        notes=(
+            _MEASURES,
+            r"Took 'OrderDate' as the time column .* since 'Order Month' "
+            r'truncates or casts it',
+        ),
     )
 
 
@@ -462,9 +478,11 @@ def test_month_without_raw_date(views: Views) -> None:
         graph,
         tables,
         _star_edges(views),
-        _MEASURES,
-        r"Took 'OrderDate' as the time column .*, and added it as a column, "
-        r"since 'Order Month' truncates or casts it",
+        notes=(
+            _MEASURES,
+            r"Took 'OrderDate' as the time column .*, and added it as a "
+            r"column, since 'Order Month' truncates or casts it",
+        ),
     )
 
 
@@ -490,8 +508,10 @@ def test_measure_inputs_that_are_not_dimensions(views: Views) -> None:
         graph,
         tables,
         _star_edges(views),
-        _MEASURES + r".*'avg_price' is AVG\(\S+\.UnitPrice, 0, 30, days\)"
-        r"; 'avg_cost' has no single aggregation",
+        notes=(
+            _MEASURES + r".*'avg_price' is AVG\(\S+\.UnitPrice, 0, 30, days\)"
+            r"; 'avg_cost' has no single aggregation",
+        ),
     )
 
 
@@ -508,7 +528,7 @@ def test_source_filter(views: Views) -> None:
     document['filter'] = 'source.OrderQty > 1'
 
     graph = views.convert(document)
-    _assert_graph(graph, _star_tables(views), _star_edges(views), _MEASURES)
+    _assert_graph(graph, _star_tables(views), _star_edges(views))
     _assert_rows(views, graph, 'OrderQty > 1')
 
 
@@ -527,8 +547,7 @@ def test_filter_on_a_parameter(views: Views) -> None:
         graph,
         _star_tables(views),
         _star_edges(views),
-        _MEASURES,
-        r"Read the parameter 'min_qty' as its default '2'",
+        notes=(_MEASURES, r"Read the parameter 'min_qty' as its default '2'"),
     )
     _assert_rows(views, graph, 'OrderQty >= 2')
 
@@ -553,10 +572,11 @@ def test_join_to_a_key_that_repeats(views: Views) -> None:
         graph,
         tables,
         {Edge(views.fact, 'ProductID', 'products')},
-        _MEASURES,
-        r"Failed to add join 'customers', and with it the table 'customers' "
-        r"and the dimensions 'TerritoryID' and 'StoreID', since its key "
-        r"'CustomerID' is not unique",
+        lost=[
+            r"Failed to add join 'customers', and with it the table 'customers' "
+            r"and the dimensions 'TerritoryID' and 'StoreID', since its key "
+            r"'CustomerID' is not unique",
+        ],
     )
 
 
@@ -577,8 +597,10 @@ def test_join_to_a_missing_table(views: Views) -> None:
         graph,
         tables,
         {Edge(views.fact, 'CustomerID', 'customers')},
-        _MEASURES,
-        r"Failed to add join 'products', .* since its table could not be read",
+        lost=[
+            r"Failed to add join 'products', .* since its table could not "
+            r'be read',
+        ],
     )
 
 
@@ -619,4 +641,4 @@ def test_upper_case_names(views: Views) -> None:
         Edge(views.fact, 'CUSTOMERID', 'CUSTOMERS'),
         Edge(views.fact, 'PRODUCTID', 'PRODUCTS'),
     }
-    _assert_graph(graph, tables, edges, '(?i)' + _MEASURES)
+    _assert_graph(graph, tables, edges, notes=['(?i)' + _MEASURES])

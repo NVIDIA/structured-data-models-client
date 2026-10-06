@@ -118,7 +118,7 @@ declare as `1.0.0` and none has published. The heading becomes
   the public API by `test_databricks_notebooks.py`; they run only in a
   workspace.
   Given a metric view, the AdventureWorks notebook asks four questions through it: 30-day demand, the same forecast three windows out, 30-day revenue through the view's `revenue` measure, and 90-day inactivity.
-  It prints the conversion warning, which names the predictive-query aggregation matching each measure, and returns it with the results as `view_messages`.
+  It prints the schema's conversion notes, which name the predictive-query aggregation matching each measure, and any conversion warning, and returns them with the results as `view_notes` and `view_messages`.
 - What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
   rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
   and Databricks Runtime 14.3 LTS ships 8; `structured-data-models-connectors[databricks]` brings
@@ -196,12 +196,12 @@ declare as `1.0.0` and none has published. The heading becomes
   A view that holds a date only as `DATE_TRUNC('MONTH', OrderDate)`, or a cast of it to a date, got that truncation as its time column, since it starts at or before the column it truncates, so every windowed question counted by month.
   Each such dimension is now offered to the time-column rule as the column it truncates or casts, added to the table if the rule takes it, and a physical timestamp is preferred to an expression derived from it.
   A dimension a window measure orders by is offered first, as the time axis the view's author chose.
-  The conversion message and the schema's time-column warning both name the column taken and the dimensions it was taken in place of.
+  A conversion note and the schema's time-column warning both name the column taken and the dimensions it was taken in place of.
 - **The columns a metric view's measures aggregate are columns of the graph.**
   A measure such as `SUM(LineTotal)` left `LineTotal` out of every table unless a dimension also named it, so no predictive query could say what the measure says.
   Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message, and a dimension that renames the column stands for it.
   Measures stay out of the graph, and are only read, never run.
-  One conversion message lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
+  One conversion note lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
 - **A metric view's names are matched without regard to case, as Databricks matches them.**
   A view naming `source.SALESORDERID` or joining `on: source.CUSTOMERID = CUSTOMERS.CUSTOMERID` over columns spelled `SalesOrderID` and `CustomerID` failed the conversion with `Column 'SALESORDERID' does not exist`.
   Dimensions, join keys and join names now match their columns and tables in any case, and a column keeps the view's spelling, the one a question about the view uses, so every read names it so; a key no dimension names takes the spelling of the join's condition.
@@ -226,6 +226,7 @@ declare as `1.0.0` and none has published. The heading becomes
   It is now selected once.
 - **What a semantic model loses, or why it is refused, reaches `Schema.from_source` as the client says everything else.**
   The engine's conversion messages arrived as its own `ViewConversionWarning`, which filtering `SDMWarning` let through, attributed to this client's module rather than the call; they are now one `SDMWarning` at the caller.
+  How a view was read where nothing was lost, the aggregation each measure is, the time column taken in place of a date the view truncates and each parameter read as its default, is a conversion note rather than a warning: `Graph.conversion_notes` and `Schema.conversion_notes` hold them, and a view that loses nothing converts without a warning, under warnings as errors too.
   A model the engine refuses, for a filter on a joined table, a query as its source or any other reason, raised the engine's `ValueError`; it is now a `StructuredDataError` (`INVALID_REQUEST`) carrying the engine's message, with the model's name in `details`.
 - **A metric view built on another metric view is refused for what it is.**
   A source or joined table that is itself a metric view got the advice to read it with `semantic_model`, which is what the caller had done.

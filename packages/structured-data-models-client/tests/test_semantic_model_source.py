@@ -535,7 +535,8 @@ def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
         'order_lines.ordered_at was taken as the time column rather than '
         "'order_month', which truncate or cast it" in said
     )
-    assert "Took 'ordered_at' as the time column of table 'order_lines'" in said
+    (note,) = [n for n in schema.conversion_notes if n.startswith('Took')]
+    assert "Took 'ordered_at' as the time column of table 'order_lines'" in note
 
 
 # --- what the engine says reaches the caller as the client says it ----------
@@ -569,8 +570,10 @@ def test_what_a_model_loses_is_one_sdm_warning_at_the_caller(
     assert lost[0].category is SDMWarning
     assert lost[0].filename == __file__
     message = str(lost[0].message)
-    assert "- Ignored the 'materialization' section" in message
-    assert "'total_quantity' is SUM(order_lines.quantity" in message
+    assert message.endswith(
+        "so it is read in part:\n- Ignored the 'materialization' section "
+        'since it cannot be represented in a graph'
+    )
     assert not any(
         type(w.message).__name__ == 'ViewConversionWarning' for w in caught
     )
@@ -693,3 +696,19 @@ def test_a_dimension_no_query_can_name_is_left_out_and_named(
     assert 'a predictive query cannot name a column holding a dot' in str(
         said.message
     )
+
+
+def test_a_model_that_loses_nothing_converts_without_a_warning(
+    source: Any,
+) -> None:
+    r"""A view with measures loses nothing, yet every one warned that it
+    "is read in part", so a caller running with warnings as errors could
+    read no such view. The aggregation each measure is stays reachable.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    (note,) = schema.conversion_notes
+    assert "'total_quantity' is SUM(order_lines.quantity, 0, 30, days)" in note
+    assert schema.snapshot().conversion_notes == schema.conversion_notes

@@ -211,7 +211,8 @@ A fact becomes a column.
 
 **Measures and metrics** are not columns, since they are aggregations rather than row values.
 Ask for them in the query instead.
-Converting a metric view reports what it chose and what it left out in one `SDMWarning`, including the aggregation matching each simple measure, such as `'revenue' is SUM(order_lines.LineTotal, 0, 30, days)`.
+Converting a metric view notes how it read the view in `schema.conversion_notes`: the aggregation matching each simple measure, such as `'revenue' is SUM(order_lines.LineTotal, 0, 30, days)`, the time column taken in place of a date the view truncates, and each parameter read as its default.
+What it left out is said in one `SDMWarning`, and a view that loses nothing converts without one.
 
 Left out, each with a message in that warning:
 

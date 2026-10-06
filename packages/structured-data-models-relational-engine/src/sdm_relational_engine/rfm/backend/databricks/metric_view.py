@@ -304,6 +304,8 @@ class MetricViewSpec:
         columns: All dimensions resolved onto a single table, in order. A
             wildcard is expanded once its table's columns are known.
         messages: Human-readable messages for every dropped element.
+        notes: Human-readable notes on how the view was read where nothing
+            was lost, such as a parameter read as its default.
         filter: The view's ``filter``, a condition on the source table's
             columns, if it has one.
         window_orders: The dimensions a window measure orders by, which
@@ -315,6 +317,7 @@ class MetricViewSpec:
     joins: list[MetricViewJoin]
     columns: list[MetricViewColumn | MetricViewWildcard]
     messages: list[str]
+    notes: list[str] = field(default_factory=list)
     filter: MetricViewFilter | None = None
     window_orders: list[str] = field(default_factory=list)
     measures: list[MetricViewMeasure] = field(default_factory=list)
@@ -649,7 +652,9 @@ def parse_metric_view(
     be represented in a graph (SQL query join sources, composite or
     non-equality join conditions, dimensions referencing multiple tables,
     and materializations) are dropped and reported in
-    :attr:`MetricViewSpec.messages`.
+    :attr:`MetricViewSpec.messages`. How the view was read where nothing is
+    lost, such as a parameter read as its default, is noted in
+    :attr:`MetricViewSpec.notes`.
 
     A parameter a dimension or the filter references is read as its default,
     as a query of the view without arguments reads it. A dimension
@@ -696,6 +701,7 @@ def parse_metric_view(
         )
 
     messages: list[str] = []
+    notes: list[str] = []
     if 'materialization' in cfg:
         messages.append(
             "Ignored the 'materialization' section since it cannot "
@@ -929,7 +935,7 @@ def parse_metric_view(
         messages[at] = _skipped_join_message(alias, reason, tables, lost[at])
 
     for parameter in used.values():
-        messages.append(
+        notes.append(
             f"Read the parameter '{parameter.name}' as its default "
             f"'{parameter.text}', as a query of the view without arguments does"
         )
@@ -939,6 +945,7 @@ def parse_metric_view(
         joins=joins,
         columns=columns,
         messages=messages,
+        notes=notes,
         filter=row_filter,
         window_orders=_window_orders(cfg.get('measures')),
         measures=_read_measures(

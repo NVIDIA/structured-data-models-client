@@ -2622,7 +2622,8 @@ def test_a_wildcard_dimension_stands_for_the_columns_of_its_table() -> None:
         'customer_id',
     }
     assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
-    (message,) = graph.conversion_messages
+    assert graph.conversion_messages == ()
+    (message,) = graph.conversion_notes
     assert message.startswith("Took 'order_date' as the time column")
 
 
@@ -2666,6 +2667,8 @@ def test_a_parameter_is_read_as_its_default() -> None:
     assert spec.messages == [
         "Failed to add dimension 'needy' since it references the parameter "
         "'required', which has no default",
+    ]
+    assert spec.notes == [
         "Read the parameter 'min_qty' as its default '1', as a query of the "
         'view without arguments does',
         "Read the parameter 'since' as its default '2024-01-31', as a query "
@@ -2834,7 +2837,8 @@ dimensions:
     fact = graph['order_lines']
     assert fact.row_filter == "amount >= CAST('20' AS BIGINT)"
     assert str(fact['big'].expr) == "amount >= CAST('20' AS BIGINT) * 2"
-    assert graph.conversion_messages == (
+    assert graph.conversion_messages == ()
+    assert graph.conversion_notes == (
         "Read the parameter 'min_amount' as its default '20', as a query of "
         'the view without arguments does',
     )
@@ -2913,7 +2917,8 @@ dimensions:
     fact = graph['order_lines']
     assert fact.row_filter == "amount >= CAST('1' AS INT)"
     assert str(fact['big'].expr) == 'amount >= Amount * 2'
-    assert graph.conversion_messages == (
+    assert graph.conversion_messages == ()
+    assert graph.conversion_notes == (
         "Read the parameter 'floor' as its default '1', as a query of the "
         'view without arguments does',
     )
@@ -2956,10 +2961,11 @@ def test_a_join_dropped_while_converting_names_the_dimensions_lost(
 
 
 def _said(graph: Graph) -> tuple[str, ...]:
-    r"""The conversion messages but the one every view with measures says."""
+    r"""The conversion notes but the one every view with measures has."""
+    assert graph.conversion_messages == ()
     return tuple(
         m
-        for m in graph.conversion_messages
+        for m in graph.conversion_notes
         if not m.startswith('Left the measures to the predictive query')
     )
 
@@ -3184,6 +3190,8 @@ def test_the_columns_a_measure_aggregates_become_columns() -> None:
     assert graph.conversion_messages == (
         "Did not add the column 'status', which the measure 'valid_amount' "
         "reads, since the dimension 'status' has its name",
+    )
+    assert graph.conversion_notes == (
         'Left the measures to the predictive query, which aggregates the '
         'columns they read, added to their tables where missing; over the '
         "next 30 days, 'total_amount' is SUM(order_lines.amount, 0, 30, "
@@ -3287,7 +3295,7 @@ measures:
     assert [column.name for column in graph['order_lines'].columns] == [
         'Order Amount'
     ]
-    (message,) = graph.conversion_messages
+    (message,) = graph.conversion_notes
     assert "'total' is SUM(order_lines.`Order Amount`, 0, 30, days)" in message
 
 
@@ -3393,3 +3401,54 @@ def test_a_filter_refused_for_a_call_names_both_ways_out() -> None:
             _KEYWORD_YAML.format(filter="customers.segment = 'a'")
         )
     assert 'trust_expressions' not in str(caught.value)
+
+
+def test_a_view_that_loses_nothing_converts_without_a_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""A view with measures, a parameter default and a truncated date
+    loses nothing, yet warned "Could not fully convert", so a caller
+    running with warnings as errors could convert no such view. How it
+    was read is noted instead.
+    """
+    expr_df = _EXPR_DATA['order_lines'].assign(big=True)
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+    definition = f"""
+version: 1.1
+source: cat.sch.order_lines
+parameters:
+  - name: floor
+    data_type: INT
+    default: 1
+dimensions:
+  - name: product_line
+    expr: source.product_line
+  - name: big
+    expr: source.amount >= floor
+{_MONTH}
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+"""
+    rows = _metric_view(
+        definition,
+        {
+            'product_line': 'string',
+            'big': 'boolean',
+            'order_month': 'timestamp',
+        },
+    )
+    at = rows.index(('', '', None)) + 1
+    rows[at:at] = [('# Parameters', '', None), ('floor', 'int', None)]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv', connection=_FakeConnection(rows), verbose=False
+        )
+
+    assert graph.conversion_messages == ()
+    parameter, measures, time_column = graph.conversion_notes
+    assert "Read the parameter 'floor' as its default '1'" in parameter
+    assert "'total_amount' is SUM(order_lines.amount" in measures
+    assert "Took 'order_date' as the time column" in time_column

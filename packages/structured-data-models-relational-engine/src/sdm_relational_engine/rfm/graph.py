@@ -586,6 +586,7 @@ class Graph:
         self._tables: dict[str, Table] = {}
         self._edges: list[Edge] = []
         self._conversion_messages: tuple[str, ...] = ()
+        self._conversion_notes: tuple[str, ...] = ()
         self._connection: (
             AdbcSqliteConnection
             | DuckDBPyConnection
@@ -1369,8 +1370,9 @@ class Graph:
         fact table, each join a linked table named for its alias, and each
         dimension an expression column on its referenced table. Measures define
         aggregations, not row-level values, so the graph omits them; express
-        aggregations with a predictive query. Other unrepresentable elements
-        are dropped with a warning.
+        aggregations with a predictive query, as
+        :attr:`conversion_notes` spells each simple one. Other
+        unrepresentable elements are dropped with a warning.
 
         A joined table that cannot be read, because it is missing, empty or
         not readable to you, drops its join with a warning, and a column that
@@ -1527,6 +1529,7 @@ class Graph:
                 ),
             )
             msgs = list(spec.messages)
+            notes = list(spec.notes)
 
             dtypes = {
                 name: DatabricksTable._to_dtype(data_type)
@@ -1844,10 +1847,10 @@ class Graph:
                         )
 
             if spec.measures:
-                msgs.append(_measures_message(fact_table, spec.measures))
+                notes.append(_measures_message(fact_table, spec.measures))
 
             for table in graph.tables.values():
-                msgs.extend(_infer_view_time_column(table, spec.window_orders))
+                notes.extend(_infer_view_time_column(table, spec.window_orders))
 
             msgs.extend(graph._drop_invalid_edges())
             graph._settle_time_columns()
@@ -1858,6 +1861,7 @@ class Graph:
                 graph.print_links()
 
             graph._conversion_messages = tuple(msgs)
+            graph._conversion_notes = tuple(notes)
         except BaseException as error:
             if internal_connection:
                 connection.close()
@@ -2602,9 +2606,22 @@ class Graph:
         cleanly. The same messages are also raised as a
         :class:`ViewConversionWarning`; this is the form to assert on, e.g.
         before running predictions that depend on a relationship the view
-        declared.
+        declared. How a view was read where nothing was lost is in
+        :attr:`conversion_notes` instead.
         """
         return self._conversion_messages
+
+    @property
+    def conversion_notes(self) -> tuple[str, ...]:
+        r"""How :meth:`from_databricks_metric_view` read the view where
+        nothing was lost, which no warning repeats.
+
+        The aggregation each of the view's measures is in a predictive
+        query, the time column taken in place of a date the view truncates,
+        and each parameter read as its default. Empty for every other
+        constructor.
+        """
+        return self._conversion_notes
 
     def print_links(self) -> None:
         r"""Prints the :meth:`~Graph.edges` of the graph."""
