@@ -330,6 +330,6 @@ def test_query_history_records_the_partner_and_the_sampling_tag(workspace):
         time.sleep(15)
     assert found, f'{statement_id} is not in query history'
     [query] = found
-    assert query.client_application == 'nvidia_sdm-client'
+    assert query.client_application == 'nvidia_structured-data-models-client'
     tags = {tag.key: tag.value for tag in query.query_tags or []}
-    assert tags.get('sdm_client_purpose') == 'sampling'
+    assert tags.get('structured_data_models_client_purpose') == 'sampling'

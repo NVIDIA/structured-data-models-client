@@ -549,7 +549,7 @@ def sdm_client_entry() -> str:
     )
 
     version = databricks_product_version(sdm_client.__version__)
-    return f'nvidia_sdm-client/{version}'
+    return f'nvidia_structured-data-models-client/{version}'
 
 
 @pytest.mark.parametrize(
@@ -604,7 +604,8 @@ def test_a_passed_workspace_client_s_requests_name_sdm_client(workspace_host):
     assert sdm_client_entry() in sent['User-Agent'].split()
     assert sent['Authorization'] == 'Bearer dapi-test'
     assert workspace.config.user_agent == before
-    assert 'nvidia_sdm-client' not in workspace.config.user_agent
+    name = sdm_client_entry().partition('/')[0]
+    assert name not in workspace.config.user_agent
 
 
 def test_the_ambient_workspace_s_requests_name_sdm_client(

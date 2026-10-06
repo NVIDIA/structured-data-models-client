@@ -12,8 +12,8 @@ It provides:
   A source never closes it: the caller owns the connection and closes it.
 - `sdm_connectors.databricks.warehouse(warehouse_id, workspace=w)` and `lakebase(endpoint, database=..., workspace=w)`: open a Databricks SQL warehouse or Lakebase connection as the caller's own `WorkspaceClient`.
   Each returns the driver's native connection, for a source to take and the caller to close.
-  Databricks requires a partner product to identify every connection and API request it opens, so each names sdm-client as `nvidia_sdm-client/<version>`.
-  A warehouse connection carries it in the driver's User-Agent, ahead of any `user_agent_entry` you pass, and tags its statements `sdm_client_purpose: sampling` beside your own query tags, unless you set `sdm_client_purpose` yourself.
+  Databricks requires a partner product to identify every connection and API request it opens, so each names structured-data-models-client as `nvidia_structured-data-models-client/<version>`.
+  A warehouse connection carries it in the driver's User-Agent, ahead of any `user_agent_entry` you pass, and tags its statements `structured_data_models_client_purpose: sampling` beside your own query tags, unless you set `structured_data_models_client_purpose` yourself.
   A Lakebase connection carries it as `application_name`, ahead of any you pass, within the 63 bytes Postgres keeps.
   The `WorkspaceClient` requests they make carry it too, through a copy of your client, which is left unchanged.
   A connection or Spark session you open yourself and pass to a source is used as it is, without the identifier or the tag.

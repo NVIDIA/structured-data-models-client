@@ -22,7 +22,8 @@ from sdm_connectors.sql import ConnectorError
 ENDPOINT = 'projects/p/branches/b/endpoints/e'
 
 #: What Databricks requires on every connection structured-data-models-client opens.
-PARTNER = 'nvidia_sdm-client/1.0.0'
+PARTNER = 'nvidia_structured-data-models-client/1.0.0'
+SAMPLING = 'structured_data_models_client_purpose:sampling'
 
 
 def _authenticate() -> dict[str, str]:
@@ -107,7 +108,7 @@ def test_warehouse_connects_as_the_workspace_and_names_sdm_client(
         'http_path': '/sql/1.0/warehouses/abc123',
         'use_cloud_fetch': False,
         'user_agent_entry': PARTNER,
-        'session_configuration': {'QUERY_TAGS': 'sdm_client_purpose:sampling'},
+        'session_configuration': {'QUERY_TAGS': SAMPLING},
     }
     assert calls == ['warehouses.get:abc123']
 
@@ -124,7 +125,7 @@ def test_warehouse_keeps_a_caller_s_entry_and_tags_after_its_own(
 
     assert driver_connect['user_agent_entry'] == f'{PARTNER} acme/2.1'
     assert driver_connect['session_configuration'] == {
-        'QUERY_TAGS': 'team:growth,sdm_client_purpose:sampling'
+        'QUERY_TAGS': f'team:growth,{SAMPLING}'
     }
 
 
@@ -285,7 +286,7 @@ def test_a_caller_s_workspace_client_is_copied_to_name_sdm_client(
     assert PARTNER in sent['User-Agent'].split()
     assert sent['Authorization'] == 'Bearer dapi-test'
     assert workspace.config.user_agent == before
-    assert 'nvidia_sdm-client' not in workspace.config.user_agent
+    assert PARTNER.partition('/')[0] not in workspace.config.user_agent
     # The connection authenticates as the caller's workspace still.
     assert driver_connect['credentials_provider']()() == {
         'Authorization': 'Bearer dapi-test'
@@ -321,7 +322,8 @@ def test_a_workspace_client_subclass_is_used_as_given(
     workspace_host: tuple[str, list[dict[str, str]]],
 ) -> None:
     """A copy would lose what the subclass adds, so its requests go as the
-    caller set them up; the connection itself still names sdm-client."""
+    caller set them up; the connection itself still names
+    structured-data-models-client."""
     sdk = pytest.importorskip('databricks.sdk')
     host, received = workspace_host
 
@@ -335,7 +337,7 @@ def test_a_workspace_client_subclass_is_used_as_given(
     warehouse('abc123', workspace=workspace)
 
     [sent] = _api_calls(received)
-    assert 'nvidia_sdm-client' not in sent['User-Agent']
+    assert PARTNER.partition('/')[0] not in sent['User-Agent']
     assert driver_connect['user_agent_entry'] == PARTNER
 
 
@@ -452,8 +454,9 @@ def test_lakebase_takes_a_given_host_without_asking_for_the_endpoint(
         ('etl', f'{PARTNER} etl'),
         ('   ', PARTNER),
         # Postgres keeps 63 bytes, and a cut through a character would leave
-        # half of it.
-        ('é' * 40, f'{PARTNER} ' + 'é' * 19),
+        # half of it: what is left after the identifier and its space holds
+        # this many two-byte characters, and no half of another.
+        ('é' * 40, f'{PARTNER} ' + 'é' * ((63 - len(PARTNER) - 1) // 2)),
     ],
     ids=['kept-after', 'blank', 'cut-to-63-bytes'],
 )

@@ -2,13 +2,14 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""How sdm-client names itself to Databricks.
+r"""How structured-data-models-client names itself to Databricks.
 
 Databricks requires a partner product to identify every connection, SDK call
 and API request it sends, by a ``<partner>_<product>/<version>`` entry. A
-private copy of structured-data-models-client's, since the connectors never import the client;
-a test holds the two to the same identifier. The five distributions release
-on one version, so this package's is structured-data-models-client's.
+private copy of structured-data-models-client's, since the connectors never
+import the client; a test holds the two to the same identifier. The five
+distributions release on one version, so this package's is
+structured-data-models-client's.
 """
 
 from __future__ import annotations
@@ -18,14 +19,18 @@ import re
 from sdm_connectors._version import __version__
 
 #: The product half of the partner identifier: a name an administrator can
-#: tie to this client, never a model or endpoint. It is a wire value, so it
-#: outlived the rename of the distribution that sends it.
+#: tie to this client, never a model or endpoint. It is the distribution's
+#: name: Databricks wants an underscore between partner and product and
+#: its SDK takes ``[a-zA-Z0-9_.+-]``, so the dashes stay and that underscore
+#: is the only one. It is a wire value that partner telemetry keys on, so it
+#: changes only with the distribution's name.
 DATABRICKS_PARTNER = 'nvidia'
-DATABRICKS_PRODUCT = 'sdm-client'
+DATABRICKS_PRODUCT = 'structured-data-models-client'
 
 #: The query tag on every warehouse session this client opens, which says what
-#: its statements are for without changing the identifier above.
-SAMPLING_QUERY_TAG = ('sdm_client_purpose', 'sampling')
+#: its statements are for without changing the identifier above. Its key is
+#: the distribution's name in the snake case query tag keys use.
+SAMPLING_QUERY_TAG = ('structured_data_models_client_purpose', 'sampling')
 
 _PACKAGE_VERSION_RE = re.compile(
     r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
@@ -66,7 +71,7 @@ def databricks_product_version(package_version: str) -> str:
 
 
 def partner_user_agent() -> tuple[str, str]:
-    r"""The ``(name, version)`` naming sdm-client, for
+    r"""The ``(name, version)`` naming structured-data-models-client, for
     ``Config.with_user_agent_extra``.
 
     An extra rather than the SDK's ``product`` slot, which names the
@@ -79,6 +84,6 @@ def partner_user_agent() -> tuple[str, str]:
 
 
 def partner_identifier() -> str:
-    r"""``nvidia_sdm-client/<version>``, as a driver's User-Agent entry or a
-    Postgres ``application_name`` carries it."""
+    r"""``nvidia_structured-data-models-client/<version>``, as a driver's
+    User-Agent entry or a Postgres ``application_name`` carries it."""
     return '/'.join(partner_user_agent())

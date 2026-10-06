@@ -18,6 +18,17 @@ declare as `1.0.0` and none has published. The heading becomes
   `-relational-engine`. The modules stay `sdm_client`, `sdm_api`,
   `predictive_query`, `sdm_connectors` and `sdm_relational_engine`, so no
   import changes. Nothing had published under the earlier names.
+- What this client sends to warehouses follows the rename too. The
+  Databricks partner identifier is now
+  `nvidia_structured-data-models-client/<version>` and the query tag on the
+  warehouse sessions it opens is `structured_data_models_client_purpose`.
+  Pre-release builds sent `nvidia_sdm-client/<version>` and
+  `sdm_client_purpose`, so Databricks partner telemetry, query history
+  filters and dashboards keyed on those strings split at this version: count
+  both names across it, and update anything registered with Databricks
+  under the old product name. The product keeps its dashes, since Databricks
+  asks only for an underscore between partner and product and its SDK takes
+  `[a-zA-Z0-9_.+-]` in a User-Agent name.
 - `docs/reference/stability.md`: the compatibility contract, saying what is public,
   what a version bump means, and the deprecation path. Enforced rather than
   stated: `tests/golden/` records the exported surface of every public package and
@@ -66,17 +77,19 @@ declare as `1.0.0` and none has published. The heading becomes
   has no sessions. Needs the new `databricks-serving` extra. It sends the
   frozen `request_json`/`response_json` envelope every deployed endpoint
   reads and writes.
-- Every Databricks connection and API request sdm-client opens names it as
-  `nvidia_sdm-client/<version>`, as Databricks requires of a partner product.
+- Every Databricks connection and API request structured-data-models-client
+  opens names it as `nvidia_structured-data-models-client/<version>`, as
+  Databricks requires of a partner product.
   Prediction requests from `SDMClient.for_databricks_serving` carry it in the
   User-Agent. So do SQL warehouse connections from `warehouse()` and the
   engine's own, ahead of any `user_agent_entry` you pass. Lakebase
   connections from `lakebase()` carry it as `application_name`, ahead of any
   you pass. The `WorkspaceClient` requests these make carry it too, through a
   copy of your client rather than your client itself.
-  Warehouse sessions structured-data-models-client opens also tag their statements
-  `sdm_client_purpose: sampling`, beside your own query tags, so query history
-  tells sampling apart. An `sdm_client_purpose` of your own is kept instead.
+  Warehouse sessions structured-data-models-client opens also tag their
+  statements `structured_data_models_client_purpose: sampling`, beside your
+  own query tags, so query history tells sampling apart. A
+  `structured_data_models_client_purpose` of your own is kept instead.
   A connection or Spark session you open yourself and pass to a source is used
   as it is, with neither.
   `structured-data-models-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,

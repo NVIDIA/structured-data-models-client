@@ -273,8 +273,9 @@ class DatabricksSource(Source):
     warehouse connection instead.
 
     A connection or session passed here is the caller's and is used as it is,
-    so it carries no ``sdm-client`` partner identifier or query tag. One opened
-    with :func:`sdm_connectors.databricks.warehouse` carries both.
+    so it carries no ``structured-data-models-client`` partner identifier or
+    query tag. One opened with :func:`sdm_connectors.databricks.warehouse`
+    carries both.
 
     Args:
         connection: A Databricks SQL connection, or a notebook's Spark session.
