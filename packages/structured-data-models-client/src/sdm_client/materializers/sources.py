@@ -257,7 +257,10 @@ def semantic_model_graph(model: Any) -> Graph:
     :class:`StructuredDataError` that carries the engine's reason.
     """
     try:
-        from sdm_relational_engine import ViewConversionError
+        from sdm_relational_engine import (
+            TableNotFoundError,
+            ViewConversionError,
+        )
         from sdm_relational_engine.rfm import Graph
     except ImportError as error:  # pragma: no cover - optional extra
         raise MissingExtraError(
@@ -269,9 +272,10 @@ def semantic_model_graph(model: Any) -> Graph:
         # since a filter holds for every thread: what it would say is said
         # below, and by the schema, to the caller.
         graph = _model_graph(Graph, model)
-    except ViewConversionError as error:
+    except (ViewConversionError, TableNotFoundError) as error:
         # The engine's refusals of the model, each saying what to change in
-        # it. Any other failure is not the model's, and is not one.
+        # it, and a table it reads that is not there, as for a source's own
+        # tables. Any other failure is not the model's, and is not one.
         raise StructuredDataError(
             str(error), code='INVALID_REQUEST', details={'model': model.name}
         ) from error

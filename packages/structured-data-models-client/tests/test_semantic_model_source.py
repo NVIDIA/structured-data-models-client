@@ -770,3 +770,20 @@ def test_reading_a_model_leaves_the_warning_filters_alone(
     assert not any(
         type(w.message).__name__ == 'ViewConversionWarning' for w in caught
     )
+
+
+def test_a_model_whose_source_table_is_missing_is_an_invalid_request(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A missing source table is a request about nothing, as it is for a
+    source's own tables, but escaped as the engine's `TableNotFoundError`
+    once only its view refusals were translated.
+    """
+    monkeypatch.delitem(_TYPES, 'order_lines')
+
+    with pytest.raises(StructuredDataError) as caught:
+        _schema(source)
+
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert "order_lines' does not exist" in caught.value.message
+    assert caught.value.details == {'model': 'sales_mv'}

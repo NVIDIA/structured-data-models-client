@@ -2139,11 +2139,22 @@ class Graph:
                     f'reference other tables'
                 )
 
-            table.add_columns(columns)
-            if primary_key is not None:
-                if primary_key not in table:
-                    table.add_column(primary_key)
-                table.primary_key = primary_key
+            # A column or key the view declares and its table cannot hold,
+            # one missing from it say, refuses the view, saying which.
+            try:
+                table.add_columns(columns)
+                if primary_key is not None:
+                    if primary_key not in table:
+                        table.add_column(primary_key)
+                    table.primary_key = primary_key
+            except ValueError as error:
+                if isinstance(error, KumoRelationalError):
+                    raise
+                raise ViewConversionError(
+                    f"Cannot convert semantic view '{semantic_view_name}' "
+                    f"into a graph since its table '{table_name}' cannot "
+                    f'hold what it declares: {error}'
+                ) from error
 
             # TODO: allow registering time columns explicitly, without the
             # heuristic.
