@@ -328,8 +328,9 @@ joins:
         JoinKeyRef(qualifier='products', column='product_id'),
     )
     assert spec.messages == [
-        "Failed to add join 'composite' since composite key references are "
-        'not yet supported',
+        "Failed to add join 'composite', and with it the table 'composite', "
+        'since it joins on more than one column, which a graph link cannot '
+        'express',
     ]
 
 
@@ -350,8 +351,8 @@ joins:
     assert [j.alias for j in spec.joins] == ['refunds']
     assert spec.joins[0].cardinality == 'one_to_many'
     assert spec.messages == [
-        "Failed to add join 'broken' since of its unsupported cardinality "
-        "'many_to_many'",
+        "Failed to add join 'broken', and with it the table 'broken', since "
+        "of its unsupported cardinality 'many_to_many'",
     ]
 
 
@@ -375,6 +376,8 @@ dimensions:
     expr: promos.kind
   - name: nested_name
     expr: nested.name
+  - name: composite_flag
+    expr: composite.flag = 1
   - name: valid
     expr: source.amount
 """)
@@ -385,14 +388,13 @@ dimensions:
     ]
     assert spec.filter == MetricViewFilter("source.status = 'VALID'")
     assert spec.messages == [
-        "Failed to add join 'promos' since only plain table names are "
-        'supported as join sources',
-        "Failed to add join 'composite' since only single-column equality "
-        'join conditions are supported',
-        "Failed to add dimension 'promo_kind' since it references the "
-        "skipped join 'promos'",
-        "Failed to add dimension 'nested_name' since it references the "
-        "skipped join 'nested'",
+        "Failed to add join 'promos', and with it the tables 'promos' and "
+        "'nested' and the dimensions 'promo_kind' and 'nested_name', since "
+        'only plain table names are supported as join sources. Create a '
+        'regular view with its query and join that instead',
+        "Failed to add join 'composite', and with it the table 'composite' "
+        "and the dimension 'composite_flag', since only single-column "
+        'equality join conditions are supported',
     ]
 
 
@@ -1110,7 +1112,7 @@ def test_from_databricks_metric_view() -> None:
     assert fact.row_filter == "source.status = 'VALID'"
     assert graph['customers'].row_filter is None
     assert "Failed to add join 'promos'" in message
-    assert "Failed to add dimension 'promo_kind'" in message
+    assert "the table 'promos' and the dimension 'promo_kind'" in message
     assert "Failed to add join 'payments'" in message
     assert "Replaced the derived column 'product_id'" in message
 
@@ -2530,9 +2532,11 @@ measures:
         MetricViewWildcard('source', ('amount',)),
     ]
     assert spec.columns[1].name == 'tier'
-    assert spec.messages[-2:] == [
-        "Failed to add dimension 'promos.*' since it references the skipped "
-        "join 'promos'",
+    assert spec.messages == [
+        "Failed to add join 'promos', and with it the table 'promos' and the "
+        "dimension 'promos.*', since only plain table names are supported as "
+        'join sources. Create a regular view with its query and join that '
+        'instead',
         "Failed to add dimension 'nowhere.*' since it references no table of "
         'the view',
     ]
@@ -2793,3 +2797,40 @@ dimensions:
         "Read the parameter 'min_amount' as its default '20', as a query of "
         'the view without arguments does',
     )
+
+
+def test_a_metric_view_on_a_metric_view_is_refused_for_what_it_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""The catalog's own advice for a metric view read as a table, to read
+    it as a metric view, is what the caller already did.
+    """
+    monkeypatch.setitem(_TABLE_TYPES, 'order_lines', 'METRIC_VIEW')
+
+    with pytest.raises(ValueError) as caught:
+        _convert(_FakeConnection(_joined_view()))
+
+    assert str(caught.value) == (
+        "'cat.sch.order_lines' is a metric view; a metric view built on "
+        'another metric view is not supported, point its source at the '
+        'underlying table'
+    )
+
+
+def test_a_join_on_a_metric_view_is_dropped_for_what_it_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(_TABLE_TYPES, 'customers', 'METRIC_VIEW')
+
+    graph = _convert(_FakeConnection(_joined_view()))
+
+    assert _keeps_the_rest_without_customers(graph) == (
+        "Failed to add join 'customers' since 'cat.sch.customers' is a "
+        'metric view; a metric view built on another metric view is not '
+        "supported, point the join's source at the underlying table"
+    )
+
+
+def test_a_query_as_the_source_is_refused_with_the_way_out() -> None:
+    with pytest.raises(ValueError, match='Create a regular view with this'):
+        parse_metric_view('source: SELECT * FROM cat.sch.tab WHERE x > 1')

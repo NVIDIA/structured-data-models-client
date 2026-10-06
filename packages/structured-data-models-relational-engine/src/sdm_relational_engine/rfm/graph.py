@@ -33,6 +33,7 @@ import sdm_relational_engine.utils.display as display
 from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
+    MetricViewAsTableError,
     NoTablesFoundError,
 )
 from sdm_relational_engine.rfm.base import (
@@ -180,6 +181,11 @@ def _view_expr_message(
         f'the {view} are executed as SQL under your warehouse '
         f'credentials{hatch}'
     )
+
+
+_METRIC_VIEW_ON_METRIC_VIEW = (
+    'a metric view built on another metric view is not supported'
+)
 
 
 def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
@@ -1332,6 +1338,14 @@ class Graph:
             tables_by_alias: dict[str, DatabricksTable] = {
                 SOURCE_ALIAS: fact_table
             }
+            try:
+                fact_table._source_column_dict  # noqa: B018
+            except MetricViewAsTableError as error:
+                raise ValueError(
+                    f"'{fact_table.source_name}' is a metric view; "
+                    f'{_METRIC_VIEW_ON_METRIC_VIEW}, point its source at the '
+                    f'underlying table'
+                ) from error
             joins_by_alias = {join.alias: join for join in spec.joins}
 
             def _table(alias: str) -> DatabricksTable:
@@ -1433,6 +1447,14 @@ class Graph:
                     table._source_sample_df  # noqa: B018
                 except Warning:
                     raise
+                except MetricViewAsTableError:
+                    msgs.append(
+                        f"Failed to add join '{join.alias}' since "
+                        f"'{table.source_name}' is a metric view; "
+                        f"{_METRIC_VIEW_ON_METRIC_VIEW}, point the join's "
+                        f'source at the underlying table'
+                    )
+                    continue
                 except Exception as error:
                     msgs.append(
                         f"Failed to add join '{join.alias}' since its table "

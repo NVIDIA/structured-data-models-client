@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import datetime
 import re
+from collections import defaultdict
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -538,7 +539,8 @@ def parse_metric_view(
         raise ValueError(
             f'Unsupported metric view source {source!r}. Only plain table '
             f'names are supported as the source of a metric view when '
-            f'converting it into a graph'
+            f'converting it into a graph. Create a regular view with this '
+            f"query and point the metric view's source at it"
         )
 
     messages: list[str] = []
@@ -553,13 +555,20 @@ def parse_metric_view(
     joins: list[MetricViewJoin] = []
     aliases: set[str] = set()
     kept: set[str] = set()
+    # Each skipped join, by the position of its message, which is written
+    # once the dimensions it takes with it are known, with the joins nested
+    # in it. And which skipped join each skipped alias goes with:
+    skips: dict[int, tuple[str, str, list[str]]] = {}
+    skipped_with: dict[str, int] = {}
+    lost: dict[int, list[str]] = defaultdict(list)
 
-    def _collect_aliases(join_cfgs: Any) -> None:
+    def _collect_aliases(join_cfgs: Any, nested: list[str]) -> None:
         for join_cfg in join_cfgs or []:
             if isinstance(join_cfg, dict):
                 if isinstance(join_cfg.get('name'), str):
                     aliases.add(join_cfg['name'])
-                _collect_aliases(join_cfg.get('joins'))
+                    nested.append(join_cfg['name'])
+                _collect_aliases(join_cfg.get('joins'), nested)
 
     def _add_joins(join_cfgs: Any, parent_path: tuple[str, ...]) -> None:
         parent_alias = parent_path[-1] if parent_path else SOURCE_ALIAS
@@ -578,9 +587,13 @@ def parse_metric_view(
                 continue
 
             def _skip(msg: str) -> None:
-                messages.append(f"Failed to add join '{alias}' since {msg}")
+                nested: list[str] = []
+                _collect_aliases(join_cfg.get('joins'), nested)
+                skips[len(messages)] = (alias, msg, nested)
+                for name in (alias, *nested):
+                    skipped_with.setdefault(name, len(messages))
+                messages.append('')
                 aliases.add(alias)
-                _collect_aliases(join_cfg.get('joins'))
 
             if alias == SOURCE_ALIAS or alias in kept:
                 _skip(f"the name '{alias}' is already in use")
@@ -588,7 +601,11 @@ def parse_metric_view(
 
             table = parse_table_reference(join_cfg.get('source'))
             if table is None:
-                _skip('only plain table names are supported as join sources')
+                _skip(
+                    'only plain table names are supported as join sources. '
+                    'Create a regular view with its query and join that '
+                    'instead'
+                )
                 continue
 
             cardinality = join_cfg.get('cardinality', 'many_to_one')
@@ -601,7 +618,10 @@ def parse_metric_view(
                 using = [using]
             if using is not None:
                 if not isinstance(using, list) or len(using) != 1:
-                    _skip('composite key references are not yet supported')
+                    _skip(
+                        'it joins on more than one column, which a graph '
+                        'link cannot express'
+                    )
                     continue
                 column = unquote_ident(str(using[0]))
                 condition = (
@@ -684,10 +704,7 @@ def parse_metric_view(
                     f'references no table of the view'
                 )
             elif wildcard_alias != SOURCE_ALIAS and wildcard_alias not in kept:
-                messages.append(
-                    f"Failed to add dimension '{expr.strip()}' since it "
-                    f"references the skipped join '{wildcard_alias}'"
-                )
+                lost[skipped_with[wildcard_alias]].append(expr.strip())
             else:
                 excluded = tuple(
                     unquote_ident(_IDENT_RE.findall(chain)[-1])
@@ -730,10 +747,7 @@ def parse_metric_view(
 
         alias = refs.pop() if refs else SOURCE_ALIAS
         if alias != SOURCE_ALIAS and alias not in kept:
-            messages.append(
-                f"Failed to add dimension '{name}' since it "
-                f"references the skipped join '{alias}'"
-            )
+            lost[skipped_with[alias]].append(name)
             continue
 
         columns.append(
@@ -743,6 +757,14 @@ def parse_metric_view(
                 expr=expr,
             )
         )
+
+    for at, (alias, reason, nested) in skips.items():
+        tables = [
+            name
+            for name in (alias, *nested)
+            if name not in kept and name != SOURCE_ALIAS
+        ]
+        messages[at] = _skipped_join_message(alias, reason, tables, lost[at])
 
     for parameter in used.values():
         messages.append(
@@ -757,6 +779,30 @@ def parse_metric_view(
         messages=messages,
         filter=row_filter,
     )
+
+
+def _quoted_list(names: Sequence[str]) -> str:
+    quoted = [f"'{name}'" for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
+
+
+def _skipped_join_message(
+    alias: str, reason: str, tables: Sequence[str], dimensions: Sequence[str]
+) -> str:
+    r"""Why a join is skipped, and the graph tables and dimensions that go
+    with it, which may be what a question was to be asked of.
+    """
+    lost: list[str] = []
+    if tables:
+        noun = 'table' if len(tables) == 1 else 'tables'
+        lost.append(f'the {noun} {_quoted_list(tables)}')
+    if dimensions:
+        noun = 'dimension' if len(dimensions) == 1 else 'dimensions'
+        lost.append(f'the {noun} {_quoted_list(dimensions)}')
+    with_it = f', and with it {" and ".join(lost)},' if lost else ''
+    return f"Failed to add join '{alias}'{with_it} since {reason}"
 
 
 def _check_filter(
