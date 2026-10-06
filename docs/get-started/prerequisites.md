@@ -14,7 +14,8 @@
 
 The client, the language and the connectors are pure Python and install
 anywhere. The relational engine is a native build: it compiles a neighbour
-sampler, and published wheels are `manylinux_2_28` for x86-64 and aarch64, so
+sampler, and published wheels are `manylinux_2_28` for x86-64 and aarch64 on
+CPython only, so
 they need a Linux with glibc 2.28 or newer. `kumo-tabular` works on a laptop;
 `kumo-relational` needs that Linux.
 

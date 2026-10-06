@@ -292,7 +292,7 @@ Pass `check_keys=False` to skip that scan when the cost matters and the key is a
 
 **Whole-table checks move.**
 Each check `from_data` runs over every row either reads metadata for a source table (dtypes, constraints, row counts) or runs on the sampled rows (value casts, and whether scored rows mean what the schema says).
-The two that would need a whole-table aggregate, key quality and whether a relationship joins anything, are skipped.
+Whether a relationship joins anything would need a whole-table aggregate, and is skipped; key quality is the one such check that is run, by `check_keys` above.
 The heuristic that searches column combinations for a composite key is not run: against a warehouse it scans the table once per candidate column.
 
 **Metadata is read once per schema, except the time range.**
@@ -709,7 +709,7 @@ What changed on the way, for anyone reading code that looks familiar:
 | Relational engine, including the C++ neighbour sampler | Moved into `structured-data-models-relational-engine`. `Graph` became `Schema`, and the PQL types now come from `predictive_query` |
 | Relational adapter | Returns the unified `Request` and `PredictionResult` |
 | Tabular adapter | Model id renamed to `kumo-tabular` |
-| Wire types | Live in `structured-data-models-client`, not `structured-data-models-api`, which stays dependency-free (see §2) |
+| Wire encoding | The DataFrame-to-wire encoder lives in `structured-data-models-client`; `structured-data-models-api` keeps the wire vocabulary and stays dependency-free (see §2) |
 | Predictive Query Language | Maintained here from this point on, in `structured-data-models-pql` |
 
 Two behaviours were carried over deliberately, because each cost something to
@@ -725,6 +725,6 @@ URL are stripped everywhere the URL is rendered.
 | Arrow IPC | The wire is JSON-arrays-only everywhere | The contract activates it |
 
 Sampling inside the warehouse is not on this list.
-The deferred row is the model reading tables by reference; the client sampling them with SQL and embedding what it fetched fits the wire as it is (§3, schemas over tables that stay where they are).
+The row above is the model reading tables by reference; the client sampling them with SQL and embedding what it fetched fits the wire as it is (§3, schemas over tables that stay where they are).
 
 ---
