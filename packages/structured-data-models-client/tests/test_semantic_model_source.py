@@ -649,7 +649,7 @@ def test_a_model_the_engine_refuses_is_an_invalid_request(
 
     assert caught.value.code == 'INVALID_REQUEST'
     assert said in caught.value.message
-    assert caught.value.details == {'model': 'sales_mv'}
+    assert caught.value.details == {'semantic_model': 'sales_mv'}
     assert isinstance(caught.value.__cause__, ViewConversionError)
 
 
@@ -823,4 +823,4 @@ def test_a_model_whose_source_table_is_missing_is_an_invalid_request(
 
     assert caught.value.code == 'INVALID_REQUEST'
     assert "order_lines' does not exist" in caught.value.message
-    assert caught.value.details == {'model': 'sales_mv'}
+    assert caught.value.details == {'semantic_model': 'sales_mv'}

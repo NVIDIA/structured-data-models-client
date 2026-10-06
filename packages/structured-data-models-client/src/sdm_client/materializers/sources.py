@@ -278,7 +278,9 @@ def semantic_model_graph(model: Any) -> Graph:
         # it, and a table it reads that is not there, as for a source's own
         # tables. Any other failure is not the model's, and is not one.
         raise StructuredDataError(
-            str(error), code='INVALID_REQUEST', details={'model': model.name}
+            str(error),
+            code='INVALID_REQUEST',
+            details={'semantic_model': model.name},
         ) from error
     if graph.conversion_messages:
         warnings.warn(
