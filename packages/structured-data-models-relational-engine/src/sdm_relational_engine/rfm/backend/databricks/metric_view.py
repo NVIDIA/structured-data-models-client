@@ -6,13 +6,16 @@ from __future__ import annotations
 
 import datetime
 import re
-from collections import defaultdict
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from sdm_relational_engine.exceptions import ViewConversionError
+from sdm_relational_engine.rfm.view_conversion import (
+    ParameterNote,
+    quoted_list,
+)
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
@@ -193,10 +196,48 @@ _SIMPLE_MEASURE_RE = re.compile(
 )
 
 
+@dataclass(frozen=True)
+class SkippedJoin:
+    r"""A join left out of the graph, with the joins and dimensions that go
+    with it, which a question may have been asked of.
+
+    Args:
+        alias: The join's name.
+        reason: Why, as a clause, such as ``its table is empty``.
+        nested: The joins nested in it, left out with it.
+        dimensions: The dimensions on it or on those, left out with it.
+    """
+
+    alias: str
+    reason: str
+    nested: tuple[str, ...] = ()
+    dimensions: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        lost: list[str] = []
+        if self.nested:
+            noun = 'join' if len(self.nested) == 1 else 'joins'
+            lost.append(f'the {noun} {quoted_list(self.nested)} nested in it')
+        if self.dimensions:
+            noun = 'dimension' if len(self.dimensions) == 1 else 'dimensions'
+            lost.append(f'the {noun} {quoted_list(self.dimensions)}')
+        with_it = f', and with it {" and ".join(lost)},' if lost else ''
+        return f"Failed to add join '{self.alias}'{with_it} since {self.reason}"
+
+
 class UnsupportedJoinError(ViewConversionError):
     r"""Raised when a metric view join cannot be converted into a graph
     edge.
+
+    Attributes:
+        alias: The join's name.
+        reason: Why, as a clause.
     """
+
+    def __init__(self, alias: str, reason: str) -> None:
+        super().__init__(str(SkippedJoin(alias, reason)))
+        self.alias = alias
+        self.reason = reason
 
 
 class UnsupportedFilterError(ViewConversionError):
@@ -303,9 +344,10 @@ class MetricViewSpec:
         joins: All convertible joins, parents before children.
         columns: All dimensions resolved onto a single table, in order. A
             wildcard is expanded once its table's columns are known.
-        messages: Human-readable messages for every dropped element.
-        notes: Human-readable notes on how the view was read where nothing
-            was lost, such as a parameter read as its default.
+        messages: Human-readable messages for every dropped element but a
+            join.
+        skipped_joins: Every join left out.
+        notes: Every parameter read as its default.
         filter: The view's ``filter``, a condition on the source table's
             columns, if it has one.
         window_orders: The dimensions a window measure orders by, which
@@ -317,7 +359,8 @@ class MetricViewSpec:
     joins: list[MetricViewJoin]
     columns: list[MetricViewColumn | MetricViewWildcard]
     messages: list[str]
-    notes: list[str] = field(default_factory=list)
+    skipped_joins: list[SkippedJoin] = field(default_factory=list)
+    notes: list[ParameterNote] = field(default_factory=list)
     filter: MetricViewFilter | None = None
     window_orders: list[str] = field(default_factory=list)
     measures: list[MetricViewMeasure] = field(default_factory=list)
@@ -652,9 +695,9 @@ def parse_metric_view(
     be represented in a graph (SQL query join sources, composite or
     non-equality join conditions, dimensions referencing multiple tables,
     and materializations) are dropped and reported in
-    :attr:`MetricViewSpec.messages`. How the view was read where nothing is
-    lost, such as a parameter read as its default, is noted in
-    :attr:`MetricViewSpec.notes`.
+    :attr:`MetricViewSpec.messages`, or as a join in
+    :attr:`MetricViewSpec.skipped_joins`. Each parameter read as its
+    default is in :attr:`MetricViewSpec.notes`.
 
     A parameter a dimension or the filter references is read as its default,
     as a query of the view without arguments reads it. A dimension
@@ -705,7 +748,6 @@ def parse_metric_view(
         )
 
     messages: list[str] = []
-    notes: list[str] = []
     if 'materialization' in cfg:
         messages.append(
             "Ignored the 'materialization' section since it cannot "
@@ -720,12 +762,14 @@ def parse_metric_view(
     joins: list[MetricViewJoin] = []
     aliases: set[str] = set()
     kept: set[str] = set()
-    # Each skipped join, by the position of its message, which is written
-    # once the dimensions it takes with it are known, with the joins nested
-    # in it. And which skipped join each skipped alias goes with:
-    skips: dict[int, tuple[str, str, list[str]]] = {}
+    skipped: list[SkippedJoin] = []
+    # The position in `skipped` of the join each skipped alias goes with.
     skipped_with: dict[str, int] = {}
-    lost: dict[int, list[str]] = defaultdict(list)
+
+    def _lose(alias: str, dimension: str) -> None:
+        at = skipped_with[alias]
+        lost = (*skipped[at].dimensions, dimension)
+        skipped[at] = replace(skipped[at], dimensions=lost)
 
     def _collect_aliases(join_cfgs: Any, nested: list[str]) -> None:
         for join_cfg in join_cfgs or []:
@@ -751,13 +795,12 @@ def parse_metric_view(
                 )
                 continue
 
-            def _skip(msg: str) -> None:
+            def _skip(reason: str) -> None:
                 nested: list[str] = []
                 _collect_aliases(join_cfg.get('joins'), nested)
-                skips[len(messages)] = (alias, msg, nested)
                 for name in (alias, *nested):
-                    skipped_with.setdefault(name, len(messages))
-                messages.append('')
+                    skipped_with.setdefault(name, len(skipped))
+                skipped.append(SkippedJoin(alias, reason, tuple(nested)))
                 aliases.add(alias)
 
             if alias == SOURCE_ALIAS or alias in kept:
@@ -876,7 +919,7 @@ def parse_metric_view(
                     f'references no table of the view'
                 )
             elif wildcard_alias != SOURCE_ALIAS and wildcard_alias not in kept:
-                lost[skipped_with[wildcard_alias]].append(expr.strip())
+                _lose(wildcard_alias, expr.strip())
             else:
                 excluded = tuple(
                     unquote_ident(_IDENT_RE.findall(chain)[-1])
@@ -919,7 +962,7 @@ def parse_metric_view(
 
         alias = refs.pop() if refs else SOURCE_ALIAS
         if alias != SOURCE_ALIAS and alias not in kept:
-            lost[skipped_with[alias]].append(name)
+            _lose(alias, name)
             continue
 
         columns.append(
@@ -930,26 +973,16 @@ def parse_metric_view(
             )
         )
 
-    for at, (alias, reason, nested) in skips.items():
-        tables = [
-            name
-            for name in (alias, *nested)
-            if name not in kept and name != SOURCE_ALIAS
-        ]
-        messages[at] = _skipped_join_message(alias, reason, tables, lost[at])
-
-    for parameter in used.values():
-        notes.append(
-            f"Read the parameter '{parameter.name}' as its default "
-            f"'{parameter.text}', as a query of the view without arguments does"
-        )
-
     return MetricViewSpec(
         source=source_ref,
         joins=joins,
         columns=columns,
         messages=messages,
-        notes=notes,
+        skipped_joins=skipped,
+        notes=[
+            ParameterNote(parameter.name, parameter.text)
+            for parameter in used.values()
+        ],
         filter=row_filter,
         window_orders=_window_orders(cfg.get('measures')),
         measures=_read_measures(
@@ -1097,30 +1130,6 @@ def _window_orders(measure_cfgs: Any) -> list[str]:
     return orders
 
 
-def _quoted_list(names: Sequence[str]) -> str:
-    quoted = [f"'{name}'" for name in names]
-    if len(quoted) == 1:
-        return quoted[0]
-    return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
-
-
-def _skipped_join_message(
-    alias: str, reason: str, tables: Sequence[str], dimensions: Sequence[str]
-) -> str:
-    r"""Why a join is skipped, and the graph tables and dimensions that go
-    with it, which may be what a question was to be asked of.
-    """
-    lost: list[str] = []
-    if tables:
-        noun = 'table' if len(tables) == 1 else 'tables'
-        lost.append(f'the {noun} {_quoted_list(tables)}')
-    if dimensions:
-        noun = 'dimension' if len(dimensions) == 1 else 'dimensions'
-        lost.append(f'the {noun} {_quoted_list(dimensions)}')
-    with_it = f', and with it {" and ".join(lost)},' if lost else ''
-    return f"Failed to add join '{alias}'{with_it} since {reason}"
-
-
 def _check_filter(
     row_filter: Any,
     candidates: Sequence[tuple[tuple[str, ...], str]],
@@ -1234,9 +1243,9 @@ def resolve_join_keys(
         return first_side, first.column, second.column
 
     raise UnsupportedJoinError(
-        f"Failed to add join '{join.alias}' since its join condition could "
-        f"not be resolved into a key reference between '{join.parent_alias}' "
-        f"and '{join.alias}'"
+        join.alias,
+        f'its join condition could not be resolved into a key reference '
+        f"between '{join.parent_alias}' and '{join.alias}'",
     )
 
 

@@ -69,13 +69,12 @@ _LINE_DIMS = (
 _CUSTOMER_DIMS = ('TerritoryID', 'StoreID')
 _PRODUCT_DIMS = ('Color', 'ListPrice', 'ProductLine')
 
-# The note every variant gets, since each has measures: it names the PQL
+# The notes every variant gets, since each has these measures: the PQL
 # aggregation that matches each one.
 _MEASURES = (
-    r'Left the measures to the predictive query.*'
-    r"'total_quantity' is SUM\(\S+\.OrderQty, 0, 30, days\).*"
-    r"'revenue' is SUM\(\S+\.LineTotal, 0, 30, days\).*"
-    r"'order_count' is COUNT_DISTINCT\(\S+\.SalesOrderID, 0, 30, days\)"
+    r"'total_quantity' is SUM\(\S+\.OrderQty, 0, 30, days\)",
+    r"'revenue' is SUM\(\S+\.LineTotal, 0, 30, days\)",
+    r"'order_count' is COUNT_DISTINCT\(\S+\.SalesOrderID, 0, 30, days\)",
 )
 
 
@@ -259,7 +258,7 @@ def _assert_graph(
     tables: dict[str, Expected],
     edges: set[Edge],
     *,
-    notes: Sequence[str] = (_MEASURES,),
+    notes: Sequence[str] = _MEASURES,
     lost: Sequence[str] = (),
 ) -> None:
     r"""The graph has exactly ``tables`` and ``edges``, one conversion note
@@ -277,7 +276,7 @@ def _assert_graph(
     assert got == tables
     assert set(graph.edges) == edges
     for said, patterns in (
-        (graph.conversion_notes, notes),
+        (tuple(map(str, graph.conversion_notes)), notes),
         (graph.conversion_messages, lost),
     ):
         assert len(said) == len(patterns), said
@@ -454,7 +453,7 @@ def test_month_beside_raw_date(views: Views) -> None:
         tables,
         _star_edges(views),
         notes=(
-            _MEASURES,
+            *_MEASURES,
             r"Took 'OrderDate' as the time column .* since 'Order Month' "
             r'truncates or casts it',
         ),
@@ -479,7 +478,7 @@ def test_month_without_raw_date(views: Views) -> None:
         tables,
         _star_edges(views),
         notes=(
-            _MEASURES,
+            *_MEASURES,
             r"Took 'OrderDate' as the time column .*, and added it as a "
             r"column, since 'Order Month' truncates or casts it",
         ),
@@ -508,7 +507,7 @@ def test_month_named_as_the_raw_date(views: Views) -> None:
         tables,
         _star_edges(views),
         notes=(
-            _MEASURES,
+            *_MEASURES,
             r"Took 'OrderDate_raw' as the time column .*, since 'OrderDate' "
             r'truncates or casts it, .*\. It is the source column '
             r"'OrderDate', added under a name of its own because",
@@ -540,8 +539,8 @@ def test_measure_inputs_that_are_not_dimensions(views: Views) -> None:
         tables,
         _star_edges(views),
         notes=(
-            _MEASURES + r".*'avg_price' is AVG\(\S+\.UnitPrice, 0, 30, days\)"
-            r"; 'avg_cost' has no single aggregation",
+            *_MEASURES,
+            r"'avg_price' is AVG\(\S+\.UnitPrice, 0, 30, days\)",
         ),
     )
 
@@ -578,7 +577,7 @@ def test_filter_on_a_parameter(views: Views) -> None:
         graph,
         _star_tables(views),
         _star_edges(views),
-        notes=(_MEASURES, r"Read the parameter 'min_qty' as its default '2'"),
+        notes=(*_MEASURES, r"Read the parameter 'min_qty' as its default '2'"),
     )
     _assert_rows(views, graph, 'OrderQty >= 2')
 
@@ -672,4 +671,6 @@ def test_upper_case_names(views: Views) -> None:
         Edge(views.fact, 'CUSTOMERID', 'CUSTOMERS'),
         Edge(views.fact, 'PRODUCTID', 'PRODUCTS'),
     }
-    _assert_graph(graph, tables, edges, notes=['(?i)' + _MEASURES])
+    _assert_graph(
+        graph, tables, edges, notes=['(?i)' + pattern for pattern in _MEASURES]
+    )

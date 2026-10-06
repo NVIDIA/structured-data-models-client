@@ -48,6 +48,11 @@ from sdm_relational_engine.rfm.base import (
 )
 from sdm_relational_engine.rfm.base.casting import CastMixin
 from sdm_relational_engine.rfm.base.utils import Timedelta
+from sdm_relational_engine.rfm.view_conversion import (
+    ConversionNote,
+    MeasureNote,
+    TimeColumnNote,
+)
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
@@ -264,26 +269,14 @@ def _join_key_reason(count: KeyCount, table: str, key: str) -> str | None:
 
 def _infer_view_time_column(
     table: Table, window_orders: Sequence[str]
-) -> list[str]:
-    r"""Infers the time column of a metric view's table, and says how when
-    the view's own columns would have led it elsewhere.
+) -> TimeColumnNote | None:
+    r"""Infers the time column of a metric view's table, and notes it where
+    the view's own columns would have led elsewhere.
 
-    A view often holds a timestamp only as a truncation or cast of a source
-    column, such as ``DATE_TRUNC('MONTH', order_date)``, which says when a
-    row happened only to the month, and starts at or before the column it
-    truncates, so the shared rule would take it. Each such column is offered
-    to the rule as the source column it derives from instead, added to the
-    table for the purpose and kept only if taken. Where a dimension holds
-    the source column's name, as ``order_date: DATE_TRUNC('MONTH',
-    source.order_date)`` does, the source column is added under a name of
-    its own, ``order_date_raw``, and the dimension keeps its name and its
-    truncated value. A dimension a window measure orders by is the time
-    axis the view's author chose, so it is offered alone first, and the
-    rule decides among them all only if it refuses that.
-
-    Args:
-        table: The table, its columns and links added.
-        window_orders: The dimensions the view's window measures order by.
+    A truncated or cast date, such as ``DATE_TRUNC('MONTH', order_date)``,
+    starts at or before the column it derives from, so that column is
+    offered in its place, under a name of its own where a dimension has its
+    name. A dimension a window measure orders by is offered alone first.
     """
     from predictive_query.schema.typing import Dtype
 
@@ -360,41 +353,32 @@ def _infer_view_time_column(
         if raw not in kept:
             table.remove_column(raw)
 
-    reasons: list[str] = []
-    if chosen is not None and chosen in axes and len(candidates) > 1:
-        reasons.append('a window measure of the view orders by it')
+    window_order = chosen is not None and chosen in axes and len(candidates) > 1
     instead_of = tuple(n for n, raw in derived_from.items() if raw == chosen)
     if instead_of:
         assert choice is not None
         table._time_column_choice = replace(choice, instead_of=instead_of)
-        verbs = (
-            'truncates or casts' if len(instead_of) == 1 else 'truncate or cast'
-        )
-        reasons.append(
-            f'{_quoted_names(instead_of)} {verbs} it, and it says when a row '
-            f'happened more precisely'
-        )
-    if not reasons:
-        return []
-    added_note = ''
-    if chosen in renamed:
-        renamed_note = (
-            f". It is the source column '{renamed[chosen]}', added under a "
-            f'name of its own because a dimension has its name'
-        )
-    else:
-        renamed_note = ''
-        if chosen in added:
-            added_note = ', and added it as a column'
-    return [
-        f"Took '{chosen}' as the time column of table '{table.name}'"
-        f'{added_note}, since {" and ".join(reasons)}{renamed_note}'
-    ]
+    if chosen is None or not (window_order or instead_of):
+        return None
+    return TimeColumnNote(
+        table=table.name,
+        column=chosen,
+        instead_of=instead_of,
+        source_column=renamed.get(chosen),
+        added=chosen in added,
+        window_order=window_order,
+    )
 
 
-def _measures_message(fact_table: Table, measures: Sequence[Any]) -> str:
-    r"""Says that a view's measures are left to a predictive query, and the
-    aggregation each simple one is, over 30 days for example.
+def _measure_notes(
+    fact_table: Table, measures: Sequence[Any]
+) -> list[MeasureNote]:
+    r"""The predictive query aggregation each simple measure of a view is.
+
+    A measure names a column in any case, as Databricks reads it, and a
+    dimension that renames a column stands for it. A dimension that has a
+    source column's name but holds something else shadows it, so a measure
+    of that name gets no note: which of the two it reads is not certain.
 
     Args:
         fact_table: The view's source table, the columns of its measures
@@ -402,45 +386,36 @@ def _measures_message(fact_table: Table, measures: Sequence[Any]) -> str:
         measures: The view's
             :class:`~sdm_relational_engine.rfm.backend.databricks.metric_view.MetricViewMeasure`.
     """
-
-    def _name(name: str) -> str:
-        return name if re.fullmatch(r'[A-Za-z_]\w*', name) else f'`{name}`'
-
-    # A measure names a column in any case, as Databricks reads it, and a
-    # dimension that renames a column stands for it.
-    columns = {
-        column.name.lower(): column.name for column in fact_table.columns
-    }
+    source = {name.lower() for name in fact_table._source_column_dict}
+    columns = {column.name.lower(): column for column in fact_table.columns}
+    renamed_as: dict[str, str] = {}
     for column in fact_table.columns:
         if column.expr is not None and (
             renamed := _renamed_column(str(column.expr))
         ):
-            columns.setdefault(renamed.lower(), column.name)
-    expressed: list[str] = []
-    others: list[str] = []
+            renamed_as.setdefault(renamed.lower(), column.name)
+    notes: list[MeasureNote] = []
     for measure in measures:
         if measure.aggregation is None:
-            others.append(measure.name)
             continue
-        function, column = measure.aggregation
-        if column is not None and column.lower() not in columns:
-            others.append(measure.name)
+        function, name = measure.aggregation
+        if name is None:
+            target = None
+        elif (column := columns.get(name.lower())) is None:
+            if (target := renamed_as.get(name.lower())) is None:
+                continue
+        elif (
+            column.expr is None
+            or name.lower() not in source
+            or (_renamed_column(str(column.expr)) or '').lower() == name.lower()
+        ):
+            target = column.name
+        else:
             continue
-        target = '*' if column is None else _name(columns[column.lower()])
-        expressed.append(
-            f"'{measure.name}' is {function}({_name(fact_table.name)}."
-            f'{target}, 0, 30, days)'
+        notes.append(
+            MeasureNote(measure.name, fact_table.name, function, target)
         )
-    said = [
-        'Left the measures to the predictive query, which aggregates the '
-        'columns they read, added to their tables where missing'
-    ]
-    if expressed:
-        said.append(f'over the next 30 days, {", ".join(expressed)}')
-    if others:
-        noun = 'has' if len(others) == 1 else 'have'
-        said.append(f'{_quoted_names(others)} {noun} no single aggregation')
-    return '; '.join(said)
+    return notes
 
 
 def _renamed_column(expr: str) -> str | None:
@@ -460,13 +435,6 @@ def _real_name(table: Table, name: str) -> str:
         return name
     folded = {column.lower(): column for column in table._source_column_dict}
     return folded.get(name.lower(), name)
-
-
-def _quoted_names(names: Sequence[str]) -> str:
-    quoted = [f"'{name}'" for name in names]
-    if len(quoted) == 1:
-        return quoted[0]
-    return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
 
 
 class ViewConversionWarning(UserWarning):
@@ -632,11 +600,7 @@ class Graph:
         self._tables: dict[str, Table] = {}
         self._edges: list[Edge] = []
         self._conversion_messages: tuple[str, ...] = ()
-        self._conversion_notes: tuple[str, ...] = ()
-        # The note of each table whose time column a view conversion chose
-        # and said why, by table, so a caller naming another can leave it
-        # out.
-        self._time_column_notes: dict[str, str] = {}
+        self._conversion_notes: tuple[ConversionNote, ...] = ()
         self._connection: (
             AdbcSqliteConnection
             | DuckDBPyConnection
@@ -1420,9 +1384,11 @@ class Graph:
         Its star or snowflake schema becomes a graph: ``source`` becomes the
         fact table, each join a linked table named for its alias, and each
         dimension an expression column on its referenced table. Measures define
-        aggregations, not row-level values, so the graph omits them; express
-        aggregations with a predictive query, as
-        :attr:`conversion_notes` spells each simple one. Other
+        aggregations, not row-level values, so the graph omits them but adds
+        the columns they read; express aggregations with a predictive query.
+        :attr:`conversion_notes` spells each measure that is one aggregate of
+        a source table column, or a count of its rows, but not one over a
+        column whose name a dimension holding something else has. Other
         unrepresentable elements are dropped with a warning.
 
         A joined table that is missing, empty, a metric view or not yours to
@@ -1514,8 +1480,8 @@ class Graph:
             SOURCE_ALIAS,
             MetricViewJoin,
             MetricViewWildcard,
+            SkippedJoin,
             UnsupportedJoinError,
-            _skipped_join_message,
             parse_metric_view,
             parse_table_reference,
             read_metric_view_definition,
@@ -1599,8 +1565,8 @@ class Graph:
                     _fact_table(parts)._source_column_dict
                 ),
             )
-            msgs = list(spec.messages)
-            notes = list(spec.notes)
+            msgs = [*spec.messages, *map(str, spec.skipped_joins)]
+            notes: list[ConversionNote] = list(spec.notes)
 
             dtypes = {
                 name: DatabricksTable._to_dtype(data_type)
@@ -1844,13 +1810,11 @@ class Graph:
                 r"""Reports a join dropped, with the table and dimensions
                 that go with it, which a question may have been asked of.
                 """
-                dimensions = [
+                dimensions = tuple(
                     column.name for column in columns_by_alias[join.alias]
-                ]
+                )
                 msgs.append(
-                    _skipped_join_message(
-                        join.alias, reason, [join.alias], dimensions
-                    )
+                    str(SkippedJoin(join.alias, reason, dimensions=dimensions))
                 )
 
             for join in spec.joins:
@@ -1888,9 +1852,9 @@ class Graph:
                         and one_table._primary_key != one_key
                     ):
                         raise UnsupportedJoinError(
-                            f"Failed to add join '{join.alias}' since table "
-                            f"'{one_table.name}' already uses "
-                            f"'{one_table._primary_key}' as its primary key"
+                            join.alias,
+                            f"table '{one_table.name}' already uses "
+                            f"'{one_table._primary_key}' as its primary key",
                         )
 
                     # A key an earlier join set passed its count then.
@@ -1907,9 +1871,7 @@ class Graph:
                             one_key,
                         )
                     ):
-                        raise UnsupportedJoinError(
-                            f"Failed to add join '{join.alias}' since {reason}"
-                        )
+                        raise UnsupportedJoinError(join.alias, reason)
 
                     for key_table, key in (
                         (one_table, one_key),
@@ -1959,23 +1921,17 @@ class Graph:
                         if undo_column is not None:
                             undo_table._column_dict[undo_key] = undo_column
                     if isinstance(error, UnsupportedJoinError):
-                        # Its message names the join, which `_drop_join`
-                        # names again.
-                        prefix = f"Failed to add join '{join.alias}' since "
-                        _drop_join(join, str(error).removeprefix(prefix))
+                        _drop_join(join, error.reason)
                     else:
                         _drop_join(
                             join, f'its keys could not be linked: {error}'
                         )
 
-            if spec.measures:
-                notes.append(_measures_message(fact_table, spec.measures))
-
-            time_column_notes: dict[str, str] = {}
+            notes.extend(_measure_notes(fact_table, spec.measures))
             for table in graph.tables.values():
-                for note in _infer_view_time_column(table, spec.window_orders):
+                note = _infer_view_time_column(table, spec.window_orders)
+                if note is not None:
                     notes.append(note)
-                    time_column_notes[table.name] = note
 
             msgs.extend(graph._drop_invalid_edges())
             graph._settle_time_columns()
@@ -1987,7 +1943,6 @@ class Graph:
 
             graph._conversion_messages = tuple(msgs)
             graph._conversion_notes = tuple(notes)
-            graph._time_column_notes = time_column_notes
         except BaseException as error:
             if internal_connection:
                 connection.close()
@@ -2754,14 +2709,18 @@ class Graph:
         return self._conversion_messages
 
     @property
-    def conversion_notes(self) -> tuple[str, ...]:
+    def conversion_notes(self) -> tuple[ConversionNote, ...]:
         r"""How :meth:`from_databricks_metric_view` read the view where
         nothing was lost, which no warning repeats.
 
-        The aggregation each of the view's measures is in a predictive
-        query, the time column taken in place of a date the view truncates,
-        and each parameter read as its default. Empty for every other
-        constructor.
+        A :class:`~sdm_relational_engine.rfm.view_conversion.MeasureNote`
+        for each measure that is one predictive query aggregation over the
+        source table, a
+        :class:`~sdm_relational_engine.rfm.view_conversion.TimeColumnNote`
+        for a time column taken in place of a date the view truncates, and a
+        :class:`~sdm_relational_engine.rfm.view_conversion.ParameterNote`
+        for each parameter read as its default. ``str()`` of each says it in
+        words. Empty for every other constructor.
         """
         return self._conversion_notes
 

@@ -1195,7 +1195,6 @@ class Schema:
         notes: tuple[str, ...] = ()
         if is_semantic_model(source):
             graph = semantic_model_graph(source)
-            notes = graph.conversion_notes
             read.keep({name: graph[name] for name in graph.tables})
             offered = list(graph.tables)
             chosen = (
@@ -1395,15 +1394,19 @@ def _notes_still_true(
     for a table whose time column the caller named otherwise: that note no
     longer says what the schema holds.
     """
-    stale = set()
-    for model, note in graph._time_column_notes.items():
-        name = as_named.get(model)
-        if name is None or name not in (time_columns or {}):
-            continue
-        engine_column = graph[model].time_column
-        if built[name].time_column != getattr(engine_column, 'name', None):
-            stale.add(note)
-    return tuple(note for note in graph.conversion_notes if note not in stale)
+    from sdm_relational_engine.rfm.view_conversion import TimeColumnNote
+
+    def _stale(note: Any) -> bool:
+        if not isinstance(note, TimeColumnNote):
+            return False
+        name = as_named.get(note.table)
+        return (
+            name is not None
+            and name in (time_columns or {})
+            and built[name].time_column != note.column
+        )
+
+    return tuple(str(n) for n in graph.conversion_notes if not _stale(n))
 
 
 def _apply_keys_and_times(

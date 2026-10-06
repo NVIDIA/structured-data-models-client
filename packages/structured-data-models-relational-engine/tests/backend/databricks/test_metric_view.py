@@ -15,6 +15,11 @@ from sdm_relational_engine.exceptions import (
     KumoRelationalError,
 )
 from sdm_relational_engine.rfm import Edge, Graph, ViewConversionWarning
+from sdm_relational_engine.rfm.view_conversion import (
+    MeasureNote,
+    ParameterNote,
+    TimeColumnNote,
+)
 
 try:
     import pyarrow as pa
@@ -329,11 +334,11 @@ joins:
         JoinKeyRef(qualifier=SOURCE_ALIAS, column='product_id'),
         JoinKeyRef(qualifier='products', column='product_id'),
     )
-    assert spec.messages == [
-        "Failed to add join 'composite', and with it the table 'composite', "
-        'since it joins on more than one column, which a graph link cannot '
-        'express',
-    ]
+    assert spec.messages == []
+    (skipped,) = spec.skipped_joins
+    assert skipped.alias == 'composite' and 'more than one column' in str(
+        skipped
+    )
 
 
 def test_parse_metric_view_cardinality() -> None:
@@ -352,10 +357,8 @@ joins:
 
     assert [j.alias for j in spec.joins] == ['refunds']
     assert spec.joins[0].cardinality == 'one_to_many'
-    assert spec.messages == [
-        "Failed to add join 'broken', and with it the table 'broken', since "
-        "of its unsupported cardinality 'many_to_many'",
-    ]
+    (skipped,) = spec.skipped_joins
+    assert skipped.alias == 'broken' and "'many_to_many'" in skipped.reason
 
 
 def test_parse_metric_view_skipped_joins() -> None:
@@ -389,14 +392,13 @@ dimensions:
         ('valid', 'source'),
     ]
     assert spec.filter == MetricViewFilter("source.status = 'VALID'")
-    assert spec.messages == [
-        "Failed to add join 'promos', and with it the tables 'promos' and "
-        "'nested' and the dimensions 'promo_kind' and 'nested_name', since "
-        'only plain table names are supported as join sources. Create a '
-        'regular view with its query and join that instead',
-        "Failed to add join 'composite', and with it the table 'composite' "
-        "and the dimension 'composite_flag', since only single-column "
-        'equality join conditions are supported',
+    assert spec.messages == []
+    assert [
+        (join.alias, join.nested, join.dimensions)
+        for join in spec.skipped_joins
+    ] == [
+        ('promos', ('nested',), ('promo_kind', 'nested_name')),
+        ('composite', (), ('composite_flag',)),
     ]
 
 
@@ -565,10 +567,8 @@ joins:
 
     assert [j.alias for j in spec.joins] == ['dim']
     assert spec.joins[0].table == ('cat', 'sch', 'dim')
-    assert spec.messages == [
-        "Failed to add join 'source' since the name 'source' is already in use",
-        "Failed to add join 'dim' since the name 'dim' is already in use",
-    ]
+    assert [join.alias for join in spec.skipped_joins] == ['source', 'dim']
+    assert all('already in use' in j.reason for j in spec.skipped_joins)
 
 
 def test_parse_metric_view_errors() -> None:
@@ -1145,7 +1145,7 @@ def test_from_databricks_metric_view() -> None:
     assert fact.row_filter == "source.status = 'VALID'"
     assert graph['customers'].row_filter is None
     assert "Failed to add join 'promos'" in message
-    assert "the table 'promos' and the dimension 'promo_kind'" in message
+    assert "the dimension 'promo_kind'" in message
     assert "Failed to add join 'payments'" in message
     assert "Replaced the derived column 'product_id'" in message
 
@@ -2376,7 +2376,7 @@ def test_a_join_whose_table_cannot_be_used_is_left_out(
     said = graph.conversion_messages
     (customers,) = [m for m in said if "'customer_segment'" in m]
     (regions,) = [m for m in said if "'region_name'" in m]
-    assert reason in customers
+    assert reason in customers and customers.count("'customers'") == 1
     assert "'customers'" in regions and "'region_code'" in regions
 
 
@@ -2590,14 +2590,10 @@ measures:
         MetricViewWildcard('source', ('amount',)),
     ]
     assert spec.columns[1].name == 'tier'
-    assert spec.messages == [
-        "Failed to add join 'promos', and with it the table 'promos' and the "
-        "dimension 'promos.*', since only plain table names are supported as "
-        'join sources. Create a regular view with its query and join that '
-        'instead',
-        "Failed to add dimension 'nowhere.*' since it references no table of "
-        'the view',
-    ]
+    (skipped,) = spec.skipped_joins
+    assert (skipped.alias, skipped.dimensions) == ('promos', ('promos.*',))
+    (message,) = spec.messages
+    assert "'nowhere.*'" in message
 
 
 _WILDCARD_YAML = """
@@ -2641,8 +2637,11 @@ def test_a_wildcard_dimension_stands_for_the_columns_of_its_table() -> None:
     }
     assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
     assert graph.conversion_messages == ()
-    (message,) = graph.conversion_notes
-    assert message.startswith("Took 'order_date' as the time column")
+    assert graph.conversion_notes == (
+        TimeColumnNote(
+            'order_lines', 'order_date', instead_of=('order_month',)
+        ),
+    )
 
 
 _PARAMETER_YAML = """
@@ -2687,10 +2686,8 @@ def test_a_parameter_is_read_as_its_default() -> None:
         "'required', which has no default",
     ]
     assert spec.notes == [
-        "Read the parameter 'min_qty' as its default '1', as a query of the "
-        'view without arguments does',
-        "Read the parameter 'since' as its default '2024-01-31', as a query "
-        'of the view without arguments does',
+        ParameterNote('min_qty', '1'),
+        ParameterNote('since', '2024-01-31'),
     ]
 
 
@@ -2856,10 +2853,7 @@ dimensions:
     assert fact.row_filter == "amount >= CAST('20' AS BIGINT)"
     assert str(fact['big'].expr) == "amount >= CAST('20' AS BIGINT) * 2"
     assert graph.conversion_messages == ()
-    assert graph.conversion_notes == (
-        "Read the parameter 'min_amount' as its default '20', as a query of "
-        'the view without arguments does',
-    )
+    assert graph.conversion_notes == (ParameterNote('min_amount', '20'),)
 
 
 def test_a_metric_view_on_a_metric_view_is_refused_for_what_it_is(
@@ -2921,19 +2915,16 @@ dimensions:
     assert fact.row_filter == "amount >= CAST('1' AS INT)"
     assert str(fact['big'].expr) == 'amount >= Amount * 2'
     assert graph.conversion_messages == ()
-    assert graph.conversion_notes == (
-        "Read the parameter 'floor' as its default '1', as a query of the "
-        'view without arguments does',
-    )
+    assert graph.conversion_notes == (ParameterNote('floor', '1'),)
 
 
-def _said(graph: Graph) -> tuple[str, ...]:
-    r"""The conversion notes but the one every view with measures has."""
+def _said(graph: Graph) -> tuple[object, ...]:
+    r"""The conversion notes but those on measures."""
     assert graph.conversion_messages == ()
     return tuple(
-        m
-        for m in graph.conversion_notes
-        if not m.startswith('Left the measures to the predictive query')
+        note
+        for note in graph.conversion_notes
+        if not isinstance(note, MeasureNote)
     )
 
 
@@ -2979,9 +2970,12 @@ def test_a_truncated_date_gives_way_to_the_column_it_truncates() -> None:
     assert fact['order_date'].expr is None
     assert fact['order_month'].expr is not None
     assert _said(graph) == (
-        "Took 'order_date' as the time column of table 'order_lines', and "
-        "added it as a column, since 'order_month' and 'order_quarter' "
-        'truncate or cast it, and it says when a row happened more precisely',
+        TimeColumnNote(
+            'order_lines',
+            'order_date',
+            instead_of=('order_month', 'order_quarter'),
+            added=True,
+        ),
     )
 
 
@@ -2994,8 +2988,11 @@ def test_a_physical_date_is_preferred_over_its_truncation() -> None:
     assert fact.time_column is not None
     assert fact.time_column.name == 'order_date'
     assert [column.name for column in fact.columns].count('order_date') == 1
-    (message,) = _said(graph)
-    assert "Took 'order_date'" in message and 'added' not in message
+    assert _said(graph) == (
+        TimeColumnNote(
+            'order_lines', 'order_date', instead_of=('order_month',)
+        ),
+    )
 
 
 def test_a_truncation_named_as_its_column_gives_way_to_it(
@@ -3026,10 +3023,13 @@ def test_a_truncation_named_as_its_column_gives_way_to_it(
     assert str(fact['order_date_raw_2'].expr) == '`order_date`'
     assert str(fact['order_date'].expr) == "DATE_TRUNC('MONTH', order_date)"
     assert _said(graph) == (
-        "Took 'order_date_raw_2' as the time column of table 'order_lines', "
-        "since 'order_date' truncates or casts it, and it says when a row "
-        "happened more precisely. It is the source column 'order_date', "
-        'added under a name of its own because a dimension has its name',
+        TimeColumnNote(
+            'order_lines',
+            'order_date_raw_2',
+            instead_of=('order_date',),
+            source_column='order_date',
+            added=True,
+        ),
     )
 
 
@@ -3058,8 +3058,15 @@ def test_a_window_measure_names_the_time_axis(
 
     graph = _convert(_FakeConnection(_time_view(dimensions, measures)))
     assert graph['order_lines'].time_column.name == 'order_date'
-    (message,) = _said(graph)
-    assert 'a window measure of the view orders by it' in message
+    assert _said(graph) == (
+        TimeColumnNote(
+            'order_lines',
+            'order_date',
+            instead_of=('order_month',),
+            added=True,
+            window_order=True,
+        ),
+    )
 
     graph = _convert(_FakeConnection(_time_view(dimensions)))
     assert graph['order_lines'].time_column.name == 'shipped'
@@ -3194,12 +3201,9 @@ def test_the_columns_a_measure_aggregates_become_columns() -> None:
         "reads, since the dimension 'status' has its name",
     )
     assert graph.conversion_notes == (
-        'Left the measures to the predictive query, which aggregates the '
-        'columns they read, added to their tables where missing; over the '
-        "next 30 days, 'total_amount' is SUM(order_lines.amount, 0, 30, "
-        "days), 'lines' is COUNT(order_lines.*, 0, 30, days), 'buyers' is "
-        'COUNT_DISTINCT(order_lines.customer_id, 0, 30, days); '
-        "'valid_amount' and 'segments' have no single aggregation",
+        MeasureNote('total_amount', 'order_lines', 'SUM', 'amount'),
+        MeasureNote('lines', 'order_lines', 'COUNT', None),
+        MeasureNote('buyers', 'order_lines', 'COUNT_DISTINCT', 'customer_id'),
     )
 
 
@@ -3267,38 +3271,54 @@ def test_names_are_matched_without_regard_to_case(
     assert graph.conversion_messages == ()
 
 
-def test_a_dimension_renaming_a_column_stands_for_it_in_a_measure(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    'name, expr, noted',
+    [
+        ('Order Amount', 'source.amount', True),
+        ('amount', 'amount * 100', False),
+    ],
+    ids=['rename', 'shadow'],
+)
+def test_a_measure_note_holds_only_where_the_column_is_the_source_column(
+    name: str, expr: str, noted: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""`Order Amount` is the column `amount` under another name, so a
-    measure over `amount` reads that dimension, and `amount` beside it would
-    be a second copy of it.
+    r"""A dimension renaming `amount` stands for it in a measure. One with
+    its name that holds something else shadows it, and the note said the
+    measure aggregated the dimension.
     """
     lines = _EXPR_DATA['order_lines']
     monkeypatch.setitem(
         _EXPR_DATA,
         'order_lines',
-        lines.assign(**{'Order Amount': _DATA['order_lines']['amount']}),
+        lines.assign(**{name: _DATA['order_lines']['amount']}),
     )
-    definition = """
+    definition = f"""
 version: 1.1
 source: cat.sch.order_lines
 dimensions:
-  - name: Order Amount
-    expr: source.amount
+  - name: {name}
+    expr: {expr}
 measures:
   - name: total
     expr: SUM(source.amount)
+  - name: bare
+    expr: SUM(amount)
 """
-    rows = _metric_view(definition, {'Order Amount': 'double'})
+    rows = _metric_view(definition, {name: 'double'})
 
     graph = _convert(_FakeConnection(rows))
 
-    assert [column.name for column in graph['order_lines'].columns] == [
-        'Order Amount'
-    ]
-    (message,) = graph.conversion_notes
-    assert "'total' is SUM(order_lines.`Order Amount`, 0, 30, days)" in message
+    assert [column.name for column in graph['order_lines'].columns] == [name]
+    if noted:
+        assert graph.conversion_notes == tuple(
+            MeasureNote(measure, 'order_lines', 'SUM', name)
+            for measure in ('total', 'bare')
+        )
+        assert graph.conversion_messages == ()
+    else:
+        assert graph.conversion_notes == ()
+        (message,) = graph.conversion_messages
+        assert "'total'" in message and f"'{name}'" in message
 
 
 def test_a_decimal_key_is_read_as_the_integer_its_type_says(
@@ -3450,10 +3470,13 @@ measures:
         )
 
     assert graph.conversion_messages == ()
-    parameter, measures, time_column = graph.conversion_notes
-    assert "Read the parameter 'floor' as its default '1'" in parameter
-    assert "'total_amount' is SUM(order_lines.amount" in measures
-    assert "Took 'order_date' as the time column" in time_column
+    assert graph.conversion_notes == (
+        ParameterNote('floor', '1'),
+        MeasureNote('total_amount', 'order_lines', 'SUM', 'amount'),
+        TimeColumnNote(
+            'order_lines', 'order_date', instead_of=('order_month',), added=True
+        ),
+    )
 
 
 @pytest.mark.parametrize(
