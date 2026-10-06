@@ -293,10 +293,9 @@ def _infer_view_time_column(
         for column in table.columns
         if column.stype == Stype.timestamp
     ]
-    source = {
-        name.lower(): column
-        for name, column in table._source_column_dict.items()
-    }
+    source = by_folded_name(
+        table._source_column_dict.values(), lambda column: column.name
+    )
     derived_from: dict[str, str] = {}
     for name in timestamps:
         expr = table[name].expr
@@ -391,7 +390,7 @@ def _measure_notes(
             :class:`~sdm_relational_engine.rfm.backend.databricks.metric_view.MetricViewMeasure`.
     """
     source = by_folded_name(fact_table._source_column_dict)
-    columns = {column.name.lower(): column for column in fact_table.columns}
+    columns = by_folded_name(fact_table.columns, lambda column: column.name)
     renamed_as: dict[str, str] = {}
     for column in fact_table.columns:
         if column.expr is not None and (
@@ -1687,10 +1686,9 @@ class Graph:
                     columns = by_folded_name(_columns_of(alias))
                     if (column := columns.get(name.lower())) is None:
                         continue
-                    taken = {
-                        spec_.name.lower(): spec_
-                        for spec_ in columns_by_alias[alias]
-                    }
+                    taken = by_folded_name(
+                        columns_by_alias[alias], lambda spec_: spec_.name
+                    )
                     # A dimension renaming the column stands for it.
                     if any(
                         (renamed := _renamed_column(str(spec_.expr)))

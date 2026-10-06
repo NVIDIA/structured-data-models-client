@@ -11,9 +11,11 @@ the note again rather than rewriting its words.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import TypeAlias
+from typing import Any, TypeAlias, TypeVar, overload
+
+_T = TypeVar('_T')
 
 
 def quoted_list(names: Sequence[str]) -> str:
@@ -24,13 +26,21 @@ def quoted_list(names: Sequence[str]) -> str:
     return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
 
 
-def by_folded_name(names: Iterable[str]) -> dict[str, str]:
-    r"""Each name under its case-folded spelling, the first spelling winning,
-    as Databricks matches names.
+@overload
+def by_folded_name(items: Iterable[str]) -> dict[str, str]: ...
+@overload
+def by_folded_name(
+    items: Iterable[_T], name: Callable[[_T], str]
+) -> dict[str, _T]: ...
+def by_folded_name(
+    items: Iterable[Any], name: Callable[[Any], str] = str
+) -> dict[str, Any]:
+    r"""Each of ``items`` under its name, given by ``name``, in lower case.
+    Of two whose names differ only in case, the first is kept.
     """
-    folded: dict[str, str] = {}
-    for name in names:
-        folded.setdefault(name.lower(), name)
+    folded: dict[str, Any] = {}
+    for item in items:
+        folded.setdefault(name(item).lower(), item)
     return folded
 
 
