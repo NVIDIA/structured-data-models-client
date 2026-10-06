@@ -52,6 +52,7 @@ from sdm_relational_engine.rfm.view_conversion import (
     ConversionNote,
     MeasureNote,
     TimeColumnNote,
+    by_folded_name,
 )
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
@@ -386,7 +387,7 @@ def _measure_notes(
         measures: The view's
             :class:`~sdm_relational_engine.rfm.backend.databricks.metric_view.MetricViewMeasure`.
     """
-    source = {name.lower() for name in fact_table._source_column_dict}
+    source = by_folded_name(fact_table._source_column_dict)
     columns = {column.name.lower(): column for column in fact_table.columns}
     renamed_as: dict[str, str] = {}
     for column in fact_table.columns:
@@ -433,8 +434,7 @@ def _real_name(table: Table, name: str) -> str:
     """
     if name in table._source_column_dict:
         return name
-    folded = {column.lower(): column for column in table._source_column_dict}
-    return folded.get(name.lower(), name)
+    return by_folded_name(table._source_column_dict).get(name.lower(), name)
 
 
 class ViewConversionWarning(UserWarning):
@@ -1642,17 +1642,16 @@ class Graph:
                 if isinstance(column_spec, MetricViewWildcard):
                     # Databricks refuses a view whose wildcards name a column
                     # twice, so one that exists names each once.
-                    excluded = {name.lower() for name in column_spec.excluded}
+                    excluded = by_folded_name(column_spec.excluded)
                     columns_by_alias[column_spec.alias].extend(
                         ColumnSpec(name=name)
                         for name in _columns_of(column_spec.alias)
                         if name.lower() not in excluded
                     )
                 elif (
-                    real := {
-                        name.lower(): name
-                        for name in _columns_of(column_spec.alias)
-                    }.get(unquote_ident(column_spec.expr).lower())
+                    real := by_folded_name(_columns_of(column_spec.alias)).get(
+                        unquote_ident(column_spec.expr).lower()
+                    )
                 ) is not None and real.lower() == column_spec.name.lower():
                     # A column named as itself in any case, as Databricks
                     # reads it, is that column, named as the view names it.
@@ -1684,7 +1683,7 @@ class Graph:
             # measure is only read here, never run.
             for measure in spec.measures:
                 for alias, name in measure.inputs:
-                    columns = {c.lower(): c for c in _columns_of(alias)}
+                    columns = by_folded_name(_columns_of(alias))
                     if (column := columns.get(name.lower())) is None:
                         continue
                     taken = {
@@ -1724,8 +1723,7 @@ class Graph:
                     (join.alias, child_key),
                     (other_alias, other_key),
                 ):
-                    folded = {name.lower(): name for name in _columns_of(alias)}
-                    real = folded.get(key.lower())
+                    real = by_folded_name(_columns_of(alias)).get(key.lower())
                     named = any(
                         spec_.name.lower() == key.lower()
                         for spec_ in columns_by_alias[alias]

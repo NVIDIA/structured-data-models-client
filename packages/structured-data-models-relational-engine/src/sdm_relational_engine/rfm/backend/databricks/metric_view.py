@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from sdm_relational_engine.exceptions import ViewConversionError
 from sdm_relational_engine.rfm.view_conversion import (
     ParameterNote,
+    by_folded_name,
     quoted_list,
 )
 from sdm_relational_engine.rfm.view_expr import (
@@ -1133,8 +1134,8 @@ def resolve_join_keys(
     parent_names = {join.parent_alias.lower()}
     if len(join.path) > 1:
         parent_names.add('.'.join(join.path[:-1]).lower())
-    child_folded = {column.lower() for column in child_columns}
-    parent_folded = {column.lower() for column in parent_columns}
+    child_folded = by_folded_name(child_columns)
+    parent_folded = by_folded_name(parent_columns)
 
     def _side(ref: JoinKeyRef) -> str | None:
         if ref.qualifier is not None:

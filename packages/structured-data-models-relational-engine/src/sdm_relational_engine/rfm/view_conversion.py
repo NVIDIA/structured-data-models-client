@@ -11,7 +11,7 @@ the note again rather than rewriting its words.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TypeAlias
 
@@ -22,6 +22,16 @@ def quoted_list(names: Sequence[str]) -> str:
     if len(quoted) <= 1:
         return ''.join(quoted)
     return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
+
+
+def by_folded_name(names: Iterable[str]) -> dict[str, str]:
+    r"""Each name under its case-folded spelling, the first spelling winning,
+    as Databricks matches names.
+    """
+    folded: dict[str, str] = {}
+    for name in names:
+        folded.setdefault(name.lower(), name)
+    return folded
 
 
 def _pql_name(name: str) -> str:
