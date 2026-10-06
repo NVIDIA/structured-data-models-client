@@ -67,6 +67,8 @@ SPDX_GENERATED_LINES = 8
 # Anything matching these must not appear in a file that ships to a user.
 INTERNAL_PATTERNS = (
     re.compile(r'gitlab-master\.nvidia\.com'),
+    re.compile(r'urm\.nvidia\.com'),
+    re.compile(r'\bkumo-tfm-nims\b'),
     re.compile(r'\bnv-shared-pypi\b'),
     re.compile(r'\bnvbugs?\b', re.IGNORECASE),
     re.compile(r'\bnspect-\d', re.IGNORECASE),
@@ -105,11 +107,6 @@ INTERNAL_ALLOWLIST = {
     # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
     'scripts/generate_sdm_api.py',
-    # Runs on the internal instance, and has to keep naming it to work.
-    # `.github/workflows/ci.yml` now runs the same gates in the open; this
-    # file stays only for the contract job, which clones a project that is
-    # not public, and goes when that clone no longer has to happen here.
-    '.gitlab-ci.yml',
 }
 
 SHIPPED_SUFFIXES = {
@@ -168,7 +165,7 @@ RETIRED_INTERFACES = (
 # for one retired interface is still checked for every other.
 RETIRED_ALLOWLIST = {
     'scripts/check_repo_hygiene.py': frozenset(RETIRED_INTERFACES),
-    'packages/structured-data-models-client/tests/test_quickstart_notebook.py': frozenset(
+    'packages/structured-data-models-client/tests/test_local_notebooks.py': frozenset(
         {
             'RelationalClient',
             'PredictClient',

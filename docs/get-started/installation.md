@@ -3,10 +3,10 @@
 | Command | You get |
 |---|---|
 | `pip install structured-data-models-client` | The client, the language, and the tabular model. Runs anywhere. |
-| `pip install structured-data-models-client[relational]` | Adds the relational model and native engine. **Python 3.10 through 3.13 only**. See [prerequisites](prerequisites.md). |
-| `pip install structured-data-models-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]`. |
-| `pip install structured-data-models-client[all]` | The relational model and every warehouse backend. |
-| `pip install structured-data-models-client[databricks-serving]` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
+| `pip install 'structured-data-models-client[relational]'` | Adds the relational model and native engine. **Python 3.10 through 3.13 only**. See [prerequisites](prerequisites.md). |
+| `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]`. |
+| `pip install 'structured-data-models-client[all]'` | The relational model and every warehouse backend. |
+| `pip install 'structured-data-models-client[databricks-serving]'` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
 
 **What you install is not what you import.** The five distributions are
 `structured-data-models-client`, `-api`, `-pql`, `-connectors` and

@@ -16,9 +16,8 @@ readme="README.md"
 # must fail resolution rather than fail to find a distribution. The bound and
 # the classifiers below name the same interpreters and move together.
 #
-# The GitLab `wheels` job builds the Linux matrix these classifiers name, from
-# `[tool.cibuildwheel]` below. Nothing publishes it yet, so the bound states
-# what the extension supports rather than what has been released.
+# The wheel jobs build the Linux matrix these classifiers name, from
+# `[tool.cibuildwheel]` below. The bound states what the extension supports.
 requires-python=">=3.10,<3.14"
 keywords=[
     "deep-learning",
@@ -242,9 +241,8 @@ ignore = [
     "C413",    #  1x reversed(sorted(...))
 
     # The tree carries 11 markers that name neither an owner nor an issue.
-    # Each sits on live code and is actionable, but there is no public issue
-    # tracker to point them at until this repository is on GitHub. Give them
-    # issue links then and drop these three rules.
+    # Each sits on live code and is actionable. Give them issue links and drop
+    # these three rules.
     "TD002",
     "TD003",
     "FIX002",

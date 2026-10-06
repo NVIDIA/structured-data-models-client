@@ -4,12 +4,10 @@
 
 # Every gate a change has to pass, run where a contributor can see it.
 #
-# The internal pipeline runs these too, but a public repository cannot ask an
-# outside contributor to trust a result they cannot open. Every blocking gate
-# on that pipeline has a counterpart here, with one exception: the contract
-# check clones the canonical OpenAPI spec from an internal project, so it stays
-# where that clone is possible. The generated bindings are pinned by SHA-256 in
-# PROVENANCE.json either way, and a drifted copy fails the build it ships in.
+# One gate is not here: the contract check reads the canonical OpenAPI spec
+# from where it is maintained, which a fork cannot reach. The generated
+# bindings are pinned by SHA-256 in PROVENANCE.json either way, and a drifted
+# copy fails the build it ships in.
 name: CI
 
 on:

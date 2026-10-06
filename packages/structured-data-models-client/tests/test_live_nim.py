@@ -205,7 +205,7 @@ def test_predictions_join_on_the_key_the_result_carries(client):
 
 @requires_tabular
 def test_a_tabular_question_runs_from_predictive_query_text(client):
-    """Phase 7: the query says what to predict, the rows say what to score.
+    """The query says what to predict, the rows say what to score.
 
     Both halves come from different places on purpose. A query resolves against
     a schema and so can only name rows that are already there; these are not.

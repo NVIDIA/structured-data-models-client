@@ -1,8 +1,8 @@
 # QA probes
 
-The end-to-end pass these fixes came out of, and now their regression suite.
-Every probe here was written against a real failure against a live NIM; each
-one that passes is a bug that stays fixed.
+A regression suite over live endpoints. Every probe here was written against a
+real failure seen against a live NIM; each one that passes is a bug that stays
+fixed.
 
 These are not part of the test suite. They need live endpoints, real
 credentials and datasets that are downloaded rather than vendored, so they are
@@ -62,12 +62,11 @@ broken thing does not hide the next.
 `probe_cloud.py` and `probe_warehouse.py` create objects and tables and remove
 them before they exit.
 
-## Status
+## Coverage
 
-All 139 probes pass. Each was written against a failure that is now fixed, so
-the suite is the regression check for those fixes: point it at a live NIM and a
-warehouse, and anything that comes back red is something that used to be
-broken.
+Each probe was written against a failure that is now fixed, so the suite is the
+regression check for those fixes: point it at a live NIM and a warehouse, and
+anything that comes back red is something that used to be broken.
 
 | Suite | Probes |
 |---|---|
@@ -94,9 +93,8 @@ python -m venv /tmp/relenv
 /tmp/relenv/bin/pip install --find-links dist/ 'structured-data-models-client'
 ```
 
-What that proved on this branch: all five distributions build; a base install
-pulls `structured-data-models-api`, `structured-data-models-pql`, pandas, numpy, requests, urllib3 and the ANTLR
+What this checks: all five distributions build; a base install pulls `structured-data-models-api`, `structured-data-models-pql`, pandas, numpy, requests, urllib3 and the ANTLR
 runtime and nothing else; `sdm_relational_engine` is **not** importable, and the
 relational path raises `MissingExtraError` naming the extra to install;
-`[relational]`, `[duckdb]` and `[s3]` each resolve on their own; and the fixes
-are present in the installed bytes, not only in the working tree.
+`[relational]`, `[duckdb]` and `[s3]` each resolve on their own; and what is
+installed is what the wheels carry, not what the working tree holds.

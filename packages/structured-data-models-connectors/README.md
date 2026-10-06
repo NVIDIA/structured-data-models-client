@@ -1,6 +1,6 @@
 # structured-data-models-connectors
 
-Shared data-source connectors for the [`structured-data-models-client`](../structured-data-models-client/README.md) client and its
+Shared data-source connectors for the [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client) client and its
 model engines. One place that knows how to reach each warehouse, so the client
 (flat table reads) and the Kumo Relational driver (warehouse connections for
 its graph samplers) don't each carry their own copy.
@@ -26,6 +26,9 @@ import duckdb
 from databricks.sdk import WorkspaceClient
 from sdm_connectors import DatabricksSource, DuckDBSource, PostgresSource
 from sdm_connectors.databricks import lakebase, warehouse
+
+warehouse_id = '0123456789abcdef'
+endpoint = 'projects/<project>/branches/<branch>/endpoints/<endpoint>'
 
 w = WorkspaceClient()
 uc = DatabricksSource(
@@ -57,6 +60,9 @@ as `QUERY_FAILED`. Either way, reach the table through `query=` with
 SQLite/DuckDB/Snowflake, `` ` `` for Databricks):
 
 ```python
+import duckdb
+from sdm_connectors import quote_ident, read_table
+
 connection = duckdb.connect('w.db', read_only=True)
 read_table(connection, query=f'SELECT * FROM {quote_ident("café")}')
 ```

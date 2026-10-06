@@ -68,11 +68,10 @@ request that was previously sent. The changelog identifies the change.
 
 ## When this starts
 
-**The contract starts at the first published release.** Nothing in this
-repository has been published, and none of the five distributions exists on
-PyPI. These promises begin at 1.0.0; they do not apply earlier.
+**The contract starts at the first published release.** These promises begin at
+1.0.0; they do not apply to anything earlier.
 
-This distinction matters. Before the first release, this document made
+This distinction matters. Before that release, this document made
 `predictive_query` public, along with `sdm_client.ModelSpec`,
 `sdm_client.RuntimeContract`, the model handles' `spec` attribute,
 `Request.decomposition` and the arguments `FittedModel` was constructed with.

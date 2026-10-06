@@ -4,8 +4,8 @@
 
 """A predictive query that builds a single-table request.
 
-The source design listed five reasons this could not work, one of them marked
-fatal: a query resolves against a schema, so it can only ever name rows that
+Five things make this look impossible, one of them fatal at first reading:
+a query resolves against a schema, so it can only ever name rows that
 are already there, while a single-table model exists to score rows that are
 not. The resolution is that the rows are an argument. The query still earns its
 place by saying which column is the target and what kind of question it is.
@@ -42,7 +42,7 @@ def query(text: str = 'PREDICT users.churn FOR EACH users.user_id'):
 
 
 def test_a_query_can_score_rows_the_tables_never_contained():
-    """The blocker the source design called fatal, and how it is answered."""
+    """The blocker that looks fatal, and how it is answered."""
     request = query().materialize(predict=new_rows())
     assert request.predict_rows == 2
     assert request.context_rows == 30

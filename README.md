@@ -1,25 +1,52 @@
-# structured-data-models-client
+# NVIDIA Structured Data Models Client
 
-One Python client for NVIDIA's structured-data foundation models.
+Ask a predictive question of one table, or of a whole relational schema, and
+get an answer without training a model for each dataset.
+
+```bash
+pip install 'structured-data-models-client[relational]'
+```
+
+## Overview
 
 Structured-data foundation models predict in context. You give the model
 labelled rows and the rows you want scored, and it answers in one pass. There
 is no training loop, no hyperparameter search, and no per-dataset artifact to
 manage.
 
-This client builds the request, sends it to a NIM, and gives you back a
-DataFrame. Inference runs in the NIM, so this package downloads no weights and
-needs no GPU.
+This client talks to those models. It builds the request, sends it to a NIM
+inference endpoint, and gives you back a `PredictionResult`, which
+`to_pandas()` turns into a DataFrame. Inference runs in the NIM, so this
+package downloads no weights and needs no GPU.
+
+Two models are available through the client:
+
+| Model | For | Asked with |
+| --- | --- | --- |
+| `kumo-tabular` | rows of a single table | `KumoTabular()` |
+| `kumo-relational` | several related tables, joined as a graph | `KumoRelational()` |
+
+**The model is an argument, not a method.** Both use the same call.
+
+## Getting started
+
+You need a running NIM to predict against. Point the client at it and ask:
 
 ```python
-from sdm_client import (
-    SDMClient,
-    Schema,
-    PredictiveQuery,
-    KumoRelational,
+import pandas as pd
+from sdm_client import KumoRelational, PredictiveQuery, SDMClient, Schema
+
+users = pd.DataFrame({'user_id': range(12)})
+orders = pd.DataFrame(
+    {
+        'order_id': range(120),
+        'user_id': [i % 12 for i in range(120)],
+        'price': [10.0 + i for i in range(120)],
+        'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+    }
 )
 
-schema = Schema.from_data({'users': users_df, 'orders': orders_df})
+schema = Schema.from_data({'users': users, 'orders': orders})
 query = PredictiveQuery(
     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id', schema
 )
@@ -30,163 +57,120 @@ with SDMClient(url='http://localhost:8000') as client:
     print(result.to_pandas())
 ```
 
-**The model is an argument, not a method.** Either model uses the same call.
-The request is gathered for one model, and `materialize(model=...)` selects it
-when the schema's shape gives the wrong default.
+The [quickstart](docs/get-started/quickstart.md) runs this end to end, and
+[prerequisites](docs/get-started/prerequisites.md) covers what you need first.
 
-## Status
+## Installation
 
-All seven phases are built and tested end to end against live NIMs. The
-packages follow [`docs/about/architecture.md`](docs/about/architecture.md).
-Nothing has been released yet.
+| Command | You get |
+| --- | --- |
+| `pip install structured-data-models-client` | The client, the language, and the tabular model |
+| `pip install 'structured-data-models-client[relational]'` | Adds the relational model and its native engine |
+| `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]` |
+| `pip install 'structured-data-models-client[all]'` | The relational model and every warehouse backend |
 
-| Phase | | |
-|---|---|---|
-| 1 | Foundation: `structured-data-models-api`, `structured-data-models-pql`, CI | ✅ |
-| 2 | Client and the tabular model | ✅ |
-| 3 | Connectors | ✅ |
-| 4 | The relational model | ✅ |
-| 5 | `fit` and explanations | ✅ |
-| 6 | Docs and end-to-end | ✅ |
-| 7 | PQL for tabular | ✅ |
+[Installation](docs/get-started/installation.md) has the rest, including what
+differs on Databricks.
+
+## Requirements
+
+Python 3.10 through 3.14. The client, the language and the connectors are pure
+Python and install anywhere.
+
+The relational engine is a native build. It publishes `manylinux_2_28` wheels
+for x86-64 and aarch64 on **CPython 3.10 through 3.13** and **no source
+distribution**, so `[relational]` resolves on a Linux with glibc 2.28 or newer
+and nowhere else: not on musl, not on an older glibc, and not on macOS or
+Windows, where pip has nothing to fall back to. `kumo-tabular` works on any
+laptop.
 
 ## Packages
 
-Five distributions, released together on one version.
+Five distributions are released together and share one version, and a given
+version of one is only tested against the same version of the others:
 
-| Distribution | Import | Kind | What it is |
-|---|---|---|---|
-| `structured-data-models-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, sessions and results |
-| `structured-data-models-api` | `sdm_api` | pure python | The Universal TFM wire types. No third-party dependencies |
-| `structured-data-models-pql` | `predictive_query` | pure python | The Predictive Query Language: grammar, parser, validator, AST, model profiles |
-| `structured-data-models-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
-| `structured-data-models-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
+| Package | Import | What it is |
+| --- | --- | --- |
+| `structured-data-models-client` | `sdm_client` | the public API: client, `Schema`, `Request`, model handles, sessions and results |
+| `structured-data-models-api` | `sdm_api` | the wire types. No third-party dependencies |
+| `structured-data-models-pql` | `predictive_query` | the Predictive Query Language: grammar, parser, validator, model profiles |
+| `structured-data-models-connectors` | `sdm_connectors` | reads source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks and S3 |
+| `structured-data-models-relational-engine` | `sdm_relational_engine` | the relational driver: graph building, samplers, the neighbor sampler |
 
-`structured-data-models-pql` is an internal dependency of `structured-data-models-client`, not a supported API, and
-its `predictive_query` package can change in any release. Write PQL with
-`sdm_client.PredictiveQuery`.
+The import name is not the package name, and is not derived from it.
 
-Only `structured-data-models-relational-engine` is native. The other four are pure Python and
-install anywhere, on 3.10 through 3.14.
+`structured-data-models-pql` is an internal dependency of the client, not a
+supported API: its `predictive_query` package can change in any release. Write
+PQL with `sdm_client.PredictiveQuery`.
 
-The engine publishes wheels for Linux x86-64 and aarch64 on 3.10 through 3.13
-and **no source distribution**, so `pip install structured-data-models-client[relational]` resolves
-there and nowhere else. On other platforms, pip has nothing to fall back to, so
-the extra does not install. It builds from a checkout on other platforms with a
-compiler and CMake, as described below. This path is for contributors; `pip`
-cannot use it for users.
-
-## Development
-
-```bash
-python3.12 -m venv .venv
-.venv/bin/pip install \
-  -e './packages/structured-data-models-api[test]' \
-  -e './packages/structured-data-models-pql[test]' \
-  -e './packages/structured-data-models-client[test]' \
-  -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
-.venv/bin/python -m pytest \
-  packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
-  packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q
-```
-
-`tests/` at the root is the cross-package suite: that the five distributions
-agree on a version and a licence, that the recorded public surface and wire
-payloads still match, and that the claims the configuration files make about
-themselves are true.
-
-The relational engine is a native build and is installed and tested on its
-own, from its own directory:
-
-```bash
-.venv/bin/pip install -e './packages/structured-data-models-relational-engine[test]'
-cd packages/structured-data-models-relational-engine && ../../.venv/bin/python -m pytest tests -q
-```
-
-Lint and format with `ruff`; the formatter owns line length. Type-check with
-`mypy`, which is blocking in CI:
-
-```bash
-.venv/bin/mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src \
-               packages/structured-data-models-client/src packages/structured-data-models-connectors/src
-```
-
-Changing anything a caller can observe, such as an exported name, signature,
-or wire request shape, requires recording a new snapshot in the same commit.
-This makes the change visible in review:
-
-```bash
-.venv/bin/python scripts/snapshot_public_api.py --write
-.venv/bin/python scripts/snapshot_wire_payloads.py --write
-```
-
-## Vendored code
-
-One tree is vendored, and it is pinned by digest and checked in CI, because a
-repo-wide rename has silently corrupted a vendored artifact in this family of
-repositories before.
-
-`mermaid.min.js` is bundled in the relational engine so `Graph.visualize()`
-draws offline: Snowflake and Databricks notebooks block external scripts, so a
-diagram fetched from a CDN would not draw. Upstream bytes, SHA-256 pinned,
-components enumerated in `LICENSE`.
-
-Everything else here, including the Predictive Query Language in `structured-data-models-pql`, is
-first-party source maintained in this repository.
-
-## License
-
-Apache-2.0, in [`LICENSE`](LICENSE). Third-party notices for the one vendored
-tree are in the same file, under "Third-party software bundled in this
-repository".
-
-Each package carries its own copy so its `pyproject.toml` can reference one,
-which is what puts the license inside each wheel. They are the same terms as
-the root file, not additional ones:
-
-- [`packages/structured-data-models-api/LICENSE`](packages/structured-data-models-api/LICENSE)
-- [`packages/structured-data-models-client/LICENSE`](packages/structured-data-models-client/LICENSE)
-- [`packages/structured-data-models-connectors/LICENSE`](packages/structured-data-models-connectors/LICENSE)
-- [`packages/structured-data-models-pql/LICENSE`](packages/structured-data-models-pql/LICENSE)
-- [`packages/structured-data-models-relational-engine/LICENSE`](packages/structured-data-models-relational-engine/LICENSE)
-
-Contributions are welcome and are signed off under the Developer Certificate of
-Origin; see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Release history is in [`CHANGELOG.md`](CHANGELOG.md), and what a version bump
+means is in [stability](docs/reference/stability.md).
 
 ## Documentation
 
 Full documentation is under [`docs/`](docs/index.md):
 
 - [Overview](docs/about/overview.md) and
-  [Architecture](docs/about/architecture.md)
+  [architecture](docs/about/architecture.md)
 - [Prerequisites](docs/get-started/prerequisites.md),
-  [Installation](docs/get-started/installation.md),
-  [Quickstart](docs/get-started/quickstart.md)
+  [installation](docs/get-started/installation.md),
+  [quickstart](docs/get-started/quickstart.md)
 - [Prediction output](docs/reference/prediction-output.md) and
-  [Limits](docs/reference/limits.md)
-- [Stability](docs/reference/stability.md): public APIs and version bumps
+  [limits](docs/reference/limits.md)
+- [Stability](docs/reference/stability.md): what is public, and what a version
+  bump means
 
-## Testing
+[`skills/`](skills/README.md) is the same material written for a coding agent.
+Every example in it that can run is run against a live endpoint by the test
+suite, and compared to the output printed beneath it.
+
+## Contributing
+
+Contributions are welcome under the Developer Certificate of Origin. Start with
+[`CONTRIBUTING.md`](CONTRIBUTING.md), which has the development setup and the
+test commands, and please read [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ```bash
-# everything that needs nothing running, and opens no sockets
-python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
-                packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests \
-  -q -m 'not live_nim and not live_warehouse and not socket'
-
-# the native engine, from the repository root
-python -m pytest packages/structured-data-models-relational-engine/tests -q
-
-# against a NIM you are running
-SDM_TABULAR_URL=http://localhost:8000 \
-SDM_RELATIONAL_URL=http://localhost:8001 \
-  python -m pytest packages/structured-data-models-client/tests -m live_nim -q
-
-# against real warehouses
-python -m pytest packages/structured-data-models-connectors/tests -m live_warehouse -q
-
-# metric view variants, created and dropped in a schema you may write to,
-# beside the DATABRICKS_* variables the engine's live tests read
-SDM_MV_TEST_SCHEMA=main.scratch python -m pytest -q \
-  packages/structured-data-models-relational-engine/tests/backend/databricks/test_live_metric_view_variants.py
+git clone https://github.com/NVIDIA/structured-data-models-client
+cd structured-data-models-client
+python -m pip install -e './packages/structured-data-models-client[test]'
+python -m pytest packages/structured-data-models-client/tests -m 'not live_nim' -q
 ```
+
+## Governance and support
+
+- Who decides what, and how a change gets merged:
+  [`GOVERNANCE.md`](GOVERNANCE.md)
+- Maintainers and the escalation path: [`MAINTAINERS.md`](MAINTAINERS.md)
+- Support level and where to ask: [`SUPPORT.md`](SUPPORT.md)
+
+## Security
+
+Please do not open a public issue for a security problem. Vulnerability
+reporting goes to NVIDIA PSIRT. See [`SECURITY.md`](SECURITY.md), which also
+records what is a deliberate design decision rather than a vulnerability.
+
+## License
+
+Apache-2.0. See [`LICENSE`](LICENSE). Copyright (c) 2026 NVIDIA CORPORATION &
+AFFILIATES.
+
+Each package under `packages/` carries its own copy of `LICENSE` so its
+`pyproject.toml` can reference it, which is what puts the license inside each
+wheel. Those copies are the same terms as the root file, not additional ones:
+[api](packages/structured-data-models-api/LICENSE),
+[client](packages/structured-data-models-client/LICENSE),
+[connectors](packages/structured-data-models-connectors/LICENSE),
+[pql](packages/structured-data-models-pql/LICENSE),
+[relational-engine](packages/structured-data-models-relational-engine/LICENSE).
+
+One third-party component is vendored rather than resolved at install time:
+`mermaid.min.js`, bundled in the relational engine so `Graph.visualize()` draws
+offline, since Snowflake and Databricks notebooks block external scripts. It is
+MIT licensed and is itself a bundle, so the components inside it are enumerated
+with their copyrights in the third-party section of [`LICENSE`](LICENSE). Its
+bytes are pinned by digest and checked in CI.
+
+Everything else is resolved at install time rather than shipped here. This
+project will download and install additional third-party open source software
+projects. Review the license terms of these open source projects before use.

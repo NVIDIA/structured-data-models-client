@@ -25,8 +25,12 @@ python -m pytest packages/structured-data-models-api/tests packages/structured-d
 cd packages/structured-data-models-relational-engine && python -m pytest tests -q && cd -
 
 ruff check . && ruff format --check .
-mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src packages/structured-data-models-client/src packages/structured-data-models-connectors/src
+mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src \
+     packages/structured-data-models-client/src packages/structured-data-models-connectors/src \
+     packages/structured-data-models-relational-engine/src
+mypy packages/structured-data-models-connectors/tests/typing/check_sources.py
 python scripts/check_repo_hygiene.py all
+python scripts/mermaid_notices.py --check
 ```
 
 Then, against running NIMs, because a release should not be the first time
@@ -50,8 +54,9 @@ done
 
 Internal pins (`structured-data-models-api==1.0.0` in `structured-data-models-client`'s dependencies) move with them.
 
-Update `CHANGELOG.md`: move `Unreleased` entries under the new version with
-today's date.
+Update `CHANGELOG.md`: the entries for the release go under its own heading
+with today's date, so the tag carries a changelog that names the version it
+publishes.
 
 ## Tagging
 

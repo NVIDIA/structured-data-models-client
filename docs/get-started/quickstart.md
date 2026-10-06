@@ -32,11 +32,21 @@ The model can score rows absent from the labelled half.
 Describe the tables, ask in PQL, and name the entities to score.
 
 ```python
+import pandas as pd
 from sdm_client import PredictiveQuery, SDMClient, KumoRelational
+
+users = pd.DataFrame({'user_id': range(20)})
+orders = pd.DataFrame(
+    {
+        'order_id': range(200),
+        'user_id': [i % 20 for i in range(200)],
+        'ordered_at': pd.date_range('2026-01-01', periods=200, freq='D'),
+    }
+)
 
 query = PredictiveQuery(
     'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id',
-    {'users': users_df, 'orders': orders_df},
+    {'users': users, 'orders': orders},
 )
 request = query.materialize(indices=[7, 12, 3])
 
@@ -138,7 +148,7 @@ with SDMClient.for_databricks_serving('kumo-relational') as client:
     result = client.predict(request, model=KumoRelational())
 ```
 
-This needs `pip install structured-data-models-client[databricks-serving]`. A serving endpoint
+This needs `pip install 'structured-data-models-client[databricks-serving]'`. A serving endpoint
 answers one request at a time, so `fit()` is refused there; `predict()` sends
 the context with every call.
 
