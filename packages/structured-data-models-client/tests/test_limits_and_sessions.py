@@ -215,7 +215,7 @@ def test_the_engine_s_statistic_travels_on_the_output_instead():
         }
     }
     (plan,) = RelationalAdapter().prediction_plan(request, ('prediction',))
-    assert plan['inference']['inference_config'] == {'num_estimators': 1}
+    assert 'inference_config' not in plan['inference']
     assert plan['output']['prediction_statistic'] == 'median'
 
 
