@@ -248,8 +248,11 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     # Databricks has no `$$` literal, and quotes no name with a backslash.
     if dialect == 'databricks' and '$$' in expr:
         return "it contains '$$', which Databricks SQL does not quote with"
-    # Snowflake also comments out the rest of a line with `//`.
-    if dialect == 'snowflake' and '//' in expr:
+    # Snowflake also comments out the rest of a line with `//`, which a
+    # literal such as a URL may hold.
+    if dialect == 'snowflake' and any(
+        token.kind == 'comment' for token in _lex(expr, dialect)
+    ):
         return "it contains '//'"
     if dialect == 'snowflake':
         for quoted in _lex(expr, dialect):
