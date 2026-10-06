@@ -350,7 +350,7 @@ class MetricViewFilter:
             self._sql, 'databricks', columns=columns
         )
         if reason is not None:
-            _refuse_filter(self._sql, reason)
+            _refuse_filter(self._sql, reason, trusting_helps=True)
         return self._sql
 
     def trusted(self) -> str:
@@ -1145,12 +1145,28 @@ def _check_filter(
     return MetricViewFilter(row_filter.strip())
 
 
-def _refuse_filter(row_filter: Any, reason: str) -> NoReturn:
+def _refuse_filter(
+    row_filter: Any, reason: str, *, trusting_helps: bool = False
+) -> NoReturn:
+    r"""Refuses the view for its filter, and says the ways out.
+
+    Args:
+        row_filter: The filter.
+        reason: Why, as a clause.
+        trusting_helps: Whether ``trust_expressions=True`` would accept it,
+            as for a call to a function other than a pure built-in.
+    """
+    hatch = ''
+    if trusting_helps:
+        hatch = (
+            ', or pass trust_expressions=True to apply it if you trust '
+            'whoever authored the view'
+        )
     raise UnsupportedFilterError(
         f'Cannot apply the metric view filter {row_filter!r} since '
         f'{reason}. The graph would otherwise read rows the view leaves '
         f'out. Create a regular view with this WHERE clause and point the '
-        f"metric view's source at it"
+        f"metric view's source at it{hatch}"
     )
 
 

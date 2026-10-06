@@ -3365,3 +3365,30 @@ fields:
         "Ignored the 'fields' section since the view also has 'dimensions', "
         'and Databricks reads only those'
     ]
+
+
+def test_a_filter_refused_for_a_call_names_both_ways_out() -> None:
+    r"""`current_date()` reads the session, which trusting the view accepts,
+    and the refusal did not say so.
+    """
+    row_filter = parse_metric_view(
+        'source: cat.sch.orders\n'
+        'filter: order_date > current_date() - INTERVAL 20 YEARS\n'
+    ).filter
+    assert row_filter is not None
+
+    with pytest.raises(UnsupportedFilterError) as caught:
+        row_filter.checked(['order_date'])
+
+    message = str(caught.value)
+    assert 'Create a regular view with this WHERE clause' in message
+    assert message.endswith(
+        'or pass trust_expressions=True to apply it if you trust whoever '
+        'authored the view'
+    )
+
+    with pytest.raises(UnsupportedFilterError) as caught:
+        parse_metric_view(
+            _KEYWORD_YAML.format(filter="customers.segment = 'a'")
+        )
+    assert 'trust_expressions' not in str(caught.value)
