@@ -172,6 +172,9 @@ declare as `1.0.0` and none has published. The heading becomes
   `customers` join or dropped it as referencing two tables, and a literal
   equal to another dimension's name was replaced by that dimension's
   expression. Literals are now left as written.
+- **A metric view parameter named `Type`, `View Text`, `Catalog` or `Database` no longer stands in for the view's own detail.**
+  `DESCRIBE TABLE EXTENDED` lists parameters before the details, and the first row of each name was read, so such a view was refused as not a metric view.
+  The description is now read section by section, on a SQL warehouse and a Spark session alike.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the

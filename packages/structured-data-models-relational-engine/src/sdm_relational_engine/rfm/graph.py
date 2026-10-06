@@ -1208,10 +1208,9 @@ class Graph:
                 quote_ident(part, char='`') for part in name_parts
             )
 
-            definition, dtype_names, view_catalog, view_schema = (
-                read_metric_view_definition(connection, quoted_name)
-            )
-            spec = parse_metric_view(definition)
+            description = read_metric_view_definition(connection, quoted_name)
+            view_catalog, view_schema = description.catalog, description.schema
+            spec = parse_metric_view(description.definition)
             msgs = list(spec.messages)
 
             def _table_parts(parts: tuple[str, ...]) -> tuple[str, str, str]:
@@ -1229,7 +1228,7 @@ class Graph:
 
             dtypes = {
                 name: DatabricksTable._to_dtype(data_type)
-                for name, data_type in dtype_names.items()
+                for name, data_type in description.dtypes.items()
             }
 
             fact_catalog, fact_schema, fact_source = _table_parts(spec.source)

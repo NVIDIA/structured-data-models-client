@@ -590,14 +590,72 @@ def resolve_join_keys(
     )
 
 
+@dataclass(frozen=True)
+class MetricViewDescription:
+    r"""What ``DESCRIBE TABLE EXTENDED`` says about a metric view.
+
+    Args:
+        definition: The YAML definition.
+        dtypes: The data types of all dimensions, by name.
+        parameters: The data types of all parameters, by name. Their
+            defaults are in the definition only.
+        catalog: The catalog of the metric view, if given.
+        schema: The schema of the metric view, if given.
+    """
+
+    definition: str
+    dtypes: dict[str, str]
+    parameters: dict[str, str]
+    catalog: str | None
+    schema: str | None
+
+
+# The section of `DESCRIBE TABLE EXTENDED` that comes before any header.
+_COLUMNS_SECTION = ''
+
+
+def _describe_sections(rows: Sequence[Any]) -> dict[str, list[tuple[str, str]]]:
+    r"""Splits the rows of ``DESCRIBE TABLE EXTENDED`` into their sections,
+    keyed by the lower-case header without its ``#``.
+
+    The columns come first, then sections such as ``# Parameters`` and
+    ``# Detailed Table Information``. A header names no type, which tells it
+    from a column named ``#...``. Row width differs between a SQL warehouse
+    (four) and a Spark session (three), and so does whether an empty cell is
+    ``''`` or ``None``, so only the first two cells are read.
+    """
+    sections: dict[str, list[tuple[str, str]]] = {_COLUMNS_SECTION: []}
+    current: str | None = _COLUMNS_SECTION
+    for row in rows:
+        name = str(row[0]).strip() if row[0] is not None else ''
+        value = str(row[1]) if len(row) > 1 and row[1] is not None else ''
+        if name.startswith('#') and not value.strip():
+            header = name.lstrip('#').strip().lower()
+            # Spark heads the rows of some sections with `# col_name`.
+            if header != 'col_name':
+                current = header
+                sections.setdefault(current, [])
+            continue
+        if not name:
+            # A blank row ends the columns; rows up to the next header belong
+            # to no section.
+            if current == _COLUMNS_SECTION:
+                current = None
+            continue
+        if current is not None:
+            sections[current].append((name, value))
+    return sections
+
+
 def read_metric_view_definition(
     connection: AnyConnection,
     quoted_name: str,
-) -> tuple[str, dict[str, str], str | None, str | None]:
-    r"""Reads a metric view definition from a Databricks SQL warehouse.
+) -> MetricViewDescription:
+    r"""Reads a metric view definition from a Databricks SQL warehouse or
+    Spark session.
 
-    Returns the YAML definition, the data types of all dimensions by name,
-    and the catalog and schema of the metric view.
+    Each section of the description is read on its own, so a parameter named
+    like a detail, such as ``Type`` or ``View Text``, cannot stand in for it.
 
     Raises:
         ValueError: If the relation is not a metric view or exposes no
@@ -607,20 +665,16 @@ def read_metric_view_definition(
         cursor.execute(f'DESCRIBE TABLE EXTENDED {quoted_name}')
         rows = cursor.fetchall()
 
-    dtypes: dict[str, str] = {}
+    sections = _describe_sections(rows)
+    dtypes = {
+        name: data_type
+        for name, data_type in sections[_COLUMNS_SECTION]
+        if not data_type.endswith(_MEASURE_SUFFIX)
+    }
+    parameters = dict(sections.get('parameters', []))
     details: dict[str, str] = {}
-    in_columns = True
-    for row in rows:
-        col_name = str(row[0]).strip() if row[0] is not None else ''
-        data_type = str(row[1]) if len(row) > 1 and row[1] is not None else ''
-        if in_columns:
-            if col_name == '' or col_name.startswith('#'):
-                in_columns = False
-                continue
-            if not data_type.endswith(_MEASURE_SUFFIX):
-                dtypes[col_name] = data_type
-        elif col_name and col_name not in details:
-            details[col_name] = data_type
+    for name, value in sections.get('detailed table information', []):
+        details.setdefault(name, value)
 
     if details.get('Type') != 'METRIC_VIEW':
         raise ValueError(
@@ -634,4 +688,10 @@ def read_metric_view_definition(
             f"Could not read the definition of metric view '{quoted_name}'"
         )
 
-    return definition, dtypes, details.get('Catalog'), details.get('Database')
+    return MetricViewDescription(
+        definition=definition,
+        dtypes=dtypes,
+        parameters=parameters,
+        catalog=details.get('Catalog'),
+        schema=details.get('Database'),
+    )

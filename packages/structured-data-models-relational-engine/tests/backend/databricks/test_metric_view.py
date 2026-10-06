@@ -1093,12 +1093,12 @@ def test_from_databricks_metric_view_invalid_name() -> None:
 
 
 def test_read_metric_view_definition() -> None:
-    definition, dtypes, catalog, schema = read_metric_view_definition(
+    description = read_metric_view_definition(
         _FakeConnection(), '`cat`.`sch`.`sales_mv`'
     )
 
-    assert definition == _METRIC_VIEW_YAML
-    assert dtypes == {
+    assert description.definition == _METRIC_VIEW_YAML
+    assert description.dtypes == {
         'order_month': 'timestamp',
         'order_quarter': 'timestamp',
         'product_line': 'string',
@@ -1107,8 +1107,79 @@ def test_read_metric_view_definition() -> None:
         'region_name': 'string',
         'region_code': 'string',
     }
-    assert catalog == _CATALOG
-    assert schema == _SCHEMA
+    assert description.parameters == {}
+    assert description.catalog == _CATALOG
+    assert description.schema == _SCHEMA
+
+
+def _parameterized(*parameters: str, width: int = 4, empty: Any = '') -> list:
+    r"""The rows a warehouse (four wide, empty cells `''`) or a Spark session
+    (three wide, empty cells `None`) describes a metric view with, holding
+    the given parameters ahead of the details, as Databricks lists them.
+    """
+    columns = _DESCRIBE_ROWS[: _DESCRIBE_ROWS.index(('', '', None))]
+    rows = [
+        *((name, dtype, None, None) for name, dtype, _ in columns),
+        ('#tag', 'string', None, None),
+        ('', '', '', ''),
+        ('# Parameters', '', '', ''),
+        *((name, 'string', '', '') for name in parameters),
+        ('', '', '', ''),
+        ('# Detailed Table Information', '', '', ''),
+        ('Catalog', _CATALOG, '', ''),
+        ('Database', _SCHEMA, '', ''),
+        ('Table', 'sales_mv', '', ''),
+        ('Type', 'METRIC_VIEW', '', ''),
+        ('View Text', _METRIC_VIEW_YAML, '', ''),
+        ('Language', 'YAML', '', ''),
+    ]
+    return [
+        tuple(empty if cell == '' else cell for cell in row[:width])
+        for row in rows
+    ]
+
+
+@pytest.mark.parametrize(
+    'width, empty', [(4, ''), (3, None)], ids=['warehouse', 'spark']
+)
+def test_a_parameter_named_like_a_detail_does_not_stand_in_for_it(
+    width: int, empty: Any
+) -> None:
+    r"""Databricks lists the parameters before the details, so reading the
+    first row of each name took a parameter named `Type` for the view's type.
+    """
+    rows = _parameterized(
+        'Type', 'View Text', 'Catalog', 'Database', width=width, empty=empty
+    )
+
+    description = read_metric_view_definition(
+        _FakeConnection(rows), '`cat`.`sch`.`sales_mv`'
+    )
+
+    assert description.definition == _METRIC_VIEW_YAML
+    assert description.catalog == _CATALOG
+    assert description.schema == _SCHEMA
+    assert description.parameters == {
+        'Type': 'string',
+        'View Text': 'string',
+        'Catalog': 'string',
+        'Database': 'string',
+    }
+    # A column named `#...` holds a type, so it is no section header:
+    assert description.dtypes['#tag'] == 'string'
+    assert 'total_amount' not in description.dtypes
+
+
+def test_a_metric_view_with_a_parameter_named_type_converts() -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'sales_mv',
+            connection=_FakeConnection(_parameterized('Type')),
+            verbose=False,
+        )
+
+    assert 'order_lines' in graph.tables
 
 
 def _metric_view(definition: str, dtypes: dict[str, str]) -> list:
