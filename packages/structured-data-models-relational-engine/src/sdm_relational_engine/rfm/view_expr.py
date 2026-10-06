@@ -861,8 +861,9 @@ _EXPRESSION_KEYWORDS = frozenset(
 _UNIT_FIRST = frozenset(
     {'extract', 'timestampadd', 'timestampdiff', 'dateadd', 'datediff'}
 )
+# A raw string, `r'...'`, takes no escapes.
 _TOKEN = re.compile(
-    r"""(?P<string>'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*")
+    r"""(?P<string>[rR]'[^']*'|[rR]"[^"]*"|'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*")
     |(?P<quoted>`(?:``|[^`])*`)
     |(?P<number>(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*)
     |(?P<word>[A-Za-z_][\w$]*)

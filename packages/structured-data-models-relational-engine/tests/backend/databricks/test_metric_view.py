@@ -3033,8 +3033,12 @@ def test_a_measure_reads_the_columns_it_names(
             "aggregate(items, CAST('2' AS INT), (acc, x) -> acc + x)",
         ),
         ('payload:region = region', "payload:region = CAST('EU' AS STRING)"),
+        (
+            "concat(r'\\', region, 'x')",
+            "concat(r'\\', CAST('EU' AS STRING), 'x')",
+        ),
     ],
-    ids=['interval', 'lambda', 'json-path'],
+    ids=['interval', 'lambda', 'json-path', 'raw-string'],
 )
 def test_a_parameter_is_read_only_where_it_is_a_value(
     expr: str, read: str
@@ -3053,7 +3057,7 @@ parameters:
     default: EU
 dimensions:
   - name: d
-    expr: "{expr}"
+    expr: {json.dumps(expr)}
 """)
 
     (column,) = spec.columns
