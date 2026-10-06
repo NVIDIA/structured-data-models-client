@@ -7,8 +7,8 @@
 #
 # The one exception is `contract`, which clones the canonical contract at the
 # exact revision this repository's bindings were generated from. That job is
-# blocking, because "the generated bindings match the contract" is the phase
-# condition this repository was built to hold. `contract-drift` watches the
+# blocking, because bindings that do not match the contract are bindings that
+# will misread a response. `contract-drift` watches the
 # contract's HEAD instead and is advisory: upstream moving is news, not a
 # broken build.
 
@@ -23,10 +23,8 @@ stages:
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   PIP_NO_CACHE_DIR: "1"
-  # PyPI rate-limited these runners (a 429 in job 465379378), which pip does not
-  # retry. Internal only: GitHub's runners cannot reach this mirror.
-  PIP_INDEX_URL: https://urm.nvidia.com/artifactory/api/pypi/pypi-remote/simple
-  CONTRACT_PROJECT: kumo-tfm-nims/structured-data-api
+  # PIP_INDEX_URL and CONTRACT_PROJECT are project variables. The contract
+  # jobs skip themselves when CONTRACT_PROJECT is unset.
 
 .python:
   before_script:
@@ -259,7 +257,7 @@ wheels:
     - for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
     - docker info --format '{{.Architecture}} {{.ServerVersion}}'
     # Pinned by digest: it runs privileged, so a moved tag must not change what runs.
-    # The pull is retried because Docker Hub once reset it mid-transfer (job 466303202).
+    # The pull is retried because Docker Hub has reset it mid-transfer.
     - |
       if [ "$CIBW_ARCHS_LINUX" = aarch64 ]; then
         binfmt=tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0  # qemu-v10.2.3
@@ -430,6 +428,8 @@ sbom:
 contract:
   stage: test
   extends: .python
+  rules:
+    - if: $CONTRACT_PROJECT
   script:
     - apt-get update -qq && apt-get install -y -qq git
     - pip install -q pyyaml
@@ -454,6 +454,8 @@ contract-drift:
   stage: test
   extends: .python
   allow_failure: true
+  rules:
+    - if: $CONTRACT_PROJECT
   script:
     - apt-get update -qq && apt-get install -y -qq git
     - pip install -q pyyaml

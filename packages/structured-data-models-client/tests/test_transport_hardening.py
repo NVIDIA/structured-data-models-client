@@ -381,8 +381,8 @@ def test_merge_raises_the_clients_own_error_type():
     """`except StructuredDataError` is the documented catch for this client.
 
     These three raises were bare `ValueError`, so a caller following the
-    documentation missed them, which is the same premise as the engine-error
-    classification added in this branch.
+    documentation missed them, on the same premise as the engine-error
+    classification beside them.
     """
     from sdm_client.errors import StructuredDataError
     from sdm_client.result import PredictionResult

@@ -2,7 +2,7 @@
 
 - **Python** 3.10 to 3.14 for the client, the language, the wire types and the
   connectors. **3.10 to 3.13 for the relational engine**, which is a native
-  build with a shorter wheel matrix. `pip install structured-data-models-client[relational]` does
+  build with a shorter wheel matrix. `pip install 'structured-data-models-client[relational]'` does
   not resolve on 3.14, while plain `pip install structured-data-models-client` does. It is
   reported as `No matching distribution found for structured-data-models-relational-engine`,
   which names the package and not the reason.
@@ -14,8 +14,10 @@
 
 The client, the language and the connectors are pure Python and install
 anywhere. The relational engine is a native build: it compiles a neighbour
-sampler, and published wheels are Linux only (x86-64 and aarch64). So `kumo-tabular` works on
-a laptop; `kumo-relational` needs Linux.
+sampler, and published wheels are `manylinux_2_28` for x86-64 and aarch64 on
+CPython only, so
+they need a Linux with glibc 2.28 or newer. `kumo-tabular` works on a laptop;
+`kumo-relational` needs that Linux.
 
 ## Getting a NIM
 

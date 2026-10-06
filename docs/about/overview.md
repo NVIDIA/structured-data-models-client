@@ -5,7 +5,7 @@ labelled rows and the rows you want scored, and it answers in one pass. There
 is no training loop, no hyperparameter search, and no per-dataset artifact.
 
 This client builds the request, sends it to a NIM, and gives you back a
-DataFrame. Inference runs in the NIM, so the client downloads no weights and
+`PredictionResult`, which `to_pandas()` turns into a DataFrame. Inference runs in the NIM, so the client downloads no weights and
 needs no GPU.
 
 ## The one idea

@@ -5,11 +5,10 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
-## Unreleased
+## 1.0.0 - 2026-10-06
 
-Everything below is the first release, which all five distributions
-declare as `1.0.0` and none has published. The heading becomes
-`## 1.0.0 - <date>` when the tag is cut, and nothing else moves.
+The first release. All five distributions declare `1.0.0` and are published
+together.
 
 ### Added
 
@@ -531,26 +530,3 @@ Write PQL with `sdm_client.PredictiveQuery`.
 `FittedModel` is returned by `SDMClient.fit()` and is not constructed directly, since what it is built from is internal; calling the class raises `TypeError`.
 `tests/test_release_contract.py` now fails when a public signature, dataclass field, property or class attribute names a type this project does not export.
 Two exceptions remain and are listed there with their reasons: `PredictionResult.items` holds the contract's generated `PredictionItem`, and a `DatabricksSource` built from a Spark session returns the session wrapped as a connection.
-
-### Notes for a reviewer
-
-**Graph visualization is kept, and so is its provenance.** `Graph.visualize()`
-renders a diagram offline because the notebook environments this client is used
-from, Snowflake and Databricks, block external scripts, so a diagram that
-fetched from a CDN would not draw at all. The mermaid bundle that makes that
-possible is vendored as upstream bytes with its SHA-256 pinned, its components
-enumerated in `LICENSE`, and a test that re-checks the digest. That test exists
-because a repo-wide rename once rewrote two identifiers inside the minified
-file and silently turned a vendored artifact into a modified one.
-`Graph.to_mermaid()` returns the diagram source for anyone who would rather
-render it themselves.
-
-**The relational engine's example scripts and notebooks were removed.** They
-came across with the port written against `RelationalClient` and
-`client.relational(...)`, an interface this client does not export, and they
-set a `run_mode` that is no longer a knob. `python
-scripts/check_repo_hygiene.py retired` now fails on any shipped file
-naming a retired interface, notebooks
-and per-package example directories included. The one quickstart this
-repository ships was written against the shipped API and every cell was
-executed against a live `kumo-tabular` and `kumo-relational` NIM.

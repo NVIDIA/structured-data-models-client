@@ -24,6 +24,80 @@ Signed-off-by: Your Name <your.email@example.com>
 
 Pull requests whose commits are not signed off cannot be merged.
 
+## Development
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/pip install ruff mypy
+.venv/bin/pip install \
+  -e './packages/structured-data-models-api[test]' \
+  -e './packages/structured-data-models-pql[test]' \
+  -e './packages/structured-data-models-client[test]' \
+  -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
+.venv/bin/python -m pytest \
+  packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+  packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q
+```
+
+`tests/` at the root is the cross-package suite: that the five distributions
+agree on a version and a licence, that the recorded public surface and wire
+payloads still match, and that the claims the configuration files make about
+themselves are true.
+
+The relational engine is a native build and is installed and tested on its
+own, from its own directory:
+
+```bash
+.venv/bin/pip install -e './packages/structured-data-models-relational-engine[test]'
+cd packages/structured-data-models-relational-engine && ../../.venv/bin/python -m pytest tests -q
+```
+
+Lint and format with `ruff`. Type-check with `mypy`. Both are blocking in CI,
+over every package including the engine:
+
+```bash
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+.venv/bin/mypy packages/structured-data-models-api/src \
+               packages/structured-data-models-pql/src \
+               packages/structured-data-models-client/src \
+               packages/structured-data-models-connectors/src \
+               packages/structured-data-models-relational-engine/src
+```
+
+Two more gates run in CI and are quick to run first:
+
+```bash
+.venv/bin/python scripts/check_repo_hygiene.py all
+.venv/bin/python scripts/mermaid_notices.py --check
+```
+
+Changing anything a caller can observe, such as an exported name, signature,
+or wire request shape, requires recording a new snapshot in the same commit.
+This makes the change visible in review:
+
+```bash
+.venv/bin/python scripts/snapshot_public_api.py --write
+.venv/bin/python scripts/snapshot_wire_payloads.py --write
+```
+
+## Testing against something live
+
+The two commands above need nothing running. These need an endpoint, and are
+deselected by default:
+
+```bash
+# a NIM you are running
+SDM_TABULAR_URL=http://localhost:8000 \
+SDM_RELATIONAL_URL=http://localhost:8001 \
+  .venv/bin/python -m pytest packages/structured-data-models-client/tests \
+    -m live_nim -q
+
+# real warehouses, with credentials in the environment
+.venv/bin/python -m pytest \
+  packages/structured-data-models-connectors/tests -m live_warehouse -q
+```
+
 ## Third-party code
 
 A new third-party *dependency* is declared in the owning package's

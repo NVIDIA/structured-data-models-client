@@ -50,7 +50,7 @@ Publishing is automated. A version tag on a commit that is on `main` and
 whose CI passed builds every distribution and uploads it through PyPI
 Trusted Publishing, with no stored token. [RELEASING.md](RELEASING.md)
 describes what a maintainer does; `.github/workflows/publish.yml` is what
-actually runs. No version has reached an index yet.
+actually runs.
 
 ## Changing this document
 
