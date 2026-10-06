@@ -95,6 +95,12 @@ class Table(ABC):
 
     _NUM_SAMPLE_ROWS = 1_000
 
+    #: Whether to warn, as a :class:`TimeColumnWarning`, of a time column
+    #: taken on the rows read alone. A view conversion told not to warn
+    #: turns it off for its own tables; :attr:`time_column_choice` says it
+    #: either way.
+    _warns_unchecked: bool = True
+
     def __init__(
         self,
         name: str,
@@ -872,7 +878,7 @@ class Table(ABC):
             self.time_column = time_column
         self._time_column_inferred = True
         for doubt in self._time_column_choice.unconfirmed:
-            if doubt.column == time_column:
+            if doubt.column == time_column and self._warns_unchecked:
                 warnings.warn(
                     taken_unchecked(
                         self.name,

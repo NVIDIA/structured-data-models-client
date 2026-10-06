@@ -734,3 +734,39 @@ def test_a_model_that_loses_nothing_converts_without_a_warning(
     (note,) = schema.conversion_notes
     assert "'total_quantity' is SUM(order_lines.quantity, 0, 30, days)" in note
     assert schema.snapshot().conversion_notes == schema.conversion_notes
+
+
+def test_reading_a_model_leaves_the_warning_filters_alone(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""The engine's warnings were silenced with `warnings.catch_warnings()`,
+    which swaps the filters of every thread for the call's length, so a
+    second `from_source` running beside it could lose its own warnings, or
+    restore the filters under the first. The engine is told not to warn
+    instead, and what it would say still reaches the caller once.
+    """
+    from sdm_relational_engine.rfm import Graph
+
+    convert = Graph.from_databricks_metric_view.__func__  # type: ignore[attr-defined]
+    seen: list[list[Any]] = []
+
+    def _converting(cls: Any, *args: Any, **kwargs: Any) -> Any:
+        seen.append(list(warnings.filters))
+        return convert(cls, *args, **kwargs)
+
+    monkeypatch.setattr(
+        Graph, 'from_databricks_metric_view', classmethod(_converting)
+    )
+    _with_view(monkeypatch, _VIEW + 'materialization:\n  mode: relaxed\n')
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        before = list(warnings.filters)
+        Schema.from_source(source.semantic_model('sales_mv'))
+
+    assert seen == [before]
+    (lost,) = [w for w in caught if 'cannot hold' in str(w.message)]
+    assert lost.category is SDMWarning
+    assert not any(
+        type(w.message).__name__ == 'ViewConversionWarning' for w in caught
+    )

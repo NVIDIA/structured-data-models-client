@@ -1389,6 +1389,7 @@ class Graph:
         verbose: bool = True,
         *,
         trust_expressions: bool = False,
+        warn: bool = True,
     ) -> Self:
         r"""Create a :class:`Graph` from a Databricks Unity Catalog metric
         view.
@@ -1458,6 +1459,14 @@ class Graph:
                 filter, that call functions other than pure built-ins.
                 Sub-queries, comments and statement separators are refused
                 regardless.
+            warn: Whether to warn of what the view loses, as a
+                :class:`ViewConversionWarning`, and of a time column taken
+                on the rows read alone, as a
+                :class:`~sdm_relational_engine.rfm.TimeColumnWarning`. A
+                caller that says them itself turns this off, rather than
+                filter warnings for every thread:
+                :attr:`conversion_messages` and each table's
+                ``time_column_choice`` hold them either way.
 
         Raises:
             ViewConversionError: If the view is refused for what it is, with
@@ -1541,6 +1550,7 @@ class Graph:
                         columns=[],
                         primary_key=None,
                     )
+                    table._warns_unchecked = warn
                     try:
                         table._source_column_dict  # noqa: B018
                     except MetricViewAsTableError as error:
@@ -1589,6 +1599,7 @@ class Graph:
                         columns=[],
                         primary_key=None,
                     )
+                    tables_by_alias[alias]._warns_unchecked = warn
                 return tables_by_alias[alias]
 
             def _columns_of(alias: str) -> list[str]:
@@ -1908,7 +1919,7 @@ class Graph:
         if internal_connection:
             graph._connection = connection
 
-        if len(msgs) > 0:
+        if warn and len(msgs) > 0:
             title = (
                 f'Could not fully convert the metric view definition '
                 f"'{metric_view_name}' into a graph:\n"
@@ -1928,6 +1939,7 @@ class Graph:
         verbose: bool = True,
         *,
         trust_expressions: bool = False,
+        warn: bool = True,
     ) -> Self:
         r"""Create a :class:`Graph` from a Snowflake semantic view.
 
@@ -1983,6 +1995,9 @@ class Graph:
             trust_expressions: Whether to keep columns that call functions
                 other than pure built-ins. Sub-queries, comments and
                 statement separators are refused regardless.
+            warn: Whether to warn of what the view loses, and of a time
+                column taken on the rows read alone, as
+                :meth:`from_databricks_metric_view` does.
 
         Raises:
             GraphConstructionError: If the semantic view does not exist or
@@ -2060,6 +2075,7 @@ class Graph:
                 columns=[],
                 primary_key=None,
             )
+            table._warns_unchecked = warn
 
             columns: list[ColumnSpec] = []
             unsupported_columns: list[str] = []
@@ -2202,7 +2218,7 @@ class Graph:
             graph.print_links()
 
         graph._conversion_messages = tuple(msgs)
-        if len(msgs) > 0:
+        if warn and len(msgs) > 0:
             title = (
                 f'Could not fully convert the semantic view definition '
                 f"'{semantic_view_name}' into a graph:\n"

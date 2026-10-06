@@ -3530,3 +3530,23 @@ dimensions:
     assert not fact.has_column('CUSTOMER_ID')
     assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
     assert graph.conversion_messages == ()
+
+
+def test_a_conversion_told_not_to_warn_says_it_only_on_the_graph() -> None:
+    r"""A caller that says what a view loses itself had to filter the
+    warnings for every thread to keep the engine from saying it too.
+    """
+    rows = _joined_view(extra='materialization:\n  mode: relaxed\n')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv',
+            connection=_FakeConnection(rows),
+            verbose=False,
+            warn=False,
+        )
+
+    assert any('materialization' in m for m in graph.conversion_messages)
+    for table in graph.tables.values():
+        assert table._warns_unchecked is False
