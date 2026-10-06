@@ -3288,3 +3288,59 @@ measures:
     ]
     (message,) = graph.conversion_messages
     assert "'total' is SUM(order_lines.`Order Amount`, 0, 30, days)" in message
+
+
+def test_a_decimal_key_is_read_as_the_integer_its_type_says(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""A `DECIMAL(38, 0)` key, as H&M's, has an integer data type but is
+    read as decimals, which no type inference takes, so the sampled keys
+    failed as soon as a question read them.
+    """
+    import decimal
+
+    from sdm_relational_engine.rfm.base import Table
+
+    def _decimals(values: pd.Series) -> list:
+        return [decimal.Decimal(int(value[1:])) for value in values]
+
+    lines, products = _DATA['order_lines'], _DATA['products']
+    monkeypatch.setitem(
+        _DATA,
+        'order_lines',
+        lines.assign(product_id=_decimals(lines['product_id'])),
+    )
+    monkeypatch.setitem(
+        _DATA,
+        'products',
+        products.assign(product_id=_decimals(products['product_id'])),
+    )
+    for table in ('order_lines', 'products'):
+        monkeypatch.setitem(
+            _COLUMN_TYPES,
+            table,
+            {**_COLUMN_TYPES[table], 'product_id': 'decimal(38,0)'},
+        )
+
+    graph = _convert(_FakeConnection(_joined_view()))
+
+    for table in ('order_lines', 'products'):
+        sample = graph[table]._source_sample_df['product_id']
+        assert sample.dtype == pd.ArrowDtype(pa.int64())
+    assert Edge('order_lines', 'product_id', 'products') in graph.edges
+
+    # As the sampler reads rows, by each column's data type:
+    from predictive_query.schema.typing import Dtype
+
+    df = pa.table(
+        {
+            'key': pa.array([decimal.Decimal(7)], pa.decimal128(38, 0)),
+            'price': pa.array([decimal.Decimal('1.25')], pa.decimal128(9, 2)),
+            'huge': pa.array([decimal.Decimal(10**30)], pa.decimal128(38, 0)),
+        }
+    ).to_pandas(types_mapper=pd.ArrowDtype)
+    df = Table._sanitize(df, {'key': Dtype.int, 'price': Dtype.float})
+    assert df['key'].tolist() == [7]
+    assert df['price'].dtype == pd.ArrowDtype(pa.float64())
+    # Past 64 bits, left as it was:
+    assert df['huge'].dtype == pd.ArrowDtype(pa.decimal128(38, 0))

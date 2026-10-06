@@ -1127,9 +1127,34 @@ class Table(ABC):
 
             return ser
 
+        import pyarrow as pa
+
+        def _from_decimal(ser: pd.Series, dtype: Dtype | None) -> pd.Series:
+            r"""A decimal column as the integer or float its data type says.
+
+            A warehouse reads a `DECIMAL(38, 0)` key as a decimal, which no
+            type inference takes, though its data type says integer. One that
+            does not fit 64 bits is left as it is.
+            """
+            arrow_type = ser.dtype.pyarrow_dtype
+            if dtype is None:
+                integer = arrow_type.scale == 0
+            else:
+                integer = dtype.is_int()
+            target = pa.int64() if integer else pa.float64()
+            try:
+                return ser.astype(pd.ArrowDtype(target))
+            except (ValueError, TypeError, ArithmeticError):
+                return ser
+
         for column_name in df.columns:
             dtype = (dtype_dict or {}).get(column_name)
             stype = (stype_dict or {}).get(column_name)
+
+            if isinstance(
+                df[column_name].dtype, pd.ArrowDtype
+            ) and pa.types.is_decimal(df[column_name].dtype.pyarrow_dtype):
+                df[column_name] = _from_decimal(df[column_name], dtype)
 
             if dtype == Dtype.time or stype == Stype.timestamp:
                 df[column_name] = to_datetime(df[column_name], column_name)
