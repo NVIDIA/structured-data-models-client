@@ -3179,7 +3179,8 @@ def test_names_are_matched_without_regard_to_case(
         },
     )
 
-    graph = _convert(_FakeConnection(rows))
+    connection = _FakeConnection(rows)
+    graph = _convert(connection)
 
     fact = graph['order_lines']
     assert [column.name for column in fact.columns] == [
@@ -3189,7 +3190,14 @@ def test_names_are_matched_without_regard_to_case(
     ]
     assert fact['PRODUCT_LINE'].expr is None
     assert str(fact['line'].expr) == 'LINE_ID'
-    assert 'source.`product_line` AS `PRODUCT_LINE`' in fact._quoted_source_name
+    # Every read of its rows names the column as the view does.
+    reads = [
+        sql for sql in connection.sql_log if '`order_lines` AS source' in sql
+    ]
+    assert reads
+    assert all(
+        'source.`product_line` AS `PRODUCT_LINE`' in sql for sql in reads
+    )
     customers = graph['CUSTOMERS']
     # Its key is named as the join's condition spells it:
     assert {column.name for column in customers.columns} == {
