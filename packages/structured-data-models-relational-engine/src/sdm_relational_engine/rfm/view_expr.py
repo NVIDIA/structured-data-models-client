@@ -256,6 +256,12 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
             if quoted.text.startswith('"') and '\\' in quoted.text:
                 return 'it has a backslash inside a double-quoted name'
     unquoted = _masked(expr, dialect, ' ')
+    # Which characters may join a name, and so keep a quote after them from
+    # opening a literal, is documented for ASCII alone: Snowflake might read
+    # `é$$` as a name or as `é` and a literal. Refusing anything else outside
+    # quotes holds whatever the warehouse decides.
+    if other := re.search(r'[^\x00-\x7f]', unquoted):
+        return f'it has {other.group()!r} outside quotes, which is not ASCII'
     for delimiter in _EXPR_QUOTE_DELIMITERS:
         if delimiter in unquoted:
             return (

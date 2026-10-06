@@ -190,6 +190,8 @@ def _refused(expr: str, dialect: str) -> str | None:
         'x + 9secret(x)',
         # A Snowflake name may hold `$`, so `a$$` opens no literal:
         'a$$ + secret(x) + b$$',
+        # Whether a non-ASCII letter starts a name is not documented:
+        'é$$ + secret(x) + b$$',
         'fünf(x)',
         '函数(x)',
         'a[0](x)',
