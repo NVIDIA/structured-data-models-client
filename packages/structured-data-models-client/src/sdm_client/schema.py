@@ -2279,13 +2279,15 @@ def _warn_how_time_columns_were_inferred(
         column = table.time_column
         if column is not None and column == choice.column:
             if choice.instead_of:
+                one = len(choice.instead_of) == 1
                 lines.append(
                     f'{name}.{column} was taken as the time column rather '
-                    f'than {_and_list(choice.instead_of)}, which truncate or '
-                    f'cast it, since it says when a row happened more '
-                    f'precisely. If a question should count by one of those, '
-                    f'name it: time_columns={{{name!r}: '
-                    f'{choice.instead_of[0]!r}}}.'
+                    f'than {_and_list(choice.instead_of)}, which '
+                    f'{"truncates or casts" if one else "truncate or cast"} '
+                    f'it, since it says when a row happened more precisely. '
+                    f'If a question should count by '
+                    f'{"it" if one else "one of those"}, name it: '
+                    f'time_columns={{{name!r}: {choice.instead_of[0]!r}}}.'
                 )
             if choice.how == 'earliest':
                 others = [other for other in choice.among if other != column]

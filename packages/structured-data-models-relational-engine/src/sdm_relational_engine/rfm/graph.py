@@ -371,15 +371,19 @@ def _infer_view_time_column(
         )
     if not reasons:
         return []
-    added_note = ', and added it as a column' if chosen in added else ''
+    added_note = ''
     if chosen in renamed:
-        added_note = (
-            f", the source column '{renamed[chosen]}' added under a name of "
-            f'its own, since a dimension has its name'
+        renamed_note = (
+            f". It is the source column '{renamed[chosen]}', added under a "
+            f'name of its own because a dimension has its name'
         )
+    else:
+        renamed_note = ''
+        if chosen in added:
+            added_note = ', and added it as a column'
     return [
         f"Took '{chosen}' as the time column of table '{table.name}'"
-        f'{added_note}, since {" and ".join(reasons)}'
+        f'{added_note}, since {" and ".join(reasons)}{renamed_note}'
     ]
 
 

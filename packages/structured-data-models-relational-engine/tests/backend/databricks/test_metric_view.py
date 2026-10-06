@@ -3060,9 +3060,9 @@ def test_a_truncation_named_as_its_column_gives_way_to_it(
     assert str(fact['order_date'].expr) == "DATE_TRUNC('MONTH', order_date)"
     assert _said(graph) == (
         "Took 'order_date_raw_2' as the time column of table 'order_lines', "
-        "the source column 'order_date' added under a name of its own, since "
-        "a dimension has its name, since 'order_date' truncates or casts it, "
-        'and it says when a row happened more precisely',
+        "since 'order_date' truncates or casts it, and it says when a row "
+        "happened more precisely. It is the source column 'order_date', "
+        'added under a name of its own because a dimension has its name',
     )
 
 

@@ -512,7 +512,9 @@ def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
     said = '\n'.join(str(item.message) for item in caught)
     assert (
         'order_lines.ordered_at was taken as the time column rather than '
-        "'order_month', which truncate or cast it" in said
+        "'order_month', which truncates or casts it, since it says when a "
+        'row happened more precisely. If a question should count by it, name '
+        "it: time_columns={'order_lines': 'order_month'}." in said
     )
     (note,) = [n for n in schema.conversion_notes if n.startswith('Took')]
     assert "Took 'ordered_at' as the time column of table 'order_lines'" in note

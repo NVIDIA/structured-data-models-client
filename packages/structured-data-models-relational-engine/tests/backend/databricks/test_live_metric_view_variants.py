@@ -509,9 +509,9 @@ def test_month_named_as_the_raw_date(views: Views) -> None:
         _star_edges(views),
         notes=(
             _MEASURES,
-            r"Took 'OrderDate_raw' as the time column .*, the source column "
-            r"'OrderDate' added under a name of its own, .* since 'OrderDate' "
-            r'truncates or casts it',
+            r"Took 'OrderDate_raw' as the time column .*, since 'OrderDate' "
+            r'truncates or casts it, .*\. It is the source column '
+            r"'OrderDate', added under a name of its own because",
         ),
     )
     assert str(graph[views.fact]['OrderDate'].expr).startswith('DATE_TRUNC')
