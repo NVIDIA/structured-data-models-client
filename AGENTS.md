@@ -1,7 +1,8 @@
 # Working in this repository
 
-Read [`README.md`](README.md) first: it has the development setup, the test
-commands, lint, type-checking and the snapshot rule. This file is only what is
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first: it has the development setup,
+the test commands, lint, type-checking and the snapshot rule, and
+[`README.md`](README.md) for what the packages are. This file is only what is
 easy to get wrong here, and most of it has been got wrong at least once.
 
 ## What you install is not what you import
@@ -34,7 +35,7 @@ A rename that sweeps the tree will change these, and nothing will fail:
 ## Run the two suites separately
 
 The engine and the other four packages cannot be collected in one pytest run;
-together they fail at import. The README gives both commands. Run both.
+together they fail at import. `CONTRIBUTING.md` gives both commands. Run both.
 
 ## skills/ is executable
 

@@ -1,13 +1,11 @@
-# structured-data-models-client architecture plan
+# Architecture
 
-**What it is:** one Python client for NVIDIA's structured-data foundation
-model NIMs.
-**Status:** built. All seven phases are implemented and tested end to end
-against live NIMs.
+One Python client for NVIDIA's structured-data foundation model NIMs: what the
+packages are, why they are split the way they are, and which decisions were
+made deliberately.
 
-> This plan records the design rationale and later corrections. For interfaces,
-> the shipped implementation is authoritative. See the
-> [quickstart](../get-started/quickstart.md) and
+> This records design rationale. For interfaces, the shipped implementation is
+> authoritative. See the [quickstart](../get-started/quickstart.md) and
 > [prediction output](../reference/prediction-output.md).
 
 ---
@@ -28,7 +26,7 @@ Verified on `structured-data-api@main` as of 2026-09-30.
 `kumo-relational` are both in the enum, so both work today and neither needs a
 contract change. What the enum forecloses is the source doc's
 `model="some-future-model"` escape hatch, which is deferred along with the
-models it would have served (§11). An unrecognised id is refused client-side
+models it would have served (§9). An unrecognised id is refused client-side
 with a message naming the contract change it would need, rather than being sent
 and rejected.
 
@@ -178,7 +176,7 @@ are how the client is built, not names it exports.
 | `Profile`, `Capabilities` | `structured-data-models-pql` | What a model may be asked, as data. §6. |
 | The time column rule (`predictive_query.time_columns`) | `structured-data-models-pql` | Which timestamp inference takes as a table's time column. `Schema.from_data` and the engine behind `Schema.from_source` both call its `choose_time_column`, and neither imports the other. |
 | Wire request/response, `InferenceSpec`, `OutputSpec` | `structured-data-models-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
-| The DataFrame→wire encoder (`wire/`) | `structured-data-models-client` | **Corrected during phase 2.** §8 first put this in `structured-data-models-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `structured-data-models-api` its zero-dependency property, which is why the split exists. `structured-data-models-api` keeps the vocabulary; encoding a frame is client-side work. |
+| The DataFrame→wire encoder (`wire/`) | `structured-data-models-client` | **Corrected while building.** §8 first put this in `structured-data-models-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `structured-data-models-api` its zero-dependency property, which is why the split exists. `structured-data-models-api` keeps the vocabulary; encoding a frame is client-side work. |
 | `Schema`, `Request`, `PredictionResult` | `structured-data-models-client` | The public surface. |
 
 ---
@@ -433,7 +431,7 @@ always an explicit argument.
 |---|---|---|
 | `Request(context=…, predict=…)` | `predict`: any rows, including rows the model has never seen | v1 |
 | `query.materialize(indices=[…])` | existing rows, looked up by entity key | v1, tabular and relational |
-| `query.materialize(predict=rows_df)` | supplied rows, which need not exist in the tables | phase 7, tabular |
+| `query.materialize(predict=rows_df)` | supplied rows, which need not exist in the tables | tabular |
 
 `materialize()` with neither argument raises, naming both. **There is no
 all-rows default** because it would silently score a whole table.
@@ -451,7 +449,8 @@ otherwise. Gathering and sending disagree loudly now: each adapter refuses a
 request gathered for the other before it is sent.
 
 **Tabular PQL has no key to name, and that is decided, not open.** `FOR EACH`
-today must name a primary key, and a tabular frame has none. In phase 7
+today must name a primary key, and a tabular frame has none. For a tabular
+question
 `Schema` synthesizes a request-local row id for a keyless table. This real,
 positional column is never sent as data or exposed in the result, which carries
 `row_index`. `FOR EACH users.<synthetic>` then validates unchanged, so the PQL
@@ -725,103 +724,7 @@ Two behaviours were carried over deliberately, because each cost something to
 learn: every redirect hop is closed rather than drained, and credentials in a
 URL are stripped everywhere the URL is rendered.
 
-## 9. Phases
-
-Each phase is independently shippable and tested.
-
-| # | Phase | Ships | Done when |
-|---|---|---|---|
-| 1 | **Foundation** | Repo, CI, `structured-data-models-api` + `structured-data-models-pql`, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
-| 2 | **Client + tabular** | `SDMClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
-| 3 | **Connectors** | `structured-data-models-connectors` | every backend reads a table |
-| 4 | **Relational** | `structured-data-models-relational-engine`, relational adapter, PQL materialization | `PredictiveQuery(...).materialize(indices=…)` predicts against the relational NIM |
-| 5 | **fit + explain** | Session handle, explanation outputs, pre-flight limits | `fit()`/`predict()` reuse one context; every §7 limit fails locally |
-| 6 | **Docs + E2E** | Docs, notebook, live-NIM harness for both models | both models pass live E2E |
-| 7 | **PQL for tabular** | `materialize(predict=…)` emits a one-table request | a tabular question runs from PQL text |
-
-Phases 2 and 3 are independent. Phase 4 needs phases 1 through 3. Nothing is
-blocked on the contract: both shipping models are already in its enum (§0).
-
----
-
-## 10. This gets open-sourced
-
-Public release was the destination from the first commit, not a maybe. Making
-a codebase publishable after the fact means auditing it after the fact. Every
-rule below is cheap on day one and expensive later.
-
-**Written OSS-clean from commit 1, and now carrying the rest:**
-
-| Held from commit 1 | Added for the release |
-|---|---|
-| SPDX header on every source file | `LICENSE` and `NOTICE` at the root, and in every distribution's metadata |
-| A provenance record for every vendored tree, CI-enforced | `GOVERNANCE.md`, `MAINTAINERS.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `SUPPORT.md` |
-| Provenance for the generated OpenAPI bindings: spec path, ref, SHA-256, generator version, and a test that they match | Public issue policy, and the repository URL every package publishes to, checked by the hygiene script |
-| An automated scan for internal URLs, ticket ids, usernames, engineer TODOs and codenames in shipped packages and docs | None |
-
-Both have since landed. The release workflow publishes through Trusted
-Publishing, with no upload token, and attaches PEP 740 attestations. A
-generated **SBOM** is produced and validated on the release, covering every
-distribution and every connector extra, the native engine included. The
-build-time pipeline generates one too, without the native extra, because no
-toolchain is present there. A hand-maintained dependency table would not have
-counted as either.
-
-The repository is released under **Apache-2.0**, which matches the code this
-consolidates, so nothing carried across needs relicensing. The models these
-packages talk to are released under OpenMDW, a licence NVIDIA drafted for
-models. The two sit side by side and stay distinct: this is software.
-
-### Vendored code is the risk, and we already know how it breaks
-
-We vendor one tree verbatim and rename aggressively across the repo
-(`Graph`→`Schema`, `kumo_*`→`sdm_*`). This exact combination already caused
-a licensing defect in this family of repos: a repo-wide rename silently rewrote
-two identifiers **inside** the minified `mermaid.min.js`, turning a vendored
-artifact into a modified one while the LICENSE still described it as upstream's
-bytes. Six bytes in a 3.3 MB file. No test caught it, and it invalidated the
-component enumeration the licence review had already accepted.
-
-So, as a rule, not a suggestion:
-
-1. Every vendored tree has a **digest pinned beside it and asserted in CI**.
-   For `mermaid.min.js`, this is one SHA-256 over the bundle.
-2. A test asserts the rename **did not inject target-repo identifiers** into a
-   vendored tree. No `sdm_`, `Schema`, or `structured-data-models-client` strings appearing where
-   upstream has none. The assertion is "unchanged from upstream", not "contains
-   no forbidden word".
-
-> This rule applied to `predictive_query` while that tree was a verbatim copy
-> of a separate repository. That repository is being retired, so the tree is
-> first-party source of this one now: there is no upstream to diverge from, and
-> a manifest pinned to a baseline nobody can fetch would assert nothing. It is
-> linted and header-checked like any other first-party tree instead. `mermaid`
-> is the only tree the rule still governs.
-3. The rename tool **excludes vendored paths and `assets/` by configuration,
-   before it runs**. The hash test then verifies the result. Exclusion prevents
-   the churn; the hash only detects it.
-4. Bumping a vendored bundle requires **re-enumerating its components from the
-   new release's manifest**. A version bump silently moves sub-component
-   versions too.
-
-This test came across with the rest.
-
-### What ships that we did not write
-
-| Component | License | Where | Note |
-|---|---|---|---|
-| ANTLR-generated parser | Apache-2.0 | `structured-data-models-pql` | Generated by ANTLR from `PQLGrammar.g4` in the same tree; the grammar and everything around it are first-party |
-| ANTLR Python runtime | BSD-3-Clause | `structured-data-models-pql` dependency | Required by the PQL parser |
-| `mermaid.min.js` (vendored) | MIT bundle; its components are enumerated in `LICENSE` | `structured-data-models-relational-engine` assets | **Kept.** `visualize()` draws offline. Snowflake and Databricks notebooks block external scripts, so a CDN-fetched diagram would not draw. Upstream bytes, SHA-256 pinned, digest asserted by a test. `to_mermaid()` returns the source for external rendering. |
-| pandas, numpy, requests, pydantic | BSD / Apache-2.0 | dependencies | Resolved at install, not vendored |
-
-Any licence review needs the provenance records and the inventory above.
-Writing them from the first commit makes that a form-filling exercise rather
-than an audit.
-
----
-
-## 11. Deferred, on purpose
+## 9. Deferred, on purpose
 
 | Thing | Why | What would change it |
 |---|---|---|
@@ -833,13 +736,3 @@ Sampling inside the warehouse is not on this list.
 The deferred row is the model reading tables by reference; the client sampling them with SQL and embedding what it fetched fits the wire as it is (§3, schemas over tables that stay where they are).
 
 ---
-
-## 12. Open questions for the human
-
-None outstanding. Two earlier ones are settled:
-
-- **The client is `SDMClient`.**
-- **The contract's closed `model` enum is not a task.** Both shipping models
-  are in it. It only forecloses the escape hatch for a third, which is deferred
-  along with the models it would serve (§11). If one is ever wanted, a small
-  `structured-data-api` MR opens the field.
