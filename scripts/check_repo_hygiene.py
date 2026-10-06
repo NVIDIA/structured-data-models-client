@@ -168,7 +168,7 @@ RETIRED_INTERFACES = (
 # for one retired interface is still checked for every other.
 RETIRED_ALLOWLIST = {
     'scripts/check_repo_hygiene.py': frozenset(RETIRED_INTERFACES),
-    'packages/structured-data-models-client/tests/test_quickstart_notebook.py': frozenset(
+    'packages/structured-data-models-client/tests/test_local_notebooks.py': frozenset(
         {
             'RelationalClient',
             'PredictClient',

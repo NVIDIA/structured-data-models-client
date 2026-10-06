@@ -89,14 +89,30 @@ def test_every_name_the_notebook_imports_is_exported(notebook):
             if isinstance(node, ast.ImportFrom) and node.module == 'sdm_client':
                 imported.update(alias.name for alias in node.names)
     assert imported, f'{notebook.name} imports nothing from sdm_client'
-    missing = sorted(name for name in imported if not hasattr(sdm_client, name))
-    assert not missing, f'{notebook.name} imports {missing}, which do not exist'
+    missing = sorted(imported - set(sdm_client.__all__))
+    assert not missing, (
+        f'{notebook.name} imports {missing}, which this client does not export'
+    )
 
 
-def test_each_notebook_asks_its_own_model_as_an_argument():
-    """The one idea, and the reason these are two files rather than one."""
-    tabular = '\n'.join(cells(EXAMPLES / 'tabular.ipynb', 'code'))
-    relational = '\n'.join(cells(EXAMPLES / 'relational.ipynb', 'code'))
-    assert 'model=KumoTabular()' in tabular
-    assert 'model=KumoRelational()' not in tabular
-    assert 'model=KumoRelational()' in relational
+#: Each notebook, the model handle it is for, and the one it must not name.
+ONE_MODEL_EACH = (
+    ('tabular.ipynb', 'KumoTabular', 'KumoRelational'),
+    ('relational.ipynb', 'KumoRelational', 'KumoTabular'),
+)
+
+
+@pytest.mark.parametrize('name, asked, other', ONE_MODEL_EACH, ids=lambda v: v)
+def test_a_notebook_names_one_model_and_only_its_own(name, asked, other):
+    """The reason these are two files rather than one.
+
+    Read off the parsed cells rather than their text, so a mention in a
+    comment or a string neither satisfies this nor trips it.
+    """
+    called: set[str] = set()
+    for source in cells(EXAMPLES / name, 'code'):
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                called.add(node.func.id)
+    assert asked in called, f'{name} never asks {asked}()'
+    assert other not in called, f'{name} also asks {other}()'
