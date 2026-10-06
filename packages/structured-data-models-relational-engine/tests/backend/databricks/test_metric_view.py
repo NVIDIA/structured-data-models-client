@@ -3031,6 +3031,41 @@ def test_a_physical_date_is_preferred_over_its_truncation() -> None:
     assert "Took 'order_date'" in message and 'added' not in message
 
 
+def test_a_truncation_named_as_its_column_gives_way_to_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""The most common shape, `order_date: DATE_TRUNC('MONTH',
+    source.order_date)`, kept the truncation as the time column, silently,
+    since the source column could not be added under the dimension's name.
+    It is added under a name of its own, and the dimension keeps its name
+    and its truncated value.
+    """
+    expr_df = _EXPR_DATA['order_lines'].assign(
+        ORDER_DATE_RAW=_DATA['order_lines']['amount'],
+        order_date_raw_2=_DATA['order_lines']['order_date'],
+    )
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+    # A column already named as the first choice, in another case:
+    dimensions = (
+        "  - name: order_date\n    expr: DATE_TRUNC('MONTH', source.order_date)"
+        '\n  - name: ORDER_DATE_RAW\n    expr: source.amount'
+    )
+
+    graph = _convert(_FakeConnection(_time_view(dimensions)))
+
+    fact = graph['order_lines']
+    assert fact.time_column is not None
+    assert fact.time_column.name == 'order_date_raw_2'
+    assert str(fact['order_date_raw_2'].expr) == '`order_date`'
+    assert str(fact['order_date'].expr) == "DATE_TRUNC('MONTH', order_date)"
+    assert _said(graph) == (
+        "Took 'order_date_raw_2' as the time column of table 'order_lines', "
+        "the source column 'order_date' added under a name of its own, since "
+        "a dimension has its name, since 'order_date' truncates or casts it, "
+        'and it says when a row happened more precisely',
+    )
+
+
 def test_a_window_measure_names_the_time_axis(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

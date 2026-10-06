@@ -486,6 +486,37 @@ def test_month_without_raw_date(views: Views) -> None:
     )
 
 
+def test_month_named_as_the_raw_date(views: Views) -> None:
+    r"""A month named as the date it truncates keeps its name and value,
+    and the raw date is added under a name of its own and taken.
+    """
+    document = _star(views)
+    document['dimensions'] = [
+        _dim('OrderDate', "DATE_TRUNC('MONTH', source.OrderDate)")
+        if d['name'] == 'OrderDate'
+        else d
+        for d in document['dimensions']
+    ]
+
+    graph = views.convert(document)
+    tables = _star_tables(views)
+    tables[views.fact] = Expected(
+        None, 'OrderDate_raw', {*_LINE_DIMS, 'OrderDate_raw'}
+    )
+    _assert_graph(
+        graph,
+        tables,
+        _star_edges(views),
+        notes=(
+            _MEASURES,
+            r"Took 'OrderDate_raw' as the time column .*, the source column "
+            r"'OrderDate' added under a name of its own, .* since 'OrderDate' "
+            r'truncates or casts it',
+        ),
+    )
+    assert str(graph[views.fact]['OrderDate'].expr).startswith('DATE_TRUNC')
+
+
 def test_measure_inputs_that_are_not_dimensions(views: Views) -> None:
     r"""The columns a measure aggregates join their tables, so a predictive
     query can aggregate them too.

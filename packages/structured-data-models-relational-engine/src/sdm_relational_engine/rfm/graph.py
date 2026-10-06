@@ -263,10 +263,13 @@ def _infer_view_time_column(
     row happened only to the month, and starts at or before the column it
     truncates, so the shared rule would take it. Each such column is offered
     to the rule as the source column it derives from instead, added to the
-    table for the purpose and kept only if taken. A dimension a window
-    measure orders by is the time axis the view's author chose, so it is
-    offered alone first, and the rule decides among them all only if it
-    refuses that.
+    table for the purpose and kept only if taken. Where a dimension holds
+    the source column's name, as ``order_date: DATE_TRUNC('MONTH',
+    source.order_date)`` does, the source column is added under a name of
+    its own, ``order_date_raw``, and the dimension keeps its name and its
+    truncated value. A dimension a window measure orders by is the time
+    axis the view's author chose, so it is offered alone first, and the
+    rule decides among them all only if it refuses that.
 
     Args:
         table: The table, its columns and links added.
@@ -296,22 +299,40 @@ def _infer_view_time_column(
             derived_from[name] = column.name
 
     added: list[str] = []
+    # The source column each added column is, where a dimension has its
+    # name and it is added under another:
+    renamed: dict[str, str] = {}
     for raw in dict.fromkeys(derived_from.values()):
-        if table.has_column(raw):
-            usable = (
-                table[raw].is_source and table[raw].stype == Stype.timestamp
-            )
+        taken = {column.name.lower() for column in table.columns}
+        name = raw
+        if table.has_column(raw) and table[raw].is_source:
+            usable = table[raw].stype == Stype.timestamp
         else:
+            if raw.lower() in taken:
+                name = f'{raw}_raw'
+                suffix = 2
+                while name.lower() in taken:
+                    name = f'{raw}_raw_{suffix}'
+                    suffix += 1
             try:
-                table.add_column(raw)
-                added.append(raw)
-                usable = table[raw].stype == Stype.timestamp
+                if name == raw:
+                    table.add_column(raw)
+                else:
+                    table.add_column(
+                        ColumnSpec(name=name, expr=quote_ident(raw, char='`'))
+                    )
+                    renamed[name] = raw
+                added.append(name)
+                usable = table[name].stype == Stype.timestamp
             except Warning:
                 raise
             except Exception:
                 usable = False
-        if not usable:
-            derived_from = {k: v for k, v in derived_from.items() if v != raw}
+        derived_from = {
+            k: name if v == raw else v
+            for k, v in derived_from.items()
+            if v != raw or usable
+        }
 
     candidates = list(dict.fromkeys(derived_from.get(n, n) for n in timestamps))
     axes = list(
@@ -350,6 +371,11 @@ def _infer_view_time_column(
     if not reasons:
         return []
     added_note = ', and added it as a column' if chosen in added else ''
+    if chosen in renamed:
+        added_note = (
+            f", the source column '{renamed[chosen]}' added under a name of "
+            f'its own, since a dimension has its name'
+        )
     return [
         f"Took '{chosen}' as the time column of table '{table.name}'"
         f'{added_note}, since {" and ".join(reasons)}'

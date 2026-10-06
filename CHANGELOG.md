@@ -195,6 +195,7 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A metric view's time column is the source column its dates truncate.**
   A view that holds a date only as `DATE_TRUNC('MONTH', OrderDate)`, or a cast of it to a date, got that truncation as its time column, since it starts at or before the column it truncates, so every windowed question counted by month.
   Each such dimension is now offered to the time-column rule as the column it truncates or casts, added to the table if the rule takes it, and a physical timestamp is preferred to an expression derived from it.
+  A dimension named as the column it truncates, as `OrderDate: DATE_TRUNC('MONTH', source.OrderDate)` is, keeps its name and its truncated value, and the column is added under a name of its own, such as `OrderDate_raw`.
   A dimension a window measure orders by is offered first, as the time axis the view's author chose.
   A conversion note and the schema's time-column warning both name the column taken and the dimensions it was taken in place of.
 - **The columns a metric view's measures aggregate are columns of the graph.**
