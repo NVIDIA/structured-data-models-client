@@ -211,7 +211,7 @@ jobs:
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
       # and twine refuses anything that is not a distribution.
       - run: pip install --upgrade twine && twine check dist/*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels
           path: dist/
@@ -284,7 +284,7 @@ jobs:
             "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: dist/sbom.cyclonedx.json
