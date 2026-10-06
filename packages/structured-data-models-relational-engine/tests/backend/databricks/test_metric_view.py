@@ -23,6 +23,7 @@ try:
         JoinKeyRef,
         MetricViewFilter,
         MetricViewJoin,
+        MetricViewMeasure,
         MetricViewWildcard,
         UnsupportedFilterError,
         UnsupportedJoinError,
@@ -1053,6 +1054,7 @@ def test_from_databricks_metric_view() -> None:
         'customer_id',
         'product_id',
         'order_date',
+        'amount',
     }
     assert fact.primary_key is not None
     assert fact.primary_key.name == 'line_id'
@@ -1302,7 +1304,10 @@ def test_from_databricks_metric_view_rejected_join_does_not_leak_column() -> (
     assert set(graph.edges) == set()
 
     fact = graph['order_lines']
-    assert {column.name for column in fact.columns} == {'product_line'}
+    assert {column.name for column in fact.columns} == {
+        'product_line',
+        'amount',
+    }
     assert fact.primary_key is None
     assert fact.time_column is None
 
@@ -1329,7 +1334,7 @@ def test_from_databricks_metric_view_rejected_join_keeps_expression() -> None:
     assert set(graph.tables) == {'order_lines'}
 
     fact = graph['order_lines']
-    assert {column.name for column in fact.columns} == {'product_id'}
+    assert {column.name for column in fact.columns} == {'product_id', 'amount'}
     assert str(fact['product_id'].expr) == 'UPPER(product_id)'
 
 
@@ -1370,7 +1375,10 @@ def test_from_databricks_metric_view_drops_a_hostile_expression() -> None:
 
     fact = graph['order_lines']
     assert not fact.has_column('leaked')
-    assert {column.name for column in fact.columns} == {'product_line'}
+    assert {column.name for column in fact.columns} == {
+        'product_line',
+        'amount',
+    }
 
 
 _UDF_EXPR_YAML = """
@@ -1423,7 +1431,7 @@ def test_a_trusted_metric_view_keeps_its_udf_dimension(
 
     assert str(graph['order_lines']['masked'].expr) == 'my_udf(product_line)'
     assert any('my_udf' in sql for sql in sql_log)
-    assert graph.conversion_messages == ()
+    assert _said(graph) == ()
 
 
 def test_a_trusted_metric_view_still_refuses_a_sub_query() -> None:
@@ -1604,7 +1612,8 @@ def test_live_metric_view_graph(metric_view_graph: Graph) -> None:
     assert fact.time_column is not None
     assert fact.time_column_choice is not None
     assert fact.time_column_choice.instead_of == ('Order Month',)
-    assert {column.name for column in fact.columns} == {
+    # Beside the columns its measures aggregate:
+    assert {column.name for column in fact.columns} >= {
         'Order Month',
         'Product Family',
         'Product Line',
@@ -2925,6 +2934,15 @@ def test_a_join_dropped_while_converting_names_the_dimensions_lost(
     )
 
 
+def _said(graph: Graph) -> tuple[str, ...]:
+    r"""The conversion messages but the one every view with measures says."""
+    return tuple(
+        m
+        for m in graph.conversion_messages
+        if not m.startswith('Left the measures to the predictive query')
+    )
+
+
 def _time_view(dimensions: str, measures: str = '') -> list:
     definition = f"""
 version: 1.1
@@ -2966,7 +2984,7 @@ def test_a_truncated_date_gives_way_to_the_column_it_truncates() -> None:
     assert fact.time_column.name == 'order_date'
     assert fact['order_date'].expr is None
     assert fact['order_month'].expr is not None
-    assert graph.conversion_messages == (
+    assert _said(graph) == (
         "Took 'order_date' as the time column of table 'order_lines', and "
         "added it as a column, since 'order_month' and 'order_quarter' "
         'truncate or cast it, and it says when a row happened more precisely',
@@ -2982,7 +3000,7 @@ def test_a_physical_date_is_preferred_over_its_truncation() -> None:
     assert fact.time_column is not None
     assert fact.time_column.name == 'order_date'
     assert [column.name for column in fact.columns].count('order_date') == 1
-    (message,) = graph.conversion_messages
+    (message,) = _said(graph)
     assert "Took 'order_date'" in message and 'added' not in message
 
 
@@ -3011,10 +3029,144 @@ def test_a_window_measure_names_the_time_axis(
 
     graph = _convert(_FakeConnection(_time_view(dimensions, measures)))
     assert graph['order_lines'].time_column.name == 'order_date'
-    (message,) = graph.conversion_messages
+    (message,) = _said(graph)
     assert 'a window measure of the view orders by it' in message
 
     graph = _convert(_FakeConnection(_time_view(dimensions)))
     assert graph['order_lines'].time_column.name == 'shipped'
     assert not graph['order_lines'].has_column('order_date')
-    assert graph.conversion_messages == ()
+    assert _said(graph) == ()
+
+
+def test_parse_metric_view_reads_what_each_measure_aggregates() -> None:
+    spec = parse_metric_view("""
+source: c.s.lines
+parameters:
+  - name: floor
+    data_type: INT
+    default: 1
+joins:
+  - name: products
+    source: c.s.products
+    on: source.pid = products.pid
+  - name: promos
+    source: SELECT * FROM c.s.promos
+    on: source.promo_id = promos.promo_id
+dimensions:
+  - name: qty
+    expr: source.OrderQty
+measures:
+  - name: total
+    expr: SUM(LineTotal)
+  - name: n
+    expr: COUNT(1)
+  - name: buyers
+    expr: COUNT(DISTINCT source.`Customer ID`)
+  - name: q
+    expr: SUM(qty)
+  - name: big
+    expr: SUM(LineTotal) FILTER (WHERE source.UnitPrice > floor AND s = 'a.b')
+  - name: ratio
+    expr: SUM(LineTotal) / COUNT(DISTINCT SalesOrderID)
+  - name: composed
+    expr: MEASURE(total) / n
+  - name: mixed
+    expr: SUM(qty * products.ListPrice)
+  - name: list_price
+    expr: AVG(products.ListPrice)
+  - name: promoted
+    expr: SUM(promos.discount)
+  - name: trailing
+    expr: SUM(LineTotal)
+    window:
+      - order: qty
+        range: trailing 3 day
+        semiadditive: last
+""")
+
+    assert spec.measures == [
+        MetricViewMeasure(
+            'total', (('source', 'LineTotal'),), ('SUM', 'LineTotal')
+        ),
+        MetricViewMeasure('n', (), ('COUNT', None)),
+        MetricViewMeasure(
+            'buyers',
+            (('source', 'Customer ID'),),
+            ('COUNT_DISTINCT', 'Customer ID'),
+        ),
+        MetricViewMeasure('q', (), ('SUM', 'qty')),
+        MetricViewMeasure(
+            'big',
+            (('source', 'LineTotal'), ('source', 'UnitPrice'), ('source', 's')),
+        ),
+        MetricViewMeasure(
+            'ratio', (('source', 'LineTotal'), ('source', 'SalesOrderID'))
+        ),
+        MetricViewMeasure('composed', ()),
+        MetricViewMeasure('mixed', ()),
+        MetricViewMeasure('list_price', (('products', 'ListPrice'),)),
+        MetricViewMeasure('promoted', ()),
+        MetricViewMeasure('trailing', (('source', 'LineTotal'),)),
+    ]
+
+
+_MEASURE_YAML = """
+version: 1.1
+source: cat.sch.order_lines
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.customer_id
+dimensions:
+  - name: product_line
+    expr: source.product_line
+  - name: status
+    expr: LOWER(source.status)
+measures:
+  - name: total_amount
+    expr: SUM(AMOUNT)
+  - name: lines
+    expr: COUNT(1)
+  - name: buyers
+    expr: COUNT(DISTINCT source.customer_id)
+  - name: valid_amount
+    expr: SUM(amount) FILTER (WHERE source.status = 'VALID' AND promo_id IS NOT NULL)
+  - name: segments
+    expr: COUNT(DISTINCT customers.segment)
+"""
+
+
+def test_the_columns_a_measure_aggregates_become_columns() -> None:
+    r"""`SUM(amount)` is only a measure, so `amount` was in no table and the
+    predictive query that would say it had nothing to aggregate.
+    """
+    rows = _metric_view(
+        _MEASURE_YAML, {'product_line': 'string', 'status': 'string'}
+    )
+
+    graph = _convert(_FakeConnection(rows))
+
+    fact = graph['order_lines']
+    assert [column.name for column in fact.columns] == [
+        'product_line',
+        'status',
+        'amount',
+        'customer_id',
+        'promo_id',
+    ]
+    assert str(fact['status'].expr) == 'LOWER(status)'
+    assert fact['amount'].expr is None
+    assert {column.name for column in graph['customers'].columns} == {
+        'segment',
+        'customer_id',
+    }
+    assert graph.conversion_messages == (
+        "Did not add the column 'status', which the measure 'valid_amount' "
+        "reads, since the dimension 'status' has its name",
+        'Left the measures to the predictive query, which aggregates the '
+        'columns they read, added to their tables where missing; over the '
+        "next 30 days, 'total_amount' is SUM(order_lines.amount, 0, 30, "
+        "days), 'lines' is COUNT(order_lines.*, 0, 30, days), 'buyers' is "
+        'COUNT_DISTINCT(order_lines.customer_id, 0, 30, days); '
+        "'valid_amount' and 'segments' have no single aggregation",
+    )

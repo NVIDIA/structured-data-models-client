@@ -123,6 +123,76 @@ def _column_under(expr: str) -> str | None:
     return None
 
 
+# A name a measure reads, possibly qualified, and whether it is called.
+_REFERENCE_RE = re.compile(rf'(?<![\w$`.])({_CHAIN})(\s*\()?')
+# Words of a measure's SQL that are no column, beyond what a call or a type
+# makes of a word. Anything left that names no column of its table is left
+# out anyway, so this only spares reading what is plainly grammar.
+_MEASURE_KEYWORDS = frozenset(
+    {
+        'all',
+        'and',
+        'any',
+        'as',
+        'asc',
+        'between',
+        'by',
+        'case',
+        'current',
+        'day',
+        'days',
+        'desc',
+        'distinct',
+        'else',
+        'end',
+        'escape',
+        'exists',
+        'false',
+        'filter',
+        'first',
+        'following',
+        'from',
+        'hour',
+        'ilike',
+        'in',
+        'interval',
+        'is',
+        'last',
+        'like',
+        'minute',
+        'month',
+        'not',
+        'null',
+        'nulls',
+        'or',
+        'order',
+        'over',
+        'partition',
+        'preceding',
+        'range',
+        'rlike',
+        'row',
+        'rows',
+        'second',
+        'some',
+        'then',
+        'true',
+        'unbounded',
+        'week',
+        'when',
+        'where',
+        'year',
+    }
+)
+# A measure a predictive query aggregation says as is: one aggregate over one
+# column, or a count of rows.
+_SIMPLE_MEASURE_RE = re.compile(
+    rf'\s*(sum|avg|min|max|count)\s*\(\s*(distinct\s+)?'
+    rf'(\*|1|{_CHAIN})\s*\)\s*',
+    flags=re.IGNORECASE,
+)
+
+
 class UnsupportedJoinError(KumoRelationalError, ValueError):
     r"""Raised when a metric view join cannot be converted into a graph
     edge.
@@ -204,6 +274,26 @@ class MetricViewWildcard:
     excluded: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class MetricViewMeasure:
+    r"""A measure of a metric view, which the graph leaves to a predictive
+    query to aggregate.
+
+    Args:
+        name: The measure's name.
+        inputs: The columns it reads, each with the alias of its table,
+            either :obj:`SOURCE_ALIAS` or a join alias, as written. A name
+            that turns out to be no column of its table reads nothing.
+        aggregation: The predictive query aggregation it is, with the name
+            it aggregates or ``None`` for a count of rows, when it is one
+            plain aggregate over the source table.
+    """
+
+    name: str
+    inputs: tuple[tuple[str, str], ...]
+    aggregation: tuple[str, str | None] | None = None
+
+
 @dataclass
 class MetricViewSpec:
     r"""The graph-relevant parts of a metric view definition.
@@ -218,6 +308,7 @@ class MetricViewSpec:
             columns, if it has one.
         window_orders: The dimensions a window measure orders by, which
             the view's author made its time axis.
+        measures: The measures, in order.
     """
 
     source: tuple[str, ...]
@@ -226,6 +317,7 @@ class MetricViewSpec:
     messages: list[str]
     filter: MetricViewFilter | None = None
     window_orders: list[str] = field(default_factory=list)
+    measures: list[MetricViewMeasure] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -842,7 +934,133 @@ def parse_metric_view(
         messages=messages,
         filter=row_filter,
         window_orders=_window_orders(cfg.get('measures')),
+        measures=_read_measures(
+            cfg.get('measures'),
+            candidates,
+            kept,
+            dimensions={
+                column.name.lower(): column
+                for column in columns
+                if isinstance(column, MetricViewColumn)
+            },
+            parameters=set(parameters),
+        ),
     )
+
+
+def _read_measures(
+    measure_cfgs: Any,
+    candidates: Sequence[tuple[tuple[str, ...], str]],
+    kept: Collection[str],
+    dimensions: Mapping[str, MetricViewColumn],
+    parameters: Collection[str],
+) -> list[MetricViewMeasure]:
+    r"""Reads which columns each measure aggregates, never running it.
+
+    A measure reads the columns it names, qualified by a join or not, the
+    ones in a ``FILTER (WHERE ...)`` and the ones of the measures it is
+    composed of included. A name that is a dimension, a measure or a
+    parameter reads none, and neither does a measure that reads more than
+    one table, which no single table's column can express.
+
+    Args:
+        measure_cfgs: The ``measures`` section, if any.
+        candidates: Every join path or alias a column can be qualified by,
+            with the alias it resolves to.
+        kept: The aliases of the joins converted.
+        dimensions: The dimensions converted, by folded name.
+        parameters: The folded names of the parameters.
+    """
+    paths = {
+        tuple(part.lower() for part in path): alias
+        for path, alias in candidates
+    }
+    measure_names = {
+        cfg['name'].lower()
+        for cfg in (measure_cfgs if isinstance(measure_cfgs, list) else [])
+        if isinstance(cfg, dict) and isinstance(cfg.get('name'), str)
+    }
+    measures: list[MetricViewMeasure] = []
+    for cfg in measure_cfgs if isinstance(measure_cfgs, list) else []:
+        if not isinstance(cfg, dict):
+            continue
+        name, expr = cfg.get('name'), cfg.get('expr')
+        if not isinstance(name, str) or not isinstance(expr, str):
+            continue
+        inputs: list[tuple[str, str]] = []
+        read: set[str] = set()  # The aliases of every table read.
+        for match in _REFERENCE_RE.finditer(_STRING_LITERAL_RE.sub("''", expr)):
+            if match.group(2) is not None:
+                continue  # A call names a function, not a column.
+            parts = [
+                unquote_ident(part)
+                for part in _IDENT_RE.findall(match.group(1))
+            ]
+            if len(parts) == 1:
+                folded = parts[0].lower()
+                if (
+                    folded in _MEASURE_KEYWORDS
+                    or folded in measure_names
+                    or folded in parameters
+                    or (folded,) in paths
+                ):
+                    continue
+                if (dimension := dimensions.get(folded)) is not None:
+                    # Already a column of the graph.
+                    read.add(dimension.alias)
+                    continue
+                reference = (SOURCE_ALIAS, parts[0])
+            else:
+                alias = paths.get(tuple(part.lower() for part in parts[:-1]))
+                if alias is None:
+                    continue  # A field of a struct, or nothing known.
+                reference = (alias, parts[-1])
+            read.add(reference[0])
+            if reference not in inputs:
+                inputs.append(reference)
+        if len(read) > 1 or not read <= {SOURCE_ALIAS, *kept}:
+            inputs = []
+        measures.append(
+            MetricViewMeasure(
+                name=name,
+                inputs=tuple(inputs),
+                aggregation=_aggregation(cfg, expr, inputs, dimensions),
+            )
+        )
+    return measures
+
+
+def _aggregation(
+    cfg: Mapping[str, Any],
+    expr: str,
+    inputs: Sequence[tuple[str, str]],
+    dimensions: Mapping[str, MetricViewColumn],
+) -> tuple[str, str | None] | None:
+    r"""The predictive query aggregation a measure is, if it is one plain
+    aggregate of a column or dimension of the source table, or a count of
+    its rows.
+    """
+    match = _SIMPLE_MEASURE_RE.fullmatch(_STRING_LITERAL_RE.sub("''", expr))
+    if match is None or 'window' in cfg:
+        return None
+    function, distinct, argument = match.groups()
+    function = function.upper()
+    if argument in ('*', '1'):
+        if function != 'COUNT' or distinct:
+            return None
+        return 'COUNT', None
+    dimension = dimensions.get(unquote_ident(argument).lower())
+    if dimension is not None and dimension.alias == SOURCE_ALIAS:
+        column = dimension.name
+    elif len(inputs) == 1 and inputs[0][0] == SOURCE_ALIAS:
+        column = inputs[0][1]
+    else:
+        return None
+    if distinct:
+        if function != 'COUNT':
+            return None
+        function = 'COUNT_DISTINCT'
+    return function, column
 
 
 def _window_orders(measure_cfgs: Any) -> list[str]:

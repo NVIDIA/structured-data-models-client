@@ -356,6 +356,51 @@ def _infer_view_time_column(
     ]
 
 
+def _measures_message(fact_table: Table, measures: Sequence[Any]) -> str:
+    r"""Says that a view's measures are left to a predictive query, and the
+    aggregation each simple one is, over 30 days for example.
+
+    Args:
+        fact_table: The view's source table, the columns of its measures
+            added.
+        measures: The view's
+            :class:`~sdm_relational_engine.rfm.backend.databricks.metric_view.MetricViewMeasure`.
+    """
+
+    def _name(name: str) -> str:
+        return name if re.fullmatch(r'[A-Za-z_]\w*', name) else f'`{name}`'
+
+    # A measure names a column in any case, as Databricks reads it.
+    columns = {
+        column.name.lower(): column.name for column in fact_table.columns
+    }
+    expressed: list[str] = []
+    others: list[str] = []
+    for measure in measures:
+        if measure.aggregation is None:
+            others.append(measure.name)
+            continue
+        function, column = measure.aggregation
+        if column is not None and column.lower() not in columns:
+            others.append(measure.name)
+            continue
+        target = '*' if column is None else _name(columns[column.lower()])
+        expressed.append(
+            f"'{measure.name}' is {function}({_name(fact_table.name)}."
+            f'{target}, 0, 30, days)'
+        )
+    said = [
+        'Left the measures to the predictive query, which aggregates the '
+        'columns they read, added to their tables where missing'
+    ]
+    if expressed:
+        said.append(f'over the next 30 days, {", ".join(expressed)}')
+    if others:
+        noun = 'has' if len(others) == 1 else 'have'
+        said.append(f'{_quoted_names(others)} {noun} no single aggregation')
+    return '; '.join(said)
+
+
 def _quoted_names(names: Sequence[str]) -> str:
     quoted = [f"'{name}'" for name in names]
     if len(quoted) == 1:
@@ -1541,6 +1586,27 @@ class Graph:
                         )
                     )
 
+            # Measures are left to a predictive query, which aggregates
+            # columns, so the columns they read are added where missing. A
+            # measure is only read here, never run.
+            for measure in spec.measures:
+                for alias, name in measure.inputs:
+                    columns = {c.lower(): c for c in _columns_of(alias)}
+                    if (column := columns.get(name.lower())) is None:
+                        continue
+                    taken = {
+                        spec_.name.lower(): spec_
+                        for spec_ in columns_by_alias[alias]
+                    }
+                    if (same := taken.get(column.lower())) is None:
+                        columns_by_alias[alias].append(ColumnSpec(name=column))
+                    elif not same.is_source:
+                        msgs.append(
+                            f"Did not add the column '{column}', which the "
+                            f"measure '{measure.name}' reads, since the "
+                            f"dimension '{same.name}' has its name"
+                        )
+
             graph = cls(tables=[])
 
             # A failure to read the fact table aborts. A joined table that
@@ -1696,6 +1762,9 @@ class Graph:
                         _drop_join(
                             join, f'its keys could not be linked: {error}'
                         )
+
+            if spec.measures:
+                msgs.append(_measures_message(fact_table, spec.measures))
 
             for table in graph.tables.values():
                 msgs.extend(_infer_view_time_column(table, spec.window_orders))
