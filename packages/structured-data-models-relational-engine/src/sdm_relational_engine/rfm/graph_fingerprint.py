@@ -151,7 +151,9 @@ def graph_fingerprint(graph: _Graph) -> str:
     """
     names = sorted(graph.tables)
     terms: list[str] = [
-        _term('structured-data-models-relational-engine'),
+        # A hashed literal, not a package reference: renaming the
+        # distribution must not rename every graph.
+        _term('sdm-relational-engine'),
         _term(FINGERPRINT_VERSION),
         _term(len(names)),
     ]

@@ -59,7 +59,7 @@ def _pooch() -> Any:
         raise ModuleNotFoundError(
             "Loading a RelBench dataset requires 'pooch'. Install it via the "
             "'relbench' extra, e.g. `pip install 'structured-data-models-relational-engine[relbench]'` "
-            "(or `pip install 'sdm_relational_engine[relbench]'`).",
+            "(or `pip install 'structured-data-models-relational-engine[relbench]'`).",
             name='pooch',
         ) from error
 

@@ -17,12 +17,13 @@ import re
 
 from sdm_connectors._version import __version__
 
-#: Named as the distribution a Databricks administrator would see installed,
-#: never a model or endpoint.
+#: The product half of the partner identifier: a name an administrator can
+#: tie to this client, never a model or endpoint. It is a wire value, so it
+#: outlived the rename of the distribution that sends it.
 DATABRICKS_PARTNER = 'nvidia'
 DATABRICKS_PRODUCT = 'sdm-client'
 
-#: The query tag on every warehouse session structured-data-models-client opens, which says what
+#: The query tag on every warehouse session this client opens, which says what
 #: its statements are for without changing the identifier above.
 SAMPLING_QUERY_TAG = ('sdm_client_purpose', 'sampling')
 

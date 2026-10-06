@@ -131,11 +131,15 @@ jobs:
 
           # All five, every time. The four pure-Python distributions and the
           # engine are pinned to each other by exact version, so a release
-          # missing one is a release whose extras cannot resolve.
+          # missing one is a release whose extras cannot resolve. Read off the
+          # tree rather than listed here, so adding or renaming one cannot
+          # leave this behind.
           expected = {
-              'sdm_api', 'sdm_pql', 'sdm_client',
-              'sdm_connectors', 'sdm_relational_engine',
+              path.parent.name.replace('-', '_')
+              for path in pathlib.Path('packages').glob('*/pyproject.toml')
           }
+          if len(expected) != 5:
+              sys.exit(f'expected 5 distributions, found {sorted(expected)}')
           present = {name.split('-')[0] for name in built}
           missing = expected - present
           if missing:

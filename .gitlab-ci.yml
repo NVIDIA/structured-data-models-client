@@ -299,7 +299,7 @@ wheels-check:
       names = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
       print('\n'.join(names))
       engine = re.compile(
-          r'sdm_relational_engine-[^-]+-(cp3\d+)-cp3\d+-.*_(x86_64|aarch64)\.whl$'
+          r'structured_data_models_relational_engine-[^-]+-(cp3\d+)-cp3\d+-.*_(x86_64|aarch64)\.whl$'
       )
       built = set()
       for name in names:

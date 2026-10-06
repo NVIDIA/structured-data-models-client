@@ -73,7 +73,7 @@ pip install "structured-data-models-connectors[sqlite]"      # or [duckdb] / [po
 ```
 
 Consumers depend on it and surface these extras under their own name, e.g.
-`structured-data-models-client[snowflake]` and `sdm_relational_engine[databricks]` both resolve the corresponding
+`structured-data-models-client[snowflake]` and `structured-data-models-relational-engine[databricks]` both resolve the corresponding
 `structured-data-models-connectors` extra.
 
 ## Local development

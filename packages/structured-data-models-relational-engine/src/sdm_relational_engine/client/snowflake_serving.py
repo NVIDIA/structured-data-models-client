@@ -161,7 +161,7 @@ class SnowflakeServingClient:
             raise ImportError(
                 'Snowflake serving support requires the '
                 "'snowflake-serving' extra: pip install "
-                "'sdm_relational_engine[snowflake-serving]'"
+                "'structured-data-models-relational-engine[snowflake-serving]'"
             ) from error
         try:
             return get_active_session()

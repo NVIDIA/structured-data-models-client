@@ -204,7 +204,7 @@ def lakebase(
 
     ``application_name`` is ``nvidia_sdm-client/<version>``, with any
     ``application_name`` given after it, cut to the 63 bytes Postgres keeps.
-    The workspace's calls name structured-data-models-client too, through a copy of
+    The workspace's calls name ``sdm-client`` too, through a copy of
     ``workspace`` rather than the caller's own.
 
     The credential is valid for at most an hour: an open connection outlives
@@ -298,7 +298,7 @@ def _application_name(theirs: object) -> str:
 def _workspace(
     workspace: WorkspaceClient | None, backend: str
 ) -> WorkspaceClient:
-    r"""A workspace client whose requests name structured-data-models-client.
+    r"""A workspace client whose requests name ``sdm-client``.
 
     A caller's ``WorkspaceClient`` is copied for that, not changed; a
     subclass or test double is used as given, since a copy would lose what

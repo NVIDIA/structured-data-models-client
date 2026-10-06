@@ -16,8 +16,9 @@ import re
 
 from sdm_client._version import __version__
 
-#: Named as the distribution a Databricks administrator would see installed,
-#: never a model or endpoint.
+#: The product half of the partner identifier: a name an administrator can
+#: tie to this client, never a model or endpoint. It is a wire value, so it
+#: outlived the rename of the distribution that sends it.
 DATABRICKS_PARTNER = 'nvidia'
 DATABRICKS_PRODUCT = 'sdm-client'
 

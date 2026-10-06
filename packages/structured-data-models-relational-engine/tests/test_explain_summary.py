@@ -36,7 +36,7 @@ except ImportError:
 
 requires_openai = pytest.mark.skipif(
     not _HAS_OPENAI,
-    reason='openai (sdm_relational_engine[explain]) is not installed',
+    reason='openai (structured-data-models-relational-engine[explain]) is not installed',
 )
 
 
