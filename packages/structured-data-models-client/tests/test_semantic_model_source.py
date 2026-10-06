@@ -499,55 +499,55 @@ def test_a_model_s_column_constant_only_in_the_rows_read_is_kept(
     assert said == []
 
 
-def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
-    source: Any, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    'named', [None, 'order_month'], ids=['engine-choice', 'named-otherwise']
+)
+def test_a_model_s_time_note_holds_for_the_time_column_the_schema_has(
+    named: str | None, source: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""The view has only the month of `ordered_at`, which starts earliest of
-    any timestamp, so it was taken, and every window counted months.
+    any timestamp, so it was taken, and every window counted months. Naming
+    the month as the time column still noted that `ordered_at` was taken,
+    which the schema no longer held.
     """
     _month_only(monkeypatch)
+    time_columns = None if named is None else {'order_lines': named}
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        schema = Schema.from_source(source.semantic_model('sales_mv'))
+        schema = Schema.from_source(
+            source.semantic_model('sales_mv'), time_columns=time_columns
+        )
 
     lines = schema['order_lines']
-    assert lines.time_column == 'ordered_at'
     assert 'order_month' in lines.columns
-    said = '\n'.join(str(item.message) for item in caught)
-    assert (
-        'order_lines.ordered_at was taken as the time column rather than '
-        "'order_month', which truncates or casts it, since it says when a "
-        'row happened more precisely. If a question should count by it, name '
-        "it: time_columns={'order_lines': 'order_month'}." in said
-    )
-    (note,) = [n for n in schema.conversion_notes if n.startswith('Took')]
-    assert "Took 'ordered_at' as the time column of table 'order_lines'" in note
+    taken = [n for n in schema.conversion_notes if 'time column' in n]
+    if named is None:
+        assert lines.time_column == 'ordered_at'
+        said = '\n'.join(str(item.message) for item in caught)
+        assert "time_columns={'order_lines': 'order_month'}" in said
+        (note,) = taken
+        assert "'ordered_at'" in note and "'order_month'" in note
+    else:
+        assert lines.time_column == 'order_month'
+        assert taken == []
+        assert schema.conversion_notes  # The measures' notes stay.
 
 
-def test_a_time_column_named_otherwise_leaves_the_engine_s_note_out(
+def test_notes_name_the_tables_as_the_schema_names_them(
     source: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    r"""Naming the month as the time column still noted that `ordered_at`
-    was taken, which the schema no longer holds.
+    r"""A note named the model's table, which a question asked of a schema
+    that names it otherwise cannot name.
     """
     _month_only(monkeypatch)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', SDMWarning)
-        named = Schema.from_source(
-            source.semantic_model('sales_mv'),
-            time_columns={'order_lines': 'order_month'},
-        )
-        same = Schema.from_source(
-            source.semantic_model('sales_mv'),
-            time_columns={'order_lines': 'ordered_at'},
-        )
+    schema = _schema(source, {'lines': 'order_lines'})
 
-    assert named['order_lines'].time_column == 'order_month'
-    assert not any(n.startswith('Took') for n in named.conversion_notes)
-    assert named.conversion_notes  # The measures' note stays.
-    assert any(n.startswith("Took 'ordered_at'") for n in same.conversion_notes)
+    notes = schema.conversion_notes
+    assert any('(lines.quantity,' in note for note in notes)
+    assert any("table 'lines'" in note for note in notes)
+    assert not any('order_lines' in note for note in notes)
 
 
 def _month_only(monkeypatch: pytest.MonkeyPatch) -> None:

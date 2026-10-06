@@ -252,7 +252,8 @@ def semantic_model_graph(model: Any) -> Graph:
 
     What the model has that a graph cannot hold is said in one
     :class:`SDMWarning`, and nothing is said for a model that loses nothing:
-    how it was read is in the graph's ``conversion_notes``. A model the
+    how it was read is in the graph's ``conversion_notes``, which the schema
+    renders as text. A model the
     engine refuses, for a filter on a joined table say, is refused with a
     :class:`StructuredDataError` that carries the engine's reason.
     """

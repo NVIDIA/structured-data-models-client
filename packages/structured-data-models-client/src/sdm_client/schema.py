@@ -36,7 +36,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
@@ -881,15 +881,18 @@ class Schema:
     @property
     def conversion_notes(self) -> tuple[str, ...]:
         r"""How :meth:`from_source` read a semantic model where nothing was
-        lost, which no warning repeats.
+        lost, which no warning repeats, for a person to read.
 
-        For a Databricks metric view: the predictive query aggregation that
-        matches each simple measure, such as
+        For a Databricks metric view, one note each: the predictive query
+        aggregation that matches a simple measure, such as
         ``'revenue' is SUM(order_lines.LineTotal, 0, 30, days)``, the time
         column taken in place of a date the view truncates, unless
-        ``time_columns`` named another, and each parameter read as its
-        default. What a model loses is said in an
-        :class:`SDMWarning` instead. Empty for every other schema.
+        ``time_columns`` named another, and a parameter read as its default.
+        Tables are named as the schema names them. What a model loses is
+        said in an :class:`SDMWarning` instead. Empty for every other schema.
+
+        The wording of a note is not part of the contract, so do not parse
+        it.
         """
         return self._conversion_notes
 
@@ -1243,7 +1246,7 @@ class Schema:
         }
         _apply_keys_and_times(built, primary_keys, time_columns)
         if is_semantic_model(source):
-            notes = _notes_still_true(graph, built, as_named, time_columns)
+            notes = _schema_notes(graph.conversion_notes, built, as_named)
         if check_keys and engine_tables is not None:
             # Before relationships are inferred: a declined key is one no
             # relationship can point at.
@@ -1384,29 +1387,39 @@ def _require_table(tables: Mapping[str, _T], name: str) -> _T:
     return tables[name]
 
 
-def _notes_still_true(
-    graph: Any,
+def _schema_notes(
+    notes: Sequence[Any],
     built: Mapping[str, _TableShape],
     as_named: Mapping[str, str],
-    time_columns: Mapping[str, str | None] | None,
 ) -> tuple[str, ...]:
-    r"""The model's conversion notes, but the time column the engine took
-    for a table whose time column the caller named otherwise: that note no
-    longer says what the schema holds.
+    r"""A semantic model's conversion notes as text, naming its tables as
+    the schema names them.
+
+    A note about a table the schema leaves out, or about a time column its
+    table no longer has, says nothing the schema holds, so it is left out.
+
+    Args:
+        notes: The engine's notes on how it read the model.
+        built: The schema's tables, by name.
+        as_named: The schema's name for each of the model's tables it holds.
     """
-    from sdm_relational_engine.rfm.view_conversion import TimeColumnNote
+    from sdm_relational_engine.rfm.view_conversion import (
+        MeasureNote,
+        TimeColumnNote,
+    )
 
-    def _stale(note: Any) -> bool:
-        if not isinstance(note, TimeColumnNote):
-            return False
-        name = as_named.get(note.table)
-        return (
-            name is not None
-            and name in (time_columns or {})
-            and built[name].time_column != note.column
-        )
-
-    return tuple(str(n) for n in graph.conversion_notes if not _stale(n))
+    said: list[str] = []
+    for note in notes:
+        if isinstance(note, MeasureNote | TimeColumnNote):
+            name = as_named.get(note.table)
+            if name is None or (
+                isinstance(note, TimeColumnNote)
+                and built[name].time_column != note.column
+            ):
+                continue
+            note = replace(note, table=name)
+        said.append(str(note))
+    return tuple(said)
 
 
 def _apply_keys_and_times(
