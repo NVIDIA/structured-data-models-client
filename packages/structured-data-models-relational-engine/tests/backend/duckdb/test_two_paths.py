@@ -121,3 +121,74 @@ def test_a_column_linking_to_two_tables_is_read_once(connection: Any) -> None:
 
     _customer_of_each_line(subgraph)
     assert subgraph.tables['buyers'].num_rows > 0
+
+
+def test_two_paths_to_a_keyed_table_sample_as_in_memory(
+    connection: Any,
+) -> None:
+    r"""With every table keyed, two paths to the lines did not fail but
+    sampled a hop too deep: lines the orders reached for the next hop were
+    read with this one, so their neighbours arrived a hop early, and
+    predictions differed from the in-memory sampler's over the same data.
+    """
+    from sdm_relational_engine.rfm.backend.local.sampler import LocalSampler
+
+    # A line's own customer is not its order's, so the orders reach lines
+    # the customers do not.
+    connection.execute('UPDATE details SET cid = (did + 1) % 10')
+
+    tables = [
+        dict(name='customers', primary_key='cid', columns=['cid', 'seg']),
+        dict(
+            name='headers',
+            primary_key='hid',
+            time_column='ts',
+            columns=['hid', 'cid', 'ts'],
+        ),
+        dict(
+            name='details',
+            primary_key='did',
+            time_column='ts',
+            columns=['did', 'hid', 'cid', 'ts'],
+        ),
+    ]
+    edges = [
+        ('headers', 'cid', 'customers'),
+        ('details', 'hid', 'headers'),
+        ('details', 'cid', 'customers'),
+    ]
+    subgraph = _sample(connection, tables, edges)
+
+    graph = rfm.Graph.from_data(
+        {
+            spec['name']: connection.execute(
+                f'SELECT * FROM {spec["name"]}'
+            ).df()
+            for spec in tables
+        },
+        edges=edges,
+        infer_metadata=False,
+        verbose=False,
+    )
+    for spec in tables:
+        graph[spec['name']].primary_key = spec['primary_key']
+        if 'time_column' in spec:
+            graph[spec['name']].time_column = spec['time_column']
+    in_memory = LocalSampler(graph, verbose=False).sample_subgraph(
+        ('customers',),
+        pd.Series(_ENTITIES),
+        pd.Series(pd.to_datetime(['2025-01-01'] * len(_ENTITIES))),
+        [16, 16, 16],
+    )
+
+    def _hops(sampled: Any) -> dict[str, list[int]]:
+        # The SQL sampler stops at the first hop that reaches nothing.
+        return {
+            name: [
+                int(n)
+                for n in np.trim_zeros(np.asarray(table.num_sampled_nodes), 'b')
+            ]
+            for name, table in sorted(sampled.tables.items())
+        }
+
+    assert _hops(subgraph) == _hops(in_memory)
