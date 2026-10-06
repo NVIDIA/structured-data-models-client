@@ -211,6 +211,8 @@ declare as `1.0.0` and none has published. The heading becomes
 - **A `DECIMAL(p, 0)` key is read as the integer its type says.**
   A warehouse column such as H&M's `DECIMAL(38, 0)` ids was described as an integer but read as decimals, which no type inference takes, so a question about a metric view or a table holding one failed when its rows were read.
   Decimal columns are now read as 64-bit integers where their scale is 0 or their type says integer, and as floats otherwise; one past 64 bits is left as it was.
+- **A metric view with both `fields` and `dimensions` reads only `dimensions`, as Databricks does.**
+  Both lists were read, adding dimensions no query of the view can see; `fields` is now left out with a message.
 - **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**
   `Schema.from_source(source.semantic_model(...))` also inferred relationships from column names, so a snowflake view's lines, holding `CustomerID`, gained a link straight to `customers` beside the path through orders, and churn questions failed with an `IndexError`.
   No relationship is now inferred beside a semantic model's joins; pass `relationships=` to add one.

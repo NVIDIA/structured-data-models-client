@@ -833,7 +833,14 @@ def parse_metric_view(
 
     columns: list[MetricViewColumn | MetricViewWildcard] = []
     defined: dict[str, str] = {}
-    dim_cfgs = list(cfg.get('dimensions') or []) + list(cfg.get('fields') or [])
+    # `fields` is the newer name of `dimensions`, and Databricks reads only
+    # `dimensions` when a view has both.
+    dim_cfgs = list(cfg.get('dimensions') or cfg.get('fields') or [])
+    if cfg.get('dimensions') and cfg.get('fields'):
+        messages.append(
+            "Ignored the 'fields' section since the view also has "
+            "'dimensions', and Databricks reads only those"
+        )
     for dim_cfg in dim_cfgs:
         if not isinstance(dim_cfg, dict):
             messages.append(

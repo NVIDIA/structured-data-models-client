@@ -3344,3 +3344,24 @@ def test_a_decimal_key_is_read_as_the_integer_its_type_says(
     assert df['price'].dtype == pd.ArrowDtype(pa.float64())
     # Past 64 bits, left as it was:
     assert df['huge'].dtype == pd.ArrowDtype(pa.decimal128(38, 0))
+
+
+def test_a_view_with_fields_and_dimensions_reads_only_dimensions() -> None:
+    r"""Databricks reads `fields` only when there are no `dimensions`, so
+    reading both added dimensions no query of the view can see.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.orders
+dimensions:
+  - name: status
+    expr: source.status
+fields:
+  - name: channel
+    expr: source.channel
+""")
+
+    assert [column.name for column in spec.columns] == ['status']
+    assert spec.messages == [
+        "Ignored the 'fields' section since the view also has 'dimensions', "
+        'and Databricks reads only those'
+    ]
