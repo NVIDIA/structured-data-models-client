@@ -199,7 +199,9 @@ declare as `1.0.0` and none has published. The heading becomes
   Losses are one `SDMWarning` at the caller.
   A refusal is a `StructuredDataError` (`INVALID_REQUEST`) with the model's name in `details['semantic_model']`.
   The schema holds only the model's own relationships, which `relationships=` replaces.
-  A column no predictive query can name is left out with a warning, and a parameter named like a `DESCRIBE` detail, such as `Type`, no longer stands in for it.
+  A parameter named like a `DESCRIBE` detail, such as `Type`, no longer stands in for it.
+- **`Schema.from_source` leaves out a column no predictive query can name, rather than refusing the source.**
+  This applies to every source: a column whose name holds a `.`, a backtick or a line break is left out with an `SDMWarning`; `Schema.from_data` still refuses such a name.
 - **A `DECIMAL(p, 0)` key is read as the integer its type says, and a decimal identifier keeps every digit.**
   Such columns were read as decimals, which no type inference takes, so a question failed when their rows were read.
 - **Sampling a table reached by two paths, or a column linking two tables, no longer fails.**
