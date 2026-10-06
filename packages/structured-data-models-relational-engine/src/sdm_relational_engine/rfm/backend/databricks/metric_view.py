@@ -21,6 +21,7 @@ from sdm_relational_engine.rfm.view_conversion import (
     quoted_list,
 )
 from sdm_relational_engine.rfm.view_expr import (
+    BARE_NAME,
     _unsafe_expr_reason,
     _untrusted_call_reason,
     name_references,
@@ -36,8 +37,7 @@ SOURCE_ALIAS = 'source'
 _CARDINALITIES = {'many_to_one', 'one_to_many'}
 _MEASURE_SUFFIX = ' measure'
 
-_BARE_IDENT = r'[A-Za-z_][A-Za-z0-9_]*'
-_IDENT = rf'`(?:[^`]|``)+`|{_BARE_IDENT}'
+_IDENT = rf'`(?:[^`]|``)+`|{BARE_NAME}'
 
 _TABLE_REFERENCE_RE = re.compile(
     rf'\s*({_IDENT})(?:\.({_IDENT}))?(?:\.({_IDENT}))?\s*$'
@@ -389,7 +389,7 @@ def parse_join_condition(
 
 def _quoted_variants(name: str) -> str:
     quoted = re.escape('`' + name.replace('`', '``') + '`')
-    if re.fullmatch(_BARE_IDENT, name):
+    if re.fullmatch(BARE_NAME, name):
         return f'{quoted}|{re.escape(name)}'
     return quoted
 

@@ -89,6 +89,10 @@ def test_parse_join_condition() -> None:
         JoinKeyRef(qualifier='source', column='my a'),
         JoinKeyRef(qualifier='x', column='my b'),
     )
+    assert parse_join_condition('source.2024_id = c.2024_id') == (
+        JoinKeyRef(qualifier='source', column='2024_id'),
+        JoinKeyRef(qualifier='c', column='2024_id'),
+    )
 
     assert parse_join_condition(None) is None
     assert parse_join_condition('a.x = b.y AND a.z = b.w') is None
@@ -2667,7 +2671,7 @@ dimensions:
     expr: UPPER(customers.segment)
   - expr: customers.* except (`segment`, customers.region_id)
   - expr: customers . regions.*
-  - expr: Source.* EXCEPT(amount)
+  - expr: Source.* EXCEPT(amount, 2024_total)
   - expr: promos.*
   - expr: nowhere.*
 measures:
@@ -2679,7 +2683,7 @@ measures:
         spec.columns[1],
         MetricViewWildcard('customers', ('segment', 'region_id')),
         MetricViewWildcard('regions'),
-        MetricViewWildcard('source', ('amount',)),
+        MetricViewWildcard('source', ('amount', '2024_total')),
     ]
     assert spec.columns[1].name == 'tier'
     (skipped,) = spec.skipped_joins
@@ -3071,6 +3075,11 @@ measures:
             ['x', 'last'],
         ),
         ('SUM(amount) /* gross */ -- switch to net_amount later', ['amount']),
+        # A name may lead with a digit, where a number is no name.
+        (
+            'SUM(2024_total) * 1e5 / 2d + 10L - SUM(source.1_000)',
+            ['2024_total', '1_000'],
+        ),
     ],
     ids=[
         'cast-joined',
@@ -3083,6 +3092,7 @@ measures:
         'keyword-named',
         'window-frame',
         'comments',
+        'digit-led',
     ],
 )
 def test_a_measure_reads_the_columns_it_names(

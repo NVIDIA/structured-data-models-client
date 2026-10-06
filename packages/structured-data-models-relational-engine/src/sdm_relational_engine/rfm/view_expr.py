@@ -37,6 +37,25 @@ _ESCAPED_DOUBLE = r'"(?:""|\\[\s\S]|[^"\\])*"'
 _BACKTICKED = r'`(?:``|[^`])*`'
 _DOLLARS = r'\$\$[\s\S]*?\$\$'
 _WORD = r'[A-Za-z_][\w$]*'
+# Databricks reads a run of letters, digits and `_` as a name unless the
+# whole run is a number, as `1e5`, `2d` and `10L` are: `2024_total` names a
+# column on a DBSQL 2026.38 warehouse.
+_WHOLE_NUMBER = r'(?i:\d+(?:e\d+)?(?:bd|d|f)?|\d+[lsy])(?![A-Za-z0-9_])'
+BARE_NAME = rf'(?!{_WHOLE_NUMBER})[A-Za-z0-9_]+'
+# A signed exponent outruns any name, and a decimal point ends a number
+# only where no name character follows, as in Spark's lexer.
+_DATABRICKS_NUMBER = (
+    r'(?i:\d+e[+-]\d+(?:bd|d|f)?'
+    r'|(?:\d+\.\d*|\.\d+)(?:e[+-]?\d+)?(?:bd|d|f)?(?![A-Za-z0-9_]))'
+    rf'|{_WHOLE_NUMBER}'
+)
+# Words and numbers elsewhere. A word may hold `$`, as a Snowflake name
+# does, so `a$$` opens no literal.
+_LOOSE_WORDS = (
+    ('open', r'/\*'),
+    ('number', r'(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*'),
+    ('word', _WORD),
+)
 _LEXEMES = {
     # A raw string, `r'...'`, takes no escapes: `r'x\'` ends at its second
     # quote. Double quotes delimit a string, not a name. A line comment goes
@@ -48,6 +67,9 @@ _LEXEMES = {
             rf"[rR]'[^']*'|[rR]\"[^\"]*\"|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}",
         ),
         ('quoted', _BACKTICKED),
+        ('open', r'/\*'),
+        ('number', _DATABRICKS_NUMBER),
+        ('word', BARE_NAME),
     ),
     # Double quotes delimit a name, which takes no escapes. Snowflake
     # refuses a backtick, so reading one as a quote hides nothing from it.
@@ -55,19 +77,17 @@ _LEXEMES = {
         ('comment', r'(?:--|//)[^\r\n]*'),
         ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}'),
         ('quoted', rf'"(?:""|[^"])*"|{_BACKTICKED}'),
+        *_LOOSE_WORDS,
     ),
     # What a check that knows no dialect reads as quoted.
     None: (
         ('comment', r'--[^\r\n]*'),
         ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}'),
         ('quoted', _BACKTICKED),
+        *_LOOSE_WORDS,
     ),
 }
-# A word may hold `$`, as a Snowflake name does, so `a$$` opens no literal.
 _LEXEMES_EVERYWHERE = (
-    ('open', r'/\*'),
-    ('number', r'(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*'),
-    ('word', _WORD),
     ('punct', r'<=>|<=|>=|<>|::|->|=>|[.:(),\[\]<>]'),
     ('space', r'\s+'),
     ('other', r'[\s\S]'),
