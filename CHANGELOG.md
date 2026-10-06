@@ -200,6 +200,9 @@ declare as `1.0.0` and none has published. The heading becomes
   Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message.
   Measures stay out of the graph, and are only read, never run.
   One conversion message lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
+- **A metric view's names are matched without regard to case, as Databricks matches them.**
+  A view naming `source.SALESORDERID` or joining `on: source.CUSTOMERID = CUSTOMERS.CUSTOMERID` over columns spelled `SalesOrderID` and `CustomerID` failed the conversion with `Column 'SALESORDERID' does not exist`.
+  Dimensions, join keys and join names now match their columns and tables in any case, and a column keeps the view's spelling, the one a question about the view uses, so every read names it so; a key no dimension names keeps its table's.
 - **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**
   `Schema.from_source(source.semantic_model(...))` also inferred relationships from column names, so a snowflake view's lines, holding `CustomerID`, gained a link straight to `customers` beside the path through orders, and churn questions failed with an `IndexError`.
   No relationship is now inferred beside a semantic model's joins; pass `relationships=` to add one.

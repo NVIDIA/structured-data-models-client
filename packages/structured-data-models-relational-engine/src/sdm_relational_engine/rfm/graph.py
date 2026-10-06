@@ -401,6 +401,16 @@ def _measures_message(fact_table: Table, measures: Sequence[Any]) -> str:
     return '; '.join(said)
 
 
+def _real_name(table: Table, name: str) -> str:
+    r"""``name`` as ``table``'s source spells it, which Databricks matches
+    to ``name`` without regard to case, or ``name`` if it spells none.
+    """
+    if name in table._source_column_dict:
+        return name
+    folded = {column.lower(): column for column in table._source_column_dict}
+    return folded.get(name.lower(), name)
+
+
 def _quoted_names(names: Sequence[str]) -> str:
     quoted = [f"'{name}'" for name in names]
     if len(quoted) == 1:
@@ -1554,6 +1564,7 @@ class Graph:
                 )
 
             columns_by_alias: dict[str, list[ColumnSpec]] = defaultdict(list)
+            renames: dict[str, dict[str, str]] = defaultdict(dict)
             for column_spec in spec.columns:
                 if isinstance(column_spec, MetricViewWildcard):
                     # Databricks refuses a view whose wildcards name a column
@@ -1564,7 +1575,16 @@ class Graph:
                         for name in _columns_of(column_spec.alias)
                         if name.lower() not in excluded
                     )
-                elif unquote_ident(column_spec.expr) == column_spec.name:
+                elif (
+                    real := {
+                        name.lower(): name
+                        for name in _columns_of(column_spec.alias)
+                    }.get(unquote_ident(column_spec.expr).lower())
+                ) is not None and real.lower() == column_spec.name.lower():
+                    # A column named as itself in any case, as Databricks
+                    # reads it, is that column, named as the view names it.
+                    if real != column_spec.name:
+                        renames[column_spec.alias][real] = column_spec.name
                     columns_by_alias[column_spec.alias].append(
                         ColumnSpec(name=column_spec.name)
                     )
@@ -1606,6 +1626,17 @@ class Graph:
                             f"measure '{measure.name}' reads, since the "
                             f"dimension '{same.name}' has its name"
                         )
+
+            # Before a row is read, so every read names them as the view does.
+            for alias, names in renames.items():
+                try:
+                    _table(alias)._name_columns(names)
+                except Warning:
+                    raise
+                except Exception:
+                    if alias == SOURCE_ALIAS:
+                        raise
+                    # A join that cannot be read is dropped below.
 
             graph = cls(tables=[])
 
@@ -1678,6 +1709,8 @@ class Graph:
                         parent_columns=parent_table._source_column_dict,
                     )
                     other_table = table_dict[other_alias]
+                    other_key = _real_name(other_table, other_key)
+                    child_key = _real_name(table, child_key)
 
                     if join.cardinality == 'many_to_one':
                         one_table, one_key = table, child_key

@@ -1158,27 +1158,31 @@ def resolve_join_keys(
     ``other_alias`` is the alias of the non-child side of the join, either
     :attr:`MetricViewJoin.parent_alias` or :obj:`SOURCE_ALIAS`. Unqualified
     column references are resolved by their (unambiguous) membership in the
-    child or parent table.
+    child or parent table. Names are compared without regard to case, as
+    Databricks compares them, and the keys come back as written.
 
     Raises:
         UnsupportedJoinError: If the condition cannot be resolved.
     """
-    child_names = {join.alias, '.'.join(join.path)}
-    parent_names = {join.parent_alias}
+    child_names = {join.alias.lower(), '.'.join(join.path).lower()}
+    parent_names = {join.parent_alias.lower()}
     if len(join.path) > 1:
-        parent_names.add('.'.join(join.path[:-1]))
+        parent_names.add('.'.join(join.path[:-1]).lower())
+    child_folded = {column.lower() for column in child_columns}
+    parent_folded = {column.lower() for column in parent_columns}
 
     def _side(ref: JoinKeyRef) -> str | None:
         if ref.qualifier is not None:
-            if ref.qualifier in child_names:
+            qualifier = ref.qualifier.lower()
+            if qualifier in child_names:
                 return join.alias
-            if ref.qualifier in parent_names:
+            if qualifier in parent_names:
                 return join.parent_alias
-            if ref.qualifier == SOURCE_ALIAS:
+            if qualifier == SOURCE_ALIAS:
                 return SOURCE_ALIAS
             return None
-        in_child = ref.column in child_columns
-        in_parent = ref.column in parent_columns
+        in_child = ref.column.lower() in child_folded
+        in_parent = ref.column.lower() in parent_folded
         if in_child and not in_parent:
             return join.alias
         if in_parent and not in_child:

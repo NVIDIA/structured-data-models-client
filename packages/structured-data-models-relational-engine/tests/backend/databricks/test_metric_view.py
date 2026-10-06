@@ -964,11 +964,13 @@ class _FakeCursor:
         else:
             names = re.findall(r'`((?:[^`]|``)+)`', projection)
 
+        # Databricks matches a name to a column without regard to case:
+        folded = {column.lower(): column for column in df.columns}
         columns = {}
         for name in names:
             name = name.replace('``', '`')
-            if name in df.columns:
-                columns[name] = df[name]
+            if name.lower() in folded:
+                columns[name] = df[folded[name.lower()]]
             else:
                 assert expr_df is not None and name in expr_df.columns, (
                     f'Unexpected column {name!r} in SQL: {sql}'
@@ -998,7 +1000,8 @@ class _FakeCursor:
         not applied, as nothing here applies it.
         """
         key = self._key(sql, r'COUNT\(DISTINCT `((?:[^`]|``)+)`\)')
-        values = self._frame(sql)[key]
+        frame = self._frame(sql)
+        values = frame[{c.lower(): c for c in frame.columns}[key.lower()]]
         return len(values), int(values.nunique()), int(values.isna().sum())
 
     def fetchall(self) -> list:
@@ -3170,3 +3173,66 @@ def test_the_columns_a_measure_aggregates_become_columns() -> None:
         'COUNT_DISTINCT(order_lines.customer_id, 0, 30, days); '
         "'valid_amount' and 'segments' have no single aggregation",
     )
+
+
+_UPPER_YAML = """
+version: 0.1
+source: cat.sch.order_lines
+joins:
+  - name: CUSTOMERS
+    source: cat.sch.customers
+    on: source.CUSTOMER_ID = customers.Customer_Id
+dimensions:
+  - name: PRODUCT_LINE
+    expr: source.PRODUCT_LINE
+  - name: line
+    expr: source.LINE_ID
+  - name: CUSTOMER_ID
+    expr: CUSTOMER_ID
+  - name: SEGMENT
+    expr: CUSTOMERS.SEGMENT
+"""
+
+
+def test_names_are_matched_without_regard_to_case(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Databricks reads `source.PRODUCT_LINE` as the column `product_line`,
+    and so must the conversion, which refused `PRODUCT_LINE` as no column.
+    """
+    lines = _EXPR_DATA['order_lines']
+    monkeypatch.setitem(
+        _EXPR_DATA,
+        'order_lines',
+        lines.assign(line=_DATA['order_lines']['line_id']),
+    )
+    rows = _metric_view(
+        _UPPER_YAML,
+        {
+            'PRODUCT_LINE': 'string',
+            'line': 'string',
+            'CUSTOMER_ID': 'string',
+            'SEGMENT': 'string',
+        },
+    )
+
+    graph = _convert(_FakeConnection(rows))
+
+    fact = graph['order_lines']
+    assert [column.name for column in fact.columns] == [
+        'PRODUCT_LINE',
+        'line',
+        'CUSTOMER_ID',
+    ]
+    assert fact['PRODUCT_LINE'].expr is None
+    assert str(fact['line'].expr) == 'LINE_ID'
+    assert 'source.`product_line` AS `PRODUCT_LINE`' in fact._quoted_source_name
+    customers = graph['CUSTOMERS']
+    assert {column.name for column in customers.columns} == {
+        'SEGMENT',
+        'customer_id',
+    }
+    assert customers.primary_key is not None
+    assert customers.primary_key.name == 'customer_id'
+    assert Edge('order_lines', 'CUSTOMER_ID', 'CUSTOMERS') in graph.edges
+    assert graph.conversion_messages == ()
