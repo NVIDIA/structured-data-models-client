@@ -10,7 +10,7 @@ import re
 import warnings
 from collections import defaultdict
 from collections.abc import Collection, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeAlias
@@ -250,6 +250,117 @@ def _join_key_reason(table: Table, key: str) -> str | None:
             f"join at a table or view with one row per '{key}'"
         )
     return None
+
+
+def _infer_view_time_column(
+    table: Table, window_orders: Sequence[str]
+) -> list[str]:
+    r"""Infers the time column of a metric view's table, and says how when
+    the view's own columns would have led it elsewhere.
+
+    A view often holds a timestamp only as a truncation or cast of a source
+    column, such as ``DATE_TRUNC('MONTH', order_date)``, which says when a
+    row happened only to the month, and starts at or before the column it
+    truncates, so the shared rule would take it. Each such column is offered
+    to the rule as the source column it derives from instead, added to the
+    table for the purpose and kept only if taken. A dimension a window
+    measure orders by is the time axis the view's author chose, so it is
+    offered alone first, and the rule decides among them all only if it
+    refuses that.
+
+    Args:
+        table: The table, its columns and links added.
+        window_orders: The dimensions the view's window measures order by.
+    """
+    from predictive_query.schema.typing import Dtype
+
+    from sdm_relational_engine.rfm.backend.databricks.metric_view import (
+        derived_column,
+    )
+
+    timestamps = [
+        column.name
+        for column in table.columns
+        if column.stype == Stype.timestamp
+    ]
+    source = {
+        name.lower(): column
+        for name, column in table._source_column_dict.items()
+    }
+    derived_from: dict[str, str] = {}
+    for name in timestamps:
+        expr = table[name].expr
+        under = None if expr is None else derived_column(str(expr))
+        column = None if under is None else source.get(under.lower())
+        if column is not None and column.dtype in (Dtype.date, Dtype.time):
+            derived_from[name] = column.name
+
+    added: list[str] = []
+    for raw in dict.fromkeys(derived_from.values()):
+        if table.has_column(raw):
+            usable = (
+                table[raw].is_source and table[raw].stype == Stype.timestamp
+            )
+        else:
+            try:
+                table.add_column(raw)
+                added.append(raw)
+                usable = table[raw].stype == Stype.timestamp
+            except Warning:
+                raise
+            except Exception:
+                usable = False
+        if not usable:
+            derived_from = {k: v for k, v in derived_from.items() if v != raw}
+
+    candidates = list(dict.fromkeys(derived_from.get(n, n) for n in timestamps))
+    axes = list(
+        dict.fromkeys(
+            derived_from.get(name, name)
+            for name in window_orders
+            if name in timestamps
+        )
+    )
+    chosen = None
+    if axes and len(candidates) > 1:
+        chosen = table._infer_time_column_among(axes)
+    if chosen is None and candidates:
+        chosen = table._infer_time_column_among(candidates)
+
+    choice = table._time_column_choice
+    kept = set() if choice is None else {choice.column, choice.fallback}
+    for raw in added:
+        if raw not in kept:
+            table.remove_column(raw)
+
+    reasons: list[str] = []
+    if chosen is not None and chosen in axes and len(candidates) > 1:
+        reasons.append('a window measure of the view orders by it')
+    instead_of = tuple(n for n, raw in derived_from.items() if raw == chosen)
+    if instead_of:
+        assert choice is not None
+        table._time_column_choice = replace(choice, instead_of=instead_of)
+        verbs = (
+            'truncates or casts' if len(instead_of) == 1 else 'truncate or cast'
+        )
+        reasons.append(
+            f'{_quoted_names(instead_of)} {verbs} it, and it says when a row '
+            f'happened more precisely'
+        )
+    if not reasons:
+        return []
+    added_note = ', and added it as a column' if chosen in added else ''
+    return [
+        f"Took '{chosen}' as the time column of table '{table.name}'"
+        f'{added_note}, since {" and ".join(reasons)}'
+    ]
+
+
+def _quoted_names(names: Sequence[str]) -> str:
+    quoted = [f"'{name}'" for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
 
 
 class ViewConversionWarning(UserWarning):
@@ -1587,14 +1698,7 @@ class Graph:
                         )
 
             for table in graph.tables.values():
-                candidates = [
-                    column.name
-                    for column in table.columns
-                    if column.stype == Stype.timestamp
-                ]
-                if len(candidates) == 0:
-                    continue
-                table._infer_time_column_among(candidates)
+                msgs.extend(_infer_view_time_column(table, spec.window_orders))
 
             msgs.extend(graph._drop_invalid_edges())
             graph._settle_time_columns()

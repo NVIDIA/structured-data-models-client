@@ -1052,11 +1052,17 @@ def test_from_databricks_metric_view() -> None:
         'line_id',
         'customer_id',
         'product_id',
+        'order_date',
     }
     assert fact.primary_key is not None
     assert fact.primary_key.name == 'line_id'
     assert fact.time_column is not None
-    assert fact.time_column.name in {'order_month', 'order_quarter'}
+    assert fact.time_column.name == 'order_date'
+    assert fact.time_column_choice is not None
+    assert fact.time_column_choice.instead_of == (
+        'order_month',
+        'order_quarter',
+    )
     assert fact['order_month'].expr is not None
     assert str(fact['order_month'].expr) == "DATE_TRUNC('MONTH', order_date)"
     assert str(fact['order_quarter'].expr) == (
@@ -1594,8 +1600,10 @@ def test_live_metric_view_graph(metric_view_graph: Graph) -> None:
 
     fact = graph['order_lines']
     assert fact.primary_key is None
+    # `Order Month` truncates a source column, which is taken instead:
     assert fact.time_column is not None
-    assert fact.time_column.name == 'Order Month'
+    assert fact.time_column_choice is not None
+    assert fact.time_column_choice.instead_of == ('Order Month',)
     assert {column.name for column in fact.columns} == {
         'Order Month',
         'Product Family',
@@ -1603,7 +1611,9 @@ def test_live_metric_view_graph(metric_view_graph: Graph) -> None:
         'customer_id',
         'product_id',
         'order_id',
+        fact.time_column.name,
     }
+    assert fact[fact.time_column.name].expr is None
 
     assert graph['customers'].primary_key is not None
     assert graph['customers'].primary_key.name == 'customer_id'
@@ -2552,7 +2562,7 @@ joins:
 dimensions:
   - name: order_month
     expr: DATE_TRUNC('MONTH', source.order_date)
-  - expr: source.* EXCEPT (ORDER_DATE, `promo_id`)
+  - expr: source.* EXCEPT (STATUS, `promo_id`)
   - expr: customers.* EXCEPT (customer_id)
 """
 
@@ -2571,8 +2581,8 @@ def test_a_wildcard_dimension_stands_for_the_columns_of_its_table() -> None:
         'order_id',
         'customer_id',
         'product_id',
+        'order_date',
         'product_line',
-        'status',
         'amount',
     ]
     assert all(fact[name].expr is None for name in ('line_id', 'amount'))
@@ -2582,7 +2592,8 @@ def test_a_wildcard_dimension_stands_for_the_columns_of_its_table() -> None:
         'customer_id',
     }
     assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
-    assert graph.conversion_messages == ()
+    (message,) = graph.conversion_messages
+    assert message.startswith("Took 'order_date' as the time column")
 
 
 _PARAMETER_YAML = """
@@ -2912,3 +2923,98 @@ def test_a_join_dropped_while_converting_names_the_dimensions_lost(
         "Failed to add join 'payments', and with it the table 'payments', "
         'since its keys could not be linked'
     )
+
+
+def _time_view(dimensions: str, measures: str = '') -> list:
+    definition = f"""
+version: 1.1
+source: cat.sch.order_lines
+dimensions:
+  - name: product_line
+    expr: source.product_line
+{dimensions}
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+{measures}
+"""
+    return _metric_view(
+        definition,
+        {
+            'product_line': 'string',
+            'order_month': 'timestamp',
+            'order_quarter': 'timestamp',
+            'order_date': 'timestamp',
+        },
+    )
+
+
+_MONTH = """  - name: order_month
+    expr: DATE_TRUNC('MONTH', source.order_date)"""
+_QUARTER = """  - name: order_quarter
+    expr: CAST(DATE_TRUNC('QUARTER', order_date) AS DATE)"""
+
+
+def test_a_truncated_date_gives_way_to_the_column_it_truncates() -> None:
+    r"""`order_month` starts at or before `order_date`, so the shared rule
+    took the truncation, and every window counted months.
+    """
+    graph = _convert(_FakeConnection(_time_view(_MONTH + '\n' + _QUARTER)))
+
+    fact = graph['order_lines']
+    assert fact.time_column is not None
+    assert fact.time_column.name == 'order_date'
+    assert fact['order_date'].expr is None
+    assert fact['order_month'].expr is not None
+    assert graph.conversion_messages == (
+        "Took 'order_date' as the time column of table 'order_lines', and "
+        "added it as a column, since 'order_month' and 'order_quarter' "
+        'truncate or cast it, and it says when a row happened more precisely',
+    )
+
+
+def test_a_physical_date_is_preferred_over_its_truncation() -> None:
+    dimensions = _MONTH + '\n  - name: order_date\n    expr: source.order_date'
+
+    graph = _convert(_FakeConnection(_time_view(dimensions)))
+
+    fact = graph['order_lines']
+    assert fact.time_column is not None
+    assert fact.time_column.name == 'order_date'
+    assert [column.name for column in fact.columns].count('order_date') == 1
+    (message,) = graph.conversion_messages
+    assert "Took 'order_date'" in message and 'added' not in message
+
+
+def test_a_window_measure_names_the_time_axis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""`refund_date` starts earlier, but the view's window measure orders by
+    the month of `order_date`, so that is the time the author meant.
+    """
+    early = _DATA['order_lines']['order_date'] - pd.Timedelta(days=400)
+    monkeypatch.setitem(
+        _DATA, 'order_lines', _DATA['order_lines'].assign(shipped=early)
+    )
+    monkeypatch.setitem(
+        _COLUMN_TYPES,
+        'order_lines',
+        {**_COLUMN_TYPES['order_lines'], 'shipped': 'timestamp'},
+    )
+    dimensions = _MONTH + '\n  - name: shipped\n    expr: source.shipped'
+    measures = """  - name: trailing
+    expr: SUM(source.amount)
+    window:
+      - order: order_month
+        range: trailing 3 month
+        semiadditive: last"""
+
+    graph = _convert(_FakeConnection(_time_view(dimensions, measures)))
+    assert graph['order_lines'].time_column.name == 'order_date'
+    (message,) = graph.conversion_messages
+    assert 'a window measure of the view orders by it' in message
+
+    graph = _convert(_FakeConnection(_time_view(dimensions)))
+    assert graph['order_lines'].time_column.name == 'shipped'
+    assert not graph['order_lines'].has_column('order_date')
+    assert graph.conversion_messages == ()

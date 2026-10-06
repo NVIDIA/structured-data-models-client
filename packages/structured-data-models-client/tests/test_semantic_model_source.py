@@ -13,6 +13,7 @@ Databricks SQL, which nothing local runs.
 from __future__ import annotations
 
 import re
+import sys
 import warnings
 from typing import Any
 
@@ -489,3 +490,48 @@ def test_a_model_s_column_constant_only_in_the_rows_read_is_kept(
 
     assert schema['order_lines'].time_column == 'ordered_at'
     assert said == []
+
+
+def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""The view has only the month of `ordered_at`, which starts earliest of
+    any timestamp, so it was taken, and every window counted months.
+    """
+    view = _VIEW.replace(
+        'name: ordered_at\n    expr: source.ordered_at',
+        "name: order_month\n    expr: DATE_TRUNC('MONTH', source.ordered_at)",
+    )
+    described = {
+        'View Text': ('View Text', view, None),
+        'ordered_at': ('order_month', 'timestamp', None),
+    }
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        '_DESCRIBE',
+        [described.get(row[0], row) for row in _DESCRIBE],
+    )
+    monkeypatch.setitem(
+        _EXPRESSIONS,
+        'order_lines',
+        {
+            **_EXPRESSIONS['order_lines'],
+            'order_month': lambda df: (
+                df['ordered_at'].dt.to_period('M').dt.to_timestamp()
+            ),
+        },
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    lines = schema['order_lines']
+    assert lines.time_column == 'ordered_at'
+    assert 'order_month' in lines.columns
+    said = '\n'.join(str(item.message) for item in caught)
+    assert (
+        'order_lines.ordered_at was taken as the time column rather than '
+        "'order_month', which truncate or cast it" in said
+    )
+    assert "Took 'ordered_at' as the time column of table 'order_lines'" in said

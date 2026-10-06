@@ -190,6 +190,11 @@ declare as `1.0.0` and none has published. The heading becomes
   The default is now written in as a literal of the parameter's type, checked against that type, and the expression guard runs on the result.
   A dimension referencing a parameter with no default, or one whose type has no literal, is left out with a message naming it, and a filter referencing one refuses the view.
   A source column of the same name wins over a parameter, as a SQL warehouse reads it.
+- **A metric view's time column is the source column its dates truncate.**
+  A view that holds a date only as `DATE_TRUNC('MONTH', OrderDate)`, or a cast of it to a date, got that truncation as its time column, since it starts at or before the column it truncates, so every windowed question counted by month.
+  Each such dimension is now offered to the time-column rule as the column it truncates or casts, added to the table if the rule takes it, and a physical timestamp is preferred to an expression derived from it.
+  A dimension a window measure orders by is offered first, as the time axis the view's author chose.
+  The conversion message and the schema's time-column warning both name the column taken and the dimensions it was taken in place of.
 - **A metric view built on another metric view is refused for what it is.**
   A source or joined table that is itself a metric view got the advice to read it with `semantic_model`, which is what the caller had done.
   The message now says a metric view on a metric view is not supported and to point the source, or the join, at the underlying table; such a join is dropped, such a source refuses the view.

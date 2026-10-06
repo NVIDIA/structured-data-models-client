@@ -8,7 +8,7 @@ import datetime
 import re
 from collections import defaultdict
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, NoReturn
 
@@ -71,6 +71,56 @@ _DECIMAL_TYPE_RE = re.compile(
     r'(?:decimal|dec|numeric)(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?'
 )
 _STRING_TYPE_RE = re.compile(r'string|(?:var)?char\(\s*\d+\s*\)')
+
+# What a timestamp dimension may wrap a column in and still say when the row
+# happened, only less precisely: a truncation or a cast to a date or time.
+_TIME_TYPE = r'(?:date|timestamp(?:_ntz|_ltz)?)'
+_DERIVATIONS = tuple(
+    re.compile(pattern, flags=re.IGNORECASE | re.DOTALL)
+    for pattern in (
+        r'\(\s*(?P<inner>.+)\s*\)',
+        r"date_trunc\s*\(\s*(?:'\w+'|\"\w+\")\s*,\s*(?P<inner>.+)\s*\)",
+        r"trunc\s*\(\s*(?P<inner>.+?)\s*,\s*(?:'\w+'|\"\w+\")\s*\)",
+        rf'cast\s*\(\s*(?P<inner>.+)\s+as\s+{_TIME_TYPE}\s*\)',
+        r'(?:to_date|date|to_timestamp)\s*\(\s*(?P<inner>.+)\s*\)',
+        rf'(?P<inner>.+?)\s*::\s*{_TIME_TYPE}',
+    )
+)
+
+
+def derived_column(expr: str) -> str | None:
+    r"""The column a dimension truncates or casts to a date or time, such as
+    ``order_date`` of ``DATE_TRUNC('MONTH', order_date)``, or ``None`` when
+    the expression is anything else, a column renamed as is included.
+
+    Truncations and casts may nest, and the column may be backticked. Whether
+    it holds a time is for the caller to check.
+    """
+    column = _column_under(expr)
+    if column is None or _IDENT_RE.fullmatch(expr.strip().strip('() ')):
+        return None
+    return column
+
+
+def _column_under(expr: str) -> str | None:
+    expr = expr.strip()
+    if _IDENT_RE.fullmatch(expr):
+        return unquote_ident(expr)
+    for pattern in _DERIVATIONS:
+        match = pattern.fullmatch(expr)
+        if match is None:
+            continue
+        inner = match.group('inner')
+        # `.+` reaches past a parenthesis that closes early, as in
+        # `date(a) - date(b)`, so what it holds must balance.
+        depth = 0
+        for char in _STRING_LITERAL_RE.sub("''", inner):
+            depth += {'(': 1, ')': -1}.get(char, 0)
+            if depth < 0:
+                break
+        if depth == 0 and (column := _column_under(inner)) is not None:
+            return column
+    return None
 
 
 class UnsupportedJoinError(KumoRelationalError, ValueError):
@@ -166,6 +216,8 @@ class MetricViewSpec:
         messages: Human-readable messages for every dropped element.
         filter: The view's ``filter``, a condition on the source table's
             columns, if it has one.
+        window_orders: The dimensions a window measure orders by, which
+            the view's author made its time axis.
     """
 
     source: tuple[str, ...]
@@ -173,6 +225,7 @@ class MetricViewSpec:
     columns: list[MetricViewColumn | MetricViewWildcard]
     messages: list[str]
     filter: MetricViewFilter | None = None
+    window_orders: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -788,7 +841,24 @@ def parse_metric_view(
         columns=columns,
         messages=messages,
         filter=row_filter,
+        window_orders=_window_orders(cfg.get('measures')),
     )
+
+
+def _window_orders(measure_cfgs: Any) -> list[str]:
+    r"""The dimensions the window measures order by, in order."""
+    orders: list[str] = []
+    for measure_cfg in measure_cfgs if isinstance(measure_cfgs, list) else []:
+        windows = (
+            measure_cfg.get('window') if isinstance(measure_cfg, dict) else None
+        )
+        if isinstance(windows, dict):
+            windows = [windows]
+        for window in windows if isinstance(windows, list) else []:
+            order = window.get('order') if isinstance(window, dict) else None
+            if isinstance(order, str) and unquote_ident(order) not in orders:
+                orders.append(unquote_ident(order))
+    return orders
 
 
 def _quoted_list(names: Sequence[str]) -> str:
