@@ -91,9 +91,14 @@ class TimeColumnNote:
         column: The time column taken.
         instead_of: The dimensions that truncate or cast it.
         source_column: The source column it is, where a dimension has that
-            column's name and it was added under a name of its own.
-        added: Whether it was added to the table for the purpose.
+            column's name, so it was added under a name of its own.
+        added: Whether it was added under its own name, as the source
+            column. Not set with ``source_column``.
         window_order: Whether a window measure of the view orders by it.
+
+    Raises:
+        ValueError: If the note gives no reason, or says the column was
+            added under both names.
     """
 
     table: str
@@ -102,6 +107,14 @@ class TimeColumnNote:
     source_column: str | None = None
     added: bool = False
     window_order: bool = False
+
+    def __post_init__(self) -> None:
+        if not (self.instead_of or self.window_order):
+            raise ValueError('A time column note needs a reason')
+        if self.added and self.source_column is not None:
+            raise ValueError(
+                'A time column is added under its own name or another, not both'
+            )
 
     def __str__(self) -> str:
         reasons: list[str] = []

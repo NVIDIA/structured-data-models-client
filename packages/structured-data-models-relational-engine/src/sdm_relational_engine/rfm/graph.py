@@ -368,7 +368,7 @@ def _infer_view_time_column(
         column=chosen,
         instead_of=instead_of,
         source_column=renamed.get(chosen),
-        added=chosen in added,
+        added=chosen in added and chosen not in renamed,
         window_order=window_order,
     )
 

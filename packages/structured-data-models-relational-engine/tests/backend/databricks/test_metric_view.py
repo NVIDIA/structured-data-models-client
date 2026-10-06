@@ -2934,7 +2934,6 @@ def test_a_truncated_date_gives_way_to_the_column_it_truncates(
             'order_date_raw_2',
             instead_of=('order_date',),
             source_column='order_date',
-            added=True,
         )
     else:
         early = _DATA['order_lines']['order_date'] - pd.Timedelta(days=400)
@@ -3224,6 +3223,21 @@ def test_names_are_matched_without_regard_to_case(
     assert customers.primary_key.name == 'Customer_Id'
     assert Edge('order_lines', 'CUSTOMER_ID', 'CUSTOMERS') in graph.edges
     assert graph.conversion_messages == ()
+
+
+@pytest.mark.parametrize(
+    'note',
+    [
+        {},
+        {'instead_of': ('order_month',), 'added': True, 'source_column': 'd'},
+    ],
+    ids=['no-reason', 'added-twice'],
+)
+def test_a_time_column_note_holds_only_what_can_be_said(
+    note: dict[str, Any],
+) -> None:
+    with pytest.raises(ValueError):
+        TimeColumnNote('order_lines', 'order_date', **note)
 
 
 @pytest.mark.parametrize(
