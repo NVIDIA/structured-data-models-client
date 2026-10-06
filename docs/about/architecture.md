@@ -15,12 +15,10 @@ made deliberately.
 **The contract will not let a new model exist.**
 
 `PredictionRequest.model` and `SessionCreateRequest.model` are a **closed
-enum** containing only `kumo-tabular` and `kumo-relational`. The source
-document's `model="some-future-model"` escape hatch therefore cannot be sent.
-The response's `model` field *is* an open string (`maxLength: 1024`), so the
-contract contradicts itself.
-
-Verified on `structured-data-api@main` as of 2026-09-30.
+enum** containing only `kumo-tabular` and `kumo-relational`, so a
+`model="some-future-model"` escape hatch cannot be sent. The response's `model`
+field *is* an open string (`maxLength: 1024`), so the contract contradicts
+itself.
 
 **This does not affect anything shipping.** `kumo-tabular` and
 `kumo-relational` are both in the enum, so both work today and neither needs a
@@ -451,10 +449,7 @@ question
 positional column is never sent as data or exposed in the result, which carries
 `row_index`. `FOR EACH users.<synthetic>` then validates unchanged, so the PQL
 validator is **not** relaxed and no query that is illegal today becomes legal.
-This is the concrete form of what review asked for here.
-
-On the question review raised here: "unseen" means a row that is not in the
-tables the schema was built from. `FOR EACH` enumerates rows that *are* there,
+"Unseen" means a row that is not in the tables the schema was built from. `FOR EACH` enumerates rows that *are* there,
 so PQL text alone can never produce them. The rows are an input, not a
 derivation. This is why the direct builder supports tabular in v1.
 
@@ -503,9 +498,9 @@ a live endpoint: classification and multiclass both give **one row per
 entity**, with multiclass carrying a probability per class as columns rather
 than a row per class. Ranking also gives one row per entity, holding its `k`
 candidates as a list, because expanding them would leave `row_index` no longer
-identifying a row; forecasting gives one row per entity per step. An earlier
-draft said multiclass gave a row per class, and another said a ranking gave `k`
-rows; neither does.
+identifying a row; forecasting gives one row per entity per step. Neither
+multiclass nor ranking gives a row per class or per candidate, which is the
+reading to guard against.
 
 **Every row carries `row_index`. It also carries the entity key when the model
 has one.** Tabular requests may have no key. Join on the key when present,
@@ -720,7 +715,7 @@ Two behaviours were carried over deliberately, because each cost something to
 learn: every redirect hop is closed rather than drained, and credentials in a
 URL are stripped everywhere the URL is rendered.
 
-## 9. Deferred, on purpose
+## 9. Not supported, on purpose
 
 | Thing | Why | What would change it |
 |---|---|---|

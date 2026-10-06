@@ -146,7 +146,7 @@ with SDMClient.for_databricks_serving('kumo-relational') as client:
     result = client.predict(request, model=KumoRelational())
 ```
 
-This needs `pip install structured-data-models-client[databricks-serving]`. A serving endpoint
+This needs `pip install 'structured-data-models-client[databricks-serving]'`. A serving endpoint
 answers one request at a time, so `fit()` is refused there; `predict()` sends
 the context with every call.
 

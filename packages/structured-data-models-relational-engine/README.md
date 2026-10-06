@@ -12,7 +12,7 @@ It is imported as `sdm_relational_engine` and is normally installed transitively
 `relational` extra rather than on its own:
 
 ```bash
-pip install structured-data-models-client[relational]      # pulls the sdm_relational_engine driver
+pip install 'structured-data-models-client[relational]'      # pulls the sdm_relational_engine driver
 ```
 
 It can also be installed on its own, for the graph, sampler and PQL machinery.
