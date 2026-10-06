@@ -1,6 +1,6 @@
 # sdm_relational_engine
 
-The Kumo Relational driver for the [`structured-data-models-client`](../structured-data-models-client/README.md) client.
+The Kumo Relational driver for the [`structured-data-models-client`](https://github.com/NVIDIA/structured-data-models-client) client.
 
 This distribution provides the heavy, client-side machinery a Kumo Relational prediction
 needs before a request reaches a NIM: the relational `Graph`/`Table` abstractions,
@@ -35,7 +35,18 @@ Application code should import the client's neutral surface, not this package
 directly:
 
 ```python
-from sdm_client import PredictiveQuery, SDMClient, KumoRelational
+import pandas as pd
+from sdm_client import KumoRelational, PredictiveQuery, SDMClient
+
+users_df = pd.DataFrame({'user_id': range(12)})
+orders_df = pd.DataFrame(
+    {
+        'order_id': range(120),
+        'user_id': [i % 12 for i in range(120)],
+        'price': [10.0 + i for i in range(120)],
+        'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+    }
+)
 
 query = PredictiveQuery(
     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
