@@ -722,12 +722,13 @@ def test_no_relationship_is_inferred_beside_a_model_s_joins(
         Relationship('orders', 'customer_id', 'customers', 'customer_id'),
         Relationship('order_lines', 'product_id', 'products', 'product_id'),
     }
-    # Asked for, it is added:
+    # Asked for, it is added, and the model's own are replaced:
     asked = Relationship(
         'order_lines', 'customer_id', 'customers', 'customer_id'
     )
-    schema = _schema(source, relationships=[*schema.relationships, asked])
-    assert asked in schema.relationships
+    added = _schema(source, relationships=[*schema.relationships, asked])
+    assert set(added.relationships) == {*schema.relationships, asked}
+    assert _schema(source, relationships=[asked]).relationships == [asked]
 
 
 def test_a_dimension_no_query_can_name_is_left_out_and_named(

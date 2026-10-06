@@ -234,7 +234,7 @@ declare as `1.0.0` and none has published. The heading becomes
   Both lists were read, adding dimensions no query of the view can see; `fields` is now left out with a message.
 - **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**
   `Schema.from_source(source.semantic_model(...))` also inferred relationships from column names, so a snowflake view's lines, holding `CustomerID`, gained a link straight to `customers` beside the path through orders, and churn questions failed with an `IndexError`.
-  No relationship is now inferred beside a semantic model's joins; pass `relationships=` to add one.
+  No relationship is now inferred beside a semantic model's joins. `relationships=` replaces the model's own, so pass `[*schema.relationships, extra]` to add one.
   The SQL sampler also read, in one hop, rows a second path had just added for the next; each hop now reads only the rows of the hop before, as the in-memory sampler does.
   For a table with no primary key, such as those lines, that failed as above.
   For keyed tables it sampled their neighbours a hop early, so predictions change for any warehouse schema where two paths reach one table, such as RelBench's rel-stack, and rel-avito sampled three or more hops deep.

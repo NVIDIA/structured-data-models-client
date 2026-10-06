@@ -1142,8 +1142,9 @@ class Schema:
         Its keys and relationships come from the model, and its tables are
         named as the model names them. No relationship is inferred from
         column names beside the model's own joins, which would give a table
-        a second path the model never declared; pass ``relationships`` to
-        add one. What the model has that a schema cannot hold is said in one
+        a second path the model never declared. ``relationships=`` replaces
+        the model's own; pass ``[*schema.relationships, extra]`` to add one.
+        What the model has that a schema cannot hold is said in one
         :class:`SDMWarning`, and how it was read where nothing was lost, such
         as the aggregation each measure is, is in :attr:`conversion_notes`.
 
