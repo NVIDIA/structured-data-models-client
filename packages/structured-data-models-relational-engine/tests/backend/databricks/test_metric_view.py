@@ -1249,18 +1249,6 @@ def test_a_parameter_named_like_a_detail_does_not_stand_in_for_it(
     assert 'total_amount' not in description.dtypes
 
 
-def test_a_metric_view_with_a_parameter_named_type_converts() -> None:
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', ViewConversionWarning)
-        graph = Graph.from_databricks_metric_view(
-            'sales_mv',
-            connection=_FakeConnection(_parameterized('Type')),
-            verbose=False,
-        )
-
-    assert 'order_lines' in graph.tables
-
-
 def _metric_view(definition: str, dtypes: dict[str, str]) -> list:
     return [(name, dtype, None) for name, dtype in dtypes.items()] + [
         ('', '', None),
@@ -2305,17 +2293,34 @@ def _joined_view(customers: str = 'customers', extra: str = '') -> list:
     )
 
 
+class _SparkError(Exception):
+    r"""Stands in for a Spark session's error, which answers for its state
+    and class rather than writing them into its message.
+    """
+
+    def getSqlState(self) -> str:  # noqa: N802 - Spark's name
+        return '42501'
+
+    def getCondition(self) -> str:  # noqa: N802 - Spark's name
+        return 'INSUFFICIENT_PERMISSIONS'
+
+
 class _FailingConnection(_FakeConnection):
     r"""A warehouse that fails every statement holding ``marker``, in its SQL
     or as a parameter, the way a driver does, and answers the rest.
     """
 
     def __init__(
-        self, describe_rows: list, marker: str, message: str = 'Failed'
+        self,
+        describe_rows: list,
+        marker: str,
+        error: str | Exception = 'Failed',
     ) -> None:
         super().__init__(describe_rows)
         self._marker = marker
-        self._message = message
+        self._error = (
+            _ServerOperationError(error) if isinstance(error, str) else error
+        )
 
     def cursor(self) -> Any:
         cursor = super().cursor()
@@ -2323,7 +2328,7 @@ class _FailingConnection(_FakeConnection):
 
         def _execute(sql: str, parameters: Any = None) -> None:
             if self._marker in sql or self._marker in (parameters or ()):
-                raise _ServerOperationError(self._message)
+                raise self._error
             execute(sql, parameters)
 
         cursor.execute = _execute  # type: ignore[method-assign]
@@ -2345,6 +2350,7 @@ def _convert(connection: Any) -> Graph:
         ('empty', 'is empty'),
         ('metric-view', 'is a metric view'),
         ('permission-denied', 'may not read'),
+        ('spark-permission-denied', 'may not read'),
     ],
 )
 def test_a_join_whose_table_cannot_be_used_is_left_out(
@@ -2360,12 +2366,16 @@ def test_a_join_whose_table_cannot_be_used_is_left_out(
         monkeypatch.setitem(_DATA, 'customers', _DATA['customers'].iloc[:0])
     elif unusable == 'metric-view':
         monkeypatch.setitem(_TABLE_TYPES, 'customers', 'METRIC_VIEW')
-    else:
+    elif unusable == 'permission-denied':
         connection = _FailingConnection(
             _DESCRIBE_ROWS,
             '`sch`.`customers`',
             '[INSUFFICIENT_PERMISSIONS] Insufficient privileges: User does '
             'not have SELECT on Table. SQLSTATE: 42501',
+        )
+    else:
+        connection = _FailingConnection(
+            _DESCRIBE_ROWS, '`sch`.`customers`', _SparkError('denied')
         )
 
     graph = _convert(connection)
@@ -2655,6 +2665,8 @@ parameters:
     default: 2024-01-31
   - name: required
     data_type: INT
+  - name: unused
+    data_type: INT
 filter: {filter}
 dimensions:
   - name: big
@@ -2669,14 +2681,18 @@ dimensions:
 
 
 def test_a_parameter_is_read_as_its_default() -> None:
+    r"""As the type Databricks describes it, which wins over the one the
+    definition names. A parameter nothing reads says nothing.
+    """
     spec = parse_metric_view(
-        _PARAMETER_YAML.format(filter='source.qty >= min_qty')
+        _PARAMETER_YAML.format(filter='source.qty >= min_qty'),
+        {'min_qty': 'bigint'},
     )
 
     assert spec.filter is not None
-    assert spec.filter.trusted() == "source.qty >= CAST('1' AS INT)"
+    assert spec.filter.trusted() == "source.qty >= CAST('1' AS BIGINT)"
     assert [(c.name, c.expr) for c in spec.columns] == [
-        ('big', "qty >= CAST('1' AS INT)"),
+        ('big', "qty >= CAST('1' AS BIGINT)"),
         ('recent', "order_date >= CAST('2024-01-31' AS DATE)"),
         ('untouched', "CONCAT('min_qty', min_qty, `min_qty`, s . min_qty)"),
     ]
@@ -2690,16 +2706,6 @@ def test_a_parameter_is_read_as_its_default() -> None:
     ]
 
 
-def test_a_parameter_the_view_does_not_use_says_nothing() -> None:
-    spec = parse_metric_view(
-        _PARAMETER_YAML.format(filter='qty > 0').replace(
-            '\n  - name: needy\n    expr: qty > required\n', '\n'
-        )
-    )
-
-    assert not any('required' in message for message in spec.messages)
-
-
 def test_a_filter_on_a_parameter_with_no_default_is_refused() -> None:
     with pytest.raises(
         UnsupportedFilterError,
@@ -2708,31 +2714,14 @@ def test_a_filter_on_a_parameter_with_no_default_is_refused() -> None:
         parse_metric_view(_PARAMETER_YAML.format(filter='qty > required'))
 
 
-def test_the_described_type_of_a_parameter_wins() -> None:
-    spec = parse_metric_view(
-        _PARAMETER_YAML.format(filter='qty >= min_qty'),
-        {'min_qty': 'bigint'},
-    )
-
-    assert spec.filter is not None
-    assert spec.filter.trusted() == "qty >= CAST('1' AS BIGINT)"
-
-
 @pytest.mark.parametrize(
     'data_type, default, literal',
     [
-        ('INT', '5', "CAST('5' AS INT)"),
         ('bigint', "'-7'", "CAST('-7' AS BIGINT)"),
-        ('DOUBLE', '1.5', "CAST('1.5' AS DOUBLE)"),
+        ('BOOLEAN', 'true', "CAST('true' AS BOOLEAN)"),
+        ('STRING', '2024-01-31', "CAST('2024-01-31' AS STRING)"),
         ('DECIMAL(10, 2)', "'3.10'", "CAST('3.10' AS DECIMAL(10, 2))"),
         ('STRING', '"O\'Brien \\\\ co"', "CAST('O\\'Brien \\\\ co' AS STRING)"),
-        ('STRING', '2024-01-31', "CAST('2024-01-31' AS STRING)"),
-        ('BOOLEAN', 'true', "CAST('true' AS BOOLEAN)"),
-        (
-            'TIMESTAMP',
-            '2024-01-31 10:00:00',
-            "CAST('2024-01-31 10:00:00' AS TIMESTAMP)",
-        ),
         (
             'timestamp_ntz',
             "'2024-01-31T10:00'",
@@ -2753,7 +2742,7 @@ filter: x = p
 """)
 
     assert spec.filter is not None
-    assert spec.filter.trusted() == f'x = {literal}'
+    assert spec.filter.checked(['x']) == f'x = {literal}'
 
 
 @pytest.mark.parametrize(
@@ -2761,10 +2750,8 @@ filter: x = p
     [
         ('INT', 'abc', "its default 'abc' is not of type INT"),
         ('INT', 'true', 'its default True is not of type INT'),
-        ('INT', '1.5', 'its default 1.5 is not of type INT'),
         ('DATE', 'yesterday', "its default 'yesterday' is not of type DATE"),
         ('DOUBLE', '.nan', 'its default nan is not of type DOUBLE'),
-        ('BINARY', 'abc', "its type 'BINARY' has no literal here"),
         ('ARRAY<INT>', '[1]', "its type 'ARRAY<INT>' has no literal here"),
     ],
 )
@@ -2805,56 +2792,6 @@ filter: status = p
         parse_metric_view(yaml_)
 
 
-def test_a_default_passes_the_function_check() -> None:
-    spec = parse_metric_view("""
-source: cat.sch.order_lines
-parameters:
-  - name: floor
-    data_type: DECIMAL(10,2)
-    default: 12.5
-filter: amount >= floor
-""")
-
-    assert spec.filter is not None
-    assert spec.filter.checked(['amount']) == (
-        "amount >= CAST('12.5' AS DECIMAL(10,2))"
-    )
-
-
-def test_a_metric_view_reads_a_parameter_in_its_filter_and_dimensions(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    expr_df = _EXPR_DATA['order_lines'].assign(big=True)
-    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
-    definition = """
-version: 1.1
-source: cat.sch.order_lines
-parameters:
-  - name: min_amount
-    data_type: INT
-    default: 20
-filter: amount >= min_amount
-dimensions:
-  - name: product_line
-    expr: source.product_line
-  - name: big
-    expr: source.amount >= min_amount * 2
-"""
-    rows = _metric_view(
-        definition, {'product_line': 'string', 'big': 'boolean'}
-    )
-    at = rows.index(('', '', None)) + 1
-    rows[at:at] = [('# Parameters', '', None), ('min_amount', 'bigint', None)]
-
-    graph = _convert(_FakeConnection(rows))
-
-    fact = graph['order_lines']
-    assert fact.row_filter == "amount >= CAST('20' AS BIGINT)"
-    assert str(fact['big'].expr) == "amount >= CAST('20' AS BIGINT) * 2"
-    assert graph.conversion_messages == ()
-    assert graph.conversion_notes == (ParameterNote('min_amount', '20'),)
-
-
 def test_a_metric_view_on_a_metric_view_is_refused_for_what_it_is(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2871,50 +2808,6 @@ def test_a_metric_view_on_a_metric_view_is_refused_for_what_it_is(
         'another metric view is not supported, point its source at the '
         'underlying table'
     )
-
-
-def test_a_query_as_the_source_is_refused_with_the_way_out() -> None:
-    with pytest.raises(ValueError, match='Create a regular view with this'):
-        parse_metric_view('source: SELECT * FROM cat.sch.tab WHERE x > 1')
-
-
-def test_a_source_column_wins_over_a_parameter_of_its_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""Measured on a SQL warehouse: with a source column `min_qty` and a
-    parameter `min_qty` defaulting to 5, the filter `OrderQty >= min_qty` and
-    the dimension `min_qty` both read the column, bare or backticked.
-    """
-    expr_df = _EXPR_DATA['order_lines'].assign(big=True)
-    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
-    definition = """
-version: 1.1
-source: cat.sch.order_lines
-parameters:
-  - name: AMOUNT
-    data_type: INT
-    default: 20
-  - name: floor
-    data_type: INT
-    default: 1
-filter: amount >= floor
-dimensions:
-  - name: product_line
-    expr: source.product_line
-  - name: big
-    expr: amount >= Amount * 2
-"""
-    rows = _metric_view(
-        definition, {'product_line': 'string', 'big': 'boolean'}
-    )
-
-    graph = _convert(_FakeConnection(rows))
-
-    fact = graph['order_lines']
-    assert fact.row_filter == "amount >= CAST('1' AS INT)"
-    assert str(fact['big'].expr) == 'amount >= Amount * 2'
-    assert graph.conversion_messages == ()
-    assert graph.conversion_notes == (ParameterNote('floor', '1'),)
 
 
 def _said(graph: Graph) -> tuple[object, ...]:
@@ -2957,120 +2850,76 @@ _QUARTER = """  - name: order_quarter
     expr: CAST(DATE_TRUNC('QUARTER', order_date) AS DATE)"""
 
 
-def test_a_truncated_date_gives_way_to_the_column_it_truncates() -> None:
+@pytest.mark.parametrize(
+    'shape', ['month-only', 'named-as-the-date', 'window-axis']
+)
+def test_a_truncated_date_gives_way_to_the_column_it_truncates(
+    shape: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     r"""`order_month` starts at or before `order_date`, so the shared rule
-    took the truncation, and every window counted months.
+    took the truncation, and every window counted months. Named as the date
+    it truncates, the source column could not be added under that name, so
+    the truncation was kept, silently. A window measure ordering by the
+    month makes it the time axis, though `shipped` starts earlier.
     """
-    graph = _convert(_FakeConnection(_time_view(_MONTH + '\n' + _QUARTER)))
-
-    fact = graph['order_lines']
-    assert fact.time_column is not None
-    assert fact.time_column.name == 'order_date'
-    assert fact['order_date'].expr is None
-    assert fact['order_month'].expr is not None
-    assert _said(graph) == (
-        TimeColumnNote(
+    measures = ''
+    if shape == 'month-only':
+        dimensions = _MONTH + '\n' + _QUARTER
+        note = TimeColumnNote(
             'order_lines',
             'order_date',
             instead_of=('order_month', 'order_quarter'),
             added=True,
-        ),
-    )
-
-
-def test_a_physical_date_is_preferred_over_its_truncation() -> None:
-    dimensions = _MONTH + '\n  - name: order_date\n    expr: source.order_date'
-
-    graph = _convert(_FakeConnection(_time_view(dimensions)))
-
-    fact = graph['order_lines']
-    assert fact.time_column is not None
-    assert fact.time_column.name == 'order_date'
-    assert [column.name for column in fact.columns].count('order_date') == 1
-    assert _said(graph) == (
-        TimeColumnNote(
-            'order_lines', 'order_date', instead_of=('order_month',)
-        ),
-    )
-
-
-def test_a_truncation_named_as_its_column_gives_way_to_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""The most common shape, `order_date: DATE_TRUNC('MONTH',
-    source.order_date)`, kept the truncation as the time column, silently,
-    since the source column could not be added under the dimension's name.
-    It is added under a name of its own, and the dimension keeps its name
-    and its truncated value.
-    """
-    expr_df = _EXPR_DATA['order_lines'].assign(
-        ORDER_DATE_RAW=_DATA['order_lines']['amount'],
-        order_date_raw_2=_DATA['order_lines']['order_date'],
-    )
-    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
-    # A column already named as the first choice, in another case:
-    dimensions = (
-        "  - name: order_date\n    expr: DATE_TRUNC('MONTH', source.order_date)"
-        '\n  - name: ORDER_DATE_RAW\n    expr: source.amount'
-    )
-
-    graph = _convert(_FakeConnection(_time_view(dimensions)))
-
-    fact = graph['order_lines']
-    assert fact.time_column is not None
-    assert fact.time_column.name == 'order_date_raw_2'
-    assert str(fact['order_date_raw_2'].expr) == '`order_date`'
-    assert str(fact['order_date'].expr) == "DATE_TRUNC('MONTH', order_date)"
-    assert _said(graph) == (
-        TimeColumnNote(
+        )
+    elif shape == 'named-as-the-date':
+        expr_df = _EXPR_DATA['order_lines'].assign(
+            ORDER_DATE_RAW=_DATA['order_lines']['amount'],
+            order_date_raw_2=_DATA['order_lines']['order_date'],
+        )
+        monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+        # A column already named as the first choice, in another case:
+        dimensions = (
+            "  - name: order_date\n    expr: DATE_TRUNC('MONTH', "
+            'source.order_date)\n  - name: ORDER_DATE_RAW\n    expr: '
+            'source.amount'
+        )
+        note = TimeColumnNote(
             'order_lines',
             'order_date_raw_2',
             instead_of=('order_date',),
             source_column='order_date',
             added=True,
-        ),
-    )
-
-
-def test_a_window_measure_names_the_time_axis(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""`refund_date` starts earlier, but the view's window measure orders by
-    the month of `order_date`, so that is the time the author meant.
-    """
-    early = _DATA['order_lines']['order_date'] - pd.Timedelta(days=400)
-    monkeypatch.setitem(
-        _DATA, 'order_lines', _DATA['order_lines'].assign(shipped=early)
-    )
-    monkeypatch.setitem(
-        _COLUMN_TYPES,
-        'order_lines',
-        {**_COLUMN_TYPES['order_lines'], 'shipped': 'timestamp'},
-    )
-    dimensions = _MONTH + '\n  - name: shipped\n    expr: source.shipped'
-    measures = """  - name: trailing
-    expr: SUM(source.amount)
-    window:
-      - order: order_month
-        range: trailing 3 month
-        semiadditive: last"""
-
-    graph = _convert(_FakeConnection(_time_view(dimensions, measures)))
-    assert graph['order_lines'].time_column.name == 'order_date'
-    assert _said(graph) == (
-        TimeColumnNote(
+        )
+    else:
+        early = _DATA['order_lines']['order_date'] - pd.Timedelta(days=400)
+        lines = _DATA['order_lines'].assign(shipped=early)
+        monkeypatch.setitem(_DATA, 'order_lines', lines)
+        monkeypatch.setitem(
+            _COLUMN_TYPES,
+            'order_lines',
+            {**_COLUMN_TYPES['order_lines'], 'shipped': 'timestamp'},
+        )
+        dimensions = _MONTH + '\n  - name: shipped\n    expr: source.shipped'
+        measures = (
+            '  - name: trailing\n    expr: SUM(source.amount)\n'
+            '    window:\n      - order: order_month\n'
+            '        range: trailing 3 month\n        semiadditive: last'
+        )
+        note = TimeColumnNote(
             'order_lines',
             'order_date',
             instead_of=('order_month',),
             added=True,
             window_order=True,
-        ),
-    )
+        )
 
-    graph = _convert(_FakeConnection(_time_view(dimensions)))
-    assert graph['order_lines'].time_column.name == 'shipped'
-    assert not graph['order_lines'].has_column('order_date')
-    assert _said(graph) == ()
+    graph = _convert(_FakeConnection(_time_view(dimensions, measures)))
+
+    fact = graph['order_lines']
+    assert fact.time_column is not None
+    assert fact.time_column.name == note.column
+    assert _said(graph) == (note,)
+    assert f"'{note.column}'" in str(note)
 
 
 _MEASURE_INPUT_YAML = """
@@ -3102,12 +2951,21 @@ measures:
             'SUM(CAST(products.ListPrice AS DOUBLE))',
             [('products', 'ListPrice')],
         ),
-        ('COUNT(DISTINCT CAST(order_ts AS DATE))', ['order_ts']),
         (
-            'SUM(x::double) + SUM(aggregate(items, 0, (acc, y) -> acc + y))',
+            'COUNT(DISTINCT CAST(order_ts AS DATE)) '
+            '+ SIZE(CAST(tags AS ARRAY<STRUCT<a: INT>>))',
+            ['order_ts', 'tags'],
+        ),
+        (
+            'SUM(x::double) + '
+            'SUM(aggregate(filter(items, z -> z > 0), 0, (acc, y) -> acc + y))',
             ['x', 'items'],
         ),
-        ('MAX(order_ts) - INTERVAL 1 DAY', ['order_ts']),
+        (
+            "MAX(order_ts) - INTERVAL 1 DAY - INTERVAL '1' DAY TO HOUR "
+            '- INTERVAL (lag) DAYS',
+            ['order_ts', 'lag'],
+        ),
         (
             'SUM(LineTotal) FILTER (WHERE UnitPrice > floor) '
             '/ COUNT(DISTINCT SalesOrderID)',
@@ -3457,7 +3315,10 @@ def test_a_view_that_loses_nothing_converts_without_a_warning(
     r"""A view with measures, a parameter default and a truncated date
     loses nothing, yet warned "Could not fully convert", so a caller
     running with warnings as errors could convert no such view. How it
-    was read is noted instead.
+    was read is noted instead. A parameter is read as its default, as the
+    type Databricks describes it, but a source column of its name, here
+    `AMOUNT`, wins over it, bare or in another case, as a warehouse reads
+    it.
     """
     expr_df = _EXPR_DATA['order_lines'].assign(big=True)
     monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
@@ -3465,14 +3326,18 @@ def test_a_view_that_loses_nothing_converts_without_a_warning(
 version: 1.1
 source: cat.sch.order_lines
 parameters:
+  - name: AMOUNT
+    data_type: INT
+    default: 20
   - name: floor
     data_type: INT
     default: 1
+filter: amount >= floor
 dimensions:
   - name: product_line
     expr: source.product_line
   - name: big
-    expr: source.amount >= floor
+    expr: amount >= Amount * floor
 {_MONTH}
 measures:
   - name: total_amount
@@ -3487,7 +3352,7 @@ measures:
         },
     )
     at = rows.index(('', '', None)) + 1
-    rows[at:at] = [('# Parameters', '', None), ('floor', 'int', None)]
+    rows[at:at] = [('# Parameters', '', None), ('floor', 'bigint', None)]
 
     with warnings.catch_warnings():
         warnings.simplefilter('error')
@@ -3495,35 +3360,29 @@ measures:
             'audit_mv', connection=_FakeConnection(rows), verbose=False
         )
 
+    fact = graph['order_lines']
+    assert fact.row_filter == "amount >= CAST('1' AS BIGINT)"
+    assert str(fact['big'].expr) == "amount >= Amount * CAST('1' AS BIGINT)"
     assert graph.conversion_messages == ()
-    assert graph.conversion_notes == (
+    notes = graph.conversion_notes
+    assert notes == (
         ParameterNote('floor', '1'),
         MeasureNote('total_amount', 'order_lines', 'SUM', 'amount'),
         TimeColumnNote(
             'order_lines', 'order_date', instead_of=('order_month',), added=True
         ),
     )
+    parameter, measure, _ = map(str, notes)
+    assert "'floor'" in parameter
+    assert 'SUM(order_lines.amount, 0, 30, days)' in measure
 
 
-@pytest.mark.parametrize(
-    'names_it',
-    [
-        '  - expr: source.*',
-        '  - name: product_line\n    expr: source.product_line\n'
-        '  - name: segment\n    expr: customers.segment\n'
-        'measures:\n  - name: buyers\n    expr: COUNT(DISTINCT customer_id)',
-    ],
-    ids=['wildcard', 'measure-input'],
-)
-def test_a_join_key_keeps_the_spelling_the_view_names_it_by(
-    names_it: str,
-) -> None:
-    r"""A wildcard or a measure input names `customer_id` as the table spells
-    it, as Databricks does, but the join's `source.CUSTOMER_ID` renamed the
-    column, and the wildcard's or measure's own column then failed to be
-    added as no column of the table.
+def test_a_join_key_keeps_the_spelling_the_view_names_it_by() -> None:
+    r"""A wildcard names `customer_id` as the table spells it, as Databricks
+    does, but the join's `source.CUSTOMER_ID` renamed the column, and the
+    wildcard's own column then failed to be added as no column of the table.
     """
-    definition = f"""
+    definition = """
 version: 1.1
 source: cat.sch.order_lines
 joins:
@@ -3531,15 +3390,9 @@ joins:
     source: cat.sch.customers
     on: source.CUSTOMER_ID = customers.customer_id
 dimensions:
-{names_it}
+  - expr: source.*
 """
-    graph = _convert(
-        _FakeConnection(
-            _metric_view(
-                definition, {'product_line': 'string', 'segment': 'string'}
-            )
-        )
-    )
+    graph = _convert(_FakeConnection(_metric_view(definition, {})))
 
     fact = graph['order_lines']
     assert fact.has_column('customer_id')

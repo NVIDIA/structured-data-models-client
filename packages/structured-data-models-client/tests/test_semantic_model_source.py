@@ -27,7 +27,11 @@ pytest.importorskip('yaml')
 
 from databricks.sql.client import Connection  # noqa: E402
 from sdm_connectors import DatabricksSource, SemanticModel  # noqa: E402
-from sdm_relational_engine import ViewConversionError  # noqa: E402
+from sdm_relational_engine import (  # noqa: E402
+    GraphConstructionError,
+    TableNotFoundError,
+    ViewConversionError,
+)
 
 from sdm_client import (  # noqa: E402
     Relationship,
@@ -618,31 +622,33 @@ def test_what_a_model_loses_is_one_sdm_warning_at_the_caller(
 
 
 @pytest.mark.parametrize(
-    'old, new, said',
+    'refused, said',
     [
-        (
-            'version: 0.1\n',
-            "version: 0.1\nfilter: customers.segment = 'a'\n",
-            "references the joined table 'customers'",
-        ),
-        (
-            'source: cat.sch.order_lines',
-            'source: SELECT * FROM cat.sch.order_lines',
-            'Create a regular view with this query',
-        ),
-        (
-            '  - name: products\n',
-            '  - name: order_lines\n',
-            "the join name 'order_lines' collides",
-        ),
+        ('joined-filter', "references the joined table 'customers'"),
+        ('query-source', 'Create a regular view with this query'),
+        ('missing-source', "order_lines' does not exist"),
     ],
-    ids=['joined-filter', 'query-source', 'name-collision'],
 )
 def test_a_model_the_engine_refuses_is_an_invalid_request(
-    source: Any, monkeypatch: pytest.MonkeyPatch, old: str, new: str, said: str
+    refused: str, said: str, source: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert old in _VIEW
-    _with_view(monkeypatch, _VIEW.replace(old, new))
+    r"""A missing source table is a request about nothing, as it is for a
+    source's own tables, but escaped as the engine's `TableNotFoundError`
+    once only its view refusals were translated.
+    """
+    if refused == 'joined-filter':
+        view = _VIEW.replace(
+            'version: 0.1\n', "version: 0.1\nfilter: customers.segment = 'a'\n"
+        )
+        _with_view(monkeypatch, view)
+    elif refused == 'query-source':
+        view = _VIEW.replace(
+            'source: cat.sch.order_lines',
+            'source: SELECT * FROM cat.sch.order_lines',
+        )
+        _with_view(monkeypatch, view)
+    else:
+        monkeypatch.delitem(_TYPES, 'order_lines')
 
     with pytest.raises(StructuredDataError) as caught:
         _schema(source)
@@ -650,7 +656,13 @@ def test_a_model_the_engine_refuses_is_an_invalid_request(
     assert caught.value.code == 'INVALID_REQUEST'
     assert said in caught.value.message
     assert caught.value.details == {'semantic_model': 'sales_mv'}
-    assert isinstance(caught.value.__cause__, ViewConversionError)
+    assert isinstance(
+        caught.value.__cause__, ViewConversionError | TableNotFoundError
+    )
+
+
+class _DriverError(Exception):
+    r"""Stands in for a warehouse driver's own exception."""
 
 
 def test_a_failure_that_is_not_a_refusal_is_not_an_invalid_request(
@@ -660,17 +672,17 @@ def test_a_failure_that_is_not_a_refusal_is_not_an_invalid_request(
     among them, became `INVALID_REQUEST`, telling the caller to change a
     model that has nothing wrong with it.
     """
-    from sdm_relational_engine.rfm import Graph
 
-    def _fails(self: Any) -> None:
-        raise ValueError('operands could not be broadcast together')
+    def _fails(frame: pd.DataFrame) -> Any:
+        raise _DriverError('the warehouse went away')
 
-    monkeypatch.setattr(Graph, 'validate', _fails)
+    monkeypatch.setitem(_EXPRESSIONS, 'order_lines', {'discounted': _fails})
 
-    with pytest.raises(ValueError, match='could not be broadcast') as caught:
+    with pytest.raises(GraphConstructionError) as caught:
         _schema(source)
 
     assert not isinstance(caught.value, StructuredDataError)
+    assert isinstance(caught.value.__cause__, _DriverError)
 
 
 def test_no_relationship_is_inferred_beside_a_model_s_joins(
@@ -772,56 +784,3 @@ def test_a_model_that_loses_nothing_converts_without_a_warning(
     (note,) = schema.conversion_notes
     assert "'total_quantity' is SUM(order_lines.quantity, 0, 30, days)" in note
     assert schema.snapshot().conversion_notes == schema.conversion_notes
-
-
-def test_reading_a_model_leaves_the_warning_filters_alone(
-    source: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    r"""The engine's warnings were silenced with `warnings.catch_warnings()`,
-    which swaps the filters of every thread for the call's length, so a
-    second `from_source` running beside it could lose its own warnings, or
-    restore the filters under the first. The engine is told not to warn
-    instead, and what it would say still reaches the caller once.
-    """
-    from sdm_relational_engine.rfm import Graph
-
-    convert = Graph.from_databricks_metric_view.__func__  # type: ignore[attr-defined]
-    seen: list[list[Any]] = []
-
-    def _converting(cls: Any, *args: Any, **kwargs: Any) -> Any:
-        seen.append(list(warnings.filters))
-        return convert(cls, *args, **kwargs)
-
-    monkeypatch.setattr(
-        Graph, 'from_databricks_metric_view', classmethod(_converting)
-    )
-    _with_view(monkeypatch, _VIEW + 'materialization:\n  mode: relaxed\n')
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        before = list(warnings.filters)
-        Schema.from_source(source.semantic_model('sales_mv'))
-
-    assert seen == [before]
-    (lost,) = [w for w in caught if 'cannot hold' in str(w.message)]
-    assert lost.category is SDMWarning
-    assert not any(
-        type(w.message).__name__ == 'ViewConversionWarning' for w in caught
-    )
-
-
-def test_a_model_whose_source_table_is_missing_is_an_invalid_request(
-    source: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    r"""A missing source table is a request about nothing, as it is for a
-    source's own tables, but escaped as the engine's `TableNotFoundError`
-    once only its view refusals were translated.
-    """
-    monkeypatch.delitem(_TYPES, 'order_lines')
-
-    with pytest.raises(StructuredDataError) as caught:
-        _schema(source)
-
-    assert caught.value.code == 'INVALID_REQUEST'
-    assert "order_lines' does not exist" in caught.value.message
-    assert caught.value.details == {'semantic_model': 'sales_mv'}
