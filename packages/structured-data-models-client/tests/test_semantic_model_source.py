@@ -500,6 +500,51 @@ def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
     r"""The view has only the month of `ordered_at`, which starts earliest of
     any timestamp, so it was taken, and every window counted months.
     """
+    _month_only(monkeypatch)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    lines = schema['order_lines']
+    assert lines.time_column == 'ordered_at'
+    assert 'order_month' in lines.columns
+    said = '\n'.join(str(item.message) for item in caught)
+    assert (
+        'order_lines.ordered_at was taken as the time column rather than '
+        "'order_month', which truncate or cast it" in said
+    )
+    (note,) = [n for n in schema.conversion_notes if n.startswith('Took')]
+    assert "Took 'ordered_at' as the time column of table 'order_lines'" in note
+
+
+def test_a_time_column_named_otherwise_leaves_the_engine_s_note_out(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Naming the month as the time column still noted that `ordered_at`
+    was taken, which the schema no longer holds.
+    """
+    _month_only(monkeypatch)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', SDMWarning)
+        named = Schema.from_source(
+            source.semantic_model('sales_mv'),
+            time_columns={'order_lines': 'order_month'},
+        )
+        same = Schema.from_source(
+            source.semantic_model('sales_mv'),
+            time_columns={'order_lines': 'ordered_at'},
+        )
+
+    assert named['order_lines'].time_column == 'order_month'
+    assert not any(n.startswith('Took') for n in named.conversion_notes)
+    assert named.conversion_notes  # The measures' note stays.
+    assert any(n.startswith("Took 'ordered_at'") for n in same.conversion_notes)
+
+
+def _month_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    r"""The view holds `ordered_at` only as its month, `order_month`."""
     view = _VIEW.replace(
         'name: ordered_at\n    expr: source.ordered_at',
         "name: order_month\n    expr: DATE_TRUNC('MONTH', source.ordered_at)",
@@ -523,21 +568,6 @@ def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
             ),
         },
     )
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        schema = Schema.from_source(source.semantic_model('sales_mv'))
-
-    lines = schema['order_lines']
-    assert lines.time_column == 'ordered_at'
-    assert 'order_month' in lines.columns
-    said = '\n'.join(str(item.message) for item in caught)
-    assert (
-        'order_lines.ordered_at was taken as the time column rather than '
-        "'order_month', which truncate or cast it" in said
-    )
-    (note,) = [n for n in schema.conversion_notes if n.startswith('Took')]
-    assert "Took 'ordered_at' as the time column of table 'order_lines'" in note
 
 
 # --- what the engine says reaches the caller as the client says it ----------

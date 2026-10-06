@@ -886,8 +886,9 @@ class Schema:
         For a Databricks metric view: the predictive query aggregation that
         matches each simple measure, such as
         ``'revenue' is SUM(order_lines.LineTotal, 0, 30, days)``, the time
-        column taken in place of a date the view truncates, and each
-        parameter read as its default. What a model loses is said in an
+        column taken in place of a date the view truncates, unless
+        ``time_columns`` named another, and each parameter read as its
+        default. What a model loses is said in an
         :class:`SDMWarning` instead. Empty for every other schema.
         """
         return self._conversion_notes
@@ -1242,6 +1243,8 @@ class Schema:
             for name, table in built.items()
         }
         _apply_keys_and_times(built, primary_keys, time_columns)
+        if is_semantic_model(source):
+            notes = _notes_still_true(graph, built, as_named, time_columns)
         if check_keys and engine_tables is not None:
             # Before relationships are inferred: a declined key is one no
             # relationship can point at.
@@ -1380,6 +1383,27 @@ def _require_table(tables: Mapping[str, _T], name: str) -> _T:
             code='INVALID_REQUEST',
         )
     return tables[name]
+
+
+def _notes_still_true(
+    graph: Any,
+    built: Mapping[str, _TableShape],
+    as_named: Mapping[str, str],
+    time_columns: Mapping[str, str | None] | None,
+) -> tuple[str, ...]:
+    r"""The model's conversion notes, but the time column the engine took
+    for a table whose time column the caller named otherwise: that note no
+    longer says what the schema holds.
+    """
+    stale = set()
+    for model, note in graph._time_column_notes.items():
+        name = as_named.get(model)
+        if name is None or name not in (time_columns or {}):
+            continue
+        engine_column = graph[model].time_column
+        if built[name].time_column != getattr(engine_column, 'name', None):
+            stale.add(note)
+    return tuple(note for note in graph.conversion_notes if note not in stale)
 
 
 def _apply_keys_and_times(

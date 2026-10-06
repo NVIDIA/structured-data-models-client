@@ -614,6 +614,10 @@ class Graph:
         self._edges: list[Edge] = []
         self._conversion_messages: tuple[str, ...] = ()
         self._conversion_notes: tuple[str, ...] = ()
+        # The note of each table whose time column a view conversion chose
+        # and said why, by table, so a caller naming another can leave it
+        # out.
+        self._time_column_notes: dict[str, str] = {}
         self._connection: (
             AdbcSqliteConnection
             | DuckDBPyConnection
@@ -1897,8 +1901,11 @@ class Graph:
             if spec.measures:
                 notes.append(_measures_message(fact_table, spec.measures))
 
+            time_column_notes: dict[str, str] = {}
             for table in graph.tables.values():
-                notes.extend(_infer_view_time_column(table, spec.window_orders))
+                for note in _infer_view_time_column(table, spec.window_orders):
+                    notes.append(note)
+                    time_column_notes[table.name] = note
 
             msgs.extend(graph._drop_invalid_edges())
             graph._settle_time_columns()
@@ -1910,6 +1917,7 @@ class Graph:
 
             graph._conversion_messages = tuple(msgs)
             graph._conversion_notes = tuple(notes)
+            graph._time_column_notes = time_column_notes
         except BaseException as error:
             if internal_connection:
                 connection.close()
