@@ -3246,12 +3246,13 @@ def test_names_are_matched_without_regard_to_case(
     assert str(fact['line'].expr) == 'LINE_ID'
     assert 'source.`product_line` AS `PRODUCT_LINE`' in fact._quoted_source_name
     customers = graph['CUSTOMERS']
+    # Its key is named as the join's condition spells it:
     assert {column.name for column in customers.columns} == {
         'SEGMENT',
-        'customer_id',
+        'Customer_Id',
     }
     assert customers.primary_key is not None
-    assert customers.primary_key.name == 'customer_id'
+    assert customers.primary_key.name == 'Customer_Id'
     assert Edge('order_lines', 'CUSTOMER_ID', 'CUSTOMERS') in graph.edges
     assert graph.conversion_messages == ()
 

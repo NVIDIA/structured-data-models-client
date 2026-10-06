@@ -1650,6 +1650,30 @@ class Graph:
                             f"dimension '{same.name}' has its name"
                         )
 
+            # A join key is named as the view's condition spells it, where
+            # no dimension already names it.
+            for join in spec.joins:
+                try:
+                    other_alias, other_key, child_key = resolve_join_keys(
+                        join,
+                        child_columns=_columns_of(join.alias),
+                        parent_columns=_columns_of(join.parent_alias),
+                    )
+                except UnsupportedJoinError:
+                    continue  # Dropped below, with its reason.
+                for alias, key in (
+                    (join.alias, child_key),
+                    (other_alias, other_key),
+                ):
+                    folded = {name.lower(): name for name in _columns_of(alias)}
+                    real = folded.get(key.lower())
+                    if (
+                        real is not None
+                        and real != key
+                        and real not in renames[alias]
+                    ):
+                        renames[alias][real] = key
+
             # Before a row is read, so every read names them as the view does.
             for alias, names in renames.items():
                 try:
