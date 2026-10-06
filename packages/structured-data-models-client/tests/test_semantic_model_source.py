@@ -181,17 +181,16 @@ class _Cursor:
             return
         if 'information_schema' in sql:
             return
+        if re.match(r'SELECT \d+ AS k, COUNT\(\*\) AS n', sql):
+            # Each join's key: its rows, distinct values and missing values.
+            self._rows = [
+                self._key_count(part) for part in sql.split('\nUNION ALL\n')
+            ]
+            return
         table_match = re.search(r'FROM `[^`]+`\.`[^`]+`\.`([^`]+)`', sql)
         assert table_match is not None, f'unexpected SQL: {sql}'
         name = table_match.group(1)
         frame = _DATA[name]
-        if count := re.match(r'SELECT (\d+) AS k, COUNT\(\*\) AS n', sql):
-            # A join's key: its rows, distinct values and missing values.
-            values = frame[re.search(r'COUNT\(DISTINCT `(\w+)`\)', sql)[1]]
-            self._rows = [
-                (int(count[1]), len(values), values.nunique(), 0),
-            ]
-            return
         if sql.startswith('SELECT COUNT(*), MIN('):
             row: list[Any] = [len(frame)]
             for column in re.findall(r'MIN\(`((?:[^`]|``)+)`\)', sql):
@@ -220,6 +219,12 @@ class _Cursor:
         self._arrow = pa.Table.from_pandas(
             pd.DataFrame(data), preserve_index=False
         )
+
+    @staticmethod
+    def _key_count(sql: str) -> tuple[int, int, int, int]:
+        frame = _DATA[re.search(r'FROM `[^`]+`\.`[^`]+`\.`([^`]+)`', sql)[1]]
+        values = frame[re.search(r'COUNT\(DISTINCT `(\w+)`\)', sql)[1]]
+        return int(sql.split()[1]), len(values), values.nunique(), 0
 
     def fetchall(self) -> list:
         return self._rows

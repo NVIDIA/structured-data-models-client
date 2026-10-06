@@ -41,6 +41,7 @@ from sdm_relational_engine.rfm.base import (
     Column,
     ColumnSpec,
     DataBackend,
+    KeyCount,
     Table,
     composite_key,
     count_keys,
@@ -237,25 +238,23 @@ def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
     return msgs
 
 
-def _join_key_reason(table: Table, key: str) -> str | None:
-    r"""Why ``key`` cannot be the primary key a view's join gives ``table``,
-    or ``None`` if it can.
+def _join_key_reason(count: KeyCount, table: str, key: str) -> str | None:
+    r"""Why ``key``, counted as ``count``, cannot be the primary key a view's
+    join gives ``table``, or ``None`` if it can.
 
     A many-to-one join promises one row of ``table`` per key, and neither
     Databricks nor a view checks it. A key that repeats would make one entity
-    of several rows, so it is counted where the rows are. A row with no key
-    is one no join reaches, and sampling leaves it out, so it is not counted
-    against the key.
+    of several rows. A row with no key is one no join reaches, and sampling
+    leaves it out, so it does not count against the key.
     """
-    (count,) = count_keys([(table, (key,))])
     if count.rows is None or count.distinct is None:
         return None
     if count.distinct == 0:
-        return f"its key '{key}' holds no value in table '{table.name}'"
+        return f"its key '{key}' holds no value in table '{table}'"
     if count.repeats > 0:
         example = '' if count.example is None else f', e.g. {count.example!r}'
         return (
-            f"its key '{key}' is not unique in table '{table.name}': "
+            f"its key '{key}' is not unique in table '{table}': "
             f'{count.repeats:,} of {count.rows:,} rows repeat a value'
             f'{example}. A graph table needs one row per key, so point the '
             f"join at a table or view with one row per '{key}'"
@@ -1790,6 +1789,57 @@ class Graph:
             graph.add_table(fact_table)
             table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
 
+            def _join_ends(join: MetricViewJoin) -> tuple[str, str, str, str]:
+                r"""The alias and key of the table ``join`` keys, then of the
+                table it links to that one.
+                """
+                child = _table(join.alias)
+                other_alias, other_key, child_key = resolve_join_keys(
+                    join,
+                    child_columns=child._source_column_dict,
+                    parent_columns=_table(
+                        join.parent_alias
+                    )._source_column_dict,
+                )
+                other_key = _real_name(_table(other_alias), other_key)
+                child_key = _real_name(child, child_key)
+                if join.cardinality == 'many_to_one':
+                    return join.alias, child_key, other_alias, other_key
+                return other_alias, other_key, join.alias, child_key
+
+            # Every key a join gives is counted in one statement, as a round
+            # trip per join is slow on a warehouse. Renames come first, as
+            # the count reads the columns by the view's names.
+            keyed: dict[tuple[str, str], str] = {}
+            for join in spec.joins:
+                if (
+                    not _read_join(join.alias, rows=True)
+                    or join.parent_alias in unusable
+                ):
+                    continue
+                try:
+                    one_alias, one_key, _, _ = _join_ends(join)
+                except UnsupportedJoinError:
+                    continue
+                keyed.setdefault((one_alias, one_key.lower()), one_key)
+            counts: dict[tuple[str, str], KeyCount] | None = None
+            try:
+                found = count_keys(
+                    [
+                        (_table(alias), (key,))
+                        for (alias, _), key in keyed.items()
+                    ]
+                )
+            except Exception as error:
+                # An unchecked key may build wrong entities, so each join
+                # kept so says it, but the warehouse failing to count is no
+                # reason to lose the joins.
+                if not _is_driver_error(error):
+                    raise
+                uncounted = type(error).__name__
+            else:
+                counts = dict(zip(keyed, found, strict=True))
+
             def _drop_join(join: MetricViewJoin, reason: str) -> None:
                 r"""Reports a join dropped, with the table and dimensions
                 that go with it, which a question may have been asked of.
@@ -1804,8 +1854,7 @@ class Graph:
                 )
 
             for join in spec.joins:
-                parent_table = table_dict.get(join.parent_alias)
-                if parent_table is None:
+                if join.parent_alias not in table_dict:
                     _drop_join(
                         join,
                         f"its parent join '{join.parent_alias}' was not added",
@@ -1828,21 +1877,11 @@ class Graph:
                 )
 
                 try:
-                    other_alias, other_key, child_key = resolve_join_keys(
-                        join,
-                        child_columns=table._source_column_dict,
-                        parent_columns=parent_table._source_column_dict,
+                    one_alias, one_key, many_alias, many_key = _join_ends(join)
+                    one_table, many_table = (
+                        _table(one_alias),
+                        _table(many_alias),
                     )
-                    other_table = table_dict[other_alias]
-                    other_key = _real_name(other_table, other_key)
-                    child_key = _real_name(table, child_key)
-
-                    if join.cardinality == 'many_to_one':
-                        one_table, one_key = table, child_key
-                        many_table, many_key = other_table, other_key
-                    else:
-                        one_table, one_key = other_table, other_key
-                        many_table, many_key = table, child_key
 
                     if (
                         one_table._primary_key is not None
@@ -1854,9 +1893,19 @@ class Graph:
                             f"'{one_table._primary_key}' as its primary key"
                         )
 
-                    # A key set here was counted then, so it is counted once.
-                    if one_table._primary_key is None and (
-                        reason := _join_key_reason(one_table, one_key)
+                    # A key an earlier join set passed its count then.
+                    if one_table._primary_key is None and counts is None:
+                        join_msgs.append(
+                            f"Kept join '{join.alias}' with its key "
+                            f"'{one_key}' unchecked, since counting the keys "
+                            f'failed: {uncounted}'
+                        )
+                    elif one_table._primary_key is None and (
+                        reason := _join_key_reason(
+                            counts[(one_alias, one_key.lower())],
+                            one_table.name,
+                            one_key,
+                        )
                     ):
                         raise UnsupportedJoinError(
                             f"Failed to add join '{join.alias}' since {reason}"

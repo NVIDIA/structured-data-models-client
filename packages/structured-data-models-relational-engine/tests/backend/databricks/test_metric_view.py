@@ -961,8 +961,11 @@ class _FakeCursor:
             self._rows = [(len(_DATA[table]),)]
             return
 
-        if key_count := re.match(r'SELECT (\d+) AS k, COUNT\(\*\) AS n', sql):
-            self._rows = [(int(key_count.group(1)), *self._key_count(sql))]
+        if re.match(r'SELECT \d+ AS k, COUNT\(\*\) AS n', sql):
+            self._rows = [
+                (int(part.split()[1]), *self._key_count(part))
+                for part in sql.split('\nUNION ALL\n')
+            ]
             return
 
         if 'HAVING COUNT(*) > 1' in sql:
@@ -2336,19 +2339,6 @@ def _convert(connection: Any) -> Graph:
         )
 
 
-def _keeps_the_rest_without_customers(graph: Graph) -> str:
-    assert set(graph.tables) == {'order_lines', 'products'}
-    assert set(graph.edges) == {
-        Edge('order_lines', 'product_id', 'products'),
-    }
-    assert graph['order_lines'].has_column('product_line')
-    assert not graph['order_lines'].has_column('customer_id')
-    (message,) = [
-        m for m in graph.conversion_messages if "join 'customers'" in m
-    ]
-    return message
-
-
 @pytest.mark.parametrize(
     'unusable, reason',
     [
@@ -2484,79 +2474,85 @@ def test_a_fact_table_that_cannot_be_read_fails_and_closes_the_connection(
     assert connection.closed
 
 
-def test_a_join_on_a_key_that_repeats_is_dropped(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    'rows, reason',
+    [
+        ('repeats', "1 of 11 rows repeat a value, e.g. 'C3'"),
+        ('no-value', "'customer_id' holds no value"),
+        ('some-missing', None),
+    ],
+)
+def test_a_join_key_is_counted_where_the_rows_are(
+    rows: str, reason: str | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""Neither Databricks nor the view checks that a many-to-one join meets
-    one row, so a key that repeats made one customer of two rows.
+    one row, so a key that repeats made one customer of two rows. No join
+    reaches a row with no key, and sampling leaves it out, so such rows
+    are no reason to leave the join out.
     """
     customers = _DATA['customers']
-    monkeypatch.setitem(
-        _DATA, 'customers', pd.concat([customers, customers.iloc[[3]]])
-    )
-
-    graph = _convert(_FakeConnection(_joined_view()))
-
-    message = _keeps_the_rest_without_customers(graph)
-    assert "key 'customer_id' is not unique in table 'customers'" in message
-    assert "1 of 11 rows repeat a value, e.g. 'C3'" in message
-
-
-def test_a_key_missing_from_some_rows_still_joins(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""No join reaches a row with no key, and sampling leaves it out, so
-    such rows are no reason to drop the join.
-    """
-    customers = _DATA['customers'].copy()
-    customers.loc[len(customers)] = [None, 'R0', 'gold']
-    customers.loc[len(customers)] = [None, 'R1', 'gold']
+    if rows == 'repeats':
+        customers = pd.concat([customers, customers.iloc[[3]]])
+    elif rows == 'no-value':
+        customers = customers.assign(customer_id=None)
+    else:
+        customers = customers.copy()
+        customers.loc[len(customers)] = [None, 'R0', 'gold']
     monkeypatch.setitem(_DATA, 'customers', customers)
 
     graph = _convert(_FakeConnection(_joined_view()))
 
-    assert graph['customers'].primary_key is not None
-    assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
-    assert graph.conversion_messages == ()
+    if reason is None:
+        assert graph['customers'].primary_key is not None
+        assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
+        assert graph.conversion_messages == ()
+    else:
+        assert set(graph.tables) == {'order_lines', 'products'}
+        assert not graph['order_lines'].has_column('customer_id')
+        (message,) = graph.conversion_messages
+        assert "'customers'" in message and reason in message
 
 
-def test_a_join_on_a_key_with_no_value_is_dropped(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setitem(
-        _DATA, 'customers', _DATA['customers'].assign(customer_id=None)
-    )
-
-    graph = _convert(_FakeConnection(_joined_view()))
-
-    message = _keeps_the_rest_without_customers(graph)
-    assert "key 'customer_id' holds no value" in message
-
-
-def test_a_one_to_many_join_counts_the_key_of_the_filtered_source(
+def test_join_keys_are_counted_in_one_statement_through_the_filter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     r"""One-to-many makes the parent the table keyed, here the fact table, so
     its key is counted over the rows its filter holds.
     """
-    connection = _FakeConnection()
-    _convert(connection)
-
-    (counted,) = [
-        sql for sql in connection.sql_log if 'COUNT(DISTINCT `line_id`)' in sql
-    ]
-    assert "WHERE (source.status = 'VALID')" in counted
-
     lines = _DATA['order_lines']
     monkeypatch.setitem(
         _DATA, 'order_lines', lines.assign(line_id=lines['order_id'])
     )
-    graph = _convert(_FakeConnection())
+    connection = _FakeConnection()
 
+    graph = _convert(connection)
+
+    (counted,) = [sql for sql in connection.sql_log if 'COUNT(DISTINCT' in sql]
+    assert 'UNION ALL' in counted
+    assert "WHERE (source.status = 'VALID')" in counted
     assert 'refunds' not in graph.tables
     assert graph['order_lines'].primary_key is None
     (message,) = [m for m in graph.conversion_messages if "join 'refunds'" in m]
-    assert "key 'line_id' is not unique in table 'order_lines'" in message
+    assert "'line_id' is not unique in table 'order_lines'" in message
+
+
+def test_a_join_whose_key_cannot_be_counted_is_kept_unchecked() -> None:
+    r"""An unchecked key may build wrong entities, so the join says so, but
+    a warehouse failing to count it is no reason to lose the join.
+    """
+    connection = _FailingConnection(_joined_view(), 'COUNT(DISTINCT')
+
+    graph = _convert(connection)
+
+    assert set(graph.edges) == {
+        Edge('order_lines', 'customer_id', 'customers'),
+        Edge('order_lines', 'product_id', 'products'),
+    }
+    assert graph['customers'].primary_key.name == 'customer_id'
+    assert graph['products'].primary_key.name == 'product_id'
+    customers, products = sorted(graph.conversion_messages)
+    assert "'customers'" in customers and "'customer_id'" in customers
+    assert "'products'" in products and "'product_id'" in products
 
 
 def test_parse_metric_view_wildcards() -> None:
