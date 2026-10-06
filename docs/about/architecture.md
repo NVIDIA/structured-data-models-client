@@ -114,20 +114,25 @@ Five distributions in one repo, released together on one version.
 | `structured-data-models-relational-engine` | `sdm_relational_engine` | **native** | The relational model's heavy client-side work: graph building, samplers, the C++ neighbor sampler. |
 
 ```
-structured-data-models-pql  ◄── structured-data-models-api  ◄── structured-data-models-client ──► structured-data-models-connectors
-   ▲                          │
-   └────── structured-data-models-relational-engine ◄┘   (only via the [relational] extra)
+structured-data-models-api   ◄──┐
+                                ├── structured-data-models-client ──► structured-data-models-connectors
+structured-data-models-pql   ◄──┘           │
+                                            └──► structured-data-models-relational-engine
+                                                 (only via the [relational] extra, and it
+                                                  depends on api, pql and connectors too)
 ```
+
+`structured-data-models-api` depends on nothing.
 
 **Only `structured-data-models-relational-engine` is native.** Everything else installs anywhere,
 so `kumo-tabular` works on a Mac; `kumo-relational` needs Linux (x86-64 or
 aarch64).
 
 ```bash
-pip install structured-data-models-client                 # tabular, PQL, transport everywhere
-pip install structured-data-models-client[relational]     # adds the native relational engine
-pip install structured-data-models-client[snowflake]      # one backend (also duckdb/sqlite/postgres/databricks/s3)
-pip install structured-data-models-client[all]            # relational + every backend
+pip install structured-data-models-client                   # tabular, PQL, transport everywhere
+pip install 'structured-data-models-client[relational]'     # adds the native relational engine
+pip install 'structured-data-models-client[snowflake]'      # one backend (also duckdb/sqlite/postgres/databricks/s3)
+pip install 'structured-data-models-client[all]'            # relational + every backend
 ```
 
 `[explain]` and `[relbench]` stay outside `[all]` and must be requested by
@@ -282,10 +287,10 @@ A connection the caller opens and passes in is used as it is.
 A notebook's `spark` is wrapped in the few calls the samplers make: a cursor that runs `spark.sql` with positional parameters and returns Arrow.
 A schema over a source does not pickle.
 
-**Keys are taken as stated.**
+**Keys are checked, and a warehouse's own constraints are not enough.**
 Unity Catalog and Snowflake constraints are informational: nothing stops a declared key from repeating.
-`from_data` checks a key for nulls and duplicates over the rows it holds; against a source that is a whole-table aggregate per key, and it is not run yet.
-Where it matters, check the key in the source before relying on it.
+`from_data` checks a key for nulls and duplicates over the rows it holds, and `from_source` does the same against the source with `check_keys=True`, which is the default: one aggregate per eligible table.
+Pass `check_keys=False` to skip that scan when the cost matters and the key is already trusted.
 
 **Whole-table checks move.**
 Each check `from_data` runs over every row either reads metadata for a source table (dtypes, constraints, row counts) or runs on the sampled rows (value casts, and whether scored rows mean what the schema says).
@@ -399,8 +404,8 @@ So there are two different answers, and neither is "guess from cardinality":
   fractional pair is not a label, so both are left as regressions.
 - **The caller has the last word where there is a decision to make.** Use
   `task=` on the direct builder or `materialize(task=…)` on the single-table
-  PQL path,
-  is authoritative and overrides everything above it. Stating it also silences
+  PQL path. What the caller states is authoritative and overrides everything
+  above it. Stating it also silences
   the warning, which is the point of the warning. A relational query has no
   such decision. The engine resolves the query and states the kind in the
   payload, so passing `task=` with one is refused rather than quietly dropped.

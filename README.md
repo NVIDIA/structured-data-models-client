@@ -4,7 +4,7 @@ Ask a predictive question of one table, or of a whole relational schema, and
 get an answer without training a model for each dataset.
 
 ```bash
-pip install structured-data-models-client[relational]
+pip install 'structured-data-models-client[relational]'
 ```
 
 ## Overview
@@ -32,9 +32,20 @@ Two models are available through the client:
 You need a running NIM to predict against. Point the client at it and ask:
 
 ```python
+import pandas as pd
 from sdm_client import KumoRelational, PredictiveQuery, SDMClient, Schema
 
-schema = Schema.from_data({'users': users_df, 'orders': orders_df})
+users = pd.DataFrame({'user_id': range(12)})
+orders = pd.DataFrame(
+    {
+        'order_id': range(120),
+        'user_id': [i % 12 for i in range(120)],
+        'price': [10.0 + i for i in range(120)],
+        'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+    }
+)
+
+schema = Schema.from_data({'users': users, 'orders': orders})
 query = PredictiveQuery(
     'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id', schema
 )
@@ -53,9 +64,9 @@ The [quickstart](docs/get-started/quickstart.md) runs this end to end, and
 | Command | You get |
 | --- | --- |
 | `pip install structured-data-models-client` | The client, the language, and the tabular model |
-| `pip install structured-data-models-client[relational]` | Adds the relational model and its native engine |
-| `pip install structured-data-models-client[snowflake]` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]` |
-| `pip install structured-data-models-client[all]` | The relational model and every warehouse backend |
+| `pip install 'structured-data-models-client[relational]'` | Adds the relational model and its native engine |
+| `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]` |
+| `pip install 'structured-data-models-client[all]'` | The relational model and every warehouse backend |
 
 [Installation](docs/get-started/installation.md) has the rest, including what
 differs on Databricks.

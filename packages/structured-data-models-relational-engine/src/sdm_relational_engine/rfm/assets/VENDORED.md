@@ -66,6 +66,3 @@ last `hashes.json` upstream published (commit `10d9cfe414`).
 To update: run `python scripts/pin_relbench.py`, which pins each repository's
 current `main`, or pass `repository=commit` to pin a given commit.
 Review the diff, then run the engine's tests with `--runintegration`.
-||||||| 3c684406
-the visualization tests, and re-enumerate the bundled components in the root
-`LICENSE` from the new version's package manifest.

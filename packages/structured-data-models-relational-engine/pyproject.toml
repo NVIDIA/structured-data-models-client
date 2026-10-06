@@ -242,9 +242,8 @@ ignore = [
     "C413",    #  1x reversed(sorted(...))
 
     # The tree carries 11 markers that name neither an owner nor an issue.
-    # Each sits on live code and is actionable, but there is no public issue
-    # tracker to point them at until this repository is on GitHub. Give them
-    # issue links then and drop these three rules.
+    # Each sits on live code and is actionable. Give them issue links and drop
+    # these three rules.
     "TD002",
     "TD003",
     "FIX002",

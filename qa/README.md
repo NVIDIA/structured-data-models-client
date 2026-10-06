@@ -1,8 +1,8 @@
 # QA probes
 
-The end-to-end pass these fixes came out of, and now their regression suite.
-Every probe here was written against a real failure against a live NIM; each
-one that passes is a bug that stays fixed.
+A regression suite over live endpoints. Every probe here was written against a
+real failure seen against a live NIM; each one that passes is a bug that stays
+fixed.
 
 These are not part of the test suite. They need live endpoints, real
 credentials and datasets that are downloaded rather than vendored, so they are
