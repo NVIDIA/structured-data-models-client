@@ -24,11 +24,17 @@ import builtins
 import importlib
 import os
 import re
+import sys
 import warnings
 from pathlib import Path
 
 import pytest
 import sdm_client
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # The packages support 3.10, where tomllib is not in the stdlib.
+    import tomli as tomllib
 
 SKILLS = Path(__file__).parents[1] / 'skills'
 
@@ -1849,8 +1855,6 @@ def test_the_source_table_is_every_source_there_is():
 
 def test_every_extra_the_warehouse_reference_names_is_one_you_can_install():
     """A `pip install` that names an extra nobody publishes teaches a dead end."""
-    import tomllib
-
     declared = set(
         tomllib.loads(
             (
