@@ -194,15 +194,18 @@ def _view_expr_message(
 def _refuses_column(error: BaseException) -> bool:
     r"""Whether ``error`` refuses a column alone: a column the graph cannot
     hold, or an expression the warehouse refused for what it says or reads.
+
+    A driver's error is judged by its state alone, since a Spark session's
+    errors are ``RuntimeError`` and ``ValueError`` whatever went wrong.
     """
     from sdm_relational_engine.rfm.backend.databricks.errors import (
         refuses_expression,
     )
 
-    if isinstance(error, NotImplementedError):
-        return False
-    return isinstance(error, ValueError | RuntimeError) or refuses_expression(
-        error
+    if _is_driver_error(error):
+        return refuses_expression(error)
+    return isinstance(error, ValueError | RuntimeError) and not isinstance(
+        error, NotImplementedError
     )
 
 

@@ -2305,6 +2305,14 @@ class _SparkError(Exception):
         return 'INSUFFICIENT_PERMISSIONS'
 
 
+# Stands in for `pyspark.errors.PySparkRuntimeError`, a driver's error.
+_PySparkRuntimeError = type(
+    'PySparkRuntimeError',
+    (RuntimeError,),
+    {'__module__': 'pyspark.errors.exceptions.base'},
+)
+
+
 class _FailingConnection(_FakeConnection):
     r"""A warehouse that fails every statement holding ``marker``, in its SQL
     or as a parameter, the way a driver does, and answers the rest.
@@ -2406,11 +2414,13 @@ def test_a_join_whose_table_cannot_be_used_is_left_out(
             "[CAST_INVALID_INPUT] The value 'SQLSTATE: 42P01' of the type "
             '"STRING" cannot be cast to "INT". SQLSTATE: 22018',
         ),
+        # A Spark session's errors are RuntimeError and ValueError.
+        ('TRY_CAST', _PySparkRuntimeError('[SESSION_NOT_ACTIVE] gone')),
     ],
-    ids=['columns', 'expression', 'nested-state', 'quoted-state'],
+    ids=['columns', 'expression', 'nested-state', 'quoted-state', 'spark'],
 )
 def test_a_warehouse_failure_while_reading_a_join_fails_the_conversion(
-    marker: str, error: str
+    marker: str, error: str | Exception
 ) -> None:
     r"""A failure that says nothing of the table or the expression may be
     the warehouse's own, so leaving out what it was reading would build a
@@ -2424,9 +2434,9 @@ def test_a_warehouse_failure_while_reading_a_join_fails_the_conversion(
     with pytest.raises(GraphConstructionError) as caught:
         _convert(connection)
 
-    assert isinstance(caught.value.__cause__, _ServerOperationError)
-
-    assert isinstance(caught.value.__cause__, _ServerOperationError)
+    assert isinstance(
+        caught.value.__cause__, _ServerOperationError | _PySparkRuntimeError
+    )
 
 
 @pytest.mark.parametrize('refused', ['expression', 'type'])
