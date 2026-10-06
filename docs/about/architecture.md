@@ -1,4 +1,4 @@
-# sdm-client architecture plan
+# structured-data-models-client architecture plan
 
 **What it is:** one Python client for NVIDIA's structured-data foundation
 model NIMs.
@@ -117,38 +117,38 @@ Five distributions in one repo, released together on one version.
 
 | Distribution | Import | Kind | Holds |
 |---|---|---|---|
-| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, `PredictiveQuery`, model handles, sessions and results. Adapters and transport live here too, as implementation details rather than public API. |
-| `sdm-api` | `sdm_api` | pure python | The wire only: OpenAPI-generated bindings and the types the NIM speaks. |
-| `sdm-pql` | `predictive_query` | pure python | The language: grammar, parser, validator, AST, model profiles, and the schema types PQL speaks. |
-| `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables: SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3. |
-| `sdm-relational-engine` | `sdm_relational_engine` | **native** | The relational model's heavy client-side work: graph building, samplers, the C++ neighbor sampler. |
+| `structured-data-models-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, `PredictiveQuery`, model handles, sessions and results. Adapters and transport live here too, as implementation details rather than public API. |
+| `structured-data-models-api` | `sdm_api` | pure python | The wire only: OpenAPI-generated bindings and the types the NIM speaks. |
+| `structured-data-models-pql` | `predictive_query` | pure python | The language: grammar, parser, validator, AST, model profiles, and the schema types PQL speaks. |
+| `structured-data-models-connectors` | `sdm_connectors` | pure python | Reading source tables: SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3. |
+| `structured-data-models-relational-engine` | `sdm_relational_engine` | **native** | The relational model's heavy client-side work: graph building, samplers, the C++ neighbor sampler. |
 
 ```
-sdm-pql  ◄── sdm-api  ◄── sdm-client ──► sdm-connectors
+structured-data-models-pql  ◄── structured-data-models-api  ◄── structured-data-models-client ──► structured-data-models-connectors
    ▲                          │
-   └────── sdm-relational-engine ◄┘   (only via the [relational] extra)
+   └────── structured-data-models-relational-engine ◄┘   (only via the [relational] extra)
 ```
 
-**Only `sdm-relational-engine` is native.** Everything else installs anywhere,
+**Only `structured-data-models-relational-engine` is native.** Everything else installs anywhere,
 so `kumo-tabular` works on a Mac; `kumo-relational` needs Linux (x86-64 or
 aarch64).
 
 ```bash
-pip install sdm-client                 # tabular, PQL, transport everywhere
-pip install sdm-client[relational]     # adds the native relational engine
-pip install sdm-client[snowflake]      # one backend (also duckdb/sqlite/postgres/databricks/s3)
-pip install sdm-client[all]            # relational + every backend
+pip install structured-data-models-client                 # tabular, PQL, transport everywhere
+pip install structured-data-models-client[relational]     # adds the native relational engine
+pip install structured-data-models-client[snowflake]      # one backend (also duckdb/sqlite/postgres/databricks/s3)
+pip install structured-data-models-client[all]            # relational + every backend
 ```
 
 `[explain]` and `[relbench]` stay outside `[all]` and must be requested by
 name. `[explain]` posts row data to a third-party LLM, so installing it is
 deliberate.
 
-### Why `sdm-pql` is separate
+### Why `structured-data-models-pql` is separate
 
 The language is a distribution of its own because two packages need it and
-neither needs the other. `sdm-client` resolves a query against a schema;
-`sdm-relational-engine` reads the AST it produces. Putting the parser in either
+neither needs the other. `structured-data-models-client` resolves a query against a schema;
+`structured-data-models-relational-engine` reads the AST it produces. Putting the parser in either
 one would make the other depend on a driver or a client it has no use for.
 
 It carries the parser, the AST, the validators, **and** the schema types
@@ -173,13 +173,13 @@ are how the client is built, not names it exports.
 
 | Type | Owner | Why |
 |---|---|---|
-| `Dtype`, `Stype`, `TaskType`, `ProblemType` | `sdm-pql` | PQL speaks them and will be an external dependency. One owner, no translation layer. |
-| `SchemaDefinition`, `TableDefinition`, `Column`, AST | `sdm-pql` | Same. The relational samplers *read* an AST, they never parse one. |
-| `Profile`, `Capabilities` | `sdm-pql` | What a model may be asked, as data. §6. |
-| The time column rule (`predictive_query.time_columns`) | `sdm-pql` | Which timestamp inference takes as a table's time column. `Schema.from_data` and the engine behind `Schema.from_source` both call its `choose_time_column`, and neither imports the other. |
-| Wire request/response, `InferenceSpec`, `OutputSpec` | `sdm-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
-| The DataFrame→wire encoder (`wire/`) | `sdm-client` | **Corrected during phase 2.** §8 first put this in `sdm-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `sdm-api` its zero-dependency property, which is why the split exists. `sdm-api` keeps the vocabulary; encoding a frame is client-side work. |
-| `Schema`, `Request`, `PredictionResult` | `sdm-client` | The public surface. |
+| `Dtype`, `Stype`, `TaskType`, `ProblemType` | `structured-data-models-pql` | PQL speaks them and will be an external dependency. One owner, no translation layer. |
+| `SchemaDefinition`, `TableDefinition`, `Column`, AST | `structured-data-models-pql` | Same. The relational samplers *read* an AST, they never parse one. |
+| `Profile`, `Capabilities` | `structured-data-models-pql` | What a model may be asked, as data. §6. |
+| The time column rule (`predictive_query.time_columns`) | `structured-data-models-pql` | Which timestamp inference takes as a table's time column. `Schema.from_data` and the engine behind `Schema.from_source` both call its `choose_time_column`, and neither imports the other. |
+| Wire request/response, `InferenceSpec`, `OutputSpec` | `structured-data-models-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
+| The DataFrame→wire encoder (`wire/`) | `structured-data-models-client` | **Corrected during phase 2.** §8 first put this in `structured-data-models-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `structured-data-models-api` its zero-dependency property, which is why the split exists. `structured-data-models-api` keeps the vocabulary; encoding a frame is client-side work. |
+| `Schema`, `Request`, `PredictionResult` | `structured-data-models-client` | The public surface. |
 
 ---
 
@@ -576,7 +576,7 @@ Three pieces. Two are cheap; one is a contract change we do not own.
 
 **1. The contract must accommodate the model, which requires more than an id.**
 `PredictionRequest.model` is a closed enum, so at minimum a new model needs an
-MR on `structured-data-api` and regenerated `sdm-api`. Until §0 is fixed,
+MR on `structured-data-api` and regenerated `structured-data-models-api`. Until §0 is fixed,
 an unrecognised id fails **client-side with a message naming that MR** rather
 than being silently sent and rejected.
 
@@ -600,7 +600,7 @@ a task kind. It is therefore the sensible third model, not anomaly.
 This is the seam's real cost, stated up front so nobody discovers it at model
 three.
 
-**2. A profile** says what the model may be asked. `sdm-pql` already ships
+**2. A profile** says what the model may be asked. `structured-data-models-pql` already ships
 `RELATIONAL`, `TABULAR`, `TIMESERIES`, `ANOMALY`. A capability may only
 *reject*: the language accepts a fixed set of queries and each model accepts a
 subset, so a new model can never widen the language.
@@ -714,12 +714,12 @@ What changed on the way, for anyone reading code that looks familiar:
 
 | Area | Change |
 |---|---|
-| Connectors | Moved into `sdm-connectors` under new names |
-| Relational engine, including the C++ neighbour sampler | Moved into `sdm-relational-engine`. `Graph` became `Schema`, and the PQL types now come from `predictive_query` |
+| Connectors | Moved into `structured-data-models-connectors` under new names |
+| Relational engine, including the C++ neighbour sampler | Moved into `structured-data-models-relational-engine`. `Graph` became `Schema`, and the PQL types now come from `predictive_query` |
 | Relational adapter | Returns the unified `Request` and `PredictionResult` |
 | Tabular adapter | Model id renamed to `kumo-tabular` |
-| Wire types | Live in `sdm-client`, not `sdm-api`, which stays dependency-free (see §2) |
-| Predictive Query Language | Maintained here from this point on, in `sdm-pql` |
+| Wire types | Live in `structured-data-models-client`, not `structured-data-models-api`, which stays dependency-free (see §2) |
+| Predictive Query Language | Maintained here from this point on, in `structured-data-models-pql` |
 
 Two behaviours were carried over deliberately, because each cost something to
 learn: every redirect hop is closed rather than drained, and credentials in a
@@ -731,10 +731,10 @@ Each phase is independently shippable and tested.
 
 | # | Phase | Ships | Done when |
 |---|---|---|---|
-| 1 | **Foundation** | Repo, CI, `sdm-api` + `sdm-pql`, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
+| 1 | **Foundation** | Repo, CI, `structured-data-models-api` + `structured-data-models-pql`, SPDX headers, provenance records | `predictive_query` imports clean; generated bindings match the contract hash |
 | 2 | **Client + tabular** | `SDMClient`, `Schema`, `Request`, `PredictionResult`, transport, sessions, tabular adapter | a direct `Request` predicts against the tabular NIM |
-| 3 | **Connectors** | `sdm-connectors` | every backend reads a table |
-| 4 | **Relational** | `sdm-relational-engine`, relational adapter, PQL materialization | `PredictiveQuery(...).materialize(indices=…)` predicts against the relational NIM |
+| 3 | **Connectors** | `structured-data-models-connectors` | every backend reads a table |
+| 4 | **Relational** | `structured-data-models-relational-engine`, relational adapter, PQL materialization | `PredictiveQuery(...).materialize(indices=…)` predicts against the relational NIM |
 | 5 | **fit + explain** | Session handle, explanation outputs, pre-flight limits | `fit()`/`predict()` reuse one context; every §7 limit fails locally |
 | 6 | **Docs + E2E** | Docs, notebook, live-NIM harness for both models | both models pass live E2E |
 | 7 | **PQL for tabular** | `materialize(predict=…)` emits a one-table request | a tabular question runs from PQL text |
@@ -787,7 +787,7 @@ So, as a rule, not a suggestion:
 1. Every vendored tree has a **digest pinned beside it and asserted in CI**.
    For `mermaid.min.js`, this is one SHA-256 over the bundle.
 2. A test asserts the rename **did not inject target-repo identifiers** into a
-   vendored tree. No `sdm_`, `Schema`, or `sdm-client` strings appearing where
+   vendored tree. No `sdm_`, `Schema`, or `structured-data-models-client` strings appearing where
    upstream has none. The assertion is "unchanged from upstream", not "contains
    no forbidden word".
 
@@ -810,9 +810,9 @@ This test came across with the rest.
 
 | Component | License | Where | Note |
 |---|---|---|---|
-| ANTLR-generated parser | Apache-2.0 | `sdm-pql` | Generated by ANTLR from `PQLGrammar.g4` in the same tree; the grammar and everything around it are first-party |
-| ANTLR Python runtime | BSD-3-Clause | `sdm-pql` dependency | Required by the PQL parser |
-| `mermaid.min.js` (vendored) | MIT bundle; its components are enumerated in `LICENSE` | `sdm-relational-engine` assets | **Kept.** `visualize()` draws offline. Snowflake and Databricks notebooks block external scripts, so a CDN-fetched diagram would not draw. Upstream bytes, SHA-256 pinned, digest asserted by a test. `to_mermaid()` returns the source for external rendering. |
+| ANTLR-generated parser | Apache-2.0 | `structured-data-models-pql` | Generated by ANTLR from `PQLGrammar.g4` in the same tree; the grammar and everything around it are first-party |
+| ANTLR Python runtime | BSD-3-Clause | `structured-data-models-pql` dependency | Required by the PQL parser |
+| `mermaid.min.js` (vendored) | MIT bundle; its components are enumerated in `LICENSE` | `structured-data-models-relational-engine` assets | **Kept.** `visualize()` draws offline. Snowflake and Databricks notebooks block external scripts, so a CDN-fetched diagram would not draw. Upstream bytes, SHA-256 pinned, digest asserted by a test. `to_mermaid()` returns the source for external rendering. |
 | pandas, numpy, requests, pydantic | BSD / Apache-2.0 | dependencies | Resolved at install, not vendored |
 
 Any licence review needs the provenance records and the inventory above.

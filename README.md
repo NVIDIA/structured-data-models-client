@@ -1,4 +1,4 @@
-# sdm-client
+# structured-data-models-client
 
 One Python client for NVIDIA's structured-data foundation models.
 
@@ -42,7 +42,7 @@ Nothing has been released yet.
 
 | Phase | | |
 |---|---|---|
-| 1 | Foundation: `sdm-api`, `sdm-pql`, CI | ✅ |
+| 1 | Foundation: `structured-data-models-api`, `structured-data-models-pql`, CI | ✅ |
 | 2 | Client and the tabular model | ✅ |
 | 3 | Connectors | ✅ |
 | 4 | The relational model | ✅ |
@@ -56,21 +56,21 @@ Five distributions, released together on one version.
 
 | Distribution | Import | Kind | What it is |
 |---|---|---|---|
-| `sdm-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, sessions and results |
-| `sdm-api` | `sdm_api` | pure python | The Universal TFM wire types. No third-party dependencies |
-| `sdm-pql` | `predictive_query` | pure python | The Predictive Query Language: grammar, parser, validator, AST, model profiles |
-| `sdm-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
-| `sdm-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
+| `structured-data-models-client` | `sdm_client` | pure python | The public API: client, `Schema`, `Request`, model handles, sessions and results |
+| `structured-data-models-api` | `sdm_api` | pure python | The Universal TFM wire types. No third-party dependencies |
+| `structured-data-models-pql` | `predictive_query` | pure python | The Predictive Query Language: grammar, parser, validator, AST, model profiles |
+| `structured-data-models-connectors` | `sdm_connectors` | pure python | Reading source tables from SQLite, DuckDB, PostgreSQL, Snowflake, Databricks, S3 |
+| `structured-data-models-relational-engine` | `sdm_relational_engine` | native | The relational driver: graph building, samplers, the neighbor sampler |
 
-`sdm-pql` is an internal dependency of `sdm-client`, not a supported API, and
+`structured-data-models-pql` is an internal dependency of `structured-data-models-client`, not a supported API, and
 its `predictive_query` package can change in any release. Write PQL with
 `sdm_client.PredictiveQuery`.
 
-Only `sdm-relational-engine` is native. The other four are pure Python and
+Only `structured-data-models-relational-engine` is native. The other four are pure Python and
 install anywhere, on 3.10 through 3.14.
 
 The engine publishes wheels for Linux x86-64 and aarch64 on 3.10 through 3.13
-and **no source distribution**, so `pip install sdm-client[relational]` resolves
+and **no source distribution**, so `pip install structured-data-models-client[relational]` resolves
 there and nowhere else. On other platforms, pip has nothing to fall back to, so
 the extra does not install. It builds from a checkout on other platforms with a
 compiler and CMake, as described below. This path is for contributors; `pip`
@@ -81,13 +81,13 @@ cannot use it for users.
 ```bash
 python3.12 -m venv .venv
 .venv/bin/pip install \
-  -e './packages/sdm-api[test]' \
-  -e './packages/sdm-pql[test]' \
-  -e './packages/sdm-client[test]' \
-  -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
+  -e './packages/structured-data-models-api[test]' \
+  -e './packages/structured-data-models-pql[test]' \
+  -e './packages/structured-data-models-client[test]' \
+  -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
 .venv/bin/python -m pytest \
-  packages/sdm-api/tests packages/sdm-pql/tests \
-  packages/sdm-client/tests packages/sdm-connectors/tests tests -q
+  packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+  packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q
 ```
 
 `tests/` at the root is the cross-package suite: that the five distributions
@@ -99,16 +99,16 @@ The relational engine is a native build and is installed and tested on its
 own, from its own directory:
 
 ```bash
-.venv/bin/pip install -e './packages/sdm-relational-engine[test]'
-cd packages/sdm-relational-engine && ../../.venv/bin/python -m pytest tests -q
+.venv/bin/pip install -e './packages/structured-data-models-relational-engine[test]'
+cd packages/structured-data-models-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 
 Lint and format with `ruff`; the formatter owns line length. Type-check with
 `mypy`, which is blocking in CI:
 
 ```bash
-.venv/bin/mypy packages/sdm-api/src packages/sdm-pql/src \
-               packages/sdm-client/src packages/sdm-connectors/src
+.venv/bin/mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src \
+               packages/structured-data-models-client/src packages/structured-data-models-connectors/src
 ```
 
 Changing anything a caller can observe, such as an exported name, signature,
@@ -131,7 +131,7 @@ draws offline: Snowflake and Databricks notebooks block external scripts, so a
 diagram fetched from a CDN would not draw. Upstream bytes, SHA-256 pinned,
 components enumerated in `LICENSE`.
 
-Everything else here, including the Predictive Query Language in `sdm-pql`, is
+Everything else here, including the Predictive Query Language in `structured-data-models-pql`, is
 first-party source maintained in this repository.
 
 ## License
@@ -144,11 +144,11 @@ Each package carries its own copy so its `pyproject.toml` can reference one,
 which is what puts the license inside each wheel. They are the same terms as
 the root file, not additional ones:
 
-- [`packages/sdm-api/LICENSE`](packages/sdm-api/LICENSE)
-- [`packages/sdm-client/LICENSE`](packages/sdm-client/LICENSE)
-- [`packages/sdm-connectors/LICENSE`](packages/sdm-connectors/LICENSE)
-- [`packages/sdm-pql/LICENSE`](packages/sdm-pql/LICENSE)
-- [`packages/sdm-relational-engine/LICENSE`](packages/sdm-relational-engine/LICENSE)
+- [`packages/structured-data-models-api/LICENSE`](packages/structured-data-models-api/LICENSE)
+- [`packages/structured-data-models-client/LICENSE`](packages/structured-data-models-client/LICENSE)
+- [`packages/structured-data-models-connectors/LICENSE`](packages/structured-data-models-connectors/LICENSE)
+- [`packages/structured-data-models-pql/LICENSE`](packages/structured-data-models-pql/LICENSE)
+- [`packages/structured-data-models-relational-engine/LICENSE`](packages/structured-data-models-relational-engine/LICENSE)
 
 Contributions are welcome and are signed off under the Developer Certificate of
 Origin; see [`CONTRIBUTING.md`](CONTRIBUTING.md).
@@ -170,18 +170,18 @@ Full documentation is under [`docs/`](docs/index.md):
 
 ```bash
 # everything that needs nothing running, and opens no sockets
-python -m pytest packages/sdm-api/tests packages/sdm-pql/tests \
-                packages/sdm-client/tests packages/sdm-connectors/tests \
+python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+                packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests \
   -q -m 'not live_nim and not live_warehouse and not socket'
 
 # the native engine, from the repository root
-python -m pytest packages/sdm-relational-engine/tests -q
+python -m pytest packages/structured-data-models-relational-engine/tests -q
 
 # against a NIM you are running
 SDM_TABULAR_URL=http://localhost:8000 \
 SDM_RELATIONAL_URL=http://localhost:8001 \
-  python -m pytest packages/sdm-client/tests -m live_nim -q
+  python -m pytest packages/structured-data-models-client/tests -m live_nim -q
 
 # against real warehouses
-python -m pytest packages/sdm-connectors/tests -m live_warehouse -q
+python -m pytest packages/structured-data-models-connectors/tests -m live_warehouse -q
 ```

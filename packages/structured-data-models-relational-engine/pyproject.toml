@@ -1,0 +1,314 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "structured-data-models-relational-engine"
+dynamic=["dependencies", "version"]
+authors=[
+    {name="NVIDIA"},
+]
+license = "Apache-2.0"
+license-files=["LICENSE", "NOTICE"]
+description="Relational driver (graph building, samplers, PQL, native neighbor-sampler) for the NVIDIA Structured Data Models client"
+readme="README.md"
+# This package ships binary wheels only (no sdist), so a version with no wheel
+# must fail resolution rather than fail to find a distribution. The bound and
+# the classifiers below name the same interpreters and move together.
+#
+# The GitLab `wheels` job builds the Linux matrix these classifiers name, from
+# `[tool.cibuildwheel]` below. Nothing publishes it yet, so the bound states
+# what the extension supports rather than what has been released.
+requires-python=">=3.10,<3.14"
+keywords=[
+    "deep-learning",
+    "graph-neural-networks",
+    "relational-foundation-model",
+    "predictive-query",
+]
+classifiers=[
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/structured-data-models-client"
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
+
+[project.optional-dependencies]
+# Invoking a model served on Snowflake. Separate from the `snowflake` extra
+# below, which reads a warehouse; either is useful without the other.
+snowflake-serving=[
+    "snowflake-snowpark-python>=1.20",
+]
+test=[
+    "packaging",
+    # The RelBench loader's digest checks are pooch's, and are tested offline.
+    "pooch",
+    "pytest",
+    "pytest-httpserver",
+    "pytest-mock",
+    "pytest-subtests",
+    "requests-mock",
+]
+explain=[
+    "openai>=1.40",
+]
+relbench=[
+    "pooch",
+    "tqdm",
+]
+sqlite=[
+    "structured-data-models-connectors[sqlite]",
+]
+duckdb=[
+    "structured-data-models-connectors[duckdb]",
+]
+snowflake=[
+    "numpy<2.0",
+    "structured-data-models-connectors[snowflake]",
+    "pyyaml",
+]
+databricks=[
+    "structured-data-models-connectors[databricks]",
+    "pyyaml",
+]
+postgres=[
+    "structured-data-models-connectors[postgres]",
+]
+
+[build-system]
+requires = [
+    "pybind11>=2.13.6",
+    "scikit-build-core<0.12.0",
+    # PEP 639 `license` + `license-files` above; older setuptools silently
+    # drops the license files from the wheel's .dist-info.
+    "setuptools>=77",
+    "setuptools_scm",
+]
+build-backend = "scikit_build_core.setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where=["src"]
+include=["sdm_relational_engine*"]
+
+[tool.setuptools.package-data]
+"sdm_relational_engine"=["py.typed"]
+"sdm_relational_engine.rfm"=["assets/*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sdm_relational_engine._version.__version__"}
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+editable.verbose=false
+
+# https://cibuildwheel.pypa.io/en/stable/options/
+# The GitLab `wheels` job and the release workflow both drive cibuildwheel from
+# here, so the wheel set CI proves is the one a tag uploads.
+[tool.cibuildwheel]
+# The default `build` frontend, not `build[uv]`: the smoke test below installs
+# this wheel against sibling wheels that exist only on disk, found through
+# PIP_FIND_LINKS. uv reads no PIP_* variable, and the uv the manylinux images
+# shipped had no environment form of --find-links at all, so under `build[uv]`
+# the smoke test could never resolve structured-data-models-api.
+build = "cp310-* cp311-* cp312-* cp313-*"
+# musllinux is not a libc this project has ever built or tested against, and
+# leaving it on would silently double the Linux wheel count.
+skip = "*-musllinux_*"
+# Proof per wheel, on the machine that built it: the compiled sampler loads and
+# the public graph surface imports.
+test-command = "python -c \"from sdm_relational_engine.rfm import Graph, KumoRelational; import sdm_relational_engine.relationallib as relationallib; assert hasattr(relationallib.NeighborSampler, 'seed')\""
+
+[tool.cibuildwheel.linux]
+# Databricks classic clusters on Graviton and serverless compute on either
+# architecture both install this wheel, so aarch64 is not optional. The glibc
+# 2.28 baseline is pinned here rather than left to cibuildwheel's default.
+archs = ["x86_64", "aarch64"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# The engine pins its siblings by exact version, and before a release they exist
+# only as wheels on disk. cibuildwheel copies the directory it is run from into
+# the container as /project, and both CI definitions run it from the repository
+# root, so this is `_sibling_wheels/` at that root.
+environment = { PIP_FIND_LINKS = "/project/_sibling_wheels" }
+
+[tool.pytest.ini_options]
+xfail_strict = true
+addopts = [
+    "--capture=no",
+    "--color=yes",
+    "-vv",
+]
+filterwarnings=[
+    # NOTE Entries here must not name a warning class by import path: pytest
+    # resolves those while parsing this file, which imports the module before
+    # any test runs. `sdm_relational_engine.rfm` is not importable without the compiled
+    # sampler, so such an entry breaks the whole session under WITH_RELATIONALLIB=0.
+    # Scope class-based filters to the tests that need them instead.
+    "error::UserWarning",
+    "error::DeprecationWarning",
+    "ignore:.*pkg_resources.*:DeprecationWarning",
+    # Pydantic v1 calls ForwardRef._evaluate, which is deprecated in Python
+    # 3.14. Remove once we upgrade to Pydantic v2.
+    "ignore:ForwardRef._evaluate is a private API.*:DeprecationWarning",
+]
+markers = [
+    "integration: integration tests",
+    "live_nim: opt-in live KumoRelational NIM tests using RFM_NIM_BASE_URL",
+    "live_nim_smoke: fast public client and NIM boundary validation",
+    "live_nim_full: extended task, validation, recovery, and session coverage",
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
+]
+
+[tool.ruff]  # https://docs.astral.sh/ruff/rules
+# Inherit the workspace rule set; this package only adds to it.
+extend="../../pyproject.toml"
+src=["src/sdm_relational_engine", "setup.py"]
+line-length=80
+indent-width=4
+target-version="py310"
+# Nothing is excluded. The query language and its ANTLR output moved to
+# structured-data-models-pql.
+
+[tool.ruff.lint]
+extend-select=[
+    "D",  # pydocstyle
+]
+# The D1xx entries below are a docstring-coverage backlog, not a policy: this
+# package predates the docstring convention the other two follow, and turning
+# them on today reports several hundred findings at once. Retire them a rule at
+# a time as the tree is documented.
+ignore = [
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D104",  # Missing docstring in public package
+    "D105",  # Missing docstring in magic method, intentional
+    "D107",  # Missing docstring in __init__, documented on the class
+    "D205",  # Blank line required between summary line and description
+    "D415",  # First line should end with a period
+
+    # --- Active exemptions ----------------------------------------------
+    # The shared baseline selects `B`, so these four are really being silenced
+    # in this tree: fixing one changes what ruff reports here today. They are
+    # separated from the block below because the two are not the same kind of
+    # debt, and a comment that lumps them together is wrong about half of it --
+    # which an earlier version of this note was.
+    "B028",    # 13x warnings.warn without stacklevel, changes the reported
+               #     call site, so it is a behaviour change for callers
+               #     filtering on it
+    "B905",    # 13x zip() without strict=; several zip unequal-length inputs
+               #     deliberately, so this needs reading case by case
+    "B023",    #  4x function defined in a loop uses the loop variable; each
+               #     needs checking for whether late binding is intended
+    "B024",    #  1x ABC with no abstract method
+
+    # --- Recorded backlog -------------------------------------------------
+    # None of the rules below is selected by the shared baseline, so listing
+    # them here silences nothing today. They are a record, not an exemption.
+    # An earlier note claimed they were "on in structured-data-models-client and structured-data-models-connectors,
+    # which pass clean"; neither half was true, and nothing read the comment to
+    # find out. What is true, and is asserted by
+    # tests/test_release_contract.py, is that those two packages report zero
+    # findings under this exact list, so the families can be promoted to the
+    # root `select` as soon as this tree and the test suites are clean too.
+    # Each is listed with its count in this tree at the time of writing. None
+    # of them can be auto-fixed without changing behaviour.
+    "C408",    # 34x dict()/list() call instead of a literal
+    "TRY004",  #  8x raise TypeError for a type check, would change the
+               #     exception type callers see, so it belongs with the
+               #     exception-hierarchy work
+    "SIM105",  #  7x try/except/pass -> contextlib.suppress
+    "SIM117",  #  7x nested with statements
+    "SIM118",  #  7x `in dict.keys()`
+    "RET504",  #  5x unnecessary assignment before return
+    "PIE810",  #  4x multiple startswith/endswith calls
+    "RUF005",  #  4x list concatenation instead of unpacking
+    "SIM102",  #  3x collapsible if
+    "C414",    #  2x unnecessary double cast
+    "RUF015",  #  2x index into an allocated iterable for the first element
+    "C413",    #  1x reversed(sorted(...))
+
+    # The tree carries 11 markers that name neither an owner nor an issue.
+    # Each sits on live code and is actionable, but there is no public issue
+    # tracker to point them at until this repository is on GitHub. Give them
+    # issue links then and drop these three rules.
+    "TD002",
+    "TD003",
+    "FIX002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# NOTE This table replaces the root one rather than merging with it, so the
+# workspace-level entries have to be repeated here.
+# Import order inside a package __init__ is load-bearing: see the root
+# pyproject.toml for why sorting them breaks sdm_relational_engine.rfm.backend.local.
+"**/__init__.py" = ["I001"]
+# Tests assert, use literal expected values, nest `with pytest.raises(...)`
+# around a fixture, and evaluate a bare attribute to prove it raises.
+"**/tests/**" = [
+    "S101",
+    "ANN",
+    "PLR2004",
+    "ERA001",
+    "SIM117",
+    "RUF012",
+    "B018",
+    "RUF043",
+]
+# contract; edit the generator, not the output.
+# Named after starlette's exception, which it is derived from and mirrors;
+# an `Error` suffix would rename a public class for no behavioural gain.
+"src/sdm_relational_engine/exceptions.py" = ["N818"]
+# `Timestamp` and `Timedelta` are drop-in replacements for the pandas
+# constructors they wrap, and read as such at every call site.
+"src/sdm_relational_engine/rfm/base/utils.py" = ["N802"]
+# `BaseHTTPRequestHandler` dispatches through `do_GET` and `do_POST`.
+"tests/client/test_client_security.py" = ["N815"]
+# ANTLR's `ErrorListener` calls `syntaxError(...)` by that exact name.
+"tests/test_pql_quoted_identifiers.py" = ["N802"]
+# Databricks injects `dbutils`/`spark`/`display` into notebooks (F821), and
+# each cell repeats its own imports so it stays runnable on its own (E402).
+"**/examples/**/notebooks/*.ipynb" = ["F821", "E402"]
+
+[tool.ruff.lint.pydocstyle]
+convention="google"
+
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.analysis]
+allowed-unresolved-imports = [
+    "setuptools.**",
+    "sdm_relational_engine.relationallib",
+    "IPython.**",
+    "google.colab.**",
+    "streamlit.**",
+    "snowflake.**",
+    "adbc_driver_sqlite.**",
+    "databricks.**",
+]
+
+[[tool.ty.overrides]]
+include = ["tests/**"]
+rules = { unresolved-import = "ignore" }
+
+[[tool.ty.overrides]]
+include = ["examples/**"]
+rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", unresolved-reference = "ignore", no-matching-overload = "ignore", unsupported-operator = "ignore", invalid-argument-type = "ignore" }
+
+[[tool.ty.overrides]]
+include = ["**/*.ipynb"]
+rules = { unresolved-import = "ignore", unresolved-reference = "ignore" }

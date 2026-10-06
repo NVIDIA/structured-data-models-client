@@ -1,4 +1,4 @@
-# sdm-client
+# structured-data-models-client
 
 One Python client for NVIDIA's structured-data foundation models.
 

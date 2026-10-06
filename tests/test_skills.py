@@ -1856,7 +1856,7 @@ def test_every_extra_the_warehouse_reference_names_is_one_you_can_install():
             (
                 Path(__file__).parents[1]
                 / 'packages'
-                / 'sdm-client'
+                / 'structured-data-models-client'
                 / 'pyproject.toml'
             ).read_text(encoding='utf-8')
         )['project']['optional-dependencies']
@@ -1866,7 +1866,7 @@ def test_every_extra_the_warehouse_reference_names_is_one_you_can_install():
     named = {only(cells[2]) for cells in shown.values()} | {'lakebase', 's3'}
     assert named <= declared, (
         f'warehouses.md names extras {sorted(named - declared)}, which '
-        f'sdm-client does not declare'
+        f'structured-data-models-client does not declare'
     )
 
 

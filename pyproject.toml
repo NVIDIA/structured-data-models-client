@@ -2,15 +2,15 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Workspace root for the sdm-client monorepo. This builds no package; each
+# Workspace root for the structured-data-models-client monorepo. This builds no package; each
 # independently released distribution lives under packages/ with its own
 # pyproject.toml:
 #
-#   packages/sdm-client            - the public client SDK (pure python)
-#   packages/sdm-api               - Universal TFM wire types (pure python)
-#   packages/sdm-pql               - the Predictive Query Language (pure python)
-#   packages/sdm-connectors        - shared data-source connectors (pure python)
-#   packages/sdm-relational-engine - the relational driver (native build)
+#   packages/structured-data-models-client            - the public client SDK (pure python)
+#   packages/structured-data-models-api               - Universal TFM wire types (pure python)
+#   packages/structured-data-models-pql               - the Predictive Query Language (pure python)
+#   packages/structured-data-models-connectors        - shared data-source connectors (pure python)
+#   packages/structured-data-models-relational-engine - the relational driver (native build)
 #
 # This file carries only shared tooling configuration. Each package's
 # [tool.ruff] extends this file, so the lint baseline below applies to every
@@ -27,8 +27,8 @@ target-version = "py310"
 # its shape, and formatting it as a module rewrites the thing being
 # illustrated.
 extend-exclude = [
-    "packages/sdm-pql/src/predictive_query/grammar",
-    "packages/sdm-api/src/sdm_api/generated/tfm_api.py",
+    "packages/structured-data-models-pql/src/predictive_query/grammar",
+    "packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py",
     "*.md",
 ]
 
@@ -65,7 +65,7 @@ no_implicit_optional = true
 exclude = [
     # ANTLR's output, regenerated from the grammar rather than edited. Excluded
     # from ruff for the same reason; the two lists move together.
-    "packages/sdm-pql/src/predictive_query/grammar/",
+    "packages/structured-data-models-pql/src/predictive_query/grammar/",
 ]
 
 # --- Baseline recorded 2026-09-17 -------------------------------------------

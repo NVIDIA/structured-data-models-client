@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-exclude: ^(packages/sdm-pql/src/predictive_query/|packages/sdm-api/src/sdm_api/generated/tfm_api\.py$|packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid\.min\.js$)
+exclude: ^(packages/structured-data-models-pql/src/predictive_query/|packages/structured-data-models-api/src/sdm_api/generated/tfm_api\.py$|packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid\.min\.js$)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

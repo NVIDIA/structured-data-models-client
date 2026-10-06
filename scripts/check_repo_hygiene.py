@@ -86,10 +86,14 @@ INTERNAL_PATTERNS = (
     re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
     # Internal build names for the servers behind a model id. A reader
     # cannot look either up, and which build answers is not the client
-    # story. The public client repository's own name is spelled
-    # ``structured-data-models-client``, so it has to be excluded here.
+    # story. The public repository and the five distributions it publishes
+    # are all spelled ``structured-data-models-*``, so they are excluded.
     re.compile(r'\bkumoml', re.IGNORECASE),
-    re.compile(r'\bstructured-data-models\b(?!-client)', re.IGNORECASE),
+    re.compile(
+        r'\bstructured-data-models\b'
+        r'(?!-(?:client|api|pql|connectors|relational-engine))',
+        re.IGNORECASE,
+    ),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has
@@ -97,7 +101,7 @@ INTERNAL_PATTERNS = (
 # push. Neither is a leak; both are reviewed deliberately.
 INTERNAL_ALLOWLIST = {
     # A provenance record has to name the repository the bytes came from.
-    'packages/sdm-api/src/sdm_api/generated/PROVENANCE.json',
+    'packages/structured-data-models-api/src/sdm_api/generated/PROVENANCE.json',
     # These two hold the patterns, so they name them by definition.
     'scripts/check_repo_hygiene.py',
     'scripts/generate_sdm_api.py',
@@ -164,7 +168,7 @@ RETIRED_INTERFACES = (
 # for one retired interface is still checked for every other.
 RETIRED_ALLOWLIST = {
     'scripts/check_repo_hygiene.py': frozenset(RETIRED_INTERFACES),
-    'packages/sdm-client/tests/test_quickstart_notebook.py': frozenset(
+    'packages/structured-data-models-client/tests/test_quickstart_notebook.py': frozenset(
         {
             'RelationalClient',
             'PredictClient',

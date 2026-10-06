@@ -79,7 +79,7 @@ jobs:
       - name: Build the four pure-Python distributions
         run: |
           python -m pip install --upgrade pip build
-          for package in sdm-api sdm-pql sdm-client sdm-connectors; do
+          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors; do
             ( cd "packages/$package" && python -m build --outdir "$GITHUB_WORKSPACE/dist" . )
           done
 
@@ -87,7 +87,7 @@ jobs:
       # a release those versions exist only in dist/, not on PyPI
       # yet, and will not be until the publish job runs. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
-      # the smoke test fails with "sdm-api was not found" and the release stops
+      # the smoke test fails with "structured-data-models-api was not found" and the release stops
       # before it can publish anything. cibuildwheel copies the directory it
       # runs from, the repository root, into the container as /project, and
       # the engine's `[tool.cibuildwheel.linux]` points pip at
@@ -104,14 +104,14 @@ jobs:
           platforms: arm64
 
       # The engine is a native build and needs one wheel per interpreter and
-      # platform. It is not optional: sdm-client[relational] pins it by exact
+      # platform. It is not optional: structured-data-models-client[relational] pins it by exact
       # version, so publishing the other four without it makes that extra
       # uninstallable for the release it names. What is built, and the smoke
       # test each wheel must pass, is the engine's `[tool.cibuildwheel]`.
       - name: Build the relational engine's wheels
         uses: pypa/cibuildwheel@v4.2.1
         with:
-          package-dir: packages/sdm-relational-engine
+          package-dir: packages/structured-data-models-relational-engine
           output-dir: dist
 
       - name: Unstage them, so nothing but distributions reaches the upload
@@ -166,9 +166,9 @@ jobs:
           # happens to be on PyPI. Without it this describes a previous release,
           # or fails outright before the first one.
           python -m pip install --find-links dist \
-            "./packages/sdm-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
+            "./packages/structured-data-models-client[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors','sdm-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors','structured-data-models-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
       - uses: actions/upload-artifact@v4
         with:

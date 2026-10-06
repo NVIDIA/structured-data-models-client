@@ -17,15 +17,15 @@ reviewers on the `pypi` environment, which hold the upload itself.
 
 ```bash
 # Everything that needs nothing running.
-python -m pytest packages/sdm-api/tests packages/sdm-pql/tests \
-                 packages/sdm-client/tests packages/sdm-connectors/tests tests \
+python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+                 packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests \
   -q -m 'not live_nim and not live_warehouse'
 
 # The native engine, from its own directory.
-cd packages/sdm-relational-engine && python -m pytest tests -q && cd -
+cd packages/structured-data-models-relational-engine && python -m pytest tests -q && cd -
 
 ruff check . && ruff format --check .
-mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/sdm-connectors/src
+mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src packages/structured-data-models-client/src packages/structured-data-models-connectors/src
 python scripts/check_repo_hygiene.py all
 ```
 
@@ -34,7 +34,7 @@ these run:
 
 ```bash
 SDM_TABULAR_URL=... SDM_RELATIONAL_URL=... \
-  python -m pytest packages/sdm-client/tests -m live_nim -q
+  python -m pytest packages/structured-data-models-client/tests -m live_nim -q
 ```
 
 ## Bumping the version
@@ -48,7 +48,7 @@ for f in packages/*/src/*/_version.py; do
 done
 ```
 
-Internal pins (`sdm-api==1.0.0` in `sdm-client`'s dependencies) move with them.
+Internal pins (`structured-data-models-api==1.0.0` in `structured-data-models-client`'s dependencies) move with them.
 
 Update `CHANGELOG.md`: move `Unreleased` entries under the new version with
 today's date.
@@ -64,7 +64,7 @@ pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
 (cp310 to cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
 the engine's `[tool.cibuildwheel]`), and then refuses to
 continue unless **all five** are present and agree with the tag. That check is
-not ceremony: `sdm-client[relational]` pins the engine by exact version, so a
+not ceremony: `structured-data-models-client[relational]` pins the engine by exact version, so a
 release missing it publishes an extra nobody can install. It then generates the
 SBOM and uploads through PyPI Trusted Publishing with PEP 740 attestations.
 Finally it creates the GitHub Release for the tag and attaches the SBOM to it,
@@ -78,7 +78,7 @@ token, something is wrong with the trusted-publisher configuration instead.
 ## After
 
 ```bash
-pip download --no-deps sdm-client==1.2.0 -d /tmp/verify
+pip download --no-deps structured-data-models-client==1.2.0 -d /tmp/verify
 python -m pypi_attestations verify pypi /tmp/verify/*.whl
 ```
 

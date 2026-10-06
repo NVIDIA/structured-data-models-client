@@ -1,0 +1,8 @@
+structured-data-models-connectors
+Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This distribution vendors no third-party source. The database drivers it reads
+through are optional dependencies, resolved by the package manager at install
+time and licensed by their own authors.

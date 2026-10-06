@@ -13,6 +13,11 @@ declare as `1.0.0` and none has published. The heading becomes
 
 ### Added
 
+- The five distributions are named for the repository that publishes them:
+  `structured-data-models-client`, `-api`, `-pql`, `-connectors` and
+  `-relational-engine`. The modules stay `sdm_client`, `sdm_api`,
+  `predictive_query`, `sdm_connectors` and `sdm_relational_engine`, so no
+  import changes. Nothing had published under the earlier names.
 - `docs/reference/stability.md`: the compatibility contract, saying what is public,
   what a version bump means, and the deprecation path. Enforced rather than
   stated: `tests/golden/` records the exported surface of every public package and
@@ -44,7 +49,7 @@ declare as `1.0.0` and none has published. The heading becomes
 - Linux aarch64 wheels for the relational engine, beside x86-64, on a
   manylinux_2_28 baseline. Databricks serverless runs on either architecture
   and classic clusters on Graviton, so an x86-64-only wheel left
-  `sdm-client[relational]` uninstallable there. A GitLab `wheels` job builds the
+  `structured-data-models-client[relational]` uninstallable there. A GitLab `wheels` job builds the
   full cp310 to cp313 matrix from the same `[tool.cibuildwheel]` table the
   release reads.
 - A PostgreSQL backend for the relational engine, so Lakebase and any other
@@ -69,12 +74,12 @@ declare as `1.0.0` and none has published. The heading becomes
   connections from `lakebase()` carry it as `application_name`, ahead of any
   you pass. The `WorkspaceClient` requests these make carry it too, through a
   copy of your client rather than your client itself.
-  Warehouse sessions sdm-client opens also tag their statements
+  Warehouse sessions structured-data-models-client opens also tag their statements
   `sdm_client_purpose: sampling`, beside your own query tags, so query history
   tells sampling apart. An `sdm_client_purpose` of your own is kept instead.
   A connection or Spark session you open yourself and pass to a source is used
   as it is, with neither.
-  `sdm-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,
+  `structured-data-models-connectors[databricks]` now needs `databricks-sql-connector>=4.1.3`,
   the first release whose SEA route sends a session's query tags.
 - `Schema.from_source` and the sources in `sdm_connectors`: a schema over
   tables that stay in their source, sampled there with SQL, so only the rows a
@@ -114,7 +119,7 @@ declare as `1.0.0` and none has published. The heading becomes
   workspace.
 - What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
   rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
-  and Databricks Runtime 14.3 LTS ships 8; `sdm-connectors[databricks]` brings
+  and Databricks Runtime 14.3 LTS ships 8; `structured-data-models-connectors[databricks]` brings
   `pyyaml`, which a metric view's definition is parsed with, and
   `databricks-sdk>=0.89`, which `warehouse()` looks a warehouse up with; and
   the engine has a `postgres` extra for its PostgreSQL backend.
@@ -243,7 +248,7 @@ declare as `1.0.0` and none has published. The heading becomes
 - **The release could not have smoke-tested the engine.** The sibling wheels
   its exact pins resolve against were staged where the build container never
   looked, and the uv frontend ignored the variable pointing at them, so the
-  first tag would have stopped at "sdm-api was not found". Reproduced with the
+  first tag would have stopped at "structured-data-models-api was not found". Reproduced with the
   pinned cibuildwheel, and fixed in both places.
 - **Eleven engine test modules never ran in CI**, fakes included, because the
   Databricks and Snowflake drivers they import were not installed; twenty more
@@ -373,7 +378,7 @@ declare as `1.0.0` and none has published. The heading becomes
   stderr of any application that had not configured logging. It now installs a
   `NullHandler`; applications that *have* configured logging still receive the
   records, unchanged.
-- `sdm-api`, `sdm-pql` and `sdm-client` each declared their version in two
+- `structured-data-models-api`, `structured-data-models-pql` and `structured-data-models-client` each declared their version in two
   places. There is now one literal per distribution, in `_version.py`, and a
   test that the five agree.
 - The four pure-Python distributions admitted Python 3.14 through
@@ -477,7 +482,7 @@ Sampling holds the line too, whatever was checked: an id asked to be scored that
 
 **A semantic model's expressions may call only standard SQL functions, unless you trust it.**
 A metric view or semantic view is written by someone else, and its expressions run as SQL under your credentials every time a request is gathered.
-Any function call used to pass, so a view could make sdm-client call a user-defined function, `secret()`, `http_request()`, `ai_query()` or `SYSTEM$WAIT()` as you.
+Any function call used to pass, so a view could make structured-data-models-client call a user-defined function, `secret()`, `http_request()`, `ai_query()` or `SYSTEM$WAIT()` as you.
 Now a column whose expression calls anything but a pure, deterministic built-in function is left out, with a conversion message naming the function.
 Qualified and quoted function names, `IDENTIFIER()`, and session values such as `current_user` and `current_date` are left out the same way.
 `source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
@@ -501,7 +506,7 @@ The message names the way out: create a regular view with that `WHERE` clause an
 `parameters` and `materialization` are still left out with a message.
 
 **`predictive_query` is not public API.**
-`sdm-pql` installs it because `sdm-client` parses and validates PQL with it, and any release may change it.
+`structured-data-models-pql` installs it because `structured-data-models-client` parses and validates PQL with it, and any release may change it.
 Write PQL with `sdm_client.PredictiveQuery`.
 `ModelSpec` is not exported either, since it carries a `predictive_query.Profile`, and `KumoTabular` and `KumoRelational` have no public `spec` attribute.
 `RuntimeContract`, the part of a `ModelSpec` that describes a deployment, is internal too, since nothing public takes or returns one.

@@ -49,7 +49,7 @@ _NEXT_LINK = re.compile(r'<([^>]+)>\s*;\s*rel="next"')
 
 OUTPUT = (
     Path(__file__).resolve().parents[1]
-    / 'packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets'
+    / 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/assets'
     / 'relbench_registry.json'
 )
 

@@ -1,0 +1,105 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "structured-data-models-client"
+# The version lives in exactly one place per distribution: `_version.py`, a
+# module holding a single literal and importing nothing. setuptools reads it
+# statically, so building the wheel never imports the package, which matters
+# because importing these roots pulls pandas, and a build backend that has to
+# import pandas to learn a version number cannot produce a wheel at all.
+dynamic = ["version"]
+description = "One Python client for NVIDIA's structured-data foundation model NIMs"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.10"
+authors = [{ name = "NVIDIA" }]
+keywords = ["structured-data", "foundation-model", "tabular", "relational"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+# What the base install carries: the wire vocabulary, the language, an HTTP
+# session, and frames. A model that does heavy client-side work brings its own
+# runtime through an extra instead.
+dependencies = [
+    "structured-data-models-api==1.0.0",
+    "structured-data-models-pql==1.0.0",
+    "pandas>=1.5",
+    "numpy>=1.23",
+    "requests>=2.28",
+    "urllib3>=1.26",
+]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/structured-data-models-client"
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
+
+[project.optional-dependencies]
+# A model that does heavy client-side work brings its own runtime; a warehouse
+# driver is opt-in the same way, through the shared connectors package.
+#
+# `relational` is deliberately narrower than this distribution: the engine is a
+# native build that publishes wheels for 3.10-3.13, so `structured-data-models-client[relational]`
+# does not resolve on 3.14 while plain `structured-data-models-client` does. pip reports that as
+# "No matching distribution found for structured-data-models-relational-engine", which names the
+# symptom and not the reason, so it is written down here and in the
+# installation guide.
+relational = ["structured-data-models-relational-engine==1.0.0"]
+sqlite = ["structured-data-models-connectors[sqlite]==1.0.0"]
+duckdb = ["structured-data-models-connectors[duckdb]==1.0.0"]
+snowflake = ["structured-data-models-connectors[snowflake]==1.0.0"]
+databricks = ["structured-data-models-connectors[databricks]==1.0.0"]
+postgres = ["structured-data-models-connectors[postgres]==1.0.0"]
+lakebase = ["structured-data-models-connectors[lakebase]==1.0.0"]
+s3 = ["structured-data-models-connectors[s3]==1.0.0"]
+# Reaching a model served on Databricks Model Serving. The one extra that names
+# a third-party package directly: the transport that imports it lives in this
+# distribution, not in the engine or the connectors. It is a way to reach a
+# model rather than a backend to read, so `all` does not carry it; ask for it by
+# name.
+databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
+all = [
+    "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
+]
+test = ["pytest", "requests-mock"]
+
+[tool.setuptools.dynamic]
+version = {attr = "sdm_client._version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["sdm_client*"]
+
+[tool.setuptools.package-data]
+"sdm_client" = ["py.typed"]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+xfail_strict = true
+addopts = ["--color=yes"]
+markers = [
+    "live_nim: needs a running NIM",
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
+    "socket: binds a local socket; deselect where that is not permitted",
+]

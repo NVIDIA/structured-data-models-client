@@ -32,8 +32,8 @@ Not public, and free to change in any release:
   re-export, including `sdm_client.core.transport`,
   `sdm_client.adapters`, `sdm_client.materializers` and `sdm_client.wire`.
   Their contents are implementation details, however stable they look.
-- The `predictive_query` package, which the `sdm-pql` distribution installs.
-  `sdm-client` depends on it to parse and validate PQL, but it is not a
+- The `predictive_query` package, which the `structured-data-models-pql` distribution installs.
+  `structured-data-models-client` depends on it to parse and validate PQL, but it is not a
   supported API. Write PQL with `sdm_client.PredictiveQuery`.
 - How a `FittedModel` is constructed. `SDMClient.fit()` returns one, and
   calling the class yourself raises `TypeError`.
@@ -52,7 +52,7 @@ requested output fields.
 
 [Semantic versioning](https://semver.org) applies to the public surface above
 and all five distributions together. They share one version and are released
-together, so `sdm-client==1.2.0` always means `sdm-api==1.2.0`.
+together, so `structured-data-models-client==1.2.0` always means `structured-data-models-api==1.2.0`.
 
 | Bump | Means |
 |---|---|

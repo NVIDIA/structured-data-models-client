@@ -29,7 +29,9 @@ try:
 except ImportError:  # pragma: no cover - exercised only in bare dev envs.
     yaml = None
 
-DEFAULT_OUTPUT = Path('packages/sdm-api/src/sdm_api/generated/tfm_api.py')
+DEFAULT_OUTPUT = Path(
+    'packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py'
+)
 DEFAULT_STRIP_PREFIX = ''
 
 _LINE_LENGTH = 80

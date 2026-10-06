@@ -59,7 +59,7 @@ The task is not an argument. It follows from the query: see
 `KumoRelational` needs the engine, which is an extra:
 
 ```
-pip install 'sdm-client[relational]'
+pip install 'structured-data-models-client[relational]'
 ```
 
 Without it the first call raises `MissingExtraError` naming that command.

@@ -51,7 +51,7 @@ typecheck:
   extends: .python
   script:
     - pip install -q mypy
-    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks]'
+    - pip install -q -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' -e './packages/structured-data-models-client' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks]'
     # Every session a source takes too, so each driver's types are its own
     # rather than Any. pyspark-client is pyspark's Python without its jars.
     - pip install -q snowflake-snowpark-python pyspark-client
@@ -59,10 +59,10 @@ typecheck:
     # toolchain to install. It ships py.typed exactly like the other four,
     # so leaving it out made the gate narrower than the promise.
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
-    - pip install -q -e './packages/sdm-relational-engine'
-    - mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src packages/sdm-connectors/src packages/sdm-relational-engine/src
+    - pip install -q -e './packages/structured-data-models-relational-engine'
+    - mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src packages/structured-data-models-client/src packages/structured-data-models-connectors/src packages/structured-data-models-relational-engine/src
     # What a caller's type checker infers for a source, and what it refuses.
-    - mypy packages/sdm-connectors/tests/typing/check_sources.py
+    - mypy packages/structured-data-models-connectors/tests/typing/check_sources.py
 
 hygiene:
   stage: lint
@@ -92,7 +92,7 @@ test:
     # connection. Without the drivers, importing the backend raises and every
     # test that covers them skips, including the ones holding the partner
     # identifier Databricks requires on every connection.
-    - pip install -q -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' -e './packages/sdm-client[test]' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
+    - pip install -q -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' -e './packages/structured-data-models-client[test]' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
     # ruff is here for tests/, not for linting: the test that checks the
     # engine's ignore-list note shells out to ruff and skips without it,
     # which made the check vacuous in the only job that runs root tests/.
@@ -104,7 +104,7 @@ test:
     #
     # Live tests are deselected: this job reaches no NIM and no warehouse. The
     # relational engine is a native build and is tested in its own job.
-    - python -m pytest packages/sdm-api/tests packages/sdm-pql/tests packages/sdm-client/tests packages/sdm-connectors/tests tests -q -m 'not live_nim and not live_warehouse' --cov --cov-report=term --cov-report=xml
+    - python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q -m 'not live_nim and not live_warehouse' --cov --cov-report=term --cov-report=xml
   coverage: '/^TOTAL.+?(\d+\%)$/'
   artifacts:
     reports:
@@ -135,29 +135,29 @@ engine:
     # The Databricks and Snowflake drivers are here for the offline tests of
     # those backends, which import the driver and skipped whole modules without
     # it: eleven of them, fakes included, ran nowhere. Taken through
-    # sdm-connectors rather than the engine's `snowflake` extra, which pins
+    # structured-data-models-connectors rather than the engine's `snowflake` extra, which pins
     # numpy<2 and would move every other test here onto numpy 1. pyyaml is what
     # the semantic-view tests read their fixtures with.
-    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' pyyaml
+    - pip install -q -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' pyyaml
     # The test extra, not a hand-written list beside it: naming these twice
     # is how the documented install came to be missing pytest-mock while this
     # job had it. `explain` carries the SDK that the explanation tests fake
     # around; without it those skipped too.
-    - pip install -q -e './packages/sdm-relational-engine[test,explain]'
+    - pip install -q -e './packages/structured-data-models-relational-engine[test,explain]'
     # The live NIM and live warehouse tests need credentials this job does not
     # have, so they are deselected by name rather than left to skip. A skip
     # that remains is a test that checked its own environment and stood down,
     # and is reported.
-    - cd packages/sdm-relational-engine && python -m pytest tests -q -m 'not live_nim and not live_warehouse'
+    - cd packages/structured-data-models-relational-engine && python -m pytest tests -q -m 'not live_nim and not live_warehouse'
     # The client's suite again, with an engine present. The `test` job does
     # not install one, so every client test that needs the engine skips there
     # and runs nowhere; a change to how a request is routed then breaks them
     # unseen. Running the whole suite rather than a name filter, because the
     # next such test will not be named like the current ones.
     - cd "$CI_PROJECT_DIR"
-    - pip install -q -e './packages/sdm-client[test]'
+    - pip install -q -e './packages/structured-data-models-client[test]'
     - pip install -q 'ruff==0.16.*'
-    - python -m pytest packages/sdm-client/tests -q -m 'not live_nim and not live_warehouse'
+    - python -m pytest packages/structured-data-models-client/tests -q -m 'not live_nim and not live_warehouse'
     # And root tests/ again, with the engine present. The `test` job runs them
     # without one, and the wire-payload snapshot deliberately excludes the
     # relational case when the engine cannot build it, so that case was
@@ -177,7 +177,7 @@ build:
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
     - pip install -q build
     - |
-      for package in sdm-api sdm-pql sdm-client sdm-connectors sdm-relational-engine; do
+      for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors structured-data-models-relational-engine; do
         echo "building $package"
         ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/dist" . )
       done
@@ -203,7 +203,7 @@ build:
     - |
       VERSION=$(cat dist/VERSION)
       pip install --dry-run --find-links "$CI_PROJECT_DIR/dist" \
-        "sdm-client[relational,sqlite,duckdb]==$VERSION"
+        "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
   artifacts:
     paths:
       - dist/
@@ -274,10 +274,10 @@ wheels:
     # The engine's smoke test installs it against these, which exist nowhere
     # but here until a release; `[tool.cibuildwheel.linux]` points pip at them.
     - |
-      for package in sdm-api sdm-pql sdm-client sdm-connectors; do
+      for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors; do
         ( cd "packages/$package" && python -m build --wheel --outdir "$CI_PROJECT_DIR/_sibling_wheels" . )
       done
-    - cibuildwheel --platform linux packages/sdm-relational-engine --output-dir dist
+    - cibuildwheel --platform linux packages/structured-data-models-relational-engine --output-dir dist
     - cp _sibling_wheels/*.whl dist/
   artifacts:
     paths:
@@ -336,7 +336,7 @@ installed-wheel:
   script:
     - pip install -q pytest requests-mock pytest-cov
     - VERSION=$(cat dist/VERSION)
-    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "sdm-client[sqlite,duckdb]==$VERSION"
+    - pip install -q --find-links "$CI_PROJECT_DIR/dist" "structured-data-models-client[sqlite,duckdb]==$VERSION"
     # Prove the installed distribution, not the checkout, is what is imported,
     # and that the typed marker survived the build. Written as one script that
     # raises, rather than a chain ending in `|| true`: a check that cannot fail
@@ -360,7 +360,7 @@ installed-wheel:
           )
       print('four distributions imported from site-packages, all typed')
       EOF
-    - python -m pytest "$CI_PROJECT_DIR/packages/sdm-client/tests" -q -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+    - python -m pytest "$CI_PROJECT_DIR/packages/structured-data-models-client/tests" -q -m 'not live_nim and not live_warehouse' -p no:cacheprovider
 
 # Advisory. A known vulnerability in a dependency is news the moment it is
 # published, not at the next release, but it is not a reason to fail a merge
@@ -371,7 +371,7 @@ audit:
   allow_failure: true
   script:
     - pip install -q pip-audit
-    - pip install -q -e './packages/sdm-api' -e './packages/sdm-pql' -e './packages/sdm-client' -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks]'
+    - pip install -q -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' -e './packages/structured-data-models-client' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks]'
     # `oauthlib` 4.0.0 fixes CVE-2026-49265 and `databricks-sql-connector`
     # pins `oauthlib<4.0.0`, so the fix cannot be installed. It is ignored so
     # that a red result still means a new finding. The check below fails when
@@ -411,11 +411,11 @@ sbom:
     - pip install -q cyclonedx-bom
     - VERSION=$(cat dist/VERSION)
     - pip install -q --find-links "$CI_PROJECT_DIR/dist"
-        "sdm-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+        "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
     - cyclonedx-py environment --of JSON --validate -o "$CI_PROJECT_DIR/dist/sbom.cyclonedx.json"
     - python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json'));
         names={c['name'] for c in d.get('components', [])};
-        missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors'} - names;
+        missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names;
         print(f'{len(names)} components');
         sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
   artifacts:
@@ -433,16 +433,16 @@ contract:
   script:
     - apt-get update -qq && apt-get install -y -qq git
     - pip install -q pyyaml
-    - pip install -q -e './packages/sdm-api[test]'
-    - REVISION=$(python -c "import json;print(json.load(open('packages/sdm-api/src/sdm_api/generated/PROVENANCE.json'))['source_revision'])")
+    - pip install -q -e './packages/structured-data-models-api[test]'
+    - REVISION=$(python -c "import json;print(json.load(open('packages/structured-data-models-api/src/sdm_api/generated/PROVENANCE.json'))['source_revision'])")
     # Quoted whole: an unquoted ': ' makes YAML read the step as a mapping,
     # which fails the whole pipeline before a job starts.
     - 'echo "contract revision: $REVISION"'
     - git clone -q "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CONTRACT_PROJECT}.git" /tmp/contract
     - git -C /tmp/contract checkout -q "$REVISION"
     - python scripts/check_contract_pin.py --contract /tmp/contract/nim-sd.openapi.yaml
-    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check
-    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --validate-contract
+    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py --check
+    - python scripts/generate_sdm_api.py --spec /tmp/contract/nim-sd.openapi.yaml --output packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py --validate-contract
     - python scripts/check_wire_payloads.py --contract /tmp/contract/nim-sd.openapi.yaml
     # The checks on the checker. They need the spec, which only this job has,
     # so running them with the suite would skip every one of them.
@@ -457,6 +457,6 @@ contract-drift:
   script:
     - apt-get update -qq && apt-get install -y -qq git
     - pip install -q pyyaml
-    - pip install -q -e './packages/sdm-api[test]'
+    - pip install -q -e './packages/structured-data-models-api[test]'
     - git clone -q --depth 1 "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CONTRACT_PROJECT}.git" /tmp/contract-head
-    - python scripts/generate_sdm_api.py --spec /tmp/contract-head/nim-sd.openapi.yaml --output packages/sdm-api/src/sdm_api/generated/tfm_api.py --check
+    - python scripts/generate_sdm_api.py --spec /tmp/contract-head/nim-sd.openapi.yaml --output packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py --check

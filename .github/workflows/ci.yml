@@ -58,18 +58,18 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
       - run: pip install --upgrade pip mypy
       - run: |
-          pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
-            -e './packages/sdm-client' \
-            -e './packages/sdm-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
-            -e './packages/sdm-relational-engine'
+          pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
+            -e './packages/structured-data-models-client' \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
+            -e './packages/structured-data-models-relational-engine'
       # Every session a source takes too, so each driver's types are its own
       # rather than Any. pyspark-client is pyspark's Python without its jars.
       - run: pip install snowflake-snowpark-python pyspark-client
       - run: |
-          mypy packages/sdm-api/src packages/sdm-pql/src packages/sdm-client/src \
-            packages/sdm-connectors/src packages/sdm-relational-engine/src
+          mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src packages/structured-data-models-client/src \
+            packages/structured-data-models-connectors/src packages/structured-data-models-relational-engine/src
       # What a caller's type checker infers for a source, and what it refuses.
-      - run: mypy packages/sdm-connectors/tests/typing/check_sources.py
+      - run: mypy packages/structured-data-models-connectors/tests/typing/check_sources.py
 
   # Every interpreter the four pure-python distributions classify. The
   # internal pipeline runs one of them, so a defect specific to any other
@@ -107,12 +107,12 @@ jobs:
       # every test covering it skips.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
-          pip install -e './packages/sdm-api[test]' -e './packages/sdm-pql[test]' \
-            -e './packages/sdm-client[test]' \
-            -e './packages/sdm-connectors[sqlite,duckdb,postgres,databricks,test]'
+          pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
+            -e './packages/structured-data-models-client[test]' \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
       - run: |
-          python -m pytest packages/sdm-api/tests packages/sdm-pql/tests \
-            packages/sdm-client/tests packages/sdm-connectors/tests tests -q \
+          python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
+            packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
             -m 'not live_nim and not live_warehouse'
 
   engine:
@@ -149,22 +149,22 @@ jobs:
       # tests fake around.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*'
-          pip install -e './packages/sdm-api' -e './packages/sdm-pql' \
-            -e './packages/sdm-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
+          pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
             pyyaml
-          pip install -e './packages/sdm-relational-engine[test,explain]'
+          pip install -e './packages/structured-data-models-relational-engine[test,explain]'
       # The same marker filter as the internal pipeline. The live NIM and live
       # warehouse tests need credentials this job does not have, so they are
       # deselected by name rather than left to skip. A skip that remains is a
       # test that checked its own environment and stood down, and is reported.
       - run: |
-          cd packages/sdm-relational-engine
+          cd packages/structured-data-models-relational-engine
           python -m pytest tests -q -m 'not live_nim and not live_warehouse'
       # The client's suite again, with an engine present. The test job installs
       # none, so every client test that needs one skips there and runs nowhere.
       - run: |
-          pip install -e './packages/sdm-client[test]'
-          python -m pytest packages/sdm-client/tests -q \
+          pip install -e './packages/structured-data-models-client[test]'
+          python -m pytest packages/structured-data-models-client/tests -q \
             -m 'not live_nim and not live_warehouse'
       # And the root suite, which holds the relational wire snapshots. They
       # only exercise anything with an engine installed, so running them in
@@ -185,7 +185,7 @@ jobs:
       # test could run: a version resolved by importing the package root cannot
       # produce a wheel at all.
       - run: |
-          for package in sdm-api sdm-pql sdm-client sdm-connectors sdm-relational-engine; do
+          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors structured-data-models-relational-engine; do
             echo "building $package"
             ( cd "packages/$package" && python -m build --wheel --outdir "$GITHUB_WORKSPACE/dist" . )
           done
@@ -209,7 +209,7 @@ jobs:
       - run: |
           VERSION=$(cat dist/VERSION)
           pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
-            "sdm-client[relational,sqlite,duckdb]==$VERSION"
+            "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
       - run: pip install --upgrade twine && twine check dist/*
       - uses: actions/upload-artifact@v4
         with:
@@ -236,7 +236,7 @@ jobs:
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "sdm-client[sqlite,duckdb]==$VERSION"
+            "structured-data-models-client[sqlite,duckdb]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
@@ -259,7 +259,7 @@ jobs:
           EOF
       - working-directory: /tmp
         run: |
-          python -m pytest "$GITHUB_WORKSPACE/packages/sdm-client/tests" -q \
+          python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
             -m 'not live_nim and not live_warehouse' -p no:cacheprovider
 
   # The dependency inventory a consumer needs before accepting this into their
@@ -281,9 +281,9 @@ jobs:
           pip install --upgrade pip cyclonedx-bom
           VERSION=$(cat dist/VERSION)
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "sdm-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+            "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'sdm-client','sdm-api','sdm-pql','sdm-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
       - uses: actions/upload-artifact@v4
         with:
           name: sbom

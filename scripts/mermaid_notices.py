@@ -59,7 +59,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = (
     REPO_ROOT
     / 'packages'
-    / 'sdm-relational-engine'
+    / 'structured-data-models-relational-engine'
     / 'src'
     / 'sdm_relational_engine'
     / 'rfm'
@@ -68,7 +68,10 @@ ASSETS = (
 COMPONENTS = ASSETS / 'MERMAID_COMPONENTS.json'
 LICENSES = (
     REPO_ROOT / 'LICENSE',
-    REPO_ROOT / 'packages' / 'sdm-relational-engine' / 'LICENSE',
+    REPO_ROOT
+    / 'packages'
+    / 'structured-data-models-relational-engine'
+    / 'LICENSE',
 )
 
 OPENS = '  The components mermaid declares, transitively.\n'

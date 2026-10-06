@@ -937,10 +937,10 @@ class TestTheRequestBodiesAreContractual:
         assert result.returncode == 0
 
 
-_ENGINE_LICENSE = 'packages/sdm-relational-engine/LICENSE'
+_ENGINE_LICENSE = 'packages/structured-data-models-relational-engine/LICENSE'
 _COMPONENTS = (
     PACKAGES
-    / 'sdm-relational-engine'
+    / 'structured-data-models-relational-engine'
     / 'src'
     / 'sdm_relational_engine'
     / 'rfm'
@@ -1090,10 +1090,16 @@ class TestDistributionCoherence:
             if 'version' in project:
                 versions[name] = project['version']
                 continue
-            module = name.replace('-', '_')
-            if module == 'sdm_pql':
-                module = 'predictive_query'
-            source = PACKAGES / name / 'src' / module / '_version.py'
+            # Read off the tree rather than derived from the distribution
+            # name: the two have never matched for predictive_query, and
+            # since the rename they match for none of the five.
+            roots = [
+                child
+                for child in (PACKAGES / name / 'src').iterdir()
+                if child.is_dir() and (child / '__init__.py').exists()
+            ]
+            assert len(roots) == 1, f'{name} has import roots {roots}'
+            source = roots[0] / '_version.py'
             text = source.read_text()
             versions[name] = text.split('=')[-1].strip().strip('\'"')
         return versions
@@ -1114,8 +1120,12 @@ class TestDistributionCoherence:
         declared = self._declared_version()
         distributions = {name for name in _distributions()}
 
+        # Built from the distributions themselves rather than written out:
+        # a name spelled only here would match a pin nothing publishes.
         pattern = re.compile(
-            r'(?P<name>sdm-[a-z-]+)(?:\[[^\]]*\])?==(?P<version>[0-9][^\'"\s,]*)'
+            r'(?P<name>'
+            + '|'.join(re.escape(one) for one in sorted(distributions))
+            + r')(?:\[[^\]]*\])?==(?P<version>[0-9][^\'"\s,]*)'
         )
         wrong = []
         for source in sorted(PACKAGES.glob('*/pyproject.toml')) + sorted(
@@ -1167,7 +1177,7 @@ class TestDistributionCoherence:
     def test_every_advertised_extra_of_the_client_resolves_to_a_real_target(
         self,
     ):
-        client = _pyproject('sdm-client')['project']
+        client = _pyproject('structured-data-models-client')['project']
         known = set(_distributions())
         for extra, requirements in client['optional-dependencies'].items():
             for requirement in requirements:
@@ -1198,9 +1208,14 @@ class TestDistributionCoherence:
         a metric view failed there with `No module named 'yaml'` until the
         connectors' extra carried one.
         """
-        client = _pyproject('sdm-client')['project']['optional-dependencies']
-        assert 'sdm-connectors[databricks]==1.0.0' in client['databricks']
-        connectors = _pyproject('sdm-connectors')['project']
+        client = _pyproject('structured-data-models-client')['project'][
+            'optional-dependencies'
+        ]
+        assert (
+            'structured-data-models-connectors[databricks]==1.0.0'
+            in client['databricks']
+        )
+        connectors = _pyproject('structured-data-models-connectors')['project']
         names = [
             requirement.split('>=')[0].split('==')[0].strip().lower()
             for requirement in connectors['optional-dependencies']['databricks']
@@ -1213,11 +1228,15 @@ class TestDistributionCoherence:
         Plain psycopg, because the binary wheel's OpenSSL fails its FIPS
         self-test on Databricks' aarch64 hosts and aborts the process.
         """
-        client = _pyproject('sdm-client')['project']['optional-dependencies']
-        assert client['lakebase'] == ['sdm-connectors[lakebase]==1.0.0']
+        client = _pyproject('structured-data-models-client')['project'][
+            'optional-dependencies'
+        ]
+        assert client['lakebase'] == [
+            'structured-data-models-connectors[lakebase]==1.0.0'
+        ]
         (everything,) = client['all']
         assert 'lakebase' in everything.partition('[')[2].rstrip(']').split(',')
-        connectors = _pyproject('sdm-connectors')['project']
+        connectors = _pyproject('structured-data-models-connectors')['project']
         extra = connectors['optional-dependencies']['lakebase']
         assert sorted(extra) == ['databricks-sdk>=0.89,<1.0', 'psycopg>=3.1']
 
@@ -1252,11 +1271,15 @@ class TestConfigurationTellsTheTruth:
         anywhere. An earlier note called the whole list inert, which was wrong
         """
         source = (
-            PACKAGES / 'sdm-relational-engine' / 'pyproject.toml'
+            PACKAGES
+            / 'structured-data-models-relational-engine'
+            / 'pyproject.toml'
         ).read_text()
         root = tomllib.loads((REPO / 'pyproject.toml').read_text())
         selected = root['tool']['ruff']['lint']['select']
-        engine = _pyproject('sdm-relational-engine')['tool']['ruff']['lint']
+        engine = _pyproject('structured-data-models-relational-engine')['tool'][
+            'ruff'
+        ]['lint']
         effective = list(selected) + list(engine.get('extend-select', []))
 
         active_block, _, backlog_block = source.partition(
@@ -1384,7 +1407,9 @@ class TestConfigurationTellsTheTruth:
         selected anywhere, and the two packages named did not pass clean under
         them. A comment cannot be wrong for long if a test reads it.
         """
-        engine = _pyproject('sdm-relational-engine')['tool']['ruff']['lint']
+        engine = _pyproject('structured-data-models-relational-engine')['tool'][
+            'ruff'
+        ]['lint']
         root = tomllib.loads((REPO / 'pyproject.toml').read_text())
         selected = root['tool']['ruff']['lint']['select']
         backlog = [
@@ -1408,14 +1433,14 @@ class TestConfigurationTellsTheTruth:
                 '--quiet',
                 '--select',
                 ','.join(backlog),
-                str(PACKAGES / 'sdm-client' / 'src'),
-                str(PACKAGES / 'sdm-connectors' / 'src'),
+                str(PACKAGES / 'structured-data-models-client' / 'src'),
+                str(PACKAGES / 'structured-data-models-connectors' / 'src'),
             ],
             capture_output=True,
             text=True,
         )
         assert result.returncode == 0, (
-            'sdm-client and sdm-connectors no longer pass clean under the '
+            'structured-data-models-client and structured-data-models-connectors no longer pass clean under the '
             'style backlog the engine records, so the note beside that ignore '
             f'list is now wrong:\n{result.stdout}{result.stderr}'
         )
@@ -1606,16 +1631,18 @@ class TestInterpreterSupportIsStated:
         matrix, but pip's error names a distribution, not a reason. Anything
         that narrow has to be explained where someone reads it.
         """
-        client = _pyproject('sdm-client')
-        engine = _pyproject('sdm-relational-engine')
+        client = _pyproject('structured-data-models-client')
+        engine = _pyproject('structured-data-models-relational-engine')
         if (
             client['project']['requires-python']
             == engine['project']['requires-python']
         ):
             return
-        source = (PACKAGES / 'sdm-client' / 'pyproject.toml').read_text()
+        source = (
+            PACKAGES / 'structured-data-models-client' / 'pyproject.toml'
+        ).read_text()
         assert '3.14' in source and 'native build' in source, (
-            'sdm-client admits interpreters its [relational] extra cannot '
+            'structured-data-models-client admits interpreters its [relational] extra cannot '
             'install on, and its pyproject does not explain that anywhere'
         )
         install_doc = (

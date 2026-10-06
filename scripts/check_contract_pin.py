@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PROVENANCE = (
     REPO_ROOT
     / 'packages'
-    / 'sdm-api'
+    / 'structured-data-models-api'
     / 'src'
     / 'sdm_api'
     / 'generated'

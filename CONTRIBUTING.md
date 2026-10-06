@@ -1,4 +1,4 @@
-# Contributing to sdm-client
+# Contributing to structured-data-models-client
 
 Thanks for your interest in contributing. This project is licensed under the
 [Apache License 2.0](./LICENSE), and we welcome external contributions.

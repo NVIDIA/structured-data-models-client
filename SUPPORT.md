@@ -20,8 +20,8 @@ Apache-2.0 licence the code is released under.
 | A suspected security vulnerability | **Not GitHub.** Follow [SECURITY.md](SECURITY.md) |
 | A problem with the NIM itself rather than the client | Your NVIDIA support channel for that NIM |
 
-A bug report is most useful with the package versions (`pip show sdm-client
-sdm-api sdm-pql sdm-connectors sdm-relational-engine`), the Python version and
+A bug report is most useful with the package versions (`pip show structured-data-models-client
+structured-data-models-api structured-data-models-pql structured-data-models-connectors structured-data-models-relational-engine`), the Python version and
 platform, the smallest script that reproduces the problem, and the full
 traceback. `StructuredDataError` and its subclasses carry a stable `code`
 field; include it.
@@ -30,11 +30,11 @@ field; include it.
 
 Five packages are released together and share a version:
 
-- `sdm-client`: the client, the schema, and the model handles
-- `sdm-api`: the generated wire types for the Universal TFM API, and nothing else
-- `sdm-pql`: the Predictive Query Language, with parser, AST and schema types
-- `sdm-connectors`: reading source tables from warehouses and object stores
-- `sdm-relational-engine`: the relational driver, graph building and sampling
+- `structured-data-models-client`: the client, the schema, and the model handles
+- `structured-data-models-api`: the generated wire types for the Universal TFM API, and nothing else
+- `structured-data-models-pql`: the Predictive Query Language, with parser, AST and schema types
+- `structured-data-models-connectors`: reading source tables from warehouses and object stores
+- `structured-data-models-relational-engine`: the relational driver, graph building and sampling
 
 If you are unsure which is at fault, file against the repository; triage is our
 job, not yours.

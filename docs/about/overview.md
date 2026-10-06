@@ -28,7 +28,7 @@ declared as data instead of discovered from a 422.
 | Model | For | Needs |
 |---|---|---|
 | `kumo-tabular` | one table | nothing (pure Python, runs anywhere) |
-| `kumo-relational` | several related tables, joined as a graph | `sdm-client[relational]`, a native build |
+| `kumo-relational` | several related tables, joined as a graph | `structured-data-models-client[relational]`, a native build |
 
 ## When not to use it
 

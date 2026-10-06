@@ -1,4 +1,4 @@
-sdm-client
+structured-data-models-client
 Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See LICENSE.
@@ -11,7 +11,7 @@ One tree is vendored into this repository as source and ships with it.
 Everything else this project depends on is resolved by the package manager at
 install time and is not covered by this file.
 
-packages/sdm-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid.min.js
+packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid.min.js
 ---------------------------------------------------------------------------------
 
 mermaid 11.15.0, MIT licensed, bundled so that Graph.visualize() renders a
@@ -27,5 +27,5 @@ copyright notices themselves are mermaid's own, carried verbatim in
 rfm/assets/MERMAID_LICENSE.
 
 Everything else in this repository, including the Predictive Query Language in
-packages/sdm-pql, is first-party NVIDIA source maintained here under the
+packages/structured-data-models-pql, is first-party NVIDIA source maintained here under the
 licence above.

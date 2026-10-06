@@ -29,8 +29,8 @@ disclosure policy. See the
 
 ## Supported versions
 
-The client is distributed as five packages: `sdm-client`, `sdm-api`,
-`sdm-pql`, `sdm-connectors` and `sdm-relational-engine`. They are released
+The client is distributed as five packages: `structured-data-models-client`, `structured-data-models-api`,
+`structured-data-models-pql`, `structured-data-models-connectors` and `structured-data-models-relational-engine`. They are released
 together.
 Only the latest released version of each receives security fixes; there are no
 long-term-support branches. Fixes ship in a new release rather than as patches

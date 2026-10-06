@@ -2,9 +2,9 @@
 
 - **Python** 3.10 to 3.14 for the client, the language, the wire types and the
   connectors. **3.10 to 3.13 for the relational engine**, which is a native
-  build with a shorter wheel matrix. `pip install sdm-client[relational]` does
-  not resolve on 3.14, while plain `pip install sdm-client` does. It is
-  reported as `No matching distribution found for sdm-relational-engine`,
+  build with a shorter wheel matrix. `pip install structured-data-models-client[relational]` does
+  not resolve on 3.14, while plain `pip install structured-data-models-client` does. It is
+  reported as `No matching distribution found for structured-data-models-relational-engine`,
   which names the package and not the reason.
 - **A reachable NIM** serving `kumo-tabular` or `kumo-relational`. The client
   runs no model and downloads no weights.

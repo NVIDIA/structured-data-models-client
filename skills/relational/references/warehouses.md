@@ -25,7 +25,7 @@ connection its own driver makes, and says so if given another.
 | `SQLiteSource` | `adbc_driver_sqlite.dbapi.connect()` | — | `sqlite` |
 
 Install the connector **and** the engine, since `Schema.from_source` needs it:
-`pip install 'sdm-client[relational,databricks]'`. With the connector alone the
+`pip install 'structured-data-models-client[relational,databricks]'`. With the connector alone the
 first call raises `MissingExtraError`.
 
 `Source(connection)` picks the right one for you when you would rather not

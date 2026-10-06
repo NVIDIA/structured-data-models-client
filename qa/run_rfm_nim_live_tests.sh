@@ -8,7 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENGINE_ROOT="$WORKSPACE_ROOT/packages/sdm-relational-engine"
+ENGINE_ROOT="$WORKSPACE_ROOT/packages/structured-data-models-relational-engine"
 VENV_DIR="${RFM_NIM_LIVE_VENV:-$ENGINE_ROOT/.tmp/rfm-nim-live-venv}"
 BASE_URL="${KUMO_RELATIONAL_NIM_BASE_URL:-${RFM_NIM_BASE_URL:-}}"
 MODE=smoke

@@ -85,17 +85,17 @@ tested. Run after building, from a venv with no source tree on `sys.path`:
 
 ```bash
 pip install build
-for pkg in sdm-api sdm-pql sdm-connectors sdm-client; do
+for pkg in structured-data-models-api structured-data-models-pql structured-data-models-connectors structured-data-models-client; do
   python -m build --wheel --sdist -o dist/ packages/$pkg
 done
-python -m build --wheel -o dist/ packages/sdm-relational-engine   # native, wheel only
+python -m build --wheel -o dist/ packages/structured-data-models-relational-engine   # native, wheel only
 
 python -m venv /tmp/relenv
-/tmp/relenv/bin/pip install --find-links dist/ 'sdm-client'
+/tmp/relenv/bin/pip install --find-links dist/ 'structured-data-models-client'
 ```
 
 What that proved on this branch: all five distributions build; a base install
-pulls `sdm-api`, `sdm-pql`, pandas, numpy, requests, urllib3 and the ANTLR
+pulls `structured-data-models-api`, `structured-data-models-pql`, pandas, numpy, requests, urllib3 and the ANTLR
 runtime and nothing else; `sdm_relational_engine` is **not** importable, and the
 relational path raises `MissingExtraError` naming the extra to install;
 `[relational]`, `[duckdb]` and `[s3]` each resolve on their own; and the fixes

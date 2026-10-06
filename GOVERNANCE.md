@@ -34,7 +34,7 @@ of quality.
 
 The wire contract is shared with the NIM. A change to the request or response
 shape cannot be made in this repository alone and needs the server side to move
-with it. `sdm-api` is generated from that contract and is not edited by hand.
+with it. `structured-data-models-api` is generated from that contract and is not edited by hand.
 
 ## Releases
 
