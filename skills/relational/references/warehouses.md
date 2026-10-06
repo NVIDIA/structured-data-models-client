@@ -205,6 +205,8 @@ From a **Databricks metric view**:
 The source table's time column is a date the view holds, chosen as for any table, with two differences.
 A dimension that truncates or casts a date, such as `DATE_TRUNC('MONTH', OrderDate)`, is offered as the column it truncates, added when no dimension names it, so a 30-day window counts days rather than months.
 The date a window measure orders by is offered first, as the time axis the view's author chose.
+Where a dimension truncating the date has the date's own name, as `OrderDate: DATE_TRUNC('MONTH', source.OrderDate)` does, the dimension keeps its name and value, and the date is added under `OrderDate_raw`, or `OrderDate_raw_2` if that is taken.
+That column is the table's time column, and the name a query uses for the exact date.
 
 From a **Snowflake semantic view**: its logical tables, the relationships between them, and their dimensions, time dimensions and facts.
 A fact becomes a column.

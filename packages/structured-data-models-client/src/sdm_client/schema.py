@@ -881,7 +881,7 @@ class Schema:
     @property
     def conversion_notes(self) -> tuple[str, ...]:
         r"""How :meth:`from_source` read a semantic model where nothing was
-        lost, which no warning repeats, for a person to read.
+        lost, for a person to read.
 
         For a Databricks metric view, one note each: the predictive query
         aggregation that matches a simple measure, such as
@@ -889,7 +889,10 @@ class Schema:
         column taken in place of a date the view truncates, unless
         ``time_columns`` named another, and a parameter read as its default.
         Tables are named as the schema names them. What a model loses is
-        said in an :class:`SDMWarning` instead. Empty for every other schema.
+        said in an :class:`SDMWarning` instead, and a time column taken in
+        place of a truncated date is said in the warning on how time columns
+        were inferred as well, with the override that names another. Empty
+        for every other schema.
 
         The wording of a note is not part of the contract, so do not parse
         it.
@@ -1143,7 +1146,8 @@ class Schema:
         named as the model names them. No relationship is inferred from
         column names beside the model's own joins, which would give a table
         a second path the model never declared. ``relationships=`` replaces
-        the model's own; pass ``[*schema.relationships, extra]`` to add one.
+        the model's own, so to add one, pass them with it:
+        ``relationships=[*Schema.from_source(model).relationships, extra]``.
         What the model has that a schema cannot hold is said in one
         :class:`SDMWarning`, and how it was read where nothing was lost, such
         as the aggregation each measure is, is in :attr:`conversion_notes`.
@@ -1163,8 +1167,9 @@ class Schema:
             primary_keys: Overrides for a table's key.
             time_columns: Overrides for a table's time column. ``None``
                 says the table has none.
-            relationships: Overrides for the relationships. Pass an empty
-                sequence to assert there are none.
+            relationships: Replaces the relationships, a semantic model's
+                own included. Pass an empty sequence to assert there are
+                none.
             check_keys: Count each key's repeats and missing values in the
                 source. ``False`` skips the scan, and the checks with it, and
                 leaves :attr:`SourceTable.duplicate_keys` ``None``. The tables
@@ -1181,6 +1186,11 @@ class Schema:
                 or a named key has no value in some row.
             MissingExtraError: If the relational engine, which reads the
                 source, is not installed.
+            GraphConstructionError: The relational engine's, if the
+                warehouse fails while a semantic model is read, with the
+                driver's error as its ``__cause__``.
+            EmptyTableError: The relational engine's, a ``RuntimeError``, if
+                a semantic model's source table holds no rows.
         """
         from sdm_client.materializers.sources import (
             EngineTables,

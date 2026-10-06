@@ -196,7 +196,7 @@ declare as `1.0.0` and none has published. The heading becomes
   A key whose count fails is kept unchecked, with a message.
   Any other warehouse failure raises `GraphConstructionError`, and a metric view on a metric view, or a query as a source, is refused with the way out.
 - **What a semantic model loses, or why it is refused, arrives as the client's own types.**
-  Losses are one `SDMWarning` at the caller, through the engine's new `warn=False` rather than warning filters that held for every thread.
+  Losses are one `SDMWarning` at the caller.
   A refusal is a `StructuredDataError` (`INVALID_REQUEST`) with the model's name in `details['semantic_model']`.
   The schema holds only the model's own relationships, which `relationships=` replaces.
   A column no predictive query can name is left out with a warning, and a parameter named like a `DESCRIBE` detail, such as `Type`, no longer stands in for it.
