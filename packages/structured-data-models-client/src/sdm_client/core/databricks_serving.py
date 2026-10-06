@@ -109,9 +109,10 @@ class DatabricksServingTransport:
         workspace_client: A ``databricks.sdk.WorkspaceClient`` to call through.
             When omitted one is built from the ambient configuration, which is
             how a notebook authenticates without handling a token. Either
-            way, its requests name sdm-client in the User-Agent. A passed
-            ``WorkspaceClient`` itself is copied for that, not changed; a
-            subclass or test double is used as given, without the name.
+            way, its requests name structured-data-models-client in the
+            User-Agent. A passed ``WorkspaceClient`` itself is copied for
+            that, not changed; a subclass or test double is used as given,
+            without the name.
         timeout: Seconds one attempt may take, and the longest the SDK keeps
             retrying. Set on the client built here, or on the copy of a
             passed ``WorkspaceClient``, never on the caller's own. When
@@ -576,7 +577,8 @@ def _as_given(workspace_client: Any, timeout: float | None) -> Any:
         )
     logger.debug(
         'workspace_client is a %s, not a WorkspaceClient; its requests are '
-        'sent as given, without the sdm-client User-Agent entry',
+        'sent as given, without the structured-data-models-client '
+        'User-Agent entry',
         kind,
     )
     return workspace_client

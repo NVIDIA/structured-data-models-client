@@ -17,10 +17,13 @@ import re
 from sdm_client._version import __version__
 
 #: The product half of the partner identifier: a name an administrator can
-#: tie to this client, never a model or endpoint. It is a wire value, so it
-#: outlived the rename of the distribution that sends it.
+#: tie to this client, never a model or endpoint. It is the distribution's
+#: name: Databricks wants an underscore between partner and product and
+#: its SDK takes ``[a-zA-Z0-9_.+-]``, so the dashes stay and that underscore
+#: is the only one. It is a wire value that partner telemetry keys on, so it
+#: changes only with the distribution's name.
 DATABRICKS_PARTNER = 'nvidia'
-DATABRICKS_PRODUCT = 'sdm-client'
+DATABRICKS_PRODUCT = 'structured-data-models-client'
 
 _PACKAGE_VERSION_RE = re.compile(
     r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'

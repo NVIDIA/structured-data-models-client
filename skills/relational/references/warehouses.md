@@ -151,8 +151,8 @@ environment 4 have; on an older runtime pass a SQL warehouse connection
 instead.
 
 A connection or session you pass is used as it is, so it carries no
-sdm-client partner identifier or query tag. One opened through the helper
-carries both:
+structured-data-models-client partner identifier or query tag. One opened
+through the helper carries both:
 
 ```python
 from databricks.sdk import WorkspaceClient
