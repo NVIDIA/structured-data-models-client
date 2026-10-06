@@ -200,6 +200,10 @@ declare as `1.0.0` and none has published. The heading becomes
   Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message.
   Measures stay out of the graph, and are only read, never run.
   One conversion message lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
+- **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**
+  `Schema.from_source(source.semantic_model(...))` also inferred relationships from column names, so a snowflake view's lines, holding `CustomerID`, gained a link straight to `customers` beside the path through orders, and churn questions failed with an `IndexError`.
+  No relationship is now inferred beside a semantic model's joins; pass `relationships=` to add one.
+  The SQL sampler also read, in one hop, rows a second path had just added for the next, so any schema reaching a table by two paths failed the same way; each hop now reads only the rows of the hop before.
 - **A column linking to two tables no longer fails sampling.**
   A metric view that joins one table twice under two names, such as a buyer and a recipient both read from `customers`, links one column to two tables, and every prediction failed with `operands could not be broadcast`, since the sampler selected the column once per link.
   It is now selected once.

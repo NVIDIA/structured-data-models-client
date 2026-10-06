@@ -369,11 +369,18 @@ class SQLSampler(Sampler):
             if neighbors == 0:
                 break  # Abort early.
 
+            # The slices each table held when this hop began. A table reached
+            # by two paths gains slices for the next hop while this one runs,
+            # through whichever of its neighbours comes first, and those must
+            # wait for the next hop, which counts them:
+            hop_end_dict = {table: len(dfs) for table, dfs in dfs_dict.items()}
+
             for table in list(num_sampled_nodes_dict.keys()):
                 # Only sample from tables that have been visited in the
                 # previous hop:
                 if num_sampled_nodes_dict[table][hop] == 0:
                     continue
+                start, end = offset_dict[table], hop_end_dict[table]
 
                 # Collect the slices of data sampled in the previous hop
                 # (but maintain only required key information). A column
@@ -383,7 +390,7 @@ class SQLSampler(Sampler):
                 if table in self.primary_key_dict:
                     cols.append(self.primary_key_dict[table])
                 cols = list(dict.fromkeys(cols))
-                dfs = [df[cols] for df in dfs_dict[table][offset_dict[table] :]]
+                dfs = [df[cols] for df in dfs_dict[table][start:end]]
                 df = (
                     pd.concat(
                         dfs,
@@ -393,11 +400,11 @@ class SQLSampler(Sampler):
                     if len(dfs) > 1
                     else dfs[0]
                 )
-                batches = batches_dict[table][offset_dict[table] :]
+                batches = batches_dict[table][start:end]
                 batch = (
                     np.concatenate(batches) if len(batches) > 1 else batches[0]
                 )
-                offset_dict[table] = len(batches_dict[table])  # Increase.
+                offset_dict[table] = end  # Increase.
 
                 pkey: pd.Series | None = None
                 index: np.ndarray | None = None

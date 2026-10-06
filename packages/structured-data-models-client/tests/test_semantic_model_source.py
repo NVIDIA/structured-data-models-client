@@ -609,3 +609,60 @@ def test_a_model_the_engine_refuses_is_an_invalid_request(
     assert caught.value.code == 'INVALID_REQUEST'
     assert said in caught.value.message
     assert caught.value.details == {'model': 'sales_mv'}
+
+
+def test_no_relationship_is_inferred_beside_a_model_s_joins(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A snowflake view joins lines to orders and orders to customers, and
+    the lines' own `customer_id` matched `customers` by name, a second path
+    to customers the view never declared.
+    """
+    view = _VIEW.replace(
+        '  - name: customers\n'
+        '    source: cat.sch.customers\n'
+        '    on: source.customer_id = customers.customer_id\n',
+        '  - name: orders\n'
+        '    source: cat.sch.orders\n'
+        '    on: source.order_id = orders.order_id\n'
+        '    joins:\n'
+        '      - name: customers\n'
+        '        source: cat.sch.customers\n'
+        '        on: orders.customer_id = customers.customer_id\n',
+    ).replace(
+        'expr: customers.segment',
+        'expr: orders.customers.segment\n'
+        '  - name: customer_id\n'
+        '    expr: source.customer_id',
+    )
+    _with_view(monkeypatch, view)
+    lines = _DATA['order_lines']
+    monkeypatch.setitem(
+        _DATA, 'order_lines', lines.assign(order_id=lines['line_id'] % 4)
+    )
+    monkeypatch.setitem(
+        _TYPES, 'order_lines', {**_TYPES['order_lines'], 'order_id': 'INT'}
+    )
+    monkeypatch.setitem(
+        _DATA,
+        'orders',
+        pd.DataFrame({'order_id': range(4), 'customer_id': [1, 2, 3, 1]}),
+    )
+    monkeypatch.setitem(
+        _TYPES, 'orders', {'order_id': 'INT', 'customer_id': 'INT'}
+    )
+    monkeypatch.setitem(_EXPRESSIONS, 'orders', {})
+
+    schema = _schema(source)
+
+    assert set(schema.relationships) == {
+        Relationship('order_lines', 'order_id', 'orders', 'order_id'),
+        Relationship('orders', 'customer_id', 'customers', 'customer_id'),
+        Relationship('order_lines', 'product_id', 'products', 'product_id'),
+    }
+    # Asked for, it is added:
+    asked = Relationship(
+        'order_lines', 'customer_id', 'customers', 'customer_id'
+    )
+    schema = _schema(source, relationships=[*schema.relationships, asked])
+    assert asked in schema.relationships

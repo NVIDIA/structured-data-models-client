@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-r"""A column linking to two tables, as a metric view's role-playing joins
-make it.
+r"""A table reached by two paths, and a column linking to two tables, as a
+metric view's snowflake and role-playing joins make them.
 """
 
 from __future__ import annotations
@@ -73,6 +73,36 @@ def _customer_of_each_line(subgraph: Any) -> None:
     entities = np.asarray(_ENTITIES)[lines.batch]
     # A line's customer is its id modulo 10:
     assert (lines.df['did'].to_numpy() % 10 == entities).all()
+
+
+def test_a_table_reached_by_two_paths_is_sampled_once_per_hop(
+    connection: Any,
+) -> None:
+    r"""The lines are reached from a customer directly and through orders.
+    Those reached through orders arrived while the lines of the hop before
+    were being read, and were read with them, so the lines and the count of
+    them disagreed and sampling failed with an `IndexError`.
+    """
+    subgraph = _sample(
+        connection,
+        [
+            dict(name='customers', primary_key='cid', columns=['cid', 'seg']),
+            dict(
+                name='headers',
+                primary_key='hid',
+                time_column='ts',
+                columns=['hid', 'cid', 'ts'],
+            ),
+            dict(name='details', time_column='ts'),
+        ],
+        [
+            ('headers', 'cid', 'customers'),
+            ('details', 'hid', 'headers'),
+            ('details', 'cid', 'customers'),
+        ],
+    )
+
+    _customer_of_each_line(subgraph)
 
 
 def test_a_column_linking_to_two_tables_is_read_once(connection: Any) -> None:

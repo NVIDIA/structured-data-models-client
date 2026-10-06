@@ -1114,7 +1114,10 @@ class Schema:
         >>> schema = Schema.from_source(source.semantic_model('sales_metrics'))
 
         Its keys and relationships come from the model, and its tables are
-        named as the model names them.
+        named as the model names them. No relationship is inferred from
+        column names beside the model's own joins, which would give a table
+        a second path the model never declared; pass ``relationships`` to
+        add one.
 
         Everything that differs between warehouses belongs to the source, so
         this reads the same whichever one the tables are in. A schema has
@@ -1231,11 +1234,16 @@ class Schema:
             covered = {
                 (link.source_table, link.source_column) for link in declared
             }
-            by_name = [
-                link
-                for link in _infer_relationships(built)
-                if (link.source_table, link.source_column) not in covered
-            ]
+            # A semantic model's joins are all the links it means.
+            by_name = (
+                []
+                if is_semantic_model(source)
+                else [
+                    link
+                    for link in _infer_relationships(built)
+                    if (link.source_table, link.source_column) not in covered
+                ]
+            )
             links = _joinable_inferred_links(built, declared + by_name)
         else:
             links = _checked_links(built, relationships)
