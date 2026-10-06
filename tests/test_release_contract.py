@@ -1120,28 +1120,33 @@ class TestDistributionCoherence:
         declared = self._declared_version()
         distributions = {name for name in _distributions()}
 
-        # Built from the distributions themselves rather than written out:
-        # a name spelled only here would match a pin nothing publishes.
+        # Any exactly pinned requirement, then judged. Reading only the five
+        # real names would make a pin on a name nothing publishes -- a
+        # survivor of the rename, or a typo -- invisible rather than wrong,
+        # which is the regression this is here to catch. Everything first
+        # party is spelled with one of these two stems, and nothing else
+        # pinned here is.
+        ours = re.compile(r'^(?:structured[-_]data[-_]models|sdm)[-_]', re.I)
         pattern = re.compile(
-            r'(?P<name>'
-            + '|'.join(re.escape(one) for one in sorted(distributions))
-            + r')(?:\[[^\]]*\])?==(?P<version>[0-9][^\'"\s,]*)'
+            r'(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)'
+            r'(?:\[[^\]]*\])?==(?P<version>[0-9][^\'"\s,]*)'
         )
         wrong = []
         for source in sorted(PACKAGES.glob('*/pyproject.toml')) + sorted(
             PACKAGES.glob('*/setup.py')
         ):
             for match in pattern.finditer(source.read_text()):
-                if match.group('name') not in distributions:
+                name = match.group('name')
+                if not ours.match(name):
                     continue
-                if match.group('version') != declared:
-                    wrong.append(
-                        f'{source.relative_to(REPO)}: '
-                        f'{match.group(0)} but the release is {declared}'
-                    )
+                where = f'{source.relative_to(REPO)}: {match.group(0)}'
+                if name not in distributions:
+                    wrong.append(f'{where} names no distribution we publish')
+                elif match.group('version') != declared:
+                    wrong.append(f'{where} but the release is {declared}')
         assert not wrong, (
-            'a first-party pin names a version other than the one being '
-            'released:\n' + '\n'.join(wrong)
+            'a first-party pin names a version, or a distribution, other '
+            'than the one being released:\n' + '\n'.join(wrong)
         )
 
     def test_every_distribution_declares_the_same_licence(self):
