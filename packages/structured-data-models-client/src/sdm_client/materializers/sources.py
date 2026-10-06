@@ -16,6 +16,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 
 if TYPE_CHECKING:
@@ -248,16 +249,41 @@ def semantic_model_graph(model: Any) -> Graph:
     Named after the model's own tables, with its links, keys and time columns
     as the model declares them. Discovery and gathering both read it here, so
     they keep the same columns.
+
+    What the model has that a graph cannot hold is said in one
+    :class:`SDMWarning`, and a model the engine refuses, for a filter on a
+    joined table say, is refused with a :class:`StructuredDataError` that
+    carries the engine's reason.
     """
     try:
-        from sdm_relational_engine.rfm import Graph
+        from sdm_relational_engine.rfm import Graph, ViewConversionWarning
     except ImportError as error:  # pragma: no cover - optional extra
         raise MissingExtraError(
             'relational', 'structured-data-models-relational-engine'
         ) from error
 
-    with _schema_says_time_columns():
-        return _model_graph(Graph, model)
+    try:
+        with _schema_says_time_columns(), warnings.catch_warnings():
+            # Said below, as the client says everything, to the caller.
+            warnings.simplefilter('ignore', ViewConversionWarning)
+            graph = _model_graph(Graph, model)
+    except ValueError as error:
+        # The engine's refusals, its own errors among them, are all
+        # `ValueError`s, and each says what to change in the model.
+        raise StructuredDataError(
+            str(error), code='INVALID_REQUEST', details={'model': model.name}
+        ) from error
+    if graph.conversion_messages:
+        warnings.warn(
+            f'{model!r} has what a graph cannot hold, so it is read in '
+            f'part:\n'
+            + '\n'.join(
+                f'- {message}' for message in graph.conversion_messages
+            ),
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    return graph
 
 
 def _model_graph(graph_type: type[Graph], model: Any) -> Graph:

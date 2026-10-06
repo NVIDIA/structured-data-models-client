@@ -31,6 +31,7 @@ from sdm_connectors import DatabricksSource, SemanticModel  # noqa: E402
 from sdm_client import (  # noqa: E402
     Relationship,
     Schema,
+    SDMWarning,
     SourceTable,
     StructuredDataError,
 )
@@ -535,3 +536,76 @@ def test_a_model_s_truncated_date_gives_way_to_the_column_it_truncates(
         "'order_month', which truncate or cast it" in said
     )
     assert "Took 'ordered_at' as the time column of table 'order_lines'" in said
+
+
+# --- what the engine says reaches the caller as the client says it ----------
+
+
+def _with_view(monkeypatch: pytest.MonkeyPatch, view: str) -> None:
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        '_DESCRIBE',
+        [
+            ('View Text', view, None) if row[0] == 'View Text' else row
+            for row in _DESCRIBE
+        ],
+    )
+
+
+def test_what_a_model_loses_is_one_sdm_warning_at_the_caller(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""The engine's own warning is no `SDMWarning`, so filtering those let
+    it through, and it named this client's module rather than the call.
+    """
+    _with_view(monkeypatch, _VIEW + 'materialization:\n  mode: relaxed\n')
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        Schema.from_source(source.semantic_model('sales_mv'))
+
+    lost = [w for w in caught if 'cannot hold' in str(w.message)]
+    assert len(lost) == 1
+    assert lost[0].category is SDMWarning
+    assert lost[0].filename == __file__
+    message = str(lost[0].message)
+    assert "- Ignored the 'materialization' section" in message
+    assert "'total_quantity' is SUM(order_lines.quantity" in message
+    assert not any(
+        type(w.message).__name__ == 'ViewConversionWarning' for w in caught
+    )
+
+
+@pytest.mark.parametrize(
+    'old, new, said',
+    [
+        (
+            'version: 0.1\n',
+            "version: 0.1\nfilter: customers.segment = 'a'\n",
+            "references the joined table 'customers'",
+        ),
+        (
+            'source: cat.sch.order_lines',
+            'source: SELECT * FROM cat.sch.order_lines',
+            'Create a regular view with this query',
+        ),
+        (
+            '  - name: products\n',
+            '  - name: order_lines\n',
+            "the join name 'order_lines' collides",
+        ),
+    ],
+    ids=['joined-filter', 'query-source', 'name-collision'],
+)
+def test_a_model_the_engine_refuses_is_an_invalid_request(
+    source: Any, monkeypatch: pytest.MonkeyPatch, old: str, new: str, said: str
+) -> None:
+    assert old in _VIEW
+    _with_view(monkeypatch, _VIEW.replace(old, new))
+
+    with pytest.raises(StructuredDataError) as caught:
+        _schema(source)
+
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert said in caught.value.message
+    assert caught.value.details == {'model': 'sales_mv'}

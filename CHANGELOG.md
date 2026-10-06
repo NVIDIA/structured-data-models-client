@@ -200,6 +200,9 @@ declare as `1.0.0` and none has published. The heading becomes
   Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message.
   Measures stay out of the graph, and are only read, never run.
   One conversion message lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
+- **What a semantic model loses, or why it is refused, reaches `Schema.from_source` as the client says everything else.**
+  The engine's conversion messages arrived as its own `ViewConversionWarning`, which filtering `SDMWarning` let through, attributed to this client's module rather than the call; they are now one `SDMWarning` at the caller.
+  A model the engine refuses, for a filter on a joined table, a query as its source or any other reason, raised the engine's `ValueError`; it is now a `StructuredDataError` (`INVALID_REQUEST`) carrying the engine's message, with the model's name in `details`.
 - **A metric view built on another metric view is refused for what it is.**
   A source or joined table that is itself a metric view got the advice to read it with `semantic_model`, which is what the caller had done.
   The message now says a metric view on a metric view is not supported and to point the source, or the join, at the underlying table; such a join is dropped, such a source refuses the view.
@@ -534,7 +537,7 @@ Each table's columns are read before its expressions are checked, and the metric
 **A metric view's `filter` is applied, or the view is refused.**
 The filter decides which rows a metric view holds, and it used to be reported as unrepresentable and dropped, so a schema and every request read rows the view leaves out.
 A filter on the source table's own columns now limits every read of that table: its preview, its row count, its time range, entity sampling and each lookup read `(SELECT * FROM <source> AS source WHERE (<filter>))` instead of the table.
-A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
+A filter that references a joined table has no single table to apply to, so `Graph.from_databricks_metric_view` refuses the view with a `ValueError`, and `Schema.from_source` with a `StructuredDataError` (`INVALID_REQUEST`), as they do a filter with a sub-query or a call to a function other than a pure built-in.
 The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
 A parameter the filter or a dimension references is read as its default, as a query of the view without arguments reads it, and a filter on a parameter with no default refuses the view.
 `materialization` is still left out with a message.

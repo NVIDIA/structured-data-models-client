@@ -29,7 +29,11 @@ pytest.importorskip('yaml')
 from databricks.sql.client import Connection  # noqa: E402
 from sdm_connectors import DatabricksSource  # noqa: E402
 
-from sdm_client import PredictiveQuery, Schema  # noqa: E402
+from sdm_client import (  # noqa: E402
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 _FILTER = "source.status = 'VALID'"
 _FACT = '`cat`.`sch`.`order_lines`'
@@ -279,10 +283,11 @@ def test_a_filter_on_a_joined_table_is_refused_with_the_workaround() -> None:
     warehouse = _Warehouse(_VIEW.replace(_FILTER, "customers.segment = 'a'"))
     source = DatabricksSource(warehouse, catalog='cat', schema='sch')
 
-    with pytest.raises(ValueError) as caught:
+    with pytest.raises(StructuredDataError) as caught:
         Schema.from_source(source.semantic_model('sales_mv'))
 
-    message = str(caught.value)
+    assert caught.value.code == 'INVALID_REQUEST'
+    message = caught.value.message
     assert "the joined table 'customers'" in message
     assert (
         'Create a regular view with this WHERE clause and point the metric '
