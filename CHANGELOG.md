@@ -117,6 +117,8 @@ declare as `1.0.0` and none has published. The heading becomes
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a
   workspace.
+  Given a metric view, the AdventureWorks notebook asks four questions through it: 30-day demand, the same forecast three windows out, 30-day revenue through the view's `revenue` measure, and 90-day inactivity.
+  It prints the conversion warning, which names the predictive-query aggregation matching each measure, and returns it with the results as `view_messages`.
 - What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
   rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
   and Databricks Runtime 14.3 LTS ships 8; `structured-data-models-connectors[databricks]` brings
