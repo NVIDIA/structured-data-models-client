@@ -524,13 +524,24 @@ def test_a_checked_filter_reads_a_keyword_after_a_column_as_grammar() -> None:
         row_filter.checked(())
 
 
-def test_a_comment_is_dropped_and_hides_no_call() -> None:
+@pytest.mark.parametrize(
+    'comment',
+    [
+        "/* secret('s', 'k') */",
+        # Databricks nests one block comment in another,
+        "/* a /* secret('s', 'k') */ b */",
+        # and goes on with a line comment past a backslash ending its line.
+        "-- c \\\nAND secret('s', 'k') IS NULL",
+    ],
+    ids=['block', 'nested', 'continued'],
+)
+def test_a_comment_is_dropped_and_hides_no_call(comment: str) -> None:
     r"""Databricks drops a comment in a filter, dimension or measure, so
     one is read as dropped, and only what is left is checked and runs.
     """
-    spec = parse_metric_view("""
+    spec = parse_metric_view(f"""
 source: cat.sch.facts
-filter: "status = 'VALID' /* secret('s', 'k') */"
+filter: {json.dumps("status = 'VALID' " + comment)}
 dimensions:
   - name: amount
     expr: |
@@ -3086,6 +3097,8 @@ measures:
         # CASE WHEN opens a searched case; DISTINCT and ALL take a sign.
         ('SUM(CASE WHEN filter THEN 1 END)', ['filter']),
         ('COUNT(DISTINCT -x) + SUM(ALL +y)', ['x', 'y']),
+        # A signed exponent ends where a name would go on.
+        ('SUM(CASE WHEN ok THEN 1e+5ELSE amount END)', ['ok', 'amount']),
         ('SUM(amount) /* gross */ -- switch to net_amount later', ['amount']),
         # A name may lead with a digit, where a number is no name.
         (
@@ -3110,6 +3123,7 @@ measures:
         'negated-comparison',
         'case-when',
         'signed-operand',
+        'signed-exponent',
         'comments',
         'digit-led',
     ],
