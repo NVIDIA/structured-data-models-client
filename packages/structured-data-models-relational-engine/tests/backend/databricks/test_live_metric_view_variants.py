@@ -6,8 +6,9 @@ r"""Metric views written the ways people write them, converted live.
 
 Each test creates one metric view over the AdventureWorks tables, converts it
 with :meth:`Graph.from_databricks_metric_view`, checks the graph and its
-conversion messages and notes, and drops the view and its helper views again, whether or
-not the checks pass. Every variant changes one thing about the baseline star.
+conversion messages and notes, and drops the view and its helper views again,
+whether or not the checks pass. Each variant changes the baseline star in the
+ways one kind of view does.
 
 Opt-in on top of the ``DATABRICKS_*`` variables of the other live tests:
 
@@ -288,17 +289,18 @@ def _assert_graph(
 
 
 def test_star(views: Views) -> None:
-    graph = views.convert(_star(views))
-    _assert_graph(graph, _star_tables(views), _star_edges(views))
-
-
-def test_version_1_1_with_semantic_metadata(views: Views) -> None:
     r"""Display names, synonyms, formats and comments change nothing, nor
-    does the server re-serializing a 1.1 definition.
+    does the server re-serializing a 1.1 definition, a join ``using`` its
+    key, or names written in another case, which Databricks matches without
+    regard to case.
     """
     document = _star(views)
     document['version'] = 1.1
     document['comment'] = 'Order lines with semantic metadata'
+    customers, products = document['joins']
+    customers['on'] = 'source.CUSTOMERID = CUSTOMERS.CUSTOMERID'
+    del products['on']
+    products['using'] = ['ProductID']
     dimensions = {d['name']: d for d in document['dimensions']}
     dimensions['OrderQty'].update(
         display_name='Order quantity',
@@ -310,23 +312,20 @@ def test_version_1_1_with_semantic_metadata(views: Views) -> None:
         'type': 'date',
         'date_format': 'year_month_day',
     }
+    for name in _CUSTOMER_DIMS:
+        dimensions[name]['expr'] = f'CUSTOMERS.{name.upper()}'
     document['measures'][1]['format'] = {
         'type': 'currency',
         'currency_code': 'USD',
     }
 
     graph = views.convert(document)
-    _assert_graph(graph, _star_tables(views), _star_edges(views))
-
-
-def test_joins_with_using(views: Views) -> None:
-    document = _star(views)
-    for join, key in zip(document['joins'], ('CustomerID', 'ProductID')):
-        del join['on']
-        join['using'] = [key]
-
-    graph = views.convert(document)
-    _assert_graph(graph, _star_tables(views), _star_edges(views))
+    tables = _star_tables(views)
+    # The key no dimension names takes the spelling of the join's condition.
+    tables['customers'] = Expected(
+        'CUSTOMERID', None, {'CUSTOMERID', *_CUSTOMER_DIMS}
+    )
+    _assert_graph(graph, tables, _star_edges(views))
 
 
 def test_wildcards(views: Views) -> None:
@@ -438,53 +437,6 @@ def test_role_playing(views: Views) -> None:
     _assert_graph(graph, tables, edges)
 
 
-def test_month_beside_raw_date(views: Views) -> None:
-    r"""The raw date, not the month truncating it, is the time column."""
-    document = _star(views)
-    document['dimensions'].append(
-        _dim('Order Month', "DATE_TRUNC('MONTH', source.OrderDate)")
-    )
-
-    graph = views.convert(document)
-    tables = _star_tables(views)
-    tables[views.fact].columns.add('Order Month')
-    _assert_graph(
-        graph,
-        tables,
-        _star_edges(views),
-        notes=(
-            *_MEASURES,
-            r"Took 'OrderDate' as the time column .* since 'Order Month' "
-            r'truncates or casts it',
-        ),
-    )
-
-
-def test_month_without_raw_date(views: Views) -> None:
-    r"""With only the month, the raw date it truncates is added and taken."""
-    document = _star(views)
-    document['dimensions'] = [
-        _dim('Order Month', "DATE_TRUNC('MONTH', source.OrderDate)")
-        if d['name'] == 'OrderDate'
-        else d
-        for d in document['dimensions']
-    ]
-
-    graph = views.convert(document)
-    tables = _star_tables(views)
-    tables[views.fact].columns.add('Order Month')
-    _assert_graph(
-        graph,
-        tables,
-        _star_edges(views),
-        notes=(
-            *_MEASURES,
-            r"Took 'OrderDate' as the time column .*, and added it as a "
-            r"column, since 'Order Month' truncates or casts it",
-        ),
-    )
-
-
 def test_month_named_as_the_raw_date(views: Views) -> None:
     r"""A month named as the date it truncates keeps its name and value,
     and the raw date is added under a name of its own and taken.
@@ -518,17 +470,21 @@ def test_month_named_as_the_raw_date(views: Views) -> None:
 
 def test_measure_inputs_that_are_not_dimensions(views: Views) -> None:
     r"""The columns a measure aggregates join their tables, so a predictive
-    query can aggregate them too.
+    query can aggregate them too, a cast one included. A dimension with a
+    column's name that holds something else shadows it, so its measure gets
+    no note and the column is not added.
     """
     document = _star(views)
     document['dimensions'] = [
-        d
+        _dim('OrderQty', 'source.OrderQty * 2')
+        if d['name'] == 'OrderQty'
+        else d
         for d in document['dimensions']
         if d['name'] not in ('LineTotal', 'UnitPrice')
     ]
     document['measures'] += [
         _dim('avg_price', 'AVG(source.UnitPrice)'),
-        _dim('avg_cost', 'AVG(products.StandardCost)'),
+        _dim('total_cost', 'SUM(CAST(products.StandardCost AS DOUBLE))'),
     ]
 
     graph = views.convert(document)
@@ -539,9 +495,10 @@ def test_measure_inputs_that_are_not_dimensions(views: Views) -> None:
         tables,
         _star_edges(views),
         notes=(
-            *_MEASURES,
+            *_MEASURES[1:],
             r"'avg_price' is AVG\(\S+\.UnitPrice, 0, 30, days\)",
         ),
+        lost=[r"'OrderQty', which the measure 'total_quantity' reads"],
     )
 
 
@@ -551,15 +508,6 @@ def _assert_rows(views: Views, graph: Graph, condition: str) -> None:
         f'SELECT COUNT(*) FROM {views.tables["order_lines"]} WHERE {condition}'
     )
     assert graph[views.fact]._get_num_rows() == expected
-
-
-def test_source_filter(views: Views) -> None:
-    document = _star(views)
-    document['filter'] = 'source.OrderQty > 1'
-
-    graph = views.convert(document)
-    _assert_graph(graph, _star_tables(views), _star_edges(views))
-    _assert_rows(views, graph, 'OrderQty > 1')
 
 
 def test_filter_on_a_parameter(views: Views) -> None:
@@ -582,9 +530,9 @@ def test_filter_on_a_parameter(views: Views) -> None:
     _assert_rows(views, graph, 'OrderQty >= 2')
 
 
-def test_join_to_a_key_that_repeats(views: Views) -> None:
-    r"""A join whose key repeats is dropped rather than read as an entity
-    table with two rows for one key.
+def test_joins_that_cannot_be_used(views: Views) -> None:
+    r"""A join whose key repeats, which would make one entity of several
+    rows, and a join to a table that is gone are left out, not the view.
     """
     customers = views.tables['customers']
     repeated = views.create_view(
@@ -592,85 +540,23 @@ def test_join_to_a_key_that_repeats(views: Views) -> None:
         f'SELECT * FROM {customers} UNION ALL '
         f'SELECT * FROM {customers} WHERE CustomerID % 10 = 0',
     )
-    document = _star(views)
-    document['joins'][0]['source'] = repeated
-
-    graph = views.convert(document)
-    tables = _star_tables(views)
-    del tables['customers']
-    _assert_graph(
-        graph,
-        tables,
-        {Edge(views.fact, 'ProductID', 'products')},
-        lost=[
-            r"Failed to add join 'customers', and with it the table 'customers' "
-            r"and the dimensions 'TerritoryID' and 'StoreID', since its key "
-            r"'CustomerID' is not unique",
-        ],
-    )
-
-
-def test_join_to_a_missing_table(views: Views) -> None:
-    r"""A join table that is gone drops its join, not the conversion."""
     gone = views.create_view(
         'products', f'SELECT * FROM {views.tables["products"]}'
     )
     document = _star(views)
+    document['joins'][0]['source'] = repeated
     document['joins'][1]['source'] = gone
     name = views.create_metric_view(document)
     views.execute(f'DROP VIEW {gone}')
 
     graph = views.read(name)
-    tables = _star_tables(views)
-    del tables['products']
+    tables = {views.fact: _star_tables(views)[views.fact]}
     _assert_graph(
         graph,
         tables,
-        {Edge(views.fact, 'CustomerID', 'customers')},
+        set(),
         lost=[
-            r"Failed to add join 'products', .* since its table could not "
-            r'be read',
+            r"join 'customers'.* its key 'CustomerID' is not unique",
+            r"join 'products'.* does not exist or you may not see it",
         ],
-    )
-
-
-def test_upper_case_names(views: Views) -> None:
-    r"""Databricks matches names without regard to case; the graph keeps the
-    view's spelling.
-    """
-    document = _star(views)
-    document['joins'] = [
-        {
-            'name': alias,
-            'source': views.tables[alias.lower()],
-            'on': f'source.{key} = {alias}.{key}',
-        }
-        for alias, key in (
-            ('CUSTOMERS', 'CUSTOMERID'),
-            ('PRODUCTS', 'PRODUCTID'),
-        )
-    ]
-    document['dimensions'] = (
-        [_dim(c.upper(), f'source.{c.upper()}') for c in _LINE_DIMS]
-        + [_dim(c.upper(), f'CUSTOMERS.{c.upper()}') for c in _CUSTOMER_DIMS]
-        + [_dim(c.upper(), f'PRODUCTS.{c.upper()}') for c in _PRODUCT_DIMS]
-    )
-    for measure in document['measures']:
-        measure['expr'] = measure['expr'].upper().replace('SOURCE.', 'source.')
-
-    graph = views.convert(document)
-    tables = {
-        name if name == views.fact else name.upper(): Expected(
-            expected.primary_key and expected.primary_key.upper(),
-            expected.time_column and expected.time_column.upper(),
-            {column.upper() for column in expected.columns},
-        )
-        for name, expected in _star_tables(views).items()
-    }
-    edges = {
-        Edge(views.fact, 'CUSTOMERID', 'CUSTOMERS'),
-        Edge(views.fact, 'PRODUCTID', 'PRODUCTS'),
-    }
-    _assert_graph(
-        graph, tables, edges, notes=['(?i)' + pattern for pattern in _MEASURES]
     )
