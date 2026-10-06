@@ -13,6 +13,7 @@ from sdm_relational_engine.exceptions import (
     EmptyTableError,
     GraphConstructionError,
     KumoRelationalError,
+    TableNotFoundError,
 )
 from sdm_relational_engine.rfm import Edge, Graph, ViewConversionWarning
 from sdm_relational_engine.rfm.view_conversion import (
@@ -1160,6 +1161,21 @@ def test_from_databricks_metric_view_not_a_metric_view() -> None:
             connection=_FakeConnection(describe_rows),
             verbose=False,
         )
+
+
+def test_a_metric_view_that_is_not_there_is_a_missing_table() -> None:
+    r"""A mistyped name failed as the warehouse's own error, which the
+    client cannot tell from a warehouse that went away.
+    """
+    connection = _FailingConnection(
+        _DESCRIBE_ROWS,
+        'DESCRIBE',
+        '[TABLE_OR_VIEW_NOT_FOUND] The table or view `cat`.`sch`.`salse_mv` '
+        'cannot be found. SQLSTATE: 42P01; line 1 pos 24',
+    )
+
+    with pytest.raises(TableNotFoundError):
+        _convert(connection)
 
 
 def test_from_databricks_metric_view_invalid_name() -> None:

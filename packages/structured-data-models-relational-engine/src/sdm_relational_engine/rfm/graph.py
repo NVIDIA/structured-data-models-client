@@ -1469,6 +1469,8 @@ class Graph:
             UnsupportedFilterError: If the view's filter references a joined
                 table or a parameter with no default, or is not a safe scalar
                 condition. A :class:`ViewConversionError`.
+            TableNotFoundError: If the metric view, or its source table,
+                does not exist or you may not see it.
             GraphConstructionError: If the warehouse fails other than by
                 refusing a joined table or a column, with the driver's error
                 as its ``__cause__``.

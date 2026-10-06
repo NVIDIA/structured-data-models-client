@@ -11,7 +11,10 @@ from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from sdm_relational_engine.exceptions import ViewConversionError
+from sdm_relational_engine.exceptions import (
+    TableNotFoundError,
+    ViewConversionError,
+)
 from sdm_relational_engine.rfm.view_conversion import (
     ParameterNote,
     by_folded_name,
@@ -1233,12 +1236,24 @@ def read_metric_view_definition(
     like a detail, such as ``Type`` or ``View Text``, cannot stand in for it.
 
     Raises:
+        TableNotFoundError: If there is no such relation, or you may not see
+            it.
         ViewConversionError: If the relation is not a metric view or
             exposes no definition.
     """
-    with connection.cursor() as cursor:
-        cursor.execute(f'DESCRIBE TABLE EXTENDED {quoted_name}')
-        rows = cursor.fetchall()
+    from sdm_relational_engine.rfm.backend.databricks.errors import sql_state
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f'DESCRIBE TABLE EXTENDED {quoted_name}')
+            rows = cursor.fetchall()
+    except Exception as error:
+        # A mistyped name is the caller's to fix, as a missing table is.
+        if sql_state(error) != '42P01':
+            raise
+        raise TableNotFoundError(
+            f"Metric view '{quoted_name}' does not exist or you may not see it"
+        ) from error
 
     sections = _describe_sections(rows)
     dtypes = {
