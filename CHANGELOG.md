@@ -131,8 +131,11 @@ declare as `1.0.0` and none has published. The heading becomes
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a
   workspace.
-  Given a metric view, the AdventureWorks notebook asks four questions through it: 30-day demand, the same forecast three windows out, 30-day revenue through the view's `revenue` measure, and 90-day inactivity.
-  It prints the schema's conversion notes, which name the predictive-query aggregation matching each measure, and any conversion warning, and returns them with the results as `view_notes` and `view_messages`.
+  Given a metric view, the AdventureWorks notebook asks four questions through it, one through the view's `revenue` measure.
+  It returns the schema's conversion notes and any conversion warning with the results, as `view_notes` and `view_messages`.
+- **Metric views convert across more of their configurations.**
+  Wildcard dimensions, parameters read as their defaults, the columns measures aggregate, names in any case, and a time column taken from the date a dimension truncates all convert as Databricks reads them.
+  `Schema.conversion_notes` says how a view was read, one note per measure, time column or parameter; the text is for reading, not parsing.
 - What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
   rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
   and Databricks Runtime 14.3 LTS ships 8; `structured-data-models-connectors[databricks]` brings
@@ -188,72 +191,20 @@ declare as `1.0.0` and none has published. The heading becomes
   `customers` join or dropped it as referencing two tables, and a literal
   equal to another dimension's name was replaced by that dimension's
   expression. Literals are now left as written.
-- **A metric view parameter named `Type`, `View Text`, `Catalog` or `Database` no longer stands in for the view's own detail.**
-  `DESCRIBE TABLE EXTENDED` lists parameters before the details, and the first row of each name was read, so such a view was refused as not a metric view.
-  The description is now read section by section, on a SQL warehouse and a Spark session alike.
-- **A metric view joined to a table that cannot be read converts without that join.**
-  A joined table that was missing, empty, unreadable or itself a metric view failed the whole conversion when a dimension referenced it, and so did one failing dimension expression or a column of a type with no graph equivalent.
-  Now the join, or the column, is left out with a conversion message; only a source table that cannot be read fails the conversion, and that failure now closes a connection the conversion opened.
-- **A metric view join whose key repeats is left out, rather than making one entity of several rows.**
-  A join's key became the joined table's primary key unchecked, and neither Databricks nor the view checks it.
-  It is now counted where the rows are, through the view's filter for the source table, with one query per join, and a key that repeats, or holds no value at all, drops the join with a message showing a repeated value.
-  Rows with no key are left alone: no join reaches them, and sampling leaves them out.
-- **A metric view's wildcard dimensions become columns.**
-  `- expr: source.*`, `- expr: <join>.*` and either with `EXCEPT (a, b)` were dropped as missing a name.
-  They now stand for the columns of their table, each named as the column, as Databricks expands them.
-- **A metric view parameter is read as its default.**
-  A filter or dimension referencing a parameter, such as `source.qty >= min_qty`, ran with the bare name, which no table has.
-  The default is now written in as a literal of the parameter's type, checked against that type, and the expression guard runs on the result.
-  A dimension referencing a parameter with no default, or one whose type has no literal, is left out with a message naming it, and a filter referencing one refuses the view.
-  A source column of the same name wins over a parameter, as a SQL warehouse reads it.
-- **A metric view's time column is the source column its dates truncate.**
-  A view that holds a date only as `DATE_TRUNC('MONTH', OrderDate)`, or a cast of it to a date, got that truncation as its time column, since it starts at or before the column it truncates, so every windowed question counted by month.
-  Each such dimension is now offered to the time-column rule as the column it truncates or casts, added to the table if the rule takes it, and a physical timestamp is preferred to an expression derived from it.
-  A dimension named as the column it truncates, as `OrderDate: DATE_TRUNC('MONTH', source.OrderDate)` is, keeps its name and its truncated value, and the column is added under a name of its own, such as `OrderDate_raw`.
-  A dimension a window measure orders by is offered first, as the time axis the view's author chose.
-  A conversion note and the schema's time-column warning both name the column taken and the dimensions it was taken in place of.
-- **The columns a metric view's measures aggregate are columns of the graph.**
-  A measure such as `SUM(LineTotal)` left `LineTotal` out of every table unless a dimension also named it, so no predictive query could say what the measure says.
-  Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message, and a dimension that renames the column stands for it.
-  Measures stay out of the graph, and are only read, never run.
-  One conversion note lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
-- **A metric view's names are matched without regard to case, as Databricks matches them.**
-  A view naming `source.SALESORDERID` or joining `on: source.CUSTOMERID = CUSTOMERS.CUSTOMERID` over columns spelled `SalesOrderID` and `CustomerID` failed the conversion with `Column 'SALESORDERID' does not exist`.
-  Dimensions, join keys and join names now match their columns and tables in any case, and a column keeps the view's spelling, the one a question about the view uses, so every read names it so; a key no dimension, wildcard or measure names, in any case, takes the spelling of the join's condition.
-- **An unqualified column in a metric view join's `on` is the joined table's, as Databricks reads it.**
-  `on: source.CustomerID = CustomerID` was refused as unresolvable when both tables have a `CustomerID`, dropping the join and its entity table.
-- **A column no predictive query can name is left out of a source's schema, not the whole schema.**
-  A metric view dimension named `a.b` refused `Schema.from_source` with "invalid characters", since `table.a.b` cannot be said in a predictive query.
-  Such a column, with a dot, a backtick or a line break in its name, is now left out with an `SDMWarning` naming it.
-- **A `DECIMAL(p, 0)` key is read as the integer its type says.**
-  A warehouse column such as H&M's `DECIMAL(38, 0)` ids was described as an integer but read as decimals, which no type inference takes, so a question about a metric view or a table holding one failed when its rows were read.
-  A decimal column is now read as a 64-bit integer where its declared type says integer, or none is declared and its scale is 0, and as a float where its declared type says float, or none is declared and its scale is not 0; one past 64 bits is left as it was.
-  A decimal column declared a string, such as a `DECIMAL(38, 0)` identifier, is read as its exact digits, and one declared any other type is left as it was.
-  An in-memory table holding Arrow decimals, as a frame read from a warehouse does, now builds too, each column typed as a request names it: an integer at scale 0 where every value fits 64 bits, a string keeping every digit where one does not, and a float otherwise.
-- **A metric view with both `fields` and `dimensions` reads only `dimensions`, as Databricks does.**
-  Both lists were read, adding dimensions no query of the view can see; `fields` is now left out with a message.
-- **A semantic model gets only the relationships it declares, and a table reached by two paths samples.**
-  `Schema.from_source(source.semantic_model(...))` also inferred relationships from column names, so a snowflake view's lines, holding `CustomerID`, gained a link straight to `customers` beside the path through orders, and churn questions failed with an `IndexError`.
-  No relationship is now inferred beside a semantic model's joins. `relationships=` replaces the model's own, so pass `[*schema.relationships, extra]` to add one.
-  The SQL sampler also read, in one hop, rows a second path had just added for the next; each hop now reads only the rows of the hop before, as the in-memory sampler does.
-  For a table with no primary key, such as those lines, that failed as above.
-  For keyed tables it sampled their neighbours a hop early, so predictions change for any warehouse schema where two paths reach one table, such as RelBench's rel-stack, and rel-avito sampled three or more hops deep.
-- **A column linking to two tables no longer fails sampling.**
-  A metric view that joins one table twice under two names, such as a buyer and a recipient both read from `customers`, links one column to two tables, and every prediction failed with `operands could not be broadcast`, since the sampler selected the column once per link.
-  It is now selected once.
-- **What a semantic model loses, or why it is refused, reaches `Schema.from_source` as the client says everything else.**
-  The engine's conversion messages arrived as its own `ViewConversionWarning`, which filtering `SDMWarning` let through, attributed to this client's module rather than the call; they are now one `SDMWarning` at the caller.
-  How a view was read where nothing was lost, the aggregation each measure is, the time column taken in place of a date the view truncates and each parameter read as its default, is a conversion note rather than a warning: `Graph.conversion_notes` and `Schema.conversion_notes` hold them, and a view that loses nothing converts without a warning, under warnings as errors too.
-  A model the engine refuses, for a filter on a joined table, a query as its source or any other reason, raised the engine's `ValueError`; it is now a `StructuredDataError` (`INVALID_REQUEST`) carrying the engine's message, with the model's name in `details['semantic_model']`.
-  The engine is told not to warn, with the new `warn=False` of `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, rather than having its warnings filtered with `warnings.catch_warnings()`, which changed the filters of every thread while a model was read.
-  The engine raises each such refusal as the new `sdm_relational_engine.ViewConversionError`, still a `ValueError`, which `UnsupportedFilterError` and `UnsupportedJoinError` now derive from, and only that, or a table the model reads that does not exist (`TableNotFoundError`), as for a source's own tables, is translated: any other failure while converting propagates as it was raised.
-  A Snowflake semantic view declaring a column or key its base table cannot hold, one missing from it say, is refused with a `ViewConversionError` naming the table.
-- **A metric view built on another metric view is refused for what it is.**
-  A source or joined table that is itself a metric view got the advice to read it with `semantic_model`, which is what the caller had done.
-  The message now says a metric view on a metric view is not supported and to point the source, or the join, at the underlying table; such a join is dropped, such a source refuses the view.
-  A query as the source, or as a join's source, is still refused, now with the way out: a regular view over the query.
-  A filter refused for calling a function other than a pure built-in, such as `current_date()`, now also names `trust_expressions=True`.
-  A dropped join now names the graph tables and dimensions lost with it, whether it is dropped for its condition, such as one on two columns, or while converting, for a table that cannot be read, a key that repeats or a parent join dropped before it.
+- **A metric view join that cannot be used is left out, not the whole view.**
+  A joined table that is missing, empty, a metric view or not yours to read, a join key that repeats or holds no value, and a column the warehouse refuses are each left out with a conversion message.
+  A key whose count fails is kept unchecked, with a message.
+  Any other warehouse failure raises `GraphConstructionError`, and a metric view on a metric view, or a query as a source, is refused with the way out.
+- **What a semantic model loses, or why it is refused, arrives as the client's own types.**
+  Losses are one `SDMWarning` at the caller, through the engine's new `warn=False` rather than warning filters that held for every thread.
+  A refusal is a `StructuredDataError` (`INVALID_REQUEST`) with the model's name in `details['semantic_model']`.
+  The schema holds only the model's own relationships, which `relationships=` replaces.
+  A column no predictive query can name is left out with a warning, and a parameter named like a `DESCRIBE` detail, such as `Type`, no longer stands in for it.
+- **A `DECIMAL(p, 0)` key is read as the integer its type says, and a decimal identifier keeps every digit.**
+  Such columns were read as decimals, which no type inference takes, so a question failed when their rows were read.
+- **Sampling a table reached by two paths, or a column linking two tables, no longer fails.**
+  Each hop of the SQL sampler now reads only the rows of the hop before, as the in-memory sampler does, and a column linking two tables is selected once.
+  Predictions change for any warehouse schema where two paths reach a keyed table, such as RelBench's rel-stack and rel-avito.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the

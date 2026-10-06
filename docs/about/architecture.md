@@ -346,7 +346,7 @@ Both kinds stay allowed, since views use them for ordinary columns, so review a 
 A metric view's `filter` decides which rows it holds, so it is applied to the source table on every read rather than dropped.
 A filter on a joined table cannot be, and the view is refused: create a regular view with that `WHERE` clause and point the metric view's source at it.
 A parameter the filter or a dimension references is read as its default, as a query of the view without arguments reads it; a filter on one with no default refuses the view.
-Besides the unit tests, metric views are converted live by an opt-in test that creates fifteen variants over AdventureWorks in the schema `SDM_MV_TEST_SCHEMA` names, and drops them again.
+Besides the unit tests, metric views are converted live by an opt-in test that creates eight variants over AdventureWorks in the schema `SDM_MV_TEST_SCHEMA` names, and drops them again.
 A Snowflake semantic view goes through the same path, read by the engine's own semantic-view support; it is tested against a fake connection, not yet against a Snowflake account.
 
 ---

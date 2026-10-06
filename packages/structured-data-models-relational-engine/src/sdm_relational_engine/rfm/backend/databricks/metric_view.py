@@ -86,12 +86,9 @@ _DERIVATIONS = tuple(
 
 
 def derived_column(expr: str) -> str | None:
-    r"""The column a dimension truncates or casts to a date or time, such as
-    ``order_date`` of ``DATE_TRUNC('MONTH', order_date)``, or ``None`` when
-    the expression is anything else, a column renamed as is included.
-
-    Truncations and casts may nest, and the column may be backticked. Whether
-    it holds a time is for the caller to check.
+    r"""The column ``expr`` truncates or casts to a date or time, such as
+    ``order_date`` in ``DATE_TRUNC('MONTH', order_date)``; ``None`` for
+    anything else, a bare column included.
     """
     column = _column_under(expr)
     if column is None or _IDENT_RE.fullmatch(expr.strip().strip('() ')):
@@ -935,11 +932,9 @@ def _read_measures(
 ) -> list[MetricViewMeasure]:
     r"""Reads which columns each measure aggregates, never running it.
 
-    A measure reads the columns it names, qualified by a join or not, the
-    ones in a ``FILTER (WHERE ...)`` and the ones of the measures it is
-    composed of included. A name that is a dimension, a measure or a
-    parameter reads none, and neither does a measure that reads more than
-    one table, which no single table's column can express.
+    A name that is a dimension, a measure or a parameter is no column to
+    add, and a measure over more than one table reads none, since no one
+    table's columns can express it.
 
     Args:
         measure_cfgs: The ``measures`` section, if any.

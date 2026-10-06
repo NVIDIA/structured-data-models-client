@@ -103,7 +103,8 @@ A schema's tables all come from one source.
 A semantic model, such as a Databricks metric view or a Snowflake semantic view, is a source of its own, and brings its tables, keys and relationships: `Schema.from_source(source.semantic_model('sales_metrics'))`.
 Its expressions run as SQL under your credentials, so a column calling anything but a standard built-in SQL function is left out with a message; `semantic_model(name, trust_expressions=True)` keeps it when you trust whoever wrote the model.
 A metric view's `filter` limits every read of its source table; one on a joined table is refused, since only a regular view with that `WHERE` clause can hold it.
-Its measures stay in the query, but the columns a measure over one table aggregates join the schema, and `schema.conversion_notes` names the aggregation matching each simple measure, such as `'revenue' is SUM(order_lines.LineTotal, 0, 30, days)`.
+Its measures stay in the query, but the columns a measure over one table aggregates join the schema.
+`schema.conversion_notes` holds one note per simple measure naming the aggregation that matches it, such as `SUM(order_lines.LineTotal, 0, 30, days)` for `revenue`; the notes are for reading, and their wording is not part of the contract.
 
 ## Asking the same context several questions
 

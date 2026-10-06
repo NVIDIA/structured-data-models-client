@@ -1627,8 +1627,7 @@ class Graph:
                     return []
                 return list(_table(alias)._source_column_dict)
 
-            # Every read of the fact table runs the filter, so it is checked
-            # against the table's columns and attached before the first one.
+            # Attached before the first read, since every read runs it.
             if spec.filter is not None:
                 fact_table.row_filter = (
                     spec.filter.trusted()
@@ -1678,9 +1677,8 @@ class Graph:
                         )
                     )
 
-            # Measures are left to a predictive query, which aggregates
-            # columns, so the columns they read are added where missing. A
-            # measure is only read here, never run.
+            # A predictive query aggregates columns, not measures, so the
+            # columns a measure reads are added. A measure is never run.
             for measure in spec.measures:
                 for alias, name in measure.inputs:
                     columns = by_folded_name(_columns_of(alias))
@@ -1707,9 +1705,8 @@ class Graph:
                             f"dimension '{same.name}' has its name"
                         )
 
-            # A join key is named as the view's condition spells it, where
-            # no dimension, wildcard or measure already names it in any
-            # case: Databricks names the column as those do.
+            # Databricks names a key as a dimension, wildcard or measure
+            # names it, and otherwise as the join's condition spells it.
             for join in spec.joins:
                 try:
                     other_alias, other_key, child_key = resolve_join_keys(
@@ -1743,7 +1740,6 @@ class Graph:
 
             graph = cls(tables=[])
 
-            # A fact table that cannot be read fails the conversion.
             fact_table._source_sample_df  # noqa: B018
             msgs.extend(
                 _add_view_columns(
@@ -1796,8 +1792,7 @@ class Graph:
                 )
             except Exception as error:
                 # An unchecked key may build wrong entities, so each join
-                # kept so says it, but the warehouse failing to count is no
-                # reason to lose the joins.
+                # says so, but a failed count is no reason to lose them.
                 if not _is_driver_error(error):
                     raise
                 uncounted = type(error).__name__
@@ -1828,10 +1823,8 @@ class Graph:
                     continue
                 table = _table(join.alias)
 
-                # Adding a join mutates tables that are already part of the
-                # graph, so record every mutation and undo it in full in case
-                # the join is rejected - a dropped join must not leave any
-                # trace behind:
+                # A rejected join must leave no trace on tables already in
+                # the graph, so every change is recorded to be undone.
                 undo_columns: list[tuple[Table, str, Column | None]] = []
                 undo_primary_key: tuple[Table, str, Stype] | None = None
                 join_msgs = _add_view_columns(
