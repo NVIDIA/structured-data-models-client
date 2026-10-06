@@ -23,6 +23,8 @@ ENDPOINT = 'projects/p/branches/b/endpoints/e'
 
 #: What Databricks requires on every connection structured-data-models-client opens.
 PARTNER = 'nvidia_structured-data-models-client/1.0.0'
+#: The bytes of an ``application_name`` left after the identifier and a space.
+ROOM = 63 - len(PARTNER.encode()) - 1
 SAMPLING = 'structured_data_models_client_purpose:sampling'
 
 
@@ -454,9 +456,9 @@ def test_lakebase_takes_a_given_host_without_asking_for_the_endpoint(
         ('etl', f'{PARTNER} etl'),
         ('   ', PARTNER),
         # Postgres keeps 63 bytes, and a cut through a character would leave
-        # half of it: what is left after the identifier and its space holds
-        # this many two-byte characters, and no half of another.
-        ('é' * 40, f'{PARTNER} ' + 'é' * ((63 - len(PARTNER) - 1) // 2)),
+        # half of it. The 63rd byte falls inside the first é, whatever the
+        # identifier's length, so the whole é goes.
+        ('a' * (ROOM - 1) + 'é' * 2, f'{PARTNER} ' + 'a' * (ROOM - 1)),
     ],
     ids=['kept-after', 'blank', 'cut-to-63-bytes'],
 )

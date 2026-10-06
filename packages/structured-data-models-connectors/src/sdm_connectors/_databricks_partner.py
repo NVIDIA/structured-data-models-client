@@ -29,7 +29,9 @@ DATABRICKS_PRODUCT = 'structured-data-models-client'
 
 #: The query tag on every warehouse session this client opens, which says what
 #: its statements are for without changing the identifier above. Its key is
-#: the distribution's name in the snake case query tag keys use.
+#: the distribution's name with underscores for the dashes, since Databricks
+#: refuses a query tag key holding ``-``: a session's tag with one is dropped
+#: and reported as ``tags_invalid``.
 SAMPLING_QUERY_TAG = ('structured_data_models_client_purpose', 'sampling')
 
 _PACKAGE_VERSION_RE = re.compile(

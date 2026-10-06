@@ -28,7 +28,8 @@ declare as `1.0.0` and none has published. The heading becomes
   both names across it, and update anything registered with Databricks
   under the old product name. The product keeps its dashes, since Databricks
   asks only for an underscore between partner and product and its SDK takes
-  `[a-zA-Z0-9_.+-]` in a User-Agent name.
+  `[a-zA-Z0-9_.+-]` in a User-Agent name. The tag key swaps them for
+  underscores, since Databricks drops a query tag whose key holds a dash.
 - `docs/reference/stability.md`: the compatibility contract, saying what is public,
   what a version bump means, and the deprecation path. Enforced rather than
   stated: `tests/golden/` records the exported surface of every public package and
