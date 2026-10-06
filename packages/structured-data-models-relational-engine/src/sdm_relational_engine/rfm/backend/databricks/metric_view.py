@@ -19,6 +19,7 @@ from sdm_relational_engine.rfm.view_conversion import (
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
+    name_references,
 )
 
 if TYPE_CHECKING:
@@ -48,14 +49,6 @@ _WILDCARD_RE = re.compile(
 # Double quotes delimit a string, not a name, in Databricks SQL.
 _STRING_LITERAL_RE = re.compile(
     r"'(?:''|\\[\s\S]|[^'\\])*'|\"(?:\"\"|\\[\s\S]|[^\"\\])*\""
-)
-# A string literal or a backticked name, neither of which is a parameter.
-_QUOTED_RE = re.compile(rf'{_STRING_LITERAL_RE.pattern}|`(?:[^`]|``)*`')
-# A bare name, with what makes it part of a qualified name, a call, a named
-# argument or a lambda rather than a reference of its own.
-_BARE_NAME_RE = re.compile(
-    r'(?P<dot>\.\s*)?(?<![\w$])(?P<name>[A-Za-z_]\w*)(?![\w$])'
-    r'(?P<after>(?=\s*(?:[.(]|=>|->)))?'
 )
 
 _INTEGER_TYPES = {
@@ -126,67 +119,6 @@ def _column_under(expr: str) -> str | None:
     return None
 
 
-# A name a measure reads, possibly qualified, and whether it is called.
-_REFERENCE_RE = re.compile(rf'(?<![\w$`.])({_CHAIN})(\s*\()?')
-# Words of a measure's SQL that are no column, beyond what a call or a type
-# makes of a word. Anything left that names no column of its table is left
-# out anyway, so this only spares reading what is plainly grammar.
-_MEASURE_KEYWORDS = frozenset(
-    {
-        'all',
-        'and',
-        'any',
-        'as',
-        'asc',
-        'between',
-        'by',
-        'case',
-        'current',
-        'day',
-        'days',
-        'desc',
-        'distinct',
-        'else',
-        'end',
-        'escape',
-        'exists',
-        'false',
-        'filter',
-        'first',
-        'following',
-        'from',
-        'hour',
-        'ilike',
-        'in',
-        'interval',
-        'is',
-        'last',
-        'like',
-        'minute',
-        'month',
-        'not',
-        'null',
-        'nulls',
-        'or',
-        'order',
-        'over',
-        'partition',
-        'preceding',
-        'range',
-        'rlike',
-        'row',
-        'rows',
-        'second',
-        'some',
-        'then',
-        'true',
-        'unbounded',
-        'week',
-        'when',
-        'where',
-        'year',
-    }
-)
 # A measure a predictive query aggregation says as is: one aggregate over one
 # column, or a count of rows.
 _SIMPLE_MEASURE_RE = re.compile(
@@ -488,17 +420,15 @@ def _sub_outside_strings(
     pattern: re.Pattern[str],
     repl: str | Callable[[re.Match[str]], str],
     expr: str,
-    quoted: re.Pattern[str] = _STRING_LITERAL_RE,
 ) -> str:
-    r"""``pattern.sub(repl, expr)`` with every string literal, or whatever
-    else ``quoted`` matches, left as is.
+    r"""``pattern.sub(repl, expr)`` with every string literal left as is.
 
     A literal holding `source.` or a field's name is data, and rewriting it
     changes the values the view declares.
     """
     out: list[str] = []
     last = 0
-    for match in quoted.finditer(expr):
+    for match in _STRING_LITERAL_RE.finditer(expr):
         out.append(pattern.sub(repl, expr[last : match.start()]))
         out.append(match.group())
         last = match.end()
@@ -648,27 +578,23 @@ def _substitute_parameters(
 ) -> tuple[str, list[_Parameter]]:
     r"""Replaces each reference to a parameter with its default.
 
-    A parameter is referenced by its bare name, so a qualified name, a call,
-    a named argument, a string literal or a backticked name is left as is.
+    A parameter is referenced by its bare name where the expression reads a
+    value, so a qualified or backticked name, and a word that is grammar,
+    such as a datetime unit or a lambda's parameter, is left as is.
 
     Returns:
         The expression, and every parameter it references, in order.
     """
-    used: dict[str, _Parameter] = {}
-
-    def _replace(match: re.Match[str]) -> str:
-        parameter = parameters.get(match.group('name').lower())
-        if (
-            parameter is None
-            or match.group('dot') is not None
-            or match.group('after') is not None
-        ):
-            return match.group()
-        used.setdefault(parameter.name, parameter)
-        return parameter.literal or match.group()
-
-    if parameters:
-        expr = _sub_outside_strings(_BARE_NAME_RE, _replace, expr, _QUOTED_RE)
+    found = [
+        (reference.span, parameter)
+        for reference in (name_references(expr) if parameters else [])
+        if reference.bare
+        and (parameter := parameters.get(reference.parts[0].lower()))
+    ]
+    for (start, end), parameter in reversed(found):
+        if parameter.literal is not None:
+            expr = f'{expr[:start]}{parameter.literal}{expr[end:]}'
+    used = {parameter.name: parameter for _, parameter in found}
     return expr, list(used.values())
 
 
@@ -1040,18 +966,12 @@ def _read_measures(
             continue
         inputs: list[tuple[str, str]] = []
         read: set[str] = set()  # The aliases of every table read.
-        for match in _REFERENCE_RE.finditer(_STRING_LITERAL_RE.sub("''", expr)):
-            if match.group(2) is not None:
-                continue  # A call names a function, not a column.
-            parts = [
-                unquote_ident(part)
-                for part in _IDENT_RE.findall(match.group(1))
-            ]
+        for named in name_references(expr):
+            parts = named.parts
             if len(parts) == 1:
                 folded = parts[0].lower()
                 if (
-                    folded in _MEASURE_KEYWORDS
-                    or folded in measure_names
+                    folded in measure_names
                     or folded in parameters
                     or (folded,) in paths
                 ):

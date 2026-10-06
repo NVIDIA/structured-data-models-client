@@ -29,7 +29,6 @@ try:
         JoinKeyRef,
         MetricViewFilter,
         MetricViewJoin,
-        MetricViewMeasure,
         MetricViewWildcard,
         UnsupportedFilterError,
         UnsupportedJoinError,
@@ -3074,8 +3073,7 @@ def test_a_window_measure_names_the_time_axis(
     assert _said(graph) == ()
 
 
-def test_parse_metric_view_reads_what_each_measure_aggregates() -> None:
-    spec = parse_metric_view("""
+_MEASURE_INPUT_YAML = """
 source: c.s.lines
 parameters:
   - name: floor
@@ -3092,58 +3090,86 @@ dimensions:
   - name: qty
     expr: source.OrderQty
 measures:
-  - name: total
-    expr: SUM(LineTotal)
-  - name: n
-    expr: COUNT(1)
-  - name: buyers
-    expr: COUNT(DISTINCT source.`Customer ID`)
-  - name: q
-    expr: SUM(qty)
-  - name: big
-    expr: SUM(LineTotal) FILTER (WHERE source.UnitPrice > floor AND s = 'a.b')
-  - name: ratio
-    expr: SUM(LineTotal) / COUNT(DISTINCT SalesOrderID)
-  - name: composed
-    expr: MEASURE(total) / n
-  - name: mixed
-    expr: SUM(qty * products.ListPrice)
-  - name: list_price
-    expr: AVG(products.ListPrice)
-  - name: promoted
-    expr: SUM(promos.discount)
-  - name: trailing
-    expr: SUM(LineTotal)
-    window:
-      - order: qty
-        range: trailing 3 day
-        semiadditive: last
+  - name: m
+    expr: "{expr}"
+"""
+
+
+@pytest.mark.parametrize(
+    'expr, inputs',
+    [
+        (
+            'SUM(CAST(products.ListPrice AS DOUBLE))',
+            [('products', 'ListPrice')],
+        ),
+        ('COUNT(DISTINCT CAST(order_ts AS DATE))', ['order_ts']),
+        (
+            'SUM(x::double) + SUM(aggregate(items, 0, (acc, y) -> acc + y))',
+            ['x', 'items'],
+        ),
+        ('MAX(order_ts) - INTERVAL 1 DAY', ['order_ts']),
+        (
+            'SUM(LineTotal) FILTER (WHERE UnitPrice > floor) '
+            '/ COUNT(DISTINCT SalesOrderID)',
+            ['LineTotal', 'UnitPrice', 'SalesOrderID'],
+        ),
+        # A dimension, a measure and two tables: no one table's columns.
+        ('SUM(qty * products.ListPrice) / MEASURE(m) + SUM(promos.d)', []),
+    ],
+    ids=['cast-joined', 'cast-date', 'lambda', 'interval', 'filter', 'mixed'],
+)
+def test_a_measure_reads_the_columns_it_names(
+    expr: str, inputs: list[Any]
+) -> None:
+    r"""A type, a datetime unit or a lambda's parameter was read as a column
+    of the source table, which then read two tables and so nothing.
+    """
+    spec = parse_metric_view(_MEASURE_INPUT_YAML.format(expr=expr))
+
+    (measure,) = spec.measures
+    assert list(measure.inputs) == [
+        name if isinstance(name, tuple) else (SOURCE_ALIAS, name)
+        for name in inputs
+    ]
+
+
+@pytest.mark.parametrize(
+    'expr, read',
+    [
+        (
+            'order_date + INTERVAL day DAY',
+            "order_date + INTERVAL CAST('1' AS INT) DAY",
+        ),
+        (
+            'aggregate(items, x, (acc, x) -> acc + x)',
+            "aggregate(items, CAST('2' AS INT), (acc, x) -> acc + x)",
+        ),
+        ('payload:region = region', "payload:region = CAST('EU' AS STRING)"),
+    ],
+    ids=['interval', 'lambda', 'json-path'],
+)
+def test_a_parameter_is_read_only_where_it_is_a_value(
+    expr: str, read: str
+) -> None:
+    spec = parse_metric_view(f"""
+source: cat.sch.orders
+parameters:
+  - name: day
+    data_type: INT
+    default: 1
+  - name: x
+    data_type: INT
+    default: 2
+  - name: region
+    data_type: STRING
+    default: EU
+dimensions:
+  - name: d
+    expr: "{expr}"
 """)
 
-    assert spec.measures == [
-        MetricViewMeasure(
-            'total', (('source', 'LineTotal'),), ('SUM', 'LineTotal')
-        ),
-        MetricViewMeasure('n', (), ('COUNT', None)),
-        MetricViewMeasure(
-            'buyers',
-            (('source', 'Customer ID'),),
-            ('COUNT_DISTINCT', 'Customer ID'),
-        ),
-        MetricViewMeasure('q', (), ('SUM', 'qty')),
-        MetricViewMeasure(
-            'big',
-            (('source', 'LineTotal'), ('source', 'UnitPrice'), ('source', 's')),
-        ),
-        MetricViewMeasure(
-            'ratio', (('source', 'LineTotal'), ('source', 'SalesOrderID'))
-        ),
-        MetricViewMeasure('composed', ()),
-        MetricViewMeasure('mixed', ()),
-        MetricViewMeasure('list_price', (('products', 'ListPrice'),)),
-        MetricViewMeasure('promoted', ()),
-        MetricViewMeasure('trailing', (('source', 'LineTotal'),)),
-    ]
+    (column,) = spec.columns
+    assert column.expr == read
 
 
 _MEASURE_YAML = """

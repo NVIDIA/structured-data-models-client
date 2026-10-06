@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection
+from dataclasses import dataclass
 
 _UNSAFE_EXPR_TOKENS = (';', '--', '/*', '*/', '|>', '->>')
 _EXPR_QUOTE_DELIMITERS = ('$$', "'", '"', '`')
@@ -499,13 +500,17 @@ _SNOWFLAKE_RESERVED = frozenset(
 #: each is followed by a literal, a name, `(`, `,` or another keyword, so a
 #: column of that name before `IN (` is a value. A keyword missing here stays
 #: grammar, which refuses rather than lifts.
-_NEVER_BEFORE_AN_EXPRESSION = frozenset(
+_DATETIME_UNITS = frozenset(
     {
-        # Datetime units. Each is followed by a literal, `,`, `FROM` or `TO`.
         'day', 'dayofyear', 'days', 'hour', 'hours', 'microsecond',
         'microseconds', 'millisecond', 'milliseconds', 'minute', 'minutes',
         'month', 'months', 'nanosecond', 'nanoseconds', 'quarter', 'second',
         'seconds', 'week', 'weeks', 'year', 'years',
+    }
+)  # fmt: skip
+_NEVER_BEFORE_AN_EXPRESSION = _DATETIME_UNITS | frozenset(
+    {
+        # Each datetime unit is followed by a literal, `,`, `FROM` or `TO`.
         # Typed literals and type names, followed by a literal, `AS` or `(`.
         'date', 'number', 'text', 'time', 'timestamp', 'x',
         # Words that only commands, clauses or `name(` forms use.
@@ -838,3 +843,213 @@ def _untrusted_call_reason(
         if word in _SESSION_WORDS and word not in overridden:
             return f'it reads the session value {quoted.group()}'
     return None
+
+
+# Words of a Databricks expression that are grammar, so name no value. A
+# datetime unit is grammar only where a unit stands, so is not among them.
+_EXPRESSION_KEYWORDS = frozenset(
+    {
+        'all', 'and', 'any', 'as', 'asc', 'between', 'by', 'case', 'current',
+        'desc', 'distinct', 'else', 'end', 'escape', 'exists', 'false',
+        'filter', 'first', 'following', 'from', 'ilike', 'in', 'interval',
+        'is', 'last', 'like', 'not', 'null', 'nulls', 'or', 'order', 'over',
+        'partition', 'preceding', 'range', 'rlike', 'row', 'rows', 'some',
+        'then', 'true', 'unbounded', 'when', 'where',
+    }
+)  # fmt: skip
+# Functions whose first argument may be a datetime unit, as a bare word.
+_UNIT_FIRST = frozenset(
+    {'extract', 'timestampadd', 'timestampdiff', 'dateadd', 'datediff'}
+)
+_TOKEN = re.compile(
+    r"""(?P<string>'(?:''|\\[\s\S]|[^'\\])*'|"(?:""|\\[\s\S]|[^"\\])*")
+    |(?P<quoted>`(?:``|[^`])*`)
+    |(?P<number>(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*)
+    |(?P<word>[A-Za-z_][\w$]*)
+    |(?P<punct><=>|<=|>=|<>|::|->|=>|[.:(),\[\]<>])
+    |(?P<other>\S)""",
+    flags=re.VERBOSE,
+)
+
+
+@dataclass(frozen=True)
+class NameReference:
+    r"""A name an expression reads as a value, possibly qualified.
+
+    Args:
+        parts: Its parts, unquoted.
+        span: Where it is in the expression as written.
+        bare: Whether it is one unquoted part.
+    """
+
+    parts: tuple[str, ...]
+    span: tuple[int, int]
+    bare: bool
+
+
+@dataclass(frozen=True)
+class _Token:
+    kind: str
+    text: str
+    start: int
+    end: int
+
+    @property
+    def folded(self) -> str:
+        return self.text.lower() if self.kind == 'word' else ''
+
+
+def _closing(tokens: list[_Token], at: int) -> int:
+    r"""The index of the bracket closing the one at ``at``, or the last."""
+    pairs = {'(': ')', '[': ']', '<': '>'}
+    opening, depth = tokens[at].text, 0
+    for index in range(at, len(tokens)):
+        if tokens[index].text == opening:
+            depth += 1
+        elif tokens[index].text == pairs[opening]:
+            depth -= 1
+            if depth == 0:
+                return index
+    return len(tokens) - 1
+
+
+def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
+    r"""Each lambda's parameters, folded, with the tokens they are bound in:
+    from the parameters to the end of the group holding the lambda.
+    """
+    scopes: list[tuple[int, int, set[str]]] = []
+    for index, token in enumerate(tokens):
+        if token.text != '->' or index == 0:
+            continue
+        before = tokens[index - 1]
+        if before.text == ')':
+            depth, start = 0, index - 1
+            while start > 0:
+                depth += {')': 1, '(': -1}.get(tokens[start].text, 0)
+                if depth == 0:
+                    break
+                start -= 1
+            names = {t.folded for t in tokens[start:index] if t.folded}
+        else:
+            start, names = index - 1, {before.folded}
+        depth, end = 0, len(tokens) - 1
+        for at in range(start, len(tokens)):
+            depth += {'(': 1, ')': -1}.get(tokens[at].text, 0)
+            if depth < 0:
+                end = at
+                break
+        scopes.append((start, end, names))
+    return scopes
+
+
+def name_references(expr: str) -> list[NameReference]:
+    r"""The names a Databricks expression reads as values.
+
+    That leaves out a function's name, a type, a keyword, a datetime unit, a
+    named argument, a lambda's parameter and a JSON path step, so a word of
+    the grammar is never read as a column or a parameter.
+    """
+    tokens = [
+        _Token(match.lastgroup or '', match.group(), *match.span())
+        for match in _TOKEN.finditer(expr)
+    ]
+    scopes = _lambda_scopes(tokens)
+    # Who opened each group still open, by name where a call did.
+    openers: list[str] = []
+    # Where a datetime unit may stand: after an INTERVAL's operand, a
+    # literal, or TO after a unit.
+    unit_after: set[int] = set()
+    skip_to = -1
+    references: list[NameReference] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        previous = tokens[index - 1] if index > 0 else None
+        if token.text in '([':
+            called = previous is not None and previous.kind in (
+                'word',
+                'quoted',
+            )
+            openers.append(previous.folded if called and previous else '')
+        elif token.text in ')]' and openers:
+            openers.pop()
+        if token.kind in ('number', 'string'):
+            unit_after.add(index)
+        if token.folded == 'interval' and index + 1 < len(tokens):
+            operand = index + 1
+            if tokens[operand].text == '(':
+                operand = _closing(tokens, operand)
+            unit_after.add(operand)
+        if token.kind not in ('word', 'quoted') or (
+            previous is not None and previous.text == '.'
+        ):
+            index += 1
+            continue
+        last = index
+        while (
+            last + 2 < len(tokens)
+            and tokens[last + 1].text == '.'
+            and tokens[last + 2].kind in ('word', 'quoted')
+        ):
+            last += 2
+        chain = tokens[index : last + 1 : 2]
+        after = tokens[last + 1] if last + 1 < len(tokens) else None
+        bare = len(chain) == 1 and token.kind == 'word'
+        is_type = previous is not None and (
+            previous.text == '::'
+            or (
+                previous.folded == 'as'
+                and bool(openers)
+                and openers[-1] in ('cast', 'try_cast')
+            )
+        )
+        is_unit = (
+            bare
+            and token.folded in _DATETIME_UNITS
+            and (
+                index - 1 in unit_after
+                or (
+                    previous is not None
+                    and previous.text == '('
+                    and len(openers) > 0
+                    and openers[-1] in _UNIT_FIRST
+                )
+            )
+        )
+        if is_unit:
+            unit_after.add(index)
+            if after is not None and after.folded == 'to':
+                unit_after.add(last + 1)
+        if is_type and after is not None and after.text == '<':
+            skip_to = _closing(tokens, last + 1)
+        if not (
+            is_type
+            or is_unit
+            or index <= skip_to
+            or (after is not None and after.text in ('(', '=>'))
+            or (previous is not None and previous.text == ':')
+            or (bare and token.folded in _EXPRESSION_KEYWORDS)
+            or (bare and token.folded == 'to' and index - 1 in unit_after)
+            or (
+                bare
+                and any(
+                    start <= index <= end and token.folded in names
+                    for start, end, names in scopes
+                )
+            )
+        ):
+            references.append(
+                NameReference(
+                    tuple(_unquoted(t) for t in chain),
+                    (token.start, tokens[last].end),
+                    bare,
+                )
+            )
+        index = last + 1
+    return references
+
+
+def _unquoted(token: _Token) -> str:
+    if token.kind == 'quoted':
+        return token.text[1:-1].replace('``', '`')
+    return token.text
