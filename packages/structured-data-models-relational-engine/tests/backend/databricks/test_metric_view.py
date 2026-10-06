@@ -2834,3 +2834,44 @@ def test_a_join_on_a_metric_view_is_dropped_for_what_it_is(
 def test_a_query_as_the_source_is_refused_with_the_way_out() -> None:
     with pytest.raises(ValueError, match='Create a regular view with this'):
         parse_metric_view('source: SELECT * FROM cat.sch.tab WHERE x > 1')
+
+
+def test_a_source_column_wins_over_a_parameter_of_its_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Measured on a SQL warehouse: with a source column `min_qty` and a
+    parameter `min_qty` defaulting to 5, the filter `OrderQty >= min_qty` and
+    the dimension `min_qty` both read the column, bare or backticked.
+    """
+    expr_df = _EXPR_DATA['order_lines'].assign(big=True)
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+    definition = """
+version: 1.1
+source: cat.sch.order_lines
+parameters:
+  - name: AMOUNT
+    data_type: INT
+    default: 20
+  - name: floor
+    data_type: INT
+    default: 1
+filter: amount >= floor
+dimensions:
+  - name: product_line
+    expr: source.product_line
+  - name: big
+    expr: amount >= Amount * 2
+"""
+    rows = _metric_view(
+        definition, {'product_line': 'string', 'big': 'boolean'}
+    )
+
+    graph = _convert(_FakeConnection(rows))
+
+    fact = graph['order_lines']
+    assert fact.row_filter == "amount >= CAST('1' AS INT)"
+    assert str(fact['big'].expr) == 'amount >= Amount * 2'
+    assert graph.conversion_messages == (
+        "Read the parameter 'floor' as its default '1', as a query of the "
+        'view without arguments does',
+    )

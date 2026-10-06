@@ -493,7 +493,9 @@ def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
 
 
 def parse_metric_view(
-    definition: str, parameter_types: Mapping[str, str] | None = None
+    definition: str,
+    parameter_types: Mapping[str, str] | None = None,
+    source_columns: Callable[[tuple[str, ...]], Collection[str]] | None = None,
 ) -> MetricViewSpec:
     r"""Parses a metric view YAML definition into its graph-relevant parts.
 
@@ -506,7 +508,9 @@ def parse_metric_view(
 
     A parameter a dimension or the filter references is read as its default,
     as a query of the view without arguments reads it. A dimension
-    referencing a parameter with no default is dropped.
+    referencing a parameter with no default is dropped. Databricks reads a
+    bare name as a column of the source table where it has one, and as a
+    parameter only otherwise.
 
     The ``filter`` decides which rows the view holds, so it is never dropped:
     it is returned to be applied to the source table, or the view is refused.
@@ -518,6 +522,9 @@ def parse_metric_view(
         definition: The YAML definition.
         parameter_types: The type of each parameter as Databricks describes
             it, which wins over the one the definition names.
+        source_columns: Reads the columns of the source table, given its
+            name parts. Called only if the view has parameters. If set to
+            ``None``, no column shadows a parameter.
 
     Raises:
         ValueError: If the definition is not a YAML mapping, misses a source,
@@ -550,6 +557,9 @@ def parse_metric_view(
             'be represented in a graph'
         )
     parameters = _read_parameters(cfg.get('parameters'), parameter_types or {})
+    if parameters and source_columns is not None:
+        for column in source_columns(source_ref):
+            parameters.pop(column.lower(), None)
     used: dict[str, _Parameter] = {}
 
     joins: list[MetricViewJoin] = []

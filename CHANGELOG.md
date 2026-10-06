@@ -189,6 +189,7 @@ declare as `1.0.0` and none has published. The heading becomes
   A filter or dimension referencing a parameter, such as `source.qty >= min_qty`, ran with the bare name, which no table has.
   The default is now written in as a literal of the parameter's type, checked against that type, and the expression guard runs on the result.
   A dimension referencing a parameter with no default, or one whose type has no literal, is left out with a message naming it, and a filter referencing one refuses the view.
+  A source column of the same name wins over a parameter, as a SQL warehouse reads it.
 - **A metric view built on another metric view is refused for what it is.**
   A source or joined table that is itself a metric view got the advice to read it with `semantic_model`, which is what the caller had done.
   The message now says a metric view on a metric view is not supported and to point the source, or the join, at the underlying table; such a join is dropped, such a source refuses the view.

@@ -1293,10 +1293,6 @@ class Graph:
 
             description = read_metric_view_definition(connection, quoted_name)
             view_catalog, view_schema = description.catalog, description.schema
-            spec = parse_metric_view(
-                description.definition, description.parameters
-            )
-            msgs = list(spec.messages)
 
             def _table_parts(parts: tuple[str, ...]) -> tuple[str, str, str]:
                 if len(parts) == 2 and view_catalog is not None:
@@ -1311,41 +1307,56 @@ class Graph:
                     )
                 return parts[0], parts[1], parts[2]
 
+            tables_by_alias: dict[str, DatabricksTable] = {}
+
+            def _fact_table(parts: tuple[str, ...]) -> DatabricksTable:
+                r"""The source table, its columns read. Tables start empty,
+                so the checks below see their columns before anything reads
+                a row.
+                """
+                if SOURCE_ALIAS not in tables_by_alias:
+                    catalog_, schema_, source_ = _table_parts(parts)
+                    table = DatabricksTable(
+                        connection,
+                        name=source_,
+                        source_name=source_,
+                        catalog=catalog_,
+                        schema=schema_,
+                        columns=[],
+                        primary_key=None,
+                    )
+                    try:
+                        table._source_column_dict  # noqa: B018
+                    except MetricViewAsTableError as error:
+                        raise ValueError(
+                            f"'{table.source_name}' is a metric view; "
+                            f'{_METRIC_VIEW_ON_METRIC_VIEW}, point its source '
+                            f'at the underlying table'
+                        ) from error
+                    tables_by_alias[SOURCE_ALIAS] = table
+                return tables_by_alias[SOURCE_ALIAS]
+
+            spec = parse_metric_view(
+                description.definition,
+                description.parameters,
+                source_columns=lambda parts: (
+                    _fact_table(parts)._source_column_dict
+                ),
+            )
+            msgs = list(spec.messages)
+
             dtypes = {
                 name: DatabricksTable._to_dtype(data_type)
                 for name, data_type in description.dtypes.items()
             }
 
-            fact_catalog, fact_schema, fact_source = _table_parts(spec.source)
-            if any(join.alias == fact_source for join in spec.joins):
+            fact_table = _fact_table(spec.source)
+            if any(join.alias == fact_table.name for join in spec.joins):
                 raise ValueError(
                     f"Cannot convert metric view '{metric_view_name}' into a "
-                    f"graph since the join name '{fact_source}' collides with "
-                    f'the name of the source table'
+                    f"graph since the join name '{fact_table.name}' collides "
+                    f'with the name of the source table'
                 )
-
-            # Tables start empty, so the checks below see their columns before
-            # anything reads a row.
-            fact_table = DatabricksTable(
-                connection,
-                name=fact_source,
-                source_name=fact_source,
-                catalog=fact_catalog,
-                schema=fact_schema,
-                columns=[],
-                primary_key=None,
-            )
-            tables_by_alias: dict[str, DatabricksTable] = {
-                SOURCE_ALIAS: fact_table
-            }
-            try:
-                fact_table._source_column_dict  # noqa: B018
-            except MetricViewAsTableError as error:
-                raise ValueError(
-                    f"'{fact_table.source_name}' is a metric view; "
-                    f'{_METRIC_VIEW_ON_METRIC_VIEW}, point its source at the '
-                    f'underlying table'
-                ) from error
             joins_by_alias = {join.alias: join for join in spec.joins}
 
             def _table(alias: str) -> DatabricksTable:
