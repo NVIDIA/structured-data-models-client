@@ -153,8 +153,8 @@ same enum.
 The tree is first-party source of this repository, maintained here under
 Apache-2.0. There is no upstream to track and no manifest to re-record. It
 imports as
-`predictive_query`, which is a name inherited from that period rather than one
-this layout would choose today.
+`predictive_query`, which is not the distribution's name and is not derived
+from it.
 
 None of it is public API. Users write PQL through `sdm_client.PredictiveQuery`,
 and [the stability page](../reference/stability.md) lists `predictive_query`
@@ -166,7 +166,7 @@ are how the client is built, not names it exports.
 
 | Type | Owner | Why |
 |---|---|---|
-| `Dtype`, `Stype`, `TaskType`, `ProblemType` | `structured-data-models-pql` | PQL speaks them and will be an external dependency. One owner, no translation layer. |
+| `Dtype`, `Stype`, `TaskType`, `ProblemType` | `structured-data-models-pql` | PQL speaks them, and the client and the engine both depend on it. One owner, no translation layer. |
 | `SchemaDefinition`, `TableDefinition`, `Column`, AST | `structured-data-models-pql` | Same. The relational samplers *read* an AST, they never parse one. |
 | `Profile`, `Capabilities` | `structured-data-models-pql` | What a model may be asked, as data. §6. |
 | The time column rule (`predictive_query.time_columns`) | `structured-data-models-pql` | Which timestamp inference takes as a table's time column. `Schema.from_data` and the engine behind `Schema.from_source` both call its `choose_time_column`, and neither imports the other. |
@@ -565,10 +565,11 @@ leaving the document wrong.
 Three pieces. Two are cheap; one is a change to the wire contract.
 
 **1. The contract must accommodate the model, which requires more than an id.**
-`PredictionRequest.model` is a closed enum, so at minimum a new model needs an
-MR on `structured-data-api` and regenerated `structured-data-models-api`. Until §0 is fixed,
-an unrecognised id fails **client-side with a message naming that MR** rather
-than being silently sent and rejected.
+`PredictionRequest.model` is a closed enum, so at minimum a new model needs a
+change to the contract and regenerated bindings in
+`structured-data-models-api`. Until §0 is fixed, an unrecognised id fails
+**client-side, with a message naming the contract and binding changes it would
+need**, rather than being silently sent and rejected.
 
 But a genuinely new *kind* of model needs more than a name. Anomaly detection
 is the honest test:

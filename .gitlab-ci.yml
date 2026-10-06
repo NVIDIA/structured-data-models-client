@@ -7,8 +7,8 @@
 #
 # The one exception is `contract`, which clones the canonical contract at the
 # exact revision this repository's bindings were generated from. That job is
-# blocking, because "the generated bindings match the contract" is the phase
-# condition this repository was built to hold. `contract-drift` watches the
+# blocking, because bindings that do not match the contract are bindings that
+# will misread a response. `contract-drift` watches the
 # contract's HEAD instead and is advisory: upstream moving is news, not a
 # broken build.
 

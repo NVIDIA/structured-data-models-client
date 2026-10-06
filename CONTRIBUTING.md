@@ -28,6 +28,7 @@ Pull requests whose commits are not signed off cannot be merged.
 
 ```bash
 python3.12 -m venv .venv
+.venv/bin/pip install ruff mypy
 .venv/bin/pip install \
   -e './packages/structured-data-models-api[test]' \
   -e './packages/structured-data-models-pql[test]' \
@@ -51,12 +52,24 @@ own, from its own directory:
 cd packages/structured-data-models-relational-engine && ../../.venv/bin/python -m pytest tests -q
 ```
 
-Lint and format with `ruff`; the formatter owns line length. Type-check with
-`mypy`, which is blocking in CI:
+Lint and format with `ruff`. Type-check with `mypy`. Both are blocking in CI,
+over every package including the engine:
 
 ```bash
-.venv/bin/mypy packages/structured-data-models-api/src packages/structured-data-models-pql/src \
-               packages/structured-data-models-client/src packages/structured-data-models-connectors/src
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+.venv/bin/mypy packages/structured-data-models-api/src \
+               packages/structured-data-models-pql/src \
+               packages/structured-data-models-client/src \
+               packages/structured-data-models-connectors/src \
+               packages/structured-data-models-relational-engine/src
+```
+
+Two more gates run in CI and are quick to run first:
+
+```bash
+.venv/bin/python scripts/check_repo_hygiene.py all
+.venv/bin/python scripts/mermaid_notices.py --check
 ```
 
 Changing anything a caller can observe, such as an exported name, signature,
