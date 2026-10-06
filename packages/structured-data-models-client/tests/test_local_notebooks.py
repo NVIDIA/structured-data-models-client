@@ -103,16 +103,30 @@ ONE_MODEL_EACH = (
 
 
 @pytest.mark.parametrize('name, asked, other', ONE_MODEL_EACH, ids=lambda v: v)
-def test_a_notebook_names_one_model_and_only_its_own(name, asked, other):
+def test_a_notebook_asks_one_model_and_only_its_own(name, asked, other):
     """The reason these are two files rather than one.
 
-    Read off the parsed cells rather than their text, so a mention in a
-    comment or a string neither satisfies this nor trips it.
+    Read off the ``model=`` a call actually passes, rather than off any
+    mention of a handle: a constructor sitting unused, or an id passed as the
+    string the client also accepts, would otherwise decide this.
     """
-    called: set[str] = set()
+    asked_for: set[str] = set()
     for source in cells(EXAMPLES / name, 'code'):
         for node in ast.walk(ast.parse(source)):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                called.add(node.func.id)
-    assert asked in called, f'{name} never asks {asked}()'
-    assert other not in called, f'{name} also asks {other}()'
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != 'model':
+                    continue
+                value = keyword.value
+                if isinstance(value, ast.Call) and isinstance(
+                    value.func, ast.Name
+                ):
+                    asked_for.add(value.func.id)
+                elif isinstance(value, ast.Constant):
+                    asked_for.add(str(value.value))
+    assert asked_for, f'{name} passes model= to nothing'
+    assert asked_for == {asked}, (
+        f'{name} asks {sorted(asked_for)}, and is the {asked} notebook'
+    )
+    assert other not in asked_for
