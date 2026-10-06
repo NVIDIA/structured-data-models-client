@@ -3073,9 +3073,19 @@ measures:
         ),
         (
             'SUM(x) OVER (ORDER BY last ROWS BETWEEN UNBOUNDED PRECEDING '
-            'AND CURRENT ROW)',
-            ['x', 'last'],
+            'AND CURRENT ROW) + SUM(y) OVER (ROWS BETWEEN 1 PRECEDING AND '
+            'CURRENT ROW)',
+            ['x', 'last', 'y'],
         ),
+        # A keyword before NOT is grammar, unless NOT negates IN or LIKE.
+        ('COUNT(x IS NOT DISTINCT FROM y)', ['x', 'y']),
+        ('SUM(CASE WHEN NOT x THEN 1 END)', ['x']),
+        ('SUM(a) FILTER (WHERE NOT y)', ['a', 'y']),
+        ('COUNT(a AND NOT NOT b)', ['a', 'b']),
+        ("COUNT(filter NOT IN (1) OR case NOT LIKE 'a')", ['filter', 'case']),
+        # CASE WHEN opens a searched case; DISTINCT and ALL take a sign.
+        ('SUM(CASE WHEN filter THEN 1 END)', ['filter']),
+        ('COUNT(DISTINCT -x) + SUM(ALL +y)', ['x', 'y']),
         ('SUM(amount) /* gross */ -- switch to net_amount later', ['amount']),
         # A name may lead with a digit, where a number is no name.
         (
@@ -3093,6 +3103,13 @@ measures:
         'mixed',
         'keyword-named',
         'window-frame',
+        'is-not-distinct',
+        'when-not',
+        'where-not',
+        'not-not',
+        'negated-comparison',
+        'case-when',
+        'signed-operand',
         'comments',
         'digit-led',
     ],

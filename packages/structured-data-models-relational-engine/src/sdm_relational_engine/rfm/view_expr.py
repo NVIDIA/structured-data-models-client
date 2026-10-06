@@ -1032,10 +1032,14 @@ _TAKE_AN_OPERAND = frozenset(
 _FOLLOW_AN_OPERAND = frozenset(
     {
         'and', 'as', 'asc', 'between', 'collate', 'desc', 'div', 'else', 'end',
-        'escape', 'for', 'from', 'ilike', 'in', 'is', 'like', 'not', 'nulls',
-        'or', 'range', 'regexp', 'rlike', 'rows', 'then', 'when',
+        'escape', 'for', 'from', 'ilike', 'in', 'is', 'like', 'nulls', 'or',
+        'range', 'regexp', 'rlike', 'rows', 'then', 'when',
     }
 )  # fmt: skip
+# `NOT` follows an operand only before these, as in `x NOT IN (1)`.
+_AFTER_A_NEGATED_OPERAND = frozenset(
+    {'between', 'ilike', 'in', 'like', 'regexp', 'rlike'}
+)
 # Databricks reads these as grammar before a sign: `SELECT all + 1` is 1.
 _BEFORE_A_SIGN = frozenset({'all', 'distinct', 'not'})
 _OPERATORS = frozenset({'<=>', '<=', '>=', '<>', '<', '>', '->', '=>'})
@@ -1130,6 +1134,10 @@ def _grammar(tokens: list[_Token]) -> set[int]:
     for index, token in enumerate(tokens):
         previous = tokens[index - 1] if index > 0 else None
         after = tokens[index + 1] if index + 1 < len(tokens) else None
+        before, beyond = (
+            tokens[at].folded if 0 <= at < len(tokens) else ''
+            for at in (index - 2, index + 2)
+        )
         if token.text in '([':
             openers.append(previous.folded if previous else '')
         elif token.text in ')]' and openers:
@@ -1141,13 +1149,19 @@ def _grammar(tokens: list[_Token]) -> set[int]:
             previous is None
             or previous.kind == 'other'
             or previous.text in ('(', '[', ',', *_OPERATORS)
-            or (index - 1 in grammar and previous.folded in _TAKE_AN_OPERAND)
+            or (
+                index - 1 in grammar
+                and previous.folded in _TAKE_AN_OPERAND
+                # `IS NOT` takes `NULL`, `TRUE` or `DISTINCT FROM`.
+                and not (previous.folded == 'not' and before == 'is')
+            )
         )
         closes = (
             after is None
             or (after.kind == 'other' and word not in _BEFORE_A_SIGN)
             or after.text in (')', ']', ',', '[', '::', *_OPERATORS)
             or after.folded in _FOLLOW_AN_OPERAND
+            or (after.folded == 'not' and beyond in _AFTER_A_NEGATED_OPERAND)
         )
         # `CASE WHEN` opens a searched case, unless a `CASE` comes first.
         if word == 'case' and after is not None and after.folded == 'when':
