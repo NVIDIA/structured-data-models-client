@@ -24,7 +24,7 @@ Verified on `structured-data-api@main` as of 2026-09-30.
 
 **This does not affect anything shipping.** `kumo-tabular` and
 `kumo-relational` are both in the enum, so both work today and neither needs a
-contract change. What the enum forecloses is the source doc's
+contract change. What the enum forecloses is a
 `model="some-future-model"` escape hatch, which is deferred along with the
 models it would have served (§9). An unrecognised id is refused client-side
 with a message naming the contract change it would need, rather than being sent
@@ -33,19 +33,11 @@ and rejected.
 If a third model is ever wanted, a small MR on `structured-data-api` opens the
 field. Until then this is a note, not a task.
 
-> **Model ids are fine.** An earlier draft claimed the NIMs still served
-> `nemotron-*`. That was a stale local checkout. The serving side declares
-> `ModelId = Literal["kumo-tabular", "kumo-relational"]`, and the tabular NIM's
-> adapter registration, `/v1/models` entry and `model_manifest.yaml` all say
-> `kumo-tabular`. All three places agree. **Re-clone before copying anything
-> (§8).**
-
 ---
 
 ## 1. The idea in one page
 
-Today you pick a model by calling a different method. Tomorrow the model is an
-argument.
+The model is an argument, not a method. Both models use the same call.
 
 ```python
 from sdm_client import (
@@ -176,14 +168,14 @@ are how the client is built, not names it exports.
 | `Profile`, `Capabilities` | `structured-data-models-pql` | What a model may be asked, as data. §6. |
 | The time column rule (`predictive_query.time_columns`) | `structured-data-models-pql` | Which timestamp inference takes as a table's time column. `Schema.from_data` and the engine behind `Schema.from_source` both call its `choose_time_column`, and neither imports the other. |
 | Wire request/response, `InferenceSpec`, `OutputSpec` | `structured-data-models-api` | The Universal TFM envelope. PQL knows nothing about HTTP. |
-| The DataFrame→wire encoder (`wire/`) | `structured-data-models-client` | **Corrected while building.** §8 first put this in `structured-data-models-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `structured-data-models-api` its zero-dependency property, which is why the split exists. `structured-data-models-api` keeps the vocabulary; encoding a frame is client-side work. |
+| The DataFrame→wire encoder (`wire/`) | `structured-data-models-client` | The first split put this in `structured-data-models-api`, but `wire/dtypes.py` imports numpy and pandas. That would cost `structured-data-models-api` its zero-dependency property, which is why the split exists. `structured-data-models-api` keeps the vocabulary; encoding a frame is client-side work. |
 | `Schema`, `Request`, `PredictionResult` | `structured-data-models-client` | The public surface. |
 
 ---
 
 ## 3. `Schema`: the rename
 
-`Graph` becomes **`Schema`**. Reviewers were right that calling a one-table
+`Graph` becomes **`Schema`**. Calling a one-table
 dataset a "graph" is confusing, and `Schema` is the word the wire contract
 already uses.
 
@@ -327,7 +319,7 @@ A Databricks metric view and a Snowflake semantic view each already say which ta
 The industry's own name for that is a semantic model: the Open Semantic Interchange, which Databricks and Snowflake both back, and dbt use it.
 So `source.semantic_model('sales_metrics')` is a source of its own, and `Schema.from_source` reads it like any other; `tables`, if given, selects and renames among the model's tables.
 Only `DatabricksSource` and `SnowflakeSource` offer it, because only those warehouses keep one, and `Schema` names no warehouse at all.
-An earlier draft took `metric_view=` on `from_source`, which put one vendor's word on the one method meant to be the same for every warehouse.
+A `metric_view=` argument on `from_source` would put one vendor's word on the one method meant to be the same for every warehouse.
 The engine turns the view into its graph: the source becomes a table named as it is in the catalog, each join a table named after the join, each dimension a column of the table it reads, and each join a relationship to the key it names.
 An expression dimension stays an expression, computed in the warehouse when the table is sampled, so `materialize()` rebuilds the tables from the view and then keeps only what the schema kept.
 Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
@@ -380,8 +372,7 @@ PredictiveQuery(
 
 ### The task kind is stated, never guessed
 
-The source doc's last blocker: *"a 2 class target becomes multiclass, not
-binary."* Inferring the kind from a column's cardinality is a guess, and it is
+A binary target can be read as multiclass. Inferring the kind from a column's cardinality is a guess, and it is
 wrong exactly when a binary target looks categorical. What the two models
 actually accept settles it, and they differ:
 
@@ -417,8 +408,8 @@ So there are two different answers, and neither is "guess from cardinality":
 PQL's own `TaskType` already has `BINARY_CLASSIFICATION` and
 `MULTICLASS_CLASSIFICATION`, but a query resolves only to the coarse
 `ProblemType` (`CLASSIFY`/`RANK`/`FORECAST`). The narrowing happens downstream
-from the target's cardinality, which is exactly where the source doc's bug
-lives. **The caller's explicit `task=` wins over that derivation, and when the
+from the target's cardinality, which is exactly where that misreading
+happens. **The caller's explicit `task=` wins over that derivation, and when the
 derivation is the only signal and the target has exactly two classes the client
 warns**, naming both kinds rather than silently picking multiclass.
 

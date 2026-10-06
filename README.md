@@ -4,7 +4,7 @@ Ask a predictive question of one table, or of a whole relational schema, and
 get an answer without training a model for each dataset.
 
 ```bash
-pip install structured-data-models-client
+pip install structured-data-models-client[relational]
 ```
 
 ## Overview
@@ -106,8 +106,9 @@ Full documentation is under [`docs/`](docs/index.md):
 - [Stability](docs/reference/stability.md): what is public, and what a version
   bump means
 
-[`skills/`](skills/README.md) is the same material written for a coding agent,
-and every example in it is run against a live endpoint by the test suite.
+[`skills/`](skills/README.md) is the same material written for a coding agent.
+Every example in it that can run is run against a live endpoint by the test
+suite, and compared to the output printed beneath it.
 
 ## Contributing
 
