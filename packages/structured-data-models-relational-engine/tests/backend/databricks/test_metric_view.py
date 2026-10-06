@@ -2389,9 +2389,28 @@ def test_a_join_whose_table_cannot_be_used_is_left_out(
     assert "'customers'" in regions and "'region_code'" in regions
 
 
-@pytest.mark.parametrize('failing', ['columns', 'expression'])
+@pytest.mark.parametrize(
+    'marker, error',
+    [
+        ('customers', 'Failed'),
+        ('TRY_CAST', 'Failed'),
+        # The state of the failure is the last one, not one its message
+        # quotes from a nested error or a value.
+        (
+            '`sch`.`customers`',
+            '[INTERNAL_ERROR] Query could not be scheduled: upstream said '
+            '[TABLE_OR_VIEW_NOT_FOUND] SQLSTATE: 42P01. SQLSTATE: XX000',
+        ),
+        (
+            '`sch`.`customers`',
+            "[CAST_INVALID_INPUT] The value 'SQLSTATE: 42P01' of the type "
+            '"STRING" cannot be cast to "INT". SQLSTATE: 22018',
+        ),
+    ],
+    ids=['columns', 'expression', 'nested-state', 'quoted-state'],
+)
 def test_a_warehouse_failure_while_reading_a_join_fails_the_conversion(
-    failing: str,
+    marker: str, error: str
 ) -> None:
     r"""A failure that says nothing of the table or the expression may be
     the warehouse's own, so leaving out what it was reading would build a
@@ -2400,11 +2419,12 @@ def test_a_warehouse_failure_while_reading_a_join_fails_the_conversion(
     extra = (
         '  - name: segment_code\n    expr: TRY_CAST(customers.segment AS INT)'
     )
-    marker = 'customers' if failing == 'columns' else 'TRY_CAST'
-    connection = _FailingConnection(_joined_view(extra=extra), marker)
+    connection = _FailingConnection(_joined_view(extra=extra), marker, error)
 
     with pytest.raises(GraphConstructionError) as caught:
         _convert(connection)
+
+    assert isinstance(caught.value.__cause__, _ServerOperationError)
 
     assert isinstance(caught.value.__cause__, _ServerOperationError)
 

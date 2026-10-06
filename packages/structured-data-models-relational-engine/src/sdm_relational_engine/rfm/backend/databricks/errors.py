@@ -21,6 +21,9 @@ from sdm_relational_engine.exceptions import (
 )
 
 _SQL_STATE_RE = re.compile(r'SQLSTATE:\s*([0-9A-Z]{5})')
+# Where Databricks appends the statement that failed, which may quote
+# anything, a state included.
+_SQL_CONTEXT_RE = re.compile(r'\n\s*== SQL\b')
 _ERROR_CLASS_RE = re.compile(r'\s*\[([A-Z0-9_]+(?:\.[A-Z0-9_]+)*)\]')
 
 _PERMISSION_CLASSES = {'INSUFFICIENT_PERMISSIONS', 'PERMISSION_DENIED'}
@@ -37,11 +40,17 @@ def _answer(error: BaseException, *methods: str) -> str | None:
 
 
 def sql_state(error: BaseException) -> str | None:
-    r"""The SQLSTATE of a Databricks failure, if it says one."""
+    r"""The SQLSTATE of a Databricks failure, if it says one.
+
+    Databricks writes the state last, after a message that may quote a
+    value, or a nested error, holding a state of its own, so the last one
+    before the statement it appends is the failure's.
+    """
     if state := _answer(error, 'getSqlState'):
         return state
-    match = _SQL_STATE_RE.search(str(error))
-    return None if match is None else match.group(1)
+    message = _SQL_CONTEXT_RE.split(str(error), maxsplit=1)[0]
+    states = _SQL_STATE_RE.findall(message)
+    return states[-1] if states else None
 
 
 def error_class(error: BaseException) -> str | None:
