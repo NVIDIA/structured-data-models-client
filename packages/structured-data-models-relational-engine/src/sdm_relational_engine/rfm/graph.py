@@ -268,7 +268,7 @@ def _join_key_reason(count: KeyCount, table: str, key: str) -> str | None:
 
 
 def _infer_view_time_column(
-    table: Table, window_orders: Sequence[str]
+    table: Table, window_orders: Sequence[str], *, warn: bool = True
 ) -> TimeColumnNote | None:
     r"""Infers the time column of a metric view's table, and notes it where
     the view's own columns would have led elsewhere.
@@ -343,9 +343,9 @@ def _infer_view_time_column(
     )
     chosen = None
     if axes and len(candidates) > 1:
-        chosen = table._infer_time_column_among(axes)
+        chosen = table._infer_time_column_among(axes, warn=warn)
     if chosen is None and candidates:
-        chosen = table._infer_time_column_among(candidates)
+        chosen = table._infer_time_column_among(candidates, warn=warn)
 
     choice = table._time_column_choice
     kept = set() if choice is None else {choice.column, choice.fallback}
@@ -1455,7 +1455,9 @@ class Graph:
                 caller that says them itself turns this off, rather than
                 filter warnings for every thread:
                 :attr:`conversion_messages` and each table's
-                ``time_column_choice`` hold them either way.
+                ``time_column_choice`` hold them either way. It covers this
+                conversion only, so a later call such as
+                ``infer_time_column()`` warns as usual.
 
         Raises:
             ViewConversionError: If the view is refused for what it is, with
@@ -1545,7 +1547,6 @@ class Graph:
                         columns=[],
                         primary_key=None,
                     )
-                    table._warns_unchecked = warn
                     try:
                         table._source_column_dict  # noqa: B018
                     except MetricViewAsTableError as error:
@@ -1595,7 +1596,6 @@ class Graph:
                         columns=[],
                         primary_key=None,
                     )
-                    tables_by_alias[alias]._warns_unchecked = warn
                 return tables_by_alias[alias]
 
             # Why each joined table cannot be used, by alias. A failure that
@@ -1929,7 +1929,9 @@ class Graph:
 
             notes.extend(_measure_notes(fact_table, spec.measures))
             for table in graph.tables.values():
-                note = _infer_view_time_column(table, spec.window_orders)
+                note = _infer_view_time_column(
+                    table, spec.window_orders, warn=warn
+                )
                 if note is not None:
                     notes.append(note)
 
@@ -2108,7 +2110,6 @@ class Graph:
                 columns=[],
                 primary_key=None,
             )
-            table._warns_unchecked = warn
 
             columns: list[ColumnSpec] = []
             unsupported_columns: list[str] = []
@@ -2204,7 +2205,7 @@ class Graph:
                     if column.stype == Stype.timestamp
                 ]
             if len(time_candidates) > 0:
-                table._infer_time_column_among(time_candidates)
+                table._infer_time_column_among(time_candidates, warn=warn)
 
             graph.add_table(table)
 

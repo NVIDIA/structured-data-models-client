@@ -3522,21 +3522,37 @@ dimensions:
     assert graph.conversion_messages == ()
 
 
-def test_a_conversion_told_not_to_warn_says_it_only_on_the_graph() -> None:
+def test_a_conversion_told_not_to_warn_says_it_only_on_the_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     r"""A caller that says what a view loses itself had to filter the
-    warnings for every thread to keep the engine from saying it too.
+    warnings for every thread to keep the engine from saying it too. Told
+    not to, the tables it built stopped warning for good.
     """
-    rows = _joined_view(extra='materialization:\n  mode: relaxed\n')
+    from sdm_relational_engine.rfm import TimeColumnWarning
+
+    lines = pd.concat([_DATA['order_lines']] * 10, ignore_index=True)
+    monkeypatch.setitem(
+        _DATA,
+        'order_lines',
+        lines.assign(order_date=pd.Timestamp('2025-01-01')),
+    )
+    extra = (
+        '  - name: order_date\n    expr: source.order_date\n'
+        'materialization:\n  mode: relaxed\n'
+    )
+    # The whole table cannot be read, so the constant date is unconfirmed.
+    connection = _FailingConnection(_joined_view(extra=extra), 'MIN(')
 
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         graph = Graph.from_databricks_metric_view(
-            'audit_mv',
-            connection=_FakeConnection(rows),
-            verbose=False,
-            warn=False,
+            'audit_mv', connection=connection, verbose=False, warn=False
         )
 
     assert any('materialization' in m for m in graph.conversion_messages)
-    for table in graph.tables.values():
-        assert table._warns_unchecked is False
+    fact = graph['order_lines']
+    assert fact.time_column is not None
+    fact.time_column = None
+    with pytest.warns(TimeColumnWarning):
+        fact.infer_time_column(verbose=False)

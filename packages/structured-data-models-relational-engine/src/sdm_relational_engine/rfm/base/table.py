@@ -95,12 +95,6 @@ class Table(ABC):
 
     _NUM_SAMPLE_ROWS = 1_000
 
-    #: Whether to warn, as a :class:`TimeColumnWarning`, of a time column
-    #: taken on the rows read alone. A view conversion told not to warn
-    #: turns it off for its own tables; :attr:`time_column_choice` says it
-    #: either way.
-    _warns_unchecked: bool = True
-
     def __init__(
         self,
         name: str,
@@ -862,9 +856,17 @@ class Table(ABC):
 
         return self
 
-    def _infer_time_column_among(self, candidates: list[str]) -> str | None:
+    def _infer_time_column_among(
+        self, candidates: list[str], *, warn: bool = True
+    ) -> str | None:
         r"""Set the time column inferred among ``candidates``, keeping how it
         was chosen and what was refused, and return it.
+
+        Args:
+            candidates: The columns to choose among.
+            warn: Whether to warn, as a :class:`TimeColumnWarning`, of a
+                time column taken on the rows read alone.
+                :attr:`time_column_choice` says it either way.
         """
         df = self._get_sample_df()
         # Only a capped read can hide a second value past its last row.
@@ -878,7 +880,7 @@ class Table(ABC):
             self.time_column = time_column
         self._time_column_inferred = True
         for doubt in self._time_column_choice.unconfirmed:
-            if doubt.column == time_column and self._warns_unchecked:
+            if doubt.column == time_column and warn:
                 warnings.warn(
                     taken_unchecked(
                         self.name,
