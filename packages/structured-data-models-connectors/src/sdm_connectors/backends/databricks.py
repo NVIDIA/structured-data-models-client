@@ -211,9 +211,9 @@ def connect(
     for that flow deliberately is allowed through. Such a request names an
     OAuth application or an ``auth_type`` the driver dispatches on.
 
-    The connection names sdm-client in its User-Agent, ahead of any
-    ``user_agent_entry`` given, and tags its session's statements
-    ``sdm_client_purpose: sampling``.
+    The connection names structured-data-models-client in its User-Agent,
+    ahead of any ``user_agent_entry`` given, and tags its session's
+    statements ``structured_data_models_client_purpose: sampling``.
     """
     check_connect_args('databricks', kwargs, _CONNECT_ARGS)
     given = set(kwargs)
@@ -242,11 +242,13 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     structured-data-models-client opens.
 
     Databricks requires a partner product to identify every connection it
-    opens, so ``user_agent_entry`` starts with ``nvidia_sdm-client/<version>``
-    and keeps any entry the caller gave after it. The session's statements
-    are tagged ``sdm_client_purpose: sampling``, beside any query tags the
-    caller set, so a query history can tell sampling apart without a
-    second identifier. A caller's own ``sdm_client_purpose`` is kept instead.
+    opens, so ``user_agent_entry`` starts with
+    ``nvidia_structured-data-models-client/<version>`` and keeps any entry
+    the caller gave after it. The session's statements are tagged
+    ``structured_data_models_client_purpose: sampling``, beside any query
+    tags the caller set, so a query history can tell sampling apart without
+    a second identifier. A caller's own
+    ``structured_data_models_client_purpose`` is kept instead.
 
     Raises:
         ConnectorError: ``INVALID_CONNECTOR_ARGS`` for a ``user_agent_entry``
@@ -265,7 +267,8 @@ def _as_sdm_client(kwargs: Mapping[str, Any]) -> dict[str, Any]:
     tags = connect_args.get('query_tags')
     if isinstance(tags, Mapping):
         # The driver lets these replace the session's QUERY_TAGS outright. A
-        # caller's own sdm_client_purpose is theirs to set, so it wins.
+        # caller's own structured_data_models_client_purpose is theirs to
+        # set, so it wins.
         connect_args['query_tags'] = {key: value, **tags}
         return connect_args
     # The session's own setting, which every driver from 4.1.3 sends on both

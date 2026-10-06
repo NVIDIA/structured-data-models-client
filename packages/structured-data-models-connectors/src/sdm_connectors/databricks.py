@@ -7,7 +7,8 @@ r"""Connections to Databricks, opened as the caller's own workspace client.
 Each helper returns the driver's own connection, which the caller owns and
 closes, and hands it to a source like any other. Databricks requires a partner
 product to identify every connection and API call it opens, so both name
-sdm-client as ``nvidia_sdm-client/<version>``: in the warehouse driver's
+structured-data-models-client as
+``nvidia_structured-data-models-client/<version>``: in the warehouse driver's
 User-Agent, in Lakebase's ``application_name``, and on the workspace client's
 own requests. A connection the caller opens and passes to a source directly
 is theirs, and is used as it is.
@@ -84,11 +85,11 @@ def warehouse(
         connection = warehouse(warehouse_id, workspace=WorkspaceClient())
         source = DatabricksSource(connection, catalog='main', schema='sales')
 
-    The connection names sdm-client in its User-Agent, ahead of any
-    ``user_agent_entry`` given, and tags its statements
-    ``sdm_client_purpose: sampling`` beside any query tags given. The
-    warehouse lookup names sdm-client too, through a copy of ``workspace``
-    rather than the caller's own.
+    The connection names structured-data-models-client in its User-Agent,
+    ahead of any ``user_agent_entry`` given, and tags its statements
+    ``structured_data_models_client_purpose: sampling`` beside any query tags
+    given. The warehouse lookup names structured-data-models-client too,
+    through a copy of ``workspace`` rather than the caller's own.
 
     A Real-Time warehouse is refused: the driver serves it through a backend
     that takes no workspace-client credentials, so connect to it with
@@ -202,10 +203,11 @@ def lakebase(
         )
         source = PostgresSource(connection, schema='public')
 
-    ``application_name`` is ``nvidia_sdm-client/<version>``, with any
-    ``application_name`` given after it, cut to the 63 bytes Postgres keeps.
-    The workspace's calls name ``sdm-client`` too, through a copy of
-    ``workspace`` rather than the caller's own.
+    ``application_name`` is ``nvidia_structured-data-models-client/<version>``,
+    with any ``application_name`` given after it, cut to the 63 bytes
+    Postgres keeps. The workspace's calls name
+    ``structured-data-models-client`` too, through a copy of ``workspace``
+    rather than the caller's own.
 
     The credential is valid for at most an hour: an open connection outlives
     it, and a new connection needs a fresh call. The login user is whatever
@@ -284,7 +286,8 @@ _APPLICATION_NAME_BYTES = 63
 
 
 def _application_name(theirs: object) -> str:
-    r"""``nvidia_sdm-client/<version>``, then the caller's own name.
+    r"""``nvidia_structured-data-models-client/<version>``, then the caller's
+    own name.
 
     Cut to the bytes Postgres keeps, on a character boundary, since the
     server would otherwise cut it wherever the limit falls.
@@ -298,7 +301,8 @@ def _application_name(theirs: object) -> str:
 def _workspace(
     workspace: WorkspaceClient | None, backend: str
 ) -> WorkspaceClient:
-    r"""A workspace client whose requests name ``sdm-client``.
+    r"""A workspace client whose requests name
+    ``structured-data-models-client``.
 
     A caller's ``WorkspaceClient`` is copied for that, not changed; a
     subclass or test double is used as given, since a copy would lose what

@@ -416,8 +416,9 @@ def test_postgres_reads_the_standard_environment_variables(monkeypatch):
 # --- Databricks partner identifier and query tag ----------------------------
 
 #: What Databricks requires on every connection structured-data-models-client opens.
-PARTNER = 'nvidia_sdm-client/1.0.0'
-SAMPLING = 'sdm_client_purpose:sampling'
+PARTNER = 'nvidia_structured-data-models-client/1.0.0'
+PURPOSE = 'structured_data_models_client_purpose'
+SAMPLING = 'structured_data_models_client_purpose:sampling'
 
 
 def _captured_databricks_connect(**kwargs):
@@ -479,11 +480,11 @@ def test_a_caller_s_session_query_tags_are_kept_beside_the_sampling_tag():
 @pytest.mark.parametrize(
     'theirs',
     [
-        'sdm_client_purpose:audit',
-        'team:growth,sdm_client_purpose:audit',
+        f'{PURPOSE}:audit',
+        f'team:growth,{PURPOSE}:audit',
         # Escaped as the driver escapes a value, so the comma and colon are
         # part of team's value rather than a separator.
-        r'team:a\,b\:c,sdm_client_purpose:audit',
+        rf'team:a\,b\:c,{PURPOSE}:audit',
     ],
     ids=['alone', 'after-another', 'after-escapes'],
 )
@@ -499,7 +500,7 @@ def test_a_caller_s_own_purpose_tag_wins_over_the_sampling_one(theirs):
 
 def test_a_purpose_named_only_inside_a_value_is_not_the_caller_s_own():
     """Escaped, it is part of team's value, so the tag is still added."""
-    theirs = r'team:x\,sdm_client_purpose\:audit'
+    theirs = rf'team:x\,{PURPOSE}\:audit'
 
     captured = _captured_databricks_connect(
         session_configuration={'QUERY_TAGS': theirs}
@@ -542,11 +543,9 @@ def test_the_caller_s_purpose_wins_in_a_query_tags_argument_too():
     if 'query_tags' not in databricks._CONNECT_ARGS:
         pytest.skip('this driver takes no query_tags= argument')
 
-    captured = _captured_databricks_connect(
-        query_tags={'sdm_client_purpose': 'audit'}
-    )
+    captured = _captured_databricks_connect(query_tags={PURPOSE: 'audit'})
 
-    assert captured['query_tags'] == {'sdm_client_purpose': 'audit'}
+    assert captured['query_tags'] == {PURPOSE: 'audit'}
 
 
 def test_the_keys_are_read_back_from_what_the_driver_writes():
@@ -557,7 +556,7 @@ def test_the_keys_are_read_back_from_what_the_driver_writes():
         pytest.skip('this driver has no query tag serializer')
     from sdm_connectors.backends.databricks import _query_tag_keys
 
-    tags = {'team': 'a,b:c\\', 'sdm_client_purpose': 'x', 'flag': None}
+    tags = {'team': 'a,b:c\\', PURPOSE: 'x', 'flag': None}
 
     assert _query_tag_keys(utils.serialize_query_tags(tags)) == set(tags)
 
@@ -581,7 +580,7 @@ def test_a_caller_s_query_tags_argument_carries_the_sampling_tag_too():
 
     assert captured['query_tags'] == {
         'team': 'growth',
-        'sdm_client_purpose': 'sampling',
+        PURPOSE: 'sampling',
     }
 
 
@@ -592,9 +591,7 @@ def test_the_driver_sends_the_sampling_tag_as_the_session_s_query_tags():
     if not hasattr(utils, 'serialize_query_tags'):
         pytest.skip('this driver has no query tag serializer')
 
-    assert utils.serialize_query_tags({'sdm_client_purpose': 'sampling'}) == (
-        SAMPLING
-    )
+    assert utils.serialize_query_tags({PURPOSE: 'sampling'}) == SAMPLING
 
 
 @pytest.mark.parametrize(
@@ -632,7 +629,7 @@ def test_the_identifier_names_the_installed_release():
 
     assert (
         partner_identifier()
-        == f'nvidia_sdm-client/{sdm_connectors.__version__}'
+        == f'nvidia_structured-data-models-client/{sdm_connectors.__version__}'
     )
 
 

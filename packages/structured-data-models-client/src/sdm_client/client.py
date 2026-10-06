@@ -335,8 +335,9 @@ class SDMClient:
             workspace_client: A ``databricks.sdk.WorkspaceClient`` to call
                 through, for a workspace or credential other than the ambient
                 one. A ``WorkspaceClient`` itself is called through a copy
-                that names ``sdm-client`` in the User-Agent, so it is not changed;
-                a subclass or test double is used as given, without the name.
+                that names ``structured-data-models-client`` in the
+                User-Agent, so it is not changed; a subclass or test double
+                is used as given, without the name.
             timeout: Seconds one attempt may take, and the longest the SDK
                 keeps retrying. When omitted, the ambient workspace client
                 gets 300, far above a NIM's default because a serving
