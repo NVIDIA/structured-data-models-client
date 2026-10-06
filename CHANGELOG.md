@@ -197,7 +197,7 @@ declare as `1.0.0` and none has published. The heading becomes
   The conversion message and the schema's time-column warning both name the column taken and the dimensions it was taken in place of.
 - **The columns a metric view's measures aggregate are columns of the graph.**
   A measure such as `SUM(LineTotal)` left `LineTotal` out of every table unless a dimension also named it, so no predictive query could say what the measure says.
-  Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message.
+  Each column a measure reads, inside a `FILTER (WHERE ...)`, a ratio or a composed measure too, is now added to its table where missing, for measures that read one table; a dimension of the same name is kept, and the column left out with a message, and a dimension that renames the column stands for it.
   Measures stay out of the graph, and are only read, never run.
   One conversion message lists them, with the aggregation each simple one is, such as `SUM(order_lines.LineTotal, 0, 30, days)`.
 - **A metric view's names are matched without regard to case, as Databricks matches them.**

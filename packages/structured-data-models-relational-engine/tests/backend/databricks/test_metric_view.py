@@ -3254,3 +3254,37 @@ def test_names_are_matched_without_regard_to_case(
     assert customers.primary_key.name == 'customer_id'
     assert Edge('order_lines', 'CUSTOMER_ID', 'CUSTOMERS') in graph.edges
     assert graph.conversion_messages == ()
+
+
+def test_a_dimension_renaming_a_column_stands_for_it_in_a_measure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""`Order Amount` is the column `amount` under another name, so a
+    measure over `amount` reads that dimension, and `amount` beside it would
+    be a second copy of it.
+    """
+    lines = _EXPR_DATA['order_lines']
+    monkeypatch.setitem(
+        _EXPR_DATA,
+        'order_lines',
+        lines.assign(**{'Order Amount': _DATA['order_lines']['amount']}),
+    )
+    definition = """
+version: 1.1
+source: cat.sch.order_lines
+dimensions:
+  - name: Order Amount
+    expr: source.amount
+measures:
+  - name: total
+    expr: SUM(source.amount)
+"""
+    rows = _metric_view(definition, {'Order Amount': 'double'})
+
+    graph = _convert(_FakeConnection(rows))
+
+    assert [column.name for column in graph['order_lines'].columns] == [
+        'Order Amount'
+    ]
+    (message,) = graph.conversion_messages
+    assert "'total' is SUM(order_lines.`Order Amount`, 0, 30, days)" in message

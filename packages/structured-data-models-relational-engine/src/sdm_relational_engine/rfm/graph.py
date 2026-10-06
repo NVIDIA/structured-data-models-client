@@ -370,10 +370,16 @@ def _measures_message(fact_table: Table, measures: Sequence[Any]) -> str:
     def _name(name: str) -> str:
         return name if re.fullmatch(r'[A-Za-z_]\w*', name) else f'`{name}`'
 
-    # A measure names a column in any case, as Databricks reads it.
+    # A measure names a column in any case, as Databricks reads it, and a
+    # dimension that renames a column stands for it.
     columns = {
         column.name.lower(): column.name for column in fact_table.columns
     }
+    for column in fact_table.columns:
+        if column.expr is not None and (
+            renamed := _renamed_column(str(column.expr))
+        ):
+            columns.setdefault(renamed.lower(), column.name)
     expressed: list[str] = []
     others: list[str] = []
     for measure in measures:
@@ -399,6 +405,15 @@ def _measures_message(fact_table: Table, measures: Sequence[Any]) -> str:
         noun = 'has' if len(others) == 1 else 'have'
         said.append(f'{_quoted_names(others)} {noun} no single aggregation')
     return '; '.join(said)
+
+
+def _renamed_column(expr: str) -> str | None:
+    r"""The column an expression is, if it is one column and nothing else."""
+    match = re.fullmatch(r'`((?:[^`]|``)+)`|([A-Za-z_]\w*)', expr.strip())
+    if match is None:
+        return None
+    quoted, bare = match.groups()
+    return bare if quoted is None else quoted.replace('``', '`')
 
 
 def _real_name(table: Table, name: str) -> str:
@@ -1618,6 +1633,14 @@ class Graph:
                         spec_.name.lower(): spec_
                         for spec_ in columns_by_alias[alias]
                     }
+                    # A dimension renaming the column stands for it.
+                    if any(
+                        (renamed := _renamed_column(str(spec_.expr)))
+                        and renamed.lower() == column.lower()
+                        for spec_ in columns_by_alias[alias]
+                        if spec_.expr is not None
+                    ):
+                        continue
                     if (same := taken.get(column.lower())) is None:
                         columns_by_alias[alias].append(ColumnSpec(name=column))
                     elif not same.is_source:
