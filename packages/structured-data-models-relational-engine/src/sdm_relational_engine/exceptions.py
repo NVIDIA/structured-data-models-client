@@ -56,6 +56,14 @@ class TableNotFoundError(KumoRelationalError, ValueError):
     r"""A table named for a graph is not in its source."""
 
 
+class EmptyTableError(KumoRelationalError, RuntimeError):
+    r"""A table named for a graph holds no rows.
+
+    A :class:`RuntimeError` as well, which an empty table was raised as
+    before.
+    """
+
+
 class MetricViewAsTableError(KumoRelationalError, ValueError):
     r"""A Databricks metric view was named where a table was expected.
 

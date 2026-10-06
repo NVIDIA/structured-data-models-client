@@ -15,6 +15,7 @@ from sdm_relational_engine.client.state import global_state
 from sdm_relational_engine.exceptions import (
     AuthenticationError,
     ClientInitializationError,
+    EmptyTableError,
     GraphConstructionError,
     HTTPException,
     InvalidResponseError,
@@ -44,6 +45,7 @@ __all__ = [
     'AuthenticationError',
     'ClientInitializationError',
     'Dtype',
+    'EmptyTableError',
     'GraphConstructionError',
     'HTTPException',
     'InvalidResponseError',

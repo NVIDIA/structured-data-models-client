@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from sdm_relational_engine.exceptions import (
+    EmptyTableError,
     GraphConstructionError,
     KumoRelationalError,
 )
@@ -2303,21 +2304,24 @@ def _joined_view(customers: str = 'customers', extra: str = '') -> list:
 
 
 class _FailingConnection(_FakeConnection):
-    r"""A warehouse that fails every statement holding ``marker``, the way a
-    driver does, and answers the rest.
+    r"""A warehouse that fails every statement holding ``marker``, in its SQL
+    or as a parameter, the way a driver does, and answers the rest.
     """
 
-    def __init__(self, describe_rows: list, marker: str) -> None:
+    def __init__(
+        self, describe_rows: list, marker: str, message: str = 'Failed'
+    ) -> None:
         super().__init__(describe_rows)
         self._marker = marker
+        self._message = message
 
     def cursor(self) -> Any:
         cursor = super().cursor()
         execute = cursor.execute
 
         def _execute(sql: str, parameters: Any = None) -> None:
-            if self._marker in sql:
-                raise _ServerOperationError(f'Failed on {self._marker}')
+            if self._marker in sql or self._marker in (parameters or ()):
+                raise _ServerOperationError(self._message)
             execute(sql, parameters)
 
         cursor.execute = _execute  # type: ignore[method-assign]
@@ -2345,120 +2349,138 @@ def _keeps_the_rest_without_customers(graph: Graph) -> str:
     return message
 
 
-def test_a_missing_joined_table_drops_its_join() -> None:
-    graph = _convert(_FakeConnection(_joined_view(customers='nowhere')))
-
-    message = _keeps_the_rest_without_customers(graph)
-    assert 'could not be read' in message and 'does not exist' in message
-
-
-def test_an_empty_joined_table_drops_its_join(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    'unusable, reason',
+    [
+        ('missing', 'does not exist'),
+        ('empty', 'is empty'),
+        ('metric-view', 'is a metric view'),
+        ('permission-denied', 'may not read'),
+    ],
+)
+def test_a_join_whose_table_cannot_be_used_is_left_out(
+    unusable: str, reason: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setitem(_DATA, 'customers', _DATA['customers'].iloc[:0])
-
-    graph = _convert(_FakeConnection(_joined_view()))
-
-    assert 'is empty' in _keeps_the_rest_without_customers(graph)
-
-
-def test_an_unreadable_joined_table_drops_its_join() -> None:
-    connection = _FailingConnection(_joined_view(), '`sch`.`customers`')
+    r"""With the join nested in it and the dimensions on both, which the
+    message names, since a question may have been asked of them.
+    """
+    connection = _FakeConnection()
+    if unusable == 'missing':
+        monkeypatch.delitem(_COLUMN_TYPES, 'customers')
+    elif unusable == 'empty':
+        monkeypatch.setitem(_DATA, 'customers', _DATA['customers'].iloc[:0])
+    elif unusable == 'metric-view':
+        monkeypatch.setitem(_TABLE_TYPES, 'customers', 'METRIC_VIEW')
+    else:
+        connection = _FailingConnection(
+            _DESCRIBE_ROWS,
+            '`sch`.`customers`',
+            '[INSUFFICIENT_PERMISSIONS] Insufficient privileges: User does '
+            'not have SELECT on Table. SQLSTATE: 42501',
+        )
 
     graph = _convert(connection)
 
-    assert 'Failed on' in _keeps_the_rest_without_customers(graph)
+    assert set(graph.tables) == {'order_lines', 'products', 'refunds'}
+    assert not any('customers' in edge for edge in graph.edges)
+    said = graph.conversion_messages
+    (customers,) = [m for m in said if "'customer_segment'" in m]
+    (regions,) = [m for m in said if "'region_name'" in m]
+    assert reason in customers
+    assert "'customers'" in regions and "'region_code'" in regions
 
 
-def test_a_joined_metric_view_drops_its_join(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize('failing', ['columns', 'expression'])
+def test_a_warehouse_failure_while_reading_a_join_fails_the_conversion(
+    failing: str,
 ) -> None:
-    monkeypatch.setitem(_TABLE_TYPES, 'customers', 'METRIC_VIEW')
+    r"""A failure that says nothing of the table or the expression may be
+    the warehouse's own, so leaving out what it was reading would build a
+    smaller graph that looks whole.
+    """
+    extra = (
+        '  - name: segment_code\n    expr: TRY_CAST(customers.segment AS INT)'
+    )
+    marker = 'customers' if failing == 'columns' else 'TRY_CAST'
+    connection = _FailingConnection(_joined_view(extra=extra), marker)
 
-    graph = _convert(_FakeConnection(_joined_view()))
+    with pytest.raises(GraphConstructionError) as caught:
+        _convert(connection)
 
-    assert 'metric view' in _keeps_the_rest_without_customers(graph)
+    assert isinstance(caught.value.__cause__, _ServerOperationError)
 
 
-def test_a_joined_column_of_an_unsupported_type_drops_only_that_column(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize('refused', ['expression', 'type'])
+def test_a_column_the_warehouse_refuses_is_left_out_alone(
+    refused: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setitem(
-        _COLUMN_TYPES,
-        'customers',
-        {**_COLUMN_TYPES['customers'], 'attrs': 'struct<a:int>'},
-    )
-    monkeypatch.setitem(
-        _DATA, 'customers', _DATA['customers'].assign(attrs='x')
-    )
-    extra = '  - name: attrs\n    expr: customers.attrs'
+    r"""A table's expressions are sampled in one query, so the one refused
+    used to fail the others, and the conversion, with it.
+    """
+    if refused == 'expression':
+        name = 'segment_code'
+        extra = (
+            f'  - name: {name}\n    expr: TRY_CAST(customers.segment AS INT)'
+        )
+        connection = _FailingConnection(
+            _joined_view(extra=extra),
+            'TRY_CAST',
+            '[CAST_INVALID_INPUT] The value \'gold\' of the type "STRING" '
+            'cannot be cast to "INT". SQLSTATE: 22018',
+        )
+    else:
+        name = 'attrs'
+        monkeypatch.setitem(
+            _COLUMN_TYPES,
+            'customers',
+            {**_COLUMN_TYPES['customers'], name: 'struct<a:int>'},
+        )
+        monkeypatch.setitem(
+            _DATA, 'customers', _DATA['customers'].assign(attrs='x')
+        )
+        extra = f'  - name: {name}\n    expr: customers.{name}'
+        connection = _FakeConnection(_joined_view(extra=extra))
 
-    graph = _convert(_FakeConnection(_joined_view(extra=extra)))
+    graph = _convert(connection)
 
     customers = graph['customers']
     assert {column.name for column in customers.columns} == {
         'customer_segment',
         'customer_id',
     }
-    assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
-    (message,) = graph.conversion_messages
-    assert "column 'attrs' to table 'customers'" in message
-
-
-def test_a_failing_dimension_drops_only_that_dimension() -> None:
-    r"""A table's expressions are sampled in one query, so the one that fails
-    used to fail the others, and the conversion, with it.
-    """
-    extra = (
-        '  - name: segment_code\n    expr: TRY_CAST(customers.segment AS INT)'
-    )
-    connection = _FailingConnection(_joined_view(extra=extra), 'TRY_CAST')
-
-    graph = _convert(connection)
-
-    customers = graph['customers']
     assert str(customers['customer_segment'].expr) == 'segment'
-    assert not customers.has_column('segment_code')
     assert Edge('order_lines', 'customer_id', 'customers') in graph.edges
     (message,) = graph.conversion_messages
-    assert "column 'segment_code' to table 'customers'" in message
-    assert 'Failed on TRY_CAST' in message
+    assert f"'{name}'" in message
 
 
-def test_an_empty_fact_table_aborts_and_closes_the_connection(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize('failing', ['empty', 'driver'])
+def test_a_fact_table_that_cannot_be_read_fails_and_closes_the_connection(
+    failing: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setitem(_DATA, 'order_lines', _DATA['order_lines'].iloc[:0])
-    connection = _FakeConnection(_joined_view())
+    if failing == 'empty':
+        lines = _DATA['order_lines'].iloc[:0]
+        monkeypatch.setitem(_DATA, 'order_lines', lines)
+        connection = _FakeConnection(_joined_view())
+    else:
+        connection = _FailingConnection(_joined_view(), '`sch`.`order_lines`')
     monkeypatch.setattr(
         'sdm_connectors.backends.databricks.connect',
         lambda **kwargs: connection,
     )
 
-    with pytest.raises(RuntimeError, match='is empty'):
+    with pytest.raises(KumoRelationalError) as caught:
         Graph.from_databricks_metric_view(
             'audit_mv',
             connection=dict(server_hostname='localhost'),
             verbose=False,
         )
-    assert connection.closed
 
-
-def test_an_unreadable_fact_table_aborts_and_closes_the_connection(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    connection = _FailingConnection(_joined_view(), '`sch`.`order_lines`')
-    monkeypatch.setattr(
-        'sdm_connectors.backends.databricks.connect',
-        lambda **kwargs: connection,
-    )
-
-    with pytest.raises(GraphConstructionError, match='Failed on'):
-        Graph.from_databricks_metric_view(
-            'audit_mv',
-            connection=dict(server_hostname='localhost'),
-            verbose=False,
-        )
+    if failing == 'empty':
+        assert isinstance(caught.value, EmptyTableError)
+    else:
+        assert isinstance(caught.value, GraphConstructionError)
+        assert isinstance(caught.value.__cause__, _ServerOperationError)
     assert connection.closed
 
 
@@ -2862,21 +2884,6 @@ def test_a_metric_view_on_a_metric_view_is_refused_for_what_it_is(
     )
 
 
-def test_a_join_on_a_metric_view_is_dropped_for_what_it_is(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setitem(_TABLE_TYPES, 'customers', 'METRIC_VIEW')
-
-    graph = _convert(_FakeConnection(_joined_view()))
-
-    assert _keeps_the_rest_without_customers(graph) == (
-        "Failed to add join 'customers', and with it the table 'customers' "
-        "and the dimension 'customer_segment', since 'cat.sch.customers' is "
-        'a metric view; a metric view built on another metric view is not '
-        "supported, point the join's source at the underlying table"
-    )
-
-
 def test_a_query_as_the_source_is_refused_with_the_way_out() -> None:
     with pytest.raises(ValueError, match='Create a regular view with this'):
         parse_metric_view('source: SELECT * FROM cat.sch.tab WHERE x > 1')
@@ -2921,42 +2928,6 @@ dimensions:
     assert graph.conversion_notes == (
         "Read the parameter 'floor' as its default '1', as a query of the "
         'view without arguments does',
-    )
-
-
-def test_a_join_dropped_while_converting_names_the_dimensions_lost(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""Dropping `customers` drops `regions`, which hangs off it, and the
-    dimensions on both, which a question may have been asked of.
-    """
-    monkeypatch.setitem(_DATA, 'customers', _DATA['customers'].iloc[:0])
-
-    graph = _convert(_FakeConnection())
-
-    customers, regions = [
-        m
-        for m in graph.conversion_messages
-        if m.startswith(
-            ("Failed to add join 'customers'", "Failed to add join 'regions'")
-        )
-    ]
-    assert customers.startswith(
-        "Failed to add join 'customers', and with it the table 'customers' "
-        "and the dimension 'customer_segment', since its table could not be "
-        'read'
-    )
-    assert regions == (
-        "Failed to add join 'regions', and with it the table 'regions' and "
-        "the dimensions 'region_name' and 'region_code', since its parent "
-        "join 'customers' was not added"
-    )
-    (unlinked,) = [
-        m for m in graph.conversion_messages if "join 'payments'" in m
-    ]
-    assert unlinked.startswith(
-        "Failed to add join 'payments', and with it the table 'payments', "
-        'since its keys could not be linked'
     )
 
 

@@ -184,42 +184,52 @@ def _view_expr_message(
     )
 
 
-_METRIC_VIEW_ON_METRIC_VIEW = (
-    'a metric view built on another metric view is not supported'
-)
+def _refuses_column(error: BaseException) -> bool:
+    r"""Whether ``error`` refuses a column alone: a column the graph cannot
+    hold, or an expression the warehouse refused for what it says or reads.
+    """
+    from sdm_relational_engine.rfm.backend.databricks.errors import (
+        refuses_expression,
+    )
+
+    if isinstance(error, NotImplementedError):
+        return False
+    return isinstance(error, ValueError | RuntimeError) or refuses_expression(
+        error
+    )
 
 
-def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
-    r"""Adds a view's columns to ``table``, leaving out each one that cannot
-    be added on its own, and returns why for each.
-
-    A table's expressions are sampled in one query, so a single failing
-    expression, or a column of a type with no graph equivalent, fails the
-    others with it. In that case nothing of the batch is kept, and the
-    columns are added one at a time instead.
-
-    Args:
-        table: The table, whose rows can already be read.
-        columns: The columns to add.
+def _try_add_columns(
+    table: Table, columns: Sequence[ColumnSpec]
+) -> BaseException | None:
+    r"""Adds ``columns`` to ``table``, or none of them if one is refused, and
+    returns why. Any other failure is raised, as the table's then is too.
     """
     before = set(table._column_dict)
     try:
         table.add_columns(columns)
-        return []
-    except Warning:
-        raise
-    except Exception:
+    except Exception as error:
+        if not _refuses_column(error):
+            raise
         for name in list(table._column_dict):
             if name not in before:
                 table.remove_column(name)
+        return error
+    return None
 
+
+def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
+    r"""Adds a view's columns to ``table``, leaving out each one that is
+    refused, and returns why for each.
+
+    A table's expressions are sampled in one query, so one refused column
+    refuses the batch, and the columns are then added one at a time.
+    """
+    if _try_add_columns(table, columns) is None:
+        return []
     msgs: list[str] = []
     for column in columns:
-        try:
-            table.add_column(column)
-        except Warning:
-            raise
-        except Exception as error:
+        if (error := _try_add_columns(table, [column])) is not None:
             msgs.append(
                 f"Failed to add column '{column.name}' to table "
                 f"'{table.name}': {error}"
@@ -315,20 +325,16 @@ def _infer_view_time_column(
                 while name.lower() in taken:
                     name = f'{raw}_raw_{suffix}'
                     suffix += 1
-            try:
-                if name == raw:
-                    table.add_column(raw)
-                else:
-                    table.add_column(
-                        ColumnSpec(name=name, expr=quote_ident(raw, char='`'))
-                    )
+            spec = ColumnSpec(
+                name=name,
+                expr=None if name == raw else quote_ident(raw, char='`'),
+            )
+            usable = _try_add_columns(table, [spec]) is None
+            if usable:
+                if name != raw:
                     renamed[name] = raw
                 added.append(name)
                 usable = table[name].stype == Stype.timestamp
-            except Warning:
-                raise
-            except Exception:
-                usable = False
         derived_from = {
             k: name if v == raw else v
             for k, v in derived_from.items()
@@ -496,24 +502,34 @@ def _warn_view_conversion(message: str, owned_connection: Any) -> None:
         raise
 
 
-def _reraise_as_graph_error(error: BaseException, source: str) -> None:
-    r"""Raise :class:`GraphConstructionError` for a foreign driver failure.
+def _is_driver_error(error: BaseException) -> bool:
+    r"""Whether ``error`` comes from a driver: not this package's, not a
+    built-in a programming error raises, and not a :class:`Warning` the
+    caller's filters escalated. An :class:`OSError` is a built-in a lost
+    connection raises, so it counts as a driver's.
+    """
+    if isinstance(error, OSError):
+        return True
+    return not (
+        isinstance(error, KumoRelationalError | Warning)
+        or type(error).__module__ == 'builtins'
+    )
 
-    Returns without raising for anything this package owns, for a built-in,
-    and for a :class:`Warning` the caller's filters escalated into an error, so
-    the caller's bare ``raise`` re-raises those unchanged with their original
-    traceback. Only a third-party driver's exception is translated, which is
-    the one class of failure that otherwise escapes graph construction with no
-    base in common with the rest of this client.
+
+def _reraise_as_graph_error(error: BaseException, source: str) -> None:
+    r"""Raise :class:`GraphConstructionError` for a driver failure.
+
+    Returns without raising for anything else, so the caller's bare
+    ``raise`` re-raises it unchanged with its original traceback. A driver's
+    exceptions share no base with the rest of this client, so they are the
+    one class of failure translated.
 
     Deliberately called from the existing cleanup handler rather than applied
     as a decorator: a wrapper frame shifts the stack depth that
     :func:`_warn_view_conversion` relies on, which silently re-attributes every
     conversion warning to this module instead of to the caller.
     """
-    if isinstance(error, KumoRelationalError | Warning):
-        return
-    if type(error).__module__ == 'builtins':
+    if not _is_driver_error(error):
         return
     raise GraphConstructionError(
         f'Reading the {source} source failed while building the graph: '
@@ -1410,10 +1426,10 @@ class Graph:
         :attr:`conversion_notes` spells each simple one. Other
         unrepresentable elements are dropped with a warning.
 
-        A joined table that cannot be read, because it is missing, empty or
-        not readable to you, drops its join with a warning, and a column that
-        cannot be added, such as an expression that fails, drops alone. Only a
-        source table that cannot be read fails the conversion.
+        A joined table that is missing, empty, a metric view or not yours to
+        read drops its join with a warning, and a column the warehouse refuses
+        drops alone. A source table that cannot be read, and any other failure
+        of the warehouse, fails the conversion.
 
         The view's ``filter`` is applied to the fact table, so every read of it
         sees only the rows the view holds. A filter on a joined table cannot
@@ -1484,10 +1500,16 @@ class Graph:
             UnsupportedFilterError: If the view's filter references a joined
                 table or a parameter with no default, or is not a safe scalar
                 condition. A :class:`ViewConversionError`.
+            GraphConstructionError: If the warehouse fails other than by
+                refusing a joined table or a column, with the driver's error
+                as its ``__cause__``.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
             DatabricksTable,
+        )
+        from sdm_relational_engine.rfm.backend.databricks.errors import (
+            unusable_table_reason,
         )
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
@@ -1563,9 +1585,10 @@ class Graph:
                         table._source_column_dict  # noqa: B018
                     except MetricViewAsTableError as error:
                         raise ViewConversionError(
-                            f"'{table.source_name}' is a metric view; "
-                            f'{_METRIC_VIEW_ON_METRIC_VIEW}, point its source '
-                            f'at the underlying table'
+                            f"'{table.source_name}' is a metric view; a "
+                            f'metric view built on another metric view is not '
+                            f'supported, point its source at the underlying '
+                            f'table'
                         ) from error
                     tables_by_alias[SOURCE_ALIAS] = table
                 return tables_by_alias[SOURCE_ALIAS]
@@ -1610,17 +1633,34 @@ class Graph:
                     tables_by_alias[alias]._warns_unchecked = warn
                 return tables_by_alias[alias]
 
+            # Why each joined table cannot be used, by alias. A failure that
+            # gives no such reason fails the conversion instead.
+            unusable: dict[str, str] = {}
+
+            def _read_join(alias: str, rows: bool = False) -> bool:
+                r"""Whether a joined table can be used, its columns read, and
+                its rows if ``rows``.
+                """
+                if alias in unusable:
+                    return False
+                table = _table(alias)
+                try:
+                    table._source_column_dict  # noqa: B018
+                    if rows:
+                        table._source_sample_df  # noqa: B018
+                except Exception as error:
+                    if (reason := unusable_table_reason(error)) is None:
+                        raise
+                    unusable[alias] = reason
+                    return False
+                return True
+
             def _columns_of(alias: str) -> list[str]:
                 if alias == SOURCE_ALIAS:
                     return list(fact_table._source_column_dict)
-                # A join that cannot be read is dropped below with its reason,
-                # so here it shows no columns.
-                try:
-                    return list(_table(alias)._source_column_dict)
-                except Warning:
-                    raise
-                except Exception:
+                if not _read_join(alias):
                     return []
+                return list(_table(alias)._source_column_dict)
 
             # Every read of the fact table runs the filter, so it is checked
             # against the table's columns and attached before the first one.
@@ -1735,20 +1775,12 @@ class Graph:
 
             # Before a row is read, so every read names them as the view does.
             for alias, names in renames.items():
-                try:
+                if alias not in unusable:
                     _table(alias)._name_columns(names)
-                except Warning:
-                    raise
-                except Exception:
-                    if alias == SOURCE_ALIAS:
-                        raise
-                    # A join that cannot be read is dropped below.
 
             graph = cls(tables=[])
 
-            # A failure to read the fact table aborts. A joined table that
-            # cannot be read, or a column that cannot be added, is dropped
-            # below with its reason instead.
+            # A fact table that cannot be read fails the conversion.
             fact_table._source_sample_df  # noqa: B018
             msgs.extend(
                 _add_view_columns(
@@ -1780,23 +1812,10 @@ class Graph:
                     )
                     continue
 
-                try:
-                    table = _table(join.alias)
-                    table._source_column_dict  # noqa: B018
-                    table._source_sample_df  # noqa: B018
-                except Warning:
-                    raise
-                except MetricViewAsTableError:
-                    _drop_join(
-                        join,
-                        f"'{table.source_name}' is a metric view; "
-                        f"{_METRIC_VIEW_ON_METRIC_VIEW}, point the join's "
-                        f'source at the underlying table',
-                    )
+                if not _read_join(join.alias, rows=True):
+                    _drop_join(join, unusable[join.alias])
                     continue
-                except Exception as error:
-                    _drop_join(join, f'its table could not be read: {error}')
-                    continue
+                table = _table(join.alias)
 
                 # Adding a join mutates tables that are already part of the
                 # graph, so record every mutation and undo it in full in case
@@ -1875,9 +1894,7 @@ class Graph:
                     table_dict[join.alias] = table
                     graph.link(many_table.name, many_key, one_table.name)
                     msgs.extend(join_msgs)
-                except Warning:
-                    raise
-                except Exception as error:
+                except ValueError as error:
                     if table_dict.get(join.alias) is table:
                         graph.remove_table(join.alias)
                         del table_dict[join.alias]

@@ -13,6 +13,7 @@ from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
 from sdm_relational_engine.exceptions import (
+    EmptyTableError,
     MetricViewAsTableError,
     TableNotFoundError,
 )
@@ -382,7 +383,7 @@ class DatabricksTable(Table):
             table = cursor.fetchall_arrow()
 
         if table.num_rows == 0:
-            raise RuntimeError(f"Table '{self.source_name}' is empty")
+            raise EmptyTableError(f"Table '{self.source_name}' is empty")
 
         return self._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),
@@ -407,7 +408,7 @@ class DatabricksTable(Table):
             num_rows = result[0]
 
         if num_rows == 0:
-            raise RuntimeError(f"Table '{self.source_name}' is empty")
+            raise EmptyTableError(f"Table '{self.source_name}' is empty")
 
         return num_rows
 
@@ -429,7 +430,7 @@ class DatabricksTable(Table):
             table = cursor.fetchall_arrow()
 
         if table.num_rows == 0:
-            raise RuntimeError(f"Table '{self.source_name}' is empty")
+            raise EmptyTableError(f"Table '{self.source_name}' is empty")
 
         return self._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),
