@@ -15,8 +15,9 @@ is no training loop, no hyperparameter search, and no per-dataset artifact to
 manage.
 
 This client talks to those models. It builds the request, sends it to a NIM
-inference endpoint, and gives you back a pandas DataFrame. Inference runs in
-the NIM, so this package downloads no weights and needs no GPU.
+inference endpoint, and gives you back a `PredictionResult`, which
+`to_pandas()` turns into a DataFrame. Inference runs in the NIM, so this
+package downloads no weights and needs no GPU.
 
 Two models are available through the client:
 
