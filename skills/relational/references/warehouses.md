@@ -196,7 +196,7 @@ Both are what the Open Semantic Interchange and dbt call a semantic model, but t
 From a **Databricks metric view**:
 
 - its source table, named as it is in the catalog;
-- each join, nested ones too, as a table named after the join and keyed by the column it joins on;
+- each join, nested ones too, as a table named after the join: keyed by the column it joins on for a `many_to_one` join, the default, and keyless for a `one_to_many` join, whose column then references the table it joins;
 - each dimension, as a column of the table it reads, and a wildcard such as `source.*` or `customers.* EXCEPT (rowguid)` as the columns it stands for;
 - the columns a measure aggregates, when it reads one table, added to that table where no dimension names them, so a query can aggregate them too;
 - its `filter`, limiting every read of the source table;
