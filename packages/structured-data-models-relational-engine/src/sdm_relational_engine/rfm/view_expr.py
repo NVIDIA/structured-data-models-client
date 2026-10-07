@@ -1175,12 +1175,29 @@ def _type_end(tokens: list[_Token], at: int) -> int:
     return at
 
 
+def _next(tokens: list[_Token], at: int) -> int:
+    r"""Where the token after the one at ``at`` is, past the type a ``::``,
+    ``?::`` or ``AS`` there introduces, read as the scan reads it, so a comma
+    in ``MAP<STRING, INT>`` separates nothing.
+    """
+    casts = tokens[at].text in ('::', '?::') or tokens[at].folded == 'as'
+    if casts and tokens[at + 1].kind == 'word':
+        return _type_end(tokens, at + 1) + 1
+    return at + 1
+
+
 def _arguments(tokens: list[_Token], at: int) -> int:
-    r"""How many arguments the call whose ``(`` is at ``at`` is given."""
-    commas, depth = 0, 0
-    for token in tokens[at : _closing(tokens, at)]:
-        depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(token.text, 0)
-        commas += token.text == ',' and depth == 1
+    r"""How many arguments the call whose ``(`` is at ``at`` is given.
+
+    A type that runs past the call's ``)`` leaves the call unclosed, and the
+    scan refuses the expression whatever this counts.
+    """
+    commas, depth, end = 0, 0, _closing(tokens, at)
+    while at < end:
+        text = tokens[at].text
+        depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(text, 0)
+        commas += text == ',' and depth == 1
+        at = _next(tokens, at)
     return commas + 1
 
 
@@ -1207,13 +1224,14 @@ def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
             }
         else:
             start, names = index - 1, {_folded_name(before)}
-        depth, end = 0, len(tokens) - 1
-        for at in range(start, len(tokens)):
+        depth, end, at = 0, len(tokens) - 1, start
+        while at < len(tokens):
             text = tokens[at].text
             depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(text, 0)
             if depth < 0 or (depth == 0 and text == ','):
                 end = at
                 break
+            at = _next(tokens, at)
         scopes.append((start, end, names))
     return scopes
 
@@ -1283,7 +1301,7 @@ class _NameScan:
         self.end = len(tokens)
         # Past the end, and so at index -1, stand tokens of no kind.
         self.tokens = [*tokens, *[_Token('end', '', -1, -1)] * 4]
-        self.scopes = _lambda_scopes(tokens)
+        self.scopes = _lambda_scopes(self.tokens)
         self.parsed: dict[tuple[object, ...], bool] = {}
         # For each trial under way, the readings as a column left to try.
         self.trials: list[list[tuple[int, _State, tuple[object, ...]]]] = []
@@ -1483,10 +1501,20 @@ class _NameScan:
         alias = self.tokens[at + 1].text in (',', ')')
         return alias and state.groups[-1].opener == 'struct'
 
-    def _names_a_field(self, at: int, name: str, state: _State) -> bool:
-        r"""Whether ``name`` at ``at``, first in its call, is the field of
-        ``EXTRACT(DOW FROM d)``, any name, or the datetime unit of
-        ``dateadd(DAY, 1, d)``. Either may be quoted.
+    def _from_follows(self, at: int) -> bool:
+        r"""Whether a FROM follows the token at ``at`` in its own bracket."""
+        depth = 0
+        for token in self.tokens[at + 1 : self.closes[at]]:
+            depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(token.text, 0)
+            if depth == 0 and token.folded == 'from':
+                return True
+        return False
+
+    def _names_a_field(self, at: int, state: _State) -> bool:
+        r"""Whether the name at ``at``, first in its call, is the field of
+        ``EXTRACT(DOW FROM d)`` or the unit of ``dateadd(DAY, 1, d)``. Either
+        may be quoted, and as Databricks' parser, which refuses a unit it
+        does not know only later, any lone name there is one.
         """
         opener = state.groups[-1].opener
         if self.tokens[at - 1].text != '(':
@@ -1494,10 +1522,10 @@ class _NameScan:
         if opener == 'extract':
             return True
         three = opener in _UNIT_FIRST_OF_THREE
-        return name in _DATETIME_UNITS and (
-            opener in _UNIT_FIRST
-            or (three and _arguments(self.tokens, at - 1) == 3)
+        unit_first = opener in _UNIT_FIRST or (
+            three and _arguments(self.tokens, at - 1) == 3
         )
+        return unit_first and self.tokens[at + 1].text == ','
 
     def _read_name(
         self, index: int, last: int, state: _State
@@ -1534,7 +1562,7 @@ class _NameScan:
                 tokens[index].kind == 'quoted'
                 and index == last
                 and (
-                    self._names_a_field(index, name, state)
+                    self._names_a_field(index, state)
                     if operand
                     else self._implicit_alias(last, state)
                 )
@@ -1594,12 +1622,13 @@ class _NameScan:
         if group.frame and word in _FRAME_WORDS:
             state.operand = word == 'between'
             return True
-        if self._names_a_field(index, word, state):
+        if self._names_a_field(index, state):
             return True
         if opens and group.opener == 'trim' and word in _TRIM_SIDES:
-            # `TRIM(BOTH FROM s)`, `TRIM(BOTH from FROM s)` and `TRIM(both)`.
-            # In `TRIM(BOTH FROM from)` no operand follows the second `from`.
-            form = after.text not in (')', ',')
+            # `TRIM(BOTH FROM s)`, `TRIM(BOTH from FROM s)`, and `TRIM(both)`
+            # and `TRIM(both < x)`, which have no FROM. In `TRIM(BOTH FROM
+            # from)` no operand follows the second `from`.
+            form = self._from_follows(index)
             third = tokens[index + 3]
             column = tokens[index + 2].folded == 'from' and (
                 third.kind in (*_NAME_KINDS, 'number', 'string')

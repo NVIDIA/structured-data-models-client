@@ -93,6 +93,20 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ),
         ('size(array(*)) + COUNT(*) OVER () + count(x) OVER ()', {'*', 'x'}),
         ('to_json(struct(customers.*, x))', {'customers.*', 'x'}),
+        # A comma inside a type's `<...>` separates no arguments, so these
+        # take two, and a lambda's scope runs past it.
+        ('date_add(`day`, payload::MAP<STRING, INT>[0])', {'day', 'payload'}),
+        ('date_add(day, payload::MAP<STRING, INT>[0])', {'day', 'payload'}),
+        (
+            'datediff(day, x::STRUCT<a: INT, b: INT>.a) + datediff(DAY, a < b, c)',
+            {'day', 'x', 'a', 'b', 'c'},
+        ),
+        ("transform(arr, v -> v::MAP<STRING, INT>['k'] + v)", {'arr'}),
+        ('aggregate(nums, 0, (acc, z) -> acc + as)', {'nums', 'as'}),
+        # Databricks reads any lone name first in a unit's place as the unit,
+        # and a TRIM side as one only before a FROM.
+        ('date_add(acc, 1, ts)', {'ts'}),
+        ('trim(both < x)', {'both', 'x'}),
         # A quoted name is a field, unit or alias where a bare one is, but
         # TRIM's side is grammar only bare.
         ('struct(source.amount `safe amount`)', {'source.amount'}),
@@ -203,6 +217,7 @@ def test_an_expression_nested_too_deep_is_refused(
         "NOT flag AND x AT TIME ZONE 'UTC'",
         'CASE WHEN flag THEN x BETWEEN SYMMETRIC y AND n END',
         'x SORT BY y',
+        'date_add(day, x::MAP<STRING, INT) > 1',
         'NOT (x',
     ],
 )
