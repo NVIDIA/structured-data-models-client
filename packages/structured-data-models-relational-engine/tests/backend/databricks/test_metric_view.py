@@ -3331,8 +3331,8 @@ measures:
             ['items', 'y'],
         ),
         (
-            "MAX(order_ts) - INTERVAL 1 DAY - INTERVAL '1' DAY TO HOUR "
-            '- INTERVAL (lag) DAYS',
+            "MAX(order_ts) - INTERVAL 1 DAY - INTERVAL '1 2' DAY TO HOUR "
+            '- MAX(lag) * INTERVAL 1 DAY',
             ['order_ts', 'lag'],
         ),
         (
