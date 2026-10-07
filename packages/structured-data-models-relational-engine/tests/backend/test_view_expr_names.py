@@ -56,6 +56,10 @@ from sdm_relational_engine.rfm.view_expr import name_references
         ('CASE from WHEN from THEN from END', {'from'}),
         ('CASE WHEN NOT is THEN is END', {'is'}),
         ('CASE CASE WHEN both THEN 1 END WHEN 1 THEN both END', {'both'}),
+        # A CASE is a form only if the rest then parses: no END is left here.
+        ('CASE case WHEN when THEN end END', {'case', 'when', 'end'}),
+        ('CASE WHEN case THEN end ELSE not END', {'case', 'end', 'not'}),
+        ('CASE WHEN x THEN not END', {'x', 'not'}),
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),
     ],
