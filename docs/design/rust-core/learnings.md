@@ -1,7 +1,7 @@
 # Rust core migration: what we learned
 
-In early October 2026, two AI agent orchestrators spent about 132 hours moving this client's logic into a shared Rust core.
-Nothing merged.
+In early October 2026, two AI agent orchestrators worked to move this client's logic into a shared Rust core, over about 132 elapsed hours in total.
+None of the Rust core work merged to `main`.
 This page sums up two independent postmortems of that attempt, one by each orchestrator, and where they agreed.
 The new plan is in [migration-plan.md](migration-plan.md).
 
@@ -16,16 +16,16 @@ The new plan is in [migration-plan.md](migration-plan.md).
 
 | What | Number |
 |---|---|
-| Python replaced (excluding generated parser code) | 26,914 lines |
+| Python replaced (excluding generated parser code and the C++ helper) | 26,914 lines |
 | Rust written (product code) | 71,112 lines, 2.6 times the Python |
 | Rust that re-creates pandas, numpy or CPython behavior by hand | about 27-29% |
-| Rust bug fixes caused by that hand-written behavior | 55% (65 of 118) |
+| Rust fix commits classified as being about that hand-written behavior | 55% (65 of 118) |
 | Migration test code | 60,741 lines, plus 193 MB of recordings |
 | Public-API regressions found by a 35-case probe after "zero differences" | 9 |
 | Commits to the migration's tracking repository by the second orchestrator in 63 hours | 1,378 |
 | Phases planned / phases by the end | 12 / 24 |
 
-Counts come from the postmortem audits of the last candidate commit; the percentages are classification estimates, accurate to about ±10%.
+Counts come from the postmortem audits of the last candidate commit; the percentages are classification estimates (about ±10%), and the 27-29% range reflects two counting methods.
 
 ## What went wrong
 
@@ -54,7 +54,7 @@ Emulating pandas' type system was open-ended, and the overlap of pandas dtypes, 
 ### 4. We rewrote libraries instead of using them
 
 The core had only 16 direct external dependencies: of the Arrow compute crates it used only `arrow-select`, and it used no time zone, YAML or big-integer library (`chrono` and `num-bigint` came in through Arrow but were never used).
-Nobody evaluated Polars or DataFusion.
+The migration records show no evaluation of Polars or DataFusion.
 They would not have matched pandas' answers; whether they would have removed much hand-written code once bit-for-bit matching was dropped was never measured.
 **Lesson:** for each dependency, decide "use a library", "port a defined algorithm" or "keep in the host", and record the measured reason.
 
@@ -76,7 +76,7 @@ Algorithm unit tests stay; migration-specific tests of internals are retired onc
 ### 7. Fixes did not protect neighboring cases
 
 A fix that refused unsupported DuckDB nested types also refused 24 cases that used to work, while its own new tests passed.
-**Lesson:** a type or conversion fix merges only with a public reproduction that failed first, plus tests for the neighboring supported and refused cases.
+**Lesson:** a type or conversion fix merges only with a public reproduction that failed first, and a CI ratchet fails any change that breaks a case that used to pass.
 
 ### 8. Hand-judged lists never converged
 
@@ -88,18 +88,24 @@ All seven independent checks of the "untested branches" lists failed, with 3 to 
 About 43% of the first orchestrator's agent time was process.
 Most audits failed on wording, not code.
 Agreed acceptance checks were locked before implementation, and checks that could never pass had to be changed and locked again ("relocks"): eight times across the first orchestrator's phases, and nine times in a single later phase.
-Evidence was tied to exact commits, so every commit forced re-validation, and approvals were per file hash, so one rename meant hundreds of re-approvals.
+Evidence tied to exact commits forced repeated re-validation, and approvals were per file hash, so one rename meant hundreds of re-approvals.
 The second orchestrator added rules on itself and asked the owner one question in 62 hours.
 **Lesson:** cap rounds and relocks, approve by meaning (one decision covers many files), and size phases in days.
 Stop rules are acted on by the owner, not by the agent doing the work.
 
 ### 10. Work fragmented instead of integrating
 
-By the end there were 74 worktree directories and many branches.
+The two runs created 74 worktree directories and many branches.
 One candidate passed all 5,004 public cases and 21,388 generated ones, though its live checks had not run; it existed only as a detached commit.
 The next four fixes, composed on top of it, broke 24 cases that used to work.
 **Lesson:** keep one integration branch with at most one short-lived topic branch.
 Push every candidate that passes its checks before building on it, and treat "passed these cases" as a checkpoint, not a release.
+
+### 11. Agreements made in review were lost
+
+When the proposal was posted, reviewers asked for pluggable data access, so a host could answer with a non-SQL source, and for one shared PQL instead of two.
+The first was agreed and the second left open: the plan omitted the data-access seam, and shared PQL never became a real shared dependency, so the implementation hard-coded the SQL dialects and wrote another PQL parser.
+**Lesson:** every review comment ends as a plan item, a decision, or an explicit "no", and is tracked to the end.
 
 ## What held up and is worth keeping
 
@@ -109,7 +115,9 @@ Push every candidate that passes its checks before building on it, and treat "pa
 - Independent review and probing, which found most real defects.
 - Locked acceptance checks, once they test the public contract and are proven passable.
 
-## Where the two postmortems differed
+## Where the two postmortems first differed
+
+After reviewing each other's reports, the second orchestrator endorsed proving the Arrow-only contract on a hard slice first and resetting the process; the table shows the initial positions.
 
 | Question | First orchestrator | Second orchestrator | The plan adopts |
 |---|---|---|---|
