@@ -1014,48 +1014,42 @@ def _untrusted_call_reason(
     return None
 
 
-# Words of a Databricks expression that may be grammar. On a DBSQL 2026.38
-# warehouse a column may take each of these names but `true`, `false` and
-# `null`, and is read where an operand stands: `SUM(filter)`, `case + 1`. A
-# datetime unit is grammar only where a unit stands, so is not among them.
-_EXPRESSION_KEYWORDS = frozenset(
-    {
-        'all', 'and', 'any', 'as', 'asc', 'between', 'by', 'case', 'current',
-        'desc', 'distinct', 'else', 'end', 'escape', 'exists', 'false',
-        'filter', 'first', 'following', 'from', 'ilike', 'in', 'interval',
-        'is', 'last', 'like', 'not', 'null', 'nulls', 'or', 'order', 'over',
-        'partition', 'preceding', 'range', 'rlike', 'row', 'rows', 'some',
-        'then', 'true', 'unbounded', 'when', 'where',
-    }
-)  # fmt: skip
+# Whether a word of a Databricks expression names a column depends on where
+# it stands, not on the word: on a DBSQL 2026.39 warehouse a column may take
+# any keyword's name but `true`, `false` and `null`. Right after a complete
+# operand a word is grammar, an operator such as REGEXP or a clause word such
+# as FOR or ROWS. Where an operand is expected a word is a column, unless it
+# opens a form around the operand that follows it, as NOT does. Where both
+# readings parse, Databricks takes the form: `NOT and(x)` calls `and`.
 _LITERAL_WORDS = frozenset({'true', 'false', 'null'})
-# Keywords an operand follows, as in `NOT x` and `COUNT(DISTINCT x)`.
+# Words that, after an operand, take another: `x REGEXP y`, `s FOR 2`, and
+# a type, field, collation or window name after AS, COLLATE or OVER.
 _TAKE_AN_OPERAND = frozenset(
     {
-        'all', 'and', 'between', 'by', 'case', 'distinct', 'else', 'from',
-        'ilike', 'interval', 'like', 'not', 'or', 'rlike', 'then', 'when',
-        'where',
+        'and', 'as', 'between', 'collate', 'div', 'else', 'escape', 'filter',
+        'for', 'from', 'ilike', 'in', 'is', 'like', 'or', 'over', 'placing',
+        'range', 'regexp', 'rlike', 'rows', 'then', 'when', 'within',
     }
 )  # fmt: skip
-# Keywords that may follow an operand, as in `x IS NULL` and `ORDER BY x ASC`.
-_FOLLOW_AN_OPERAND = frozenset(
-    {
-        'and', 'as', 'asc', 'between', 'collate', 'desc', 'div', 'else', 'end',
-        'escape', 'for', 'from', 'ilike', 'in', 'is', 'like', 'nulls', 'or',
-        'range', 'regexp', 'rlike', 'rows', 'then', 'when',
-    }
-)  # fmt: skip
-# `NOT` follows an operand only before these, as in `x NOT IN (1)`.
-_AFTER_A_NEGATED_OPERAND = frozenset(
-    {'between', 'ilike', 'in', 'like', 'regexp', 'rlike'}
+_TAKE_A_NAME = frozenset({'as', 'collate', 'over'})
+# Words before `(` that open no call, or a form with its own grammar.
+_NOT_CALLS = _TAKE_AN_OPERAND | {
+    '', 'cast', 'extract', 'group', 'overlay', 'position', 'substring',
+    'trim', 'try_cast',
+}  # fmt: skip
+# NOT follows an operand only before these: `x NOT IN (1)`.
+_NEGATED = frozenset({'between', 'ilike', 'in', 'like', 'regexp', 'rlike'})
+# What may stand after IS: `IS [NOT] NULL`, `IS UNKNOWN`, `IS DISTINCT FROM`.
+_AFTER_IS = frozenset(
+    {'distinct', 'false', 'from', 'not', 'null', 'true', 'unknown'}
 )
-# Databricks reads these as grammar before a sign: `SELECT all + 1` is 1.
-_BEFORE_A_SIGN = frozenset({'all', 'distinct', 'not'})
-_OPERATORS = frozenset({'<=>', '<=', '>=', '<>', '<', '>', '->', '=>'})
-# What a window's frame says, grammar anywhere inside `OVER (...)`.
+# What a window's frame says between ROWS or RANGE and its `)`, and what
+# may start it.
 _FRAME_WORDS = frozenset(
-    {'current', 'following', 'preceding', 'range', 'row', 'rows', 'unbounded'}
+    {'between', 'current', 'following', 'preceding', 'row', 'unbounded'}
 )
+_FRAME_STARTS = frozenset({'between', 'current', 'interval', 'unbounded'})
+_TRIM_SIDES = frozenset({'both', 'leading', 'trailing'})
 # Functions whose first argument may be a datetime unit, as a bare word.
 _UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
 # These take a unit first only in their three-argument form: `datediff(a,
@@ -1117,9 +1111,9 @@ def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
                 if depth == 0:
                     break
                 start -= 1
-            names = {t.folded for t in tokens[start:index] if t.folded}
+            names = {_name(t) for t in tokens[start:index] if _name(t)}
         else:
-            start, names = index - 1, {before.folded}
+            start, names = index - 1, {_name(before)}
         depth, end = 0, len(tokens) - 1
         for at in range(start, len(tokens)):
             depth += {'(': 1, ')': -1}.get(tokens[at].text, 0)
@@ -1130,59 +1124,304 @@ def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
     return scopes
 
 
-def _grammar(tokens: list[_Token]) -> set[int]:
-    r"""Where in ``tokens`` a keyword is grammar rather than a column.
+@dataclass
+class _Group:
+    r"""A bracket open while scanning, and what is open inside it."""
 
-    A keyword names a column only where a lone operand stands: after an
-    operator, an opening bracket, a comma or a keyword taking an operand,
-    and before an operator, a closing bracket, a comma or a keyword that
-    may follow an operand.
+    opener: str  # The word before it, folded, if any.
+    cases: int = 0  # How many CASEs are open.
+    frame: bool = False  # Whether a window's frame is being read.
+
+
+class _NameScan:
+    r"""Reads an expression's tokens in order, keeping whether an operand is
+    expected next, which decides whether a word names a value.
     """
-    grammar: set[int] = set()
-    openers: list[str] = []
-    for index, token in enumerate(tokens):
-        previous = tokens[index - 1] if index > 0 else None
-        after = tokens[index + 1] if index + 1 < len(tokens) else None
-        before, beyond = (
-            tokens[at].folded if 0 <= at < len(tokens) else ''
-            for at in (index - 2, index + 2)
-        )
+
+    def __init__(self, tokens: list[_Token]) -> None:
+        self.tokens = tokens
+        self.scopes = _lambda_scopes(tokens)
+        self.groups = [_Group('')]
+        self.operand = True  # An operand is expected next.
+        self.name_next = False  # A type, field, collation or window comes.
+        self.after_is = False  # Within `IS [NOT] ...`.
+        self.case_at = -1  # Where a CASE's subject or first WHEN stands.
+        self.by_at = -1  # Where the BY of `PARTITION BY` stands.
+        self.skip_to = -1  # The end of a type's `<...>`.
+
+    def references(self) -> list[NameReference]:
+        tokens, references = self.tokens, []
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            if index <= self.skip_to:
+                index += 1
+            elif token.kind not in ('word', 'quoted'):
+                self._punctuation(index)
+                index += 1
+            else:
+                last = index
+                while (
+                    last + 2 < len(tokens)
+                    and tokens[last + 1].text == '.'
+                    and tokens[last + 2].kind in ('word', 'quoted')
+                ):
+                    last += 2
+                if self._is_value(index, last):
+                    references.append(
+                        NameReference(
+                            tuple(
+                                _unquoted(t)
+                                for t in tokens[index : last + 1 : 2]
+                            ),
+                            (token.start, tokens[last].end),
+                            last == index and token.kind == 'word',
+                        )
+                    )
+                index = last + 1
+        return references
+
+    def _punctuation(self, index: int) -> None:
+        token = self.tokens[index]
         if token.text in '([':
-            openers.append(previous.folded if previous else '')
-        elif token.text in ')]' and openers:
-            openers.pop()
-        word = token.folded
-        if word not in _EXPRESSION_KEYWORDS:
-            continue
-        opens = (
-            previous is None
-            or previous.kind == 'other'
-            or previous.text in ('(', '[', ',', *_OPERATORS)
-            or (
-                index - 1 in grammar
-                and previous.folded in _TAKE_AN_OPERAND
-                # `IS NOT` takes `NULL`, `TRUE` or `DISTINCT FROM`.
-                and not (previous.folded == 'not' and before == 'is')
-            )
+            previous = self.tokens[index - 1] if index else None
+            self.groups.append(_Group(previous.folded if previous else ''))
+        elif token.text in ')]' and len(self.groups) > 1:
+            self.groups.pop()
+        self.operand = token.text not in ')]' and token.kind not in (
+            'number',
+            'string',
         )
-        closes = (
-            after is None
-            or (after.kind == 'other' and word not in _BEFORE_A_SIGN)
-            or after.text in (')', ']', ',', '[', '::', *_OPERATORS)
-            or after.folded in _FOLLOW_AN_OPERAND
-            or (after.folded == 'not' and beyond in _AFTER_A_NEGATED_OPERAND)
+        self.name_next = token.text == '::'
+        self.after_is = False
+
+    def _folded(self, at: int) -> str:
+        return self.tokens[at].folded if at < len(self.tokens) else ''
+
+    def _text(self, at: int) -> str:
+        return self.tokens[at].text if at < len(self.tokens) else ''
+
+    def _starts_an_operand(self, at: int) -> bool:
+        r"""Whether an operand may start at ``at``.
+
+        A word that may take an operand after another, as ``or`` may, does
+        only if an operand may start after it: in ``NOT or`` the ``or`` is a
+        column, and in ``NOT or AND y`` it is not. So each such word in a
+        run turns over the answer for what follows the run.
+        """
+        turns = 0
+        starts, span = self._role(at)
+        while span:
+            turns += 1
+            at += span
+            starts, span = self._role(at)
+        return starts != bool(turns % 2)
+
+    def _role(self, at: int) -> tuple[bool, int]:
+        r"""Whether an operand may start at ``at``, or else how many tokens
+        a word that takes an operand there spans, as ``NOT IN`` spans two.
+        """
+        if at >= len(self.tokens):
+            return False, 0
+        token = self.tokens[at]
+        if token.kind in ('number', 'string', 'quoted') or token.text == '(':
+            return True, 0
+        if token.kind != 'word':
+            return False, 0
+        word, group = token.folded, self.groups[-1]
+        after, after_text = self._folded(at + 1), self._text(at + 1)
+        if word in ('then', 'else', 'when', 'end') and not group.cases:
+            return True, 0
+        if word == 'end':
+            # An END closes a CASE only if too few follow it to close them all.
+            return self._ends_after(at) >= group.cases, 0
+        if after_text == '(':
+            return True, 0  # A call, as `in(1, 2)` may be.
+        if word == 'not' and after in _NEGATED:
+            # Before `(`, Databricks reads `NOT in(1)` before reading
+            # `NOT IN (1)` after an operand.
+            call = self._text(at + 2) == '('
+            return call, 0 if call else 2
+        follows = (
+            (word in ('preceding', 'following') and group.frame)
+            or (word in ('ignore', 'respect') and after == 'nulls')
+            or (word == 'nulls' and after in ('first', 'last'))
+            or (word in ('order', 'partition') and after == 'by')
         )
-        # `CASE WHEN` opens a searched case, unless a `CASE` comes first.
-        if word == 'case' and after is not None and after.folded == 'when':
-            closes = previous is not None and previous.folded == 'case'
-        in_frame = bool(openers) and openers[-1] == 'over'
-        if (
-            word in _LITERAL_WORDS
-            or not (opens and closes)
-            or (in_frame and word in _FRAME_WORDS)
+        if word in ('rows', 'range'):
+            # Grammar only where it opens a window's frame.
+            follows = group.opener == 'over' and self._opens_a_frame(at + 1)
+            return not follows, 0
+        if follows:
+            return False, 0
+        return word not in _TAKE_AN_OPERAND, int(word in _TAKE_AN_OPERAND)
+
+    def _opens_a_frame(self, at: int) -> bool:
+        r"""Whether what is at ``at`` may follow ROWS or RANGE in a frame."""
+        return self._folded(at) in _FRAME_STARTS or (
+            at < len(self.tokens) and self.tokens[at].kind == 'number'
+        )
+
+    def _ends_after(self, at: int) -> int:
+        r"""How many words ``end`` follow ``at`` in its group."""
+        depth, ends = 0, 0
+        for token in self.tokens[at + 1 :]:
+            depth += {'(': 1, '[': 1, ')': -1, ']': -1}.get(token.text, 0)
+            if depth < 0:
+                break
+            ends += depth == 0 and token.folded == 'end'
+        return ends
+
+    def _is_value(self, index: int, last: int) -> bool:
+        r"""Whether the name at ``index`` to ``last`` is read as a value,
+        moving on what is expected after it.
+        """
+        tokens, group = self.tokens, self.groups[-1]
+        token = tokens[index]
+        previous = tokens[index - 1] if index else None
+        after = tokens[last + 1] if last + 1 < len(tokens) else None
+        word = token.folded if index == last else ''
+        name = _name(token) if index == last else ''
+        operand, name_next, after_is = (
+            self.operand,
+            self.name_next,
+            self.after_is,
+        )
+        self.operand = self.name_next = self.after_is = False
+        if previous is not None and previous.text in ('.', ':'):
+            return False  # A field or a JSON path's step.
+        if name_next:
+            if after is not None and after.text == '<':
+                self.skip_to = _closing(tokens, last + 1)
+            return False
+        if after is not None and after.text in ('(', '=>'):
+            return False  # A call or a named argument.
+        if name and any(
+            start <= index <= end and name in names
+            for start, end, names in self.scopes
         ):
-            grammar.add(index)
-    return grammar
+            return False  # A lambda's parameter.
+        if not word:
+            return True  # Quoted or qualified.
+        if index == self.by_at:
+            self.operand = True
+            return False
+        if (
+            word in ('order', 'partition')
+            and after is not None
+            and after.folded == 'by'
+        ):
+            self.by_at = last + 1
+            return False
+        if not operand:
+            # Right after an operand: an operator or a clause's word.
+            self.operand = word in _TAKE_AN_OPERAND
+            self.name_next = word in _TAKE_A_NAME
+            self.after_is = word == 'is'
+            group.frame = group.frame or word in ('rows', 'range')
+            if word == 'end' and group.cases:
+                group.cases -= 1
+            return False
+        return not self._opens_a_form(index, word, previous, after, after_is)
+
+    def _opens_a_form(
+        self,
+        index: int,
+        word: str,
+        previous: _Token | None,
+        after: _Token | None,
+        after_is: bool,
+    ) -> bool:
+        r"""Whether ``word``, where an operand is expected, is grammar."""
+        group, following = self.groups[-1], after.folded if after else ''
+        opens = previous is not None and previous.text == '('
+        if word in _LITERAL_WORDS:
+            return True
+        if after_is and word in _AFTER_IS:
+            self.after_is = word in ('not', 'distinct')
+            self.operand = word in ('not', 'distinct', 'from')
+            return True
+        if group.frame and word in _FRAME_WORDS:
+            self.operand = word == 'between'
+            return True
+        if (
+            opens
+            and word in _DATETIME_UNITS
+            and (
+                group.opener in _UNIT_FIRST
+                or (
+                    group.opener in _UNIT_FIRST_OF_THREE
+                    and _arguments(self.tokens, index - 1) == 3
+                )
+            )
+        ):
+            return True
+        if (
+            opens
+            and group.opener == 'trim'
+            and word in _TRIM_SIDES
+            and after is not None
+            and after.text not in (')', ',')
+        ):
+            # `TRIM(BOTH FROM s)` and `TRIM(BOTH from FROM s)`.
+            self.operand = self._starts_an_operand(index + 1)
+            return True
+        if (
+            opens
+            and group.opener == 'over'
+            and word in ('rows', 'range')
+            and self._opens_a_frame(index + 1)
+        ):
+            group.frame = self.operand = True
+            return True
+        if word == 'when' and index == self.case_at:
+            # `CASE WHEN x`, unless a subject named `when` comes first.
+            searched = not (
+                following == 'when' and self._starts_an_operand(index + 2)
+            )
+            self.operand = searched
+            return searched
+        signed = after is not None and after.text in ('+', '-')
+        if word == 'interval':
+            # `INTERVAL 1 DAY` and `INTERVAL -1 DAY`, where `interval - 1`
+            # and `interval ASC` read a column.
+            opens_form = after is not None and (
+                after.kind in ('number', 'string')
+                or after.text == '('
+                or (
+                    self._folded(index + 2 + signed) in _DATETIME_UNITS
+                    and (signed or self._starts_an_operand(index + 1))
+                )
+            )
+        elif word == 'where':
+            # FILTER takes a WHERE, and nothing else does.
+            opens_form = opens and group.opener == 'filter'
+        elif word == 'case':
+            group.cases += 1  # What follows is read as inside it.
+            # A CASE needs an END. Where a CASE's subject stands, a column
+            # named `case` may come before WHEN.
+            opens_form = self._ends_after(index) >= group.cases and (
+                following == 'when' or self._starts_an_operand(index + 1)
+            )
+            group.cases -= 1
+        elif word in ('all', 'distinct'):
+            # Only a call's arguments take a quantifier: `COUNT(DISTINCT x)`.
+            opens_form = (
+                opens
+                and group.opener not in _NOT_CALLS
+                and (signed or self._starts_an_operand(index + 1))
+            )
+        elif word == 'not':
+            opens_form = signed or self._starts_an_operand(index + 1)
+        else:
+            # A typed literal, as DATE '2024-01-01'.
+            opens_form = after is not None and after.kind == 'string'
+        if opens_form:
+            self.operand = True
+            if word == 'case':
+                group.cases += 1
+                self.case_at = index + 1
+        return opens_form
 
 
 def name_references(expr: str) -> list[NameReference]:
@@ -1191,109 +1430,17 @@ def name_references(expr: str) -> list[NameReference]:
     That leaves out a function's name, a type, a keyword where it is
     grammar, a datetime unit, a named argument, a lambda's parameter and a
     JSON path step, so a word of the grammar is never read as a column or a
-    parameter.
+    parameter. Where a word stands decides which it is, as it does for
+    Databricks: in ``SUM(x) OVER (PARTITION BY range)`` the ``range`` is a
+    column, and in ``col REGEXP 'x'`` the ``REGEXP`` is an operator.
     """
     tokens = [token for token in _lex(expr) if token.kind != 'comment']
-    scopes = _lambda_scopes(tokens)
-    grammar = _grammar(tokens)
-    # Who opened each group still open, by name where a call did.
-    openers: list[str] = []
-    # Where a datetime unit may stand: after an INTERVAL's operand, a
-    # literal, or TO after a unit.
-    unit_after: set[int] = set()
-    skip_to = -1
-    references: list[NameReference] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        previous = tokens[index - 1] if index > 0 else None
-        if token.text in '([':
-            called = previous is not None and previous.kind in (
-                'word',
-                'quoted',
-            )
-            openers.append(previous.folded if called and previous else '')
-        elif token.text in ')]' and openers:
-            openers.pop()
-        if token.kind in ('number', 'string'):
-            unit_after.add(index)
-        if token.folded == 'interval' and index + 1 < len(tokens):
-            operand = index + 1
-            if tokens[operand].text == '(':
-                operand = _closing(tokens, operand)
-            unit_after.add(operand)
-        if token.kind not in ('word', 'quoted') or (
-            previous is not None and previous.text == '.'
-        ):
-            index += 1
-            continue
-        last = index
-        while (
-            last + 2 < len(tokens)
-            and tokens[last + 1].text == '.'
-            and tokens[last + 2].kind in ('word', 'quoted')
-        ):
-            last += 2
-        chain = tokens[index : last + 1 : 2]
-        after = tokens[last + 1] if last + 1 < len(tokens) else None
-        bare = len(chain) == 1 and token.kind == 'word'
-        # After AS stands a type in a cast, and a name given elsewhere, as
-        # in `struct(a AS f)`.
-        after_as = previous is not None and previous.folded == 'as'
-        is_type = (previous is not None and previous.text == '::') or (
-            after_as and bool(openers) and openers[-1] in ('cast', 'try_cast')
-        )
-        is_unit = (
-            bare
-            and token.folded in _DATETIME_UNITS
-            and (
-                index - 1 in unit_after
-                or (
-                    previous is not None
-                    and previous.text == '('
-                    and len(openers) > 0
-                    and (
-                        openers[-1] in _UNIT_FIRST
-                        or (
-                            openers[-1] in _UNIT_FIRST_OF_THREE
-                            and _arguments(tokens, index - 1) == 3
-                        )
-                    )
-                )
-            )
-        )
-        if is_unit:
-            unit_after.add(index)
-            if after is not None and after.folded == 'to':
-                unit_after.add(last + 1)
-        if is_type and after is not None and after.text == '<':
-            skip_to = _closing(tokens, last + 1)
-        if not (
-            is_type
-            or after_as
-            or is_unit
-            or index <= skip_to
-            or (after is not None and after.text in ('(', '=>'))
-            or (previous is not None and previous.text == ':')
-            or (bare and index in grammar)
-            or (bare and token.folded == 'to' and index - 1 in unit_after)
-            or (
-                bare
-                and any(
-                    start <= index <= end and token.folded in names
-                    for start, end, names in scopes
-                )
-            )
-        ):
-            references.append(
-                NameReference(
-                    tuple(_unquoted(t) for t in chain),
-                    (token.start, tokens[last].end),
-                    bare,
-                )
-            )
-        index = last + 1
-    return references
+    return _NameScan(tokens).references()
+
+
+def _name(token: _Token) -> str:
+    r"""The folded name ``token`` gives, quoted or not, or ``''``."""
+    return _unquoted(token).lower() if token.kind in ('word', 'quoted') else ''
 
 
 def _unquoted(token: _Token) -> str:
