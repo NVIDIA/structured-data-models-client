@@ -712,6 +712,31 @@ def test_parsing_leaves_calls_to_the_check() -> None:
         parse('source.amount > 0) OR (1 = 1')
 
 
+@pytest.mark.parametrize(
+    'row_filter, reason',
+    [
+        ('source.x IN (SELECT 1) AND source.x > p', "keyword 'SELECT'"),
+        ('source.x > p) OR (1 = 1', "closes a '\\('"),
+    ],
+    ids=['sub-query', 'stray-bracket'],
+)
+def test_a_filter_on_a_parameter_is_refused_for_what_the_guard_sees(
+    row_filter: str, reason: str
+) -> None:
+    r"""Reading the filter for its parameters refused a sub-query as syntax
+    not understood, which hid what it was.
+    """
+    with pytest.raises(UnsupportedFilterError, match=reason):
+        parse_metric_view(f"""
+source: cat.sch.t
+parameters:
+  - name: p
+    data_type: INT
+    default: 1
+filter: {json.dumps(row_filter)}
+""")
+
+
 def test_a_parsed_filter_gives_out_its_sql_only_through_a_check() -> None:
     r"""The parsed filter is no string, so it cannot reach a query unless a
     caller checks it against the source table's columns or trusts the view.

@@ -873,7 +873,12 @@ def parse_metric_view(
     }
 
     row_filter = _sql(cfg.get('filter'))
-    if isinstance(row_filter, str):
+    # What the guard refuses, such as a sub-query, is not read but left for
+    # the check below to refuse, saying why.
+    if (
+        isinstance(row_filter, str)
+        and _unsafe_expr_reason(row_filter, 'databricks') is None
+    ):
         try:
             substituted, referenced = _substitute_parameters(
                 row_filter, parameters
