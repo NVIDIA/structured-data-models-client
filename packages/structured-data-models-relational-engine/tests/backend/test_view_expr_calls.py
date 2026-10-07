@@ -302,7 +302,9 @@ def test_snowflake_refuses_a_line_comment_written_with_slashes() -> None:
     # Spliced into a select list, it would comment out the table read.
     assert _unsafe_expr_reason('X FROM PAYROLL //', 'snowflake') is not None
     assert _unsafe_expr_reason('X / 2', 'snowflake') is None
-    assert _unsafe_expr_reason("CONCAT('https://x.com/', ID)", 'snowflake') is None
+    assert (
+        _unsafe_expr_reason("CONCAT('https://x.com/', ID)", 'snowflake') is None
+    )
     assert _unsafe_expr_reason("CONCAT('a//b', x)", 'databricks') is None
 
 
