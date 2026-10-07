@@ -1098,13 +1098,13 @@ _TYPED_LITERALS = frozenset(
     {'date', 'timestamp', 'timestamp_ltz', 'timestamp_ntz', 'x'}
 )
 _TRIM_SIDES = frozenset({'both', 'leading', 'trailing'})
-# What a type may go on with after its name, as the cast grammar reads it:
-# fields in `<...>` for these alone, so `x::int < y` compares, `STRUCT<>`
-# with none, the fields of `INTERVAL DAY TO SECOND`, and a time zone.
+# The types that take fields in `<...>`; after any other, `<` compares.
 _TYPES_WITH_FIELDS = frozenset({'array', 'map', 'struct'})
+# The fields an interval type names, as in `INTERVAL DAY TO SECOND`.
 _INTERVAL_FIELDS = frozenset(
     {'year', 'month', 'day', 'hour', 'minute', 'second'}
 )
+# The time zones a timestamp type may name.
 _TIME_ZONES = (('with', 'local', 'time', 'zone'), ('without', 'time', 'zone'))
 # Functions whose first argument may be a datetime unit, as a bare word.
 _UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
@@ -1146,6 +1146,27 @@ def _closing(tokens: list[_Token], at: int) -> int:
             if depth == 0:
                 return index
     return len(tokens) - 1
+
+
+def _type_end(tokens: list[_Token], at: int) -> int:
+    r"""Where the type named at ``at`` ends: past its parameters, as in
+    ``DECIMAL(38, 2)``, its fields, as in ``ARRAY<INT>``, ``STRUCT<>`` and
+    ``INTERVAL DAY TO SECOND``, or its time zone. An alias, collation or
+    window name ends where it starts.
+    """
+    word, after = tokens[at].folded, tokens[at + 1].text
+    if after == '(' or (after == '<' and word in _TYPES_WITH_FIELDS):
+        return _closing(tokens, at + 1)
+    if after == '<>' and word == 'struct':
+        return at + 1
+    if word == 'interval' and tokens[at + 1].folded in _INTERVAL_FIELDS:
+        return at + 3 if tokens[at + 2].folded == 'to' else at + 1
+    if word == 'timestamp':
+        words = tuple(token.folded for token in tokens[at + 1 : at + 5])
+        for zone in _TIME_ZONES:
+            if words[: len(zone)] == zone:
+                return at + len(zone)
+    return at
 
 
 def _arguments(tokens: list[_Token], at: int) -> int:
@@ -1208,7 +1229,7 @@ class _State:
     after_is: bool = False  # Within `IS [NOT] ...`.
     case_at: int = -1  # Where a CASE's subject or first WHEN stands.
     by_at: int = -1  # Where the BY of `PARTITION BY` stands.
-    skip_to: int = -1  # The end of a type's `<...>`.
+    skip_to: int = -1  # The end of a type.
 
     def taken(self) -> tuple[bool, bool, bool]:
         r"""What the last token left expected, cleared for the next."""
@@ -1432,7 +1453,7 @@ class _NameScan:
         if previous.text in ('.', ':'):
             return False, True  # A field or a JSON path's step.
         if name_next:
-            if (end := self._type_end(last)) > last:
+            if (end := _type_end(tokens, last)) > last:
                 state.skip_to = end
             return False, True
         if after.text == '(' and operand:
@@ -1468,27 +1489,6 @@ class _NameScan:
         elif word in _CASE_STEPS and group.cases:
             group.cases = (*group.cases[:-1], word)
         return False, parses
-
-    def _type_end(self, at: int) -> int:
-        r"""Where the type named at ``at`` ends: past its parameters, as in
-        ``DECIMAL(38, 2)``, its fields, as in ``ARRAY<INT>``, ``STRUCT<>`` and
-        ``INTERVAL DAY TO SECOND``, or its time zone. An alias, collation or
-        window name ends where it starts.
-        """
-        tokens, word = self.tokens, self.tokens[at].folded
-        after = tokens[at + 1].text
-        if after == '(' or (after == '<' and word in _TYPES_WITH_FIELDS):
-            return _closing(tokens, at + 1)
-        if after == '<>' and word == 'struct':
-            return at + 1
-        if word == 'interval' and tokens[at + 1].folded in _INTERVAL_FIELDS:
-            return at + 3 if tokens[at + 2].folded == 'to' else at + 1
-        if word == 'timestamp':
-            words = tuple(token.folded for token in tokens[at + 1 : at + 5])
-            for zone in _TIME_ZONES:
-                if words[: len(zone)] == zone:
-                    return at + len(zone)
-        return at
 
     def _opens_a_form(
         self, index: int, word: str, state: _State, after_is: bool

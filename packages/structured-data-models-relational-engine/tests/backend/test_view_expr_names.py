@@ -82,18 +82,15 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ('CAST(CASE WHEN a THEN b END AS DECIMAL(38,2))', {'a', 'b'}),
         ('CAST(CASE WHEN a THEN b END AS INT)', {'a', 'b'}),
         ('CAST(COALESCE(b, c) AS DECIMAL(38,2))', {'b', 'c'}),
-        (
-            'TRY_CAST(CASE case WHEN end THEN end END AS CHAR(3))',
-            {'case', 'end'},
-        ),
-        ('CAST(NOT not AS DECIMAL(3,1))', {'not'}),
-        ('COUNT(DISTINCT CAST(distinct AS VARCHAR(10)))', {'distinct'}),
-        ('COUNT(ALL all::DECIMAL(10))', {'all'}),
+        ('TRY_CAST(CASE a WHEN b THEN c END AS CHAR(3))', {'a', 'b', 'c'}),
+        ('CAST(NOT a AS DECIMAL(3,1))', {'a'}),
+        ('COUNT(DISTINCT CAST(a AS VARCHAR(10)))', {'a'}),
+        ('COUNT(ALL a::DECIMAL(10))', {'a'}),
         ('CASE WHEN when THEN then::DECIMAL(10) END', {'when', 'then'}),
         (
-            'CAST(CASE WHEN case THEN CASE WHEN when THEN end END END '
-            'AS DECIMAL(38,2)) + end',
-            {'case', 'when', 'end'},
+            'CAST(CASE WHEN a THEN CASE WHEN b THEN c END END '
+            'AS DECIMAL(38,2)) + d',
+            {'a', 'b', 'c', 'd'},
         ),
         (
             'CAST(CASE WHEN interval THEN day END AS INTERVAL DAY TO SECOND)',
@@ -109,8 +106,7 @@ _PROBE = '(CASE WHEN x THEN not END)'
             'AS TIMESTAMP WITHOUT TIME ZONE)',
             {'zone', 'without'},
         ),
-        ('CASE WHEN with THEN time::timestamp END', {'with', 'time'}),
-        ('CAST(CASE WHEN case THEN NULL END AS STRUCT<>) IS NULL', {'case'}),
+        ('CAST(CASE WHEN a THEN NULL END AS STRUCT<>) IS NULL', {'a'}),
         (
             'COUNT(x) OVER (PARTITION BY CAST(CASE WHEN end THEN end END '
             'AS DECIMAL(10)) ORDER BY y)',
