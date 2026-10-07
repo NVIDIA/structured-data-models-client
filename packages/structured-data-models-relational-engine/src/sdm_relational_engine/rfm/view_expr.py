@@ -1577,7 +1577,7 @@ def name_references(expr: str) -> list[NameReference]:
     references = scan.references()
     if scan.cut:
         raise UnreadableExpressionError(
-            'it is too deeply nested to read safely'
+            'it is too deeply nested or too long to read safely'
         )
     return references
 

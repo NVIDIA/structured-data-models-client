@@ -3214,10 +3214,10 @@ measures:
     assert [column.name for column in spec.columns] == ['kept']
     assert spec.measures == []
     assert spec.messages == [
-        "Failed to add dimension 'd' since it is too deeply nested to read "
-        'safely',
-        "Failed to add measure 'm' since it is too deeply nested to read "
-        'safely',
+        "Failed to add dimension 'd' since it is too deeply nested or too "
+        'long to read safely',
+        "Failed to add measure 'm' since it is too deeply nested or too "
+        'long to read safely',
     ]
     with pytest.raises(UnsupportedFilterError, match='too deeply nested'):
         parse_metric_view(f'{view}filter: {json.dumps(_TOO_DEEP)}\n')
