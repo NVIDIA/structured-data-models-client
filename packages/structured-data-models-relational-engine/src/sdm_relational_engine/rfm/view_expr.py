@@ -1026,15 +1026,9 @@ def _untrusted_call_reason(
     return None
 
 
-# Whether a word of a Databricks expression names a column depends on where
-# it stands, not on the word: on a DBSQL 2026.39 warehouse a column may take
-# any keyword's name but `true`, `false` and `null`. Right after a complete
-# operand a word is grammar, an operator such as REGEXP or a clause word such
-# as FOR or ROWS. Where an operand is expected a word is a column, unless it
-# opens a form around the operand that follows it, as NOT does. Where both
-# readings parse, Databricks takes the form, so `NOT and(x)` calls `and`, and
-# where the form leaves the rest unparsable, the word is a column: in `CASE
-# WHEN x THEN not END` a NOT would take the END the CASE needs.
+# A column may take any keyword's name but TRUE, FALSE and NULL, so where a
+# word stands decides whether it names one. Where both readings parse,
+# Databricks takes the form, as in `NOT and(x)`.
 _LITERAL_WORDS = frozenset({'true', 'false', 'null'})
 # Words that, after an operand, take another: `x REGEXP y`, `s FOR 2`, and
 # a type, field, collation or window name after AS, COLLATE or OVER.
@@ -1047,7 +1041,7 @@ _TAKE_AN_OPERAND = frozenset(
 )  # fmt: skip
 _TAKE_A_NAME = frozenset({'as', 'collate', 'over'})
 # Words before `(` that open no call, or a form with its own grammar.
-_NOT_CALLS = _TAKE_AN_OPERAND | {
+_NO_CALL_OPENERS = _TAKE_AN_OPERAND | {
     '', 'cast', 'extract', 'group', 'overlay', 'position', 'substring',
     'trim', 'try_cast',
 }  # fmt: skip
@@ -1058,12 +1052,19 @@ _CASE_STEPS = {
     'else': ('then',),
     'end': ('then', 'else'),
 }
-# How deep trial readings may nest, and how many steps they may take per
-# token, before a form is taken untried.
-_MOST_TRIALS = 32
+# How many steps trial readings may take per token, and how deep they may
+# nest, which only keeps the call stack in bounds: each level is a bracket.
 _TRIAL_STEPS = 16
-# NOT follows an operand only before these: `x NOT IN (1)`.
-_NEGATED = frozenset({'between', 'ilike', 'in', 'like', 'regexp', 'rlike'})
+_DEEPEST_TRIAL = 64
+# Words that follow an operand only before these: `x NOT IN (1)`,
+# `IGNORE NULLS`.
+_FOLLOWED_BY = {
+    'not': frozenset({'between', 'ilike', 'in', 'like', 'regexp', 'rlike'}),
+    'ignore': frozenset({'nulls'}),
+    'respect': frozenset({'nulls'}),
+}
+_NAME_KINDS = ('word', 'quoted')
+_OPERATOR_PAIRS = frozenset({'!=', '==', '||', '<<', '>>'})
 # What may stand after IS: `IS [NOT] NULL`, `IS UNKNOWN`, `IS DISTINCT FROM`.
 _AFTER_IS = frozenset(
     {'distinct', 'false', 'from', 'not', 'null', 'true', 'unknown'}
@@ -1074,6 +1075,8 @@ _FRAME_WORDS = frozenset(
     {'between', 'current', 'following', 'preceding', 'row', 'unbounded'}
 )
 _FRAME_STARTS = frozenset({'between', 'current', 'interval', 'unbounded'})
+# Words before a string that type it: `DATE '2024-01-01'`, and `X'1F'`, a
+# binary literal in hex.
 _TYPED_LITERALS = frozenset(
     {'date', 'timestamp', 'timestamp_ltz', 'timestamp_ntz', 'x'}
 )
@@ -1139,9 +1142,11 @@ def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
                 if depth == 0:
                     break
                 start -= 1
-            names = {_name(t) for t in tokens[start:index] if _name(t)}
+            names = {
+                _folded_name(t) for t in tokens[start:index] if _folded_name(t)
+            }
         else:
-            start, names = index - 1, {_name(before)}
+            start, names = index - 1, {_folded_name(before)}
         depth, end = 0, len(tokens) - 1
         for at in range(start, len(tokens)):
             depth += {'(': 1, ')': -1}.get(tokens[at].text, 0)
@@ -1158,7 +1163,7 @@ class _Group:
 
     opener: str  # The word before it, folded, if any.
     # Each CASE open, by what it last read: CASE, WHEN, THEN or ELSE.
-    cases: list[str] = field(default_factory=list)
+    cases: tuple[str, ...] = ()
     frame: bool = False  # Whether a window's frame is being read.
 
 
@@ -1174,29 +1179,25 @@ class _State:
     by_at: int = -1  # Where the BY of `PARTITION BY` stands.
     skip_to: int = -1  # The end of a type's `<...>`.
 
+    def taken(self) -> tuple[bool, bool, bool]:
+        r"""What the last token left expected, cleared for the next."""
+        left = self.operand, self.name_next, self.after_is
+        self.operand = self.name_next = self.after_is = False
+        return left
+
+    def copy(self) -> _State:
+        return replace(self, groups=[replace(g) for g in self.groups])
+
     def trial(self) -> _State:
-        r"""A copy to read on from to the end of the current bracket, which
-        is all of the state that reading uses, under an outermost group.
+        r"""A copy holding only the innermost group, which is all a trial to
+        the bracket's end reads, under an outermost one.
         """
-        last = self.groups[-1]
-        return replace(
-            self, groups=[_Group(''), replace(last, cases=list(last.cases))]
-        )
+        return replace(self, groups=[_Group(''), replace(self.groups[-1])])
 
     def key(self) -> tuple[object, ...]:
         r"""What a reading to the end of the current bracket depends on."""
-        last = self.groups[-1]
-        return (
-            self.operand,
-            self.name_next,
-            self.after_is,
-            self.case_at,
-            self.by_at,
-            self.skip_to,
-            last.opener,
-            tuple(last.cases),
-            last.frame,
-        )
+        flags = (v for k, v in vars(self).items() if k != 'groups')
+        return (*flags, *vars(self.groups[-1]).values())
 
 
 class _NameScan:
@@ -1204,34 +1205,33 @@ class _NameScan:
     expected next, which decides whether a word names a value.
 
     Where a word may open a form or be a column, as NOT, CASE and a CASE's
-    first WHEN may, Databricks' parser takes the form if the rest then
-    parses, and so does the scan: it reads on as if the word opened the
-    form, to the end of the bracket the word is in, and checks that what
-    it meets may stand where it does.
+    first WHEN may, Databricks' parser takes the form if the rest parses,
+    and so does the scan. A trial reads on as if the word opened the form,
+    to the end of its bracket, checking that each token may stand where it
+    does. Meeting another such word in that bracket, it takes the form and
+    comes back to read a column if the form fails; one in a deeper bracket
+    is a trial of its own. What a trial finds is kept by where it starts
+    and the state it starts in.
     """
 
     def __init__(self, tokens: list[_Token]) -> None:
-        self.tokens = tokens
+        self.end = len(tokens)
+        # Past the end, and so at index -1, stand tokens of no kind.
+        self.tokens = [*tokens, *[_Token('end', '', -1, -1)] * 4]
         self.scopes = _lambda_scopes(tokens)
         self.parsed: dict[tuple[object, ...], bool] = {}
-        self.depth = 0  # How many trial readings are under way.
-        # Trial readings may take this many steps in all, so a long
-        # expression is read in time linear in its length.
-        self.budget = _TRIAL_STEPS * (len(tokens) + 1)
-        # Where the bracket around each token closes, or the end.
-        around, closing, open_at = [], {-1: len(tokens)}, [-1]
-        for index, token in enumerate(tokens):
-            if token.text in ')]' and len(open_at) > 1:
-                closing[open_at.pop()] = index
-            around.append(open_at[-1])
-            if token.text in '([':
-                open_at.append(index)
-        self.closes = [closing.get(at, len(tokens)) for at in around]
+        # For each trial under way, the readings as a column left to try.
+        self.trials: list[list[tuple[int, _State, tuple[object, ...]]]] = []
+        # Past this many steps in all, or the deepest trial, forms are taken
+        # untried and nothing more is kept, so a long expression is read in
+        # time linear in its length.
+        self.budget = _TRIAL_STEPS * (self.end + 1)
+        self.cut = False
 
     def references(self) -> list[NameReference]:
         state, found = _State(), list[NameReference]()
         index = 0
-        while index < len(self.tokens):
+        while index < self.end:
             index, _ = self._step(index, state, found)
         return found
 
@@ -1239,39 +1239,45 @@ class _NameScan:
         r"""Whether the tokens from ``index`` to the end of the current
         bracket parse, read from ``state``.
         """
-        if self.depth >= _MOST_TRIALS or self.budget <= 0:
-            return True  # Take the form, as the parser prefers.
         key = (index, *state.key())
-        if key not in self.parsed:
-            self.depth += 1
-            self.parsed[key] = self._reads_through(index, state.trial())
-            self.depth -= 1
-        return self.parsed[key]
+        if key in self.parsed:
+            return self.parsed[key]
+        if self.budget <= 0 or len(self.trials) >= _DEEPEST_TRIAL:
+            self.cut = True
+            return True  # Take the form, as the parser prefers.
+        columns: list[tuple[int, _State, tuple[object, ...]]] = []
+        self.trials.append(columns)
+        state = state.trial()
+        while not (parses := self._reads_on(index, state)) and columns:
+            index, state, form = columns.pop()
+            self._keep(form, False)
+        self.trials.pop()
+        for _, _, form in columns:
+            self._keep(form, True)  # Each form taken on the way parsed.
+        self._keep(key, parses)
+        return parses
 
-    def _reads_through(self, index: int, state: _State) -> bool:
-        r"""Reads on from ``index`` to the end of the current bracket,
-        and says whether every token may stand where it does.
+    def _keep(self, key: tuple[object, ...], parses: bool) -> None:
+        if not self.cut:
+            self.parsed[key] = parses
+
+    def _reads_on(self, index: int, state: _State) -> bool:
+        r"""Whether every token from ``index`` to the end of the current
+        bracket may stand where it does, read from ``state``.
         """
-        groups = len(state.groups)
-        while index < len(self.tokens) and len(state.groups) >= groups:
+        while index < self.end and len(state.groups) > 1:
             known = self.parsed.get((index, *state.key()))
-            if known is False or (known and len(state.groups) == groups):
+            if known is not None and (not known or len(state.groups) == 2):
                 return known  # Read from here before, from this state.
-            if known:
-                # The rest of this bracket parses: go on after it.
-                index = self.closes[index]
-                if index == len(self.tokens):
-                    return True
-                state.groups.pop()
-                state.operand = state.name_next = state.after_is = False
-                index += 1
-                continue
+            if self.budget <= 0:
+                self.cut = True
+                return True
             self.budget -= 1
             index, parses = self._step(index, state, None)
             if not parses:
                 return False
         # A `)` checks its own group as it closes it.
-        return len(state.groups) < groups or not (
+        return len(state.groups) == 1 or not (
             state.operand or state.name_next or state.groups[-1].cases
         )
 
@@ -1285,16 +1291,15 @@ class _NameScan:
         tokens = self.tokens
         if index <= state.skip_to:
             return index + 1, True
-        if tokens[index].kind not in ('word', 'quoted'):
+        if tokens[index].kind not in _NAME_KINDS:
             return index + 1, self._punctuation(index, state)
         last = index
         while (
-            last + 2 < len(tokens)
-            and tokens[last + 1].text == '.'
-            and tokens[last + 2].kind in ('word', 'quoted')
+            tokens[last + 1].text == '.'
+            and tokens[last + 2].kind in _NAME_KINDS
         ):
             last += 2
-        value, parses = self._name(index, last, state)
+        value, parses = self._read_name(index, last, state)
         if value and found is not None:
             found.append(
                 NameReference(
@@ -1305,114 +1310,93 @@ class _NameScan:
             )
         return last + 1, parses
 
-    def _text(self, at: int) -> str:
-        return self.tokens[at].text if 0 <= at < len(self.tokens) else ''
-
-    def _folded(self, at: int) -> str:
-        return self.tokens[at].folded if 0 <= at < len(self.tokens) else ''
-
     def _punctuation(self, index: int, state: _State) -> bool:
-        r"""Reads the token at ``index``, which is no name, and says whether
-        it may stand where it does.
+        r"""Reads the token at ``index``, no name, and says whether it may
+        stand where it does.
         """
-        token, previous = (
-            self.tokens[index],
-            self.tokens[index - 1] if index else None,
-        )
+        token, previous = self.tokens[index], self.tokens[index - 1]
         text, operand = token.text, state.operand
         state.name_next, state.after_is = text == '::', False
         if text in '([':
-            state.groups.append(_Group(previous.folded if previous else ''))
+            state.groups.append(_Group(previous.folded))
             state.operand = True
             return operand or text == '['
         if text in ')]':
-            closed = not state.groups[-1].cases and len(state.groups) > 1
-            if len(state.groups) > 1:
-                state.groups.pop()
+            closed = len(state.groups) > 1 and not state.groups.pop().cases
             state.operand = False
-            empty = previous is not None and previous.text == '('
-            return closed and (not operand or empty)
-        if text == ',':
-            state.operand = True
-            return not operand
+            return closed and (not operand or previous.text == '(')
         if token.kind in ('number', 'string'):
             state.operand = False
             # `INTERVAL 1 YEAR 2 MONTHS` gives a value after each unit.
-            return operand or self._folded(index - 1) in _DATETIME_UNITS
-        if text in ('+', '-', '~'):
-            state.operand = True  # A sign or an operator.
+            return operand or previous.folded in _DATETIME_UNITS
+        if text in '+-~' or (text == '*' and operand):
+            state.operand = text != '*'  # A sign, or COUNT(*).
             return True
-        if text == '*' and operand:
-            state.operand = False  # As in COUNT(*).
-            return True
-        if previous is not None and previous.end == token.start:
-            if previous.text + text in ('!=', '==', '||', '<<', '>>'):
-                return True  # The second half of an operator.
-        if text == '!' and self._text(index + 1) != '=':
+        if (
+            previous.end == token.start
+            and previous.text + text in _OPERATOR_PAIRS
+        ):
+            return True  # The second half of an operator.
+        if text == '!' and self.tokens[index + 1].text != '=':
             return operand  # Not, as in `!x`.
         state.operand = True
-        return not operand  # An operator after an operand.
+        return not operand  # An operator after an operand, or a comma.
 
     def _follows(self, word: str, state: _State, at: int) -> bool:
         r"""Whether ``word`` at ``at`` may stand right after an operand."""
-        group = state.groups[-1]
-        before, after = self._folded(at - 1), self._folded(at + 1)
+        group, before = state.groups[-1], self.tokens[at - 1]
+        after = self.tokens[at + 1].folded
         if word in _CASE_STEPS:
             return bool(group.cases) and group.cases[-1] in _CASE_STEPS[word]
         if word in ('preceding', 'following', 'row'):
             return group.frame
-        if word == 'not':
-            return after in _NEGATED
-        if word in ('ignore', 'respect'):
-            return after == 'nulls'
+        if word in _FOLLOWED_BY:
+            return after in _FOLLOWED_BY[word]
         if word == 'nulls':
-            return after in ('first', 'last') or before in ('ignore', 'respect')
+            return after in ('first', 'last') or before.folded in (
+                'ignore',
+                'respect',
+            )
         if word in ('first', 'last'):
-            return before == 'nulls'
+            return before.folded == 'nulls'
         if word == 'to':
-            return before in _DATETIME_UNITS
+            return before.folded in _DATETIME_UNITS
         if word in _DATETIME_UNITS:
             # `INTERVAL 1 DAY`, `'1' DAY TO HOUR`, `INTERVAL (n) DAYS`.
-            token = self.tokens[at - 1]
             return (
-                token.kind in ('number', 'string')
-                or before == 'to'
-                or (token.text == ')' or self._folded(at - 2) == 'interval')
+                before.kind in ('number', 'string')
+                or before.text == ')'
+                or before.folded == 'to'
+                or self.tokens[at - 2].folded == 'interval'
             )
         return word in _TAKE_AN_OPERAND or word in ('asc', 'desc')
 
-    def _name(self, index: int, last: int, state: _State) -> tuple[bool, bool]:
+    def _read_name(
+        self, index: int, last: int, state: _State
+    ) -> tuple[bool, bool]:
         r"""Reads the name at ``index`` to ``last``, and says whether it is
         read as a value and whether it may stand where it does.
         """
         tokens, group = self.tokens, state.groups[-1]
-        token = tokens[index]
-        previous = tokens[index - 1] if index else None
-        after = tokens[last + 1] if last + 1 < len(tokens) else None
-        word = token.folded if index == last else ''
-        name = _name(token) if index == last else ''
-        operand, name_next, after_is = (
-            state.operand,
-            state.name_next,
-            state.after_is,
-        )
-        state.operand = state.name_next = state.after_is = False
-        if previous is not None and previous.text in ('.', ':'):
+        previous, after = tokens[index - 1], tokens[last + 1]
+        word = tokens[index].folded if index == last else ''
+        name = _folded_name(tokens[index]) if index == last else ''
+        operand, name_next, after_is = state.taken()
+        if previous.text in ('.', ':'):
             return False, True  # A field or a JSON path's step.
         if name_next:
-            if after is not None and after.text == '<':
+            if after.text == '<':
                 state.skip_to = _closing(tokens, last + 1)
             return False, True
-        if after is not None and after.text == '(' and operand:
-            # `NOT (x)` and `CASE (x) WHEN` open forms, others call.
-            if not self._opens_a_form(index, word, state, after_is):
-                state.operand = True
+        if after.text == '(' and operand:
+            # `NOT (x)` and `CASE (x) WHEN` open forms, and others call.
+            self._opens_a_form(index, word, state, after_is)
+            state.operand = True
             return False, True
-        if after is not None and after.text == '=>':
+        if after.text == '=>':
             return False, operand  # A named argument.
         if name and any(
-            start <= index <= end and name in names
-            for start, end, names in self.scopes
+            s <= index <= e and name in n for s, e, n in self.scopes
         ):
             return False, operand  # A lambda's parameter.
         if not word:
@@ -1420,25 +1404,23 @@ class _NameScan:
         if index == state.by_at:
             state.operand = True
             return False, True
-        if word in ('order', 'partition') and self._folded(last + 1) == 'by':
+        if word in ('order', 'partition') and after.folded == 'by':
             # After an operand, or first in `OVER (`.
             state.by_at = last + 1
-            return False, not operand or self._text(index - 1) == '('
-
-        if not operand:
-            # Right after an operand: an operator or a clause's word.
-            parses = self._follows(word, state, index)
-            state.operand = word in _TAKE_AN_OPERAND
-            state.name_next = word in _TAKE_A_NAME
-            state.after_is = word == 'is'
-            group.frame = group.frame or word in ('rows', 'range')
-            if word in _CASE_STEPS and group.cases:
-                if word == 'end':
-                    group.cases.pop()
-                else:
-                    group.cases[-1] = word
-            return False, parses
-        return not self._opens_a_form(index, word, state, after_is), True
+            return False, not operand or previous.text == '('
+        if operand:
+            return not self._opens_a_form(index, word, state, after_is), True
+        # Right after an operand: an operator or a clause's word.
+        parses = self._follows(word, state, index)
+        state.operand = word in _TAKE_AN_OPERAND
+        state.name_next = word in _TAKE_A_NAME
+        state.after_is = word == 'is'
+        group.frame = group.frame or word in ('rows', 'range')
+        if word == 'end':
+            group.cases = group.cases[:-1]
+        elif word in _CASE_STEPS and group.cases:
+            group.cases = (*group.cases[:-1], word)
+        return False, parses
 
     def _opens_a_form(
         self, index: int, word: str, state: _State, after_is: bool
@@ -1446,10 +1428,17 @@ class _NameScan:
         r"""Whether ``word``, where an operand is expected, is grammar,
         moving ``state`` on past it.
         """
+        form = self._fixed_form(index, word, state, after_is)
+        return self._tried_form(index, word, state) if form is None else form
+
+    def _fixed_form(
+        self, index: int, word: str, state: _State, after_is: bool
+    ) -> bool | None:
+        r"""Whether ``word`` at ``index`` is grammar by where it stands, or
+        ``None`` if a trial decides.
+        """
         group, tokens = state.groups[-1], self.tokens
-        after = tokens[index + 1] if index + 1 < len(tokens) else None
-        following = after.folded if after else ''
-        opens = self._text(index - 1) == '('
+        after, opens = tokens[index + 1], tokens[index - 1].text == '('
         if word in _LITERAL_WORDS:
             return True
         if after_is and word in _AFTER_IS:
@@ -1459,88 +1448,75 @@ class _NameScan:
         if group.frame and word in _FRAME_WORDS:
             state.operand = word == 'between'
             return True
-        if (
-            opens
-            and word in _DATETIME_UNITS
-            and (
-                group.opener in _UNIT_FIRST
-                or (
-                    group.opener in _UNIT_FIRST_OF_THREE
-                    and _arguments(tokens, index - 1) == 3
-                )
+        if opens and word in _DATETIME_UNITS:
+            # `EXTRACT(YEAR FROM d)`, and `dateadd(DAY, 1, d)`.
+            three = group.opener in _UNIT_FIRST_OF_THREE
+            if group.opener in _UNIT_FIRST or (
+                three and _arguments(tokens, index - 1) == 3
+            ):
+                return True
+        if opens and group.opener == 'trim' and word in _TRIM_SIDES:
+            # `TRIM(BOTH FROM s)`, `TRIM(BOTH from FROM s)` and `TRIM(both)`.
+            form = after.text not in (')', ',')
+            state.operand = form and (
+                after.folded != 'from' or tokens[index + 2].folded == 'from'
             )
-        ):
-            return True
-        if (
-            opens
-            and group.opener == 'trim'
-            and word in _TRIM_SIDES
-            and after is not None
-            and after.text not in (')', ',')
-        ):
-            # `TRIM(BOTH FROM s)`, but `TRIM(BOTH from FROM s)`.
-            state.operand = following != 'from' or (
-                self._folded(index + 2) == 'from'
-            )
-            return True
-        if (
-            opens
-            and group.opener == 'over'
-            and word in ('rows', 'range')
-            and self._opens_a_frame(index + 1)
-        ):
-            group.frame = state.operand = True
-            return True
+            return form
+        if opens and group.opener == 'over' and word in ('rows', 'range'):
+            if after.folded in _FRAME_STARTS or after.kind == 'number':
+                group.frame = state.operand = True
+                return True
         if word == 'interval':
             # `INTERVAL 1 DAY` and `INTERVAL -1 DAY`, where `interval - 1`
             # and `interval ASC` read a column.
-            signed = self._text(index + 1) in ('+', '-')
-            word_value = after is not None and after.kind == 'word'
-            value = (
-                signed or (word_value and following not in _TAKE_AN_OPERAND)
-            ) and self._folded(index + 2 + signed) in _DATETIME_UNITS
-            form = after is not None and (
-                after.kind in ('number', 'string') or after.text == '(' or value
+            signed = after.text in ('+', '-')
+            value = signed or (
+                after.kind == 'word' and after.folded not in _TAKE_AN_OPERAND
             )
-            state.operand = form
-            return form
-        if word == 'where':
-            # FILTER takes a WHERE, and nothing else does.
-            form = opens and group.opener == 'filter'
-            state.operand = form
-            return form
-        # The rest open a form only if what follows then parses.
-        trial = state.trial()
-        trial.operand = True
-        if word == 'when' and index == state.case_at:
-            # A searched CASE's first WHEN, or a subject named `when`.
-            trial.groups[-1].cases[-1] = 'when'
-        elif word == 'case':
-            trial.groups[-1].cases.append('case')
-            trial.case_at = index + 1
-        elif word == 'not' or (
-            word in ('all', 'distinct')
-            and opens
-            and group.opener not in _NOT_CALLS
-        ):
-            pass  # `NOT x`, and a quantifier in a call: `COUNT(DISTINCT x)`.
-        else:
-            # A typed literal, as DATE '2024-01-01'.
-            state.operand = word in _TYPED_LITERALS and (
-                after is not None and after.kind == 'string'
+            unit = tokens[index + 2 + signed].folded in _DATETIME_UNITS
+            state.operand = (
+                after.kind in ('number', 'string')
+                or after.text == '('
+                or (value and unit)
             )
             return state.operand
-        if not self._parses(index + 1, trial):
+        if word == 'where':
+            # FILTER takes a WHERE, and nothing else does.
+            state.operand = opens and group.opener == 'filter'
+            return state.operand
+        if word in _TYPED_LITERALS and after.kind == 'string':
+            state.operand = True
+            return True
+        return None
+
+    def _tried_form(self, index: int, word: str, state: _State) -> bool:
+        r"""Whether ``word`` at ``index``, which may open a form or be a
+        column, opens the form: whether what follows then parses.
+        """
+        form = state.trial()
+        inner = form.groups[-1]
+        if word == 'when' and index == state.case_at:
+            # A searched CASE's first WHEN, or a subject named `when`.
+            inner.cases = (*inner.cases[:-1], 'when')
+        elif word == 'case':
+            inner.cases, form.case_at = (*inner.cases, 'case'), index + 1
+        elif word != 'not' and not (
+            word in ('all', 'distinct')
+            and self.tokens[index - 1].text == '('
+            and inner.opener not in _NO_CALL_OPENERS
+        ):
             return False
-        group.cases, state.case_at = trial.groups[-1].cases, trial.case_at
+        form.operand = True
+        if self.trials and len(state.groups) == 2:
+            # In the bracket this trial reads to the end of: take the form,
+            # and keep the column to come back to.
+            column = (index + 1, state.copy(), (index + 1, *form.key()))
+            self.trials[-1].append(column)
+        elif not self._parses(index + 1, form):
+            return False
+        state.groups[-1].cases, state.case_at = inner.cases, form.case_at
         state.operand = True
         return True
-
-    def _opens_a_frame(self, at: int) -> bool:
-        r"""Whether what is at ``at`` may follow ROWS or RANGE in a frame."""
-        return self._folded(at) in _FRAME_STARTS or (
-            at < len(self.tokens) and self.tokens[at].kind == 'number'
-        )
 
 
 def name_references(expr: str) -> list[NameReference]:
@@ -1557,7 +1533,7 @@ def name_references(expr: str) -> list[NameReference]:
     return _NameScan(tokens).references()
 
 
-def _name(token: _Token) -> str:
+def _folded_name(token: _Token) -> str:
     r"""The folded name ``token`` gives, quoted or not, or ``''``."""
     return _unquoted(token).lower() if token.kind in ('word', 'quoted') else ''
 

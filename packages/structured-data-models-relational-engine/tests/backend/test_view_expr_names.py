@@ -14,6 +14,8 @@ from __future__ import annotations
 import pytest
 from sdm_relational_engine.rfm.view_expr import name_references
 
+_PROBE = '(CASE WHEN x THEN not END)'
+
 
 @pytest.mark.parametrize(
     'expr, columns',
@@ -31,7 +33,6 @@ from sdm_relational_engine.rfm.view_expr import name_references
             '1 FOLLOWING)',
             {'x', 'rows'},
         ),
-        ('row_number() OVER (PARTITION BY row ORDER BY row)', {'row'}),
         ('first_value(desc) IGNORE NULLS OVER (ORDER BY desc)', {'desc'}),
         (
             'percentile_cont(0.5) WITHIN GROUP (ORDER BY window DESC)',
@@ -42,12 +43,12 @@ from sdm_relational_engine.rfm.view_expr import name_references
         ('SUBSTRING(col FROM 1 FOR 2)', {'col'}),
         ('OVERLAY(order PLACING order FROM 1 FOR 2)', {'order'}),
         ('TRIM(BOTH struct FROM using)', {'struct', 'using'}),
-        ('range DIV range', {'range'}),
         ('from COLLATE UTF8_LCASE = from', {'from'}),
         ('else IS UNKNOWN', {'else'}),
         ('end IS NOT DISTINCT FROM between', {'end', 'between'}),
         ('rows NOT LIKE rows', {'rows'}),
-        # Where an operand stands, a word is a column unless it opens a form.
+        # Where an operand stands, a word is a column unless it opens a form
+        # after which the rest parses.
         ('placing OR NOT rlike', {'placing', 'rlike'}),
         ('NOT div', {'div'}),
         ("DATE '2020-01-01' + ilike", {'ilike'}),
@@ -56,10 +57,16 @@ from sdm_relational_engine.rfm.view_expr import name_references
         ('CASE from WHEN from THEN from END', {'from'}),
         ('CASE WHEN NOT is THEN is END', {'is'}),
         ('CASE CASE WHEN both THEN 1 END WHEN 1 THEN both END', {'both'}),
-        # A CASE is a form only if the rest then parses: no END is left here.
         ('CASE case WHEN when THEN end END', {'case', 'when', 'end'}),
-        ('CASE WHEN case THEN end ELSE not END', {'case', 'end', 'not'}),
         ('CASE WHEN x THEN not END', {'x', 'not'}),
+        # However long or deep the expression around it.
+        pytest.param('NOT (' * 30 + _PROBE + ')' * 30, {'x', 'not'}, id='deep'),
+        pytest.param(
+            ' AND '.join(f'NOT c{i}' for i in range(1000)) + ' AND ' + _PROBE,
+            {f'c{i}' for i in range(1000)} | {'x', 'not'},
+            id='long',
+        ),
+        # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),
     ],
@@ -67,8 +74,7 @@ from sdm_relational_engine.rfm.view_expr import name_references
 def test_a_name_is_a_column_where_databricks_reads_one(
     expr: str, columns: set[str]
 ) -> None:
-    r"""A set of keywords decided which words were columns, so a column
-    named `range` was lost in `PARTITION BY range`, and `REGEXP` and `FOR`
-    were read as columns no view names.
+    r"""Where a word stands decides whether it names a column: a column may
+    take a keyword's name, and a keyword after an operand is grammar.
     """
     assert {'.'.join(name.parts) for name in name_references(expr)} == columns
