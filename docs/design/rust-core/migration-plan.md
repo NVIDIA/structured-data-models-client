@@ -35,6 +35,7 @@ The owner answers these in one sitting, before any code.
 5. **The quirk register** (section 5): which Python behaviors to keep and which to drop.
 6. **Where PQL lives** (section 3, "PQL").
    Proposed: one PQL, owned by the shared PQL library, agreed with its owners.
+   This includes which library that is: the proposed open-source PQL library and Kumo's own PQL package are separate today.
 7. **Scope inventories**: the exact backends, scenarios, Databricks runtimes and platforms each language must support.
    For example: is Lakebase in Java's first release?
 8. **Who owns the Rust core long term.**
