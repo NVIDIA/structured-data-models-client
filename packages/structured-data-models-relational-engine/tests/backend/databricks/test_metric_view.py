@@ -440,50 +440,54 @@ measures:
     ]
 
 
-def test_a_star_keeps_its_table_and_takes_no_field() -> None:
-    r"""`source.*` was read as the name `source`, so a field of that name
-    was substituted into it, as `array((amount).*)`. A star of one table is
-    that table's columns, as the graph reads it, while a bare one on a view
-    with joins reads every table's and is refused.
+def test_a_star_inside_an_expression_is_refused() -> None:
+    r"""In the view `source.*` also holds each join as a struct, and the
+    graph's sampled reads join a table to its ids, so a star inside an
+    expression reads other columns there. A top-level star is the columns
+    it stands for, and `COUNT(*)` counts rows.
     """
-    spec = parse_metric_view("""
+    yaml = """
 source: cat.sch.t
 joins:
   - name: customers
     source: cat.sch.customers
     on: source.customer_id = customers.id
 fields:
-  - name: source
-    expr: source.amount
+  - expr: source.*
   - name: packed
     expr: array(source.*)
-  - name: less
-    expr: "struct(source.* EXCEPT (source.amount))"
   - name: theirs
-    expr: to_json(struct(customers.*))
+    expr: to_json(array(customers.*))
   - name: everything
     expr: struct(*)
+  - name: less
+    expr: "struct(source.* EXCEPT (source.amount))"
 measures:
   - name: rows
     expr: COUNT(*)
+  - name: paid
+    expr: COUNT(*) FILTER (WHERE source.amount > 0)
   - name: keyed
     expr: COUNT(DISTINCT to_json(struct(source.*)))
-""")
+"""
+    spec = parse_metric_view(yaml)
 
-    assert [(c.name, c.alias, c.expr) for c in spec.columns] == [
-        ('source', 'source', 'amount'),
-        ('packed', 'source', 'array(*)'),
-        ('less', 'source', 'struct(* EXCEPT (amount))'),
-        ('theirs', 'customers', 'to_json(struct(*))'),
+    assert spec.columns == [MetricViewWildcard('source', ())]
+    assert [(m.name, m.inputs, m.aggregation) for m in spec.measures] == [
+        ('rows', (), ('COUNT', None)),
+        ('paid', (('source', 'amount'),), None),
+        ('keyed', (), None),
     ]
-    assert [(m.name, m.inputs) for m in spec.measures] == [
-        ('rows', ()),
-        ('keyed', ()),
-    ]
+    reason = (
+        'it reads every column of a table through `*`, which the graph '
+        'cannot reproduce'
+    )
     assert spec.messages == [
-        "Failed to add dimension 'everything' since it reads every column "
-        'of the joined tables through `*`, which no one table holds'
+        f"Failed to add dimension '{name}' since {reason}"
+        for name in ('packed', 'theirs', 'everything', 'less')
     ]
+    with pytest.raises(UnsupportedFilterError, match='through `\\*`'):
+        parse_metric_view(f'{yaml}filter: struct(*) IS NOT NULL\n')
 
 
 def test_parse_metric_view_nested_joins() -> None:

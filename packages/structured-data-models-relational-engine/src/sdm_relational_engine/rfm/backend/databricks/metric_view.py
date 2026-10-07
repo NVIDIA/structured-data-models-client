@@ -657,15 +657,27 @@ def _substitute_fields(
     return expr, refused
 
 
+# Why an expression reading a star is refused. In the view, `source.*`
+# also holds each join as a struct, and the graph's sampled reads join a
+# table to its ids, so no star inside an expression reads the same columns.
+_STAR_REASON = (
+    'it reads every column of a table through `*`, which the graph cannot '
+    'reproduce'
+)
+
+
 def _star(expr: str) -> bool:
-    r"""Whether ``expr`` reads every column of its view through a bare ``*``,
-    as ``struct(*)`` does, rather than of one table, as ``struct(t.*)``.
+    r"""Whether ``expr`` reads every column of a table through ``*``, as
+    ``struct(*)``, ``array(t.*)`` and ``struct(* EXCEPT (x))`` do.
+    ``COUNT(*)`` counts rows instead.
 
     Raises:
         UnreadableExpressionError: If which of its words are values cannot
             be settled.
     """
-    return any(reference.parts == ('*',) for reference in name_references(expr))
+    return any(
+        reference.parts[-1] == '*' for reference in name_references(expr)
+    )
 
 
 def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
@@ -894,10 +906,13 @@ def parse_metric_view(
             substituted, referenced = _substitute_parameters(
                 row_filter, parameters
             )
+            star = _star(row_filter)
         except UnreadableExpressionError as error:
             _refuse_filter(row_filter, str(error))
         if reason := _unusable_parameter(referenced):
             _refuse_filter(row_filter, reason, default_helps=True)
+        if star:
+            _refuse_filter(row_filter, _STAR_REASON)
         row_filter = substituted
         used.update((parameter.name, parameter) for parameter in referenced)
     row_filter = _check_filter(row_filter, candidates)
@@ -962,6 +977,7 @@ def parse_metric_view(
             try:
                 expr, referenced = _substitute_parameters(expr, parameters)
                 expr, refused = _substitute_fields(expr, defined, qualifiers)
+                star = _star(expr)
             except UnreadableExpressionError as error:
                 reason = str(error)
             else:
@@ -970,11 +986,8 @@ def parse_metric_view(
                     reason = (
                         f"it names the dimension '{refused}', which is refused"
                     )
-                if reason is None and len(qualifiers) > 1 and _star(expr):
-                    reason = (
-                        'it reads every column of the joined tables through '
-                        '`*`, which no one table holds'
-                    )
+                if reason is None and star:
+                    reason = _STAR_REASON
             if reason is not None:
                 messages.append(
                     f"Failed to add dimension '{name}' since {reason}"
