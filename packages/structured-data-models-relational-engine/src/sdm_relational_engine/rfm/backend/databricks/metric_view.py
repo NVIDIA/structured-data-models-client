@@ -593,7 +593,7 @@ def _substitute_parameters(
     """
     found = [
         (reference.span, parameter)
-        for reference in (name_references(expr) if parameters else [])
+        for reference in name_references(expr)
         if reference.bare
         and (parameter := parameters.get(reference.parts[0].lower()))
     ]
@@ -638,7 +638,7 @@ def _substitute_fields(
             be settled.
     """
     refused = None
-    for reference in reversed(name_references(expr) if fields else []):
+    for reference in reversed(name_references(expr)):
         parts = tuple(part.lower() for part in reference.parts)
         qualified = any(
             len(parts) > len(path) and parts[: len(path)] == path

@@ -374,6 +374,29 @@ dimensions:
     ]
 
 
+def test_an_unreadable_expression_is_refused_wherever_it_stands() -> None:
+    r"""Only an expression after a parameter or an earlier field was read,
+    so the same one was kept as a first field and refused as a later one.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.t
+dimensions:
+  - name: o
+    expr: source.ts AT TIME ZONE 'UTC'
+""")
+
+    assert spec.columns == []
+    assert spec.messages == [
+        "Failed to add dimension 'o' since it has syntax that is not "
+        'understood, so which of its words name columns cannot be settled'
+    ]
+    with pytest.raises(UnsupportedFilterError, match='not understood'):
+        parse_metric_view("""
+source: cat.sch.t
+filter: source.ts AT TIME ZONE 'UTC' IS NOT NULL
+""")
+
+
 def test_parse_metric_view_nested_joins() -> None:
     spec = parse_metric_view("""
 source: cat.sch.facts
@@ -3365,8 +3388,8 @@ def test_a_measure_reads_the_columns_it_names(
     'expr, read',
     [
         (
-            'order_date + INTERVAL day DAY',
-            "order_date + INTERVAL CAST('1' AS INT) DAY",
+            'order_date + INTERVAL 1 DAY + make_dt_interval(day)',
+            "order_date + INTERVAL 1 DAY + make_dt_interval(CAST('1' AS INT))",
         ),
         (
             'aggregate(items, x, (acc, x) -> acc + x)',
