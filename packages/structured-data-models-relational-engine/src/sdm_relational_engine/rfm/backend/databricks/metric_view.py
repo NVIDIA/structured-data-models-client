@@ -409,13 +409,6 @@ def _path_pattern(path: Sequence[str]) -> re.Pattern[str]:
     )
 
 
-def _field_pattern(name: str) -> re.Pattern[str]:
-    return re.compile(
-        rf'(?<![A-Za-z0-9_`$.])(?:{_quoted_variants(name)})(?![A-Za-z0-9_`])',
-        flags=re.IGNORECASE,
-    )
-
-
 def _sub_outside_strings(
     pattern: re.Pattern[str],
     repl: str | Callable[[re.Match[str]], str],
@@ -609,6 +602,30 @@ def _substitute_parameters(
             expr = f'{expr[:start]}{parameter.literal}{expr[end:]}'
     used = {parameter.name: parameter for _, parameter in found}
     return expr, list(used.values())
+
+
+def _substitute_fields(expr: str, fields: Mapping[str, str]) -> str:
+    r"""Replaces each reference to an earlier field with its expression.
+
+    A field is referenced by its name, bare or backticked, where the
+    expression reads a value. So a function, type, keyword, datetime unit or
+    qualifier of the same name is left as is: a field named ``upper`` leaves
+    ``UPPER(source.z)`` alone.
+
+    Args:
+        expr: The expression, its parameters substituted.
+        fields: The expression of each earlier field, by folded name.
+
+    Raises:
+        UnreadableExpressionError: If which of its words are values cannot
+            be settled.
+    """
+    for reference in reversed(name_references(expr) if fields else []):
+        name = reference.parts[0].lower()
+        if len(reference.parts) == 1 and name in fields:
+            start, end = reference.span
+            expr = f'{expr[:start]}({fields[name]}){expr[end:]}'
+    return expr
 
 
 def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
@@ -887,23 +904,24 @@ def parse_metric_view(
             )
             continue
 
-        try:
-            expr, referenced = _substitute_parameters(expr, parameters)
-        except UnreadableExpressionError as error:
-            messages.append(f"Failed to add dimension '{name}' since {error}")
-            continue
-        if reason := _unusable_parameter(referenced):
-            messages.append(f"Failed to add dimension '{name}' since {reason}")
-            continue
-        used.update((parameter.name, parameter) for parameter in referenced)
-
-        for field_name, field_expr in defined.items():
-            expr = _sub_outside_strings(
-                _field_pattern(field_name),
-                lambda match: f'({field_expr})',
-                expr,
-            )
-        defined[name] = expr
+        # What the guard refuses, such as a sub-query, is not read but left
+        # for the guard to drop, saying why.
+        if _unsafe_expr_reason(expr, 'databricks') is None:
+            try:
+                expr, referenced = _substitute_parameters(expr, parameters)
+                expr = _substitute_fields(expr, defined)
+            except UnreadableExpressionError as error:
+                messages.append(
+                    f"Failed to add dimension '{name}' since {error}"
+                )
+                continue
+            if reason := _unusable_parameter(referenced):
+                messages.append(
+                    f"Failed to add dimension '{name}' since {reason}"
+                )
+                continue
+            used.update((parameter.name, parameter) for parameter in referenced)
+        defined[name.lower()] = expr
 
         refs: set[str] = set()
         for path, path_alias in candidates:

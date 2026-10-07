@@ -246,6 +246,76 @@ dimensions:
     ]
 
 
+def test_a_field_replaces_only_its_name_where_a_value_stands() -> None:
+    r"""A field named like a function, type, datetime unit or qualifier is
+    substituted where its name reads a value alone: a field `upper` turned
+    `UPPER(source.z)` into `(x)(z)`.
+    """
+    spec = parse_metric_view("""
+version: 1.1
+source: cat.sch.t
+fields:
+  - name: upper
+    expr: source.x
+  - name: y
+    expr: UPPER(source.z) || `upper`
+  - name: day
+    expr: source.day_of_order
+  - name: next
+    expr: source.ts + INTERVAL 1 DAY
+  - name: dom
+    expr: extract(DAY FROM source.ts) + day
+  - name: int
+    expr: source.n
+  - name: c
+    expr: CAST(source.z AS INT) + int
+  - name: source
+    expr: source.w
+  - name: q
+    expr: source.z || source
+  - name: masked
+    expr: my_udf(source.x)
+  - name: m
+    expr: masked
+""")
+
+    assert [(c.name, c.expr) for c in spec.columns] == [
+        ('upper', 'x'),
+        ('y', 'UPPER(z) || (x)'),
+        ('day', 'day_of_order'),
+        ('next', 'ts + INTERVAL 1 DAY'),
+        ('dom', 'extract(DAY FROM ts) + (day_of_order)'),
+        ('int', 'n'),
+        ('c', 'CAST(z AS INT) + (n)'),
+        ('source', 'w'),
+        ('q', 'z || (w)'),
+        ('masked', 'my_udf(x)'),
+        # The guard reads what the field stands for.
+        ('m', '(my_udf(x))'),
+    ]
+    assert spec.messages == []
+
+
+def test_a_field_whose_names_cannot_be_settled_is_refused() -> None:
+    r"""Where its words cannot be told apart, substituting a field could
+    rewrite one that is not a value.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.t
+dimensions:
+  - name: a
+    expr: source.x
+  - name: b
+    expr: a AT TIME ZONE 'UTC'
+""")
+
+    assert [column.name for column in spec.columns] == ['a']
+    assert spec.messages == [
+        "Failed to add dimension 'b' since it has syntax that is not "
+        'understood, so which of its words name columns cannot be settled'
+    ]
+
+
 def test_parse_metric_view_nested_joins() -> None:
     spec = parse_metric_view("""
 source: cat.sch.facts
@@ -1499,6 +1569,56 @@ def test_a_dimension_calling_a_udf_is_dropped_before_it_runs() -> None:
     (message,) = [m for m in graph.conversion_messages if "'masked'" in m]
     assert "calls 'my_udf'" in message
     assert 'trust_expressions=True' in message
+
+
+def test_a_field_reads_through_to_what_an_earlier_field_stands_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""A field named `upper` no longer rewrites `UPPER(...)`, and the guard
+    reads a field through the one it names, so a UDF behind it never runs.
+    """
+    yaml = """
+version: "1.1"
+source: cat.sch.order_lines
+fields:
+  - name: upper
+    expr: source.product_line
+  - name: shouted
+    expr: UPPER(source.product_line)
+  - name: masked
+    expr: my_udf(source.product_line)
+  - name: via
+    expr: masked
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+"""
+    expr_df = _EXPR_DATA['order_lines'].assign(upper='a', shouted='A')
+    monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
+    connection = _FakeConnection(
+        _metric_view(
+            yaml,
+            {
+                'upper': 'string',
+                'shouted': 'string',
+                'masked': 'string',
+                'via': 'string',
+            },
+        )
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ViewConversionWarning)
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv', connection=connection, verbose=False
+        )
+
+    fact = graph['order_lines']
+    assert str(fact['shouted'].expr) == 'UPPER(product_line)'
+    assert not fact.has_column('masked')
+    assert not fact.has_column('via')
+    assert not any('my_udf' in sql for sql in connection.sql_log)
+    (message,) = [m for m in graph.conversion_messages if "'via'" in m]
+    assert "calls 'my_udf'" in message
 
 
 def test_a_trusted_metric_view_keeps_its_udf_dimension(
