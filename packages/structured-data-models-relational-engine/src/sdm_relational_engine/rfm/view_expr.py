@@ -197,17 +197,34 @@ _UNSAFE_EXPR_KEYWORDS = re.compile(
 )
 # Databricks runs each of these as a sub-query where it opens the expression
 # or a `(`: `(FROM t |> ...)`, `(VALUES 1)`, `(WITH a AS (...) ...)` and the
-# script transforms `(MAP x USING 'cmd')` and `(REDUCE ...)`. A filter is
-# spliced into `WHERE (...)`, so `values + 1 > 0` opens `(VALUES +1 > 0)`.
-# `TABLE` is refused anywhere.
+# script transforms `(MAP x USING 'cmd')` and `(REDUCE ...)`, which need a
+# USING before their bracket closes. A filter is spliced into `WHERE (...)`,
+# so `values + 1 > 0` opens `(VALUES +1 > 0)`. `TABLE` is refused anywhere.
 _QUERY_START = re.compile(
     r'(?:^|\()\s*(?:'
     r'(?:from|values)\b'
-    r'|with\s+(?:recursive\s+)?(?:[\w$]+\s*)?(?:\([^()]*\)\s*)?as\b'
-    r'|(?:map|reduce)\b(?!\s*\()(?=[\s\S]*\busing\b)'
+    r'|with\s+(?:recursive\s+)?(?:[\w$]+\s*)?(?:\([^()]*\)\s*)?as\s*\('
+    r'|(?P<script>(?:map|reduce)\b(?!\s*\())'
     r')',
     flags=re.IGNORECASE,
 )
+_USING = re.compile(r'\busing\b', flags=re.IGNORECASE)
+
+
+def _starts_a_query(unquoted: str) -> bool:
+    r"""Whether ``unquoted``, its quoted text masked, opens a sub-query."""
+    for match in _QUERY_START.finditer(unquoted):
+        if not match.group('script'):
+            return True
+        depth, end = 0, len(unquoted)
+        for at in range(match.end(), len(unquoted)):
+            depth += {'(': 1, ')': -1}.get(unquoted[at], 0)
+            if depth < 0:
+                end = at
+                break
+        if _USING.search(unquoted, match.end(), end):
+            return True
+    return False
 
 
 def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
@@ -292,7 +309,7 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
         return "it leaves a '(' unclosed"
     if match := _UNSAFE_EXPR_KEYWORDS.search(unquoted):
         return f"it contains the SQL keyword '{match.group()}'"
-    if _QUERY_START.search(unquoted):
+    if _starts_a_query(unquoted):
         return 'it contains a sub-query'
     return None
 

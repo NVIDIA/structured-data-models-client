@@ -138,6 +138,7 @@ def test_no_session_or_random_function_is_trusted(functions) -> None:
         '(WITH a AS (VALUES (1)) VALUES (2))',
         "x = (MAP x USING 'cat')",
         "(REDUCE x USING 'cat')",
+        "(MAP f(x) USING 'cat')",
     ],
 )
 def test_a_query_without_select_is_refused(expr: str) -> None:
@@ -151,7 +152,14 @@ def test_a_query_without_select_is_refused(expr: str) -> None:
 
 @pytest.mark.parametrize(
     'expr',
-    ['x + values', '(with + 1)', 'map(x, 1)', 'reduce(a, 0, (s, y) -> s + y)'],
+    [
+        'x + values',
+        '(with + 1)',
+        'struct(with AS f)',
+        'map(x, 1)',
+        'reduce(a, 0, (s, y) -> s + y)',
+        'x IN (map, 1) OR using',
+    ],
 )
 def test_a_name_or_call_like_a_query_start_is_not_a_query(expr: str) -> None:
     r"""On the same warehouse these read a column or call a function."""
