@@ -1410,11 +1410,12 @@ class Graph:
         one is dropped with a warning.
 
         Dimension expressions later run as SQL under your warehouse
-        credentials, making the view definition executable input. Expressions
-        with a statement separator, comment, or sub-query are not plain scalar
-        expressions and are dropped with a warning. So are expressions calling
-        anything but a pure built-in function, such as a user-defined function
-        or ``secret()``, unless ``trust_expressions`` is set. Load only trusted
+        credentials, making the view definition executable input. A comment is
+        removed first, as Databricks drops it. Expressions with a statement
+        separator or sub-query are not plain scalar expressions and are
+        dropped with a warning. So are expressions calling anything but a
+        pure built-in function, such as a user-defined function or
+        ``secret()``, unless ``trust_expressions`` is set. Load only trusted
         metric views.
 
         .. code-block:: python
@@ -1448,8 +1449,7 @@ class Graph:
             verbose: Whether to print verbose output.
             trust_expressions: Whether to keep dimensions, and accept a
                 filter, that call functions other than pure built-ins.
-                Sub-queries, comments and statement separators are refused
-                regardless.
+                Sub-queries and statement separators are refused regardless.
             warn: Whether to warn of what the view loses, as a
                 :class:`ViewConversionWarning`, and of a time column taken
                 on the rows read alone, as a
