@@ -331,6 +331,49 @@ dimensions:
     ]
 
 
+def test_a_field_naming_a_refused_field_is_refused_too() -> None:
+    r"""A refused field was never remembered, so a later field naming it
+    read the source column of that name instead, and two halves the guard
+    refuses could join into text it accepts.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.t
+parameters:
+  - name: p
+    data_type: STRING
+dimensions:
+  - name: order_date
+    expr: date_trunc('DAY', source.order_date) AT TIME ZONE 'UTC'
+  - name: m
+    expr: order_date
+  - name: shipped
+    expr: date_trunc(p, source.shipped)
+  - name: n
+    expr: shipped
+  - name: a
+    expr: source.x '
+  - name: b
+    expr: "' + 1"
+  - name: c
+    expr: a + b
+""")
+
+    assert [column.name for column in spec.columns] == ['a', 'b']
+    assert spec.messages == [
+        "Failed to add dimension 'order_date' since it has syntax that is "
+        'not understood, so which of its words name columns cannot be '
+        'settled',
+        "Failed to add dimension 'm' since it names the dimension "
+        "'order_date', which is refused",
+        "Failed to add dimension 'shipped' since it references the "
+        "parameter 'p', which has no default",
+        "Failed to add dimension 'n' since it names the dimension "
+        "'shipped', which is refused",
+        "Failed to add dimension 'c' since it names the dimension 'a', "
+        'which is refused',
+    ]
+
+
 def test_parse_metric_view_nested_joins() -> None:
     spec = parse_metric_view("""
 source: cat.sch.facts

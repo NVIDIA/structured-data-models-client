@@ -610,9 +610,9 @@ _FIRST_PART = re.compile(r'`(?:``|[^`])*`|[A-Za-z0-9_]+')
 
 def _substitute_fields(
     expr: str,
-    fields: Mapping[str, str],
+    fields: Mapping[str, str | None],
     qualifiers: Collection[tuple[str, ...]],
-) -> str:
+) -> tuple[str, str | None]:
     r"""Replaces each reference to an earlier field with its expression.
 
     A field is referenced by its name, bare or backticked, where the
@@ -625,25 +625,36 @@ def _substitute_fields(
 
     Args:
         expr: The expression, its parameters substituted.
-        fields: The expression of each earlier field, by folded name.
+        fields: The expression of each earlier field, by folded name, or
+            ``None`` for one refused.
         qualifiers: Every join path or alias, folded.
+
+    Returns:
+        The expression, and the name of a refused field it references, as
+        written, if any.
 
     Raises:
         UnreadableExpressionError: If which of its words are values cannot
             be settled.
     """
+    refused = None
     for reference in reversed(name_references(expr) if fields else []):
         parts = tuple(part.lower() for part in reference.parts)
         qualified = any(
             len(parts) > len(path) and parts[: len(path)] == path
             for path in qualifiers
         )
-        if parts[0] in fields and not qualified:
-            start = reference.span[0]
-            first = _FIRST_PART.match(expr, start)
-            assert first is not None
-            expr = f'{expr[:start]}({fields[parts[0]]}){expr[first.end() :]}'
-    return expr
+        if parts[0] not in fields or qualified:
+            continue
+        field = fields[parts[0]]
+        if field is None:
+            refused = reference.parts[0]
+            continue
+        start = reference.span[0]
+        first = _FIRST_PART.match(expr, start)
+        assert first is not None
+        expr = f'{expr[:start]}({field}){expr[first.end() :]}'
+    return expr, refused
 
 
 def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
@@ -876,7 +887,9 @@ def parse_metric_view(
     row_filter = _check_filter(row_filter, candidates)
 
     columns: list[MetricViewColumn | MetricViewWildcard] = []
-    defined: dict[str, str] = {}
+    # Each field's expression by folded name, or `None` for one refused,
+    # so a field naming it is refused too rather than read as a column.
+    defined: dict[str, str | None] = {}
     # `fields` is the newer name of `dimensions`, and Databricks reads only
     # `dimensions` when a view has both.
     dim_cfgs = list(cfg.get('dimensions') or cfg.get('fields') or [])
@@ -927,22 +940,28 @@ def parse_metric_view(
 
         # What the guard refuses, such as a sub-query, is not read but left
         # for the guard to drop, saying why.
-        if _unsafe_expr_reason(expr, 'databricks') is None:
+        if _unsafe_expr_reason(expr, 'databricks') is not None:
+            defined[name.lower()] = None
+        else:
             try:
                 expr, referenced = _substitute_parameters(expr, parameters)
-                expr = _substitute_fields(expr, defined, qualifiers)
+                expr, refused = _substitute_fields(expr, defined, qualifiers)
             except UnreadableExpressionError as error:
-                messages.append(
-                    f"Failed to add dimension '{name}' since {error}"
-                )
-                continue
-            if reason := _unusable_parameter(referenced):
+                reason = str(error)
+            else:
+                reason = _unusable_parameter(referenced)
+                if reason is None and refused is not None:
+                    reason = (
+                        f"it names the dimension '{refused}', which is refused"
+                    )
+            if reason is not None:
                 messages.append(
                     f"Failed to add dimension '{name}' since {reason}"
                 )
+                defined[name.lower()] = None
                 continue
             used.update((parameter.name, parameter) for parameter in referenced)
-        defined[name.lower()] = expr
+            defined[name.lower()] = expr
 
         refs: set[str] = set()
         for path, path_alias in candidates:
