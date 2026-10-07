@@ -303,9 +303,10 @@ def sent_inference(request) -> dict:
 def test_an_inference_config_dataclass_sends_what_the_dict_form_sends():
     """The engine takes `InferenceConfig | dict | None` and gathers the same
     payload from either, so only the warning bookkeeping saw the difference."""
-    assert sent_inference(gathered_with(regression_config())) == (
-        sent_inference(gathered_with({}))
-    )
+    assert sent_inference(gathered_with(regression_config())) == {
+        'run_mode': 'fast'
+    }
+    assert sent_inference(gathered_with({})) == {'run_mode': 'fast'}
 
 
 def test_a_dataclass_field_the_caller_set_is_still_named_when_it_is_dropped():
@@ -318,6 +319,20 @@ def test_a_dataclass_field_the_caller_set_is_still_named_when_it_is_dropped():
     assert 'output_type' in str(error.value)
 
 
+@pytest.mark.parametrize(
+    ('config', 'field'),
+    [
+        ({'num_estimators': 4}, 'num_estimators'),
+        ({'column_shuffle': True}, 'column_shuffle'),
+        ({'target_transforms': ['clip']}, 'target_transforms'),
+    ],
+)
+def test_explicit_inference_config_is_refused(config, field):
+    request = gathered_with(config, sent={'num_estimators': 1, **config})
+    with pytest.raises(UnsupportedRequestError, match=field):
+        sent_inference(request)
+
+
 def test_a_defaulted_dataclass_field_is_dropped_without_a_refusal():
     """A bare config asks for exactly what passing none asks for, and the
     engine fills the rest in whether or not the caller wanted it."""
@@ -325,7 +340,7 @@ def test_a_defaulted_dataclass_field_is_dropped_without_a_refusal():
         regression_config(),
         sent={'num_estimators': 1, 'output_type': 'median'},
     )
-    assert sent_inference(request)['inference_config'] == {'num_estimators': 1}
+    assert sent_inference(request) == {'run_mode': 'fast'}
 
 
 def test_a_dropped_option_is_refused_with_a_remedy_that_works():

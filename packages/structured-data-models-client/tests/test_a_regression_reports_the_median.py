@@ -125,7 +125,7 @@ def test_a_regression_asks_for_the_median_by_default(requests_mock):
 
     assert body['task']['kind'] == 'regression'
     assert body['output']['prediction_statistic'] == 'median'
-    assert 'output_type' not in body['inference']['inference_config']
+    assert 'inference_config' not in body['inference']
     # Both transports wrap the same payload, so both ask for the same thing.
     (wrapped,) = sent_to_databricks(request)
     assert without_request_id(wrapped) == without_request_id(body)
@@ -159,6 +159,7 @@ def test_a_session_scores_with_the_statistic_asked_for(
 
     (body,) = [call.json() for call in scored.request_history]
     assert body['output']['prediction_statistic'] == statistic
+    assert 'inference_config' not in body['inference']
 
 
 def test_every_step_of_a_forecast_reports_the_statistic_asked_for():

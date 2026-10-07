@@ -140,50 +140,34 @@ class RelationalAdapter:
     def _inference(
         self, inference: Any, request: Request
     ) -> dict[str, Any] | None:
-        """Send only the inference options this model reads.
+        """Keep gathering options, but omit the engine's model config.
 
         The engine fills in an inference config on every request, including
-        keys this client does not forward: `output_type`, whose choice travels
-        as ``output.prediction_statistic`` instead, and `target_transforms`.
-        Dropping the engine's defaults is safe. If the *caller* asked for one,
-        it is named rather than silently discarded, because a dropped request
-        for four estimators is a different prediction than the one that was
-        wanted.
-
-        Forwarding a key is not a promise that the endpoint serves it. This is
-        a name-level filter over what the engine sends; whether a deployment
-        accepts the *value* is its own answer, and it may still refuse.
+        keys the endpoint does not accept. `output_type` is represented by
+        ``output.prediction_statistic`` instead. Reject caller-selected config
+        values rather than silently changing the requested prediction.
         """
         if not isinstance(inference, dict):
             return None
-        config = inference.get('inference_config')
-        if not isinstance(config, dict):
-            return dict(inference)
-
-        forwarded = self.spec.runtime.inference_options
-        unsupported = sorted(set(config) - forwarded)
-        asked_for = _keys_the_caller_set(
-            request.requested_inference.get('inference_config')
+        asked_for = sorted(
+            _keys_the_caller_set(
+                request.requested_inference.get('inference_config')
+            )
         )
-        refused = sorted(set(unsupported) & asked_for)
-        if refused:
+        if asked_for:
             raise UnsupportedRequestError(
                 f'{self.spec.model_id} does not read inference option(s) '
-                f'{refused}; drop them from inference_config to send the '
-                f'request without them. The keys this client forwards are '
-                f'{sorted(forwarded)}, and the endpoint decides for itself '
-                f'whether it serves the value given for one'
-                + _where_the_statistic_is_chosen(refused),
+                f'{asked_for}; drop them from inference_config to send the '
+                f'request without them'
+                + _where_the_statistic_is_chosen(asked_for),
                 details={
                     'model': self.spec.model_id,
-                    'unsupported': refused,
+                    'unsupported': asked_for,
                 },
             )
 
         trimmed = dict(inference)
-        trimmed['inference_config'] = {
-            key: value for key, value in config.items() if key in forwarded
-        }
+        trimmed.pop('inference_config', None)
         return trimmed
 
     def session_plan(

@@ -181,9 +181,7 @@ def test_the_relational_model_declares_the_deployment_it_was_read_from():
     runtime = KUMO_RELATIONAL.runtime
     assert {'forecasting', 'temporal_link_prediction'} <= runtime.tasks
     assert 'explanation' in runtime.outputs
-    # Only these inference options reach the wire; the engine defaults to more.
-    assert 'output_type' not in runtime.inference_options
-    assert 'num_estimators' in runtime.inference_options
+    assert not runtime.inference_options
 
 
 def test_an_inference_option_the_caller_set_is_named_rather_than_dropped():
@@ -215,7 +213,7 @@ def test_the_engine_s_statistic_travels_on_the_output_instead():
         }
     }
     (plan,) = RelationalAdapter().prediction_plan(request, ('prediction',))
-    assert plan['inference']['inference_config'] == {'num_estimators': 1}
+    assert 'inference_config' not in plan['inference']
     assert plan['output']['prediction_statistic'] == 'median'
 
 
