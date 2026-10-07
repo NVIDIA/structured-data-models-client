@@ -123,5 +123,5 @@ After reviewing each other's reports, the second orchestrator endorsed proving t
 |---|---|---|---|
 | How deep to fix the boundary | Re-cut to an Arrow-only contract | Repair it in place; problems are "bounded" | Prove the Arrow-only contract on one hard slice first, then choose from the evidence |
 | Process | Reset it | Keep the full machinery, trim the launchers | Reset it: keep behavioral requirements and independent review, drop per-file approvals and unbounded relocks |
-| Slice order | Warehouse first, Python and Java together | Python slices first, Java later | Warehouse first, both languages together, if the Java target can load native code |
+| Slice order | Warehouse first, Python and Java together | Python slices first, Java later | Python leads every slice, warehouse path first; Java follows on the same contract cases |
 | Deleting internal tests | On a schedule | Only when replacements prove they catch the same issues | Replacements must show they catch what the old tests caught; then delete |
