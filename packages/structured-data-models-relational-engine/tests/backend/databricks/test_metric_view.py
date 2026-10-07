@@ -249,11 +249,16 @@ dimensions:
 def test_a_field_replaces_only_its_name_where_a_value_stands() -> None:
     r"""A field named like a function, type, datetime unit or qualifier is
     substituted where its name reads a value alone: a field `upper` turned
-    `UPPER(source.z)` into `(x)(z)`.
+    `UPPER(source.z)` into `(x)(z)`. A member of a field is read through it,
+    unless the name begins a join's path.
     """
     spec = parse_metric_view("""
 version: 1.1
 source: cat.sch.t
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.id
 fields:
   - name: upper
     expr: source.x
@@ -273,10 +278,14 @@ fields:
     expr: source.w
   - name: q
     expr: source.z || source
-  - name: masked
-    expr: my_udf(source.x)
-  - name: m
-    expr: masked
+  - name: address
+    expr: named_struct('city', upper(source.address.city))
+  - name: city
+    expr: address.city || `address`['city']
+  - name: customers
+    expr: source.customer_id
+  - name: segment
+    expr: customers.segment
 """)
 
     assert [(c.name, c.expr) for c in spec.columns] == [
@@ -289,10 +298,16 @@ fields:
         ('c', 'CAST(z AS INT) + (n)'),
         ('source', 'w'),
         ('q', 'z || (w)'),
-        ('masked', 'my_udf(x)'),
-        # The guard reads what the field stands for.
-        ('m', '(my_udf(x))'),
+        ('address', "named_struct('city', upper(address.city))"),
+        (
+            'city',
+            "(named_struct('city', upper(address.city))).city "
+            "|| (named_struct('city', upper(address.city)))['city']",
+        ),
+        ('customers', 'customer_id'),
+        ('segment', 'segment'),
     ]
+    assert spec.columns[-1].alias == 'customers'
     assert spec.messages == []
 
 
@@ -1574,15 +1589,13 @@ def test_a_dimension_calling_a_udf_is_dropped_before_it_runs() -> None:
 def test_a_field_reads_through_to_what_an_earlier_field_stands_for(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    r"""A field named `upper` no longer rewrites `UPPER(...)`, and the guard
-    reads a field through the one it names, so a UDF behind it never runs.
+    r"""The guard reads a field through the one it names, so a UDF behind it
+    never runs.
     """
     yaml = """
 version: "1.1"
 source: cat.sch.order_lines
 fields:
-  - name: upper
-    expr: source.product_line
   - name: shouted
     expr: UPPER(source.product_line)
   - name: masked
@@ -1593,13 +1606,12 @@ measures:
   - name: total_amount
     expr: SUM(source.amount)
 """
-    expr_df = _EXPR_DATA['order_lines'].assign(upper='a', shouted='A')
+    expr_df = _EXPR_DATA['order_lines'].assign(shouted='A')
     monkeypatch.setitem(_EXPR_DATA, 'order_lines', expr_df)
     connection = _FakeConnection(
         _metric_view(
             yaml,
             {
-                'upper': 'string',
                 'shouted': 'string',
                 'masked': 'string',
                 'via': 'string',

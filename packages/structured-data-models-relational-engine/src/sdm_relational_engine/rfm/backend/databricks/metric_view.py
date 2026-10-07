@@ -604,27 +604,45 @@ def _substitute_parameters(
     return expr, list(used.values())
 
 
-def _substitute_fields(expr: str, fields: Mapping[str, str]) -> str:
+# The first part of a name, backticked or not.
+_FIRST_PART = re.compile(r'`(?:``|[^`])*`|[A-Za-z0-9_]+')
+
+
+def _substitute_fields(
+    expr: str,
+    fields: Mapping[str, str],
+    qualifiers: Collection[tuple[str, ...]],
+) -> str:
     r"""Replaces each reference to an earlier field with its expression.
 
     A field is referenced by its name, bare or backticked, where the
-    expression reads a value. So a function, type, keyword, datetime unit or
+    expression reads a value, and may be followed by a member, as in
+    ``address.city``. So a function, type, keyword, datetime unit or
     qualifier of the same name is left as is: a field named ``upper`` leaves
-    ``UPPER(source.z)`` alone.
+    ``UPPER(source.z)`` alone. A name that a table's alias or join path
+    begins qualifies a column instead, as Databricks resolves a qualifier
+    before a struct's field.
 
     Args:
         expr: The expression, its parameters substituted.
         fields: The expression of each earlier field, by folded name.
+        qualifiers: Every join path or alias, folded.
 
     Raises:
         UnreadableExpressionError: If which of its words are values cannot
             be settled.
     """
     for reference in reversed(name_references(expr) if fields else []):
-        name = reference.parts[0].lower()
-        if len(reference.parts) == 1 and name in fields:
-            start, end = reference.span
-            expr = f'{expr[:start]}({fields[name]}){expr[end:]}'
+        parts = tuple(part.lower() for part in reference.parts)
+        qualified = any(
+            len(parts) > len(path) and parts[: len(path)] == path
+            for path in qualifiers
+        )
+        if parts[0] in fields and not qualified:
+            start = reference.span[0]
+            first = _FIRST_PART.match(expr, start)
+            assert first is not None
+            expr = f'{expr[:start]}({fields[parts[0]]}){expr[first.end() :]}'
     return expr
 
 
@@ -839,6 +857,9 @@ def parse_metric_view(
         candidates.append(((alias,), alias))
     candidates.append(((SOURCE_ALIAS,), SOURCE_ALIAS))
     candidates.sort(key=lambda candidate: len(candidate[0]), reverse=True)
+    qualifiers = {
+        tuple(part.lower() for part in path) for path, _ in candidates
+    }
 
     row_filter = _sql(cfg.get('filter'))
     if isinstance(row_filter, str):
@@ -909,7 +930,7 @@ def parse_metric_view(
         if _unsafe_expr_reason(expr, 'databricks') is None:
             try:
                 expr, referenced = _substitute_parameters(expr, parameters)
-                expr = _substitute_fields(expr, defined)
+                expr = _substitute_fields(expr, defined, qualifiers)
             except UnreadableExpressionError as error:
                 messages.append(
                     f"Failed to add dimension '{name}' since {error}"
