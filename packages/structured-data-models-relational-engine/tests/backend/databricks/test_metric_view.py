@@ -3079,6 +3079,11 @@ measures:
             '+ COUNT(DISTINCT struct(order_ts AS f))',
             ['day', 'shipped', 'a', 'b', 'order_ts'],
         ),
+        (
+            'SUM(date_diff(DAY, a, b) + timediff(HOUR, a, b)) '
+            '+ COUNT(extract(DOW FROM order_ts))',
+            ['a', 'b', 'order_ts'],
+        ),
         # A dimension, a measure and two tables: no one table's columns.
         ('SUM(qty * products.ListPrice) / MEASURE(m) + SUM(promos.d)', []),
         # Databricks reads a column named like a keyword where an operand is.
@@ -3124,6 +3129,7 @@ measures:
         'interval',
         'filter',
         'date-function',
+        'unit-first',
         'mixed',
         'keyword-named',
         'window-frame',

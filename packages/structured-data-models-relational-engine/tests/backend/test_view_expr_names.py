@@ -74,6 +74,17 @@ _PROBE = '(CASE WHEN x THEN not END)'
             {f'c{i}' for i in range(1000)} | {'x', 'not'},
             id='long',
         ),
+        # EXTRACT's field is any word, and these take a datetime unit first.
+        ('extract(DOW FROM ts) + dow', {'ts', 'dow'}),
+        (
+            'extract(dayofweek_iso FROM ts) + extract(D FROM ts) '
+            '+ extract(DOY FROM ts)',
+            {'ts'},
+        ),
+        ('date_add(DAY, 1, d)', {'d'}),
+        ('date_diff(DAY, d, ts)', {'d', 'ts'}),
+        ('timediff(HOUR, d, ts)', {'d', 'ts'}),
+        ('date_diff(d, d) + day', {'d', 'day'}),
         # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),

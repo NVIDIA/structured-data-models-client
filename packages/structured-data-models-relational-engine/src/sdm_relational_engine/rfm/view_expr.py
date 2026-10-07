@@ -1110,10 +1110,12 @@ _INTERVAL_FIELDS = frozenset(
 # The time zones a timestamp type may name.
 _TIME_ZONES = (('with', 'local', 'time', 'zone'), ('without', 'time', 'zone'))
 # Functions whose first argument may be a datetime unit, as a bare word.
-_UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
+_UNIT_FIRST = frozenset({'timediff', 'timestampadd', 'timestampdiff'})
 # These take a unit first only in their three-argument form: `datediff(a,
 # b)` reads two values.
-_UNIT_FIRST_OF_THREE = frozenset({'dateadd', 'datediff'})
+_UNIT_FIRST_OF_THREE = frozenset(
+    {'date_add', 'date_diff', 'dateadd', 'datediff'}
+)
 
 
 class UnreadableExpressionError(ValueError):
@@ -1533,8 +1535,10 @@ class _NameScan:
         if group.frame and word in _FRAME_WORDS:
             state.operand = word == 'between'
             return True
+        if opens and group.opener == 'extract':
+            return True  # The field of `EXTRACT(DOW FROM d)`, any word.
         if opens and word in _DATETIME_UNITS:
-            # `EXTRACT(YEAR FROM d)`, and `dateadd(DAY, 1, d)`.
+            # `dateadd(DAY, 1, d)`.
             three = group.opener in _UNIT_FIRST_OF_THREE
             if group.opener in _UNIT_FIRST or (
                 three and _arguments(tokens, index - 1) == 3
