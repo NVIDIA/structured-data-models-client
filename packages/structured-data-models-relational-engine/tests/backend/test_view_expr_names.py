@@ -12,7 +12,10 @@ warehouse, for a table `t` whose columns are named like keywords.
 from __future__ import annotations
 
 import pytest
-from sdm_relational_engine.rfm.view_expr import name_references
+from sdm_relational_engine.rfm.view_expr import (
+    UnreadableExpressionError,
+    name_references,
+)
 
 _PROBE = '(CASE WHEN x THEN not END)'
 
@@ -60,7 +63,12 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ('CASE case WHEN when THEN end END', {'case', 'when', 'end'}),
         ('CASE WHEN x THEN not END', {'x', 'not'}),
         # However long or deep the expression around it.
-        pytest.param('NOT (' * 30 + _PROBE + ')' * 30, {'x', 'not'}, id='deep'),
+        pytest.param('NOT (' * 63 + _PROBE + ')' * 63, {'x', 'not'}, id='deep'),
+        pytest.param(
+            'NOT (' * 34 + 'y' + ')' * 34 + ' AND ' + _PROBE,
+            {'x', 'not', 'y'},
+            id='deep-then-shallow',
+        ),
         pytest.param(
             ' AND '.join(f'NOT c{i}' for i in range(1000)) + ' AND ' + _PROBE,
             {f'c{i}' for i in range(1000)} | {'x', 'not'},
@@ -78,3 +86,15 @@ def test_a_name_is_a_column_where_databricks_reads_one(
     take a keyword's name, and a keyword after an operand is grammar.
     """
     assert {'.'.join(name.parts) for name in name_references(expr)} == columns
+
+
+@pytest.mark.parametrize('depth', [64, 200])
+@pytest.mark.parametrize('opener', ['NOT (', 'f(DISTINCT '])
+def test_an_expression_nested_too_deep_is_refused(
+    opener: str, depth: int
+) -> None:
+    r"""Past the deepest trial the scan keeps, it says so rather than guess,
+    which would read `END` as a column and lose `not`.
+    """
+    with pytest.raises(UnreadableExpressionError):
+        name_references(opener * depth + _PROBE + ')' * depth)

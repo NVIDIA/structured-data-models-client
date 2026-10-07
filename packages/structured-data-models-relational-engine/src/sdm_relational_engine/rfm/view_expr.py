@@ -1105,6 +1105,12 @@ _UNIT_FIRST = frozenset({'extract', 'timestampadd', 'timestampdiff'})
 _UNIT_FIRST_OF_THREE = frozenset({'dateadd', 'datediff'})
 
 
+class UnreadableExpressionError(ValueError):
+    r"""An expression whose names could not be settled within the bounds
+    the scan keeps, so no reading of it is safe.
+    """
+
+
 @dataclass(frozen=True)
 class NameReference:
     r"""A name an expression reads as a value, possibly qualified.
@@ -1239,11 +1245,21 @@ class _NameScan:
         self.parsed: dict[tuple[object, ...], bool] = {}
         # For each trial under way, the readings as a column left to try.
         self.trials: list[list[tuple[int, _State, tuple[object, ...]]]] = []
-        # Past this many steps in all, or the deepest trial, forms are taken
-        # untried and nothing more is kept, so a long expression is read in
-        # time linear in its length.
+        # Past this many steps in all, or the deepest trial, the scan stops
+        # trying and keeps nothing more, and the expression is refused as
+        # unreadable. So a long expression is read in time linear in its
+        # length, and none is read wrong.
         self.budget = _TRIAL_STEPS * (self.end + 1)
         self.cut = False
+        # Where the bracket around each token closes, or the end.
+        around, closing, open_at = [], {-1: self.end}, [-1]
+        for index, token in enumerate(tokens):
+            if token.text in ')]' and len(open_at) > 1:
+                closing[open_at.pop()] = index
+            around.append(open_at[-1])
+            if token.text in '([':
+                open_at.append(index)
+        self.closes = [closing.get(at, self.end) for at in around]
 
     def references(self) -> list[NameReference]:
         state, found = _State(), list[NameReference]()
@@ -1261,7 +1277,7 @@ class _NameScan:
             return self.parsed[key]
         if self.budget <= 0 or len(self.trials) >= _DEEPEST_TRIAL:
             self.cut = True
-            return True  # Take the form, as the parser prefers.
+            return True  # Undecided: the expression will be refused.
         columns: list[tuple[int, _State, tuple[object, ...]]] = []
         self.trials.append(columns)
         state = state.trial()
@@ -1286,6 +1302,12 @@ class _NameScan:
             known = self.parsed.get((index, *state.key()))
             if known is not None and (not known or len(state.groups) == 2):
                 return known  # Read from here before, from this state.
+            if known:
+                # The rest of this deeper bracket parses: go on after it.
+                index = self.closes[index] + 1
+                state.groups.pop()
+                state.operand = state.name_next = state.after_is = False
+                continue
             if self.budget <= 0:
                 self.cut = True
                 return True
@@ -1545,9 +1567,19 @@ def name_references(expr: str) -> list[NameReference]:
     parameter. Where a word stands decides which it is, as it does for
     Databricks: in ``SUM(x) OVER (PARTITION BY range)`` the ``range`` is a
     column, and in ``col REGEXP 'x'`` the ``REGEXP`` is an operator.
+
+    Raises:
+        UnreadableExpressionError: If brackets nest too deeply, or the
+            expression is too long, to settle which words are names.
     """
     tokens = [token for token in _lex(expr) if token.kind != 'comment']
-    return _NameScan(tokens).references()
+    scan = _NameScan(tokens)
+    references = scan.references()
+    if scan.cut:
+        raise UnreadableExpressionError(
+            'it is too deeply nested to read safely'
+        )
+    return references
 
 
 def _folded_name(token: _Token) -> str:

@@ -22,6 +22,7 @@ from sdm_relational_engine.rfm.view_conversion import (
 )
 from sdm_relational_engine.rfm.view_expr import (
     BARE_NAME,
+    UnreadableExpressionError,
     _unsafe_expr_reason,
     _untrusted_call_reason,
     name_references,
@@ -824,7 +825,12 @@ def parse_metric_view(
 
     row_filter = _sql(cfg.get('filter'))
     if isinstance(row_filter, str):
-        substituted, referenced = _substitute_parameters(row_filter, parameters)
+        try:
+            substituted, referenced = _substitute_parameters(
+                row_filter, parameters
+            )
+        except UnreadableExpressionError as error:
+            _refuse_filter(row_filter, str(error))
         if reason := _unusable_parameter(referenced):
             _refuse_filter(row_filter, reason, default_helps=True)
         row_filter = substituted
@@ -881,7 +887,11 @@ def parse_metric_view(
             )
             continue
 
-        expr, referenced = _substitute_parameters(expr, parameters)
+        try:
+            expr, referenced = _substitute_parameters(expr, parameters)
+        except UnreadableExpressionError as error:
+            messages.append(f"Failed to add dimension '{name}' since {error}")
+            continue
         if reason := _unusable_parameter(referenced):
             messages.append(f"Failed to add dimension '{name}' since {reason}")
             continue
@@ -920,6 +930,18 @@ def parse_metric_view(
             )
         )
 
+    measures = _read_measures(
+        cfg.get('measures'),
+        candidates,
+        kept,
+        dimensions={
+            column.name.lower(): column
+            for column in columns
+            if isinstance(column, MetricViewColumn)
+        },
+        parameters=set(parameters),
+        messages=messages,
+    )
     return MetricViewSpec(
         source=source_ref,
         joins=joins,
@@ -932,17 +954,7 @@ def parse_metric_view(
         ],
         filter=row_filter,
         window_orders=_window_orders(cfg.get('measures')),
-        measures=_read_measures(
-            cfg.get('measures'),
-            candidates,
-            kept,
-            dimensions={
-                column.name.lower(): column
-                for column in columns
-                if isinstance(column, MetricViewColumn)
-            },
-            parameters=set(parameters),
-        ),
+        measures=measures,
     )
 
 
@@ -952,6 +964,7 @@ def _read_measures(
     kept: Collection[str],
     dimensions: Mapping[str, MetricViewColumn],
     parameters: Collection[str],
+    messages: list[str],
 ) -> list[MetricViewMeasure]:
     r"""Reads which columns each measure aggregates, never running it.
 
@@ -966,6 +979,7 @@ def _read_measures(
         kept: The aliases of the joins converted.
         dimensions: The dimensions converted, by folded name.
         parameters: The folded names of the parameters.
+        messages: Where to say which measure was left out, and why.
     """
     paths = {
         tuple(part.lower() for part in path): alias
@@ -983,9 +997,14 @@ def _read_measures(
         name, expr = cfg.get('name'), _sql(cfg.get('expr'))
         if not isinstance(name, str) or not isinstance(expr, str):
             continue
+        try:
+            names = name_references(expr)
+        except UnreadableExpressionError as error:
+            messages.append(f"Failed to add measure '{name}' since {error}")
+            continue
         inputs: list[tuple[str, str]] = []
         read: set[str] = set()  # The aliases of every table read.
-        for named in name_references(expr):
+        for named in names:
             parts = named.parts
             if len(parts) == 1:
                 folded = parts[0].lower()

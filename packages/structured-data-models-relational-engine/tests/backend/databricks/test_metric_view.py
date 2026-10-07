@@ -3186,6 +3186,43 @@ dimensions:
     assert column.expr == read
 
 
+# Nested past what the name scanner settles, so it reads no name of it.
+_TOO_DEEP = 'NOT (' * 64 + '(CASE WHEN x THEN not END)' + ')' * 64
+
+
+def test_an_expression_too_deep_to_read_is_refused_not_misread() -> None:
+    r"""Its names cannot be told from its grammar within the scan's bounds,
+    and a name dropped would substitute or add the wrong columns.
+    """
+    view = f"""
+source: cat.sch.orders
+parameters:
+  - name: p
+    data_type: INT
+    default: 1
+dimensions:
+  - name: d
+    expr: {json.dumps(_TOO_DEEP)}
+  - name: kept
+    expr: x + p
+measures:
+  - name: m
+    expr: {json.dumps(f'SUM(x) FILTER (WHERE {_TOO_DEEP})')}
+"""
+    spec = parse_metric_view(view)
+
+    assert [column.name for column in spec.columns] == ['kept']
+    assert spec.measures == []
+    assert spec.messages == [
+        "Failed to add dimension 'd' since it is too deeply nested to read "
+        'safely',
+        "Failed to add measure 'm' since it is too deeply nested to read "
+        'safely',
+    ]
+    with pytest.raises(UnsupportedFilterError, match='too deeply nested'):
+        parse_metric_view(f'{view}filter: {json.dumps(_TOO_DEEP)}\n')
+
+
 _MEASURE_YAML = """
 version: 1.1
 source: cat.sch.order_lines
