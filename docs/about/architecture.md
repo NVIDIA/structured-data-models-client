@@ -331,7 +331,8 @@ A wildcard dimension such as `source.* EXCEPT (rowguid)` becomes the columns it 
 A dimension truncating or casting a date stands for the column it truncates when the time column is chosen, so windows count days, not months.
 A join whose table cannot be read, or whose key repeats, is left out with the tables and dimensions hanging off it; only a source table that cannot be read fails the conversion.
 A model is written by someone else, and its expressions run under the caller's credentials each time a request is gathered, so by default they may call only pure, deterministic built-in functions, from an allowlist per dialect.
-A column calling a user-defined function, `secret()`, `http_request()` or `SYSTEM$WAIT()` is left out with a message, and `trust_expressions=True` keeps it; sub-queries, comments and statement separators are refused either way.
+A column calling a user-defined function, `secret()`, `http_request()` or `SYSTEM$WAIT()` is left out with a message, and `trust_expressions=True` keeps it; sub-queries and statement separators are refused either way.
+A comment in a metric view is removed first, as Databricks drops it, and one in a Snowflake semantic view is refused.
 Allowed is not the same as cheap or fixed.
 Some allowed built-ins can build large values from small inputs and so cost the warehouse time and memory: `repeat`, `space`, `lpad`, `rpad`, `array_repeat` and `sequence` on Databricks, and `repeat`, `space` and `array_generate_range` on Snowflake.
 Others read the session's time zone, so their results can differ between two sessions reading the same rows: `from_unixtime`, `date_format`, `to_timestamp`, `convert_timezone` with two arguments, and the `*_ltz` functions.
