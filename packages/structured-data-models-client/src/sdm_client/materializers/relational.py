@@ -6,6 +6,7 @@ r"""Gather and encode relational requests with the relational engine."""
 
 from __future__ import annotations
 
+import copy
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -162,8 +163,13 @@ class RelationalMaterializer:
             query=query.to_string(),
             indices=list(indices),
             entity_table=table_name(query.entity_column),
+            # A copy: the payloads were gathered from the config as it is
+            # now, and a caller's later edit to it must not change what the
+            # adapter believes was asked for.
             requested_inference={
-                'inference_config': options.get('inference_config') or {}
+                'inference_config': copy.deepcopy(
+                    options.get('inference_config') or {}
+                )
             },
         )
 
