@@ -993,14 +993,20 @@ def parse_metric_view(
             )
         )
 
+    dimensions = {
+        column.name.lower(): column
+        for column in columns
+        if isinstance(column, MetricViewColumn)
+    }
     measures = _read_measures(
         cfg.get('measures'),
         candidates,
         kept,
-        dimensions={
-            column.name.lower(): column
-            for column in columns
-            if isinstance(column, MetricViewColumn)
+        dimensions=dimensions,
+        refused={
+            name
+            for name, field in defined.items()
+            if field is None or name not in dimensions
         },
         parameters=set(parameters),
         messages=messages,
@@ -1026,6 +1032,7 @@ def _read_measures(
     candidates: Sequence[tuple[tuple[str, ...], str]],
     kept: Collection[str],
     dimensions: Mapping[str, MetricViewColumn],
+    refused: Collection[str],
     parameters: Collection[str],
     messages: list[str],
 ) -> list[MetricViewMeasure]:
@@ -1033,7 +1040,8 @@ def _read_measures(
 
     A name that is a dimension, a measure or a parameter is no column to
     add, and a measure over more than one table reads none, since no one
-    table's columns can express it.
+    table's columns can express it. A measure naming a refused dimension is
+    refused, rather than read the source column of that name.
 
     Args:
         measure_cfgs: The ``measures`` section, if any.
@@ -1041,6 +1049,7 @@ def _read_measures(
             with the alias it resolves to.
         kept: The aliases of the joins converted.
         dimensions: The dimensions converted, by folded name.
+        refused: The folded names of the dimensions refused.
         parameters: The folded names of the parameters.
         messages: Where to say which measure was left out, and why.
     """
@@ -1064,6 +1073,20 @@ def _read_measures(
             names = name_references(expr)
         except UnreadableExpressionError as error:
             messages.append(f"Failed to add measure '{name}' since {error}")
+            continue
+        named_refused = [
+            named.parts[0]
+            for named in names
+            if len(named.parts) == 1
+            and (folded := named.parts[0].lower()) in refused
+            and folded not in measure_names
+            and folded not in parameters
+        ]
+        if named_refused:
+            messages.append(
+                f"Failed to add measure '{name}' since it names the "
+                f"dimension '{named_refused[0]}', which is refused"
+            )
             continue
         inputs: list[tuple[str, str]] = []
         read: set[str] = set()  # The aliases of every table read.

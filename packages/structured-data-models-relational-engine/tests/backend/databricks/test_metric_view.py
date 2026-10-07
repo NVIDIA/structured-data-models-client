@@ -397,6 +397,49 @@ filter: source.ts AT TIME ZONE 'UTC' IS NOT NULL
 """)
 
 
+def test_a_measure_naming_a_refused_dimension_is_refused_too() -> None:
+    r"""A measure naming a dimension that was refused read the source column
+    of the same name instead: `SUM(net)` aggregated the raw `net`.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.t
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.id
+parameters:
+  - name: p
+    data_type: DOUBLE
+dimensions:
+  - name: net
+    expr: source.gross - p
+  - name: mixed
+    expr: source.x || customers.y
+  - name: kept
+    expr: source.gross
+measures:
+  - name: total_net
+    expr: SUM(net)
+  - name: mixed_count
+    expr: COUNT(DISTINCT mixed)
+  - name: total
+    expr: SUM(kept) + SUM(source.tax)
+""")
+
+    assert [measure.name for measure in spec.measures] == ['total']
+    assert spec.measures[0].inputs == (('source', 'tax'),)
+    assert spec.messages == [
+        "Failed to add dimension 'net' since it references the parameter "
+        "'p', which has no default",
+        "Failed to add dimension 'mixed' since its expression references "
+        'multiple tables',
+        "Failed to add measure 'total_net' since it names the dimension "
+        "'net', which is refused",
+        "Failed to add measure 'mixed_count' since it names the dimension "
+        "'mixed', which is refused",
+    ]
+
+
 def test_parse_metric_view_nested_joins() -> None:
     spec = parse_metric_view("""
 source: cat.sch.facts
