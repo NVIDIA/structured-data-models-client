@@ -77,6 +77,53 @@ _PROBE = '(CASE WHEN x THEN not END)'
         # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),
+        # A type ends where the cast grammar ends it, so the form around
+        # the cast still parses: past its parameters, fields or words.
+        ('CAST(CASE WHEN a THEN b END AS DECIMAL(38,2))', {'a', 'b'}),
+        ('CAST(CASE WHEN a THEN b END AS INT)', {'a', 'b'}),
+        ('CAST(COALESCE(b, c) AS DECIMAL(38,2))', {'b', 'c'}),
+        (
+            'TRY_CAST(CASE case WHEN end THEN end END AS CHAR(3))',
+            {'case', 'end'},
+        ),
+        ('CAST(NOT not AS DECIMAL(3,1))', {'not'}),
+        ('COUNT(DISTINCT CAST(distinct AS VARCHAR(10)))', {'distinct'}),
+        ('COUNT(ALL all::DECIMAL(10))', {'all'}),
+        ('CASE WHEN when THEN then::DECIMAL(10) END', {'when', 'then'}),
+        (
+            'CAST(CASE WHEN case THEN CASE WHEN when THEN end END END '
+            'AS DECIMAL(38,2)) + end',
+            {'case', 'when', 'end'},
+        ),
+        (
+            'CAST(CASE WHEN interval THEN day END AS INTERVAL DAY TO SECOND)',
+            {'interval', 'day'},
+        ),
+        (
+            'CAST(CASE WHEN with THEN local END '
+            'AS TIMESTAMP WITH LOCAL TIME ZONE)',
+            {'with', 'local'},
+        ),
+        (
+            'CAST(CASE WHEN zone THEN without END '
+            'AS TIMESTAMP WITHOUT TIME ZONE)',
+            {'zone', 'without'},
+        ),
+        ('CASE WHEN with THEN time::timestamp END', {'with', 'time'}),
+        ('CAST(CASE WHEN case THEN NULL END AS STRUCT<>) IS NULL', {'case'}),
+        (
+            'COUNT(x) OVER (PARTITION BY CAST(CASE WHEN end THEN end END '
+            'AS DECIMAL(10)) ORDER BY y)',
+            {'x', 'end', 'y'},
+        ),
+        (
+            'SUM(decimal) FILTER (WHERE NOT decimal::decimal(38, 2) < int)',
+            {'decimal', 'int'},
+        ),
+        # Only ARRAY, MAP and STRUCT take `<...>`: after any other type or a
+        # collation, `<` compares.
+        ('x::int < y AND n > 1', {'x', 'y', 'n'}),
+        ('map COLLATE UTF8_LCASE < string AND n > 1', {'map', 'string', 'n'}),
     ],
 )
 def test_a_name_is_a_column_where_databricks_reads_one(

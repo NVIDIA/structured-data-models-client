@@ -3097,6 +3097,12 @@ measures:
         # CASE WHEN opens a searched case; DISTINCT and ALL take a sign.
         ('SUM(CASE WHEN filter THEN 1 END)', ['filter']),
         ('COUNT(DISTINCT -x) + SUM(ALL +y)', ['x', 'y']),
+        # A CASE stays a CASE in a cast to a type with parameters.
+        (
+            'SUM(CAST(CASE WHEN source.refunded THEN 0 ELSE source.amount '
+            'END AS DECIMAL(38,2)))',
+            ['refunded', 'amount'],
+        ),
         # A signed exponent ends where a name would go on.
         ('SUM(CASE WHEN ok THEN 1e+5ELSE amount END)', ['ok', 'amount']),
         ('SUM(amount) /* gross */ -- switch to net_amount later', ['amount']),
@@ -3123,6 +3129,7 @@ measures:
         'negated-comparison',
         'case-when',
         'signed-operand',
+        'case-in-cast',
         'signed-exponent',
         'comments',
         'digit-led',
