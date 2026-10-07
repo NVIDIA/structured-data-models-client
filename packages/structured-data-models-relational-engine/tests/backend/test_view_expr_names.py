@@ -142,6 +142,11 @@ _PROBE = '(CASE WHEN x THEN not END)'
             'SUM(decimal) FILTER (WHERE NOT decimal::decimal(38, 2) < int)',
             {'decimal', 'int'},
         ),
+        # `?::` casts as `::` does, returning NULL where the cast fails.
+        ('source.amount ?:: DECIMAL(10, 2)', {'source.amount'}),
+        ('CASE WHEN a THEN b ?:: DECIMAL(38,2) END', {'a', 'b'}),
+        ('x ?::INT::STRING', {'x'}),
+        ('x?::int < y AND n > 1', {'x', 'y', 'n'}),
         # Only ARRAY, MAP and STRUCT take `<...>`: after any other type or a
         # collation, `<` compares.
         ('x::int < y AND n > 1', {'x', 'y', 'n'}),

@@ -87,8 +87,9 @@ _LEXEMES = {
         *_LOOSE_WORDS,
     ),
 }
+# `?::` is Databricks' try-cast, `x ?:: INT`, read wherever `::` is.
 _LEXEMES_EVERYWHERE = (
-    ('punct', r'<=>|<=|>=|<>|::|->|=>|[.:(),\[\]<>]'),
+    ('punct', r'<=>|<=|>=|<>|\?::|::|->|=>|[.:(),\[\]<>]'),
     ('space', r'\s+'),
     ('other', r'[\s\S]'),
 )
@@ -1418,7 +1419,7 @@ class _NameScan:
         """
         token, previous = self.tokens[index], self.tokens[index - 1]
         text, operand = token.text, state.operand
-        state.name_next, state.after_is = text == '::', False
+        state.name_next, state.after_is = text in ('::', '?::'), False
         if text in '([':
             state.groups.append(_Group(previous.folded))
             state.operand = True

@@ -3424,6 +3424,7 @@ measures:
             'END AS DECIMAL(38,2)))',
             ['refunded', 'amount'],
         ),
+        ('SUM(source.amount ?:: DECIMAL(38,2))', ['amount']),
         # A signed exponent ends where a name would go on.
         ('SUM(CASE WHEN ok THEN 1e+5ELSE amount END)', ['ok', 'amount']),
         ('SUM(amount) /* gross */ -- switch to net_amount later', ['amount']),
@@ -3453,6 +3454,7 @@ measures:
         'case-when',
         'signed-operand',
         'case-in-cast',
+        'try-cast-operator',
         'signed-exponent',
         'comments',
         'digit-led',
