@@ -657,6 +657,17 @@ def _substitute_fields(
     return expr, refused
 
 
+def _star(expr: str) -> bool:
+    r"""Whether ``expr`` reads every column of its view through a bare ``*``,
+    as ``struct(*)`` does, rather than of one table, as ``struct(t.*)``.
+
+    Raises:
+        UnreadableExpressionError: If which of its words are values cannot
+            be settled.
+    """
+    return any(reference.parts == ('*',) for reference in name_references(expr))
+
+
 def _unusable_parameter(used: Sequence[_Parameter]) -> str | None:
     r"""Why an expression referencing ``used`` cannot be read, or ``None``."""
     for parameter in used:
@@ -959,6 +970,11 @@ def parse_metric_view(
                     reason = (
                         f"it names the dimension '{refused}', which is refused"
                     )
+                if reason is None and len(qualifiers) > 1 and _star(expr):
+                    reason = (
+                        'it reads every column of the joined tables through '
+                        '`*`, which no one table holds'
+                    )
             if reason is not None:
                 messages.append(
                     f"Failed to add dimension '{name}' since {reason}"
@@ -1092,6 +1108,12 @@ def _read_measures(
         read: set[str] = set()  # The aliases of every table read.
         for named in names:
             parts = named.parts
+            if parts[-1] == '*':
+                # Every column of a table, which adds none to the graph.
+                table = tuple(part.lower() for part in parts[:-1])
+                if table and (alias := paths.get(table)) is not None:
+                    read.add(alias)
+                continue
             if len(parts) == 1:
                 folded = parts[0].lower()
                 if (

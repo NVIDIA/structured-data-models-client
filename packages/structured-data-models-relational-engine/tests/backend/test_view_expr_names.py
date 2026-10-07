@@ -85,6 +85,14 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ('date_diff(DAY, d, ts)', {'d', 'ts'}),
         ('timediff(HOUR, d, ts)', {'d', 'ts'}),
         ('date_diff(d, d) + day', {'d', 'day'}),
+        # A star reads every column, of one table if qualified, but the
+        # columns `* EXCEPT` leaves out and `COUNT(*)` read none.
+        (
+            'to_json(struct(source.* EXCEPT (x, source.y))) || s',
+            {'source.*', 's'},
+        ),
+        ('size(array(*)) + COUNT(*) OVER () + count(x) OVER ()', {'*', 'x'}),
+        ('to_json(struct(customers.*, x))', {'customers.*', 'x'}),
         # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),

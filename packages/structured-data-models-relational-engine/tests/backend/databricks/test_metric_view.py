@@ -440,6 +440,52 @@ measures:
     ]
 
 
+def test_a_star_keeps_its_table_and_takes_no_field() -> None:
+    r"""`source.*` was read as the name `source`, so a field of that name
+    was substituted into it, as `array((amount).*)`. A star of one table is
+    that table's columns, as the graph reads it, while a bare one on a view
+    with joins reads every table's and is refused.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.t
+joins:
+  - name: customers
+    source: cat.sch.customers
+    on: source.customer_id = customers.id
+fields:
+  - name: source
+    expr: source.amount
+  - name: packed
+    expr: array(source.*)
+  - name: less
+    expr: "struct(source.* EXCEPT (source.amount))"
+  - name: theirs
+    expr: to_json(struct(customers.*))
+  - name: everything
+    expr: struct(*)
+measures:
+  - name: rows
+    expr: COUNT(*)
+  - name: keyed
+    expr: COUNT(DISTINCT to_json(struct(source.*)))
+""")
+
+    assert [(c.name, c.alias, c.expr) for c in spec.columns] == [
+        ('source', 'source', 'amount'),
+        ('packed', 'source', 'array(*)'),
+        ('less', 'source', 'struct(* EXCEPT (amount))'),
+        ('theirs', 'customers', 'to_json(struct(*))'),
+    ]
+    assert [(m.name, m.inputs) for m in spec.measures] == [
+        ('rows', ()),
+        ('keyed', ()),
+    ]
+    assert spec.messages == [
+        "Failed to add dimension 'everything' since it reads every column "
+        'of the joined tables through `*`, which no one table holds'
+    ]
+
+
 def test_parse_metric_view_nested_joins() -> None:
     spec = parse_metric_view("""
 source: cat.sch.facts

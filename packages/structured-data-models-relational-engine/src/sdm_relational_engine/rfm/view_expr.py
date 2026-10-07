@@ -1373,6 +1373,12 @@ class _NameScan:
         if index <= state.skip_to:
             return index + 1, True
         if tokens[index].kind not in _NAME_KINDS:
+            if found is not None and self._star(index, state):
+                found.append(
+                    NameReference(
+                        ('*',), (tokens[index].start, tokens[index].end), False
+                    )
+                )
             return index + 1, self._punctuation(index, state)
         last = index
         while (
@@ -1380,6 +1386,8 @@ class _NameScan:
             and tokens[last + 2].kind in _NAME_KINDS
         ):
             last += 2
+        if tokens[last + 1].text == '.' and tokens[last + 2].text == '*':
+            last += 2  # `t.*`, every column of `t`.
         value, parses = self._read_name(index, last, state)
         if value and found is not None:
             found.append(
@@ -1390,6 +1398,19 @@ class _NameScan:
                 )
             )
         return last + 1, parses
+
+    def _star(self, index: int, state: _State) -> bool:
+        r"""Whether the token at ``index`` is a ``*`` reading every column,
+        as in ``struct(*)``. ``COUNT(*)`` counts rows instead.
+        """
+        tokens = self.tokens
+        if tokens[index].text != '*' or not state.operand:
+            return False
+        return not (
+            state.groups[-1].opener == 'count'
+            and tokens[index - 1].text == '('
+            and tokens[index + 1].text == ')'
+        )
 
     def _punctuation(self, index: int, state: _State) -> bool:
         r"""Reads the token at ``index``, no name, and says whether it may
@@ -1497,6 +1518,10 @@ class _NameScan:
             return False, not operand or previous.text == '('
         if operand:
             return not self._opens_a_form(index, word, state, after_is), True
+        if word == 'except' and previous.text == '*' and after.text == '(':
+            # The columns `* EXCEPT (...)` leaves out are read as no value.
+            state.skip_to = _closing(tokens, last + 1)
+            return False, True
         # Right after an operand: an operator or a clause's word.
         parses = self._follows(word, state, index)
         state.operand = word in _TAKE_AN_OPERAND
