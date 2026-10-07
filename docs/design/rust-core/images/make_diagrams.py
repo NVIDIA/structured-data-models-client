@@ -109,7 +109,7 @@ def architecture():
 
     # Bands. The layout keeps every vertical arrow clear of the band titles.
     c.band(30, 86, 1570, 204, "Outside sdm-client", GREY_FILL, "#999999", dashed=True)
-    c.band(30, 232, 1570, 416, "Python and Java: every query and network call happens here", BLUE_FILL, BLUE)
+    c.band(30, 232, 1570, 416, "Python (main) and Java: every query and network call happens here", BLUE_FILL, BLUE)
     c.band(30, 556, 1570, 900, "Rust core: shared logic, no database or network access", ORANGE_FILL, ORANGE)
 
     # Outside
@@ -241,11 +241,12 @@ def bindings():
             "The core is plain Rust and never knows who loads it; the boundary logic is written once in sdm-host.")
 
     # Each language
-    c.band(30, 90, 940, 236, "Each language", BLUE_FILL, BLUE)
-    c.box(60, 136, 330, 216, ["Python", "PyO3 binding (sdm-py),", "abi3 wheels built with maturin"], size=13)
-    c.box(350, 136, 620, 216, ["Java", "jni-rs binding (sdm-jni), loaded", "from the JAR (JDK 17 and 21)"],
+    c.band(30, 90, 940, 246, "Each language", BLUE_FILL, BLUE)
+    c.box(60, 136, 330, 226, ["Python", "PyO3 binding (sdm-py),", "abi3 wheels built with maturin"], size=13)
+    c.box(350, 136, 620, 226, ["Java", "jni-rs binding (sdm-jni), loaded", "from the JAR (JDK 17 and 21);",
+                               "follows Python"],
           size=13)
-    c.box(640, 136, 910, 216, ["Future languages", "without a Rust binding tool:", "a C interface on top of sdm-host"],
+    c.box(640, 136, 910, 226, ["Future languages", "without a Rust binding tool:", "a C interface on top of sdm-host"],
           stroke="#aaaaaa", size=13, dashed=True)
 
     # The shared boundary layer
@@ -266,9 +267,9 @@ def bindings():
     c.box(60 + 2 * (w + gap), 588, 910, 644, ["PQL", "the PQL team's Rust crate over its C++ core"], size=13)
 
     # Calls
-    c.arrow([(120, 216), (120, 310)], BLUE, label="Python objects, Arrow via PyCapsule", lx=128, ly=268)
-    c.arrow([(400, 216), (400, 310)], BLUE, label="Java objects, Arrow via Arrow Java C Data", lx=408, ly=268)
-    c.arrow([(775, 216), (775, 310)], GREY, dashed=True)
+    c.arrow([(120, 226), (120, 310)], BLUE, label="Python objects, Arrow via PyCapsule", lx=128, ly=274)
+    c.arrow([(400, 226), (400, 310)], BLUE, label="Java objects, Arrow via Arrow Java C Data", lx=408, ly=274)
+    c.arrow([(775, 226), (775, 310)], GREY, dashed=True)
     c.arrow([(811, 410), (811, 520)], ORANGE, label="Rust calls", lx=819, ly=450)
 
     # What ships: binding, sdm-host and the core, built into a native library per platform
@@ -284,55 +285,57 @@ def bindings():
 
 
 def delivery():
-    c = Canvas(1720, 560)
+    c = Canvas(1720, 590)
     c.title("Delivery: slices through the public API",
             "Each slice goes from the public API down to the core and merges to main at its gate.")
 
-    top, bottom, mid = 148, 288, 218
+    top, bottom, mid = 148, 318, 233
 
-    c.band(245, 106, 1405, 316,
-           "S1 and S2 ship in Python and Java (Java: DuckDB, SQLite, Postgres, Databricks); "
-           "S3's Java scope added later", BLUE_FILL, BLUE)
+    c.band(245, 106, 1405, 346,
+           "Python leads every slice; Java follows on the same contract cases "
+           "(Java: DuckDB, SQLite, Postgres, Databricks)", BLUE_FILL, BLUE)
 
     phases = [
         (60, 230, ["R0 Prepare", "reference environment", "in its own worktree;", "bank the first attempt's",
                    "best candidate;", "one integration branch"], 1),
-        (260, 430, ["R1a Harness", "contract, test runners,", "CI guards;", "S0 PQL validation"], 1),
-        (460, 630, ["R1b Spike", "DuckDB from_source", "to predict in", "both languages"], 1),
-        (820, 990, ["R2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;", "sample Java",
-                    "data provider"], 2),
-        (1020, 1190, ["R3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase", "(Java: Databricks);",
-                      "Python switches", "warehouse paths"], 2),
+        (260, 430, ["R1a Harness", "contract, test runners,", "CI guards;", "S0 PQL validation",
+                    "in Python, running in Java"], 1),
+        (460, 630, ["R1b Spike", "DuckDB from_source", "to predict in Python", "and a pure-Rust",
+                    "test host"], 1),
+        (820, 990, ["R2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;",
+                    "sample data provider"], 2),
+        (1020, 1190, ["R3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
+                      "Python switches", "warehouse paths;", "Java follows", "on Databricks"], 2),
         (1220, 1390, ["R4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
         (1450, 1620, ["R5 Release", "PQL crate,", "delete old engine"], 1),
     ]
     for x1, x2, lines, bold in phases:
         c.box(x1, top, x2, bottom, lines, size=13, bold=bold)
 
-    c.box(655, 173, 795, 263, ["owner decides", "go / no-go"], shape="diamond", size=12, bold=0)
-    c.text_lines(725, 284, ["go: merge R1a", "and R1b to main"], size=12, bold=0)
+    c.box(655, 188, 795, 278, ["owner decides", "go / no-go"], shape="diamond", size=12, bold=0)
+    c.text_lines(725, 302, ["go: merge R1a", "and R1b to main"], size=12, bold=0)
 
     # Sequence arrows
     for x1, x2 in ((230, 260), (430, 460), (630, 655), (795, 820), (990, 1020), (1190, 1220), (1390, 1450)):
         c.arrow([(x1, mid), (x2, mid)], GREY)
 
     # Merges to main: after the spike's go, after each slice gate, and at release
-    main_y = 364
+    main_y = 394
     c.out.append(f'<line x1="60" y1="{main_y}" x2="1620" y2="{main_y}" stroke="{GREY}" stroke-width="4"/>')
     c.note(60, main_y - 10, "main", size=14, bold=True, color=GREY)
     for x, y, label in ((807, mid, "merge to main"), (1005, mid, "merge to main"), (1205, mid, "merge to main"),
                         (1420, mid, "merge to main"), (1535, bottom, "merge to main (release)")):
         c.arrow([(x, y), (x, main_y - 3)], ORANGE, width=2)
         c.out.append(f'<circle cx="{x}" cy="{y}" r="4.5" fill="{ORANGE}"/>')
-        c.note(x + 7, 342, label, size=12, color=ORANGE)
+        c.note(x + 7, 372, label, size=12, color=ORANGE)
 
     # Checks strip
-    c.band(30, 400, 1690, 530, "Checks that run all along", GREY_FILL, "#999999")
-    c.box(60, 440, 590, 510, ["Every PR", "unit, boundary guards, contract subset,",
+    c.band(30, 430, 1690, 560, "Checks that run all along", GREY_FILL, "#999999")
+    c.box(60, 470, 590, 540, ["Every PR", "unit, boundary guards, contract subset,",
                               "SQL goldens, provider kit, conversion tables"], size=13)
-    c.box(620, 440, 1120, 510, ["Nightly", "full contract corpus, differential vs old release,", "performance"],
+    c.box(620, 470, 1120, 540, ["Nightly", "full contract corpus, differential vs old release,", "performance"],
           size=13)
-    c.box(1150, 440, 1660, 510, ["Weekly and before release", "weekly: live matrix",
+    c.box(1150, 470, 1660, 540, ["Weekly and before release", "weekly: live matrix",
                                  "before release: all layers, packaging and safety"], size=13)
 
     c.save("delivery.svg")

@@ -19,7 +19,7 @@ What changes is where the line between the core and each language sits, how data
 | SQL dialects inside the core | Data access is pluggable: the core emits typed data requests; SQL dialects are one built-in provider, and the layer can be swapped or a host can answer with its own provider (for example for Pyramid) | Agreed when the proposal was posted, then lost: the first attempt hard-coded the dialects |
 | PQL: a hand-written port | One PQL implementation, the PQL team's C++ core, used through its published Rust crate | Several PQL copies already drift |
 | Port the client logic | Port defined algorithms; use Rust libraries for general data work; keep presentation and object behavior in the host | 27-29% of the Rust re-created libraries by hand |
-| Python first, then Java | Each slice ships in Python and Java together, warehouse path first | Python assumptions surfaced only at the end |
+| Python first, Java much later | Python leads every slice; Java runs the same contract cases from the start, so Python assumptions in the core surface early, but never holds Python back | Python assumptions surfaced only at the end |
 | Module-by-module phases, merged at the end | Vertical slices through the public API, each merged to `main` at its gate | Modules passed alone and broke together; nothing merged |
 
 Unchanged: Rust, no I/O in the core, the run loop that asks the host to fetch data or call the model, official database drivers per language, and per-language packaging.
@@ -28,19 +28,21 @@ Unchanged: Rust, no I/O in the core, the run loop that asks the host to fetch da
 
 The owner made these before any code:
 
-1. **Java:** the first Java consumer is a team using Pyramid, which brings its own data layer and uses none of the data sources this client supports.
-   The Java binding still gets basic support for the offline backends and Databricks, proven working on Databricks.
-   It loads the core as a native library; WebAssembly is out, because its size limits are too restrictive.
+1. **Python comes first.** Python is the main interface and matters most: no regressions for Python users, and Python's needs set the order of the work.
+   Java is a second binding on the same core, built so the core stays language-neutral, never at Python's expense.
 2. **Scope:** Python supports every backend it supports today (Databricks, Snowflake, Lakebase, Postgres, SQLite, DuckDB and in-memory frames).
    Java starts with DuckDB, SQLite, Postgres and Databricks.
-3. **Data layer:** Pyramid is not in scope, but the data layer must be switchable: a team given access to this repository should be able to replace it, for example to work with Pyramid, without touching the rest of the core.
-4. **PQL:** the PQL team owns one C++ core and publishes it as a Rust crate and a Python package; this client's core uses the Rust crate, with the hand-written parser as a stopgap (section 3).
-5. **Regressions:** refusing an input the old Python client accepted is a regression.
+3. **Regressions:** refusing an input the old Python client accepted is a regression.
    Java on Snowflake is not prioritized, so it is not held to this yet.
-6. **Python quirks:** the register (section 5) follows common sense, with a small bias towards today's Python behavior but without catering to its accidents.
-7. **Reference environment:** the old release is installed locally in its own worktree and environment, with its Python, pandas, NumPy, PyArrow and torch versions recorded; it is the oracle the tests compare against.
-8. **No calendar budget and no time estimates:** the work is paced by its gates, not by dates, and dates must not change the quality of the work.
-9. **Ownership:** this team owns the core long term; that does not change how it is built.
+4. **Python quirks:** the register (section 5) follows common sense, with a small bias towards today's Python behavior but without catering to its accidents.
+5. **Reference environment:** the old release is installed locally in its own worktree and environment, with its Python, pandas, NumPy, PyArrow and torch versions recorded; it is the oracle the tests compare against.
+6. **PQL:** the PQL team owns one C++ core and publishes it as a Rust crate and a Python package; this client's core uses the Rust crate, with the hand-written parser as a stopgap (section 3).
+7. **Data layer:** the data layer must be switchable: a team given access to this repository should be able to replace it, for example to work with Pyramid, without touching the rest of the core.
+   A Pyramid provider itself is not in scope.
+8. **Java:** the first Java consumer is a team using Pyramid, which brings its own data layer.
+   Java gets basic support for the offline backends and Databricks, proven working on Databricks, and loads the core as a native library; WebAssembly is out, because its size limits are too restrictive.
+9. **No calendar budget and no time estimates:** the work is paced by its gates, not by dates, and dates must not change the quality of the work.
+10. **Ownership:** this team owns the core long term; that does not change how it is built.
 
 Still to agree with the PQL team: one PQL dialect, the versioned validated-query format, the conformance suite, platform builds, and when the Rust crate ships.
 
@@ -188,9 +190,9 @@ On the Python side, pandas and pyarrow stay as host dependencies, and the old en
 
 | Slice | Public path | Languages |
 |---|---|---|
-| S0 | PQL validation | Python and Java |
-| S1 | `Schema.from_source` → `materialize` → `predict` on DuckDB, SQLite and Postgres, offline; a sample custom data provider, written in Java, passes the conformance kit | Python and Java |
-| S2 | The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase; the Databricks job matrix across runtimes; Python and Java agree on the same Databricks data | Python on all three; Java on Databricks |
+| S0 | PQL validation | Python; Java follows |
+| S1 | `Schema.from_source` → `materialize` → `predict` on DuckDB, SQLite and Postgres, offline; a sample custom data provider passes the conformance kit | Python; Java follows |
+| S2 | The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase; the Databricks job matrix across runtimes; Python and Java agree on the same Databricks data | Python on all three; Java follows on Databricks |
 | S3 | In-memory frames, ranking, forecasting, link prediction, sessions, tabular requests | Python; Java as the owner adds scope |
 
 A path is one public operation with one input mode on one backend (for example `predict` of a regression query on Snowflake), and one routing boundary chooses the old implementation or the core for each path.
@@ -198,7 +200,7 @@ Python switches a path only after its slice passes all its gates, live ones incl
 R0 maps every Databricks job in the matrix to its paths, so S2 includes what its jobs need.
 Old paths are deleted in R5, and the oracle (section 6) stays available after that.
 Each slice gate merges to `main`.
-If the Java binding blocks a slice, the slice can ship in Python first; Java keeps running the contract corpus and catches up at the next gate.
+Python sets the pace: a slice ships for Python when its Python gates pass, and Java follows on the same contract cases without holding it back.
 
 ## 5. The quirk register
 
@@ -247,7 +249,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | Gate | Passes when |
 |---|---|
 | Merge a change | L0, L1, L4, L5 and the L2 subset green; the ratchet holds; a type or conversion fix comes with a public reproduction that failed first |
-| Slice done (merges to `main`) | The full L2 for the slice green in both languages; L3 on the agreed seed sets with no unexplained divergence; every difference has an approved register entry; for S2, L6 green for its scenarios |
+| Slice done (merges to `main`) | The full L2 for the slice green in Python (Java must be green for its own scope before it ships that slice); L3 on the agreed seed sets with no unexplained divergence; every difference has an approved register entry; for S2, L6 green for its scenarios |
 | Python switch for a path | Its slice done; L6 green for it; the Databricks job matrix equal to the baseline; L7 within its limits |
 | Release | Every layer green on the release commit, including L6 and the job matrix re-run after the old code is deleted; the existing Python test suites green; live test resources cleaned up |
 
@@ -256,8 +258,8 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | Phase | Work | Exit |
 |---|---|---|
 | R0 | Build the reference environment (decision 7) in its own worktree; record the accepted text-date formats and inference rules; agree the PQL crate's release milestone with the PQL team; verify branch protection, CI and approval identities; push the first attempt's best candidate as a named branch and run CI once, as a fallback; archive the rest; one integration branch | Decisions and dates written down | 1 day |
-| R1a | `sdm-contract`, `sdm-testkit`, L0 guards, L2 runners for Python, Java and the oracle, CI tiers | S0 green in both languages; the runners fail on seeded faults |
-| R1b | Spike, fixed in scope: DuckDB `from_source` → `materialize` → `predict` → result through the new contract and the data provider interface in both languages, and the same path through a minimal non-SQL test provider, against a scripted model endpoint; the text-date rules recorded in R0 checked against the oracle | Matches the oracle on inferred types, keys, time columns, data requests and SQL, payloads, results, warnings and refusals, over the first attempt's column-type cases; the owner decides go or no-go (go: R1a and R1b merge to `main`; no-go: repair the first attempt in place, or stop) | 3 days, hard stop |
+| R1a | `sdm-contract`, `sdm-testkit`, L0 guards, L2 runners for Python, Java and the oracle, CI tiers | S0 green in Python, and running in Java; the runners fail on seeded faults |
+| R1b | Spike, fixed in scope: DuckDB `from_source` → `materialize` → `predict` → result through the new contract and the data provider interface in Python and through the pure-Rust test host (which shows the contract needs nothing from Python), and the same path through a minimal non-SQL test provider, against a scripted model endpoint; the text-date rules recorded in R0 checked against the oracle | Matches the oracle on inferred types, keys, time columns, data requests and SQL, payloads, results, warnings and refusals, over the first attempt's column-type cases; the owner decides go or no-go (go: R1a and R1b merge to `main`; no-go: repair the first attempt in place, or stop) | 3 days, hard stop |
 | R2 | S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit; the time-library and dataframe-engine comparisons | Slice gate |
 | R3 | S2 and the Python switch for warehouse paths | Switch gate |
 | R4 | S3, moving the rest of the code as its paths need it | Slice gate and switch gate |
@@ -283,7 +285,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 - a check failing twice the same way changes method, never adds a phase;
 - after two fix rounds on the same divergence, the owner chooses between repairing it, deferring the slice with the old path unchanged, and approving a named behavior change; nothing becomes an accepted refusal automatically;
 - three live failures for non-product reasons stop live work;
-- if S1 can't go green in both languages, the owner chooses the next step;
+- if S1 can't go green for Python, the owner chooses the next step;
 - while a blocking question waits for the owner, work narrows to the current slice; silence never authorizes going on.
 
 ## 10. Risks
@@ -295,6 +297,6 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | The C++ PQL core complicates every build and can crash across the boundary | Ask the PQL team for a C interface that never lets exceptions escape, static libraries per platform built for manylinux with private symbols, matching crate and PyPI releases, no aborts or console output, a recursion limit, and the conformance suite in their CI; load and crash tests in L8 |
 | A native library builds but doesn't load on some platform | L8 installs the real artifacts in clean containers for every platform |
 | The Java consumer's environment disallows the needed runtime flags | Confirm `--enable-native-access` and Arrow Java's flag with the consumer before Java packaging |
-| A team swapping the data layer for Pyramid finds the interface insufficient | The interface is documented, a Java sample provider proves it in S1, and the conformance kit defines what a replacement must do |
+| A team swapping the data layer for Pyramid finds the interface insufficient | The interface is documented, a sample provider proves it in S1, and the conformance kit defines what a replacement must do |
 | Host conversion tables drift between Python and Java | L5 checks both languages convert the same table to the same Arrow types |
 | Process grows faster than product again | Rules enforced by CI and the owner, not by the executor; new harness tooling needs approval |
