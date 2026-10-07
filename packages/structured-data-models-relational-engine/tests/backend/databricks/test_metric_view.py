@@ -3061,6 +3061,10 @@ measures:
             ['x', 'items'],
         ),
         (
+            'SUM(aggregate(items, 0, (acc, y) -> acc + y, acc -> acc * y))',
+            ['items', 'y'],
+        ),
+        (
             "MAX(order_ts) - INTERVAL 1 DAY - INTERVAL '1' DAY TO HOUR "
             '- INTERVAL (lag) DAYS',
             ['order_ts', 'lag'],
@@ -3116,6 +3120,7 @@ measures:
         'cast-joined',
         'cast-date',
         'lambda',
+        'finishing-lambda',
         'interval',
         'filter',
         'date-function',

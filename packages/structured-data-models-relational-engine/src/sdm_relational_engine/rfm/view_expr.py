@@ -1183,7 +1183,9 @@ def _arguments(tokens: list[_Token], at: int) -> int:
 
 def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
     r"""Each lambda's parameters, folded, with the tokens they are bound in:
-    from the parameters to the end of the group holding the lambda.
+    from the parameters to the end of the lambda's argument, at the comma or
+    bracket after it. The next argument may be another lambda, as the
+    finish of ``aggregate`` is, which binds names of its own.
     """
     scopes: list[tuple[int, int, set[str]]] = []
     for index, token in enumerate(tokens):
@@ -1204,8 +1206,9 @@ def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
             start, names = index - 1, {_folded_name(before)}
         depth, end = 0, len(tokens) - 1
         for at in range(start, len(tokens)):
-            depth += {'(': 1, ')': -1}.get(tokens[at].text, 0)
-            if depth < 0:
+            text = tokens[at].text
+            depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(text, 0)
+            if depth < 0 or (depth == 0 and text == ','):
                 end = at
                 break
         scopes.append((start, end, names))

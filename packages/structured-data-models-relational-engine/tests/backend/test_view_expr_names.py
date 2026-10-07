@@ -77,6 +77,13 @@ _PROBE = '(CASE WHEN x THEN not END)'
         # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),
+        # A lambda binds its parameters in its own argument alone.
+        (
+            'aggregate(nums, 0, (acc, v) -> acc + v, acc -> acc * v)',
+            {'nums', 'v'},
+        ),
+        ('reduce(nums, 0, (acc, v) -> acc + v, v -> v + acc)', {'nums', 'acc'}),
+        ('transform(nums, v -> array(v, v)[0])', {'nums'}),
         # A type ends where the cast grammar ends it, so the form around
         # the cast still parses: past its parameters, fields or words.
         ('CAST(CASE WHEN a THEN b END AS DECIMAL(38,2))', {'a', 'b'}),
