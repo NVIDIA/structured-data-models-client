@@ -33,9 +33,11 @@ The owner answers these in one sitting, before any code.
    The Databricks validation runtimes use pandas 2, and current `main` doesn't include the first attempt's determinism fixes.
 4. **Is refusing an input the old client accepted a regression?** Default: yes, unless an approved register entry says otherwise.
 5. **The quirk register** (section 5): which Python behaviors to keep and which to drop.
-6. **Scope inventories**: the exact backends, scenarios, Databricks runtimes and platforms each language must support.
+6. **Where PQL lives** (section 3, "PQL").
+   Proposed: one PQL, owned by the shared PQL library, agreed with its owners.
+7. **Scope inventories**: the exact backends, scenarios, Databricks runtimes and platforms each language must support.
    For example: is Lakebase in Java's first release?
-7. **Who owns the Rust core long term.**
+8. **Who owns the Rust core long term.**
 
 ## 3. Architecture
 
@@ -85,6 +87,23 @@ R1 validates this set against the first attempt's column-type cases before it is
 | Object behavior, exceptions, presentation (`to_pandas`, Java records) | No | Host |
 | Database drivers, HTTP, authentication | No | Host |
 
+### PQL
+
+Several separate PQL implementations exist today, and only two of them share tests.
+Keeping a private copy of the grammar in this client lets it drift from everyone else's.
+
+| Part | Owner |
+|---|---|
+| Grammar, parser, generic validation, error codes and spans, written date-literal rules | The shared PQL library |
+| A versioned, serialized form of a validated query (JSON plus a schema) | The shared PQL library |
+| A shared test corpus of valid and invalid queries (seeded with this client's 417 cases) | The shared PQL library, run by every implementation |
+| Model capability checks and profiles | This client's core |
+| Turning a validated query into tasks, samples, labels, SQL and payloads | This client's core |
+
+The core, the Python package and the Java package must all call the same parser without calling back into another language.
+So the library's reference implementation should be a Rust crate, with its Python package a thin wrapper over it.
+Until that crate exists, this client's Python uses the library's Python package, and the core keeps its own Rust parser, held to the shared corpus and deleted once the shared crate exists.
+
 ### Crates
 
 The names and boundaries below are the target ownership, not a reason to rename or rewrite everything before the first slice works.
@@ -92,7 +111,7 @@ The names and boundaries below are the target ownership, not a reason to rename 
 | Crate | Holds | From today's tree |
 |---|---|---|
 | `sdm-contract` | The type set, operations, errors and warnings, run steps | New, folding in `protocol` |
-| `sdm-pql` | Parser, validator, query model | Keep; remove the Python value type |
+| `sdm-pql` | Model capability checks and profiles over the shared PQL library's validated query; a temporary parser until the library's Rust crate exists | Keep the capability checks; the parser goes once the shared crate exists |
 | `sdm-sql` | One module per database | Keep the dialect backends; drop the capture and render scaffolding |
 | `sdm-schema` | Inference over Arrow, metric and semantic views | Keep the engine; drop the pandas column models and dtype parsing; YAML through a library |
 | `sdm-time` | One calendar, date parsing rules, `DateOffset`, time zones | New, merging today's duplicates; built on a time library |
@@ -154,7 +173,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 
 | Layer | What it checks | When |
 |---|---|---|
-| L1 Unit and property tests | Algorithms in each crate, with every past mismatch seed | Every PR |
+| L1 Unit and property tests | Algorithms in each crate, with every past mismatch seed; the shared PQL corpus | Every PR |
 | L2 Contract corpus | One shared list of cases run by a runner in each language: a public call and its inputs in; ordered SQL and parameters, payload, result, warnings and error kind, code and details out | Every PR (subset), nightly (all) |
 | L3 Differential generator | Random public-API inputs (type × role × backend × task) compared with the old release, installed from a pinned wheel in its pinned environment (the "oracle"), before and after the old code is deleted | Nightly |
 | L4 SQL goldens | Reviewed SQL per database, also executed on DuckDB, SQLite and Postgres | Every PR |
