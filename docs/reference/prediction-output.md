@@ -10,6 +10,22 @@ result.explanation  # None unless you asked for it
 result.metadata  # whatever the endpoint reported
 ```
 
+An output is asked for on `predict()`, as `outputs=[...]`, and not on
+`materialize()`, which refuses the argument. The default is `prediction`
+alone, so nothing asks for an explanation unless you do.
+
+**The shipping deployments do not serve `explanation` on any task**, and
+refuse it rather than ignoring it:
+
+```text
+422 UNSUPPORTED_OUTPUT output(s) ['explanation'] not supported by model
+'kumo-relational' for task 'regression'; supported: ['prediction', 'quantiles']
+```
+
+[What a deployment actually serves](../about/architecture.md#what-a-deployment-actually-serves)
+has the per-task table. Treat `result.explanation` as possibly `None` and do
+not build a flow that assumes one arrives.
+
 ## How many rows come back
 
 The shape depends on the **task**, not the model.

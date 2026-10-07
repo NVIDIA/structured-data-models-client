@@ -28,6 +28,12 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
 
+
+The two explanation limits are the client's own. They are what it checks
+before sending, and the shipping deployments refuse `explanation` on every
+task regardless, so an explanation does not arrive today whichever side would
+have allowed it. See [prediction output](prediction-output.md).
+
 The tabular cap was measured at the boundary rather than read from a document:
 10,000 context rows are answered and 10,001 come back as
 `422 UNSUPPORTED_SHAPE N_train 10001 exceeds limit 10000`.
