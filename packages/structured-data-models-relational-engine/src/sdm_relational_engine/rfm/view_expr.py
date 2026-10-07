@@ -195,8 +195,19 @@ _UNSAFE_EXPR_KEYWORDS = re.compile(
     r'|(?:insert|truncate)\b(?!\s*\())',
     flags=re.IGNORECASE,
 )
-# Databricks runs `(FROM t |> ...)` and `(TABLE t)` as sub-queries.
-_QUERY_START = re.compile(r'(?:^|\()\s*from\b', flags=re.IGNORECASE)
+# Databricks runs each of these as a sub-query where it opens the expression
+# or a `(`: `(FROM t |> ...)`, `(VALUES 1)`, `(WITH a AS (...) ...)` and the
+# script transforms `(MAP x USING 'cmd')` and `(REDUCE ...)`. A filter is
+# spliced into `WHERE (...)`, so `values + 1 > 0` opens `(VALUES +1 > 0)`.
+# `TABLE` is refused anywhere.
+_QUERY_START = re.compile(
+    r'(?:^|\()\s*(?:'
+    r'(?:from|values)\b'
+    r'|with\s+(?:recursive\s+)?(?:[\w$]+\s*)?(?:\([^()]*\)\s*)?as\b'
+    r'|(?:map|reduce)\b(?!\s*\()(?=[\s\S]*\busing\b)'
+    r')',
+    flags=re.IGNORECASE,
+)
 
 
 def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
@@ -227,9 +238,10 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     ``(``, so a call cannot be one. A keyword directly behind a ``.`` is the
     trailing part of a qualified name (``ORDERS.MERGE``), which also cannot
     begin a statement. ``SELECT`` may legally be followed by ``(``, so it is
-    always refused. Databricks also reads a table without ``SELECT``: through
-    ``TABLE t``, a query opening with ``FROM``, and the ``|>`` pipe, and
-    Snowflake chains statements with ``->>``, so those are refused too.
+    always refused. Databricks also runs a query without ``SELECT``: through
+    ``TABLE t``, a query opening with ``FROM``, ``VALUES``, ``WITH``, ``MAP``
+    or ``REDUCE``, and the ``|>`` pipe, and Snowflake chains statements with
+    ``->>``, so those are refused too.
 
     Parentheses must balance outside quoted text. An expression is spliced
     into a select list or a filter's ``WHERE (...)``, and a stray ``)`` would

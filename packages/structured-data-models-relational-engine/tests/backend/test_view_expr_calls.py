@@ -131,14 +131,31 @@ def test_no_session_or_random_function_is_trusted(functions) -> None:
         '(FROM payroll |> AGGREGATE MAX(salary))',
         'x IN ( from payroll)',
         '1 ->> SHOW TABLES',
+        # A filter is spliced into `WHERE (...)`: `(VALUES +1 > 0)`.
+        'values + 1 > 0',
+        'x = (VALUES 1)',
+        'x IN (values (1))',
+        '(WITH a AS (VALUES (1)) VALUES (2))',
+        "x = (MAP x USING 'cat')",
+        "(REDUCE x USING 'cat')",
     ],
 )
 def test_a_query_without_select_is_refused(expr: str) -> None:
     r"""Verified on a Databricks SQL warehouse: ``TABLE t``, a query opening
-    with ``FROM`` and the ``|>`` pipe each read a table inside an expression,
-    with no ``SELECT`` anywhere.
+    with ``FROM``, ``VALUES``, ``WITH``, ``MAP`` or ``REDUCE``, and the ``|>``
+    pipe each read a table or run a query inside an expression, with no
+    ``SELECT`` anywhere.
     """
     assert _unsafe_expr_reason(expr) is not None
+
+
+@pytest.mark.parametrize(
+    'expr',
+    ['x + values', '(with + 1)', 'map(x, 1)', 'reduce(a, 0, (s, y) -> s + y)'],
+)
+def test_a_name_or_call_like_a_query_start_is_not_a_query(expr: str) -> None:
+    r"""On the same warehouse these read a column or call a function."""
+    assert _unsafe_expr_reason(expr) is None
 
 
 @pytest.mark.parametrize(
