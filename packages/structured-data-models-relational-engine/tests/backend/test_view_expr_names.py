@@ -93,6 +93,13 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ),
         ('size(array(*)) + COUNT(*) OVER () + count(x) OVER ()', {'*', 'x'}),
         ('to_json(struct(customers.*, x))', {'customers.*', 'x'}),
+        # A quoted name is a field, unit or alias where a bare one is, but
+        # TRIM's side is grammar only bare.
+        ('struct(source.amount `safe amount`)', {'source.amount'}),
+        ('struct(x `a`, y b)', {'x', 'y'}),
+        ('extract(`DOW` FROM ts)', {'ts'}),
+        ('date_add(`DAY`, 1, d) + timestampdiff(`HOUR`, d, ts)', {'d', 'ts'}),
+        ('trim(`BOTH` FROM s)', {'BOTH', 's'}),
         # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),

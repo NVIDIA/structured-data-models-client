@@ -1474,9 +1474,30 @@ class _NameScan:
             )
         if word in _TAKE_AN_OPERAND or word in ('asc', 'desc'):
             return True
-        # STRUCT takes an alias without AS: `struct(x a, y b)`.
+        return self._implicit_alias(at, state)
+
+    def _implicit_alias(self, at: int, state: _State) -> bool:
+        r"""Whether the name at ``at``, right after an operand, is an alias
+        STRUCT takes without AS: ``struct(x a, y `b c`)``.
+        """
         alias = self.tokens[at + 1].text in (',', ')')
-        return alias and group.opener == 'struct'
+        return alias and state.groups[-1].opener == 'struct'
+
+    def _names_a_field(self, at: int, name: str, state: _State) -> bool:
+        r"""Whether ``name`` at ``at``, first in its call, is the field of
+        ``EXTRACT(DOW FROM d)``, any name, or the datetime unit of
+        ``dateadd(DAY, 1, d)``. Either may be quoted.
+        """
+        opener = state.groups[-1].opener
+        if self.tokens[at - 1].text != '(':
+            return False
+        if opener == 'extract':
+            return True
+        three = opener in _UNIT_FIRST_OF_THREE
+        return name in _DATETIME_UNITS and (
+            opener in _UNIT_FIRST
+            or (three and _arguments(self.tokens, at - 1) == 3)
+        )
 
     def _read_name(
         self, index: int, last: int, state: _State
@@ -1507,7 +1528,19 @@ class _NameScan:
         ):
             return False, operand  # A lambda's parameter.
         if not word:
-            return True, operand  # Quoted or qualified.
+            # Quoted or qualified: a value, but for a quoted field, unit or
+            # alias, as in ``EXTRACT(`DOW` FROM d)``.
+            if (
+                tokens[index].kind == 'quoted'
+                and index == last
+                and (
+                    self._names_a_field(index, name, state)
+                    if operand
+                    else self._implicit_alias(last, state)
+                )
+            ):
+                return False, True
+            return True, operand
         if index == state.by_at:
             state.operand = True
             return False, True
@@ -1561,15 +1594,8 @@ class _NameScan:
         if group.frame and word in _FRAME_WORDS:
             state.operand = word == 'between'
             return True
-        if opens and group.opener == 'extract':
-            return True  # The field of `EXTRACT(DOW FROM d)`, any word.
-        if opens and word in _DATETIME_UNITS:
-            # `dateadd(DAY, 1, d)`.
-            three = group.opener in _UNIT_FIRST_OF_THREE
-            if group.opener in _UNIT_FIRST or (
-                three and _arguments(tokens, index - 1) == 3
-            ):
-                return True
+        if self._names_a_field(index, word, state):
+            return True
         if opens and group.opener == 'trim' and word in _TRIM_SIDES:
             # `TRIM(BOTH FROM s)`, `TRIM(BOTH from FROM s)` and `TRIM(both)`.
             # In `TRIM(BOTH FROM from)` no operand follows the second `from`.
