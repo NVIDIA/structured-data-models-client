@@ -35,7 +35,8 @@ The owner made these before any code:
 3. **Regressions:** refusing an input the old Python client accepted is a regression.
    Java on Snowflake is not prioritized, so it is not held to this yet.
 4. **Python quirks:** the register (section 5) follows common sense, with a small bias towards today's Python behavior but without catering to its accidents.
-5. **Reference environment:** the old release is installed locally in its own worktree and environment, with its Python, pandas, NumPy, PyArrow and torch versions recorded; it is the oracle the tests compare against.
+5. **Reference environment:** a local reference branch off the latest `main`, with the first attempt's determinism fixes applied (so the old Python gives the same answer on every run), installed in its own worktree and environment with its Python, pandas, NumPy, PyArrow and torch versions recorded; it is the oracle the tests compare against.
+   `main` keeps moving: at each slice gate the reference branch is rebased onto the latest `main` and the full comparison rerun; a new difference must trace to a deliberate commit on `main`, and every test run records the reference commit it used.
 6. **PQL:** the PQL team owns one C++ core and publishes it as a Rust crate and a Python package; this client's core uses the Rust crate, with the hand-written parser as a stopgap (section 3).
 7. **Data layer:** the data layer must be switchable: a team given access to this repository should be able to replace it, for example to work with Pyramid, without touching the rest of the core.
    A Pyramid provider itself is not in scope.
@@ -196,7 +197,7 @@ On the Python side, pandas and pyarrow stay as host dependencies, and the old en
 | S3 | In-memory frames, ranking, forecasting, link prediction, sessions, tabular requests | Python; Java as the owner adds scope |
 
 A path is one public operation with one input mode on one backend (for example `predict` of a regression query on Snowflake), and one routing boundary chooses the old implementation or the core for each path.
-Python switches a path only after its slice passes all its gates, live ones included: S1 and S2 paths after S2, S3 paths (ranking, forecasting, sessions, on any backend) after S3.
+Python switches a path only after its slice passes all its gates, live ones included: S0 (PQL validation), S1 and S2 paths together after S2, so no call mixes old and new code, and S3 paths (ranking, forecasting, sessions, on any backend) after S3.
 R0 maps every Databricks job in the matrix to its paths, so S2 includes what its jobs need.
 Old paths are deleted in R5, and the oracle (section 6) stays available after that.
 Each slice gate merges to `main`.
@@ -257,7 +258,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 
 | Phase | Work | Exit |
 |---|---|---|
-| R0 | Build the reference environment (decision 5) in its own worktree; record the accepted text-date formats and inference rules; agree the PQL crate's release milestone with the PQL team; verify branch protection, CI and approval identities; push the first attempt's best candidate as a named branch and run CI once, as a fallback; archive the rest; one integration branch | Decisions and dates written down | 1 day |
+| R0 | Create the reference branch and environment (decision 5) in its own worktree; record the accepted text-date formats and inference rules; agree the PQL crate's release milestone with the PQL team; verify branch protection, CI and approval identities; push the first attempt's best candidate as a named branch and run CI once, as a fallback; archive the rest; one integration branch | Decisions and dates written down | 1 day |
 | R1a | `sdm-contract`, `sdm-testkit`, L0 guards, L2 runners for Python, Java and the oracle, CI tiers | S0 green in Python, and running in Java; the runners fail on seeded faults |
 | R1b | Spike, fixed in scope: DuckDB `from_source` → `materialize` → `predict` → result through the new contract and the data provider interface in Python and through the pure-Rust test host (which shows the contract needs nothing from Python), and the same path through a minimal non-SQL test provider, against a scripted model endpoint; the text-date rules recorded in R0 checked against the oracle | Matches the oracle on inferred types, keys, time columns, data requests and SQL, payloads, results, warnings and refusals, over the first attempt's column-type cases; the owner decides go or no-go (go: R1a and R1b merge to `main`; no-go: repair the first attempt in place, or stop) | 3 days, hard stop |
 | R2 | S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit; the time-library and dataframe-engine comparisons | Slice gate |
