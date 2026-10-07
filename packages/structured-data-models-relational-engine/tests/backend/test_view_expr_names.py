@@ -120,6 +120,21 @@ _PROBE = '(CASE WHEN x THEN not END)'
         # collation, `<` compares.
         ('x::int < y AND n > 1', {'x', 'y', 'n'}),
         ('map COLLATE UTF8_LCASE < string AND n > 1', {'map', 'string', 'n'}),
+        # A window may cluster, distribute and sort its rows, and STRUCT
+        # takes an alias without AS.
+        ('NOT flag AND SUM(x) OVER (CLUSTER BY y) > 0', {'flag', 'x', 'y'}),
+        (
+            'CASE WHEN flag THEN SUM(x) OVER (DISTRIBUTE BY y) ELSE n END',
+            {'flag', 'x', 'y', 'n'},
+        ),
+        (
+            'SUM(x) OVER (DISTRIBUTE BY y, n SORT BY n DESC NULLS LAST)',
+            {'x', 'y', 'n'},
+        ),
+        ('struct(x a, y b)', {'x', 'y'}),
+        ('struct(all AS f)', {'all'}),
+        ('struct(DISTINCT x)', {'DISTINCT'}),
+        ('TRIM(BOTH FROM from)', {'from'}),
     ],
 )
 def test_a_name_is_a_column_where_databricks_reads_one(
@@ -141,3 +156,22 @@ def test_an_expression_nested_too_deep_is_refused(
     """
     with pytest.raises(UnreadableExpressionError):
         name_references(opener * depth + _PROBE + ')' * depth)
+
+
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'NOT flag AND x IN (SELECT y)',
+        "NOT flag AND x AT TIME ZONE 'UTC'",
+        'CASE WHEN flag THEN x BETWEEN SYMMETRIC y AND n END',
+        'x SORT BY y',
+        'NOT (x',
+    ],
+)
+def test_an_expression_that_does_not_parse_is_refused(expr: str) -> None:
+    r"""Syntax the scan does not know is refused, rather than let it fail
+    the reading of an earlier form, which turned `NOT` or `CASE` into a
+    column wherever it stood.
+    """
+    with pytest.raises(UnreadableExpressionError, match='not understood'):
+        name_references(expr)

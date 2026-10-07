@@ -1060,7 +1060,7 @@ _TAKE_A_NAME = frozenset({'as', 'collate', 'over'})
 # Words before `(` that open no call, or a form with its own grammar.
 _NO_CALL_OPENERS = _TAKE_AN_OPERAND | {
     '', 'cast', 'extract', 'group', 'overlay', 'position', 'substring',
-    'trim', 'try_cast',
+    'struct', 'trim', 'try_cast',
 }  # fmt: skip
 # What a CASE may have read last before each of its words.
 _CASE_STEPS = {
@@ -1098,6 +1098,9 @@ _TYPED_LITERALS = frozenset(
     {'date', 'timestamp', 'timestamp_ltz', 'timestamp_ntz', 'x'}
 )
 _TRIM_SIDES = frozenset({'both', 'leading', 'trailing'})
+# The words before BY that only a window's clauses open with, as in
+# `OVER (DISTRIBUTE BY y SORT BY n)`. ORDER BY also sorts a WITHIN GROUP.
+_WINDOW_BY = frozenset({'cluster', 'distribute', 'partition', 'sort'})
 # The types that take fields in `<...>`; after any other, `<` compares.
 _TYPES_WITH_FIELDS = frozenset({'array', 'map', 'struct'})
 # The fields an interval type names, as in `INTERVAL DAY TO SECOND`.
@@ -1246,6 +1249,10 @@ class _State:
         """
         return replace(self, groups=[_Group(''), replace(self.groups[-1])])
 
+    def settled(self) -> bool:
+        r"""Whether the innermost group may end here, nothing left owed."""
+        return not (self.operand or self.name_next or self.groups[-1].cases)
+
     def key(self) -> tuple[object, ...]:
         r"""What a reading to the end of the current bracket depends on."""
         flags = (v for k, v in vars(self).items() if k != 'groups')
@@ -1280,6 +1287,7 @@ class _NameScan:
         # length, and none is read wrong.
         self.budget = _TRIAL_STEPS * (self.end + 1)
         self.cut = False
+        self.parses = True  # Whether the whole expression parses.
         # Where the bracket around each token closes, or the end.
         around, closing, open_at = [], {-1: self.end}, [-1]
         for index, token in enumerate(tokens):
@@ -1294,7 +1302,9 @@ class _NameScan:
         state, found = _State(), list[NameReference]()
         index = 0
         while index < self.end:
-            index, _ = self._step(index, state, found)
+            index, parses = self._step(index, state, found)
+            self.parses = self.parses and parses
+        self.parses = self.parses and len(state.groups) == 1 and state.settled()
         return found
 
     def _parses(self, index: int, state: _State) -> bool:
@@ -1345,9 +1355,7 @@ class _NameScan:
             if not parses:
                 return False
         # A `)` checks its own group as it closes it.
-        return len(state.groups) == 1 or not (
-            state.operand or state.name_next or state.groups[-1].cases
-        )
+        return len(state.groups) == 1 or state.settled()
 
     def _step(
         self, index: int, state: _State, found: list[NameReference] | None
@@ -1437,7 +1445,11 @@ class _NameScan:
                 or before.folded == 'to'
                 or self.tokens[at - 2].folded == 'interval'
             )
-        return word in _TAKE_AN_OPERAND or word in ('asc', 'desc')
+        if word in _TAKE_AN_OPERAND or word in ('asc', 'desc'):
+            return True
+        # STRUCT takes an alias without AS: `struct(x a, y b)`.
+        alias = self.tokens[at + 1].text in (',', ')')
+        return alias and group.opener == 'struct'
 
     def _read_name(
         self, index: int, last: int, state: _State
@@ -1472,7 +1484,9 @@ class _NameScan:
         if index == state.by_at:
             state.operand = True
             return False, True
-        if word in ('order', 'partition') and after.folded == 'by':
+        if after.folded == 'by' and (
+            word == 'order' or (word in _WINDOW_BY and group.opener == 'over')
+        ):
             # After an operand, or first in `OVER (`.
             state.by_at = last + 1
             return False, not operand or previous.text == '('
@@ -1525,10 +1539,14 @@ class _NameScan:
                 return True
         if opens and group.opener == 'trim' and word in _TRIM_SIDES:
             # `TRIM(BOTH FROM s)`, `TRIM(BOTH from FROM s)` and `TRIM(both)`.
+            # In `TRIM(BOTH FROM from)` no operand follows the second `from`.
             form = after.text not in (')', ',')
-            state.operand = form and (
-                after.folded != 'from' or tokens[index + 2].folded == 'from'
+            third = tokens[index + 3]
+            column = tokens[index + 2].folded == 'from' and (
+                third.kind in (*_NAME_KINDS, 'number', 'string')
+                or third.text in ('(', '+', '-', '~')
             )
+            state.operand = form and (after.folded != 'from' or column)
             return form
         if opens and group.opener == 'over' and word in ('rows', 'range'):
             if after.folded in _FRAME_STARTS or after.kind == 'number':
@@ -1597,9 +1615,14 @@ def name_references(expr: str) -> list[NameReference]:
     Databricks: in ``SUM(x) OVER (PARTITION BY range)`` the ``range`` is a
     column, and in ``col REGEXP 'x'`` the ``REGEXP`` is an operator.
 
+    An expression that does not parse as the scan reads SQL is refused,
+    since a failed reading of a form makes its word a column: an unknown
+    clause late in the expression would turn an earlier ``NOT`` into one.
+
     Raises:
-        UnreadableExpressionError: If brackets nest too deeply, or the
-            expression is too long, to settle which words are names.
+        UnreadableExpressionError: If the expression does not parse as the
+            scan reads SQL, or brackets nest too deeply, or it is too long,
+            to settle which words are names.
     """
     tokens = [token for token in _lex(expr) if token.kind != 'comment']
     scan = _NameScan(tokens)
@@ -1607,6 +1630,11 @@ def name_references(expr: str) -> list[NameReference]:
     if scan.cut:
         raise UnreadableExpressionError(
             'it is too deeply nested or too long to read safely'
+        )
+    if not scan.parses:
+        raise UnreadableExpressionError(
+            'it has syntax that is not understood, so which of its words '
+            'name columns cannot be settled'
         )
     return references
 

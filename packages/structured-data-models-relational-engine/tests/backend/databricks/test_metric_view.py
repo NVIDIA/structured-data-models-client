@@ -3230,6 +3230,20 @@ measures:
         parse_metric_view(f'{view}filter: {json.dumps(_TOO_DEEP)}\n')
 
 
+def test_a_measure_with_syntax_not_understood_is_refused_not_misread() -> None:
+    r"""Syntax the scan does not know failed the reading of the `NOT` before
+    it, which then read `NOT` as a column of the source.
+    """
+    expr = "SUM(x) FILTER (WHERE NOT flag AND x AT TIME ZONE 'UTC')"
+    spec = parse_metric_view(_MEASURE_INPUT_YAML.format(expr=expr))
+
+    assert spec.measures == []
+    assert spec.messages == [
+        "Failed to add measure 'm' since it has syntax that is not "
+        'understood, so which of its words name columns cannot be settled'
+    ]
+
+
 _MEASURE_YAML = """
 version: 1.1
 source: cat.sch.order_lines
