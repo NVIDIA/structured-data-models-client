@@ -83,7 +83,8 @@ test:
   variables:
     POSTGRES_DB: sdm_test
     POSTGRES_PASSWORD: postgres
-    SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@postgres:5432/sdm_test
+    PGPASSWORD: postgres
+    SDM_POSTGRES_TEST_DSN: postgresql://postgres@postgres:5432/sdm_test
     SDM_REQUIRE_POSTGRES: "1"
   script:
     # databricks is here for its driver, not for a server: those tests mock the
@@ -126,7 +127,8 @@ engine:
   variables:
     POSTGRES_DB: sdm_test
     POSTGRES_PASSWORD: postgres
-    SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@postgres:5432/sdm_test
+    PGPASSWORD: postgres
+    SDM_POSTGRES_TEST_DSN: postgresql://postgres@postgres:5432/sdm_test
     SDM_REQUIRE_POSTGRES: "1"
   script:
     - apt-get update -qq && apt-get install -y -qq build-essential cmake git
