@@ -34,17 +34,8 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 27 | D1: the RandomState shuffle (`508845fe`, with `f2f5b86c` and `c9695f3c`) is not adopted; the reference keeps `default_rng` | [determinism-fixes.md](determinism-fixes.md), T0.3 |
 | 28 | D2: the new seeded SQLite draw is accepted; it becomes a register entry and a random stream the core must reproduce | determinism-fixes.md, `register.yaml` (T0.8), T0.6 |
 | 29 | The plan's section 5 keep and drop entries (PK-1 to PK-9, PD-1 to PD-6) are approved register entries | register.yaml |
+| 30 | Recommendations accepted: RS-4 (an unseeded in-memory sample uses fresh operating-system randomness), RS-7 (keep refusing seeds of 2**31 and above), DT-1 (zone rules keep applying after 2099), DT-2 (use the host's zone database as today, with a bundled fallback and versions pinned in tests), DT-3 (don't copy the wrap at `Timestamp.min`; handle the no-time marker explicitly), DT-5 (keep packed PQL dates unless the agreed dialect drops them), DT-6 (keep reading free-form text in per-row time columns) | register.yaml |
 
 ## Open decisions
 
-Proposed entries in [`register.yaml`](../register.yaml) that wait for the owner; each has a recommendation in its notes.
-The other proposed entries can be approved by the independent reviewer.
-
-- RS-4: what an unseeded in-memory entity sample draws from (recommended: OS entropy).
-- RS-7: whether in-memory and DuckDB keep refusing seeds from `2**31` on (recommended: keep the refusals).
-- DT-1: daylight saving time after 2099, which `chrono-tz` does not apply (recommended: a zone library that applies the last rule, else register the cutoff).
-- DT-2: a bundled, pinned zone database or the host's (recommended: bundled and pinned, version recorded).
-- DT-3: dropping the int64 wrap at `Timestamp.min` (recommended: drop, after the Phase 1 check of the sentinel).
-- DT-5: PQL packed dates, which go to the PQL asks (recommended: keep unless the agreed dialect drops them).
-- DT-6: free-form values in per-row time columns, if the core refuses them instead of reading them (recommended: keep reading them).
-- P1B-1: any Phase 1b case whose new outcome refuses an input Python accepted.
+- P1B-1: any Phase 1b case whose new outcome refuses an input Python accepts comes to the owner case by case.

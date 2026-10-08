@@ -440,9 +440,9 @@ entries:
     In-memory relational requests without entity ids on tables larger than the
     sample; the change concerns only random_seed=None.
   cases: [T0.6, G3]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 30
   notes: >-
     Owner decision for None: OS entropy (recommended; the only loss is that a
     user's np.random.seed no longer makes an unseeded request repeatable) or
@@ -500,9 +500,9 @@ entries:
     DuckDB with a named INVALID_REQUEST.
   affected_inputs: Requests with random_seed of 2**31 or more on in-memory frames or DuckDB.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 30
   notes: >-
     Owner decision: keep today's refusals (recommended, no regression and no
     new stream to define) or accept larger seeds, which needs a defined stream
@@ -524,9 +524,9 @@ entries:
     Local wall times and localization of instants from 2100 on (128 of 1,404
     zone answers in the check).
   cases: [T0.6, M4]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 30
   notes: >-
     Owner decision. Recommendation: prefer a zone library that applies a
     zone's last rule indefinitely, if the same probe confirms it agrees
@@ -535,27 +535,26 @@ entries:
     showing and localizing wall times.
 
 - id: DT-2
-  title: Bundled zone database instead of the host's
-  kind: change
+  title: Zone database from the host, as today, with a bundled fallback
+  kind: keep
   old_behavior: >-
     pandas 3 reads the host's zone database (2026c on the reference host),
     falling back to the tzdata package only when the host has none.
   new_behavior: >-
-    Proposed: the core uses a zone database pinned at build time (chrono-tz's
-    built-in copy, 2025b today), recorded as a build fact and updated with
-    releases.
+    The core also uses the host's zone database, falling back to a bundled
+    copy only where the host has none (for example Windows); tests pin the
+    database version so comparisons stay stable, and the version is recorded
+    with every run.
   affected_inputs: >-
     Zones whose rules differ between database versions; in the check, all 88
     differences were Africa/Casablanca from 2036 on.
   cases: [T0.6, M5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 30
   notes: >-
-    Owner decision: bundled and pinned (recommended; answers repeat across
-    hosts, and the version is recorded with every run) or the host's database
-    as today. Either way the version is recorded.
-
+    The owner chose to follow the host, like today's Python, over a bundled
+    database pinned at build time.
 - id: DT-3
   title: int64 wrap at Timestamp.min
   kind: drop
@@ -567,9 +566,9 @@ entries:
     Only the Timestamp.min sentinel, which inference/payload.py:469-471 on the
     reference compares against.
   cases: [T0.6, M3]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 30
   notes: >-
     Recommendation: drop the wrap, after Phase 1 checks whether that comparison
     still sees the sentinel after the sampler's round trip; if a public answer
@@ -604,8 +603,8 @@ entries:
     registered as a change if the agreed dialect differs.
   affected_inputs: PQL date literals with packed fields.
   cases: [T0.6, T0.9, M2]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: 6
   notes: >-
     Not a chrono limit; the probe does not model dateutil's packed reading.
@@ -624,9 +623,9 @@ entries:
     this entry changes to a refusal approved by the owner.
   affected_inputs: Frame time columns mixing a decided shape with free-form date text.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 30
   notes: >-
     date-rules.md, "Per-row reading". Refusing would refuse input Python
     accepts, so a change needs the owner. Recommendation: keep, scoped by
