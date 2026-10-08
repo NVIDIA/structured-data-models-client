@@ -691,8 +691,9 @@ entries:
   kind: change
   old_behavior: >-
     The reference reads date literals such as 20240101-01-01 and
-    2024-01-01 00000:00:00 (D8 packed dates, D9 years past 9999) and validates
-    the query.
+    2024-01-01 00000:00:00 (packed or long zero-padded fields that decode to
+    a valid date; actual years above 9999 remain refused) and validates the
+    query.
   new_behavior: >-
     The interim date reader of T1.6a does not read a field of five or more
     digits: validate_query ends with kind unsupported, UNSUPPORTED_REQUEST
@@ -751,7 +752,10 @@ entries:
   decision_ref: null
   notes: >-
     Phase 1 decisions F2 and H15. Settling which policy both paths follow is
-    S3 work in Phase 4, as its own change entry.
+    S3 work in Phase 4, as its own change entry. The time-window fetch
+    (_by_time) is unordered and feeds order-sensitive float32 group sums; the
+    inventory's values are exact in float32, so no case shows it, and it
+    becomes its own entry (ORD-3) if one ever does.
 
 # --- Phase 1b ------------------------------------------------------------------
 
