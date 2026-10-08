@@ -26,6 +26,7 @@ A row changes with the dependency, in the same commit.
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
 | `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
 | `tracing` | planned (T1.8) | first-party crates | Use a library | Logging in Rust (decision H8) |
+| `serde_stacker` | planned (T1.7c) | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27) |
 | `pyo3-log` | planned (T1.8) | `sdm-py` only | Use a library | Bridges Rust log records to Python `logging`; its level cache is reset at each run start (H8) |
 
 ## Ported algorithms and host concerns

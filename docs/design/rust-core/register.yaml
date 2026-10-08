@@ -688,6 +688,29 @@ entries:
 
 # --- Orderings ----------------------------------------------------------------
 
+- id: DT-9
+  title: PQL date literals with a field of five or more digits (interim)
+  kind: change
+  old_behavior: >-
+    The reference reads date literals such as 20240101-01-01 and
+    2024-01-01 00000:00:00 (D8 packed dates, D9 years past 9999) and validates
+    the query.
+  new_behavior: >-
+    The interim date reader of T1.6a does not read a field of five or more
+    digits: validate_query ends with kind unsupported, UNSUPPORTED_REQUEST
+    (Phase 1 decision E10). T1.6b reads them, and a reference-accepted query
+    in the adapter tests, pinned as refused now, must flip to accepted.
+  affected_inputs: S0 on the core route with packed or five-digit date fields.
+  cases: [T1.6a, T1.6b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Phase 1 decisions E10 and H27, from the batch 2 code review. This
+    refuses input the reference accepts, so it needs the owner while it
+    stands; no path switches before T1.6b removes it, and the entry is
+    withdrawn when T1.6b lands.
+
 - id: ORD-1
   title: Tie order of the shared train set by entity time
   kind: keep
@@ -802,3 +825,28 @@ entries:
     (Phase 3), move a start message's schema (and query text past a bound)
     into an attachment, as data already travels, with a contract version
     bump, and keep the cap for control JSON proper.
+
+- id: HOST-2
+  title: Arrow types admission still refuses that the reference accepts
+  kind: change
+  old_behavior: >-
+    The reference reads any Arrow type DuckDB returns into pandas
+    (to_pandas with pd.ArrowDtype) and maps float16, any timedelta unit and
+    any categorical, among others.
+  new_behavior: >-
+    Admission widens losslessly into the closed set (Phase 1 decision H27):
+    float16, decimal32 and decimal64, duration and time32 at s or ms, date64
+    of whole days, view types, fixed_size_binary and any dictionary are
+    admitted. Proposed: what still cannot convert without loss (for example
+    date64 values that are not whole days, and any type T1.34 finds no
+    lossless row for) is refused by name; interval and union are refused by
+    the reference too and need no entry.
+  affected_inputs: Sources returning Arrow types outside the closed set with no lossless conversion.
+  cases: [T1.7c, T1.34]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    From the batch 2 code review. Each remaining refusal of a type the
+    reference accepts needs the owner (P1B-1 process); T1.34 lists them by
+    type with a case where the inventory reaches one.
