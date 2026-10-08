@@ -48,7 +48,8 @@ jobs:
 
   # The Rust core (docs/design/rust-core/phase-1/design.md, section CI). Each
   # job installs the toolchain rust/rust-toolchain.toml pins, and caches the
-  # build keyed on Cargo.lock.
+  # build keyed on Cargo.lock. Third-party actions are pinned by commit, as
+  # the organisation's allow list requires.
   rust-lint:
     runs-on: ubuntu-latest
     defaults:
@@ -57,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
       - run: cargo fmt --all --check
@@ -71,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
         with:
           tool: cargo-deny
       - run: cargo deny --locked check
@@ -84,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
       - run: cargo test --workspace --locked
