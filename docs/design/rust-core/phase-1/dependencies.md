@@ -25,9 +25,9 @@ A row changes with the dependency, in the same commit.
 | `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
 | `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
-| `tracing` | planned (T1.8) | first-party crates | Use a library | Logging in Rust (decision H8) |
+| `tracing` (feature `log`) | planned (T1.8) | first-party crates | Use a library | Logging in Rust (decision H8); the `log` feature emits each event to the `log` facade when no subscriber is set, which is what `pyo3-log` reads |
 | `serde_stacker` | planned (T1.7c) | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27) |
-| `pyo3-log` | planned (T1.8) | `sdm-py` only | Use a library | Bridges Rust log records to Python `logging`; its level cache is reset at each run start (H8) |
+| `pyo3-log` | planned (T1.8) | `sdm-py` only | Use a library | Bridges Rust `log` records to Python `logging`, initialized at the first core call; its level cache is reset at each run start (H8) |
 
 ## Ported algorithms and host concerns
 
@@ -39,7 +39,10 @@ A row changes with the dependency, in the same commit.
 | PQL date literals D1 to D9 | Port a defined algorithm over `jiff` | `sdm-pql-interim`, T1.6a and T1.6b | Written rules from `date-rules.md`, replacing the archive's 1,695-line clone |
 | `pyint`'s digit limit, `float_repr`, `escapes` | Emulate, allowlisted | `sdm-pql-interim` | They decide validity (A4, E9); the allowlist expires with the crate |
 | Arrow-to-Arrow admission casts | Hand-written over `arrow-cast` | `sdm-host`, T1.7 and T1.7c | `arrow-cast` casts silently where admission must refuse by name (`VALUE_OUT_OF_RANGE`) and check schemas first (H16); the kernels are used where their semantics fit |
-| Text-date shapes (DT-7) | Port a defined algorithm | `sdm-engine::time::text_shapes`, T1.25 | Only the shapes of `date-rules.md`, by owner row (H21) |
+| Text-date shapes (DT-7) | Port a defined algorithm | `sdm-engine::time::text_shapes`, T1.25 | Only the shapes of `date-rules.md`, with its T0.6 vectors (H21) |
+| `DateOffset` month arithmetic in PQL date literals | Port a defined algorithm | `sdm-pql-interim`, `dor.rs` | pandas' definition, as the reference's parser applies it |
+| `str.isspace` | Port a defined algorithm | `sdm-pql-interim`, `syntax.rs` | Python's whitespace set decides what the parser skips before a query's first word |
+| The `query[:-1]` quirk | Port a defined algorithm | `sdm-pql-interim`, `visitor.rs` | With no space in the query, the reference reads the `EXPLAIN` or `EVALUATE` prefix from all but the last character; which flag a query gets depends on it |
 | pandas and NumPy conversion and presentation | Keep in the host | `_rust/`, the reviewed table | The core never sees a dtype (plan section 3) |
 | HTTP, authentication and the model call | Keep in the host | Client transport | The core passes model bodies as bytes |
 
