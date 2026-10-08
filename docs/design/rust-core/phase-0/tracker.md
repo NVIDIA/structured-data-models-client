@@ -11,7 +11,7 @@ Each row links its evidence when done.
 | T0.4 Support matrix | done | [support-matrix.md](support-matrix.md) | Gaps G1 to G14 decided by the owner |
 | T0.5 Scope manifests and case inventory format | done | [scope-format.md](scope-format.md), [scope-python.yaml](scope-python.yaml), [scope-java.yaml](scope-java.yaml), [databricks-jobs.md](databricks-jobs.md) | Written and validated; J1 to J3 decided and applied |
 | T0.6 Random streams and time library | in progress | | Random streams, date rules, chrono probe |
-| T0.7 Phase 1b case inventory | in progress | | |
+| T0.7 Phase 1b case inventory | done | [phase-1b-inventory.yaml](phase-1b-inventory.yaml) | 40 DuckDB cases (24 succeed, 16 refuse today), all run against the reference in about 1.4 s; 13 flagged for register entries if Phase 1b changes them; runner kept outside the repo |
 | T0.8 Register and decision record | not started | | |
 | T0.9 PQL asks | not started | | Sent by the owner; not a phase exit |
 | Phase review | not started | | Fresh-agent review before the owner merges |

@@ -1,0 +1,669 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Phase 1b case inventory (Phase 0, T0.7).
+#
+# The fixed set of cases the Phase 1b spike runs: DuckDB Schema.from_source ->
+# PredictiveQuery.materialize -> SDMClient.predict -> PredictionResult, in Python
+# and through the pure-Rust test host, against a scripted model endpoint.
+# 40 cases; all of them run against the reference in about two seconds.
+#
+# Each case is:
+#   id           stable case ID (scope-format.md "Case IDs" pattern)
+#   seam         keys | decimal | nested | empty-null | time | refusal | baseline
+#   cells        the scope-python.yaml cells (<type>/<role>) the case exercises;
+#                the type is the Arrow type the core should receive
+#   base         a named list of DuckDB statements under `bases`
+#   setup        DuckDB statements run after the base, on the same connection
+#   from_source  keyword arguments to Schema.from_source (tables, primary_keys,
+#                time_columns); absent means Schema.from_source(source)
+#   pql          the query (defaults.pql when absent)
+#   materialize  keyword arguments to materialize (defaults.materialize when
+#                absent); anchor_time is an ISO timestamp, and
+#                `indices_as: decimal` means each index is Decimal(text)
+#   expect       today's outcome on the reference (rust-core-reference at
+#                70aa159, environment in reference-environment.md):
+#                  outcome  success | refusal
+#                  stage    from_source | materialize | predict (where it ended)
+#                  error    exception class name, for a refusal
+#                  code     StructuredDataError.code, or null for an exception
+#                           that has none
+#                  message  a fragment of the message
+#                  today    what else the reference showed that the spike
+#                           compares (inferred types, time column, result)
+#   register     present when today's outcome is an engine failure or an
+#                unnamed exception, which the core is expected to replace with
+#                a named answer; each needs a register entry (T0.8) if Phase 1b
+#                changes it
+#   why          why the case is in the set
+#   source       where it comes from:
+#                  probe#N  row N of the first attempt's 35-case public dtype
+#                           probe, whose nine divergences are the type
+#                           regressions in learnings.md ("By the numbers"):
+#                           1 time ts[us], 2 time ts[ns], 3 time date32,
+#                           4 key string, 5 feature bool, 6 feature date32,
+#                           7 feature ts[us] with a null, 8 feature
+#                           large_string, 9 key uint64 above int64 max
+#                  dtypes:<kind>:<name>  a case of the first attempt's
+#                           tests/rust_core/test_public_dtypes_on_both_paths.py
+#                           (archive/rust-core-attempt-1); the probe's cases
+#                           were in-memory frames, so each is recast here as
+#                           the DuckDB column type that reaches the same Arrow
+#                           type
+#                  DVnnn    a deviation recorded by the first attempt
+#                  plan     migration-plan.md (type set, Phase 1b row)
+#
+# The scripted endpoint answers every payload with one prediction per row of
+# payload.predict.instance_table: {id: str(instance_id), row_index: i,
+# prediction: p}, where p is 1.0 for a regression and the first of
+# task.target.classes for a classification; response object
+# prediction.response, id r1, model kumo-relational, metadata {}.
+# predict is called with model=KumoRelational().
+#
+# The warning "Missing N indices in M tables ..." appears on every shop case
+# (DuckDB tables without declared keys) and is not repeated under `today`.
+
+format: sdm-phase-1b-inventory/1
+
+bases:
+  shop:
+  - CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)
+  - CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)
+  declared:
+  - CREATE TABLE users (uid INTEGER PRIMARY KEY, age INTEGER, country VARCHAR)
+  - CREATE TABLE orders (oid BIGINT PRIMARY KEY, buyer INTEGER REFERENCES users (uid), price DOUBLE, ts TIMESTAMP)
+  - INSERT INTO users SELECT i, 20 + i, ['US', 'DE', 'IN'][1 + i % 3] FROM range(8) t(i)
+  - INSERT INTO orders SELECT i, i % 8, 10 + i * 1.5, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) FROM range(80) t(i)
+
+defaults:
+  pql: PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id
+  materialize: {indices: [0, 1], anchor_time: '2024-03-01'}
+
+cases:
+
+# --- baseline: one per task kind on the S1 DuckDB paths -----------------------
+
+- id: base.regression
+  seam: baseline
+  cells: [int64/primary-key, int64/foreign-key, timestamp-us/time-column, float64/target, utf8/feature]
+  base: shop
+  expect:
+    outcome: success
+    stage: predict
+    today: users.user_id and orders.order_id inferred as keys; orders.ts the time column; result columns row_index int64, id int64, prediction float64
+  why: The plain journey every other case varies one thing of; also probe#1 (a ts[us] time column)
+  source: probe#1; dtypes:time:datetime64_us; plan (Phase 1b row)
+
+- id: base.binary
+  seam: baseline
+  cells: [int64/primary-key, timestamp-us/time-column]
+  base: shop
+  pql: PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id
+  expect:
+    outcome: success
+    stage: predict
+    today: task binary_classification, classes ['false', 'true'], positive class 'true'; result prediction bool
+  why: Covers client.predict/binary/duckdb and a boolean label
+  source: scope-python.yaml paths
+
+- id: base.multiclass
+  seam: baseline
+  cells: [utf8/target]
+  base: shop
+  pql: PREDICT users.country FOR EACH users.user_id
+  materialize: {indices: [0, 1]}
+  expect:
+    outcome: success
+    stage: predict
+    today: task multiclass_classification, target dtype string, classes ['IN', 'DE', 'US'] (in that order)
+  why: Covers client.predict/multiclass/duckdb, a static target with no time window, and class order
+  source: scope-python.yaml paths
+
+- id: feature.bool
+  seam: baseline
+  cells: [bool/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN NULL ELSE user_id % 2 = 0 END AS f FROM users
+  expect:
+    outcome: success
+    stage: predict
+    today: users.f is bool / categorical
+  why: The first attempt sent a different payload for a boolean feature
+  source: probe#5; dtypes:feature:arrow_bool
+
+# --- keys ---------------------------------------------------------------------
+
+- id: key.declared-int32
+  seam: keys
+  cells: [int32/primary-key, int32/foreign-key]
+  base: declared
+  pql: PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid
+  expect:
+    outcome: success
+    stage: predict
+    today: keys and the link come from DuckDB's declared constraints (names alone would not infer buyer -> uid); schema dtype int64 for both; result id int64
+  why: Covers schema.from-source/catalog-keys/duckdb and an int32 key, and skips the key count for enforced keys
+  source: scope-python.yaml paths
+
+- id: key.uint8
+  seam: keys
+  cells: [uint8/primary-key, uint8/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE UTINYINT
+  - ALTER TABLE orders ALTER user_id TYPE UTINYINT
+  expect:
+    outcome: success
+    stage: predict
+    today: schema dtype int64; result id int64
+  why: Narrow unsigned keys; the plan keeps every integer width distinct on the wire
+  source: dtypes:key:uint8; plan (type set)
+
+- id: key.uint64-small
+  seam: keys
+  cells: [uint64/primary-key, uint64/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE UBIGINT
+  - ALTER TABLE orders ALTER user_id TYPE UBIGINT
+  expect:
+    outcome: success
+    stage: predict
+  why: uint64 keys whose values fit in int64 must keep working while the large ones are handled
+  source: dtypes:key:uint64
+
+- id: key.uint64-above-int64-max
+  seam: keys
+  cells: [uint64/primary-key, uint64/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT
+  - ALTER TABLE orders ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT
+  materialize: {indices: [9223372036854775808, 9223372036854775809], anchor_time: '2024-03-01'}
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INVALID_REQUEST
+  why: The first attempt accepted these and sent them as text where today refuses; the spike must match or register
+  source: probe#9; dtypes:key:uint64_past_int64
+
+- id: key.hugeint
+  seam: keys
+  cells: [decimal128/primary-key, decimal128/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE HUGEINT
+  - ALTER TABLE orders ALTER user_id TYPE HUGEINT
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: unsupported data type 'decimal128(38, 0)[pyarrow]' for column 'ENTITY'
+    today: Schema.from_source accepts it and reports user_id as int64 / ID
+  register: Today the engine fails after the schema accepted the key; a 128-bit integer reaches the core as decimal128(38, 0), outside the integer set
+  why: An integer key wider than int64 that DuckDB hands over as a decimal; tests the host conversion and the key path together
+  source: plan (type set); DV131
+
+- id: key.varchar
+  seam: keys
+  cells: [utf8/primary-key, utf8/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id
+  - ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id
+  materialize: {indices: [u0, u1], anchor_time: '2024-03-01'}
+  expect:
+    outcome: success
+    stage: predict
+    today: schema dtype string / ID; result id str ('u0', 'u1')
+  why: Text keys; the first attempt failed an Arrow string key with INTERNAL_ERROR
+  source: probe#4; dtypes:key:arrow_string
+
+- id: key.varchar-large-buffers
+  seam: keys
+  cells: [utf8/primary-key, utf8/foreign-key]
+  base: shop
+  setup:
+  - SET arrow_large_buffer_size = true
+  - ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id
+  - ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id
+  materialize: {indices: [u0, u1], anchor_time: '2024-03-01'}
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: unsupported data type 'large_string[pyarrow]' for column 'ENTITY'
+  register: The plan has hosts convert large_utf8 to utf8 without loss, which would turn this into a success
+  why: The same keys as key.varchar delivered as large_string by a DuckDB setting; the host conversion seam
+  source: probe#8; dtypes:key:arrow_large_string; plan (type set)
+
+- id: key.decimal-18-0
+  seam: keys
+  cells: [decimal128/primary-key, decimal128/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE DECIMAL(18, 0)
+  - ALTER TABLE orders ALTER user_id TYPE DECIMAL(18, 0)
+  materialize: {indices: ['0', '1'], indices_as: decimal, anchor_time: '2024-03-01'}
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: unsupported data type 'decimal128(18, 0)[pyarrow]' for column 'ENTITY'
+    today: Schema.from_source reports user_id as int64 / ID
+  register: Engine failure after the schema accepted the key
+  why: Integral decimal keys are common in warehouses (NUMBER(18,0)); the first attempt left decimal keys out, then mis-keyed them
+  source: DV35; DV131
+
+- id: key.decimal-38-10
+  seam: keys
+  cells: [decimal128/primary-key, decimal128/foreign-key]
+  base: shop
+  setup:
+  - ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5
+  - ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5
+  materialize: {indices: ['0.5', '1.5'], indices_as: decimal, anchor_time: '2024-03-01'}
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: unsupported data type 'decimal128(38, 10)[pyarrow]' for column 'ENTITY'
+    today: Schema.from_source reports user_id as float64 / ID
+  register: Engine failure after the schema accepted the key
+  why: A fractional, full-precision decimal key; the case where float keys would collide
+  source: DV131; DV133
+
+- id: null.some-foreign-keys
+  seam: keys
+  cells: [int64/foreign-key]
+  base: shop
+  setup:
+  - UPDATE orders SET user_id = NULL WHERE order_id % 10 = 0
+  expect:
+    outcome: success
+    stage: predict
+  why: Null foreign keys must drop out of joins, not become a key of their own
+  source: dtypes (key cases with missing values)
+
+# --- decimal precision and scale ----------------------------------------------
+
+- id: decimal.feature-38-0-wide
+  seam: decimal
+  cells: [decimal128/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, (12345678901234567890123456789::DECIMAL(38, 0) + user_id) AS f FROM users
+  expect:
+    outcome: success
+    stage: predict
+  why: Values beyond float64 and int64 precision; must not be rounded into equal values or nulls
+  source: dtypes:feature:arrow_decimal; plan (type set)
+
+- id: decimal.target-38-18
+  seam: decimal
+  cells: [decimal128/target]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER price TYPE DECIMAL(38, 18) USING price + 0.000000000000000001
+  expect:
+    outcome: success
+    stage: predict
+    today: schema dtype float64 / numerical
+  why: A summed decimal at the maximum scale; aggregation and label type
+  source: DV133; test_decimal_target_accuracy.py (first attempt)
+
+- id: decimal.class-target-38-18
+  seam: decimal
+  cells: [decimal128/target]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, (0.1 + (user_id % 3) * 0.1)::DECIMAL(38, 18) AS tier FROM users
+  pql: PREDICT users.tier FOR EACH users.user_id
+  materialize: {indices: [0, 1]}
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: unsupported data type 'decimal128(38, 18)[pyarrow]' for column 'TARGET'
+    today: Schema.from_source reports tier as float64 / categorical
+  register: Engine failure on a decimal static target
+  why: DECIMAL(38,18) classes collided to 0.1 in the first attempt
+  source: DV133
+
+# --- nested values ------------------------------------------------------------
+
+- id: nested.list-int
+  seam: nested
+  cells: [list/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS f FROM users
+  expect:
+    outcome: success
+    stage: predict
+  why: A list with empty lists and nulls among the values; the nested type today accepts
+  source: dtypes:feature:arrow_list_int; learnings.md section 7
+
+- id: nested.fixed-array
+  seam: nested
+  cells: [list/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[2] AS f FROM users
+  expect:
+    outcome: refusal
+    stage: from_source
+    error: RuntimeError
+    code: null
+    message: Could not determine semantic type for column 'f' with data type 'int'
+  register: An unnamed RuntimeError, and the message calls the column int; the plan has hosts convert fixed_size_list to list
+  why: DuckDB ARRAY reaches the host as fixed_size_list
+  source: plan (type set)
+
+- id: nested.struct
+  seam: nested
+  cells: [struct/feature]
+  base: shop
+  setup:
+  - "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users"
+  expect:
+    outcome: refusal
+    stage: from_source
+    error: RuntimeError
+    code: null
+    message: Could not determine semantic type for column 'f' with data type 'int'
+  register: An unnamed RuntimeError naming the wrong type; the plan's set accepts struct
+  why: The first attempt turned STRUCT features into nulls, and its nested-type refusal fix broke 24 working cases
+  source: DV142; DV149; learnings.md section 7
+
+- id: nested.map
+  seam: nested
+  cells: [map/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [user_id::INTEGER]) AS f FROM users
+  expect:
+    outcome: refusal
+    stage: from_source
+    error: RuntimeError
+    code: null
+    message: Could not determine semantic type for column 'f' with data type 'int'
+  register: As nested.struct
+  why: As nested.struct, for MAP
+  source: DV142; DV149
+
+- id: nested.union
+  seam: refusal
+  cells: []
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users
+  expect:
+    outcome: refusal
+    stage: from_source
+    error: RuntimeError
+    code: null
+    message: Could not determine semantic type for column 'f' with data type 'int'
+  register: A type outside the plan's set must be refused by name; today's refusal is unnamed and names the wrong type
+  why: The one DuckDB type here with no place in the type set at all
+  source: plan (type set, "refused with a named error, never silently turned into nulls")
+
+# --- empty and all-null data --------------------------------------------------
+
+- id: null.feature-all-null
+  seam: empty-null
+  cells: [int32/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, NULL::INTEGER AS f FROM users
+  expect:
+    outcome: success
+    stage: predict
+  why: An all-null column whose type comes only from the catalog, since the preview has no values
+  source: plan (type set, null); dtypes (missing values)
+
+- id: null.target-all-null
+  seam: empty-null
+  cells: [float64/target]
+  base: shop
+  setup:
+  - UPDATE orders SET price = NULL
+  expect:
+    outcome: success
+    stage: predict
+    today: warns "every context row has the same answer to ..." and still sends
+  why: The label of every context row is the same; the warning must survive
+  source: plan (empty and all-null data)
+
+- id: null.some-times
+  seam: empty-null
+  cells: [timestamp-us/time-column]
+  base: shop
+  setup:
+  - UPDATE orders SET ts = NULL WHERE order_id % 10 = 0
+  expect:
+    outcome: success
+    stage: predict
+  why: Rows with a null time must be left out of windows, not read as the epoch or a sentinel
+  source: DV153; probe#7
+
+- id: empty.fact-table
+  seam: empty-null
+  cells: []
+  base: shop
+  setup:
+  - DELETE FROM orders
+  expect:
+    outcome: refusal
+    stage: from_source
+    error: RuntimeError
+    code: null
+    message: Table 'orders' is empty
+  register: An unnamed RuntimeError for an empty table
+  why: A table with no rows at all, refused before any query
+  source: plan (empty and all-null data)
+
+- id: empty.indices
+  seam: empty-null
+  cells: []
+  base: shop
+  materialize: {indices: [], anchor_time: '2024-03-01'}
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INVALID_REQUEST
+    message: indices names no entity
+  why: An empty batch is refused for a relational request (the message points to Request(predict=<no rows>))
+  source: plan (empty and all-null data)
+
+- id: empty.entity-without-facts
+  seam: empty-null
+  cells: [int64/primary-key]
+  base: shop
+  setup:
+  - INSERT INTO users VALUES (99, 50, 'US')
+  materialize: {indices: [0, 99], anchor_time: '2024-03-01'}
+  expect:
+    outcome: success
+    stage: predict
+  why: An entity with no related rows; its neighborhood is empty and its answer must still come back under its key
+  source: plan (empty and all-null data)
+
+# --- time inference -----------------------------------------------------------
+
+- id: time.date
+  seam: time
+  cells: [date32/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER ts TYPE DATE
+  expect:
+    outcome: success
+    stage: predict
+    today: orders.ts inferred as the time column
+  why: The first attempt read a date32 time column as text and refused the query
+  source: probe#3; dtypes:time:arrow_date32
+
+- id: time.timestamp-ns
+  seam: time
+  cells: [timestamp-ns/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS
+  expect:
+    outcome: success
+    stage: predict
+  why: The first attempt refused a ts[ns] time column ("Found no valid rows")
+  source: probe#2; dtypes:time:arrow_timestamp_ns
+
+- id: time.timestamp-s
+  seam: time
+  cells: [timestamp-us/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S
+  expect:
+    outcome: success
+    stage: predict
+  why: timestamp[s] is cast to us by the host; checks that conversion end to end
+  source: dtypes:time:arrow_timestamp_s; plan (type set)
+
+- id: time.timestamptz
+  seam: time
+  cells: [timestamp-us-tz/time-column]
+  base: shop
+  setup:
+  - SET TimeZone = 'America/New_York'
+  - ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ
+  expect:
+    outcome: success
+    stage: predict
+  why: A zoned time column, with a session zone other than UTC (a host fact the core must be given, not read)
+  source: dtypes:time:arrow_timestamp_utc; plan (host facts)
+
+- id: time.text-iso-date
+  seam: time
+  cells: [utf8/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER ts TYPE VARCHAR USING strftime(ts, '%Y-%m-%d')
+  expect:
+    outcome: success
+    stage: predict
+    today: orders.ts (text) inferred as the time column
+  why: Time inferred from text dates, the rule date-rules.md records
+  source: dtypes:time:text; dtypes:time:arrow_text
+
+- id: time.text-us-date
+  seam: time
+  cells: [utf8/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER ts TYPE VARCHAR USING strftime(ts, '%m/%d/%Y')
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: 'invalid timestamp field format: "01/01/2023"'
+    today: Schema.from_source infers orders.ts as the time column; the DuckDB CAST in the sampling SQL then fails
+  register: Inference accepts a format the backend's cast cannot read
+  why: A text format the Python inference reads but DuckDB's CAST does not; the inference rule and the SQL must agree
+  source: plan (text-date rules checked against the reference)
+
+- id: time.text-one-bad-value
+  seam: time
+  cells: [utf8/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders ALTER ts TYPE VARCHAR USING strftime(ts, '%Y-%m-%d')
+  - UPDATE orders SET ts = 'not a date' WHERE order_id = 5
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INTERNAL_ERROR
+    message: 'invalid timestamp field format: "not a date"'
+    today: the preview still infers orders.ts as the time column
+  register: One unreadable value fails the backend cast instead of being dropped or named
+  why: Inference over a preview against SQL over every row
+  source: plan (text-date rules)
+
+- id: time.text-declared
+  seam: time
+  cells: [utf8/time-column]
+  base: shop
+  setup:
+  - ALTER TABLE orders RENAME ts TO happened
+  - ALTER TABLE orders ALTER happened TYPE VARCHAR USING strftime(happened, '%Y-%m-%d')
+  from_source: {time_columns: {orders: happened}}
+  expect:
+    outcome: success
+    stage: predict
+  why: A time column named by the caller rather than inferred
+  source: schema.from-source options (time_columns)
+
+- id: time.feature-date-and-timestamp-with-null
+  seam: time
+  cells: [date32/feature, timestamp-us/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN NULL ELSE DATE '2020-01-01' + user_id::INTEGER END AS f_date, CASE WHEN user_id = 5 THEN NULL ELSE TIMESTAMP '2020-01-01' + to_days(user_id::INTEGER) END AS f_ts FROM users
+  expect:
+    outcome: success
+    stage: predict
+    today: both read as timestamp; users.f_date becomes the users time column, with a warning that it was chosen because its values start earliest of f_date and f_ts
+  why: Date and timestamp features with nulls; the first attempt read the date as text and refused the null timestamp; also time inference on a dimension table
+  source: probe#6; probe#7; dtypes:feature:arrow_date32; dtypes:feature:arrow_timestamp_us
+
+- id: time.feature-time-of-day
+  seam: time
+  cells: [time64/feature]
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, make_time(user_id::BIGINT, 30, 0) AS f FROM users
+  expect:
+    outcome: success
+    stage: predict
+  why: A time of day; the first attempt changed it to a refusal (frames refused it as a date today, DuckDB accepts it)
+  source: dtypes:feature:arrow_time64
+
+- id: time.feature-interval
+  seam: time
+  cells: []
+  base: shop
+  setup:
+  - CREATE OR REPLACE TABLE users AS SELECT *, to_days(user_id::INTEGER) AS f FROM users
+  expect:
+    outcome: refusal
+    stage: from_source
+    error: RuntimeError
+    code: null
+    message: unsupported data type 'month_day_nano_interval[pyarrow]' for column 'f'
+  register: Refused by type but as an unnamed RuntimeError; month_day_nano_interval is outside the type set (duration is in it)
+  why: DuckDB INTERVAL is not a duration; checks the refusal is by name
+  source: dtypes:feature:arrow_duration; plan (type set)
+
+# --- refusals -----------------------------------------------------------
+
+- id: refuse.unknown-column
+  seam: refusal
+  cells: []
+  base: shop
+  pql: PREDICT SUM(orders.cost, 0, 30, days) FOR EACH users.user_id
+  expect:
+    outcome: refusal
+    stage: materialize
+    error: StructuredDataError
+    code: INVALID_REQUEST
+  why: A PQL refusal against a source schema, before any data is read
+  source: scope-python.yaml query.validate/refuse
