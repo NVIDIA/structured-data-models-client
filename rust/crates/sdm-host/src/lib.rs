@@ -10,8 +10,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod admission;
 pub mod codec;
 pub mod zones;
 
+pub use admission::{admit, admitted_type};
 pub use codec::{CONTROL_CAP, decode, encode, encode_error, encode_warnings};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};

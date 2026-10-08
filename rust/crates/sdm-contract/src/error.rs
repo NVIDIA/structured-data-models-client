@@ -60,6 +60,9 @@ pub mod codes {
 
     /// An Arrow type outside the closed set.
     pub const UNSUPPORTED_TYPE: &str = "UNSUPPORTED_TYPE";
+    /// A value the admitted type of its column cannot hold, such as a
+    /// `timestamp[s]` past the microseconds an int64 counts.
+    pub const VALUE_OUT_OF_RANGE: &str = "VALUE_OUT_OF_RANGE";
     /// A provider answered with a schema other than the one asked for.
     pub const PROVIDER_SCHEMA_MISMATCH: &str = "PROVIDER_SCHEMA_MISMATCH";
     /// A provider's query failed.
