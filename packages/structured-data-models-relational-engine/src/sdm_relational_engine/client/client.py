@@ -134,9 +134,9 @@ def redact_url(url: str | None) -> str | None:
     r"""Strip any userinfo from ``url`` so it is safe to log or display.
 
     A URL carrying a password in its userinfo is a legal way to point the
-    client at a
-    deployment, and the credential is in the URL itself. Anywhere a URL reaches
-    a log line, an error message or a repr, it goes through here first.
+    client at a deployment, and the credential is in the URL itself.
+    Anywhere a URL reaches a log line, an error message or a repr, it goes
+    through here first.
     """
     if not url:
         return url
