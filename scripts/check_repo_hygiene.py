@@ -176,8 +176,6 @@ RETIRED_ALLOWLIST = {
             'nemotron_predict',
         }
     ),
-    # Why the engine's ported examples were removed.
-    'CHANGELOG.md': frozenset({'RelationalClient', 'client.relational('}),
     # The design rule that the model is an argument, never a method.
     'docs/about/architecture.md': frozenset({'client.relational('}),
 }
