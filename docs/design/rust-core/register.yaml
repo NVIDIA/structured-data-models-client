@@ -675,11 +675,11 @@ entries:
     timestamp zones, the host's local zone and zones named in requests; with
     pandas 3 on Linux, such a name is taken where the reference refuses it.
   cases: [T1.3]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: null
   notes: >-
-    Phase 1 decisions row E3, revised. The first version (4ce742a) resolved
+    Approved at the T1.7b check-in (2026-10-08). Phase 1 decisions row E3, revised. The first version (4ce742a) resolved
     only the canonical spelling and refused the rest, which refused input the
     reference accepts; the owner's rule is that a refusal of such input is a
     regression, so the lookup now takes every case. This entry refuses
@@ -703,11 +703,11 @@ entries:
     S0 on the core route with packed or long zero-padded date fields that
     decode to a valid date (years above 9999 stay refused, date-rules.md).
   cases: [T1.6a, T1.6b]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: null
   notes: >-
-    Phase 1 decisions E10 and H27, from the batch 2 code review. This
+    Approved by the owner at the T1.7b check-in (2026-10-08) as a temporary gap until T1.6b. Phase 1 decisions E10 and H27, from the batch 2 code review. This
     refuses input the reference accepts, so it needs the owner while it
     stands; no path switches before T1.6b removes it, and T1.6b sets this
     entry to rejected. T1.12's D8 and DT-9 cases stay diagnostic until then.
@@ -863,7 +863,7 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    From the batch 2 code review. Each remaining refusal of a type the
+    At the T1.7b check-in (2026-10-08) the owner chose to decode run_end_encoded rather than refuse it (Phase 1 decisions row E17, T1.7d). From the batch 2 code review. Each remaining refusal of a type the
     reference accepts needs the owner (P1B-1 process); T1.7c writes the
     generated list here and T1.33 marks each type reference-accepted or not,
     with a case where the inventory reaches one.
