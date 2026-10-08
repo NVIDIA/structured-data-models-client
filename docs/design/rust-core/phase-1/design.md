@@ -437,7 +437,7 @@ Written to `phase-1/evidence/`, generated from the branch's own runs wherever it
 
 ### Locked acceptance checks
 
-Locked at T1.1 and amended by the owner on 2026-10-08 (H13, and answers 3 and 5 of re-review round 2); any later change goes to the owner.
+Locked at T1.1 and amended by the owner on 2026-10-08 (H13, and answers 3 and 5 of re-review round 2), and at the T1.7b check-in (E16, check 3's floor); any later change goes to the owner.
 
 1. 1a exit, run by `gate.sh` on the reference machine: S0 green against the committed reference observations, `python-core` and `rust-host` matching them in `ref-pandas3` (validity and `StructuredDataError.code` in Python, kind and code on the core) and `python-core` equal to `python-old` in the other cells; the L1 corpus green on codes and spans; coverage `--gate S0` passing; no S0 case refuses an input the reference accepts without an owner-approved register entry.
 2. 1a exit: the seeded faults and comparator fault tests of T1.19 and the ratchet's seeded checks of T1.14 each behave as stated.

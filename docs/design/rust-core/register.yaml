@@ -865,7 +865,7 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    At the T1.7b check-in (2026-10-08) the owner chose to decode run_end_encoded rather than refuse it (Phase 1 decisions row E17, T1.7d). From the batch 2 code review. Each remaining refusal of a type the
+    At the T1.7b check-in (2026-10-08) the owner chose to decode run_end_encoded rather than refuse it (Phase 1 decisions row E17, T1.7d); the entry stays proposed for interval and union until T1.33 shows whether the reference reads them. From the batch 2 code review. Each remaining refusal of a type the
     reference accepts needs the owner (P1B-1 process); T1.7c writes the
     generated list here and T1.33 marks each type reference-accepted or not,
     with a case where the inventory reaches one.
