@@ -8,17 +8,23 @@
 ``rust/crates/sdm-contract/schema/contract.lock`` holds one line per contract
 version, ``<version> sha256:<hex> <schema file>``. This check fails when
 
-- a locked schema file no longer has its locked hash, or
-- an entry any earlier commit's lock held is missing or different now.
+- a locked schema file no longer has its locked hash,
+- an entry any earlier commit's lock held is missing or different now,
+  including the lock at the merge base with ``origin/rust-core``, which
+  holds even if the branch's own history is rewritten, or
+- an earlier lock, or the base, cannot be read.
 
 That the committed schema is the one the types generate, and that the current
 version has an entry, is checked by ``cargo test -p sdm-contract --test
 schema_lock``. Run from anywhere in the repository; it reads the full history
-of the lock file, so CI checks out every commit.
+of the lock file and the base branch, so CI checks out every commit of
+every branch; ``--base`` names another base, and the root Python test runs
+without one, since its checkout is shallow.
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import subprocess
 import sys
@@ -73,7 +79,10 @@ def check(
     for commit, text in earlier:
         try:
             then = parse_lock(text)
-        except ValueError:
+        except ValueError as error:
+            problems.append(
+                f'the lock at {commit[:12]} cannot be read: {error}'
+            )
             continue
         for version, entry in sorted(then.items()):
             if version not in now:
@@ -96,7 +105,30 @@ def _git(*args: str) -> str:
     ).stdout
 
 
-def main() -> int:
+def _base_lock(base: str) -> list[tuple[str, str]]:
+    """The lock at the merge base of HEAD and ``base``, if it has one."""
+    merge_base = _git('merge-base', 'HEAD', base).strip()
+    try:
+        _git('cat-file', '-e', f'{merge_base}:{LOCK}')
+    except subprocess.CalledProcessError:
+        return []  # the base predates the lock
+    return [(merge_base, _git('show', f'{merge_base}:{LOCK}'))]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        '--base',
+        default='origin/rust-core',
+        help='the branch whose merge base with HEAD is also checked',
+    )
+    parser.add_argument(
+        '--no-base',
+        action='store_true',
+        help='check the branch history only (a shallow checkout)',
+    )
+    args = parser.parse_args(argv)
+
     commits = _git('log', '--format=%H', '--', str(LOCK)).split()
     earlier = []
     for commit in commits:
@@ -104,6 +136,16 @@ def main() -> int:
             earlier.append((commit, _git('show', f'{commit}:{LOCK}')))
         except subprocess.CalledProcessError:
             continue  # the commit deleted the lock
+    if not args.no_base:
+        try:
+            earlier.extend(_base_lock(args.base))
+        except subprocess.CalledProcessError as error:
+            print(
+                f'contract lock: no merge base with {args.base}: '
+                f'{error.stderr.strip() or error}',
+                file=sys.stderr,
+            )
+            return 1
 
     def read_schema(name: str) -> bytes | None:
         path = REPO_ROOT / SCHEMA_DIR / name

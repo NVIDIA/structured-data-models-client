@@ -68,7 +68,7 @@ jobs:
       # The contract schema: regenerated from the types and compared with the
       # committed file, locked to the current version; and no version entry
       # rewritten across the lock's history, which is why this job checks
-      # out every commit.
+      # out every commit of every branch (the merge base with rust-core too).
       - run: cargo test -p sdm-contract --locked --test schema_lock
       - run: python3 scripts/rust_core/contract_lock.py
         working-directory: .

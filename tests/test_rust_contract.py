@@ -129,7 +129,24 @@ def _digest(body: bytes) -> str:
 
 
 def test_the_lock_check_holds_on_the_committed_lock() -> None:
-    assert _lock_module().main() == 0
+    # The checkout here may be shallow; rust-lint checks the merge base.
+    assert _lock_module().main(['--no-base']) == 0
+
+
+def test_the_lock_check_fails_without_its_base() -> None:
+    assert _lock_module().main(['--base', 'no-such-branch-for-the-lock']) == 1
+
+
+def test_the_lock_check_fails_an_unreadable_earlier_lock() -> None:
+    lock = _lock_module()
+    one = b'{"v": 1}\n'
+    entry = f'1 sha256:{_digest(one)} sdm-contract-1.json\n'
+    problems = lock.check(
+        entry,
+        [('d' * 40, 'not a lock line\n')],
+        {'sdm-contract-1.json': one}.get,
+    )
+    assert any('cannot be read' in p for p in problems), problems
 
 
 def test_the_lock_check_fails_a_rewritten_or_removed_entry() -> None:
