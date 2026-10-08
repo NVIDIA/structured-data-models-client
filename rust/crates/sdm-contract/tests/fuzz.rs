@@ -3,8 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A bounded, property-based fuzz test of the contract's decoders: any
-//! input is decoded or refused, never a panic, and every value the encoder
-//! writes reads back exactly.
+//! input is decoded or refused, never a panic, every value the encoder
+//! writes reads back exactly, and a value the decoder would refuse is not
+//! written at all.
+
+mod corpus;
 
 use arrow_buffer::i256;
 use proptest::prelude::*;
@@ -63,6 +66,56 @@ fn scalar() -> impl Strategy<Value = Scalar> {
     ]
 }
 
+/// Scalars the decoder refuses: an empty zone, a decimal precision of 0 or
+/// past its type's limit, a scale past the precision, or a value with more
+/// digits than the precision.
+fn unencodable() -> impl Strategy<Value = Scalar> {
+    prop_oneof![
+        (unit(), any::<i64>()).prop_map(|(unit, value)| Scalar::Timestamp {
+            unit,
+            zone: Some(String::new()),
+            value,
+        }),
+        (
+            prop_oneof![Just(0u8), 39u8..=u8::MAX],
+            any::<i8>(),
+            any::<i128>()
+        )
+            .prop_map(|(precision, scale, value)| Scalar::Decimal128 {
+                precision,
+                scale,
+                value,
+            }),
+        (1u8..=37, any::<i128>(), any::<bool>()).prop_map(|(p, v, negative)| {
+            // At least 10^p, so p + 1 digits; below 2 * 10^37, so it fits.
+            let floor = 10i128.pow(u32::from(p));
+            let value = floor + v.rem_euclid(floor);
+            Scalar::Decimal128 {
+                precision: p,
+                scale: 0,
+                value: if negative { -value } else { value },
+            }
+        }),
+        (1u8..=38, 1i8..=10).prop_map(|(p, over)| Scalar::Decimal128 {
+            precision: p,
+            scale: (p as i8).saturating_add(over),
+            value: 0,
+        }),
+        (prop_oneof![Just(0u8), 77u8..=u8::MAX], any::<i8>()).prop_map(|(precision, scale)| {
+            Scalar::Decimal256 {
+                precision,
+                scale,
+                value: i256::ZERO,
+            }
+        }),
+        (1u8..=75).prop_map(|p| Scalar::Decimal256 {
+            precision: p,
+            scale: 0,
+            value: i256::from_i128(10).wrapping_pow(u32::from(p)),
+        }),
+    ]
+}
+
 /// Arbitrary JSON, a few levels deep, with the contract's own keys and tags
 /// over-represented so decoding gets past the first field.
 fn json() -> impl Strategy<Value = Value> {
@@ -115,6 +168,12 @@ proptest! {
     }
 
     #[test]
+    fn no_unencodable_scalar_is_written(scalar in unencodable()) {
+        prop_assert!(scalar.validate().is_err());
+        prop_assert!(serde_json::to_string(&scalar).is_err());
+    }
+
+    #[test]
     fn any_text_decodes_or_is_refused(text in ".*") {
         let _ = serde_json::from_str::<ControlMessage>(&text);
         let _ = serde_json::from_str::<Scalar>(&text);
@@ -145,6 +204,24 @@ proptest! {
         if let Ok(back) = serde_json::from_slice::<Scalar>(&bytes) {
             let again = serde_json::to_string(&back).unwrap();
             prop_assert_eq!(serde_json::from_str::<Scalar>(&again).unwrap(), back);
+        }
+    }
+
+    #[test]
+    fn a_damaged_message_decodes_or_is_refused(
+        which in any::<prop::sample::Index>(),
+        damage in prop::collection::vec((any::<prop::sample::Index>(), any::<u8>()), 1..4),
+    ) {
+        let corpus = corpus::messages();
+        let message = &corpus[which.index(corpus.len())];
+        let mut bytes = serde_json::to_vec(message).unwrap();
+        for (at, byte) in damage {
+            let i = at.index(bytes.len());
+            bytes[i] = byte;
+        }
+        if let Ok(back) = serde_json::from_slice::<ControlMessage>(&bytes) {
+            let again = serde_json::to_string(&back).unwrap();
+            prop_assert_eq!(serde_json::from_str::<ControlMessage>(&again).unwrap(), back);
         }
     }
 }

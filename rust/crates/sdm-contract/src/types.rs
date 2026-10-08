@@ -18,6 +18,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, Detail, ErrorKind, codes};
+use crate::scalar::{
+    DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION, decimal_type_rule, zone_rule,
+};
 
 /// The unit of a timestamp, duration or time of day.
 #[derive(
@@ -50,7 +53,11 @@ pub enum IndexType {
 #[serde(deny_unknown_fields)]
 pub struct Field {
     pub name: String,
-    #[serde(rename = "type", deserialize_with = "strict_column_type")]
+    #[serde(
+        rename = "type",
+        serialize_with = "checked_column_type",
+        deserialize_with = "strict_column_type"
+    )]
     pub column_type: ColumnType,
     pub nullable: bool,
     /// Arrow field metadata, kept as it came.
@@ -240,6 +247,48 @@ impl ColumnType {
     /// named refusal. `column` names the column, with a path through nested
     /// types (`tags.item`).
     pub fn from_arrow(column: &str, data_type: &DataType) -> Result<Self, CoreError> {
+        let column_type = Self::from_arrow_unchecked(column, data_type)?;
+        // A decimal Arrow would itself refuse to build arrays of (precision
+        // 0, or past the type's limit) is outside the set too.
+        match column_type.check_own() {
+            Ok(()) => Ok(column_type),
+            Err(_) => Err(unsupported_type(column, data_type)),
+        }
+    }
+
+    /// The limits the contract puts on a type's parameters, which the
+    /// decoder enforces: a decimal's precision from 1 to 38 (`decimal128`)
+    /// or 76 (`decimal256`) and a scale no larger than it, the same rule as
+    /// a decimal scalar's; a timestamp zone, if any, not empty. Nested
+    /// fields are checked too.
+    pub fn check(&self) -> Result<(), String> {
+        self.check_own()?;
+        match self {
+            ColumnType::List { item } => item.column_type.check(),
+            ColumnType::Struct { fields } => fields.iter().try_for_each(|f| f.column_type.check()),
+            ColumnType::Map { key, value, .. } => {
+                key.column_type.check()?;
+                value.column_type.check()
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// [`ColumnType::check`] without the nested fields.
+    fn check_own(&self) -> Result<(), String> {
+        match self {
+            ColumnType::Decimal128 { precision, scale } => {
+                decimal_type_rule("decimal128", *precision, *scale, DECIMAL128_MAX_PRECISION)
+            }
+            ColumnType::Decimal256 { precision, scale } => {
+                decimal_type_rule("decimal256", *precision, *scale, DECIMAL256_MAX_PRECISION)
+            }
+            ColumnType::Timestamp { zone, .. } => zone_rule("timestamp", zone.as_deref()),
+            _ => Ok(()),
+        }
+    }
+
+    fn from_arrow_unchecked(column: &str, data_type: &DataType) -> Result<Self, CoreError> {
         use ColumnType as C;
         let unit = |u: &TimeUnit| match u {
             TimeUnit::Nanosecond => Some(Unit::Ns),
@@ -271,10 +320,12 @@ impl ColumnType {
             DataType::Utf8 => C::Utf8,
             DataType::Binary => C::Binary,
             DataType::Date32 => C::Date32,
+            // Arrow reads an empty zone as no zone (Schema.fbs), and so does
+            // the set.
             DataType::Timestamp(u, zone) => match unit(u) {
                 Some(unit) => C::Timestamp {
                     unit,
-                    zone: zone.as_deref().map(str::to_owned),
+                    zone: zone.as_deref().filter(|z| !z.is_empty()).map(str::to_owned),
                 },
                 None => return refuse(),
             },
@@ -428,7 +479,8 @@ impl Field {
 
 /// Reads a [`ColumnType`], refusing fields a unit variant does not have,
 /// which serde's `deny_unknown_fields` lets through for internally tagged
-/// unit variants.
+/// unit variants, and parameters outside the limits of
+/// [`ColumnType::check`].
 pub(crate) fn strict_column_type<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<ColumnType, D::Error> {
@@ -445,7 +497,23 @@ pub(crate) fn strict_column_type<'de, D: serde::Deserializer<'de>>(
             )));
         }
     }
-    serde_json::from_value(Value::Object(map)).map_err(D::Error::custom)
+    let column_type: ColumnType =
+        serde_json::from_value(Value::Object(map)).map_err(D::Error::custom)?;
+    // Nested fields were read through this function already.
+    column_type.check_own().map_err(D::Error::custom)?;
+    Ok(column_type)
+}
+
+/// Writes a [`ColumnType`], failing for parameters outside the limits of
+/// [`ColumnType::check`], so the encoder never writes what
+/// [`strict_column_type`] refuses.
+pub(crate) fn checked_column_type<S: serde::Serializer>(
+    column_type: &ColumnType,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    // Nested fields are written through this function too.
+    column_type.check_own().map_err(serde::ser::Error::custom)?;
+    column_type.serialize(serializer)
 }
 
 /// The refusal of an Arrow type outside the set, naming the column and the

@@ -203,6 +203,11 @@ fn malformed_and_overflowing_values_are_refused() {
         r#"{"t":"f64","v":"Infinity"}"#,
         r#"{"t":"f64","v":"nan"}"#,
         r#"{"t":"f64","v":1.5}"#,
+        // Finite text that rounds to infinity is no float's text.
+        r#"{"t":"f64","v":"1e400"}"#,
+        r#"{"t":"f64","v":"-1e309"}"#,
+        r#"{"t":"f32","v":"1e39"}"#,
+        r#"{"t":"f32","v":"-3.5e38"}"#,
         r#"{"t":"d128","p":39,"s":0,"v":"1"}"#,
         r#"{"t":"d128","p":0,"s":0,"v":"0"}"#,
         r#"{"t":"d128","p":5,"s":6,"v":"1"}"#,
@@ -222,5 +227,97 @@ fn malformed_and_overflowing_values_are_refused() {
             serde_json::from_str::<Scalar>(text).is_err(),
             "{text} was accepted"
         );
+    }
+}
+
+#[test]
+fn the_widest_finite_floats_are_kept() {
+    for (text, want) in [
+        (
+            r#"{"t":"f64","v":"1.7976931348623157e308"}"#,
+            Scalar::Float64(f64::MAX),
+        ),
+        (
+            r#"{"t":"f32","v":"3.4028235e38"}"#,
+            Scalar::Float32(f32::MAX),
+        ),
+        (
+            r#"{"t":"f32","v":"-3.4028235e38"}"#,
+            Scalar::Float32(f32::MIN),
+        ),
+        (
+            r#"{"t":"f64","v":"-inf"}"#,
+            Scalar::Float64(f64::NEG_INFINITY),
+        ),
+        (r#"{"t":"f32","v":"inf"}"#, Scalar::Float32(f32::INFINITY)),
+    ] {
+        assert_eq!(
+            serde_json::from_str::<Scalar>(text).unwrap(),
+            want,
+            "{text}"
+        );
+    }
+}
+
+/// Values a `Scalar` can hold that the decoder refuses.
+fn unencodable() -> Vec<Scalar> {
+    vec![
+        Scalar::Timestamp {
+            unit: Unit::Us,
+            zone: Some(String::new()),
+            value: 0,
+        },
+        Scalar::Decimal128 {
+            precision: 0,
+            scale: 0,
+            value: 0,
+        },
+        Scalar::Decimal128 {
+            precision: 39,
+            scale: 0,
+            value: 1,
+        },
+        Scalar::Decimal128 {
+            precision: 5,
+            scale: 6,
+            value: 1,
+        },
+        Scalar::Decimal128 {
+            precision: 2,
+            scale: 0,
+            value: 100,
+        },
+        Scalar::Decimal128 {
+            precision: 2,
+            scale: 0,
+            value: -100,
+        },
+        Scalar::Decimal256 {
+            precision: 0,
+            scale: 0,
+            value: i256::ZERO,
+        },
+        Scalar::Decimal256 {
+            precision: 77,
+            scale: 0,
+            value: i256::ONE,
+        },
+        Scalar::Decimal256 {
+            precision: 3,
+            scale: 0,
+            value: i256::from_i128(1000),
+        },
+    ]
+}
+
+#[test]
+fn the_encoder_refuses_what_the_decoder_refuses() {
+    for scalar in unencodable() {
+        assert!(scalar.validate().is_err(), "{scalar:?} validated");
+        let err = serde_json::to_string(&scalar).unwrap_err();
+        assert!(!err.to_string().is_empty());
+    }
+    for (_, scalar) in edges() {
+        scalar.validate().unwrap();
     }
 }

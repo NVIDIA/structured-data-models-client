@@ -167,6 +167,107 @@ fn a_field_refuses_fields_its_type_does_not_have() {
 }
 
 #[test]
+fn type_parameters_outside_the_limits_are_refused() {
+    let good = [
+        r#"{"type":"decimal128","precision":1,"scale":0}"#,
+        r#"{"type":"decimal128","precision":38,"scale":38}"#,
+        r#"{"type":"decimal128","precision":10,"scale":-3}"#,
+        r#"{"type":"decimal256","precision":76,"scale":0}"#,
+        r#"{"type":"timestamp","unit":"us","zone":"UTC"}"#,
+        r#"{"type":"timestamp","unit":"us","zone":null}"#,
+    ];
+    let bad = [
+        r#"{"type":"decimal128","precision":0,"scale":0}"#,
+        r#"{"type":"decimal128","precision":39,"scale":0}"#,
+        r#"{"type":"decimal128","precision":5,"scale":6}"#,
+        r#"{"type":"decimal256","precision":0,"scale":0}"#,
+        r#"{"type":"decimal256","precision":77,"scale":0}"#,
+        r#"{"type":"decimal256","precision":3,"scale":4}"#,
+        r#"{"type":"timestamp","unit":"us","zone":""}"#,
+        // Nested: a list item and a struct child.
+        r#"{"type":"list","item":{"name":"item","type":{"type":"decimal128","precision":0,"scale":0},"nullable":true}}"#,
+        r#"{"type":"struct","fields":[{"name":"t","type":{"type":"timestamp","unit":"ns","zone":""},"nullable":true}]}"#,
+    ];
+    let field = |t: &str| format!(r#"{{"name":"a","type":{t},"nullable":true}}"#);
+    for t in good {
+        let read: Field = serde_json::from_str(&field(t)).unwrap();
+        read.column_type.check().unwrap();
+    }
+    for t in bad {
+        assert!(
+            serde_json::from_str::<Field>(&field(t)).is_err(),
+            "{t} was accepted"
+        );
+    }
+}
+
+#[test]
+fn a_type_outside_the_limits_is_not_written() {
+    let bad = [
+        ColumnType::Decimal128 {
+            precision: 0,
+            scale: 0,
+        },
+        ColumnType::Decimal128 {
+            precision: 5,
+            scale: 6,
+        },
+        ColumnType::Decimal256 {
+            precision: 77,
+            scale: 0,
+        },
+        ColumnType::Timestamp {
+            unit: sdm_contract::Unit::Us,
+            zone: Some(String::new()),
+        },
+    ];
+    for column_type in bad {
+        assert!(column_type.check().is_err());
+        let top = Field {
+            name: "a".into(),
+            column_type: column_type.clone(),
+            nullable: true,
+            metadata: Default::default(),
+        };
+        assert!(serde_json::to_string(&top).is_err(), "{column_type:?}");
+        let nested = Field {
+            name: "l".into(),
+            column_type: ColumnType::List {
+                item: Box::new(top),
+            },
+            nullable: true,
+            metadata: Default::default(),
+        };
+        assert!(nested.column_type.check().is_err());
+        assert!(
+            serde_json::to_string(&nested).is_err(),
+            "nested {column_type:?}"
+        );
+    }
+}
+
+#[test]
+fn arrow_decimals_outside_the_limits_are_refused_and_an_empty_zone_is_none() {
+    for data_type in [
+        DataType::Decimal128(0, 0),
+        DataType::Decimal128(39, 0),
+        DataType::Decimal128(5, 6),
+        DataType::Decimal256(77, 0),
+    ] {
+        let err = ColumnType::from_arrow("d", &data_type).unwrap_err();
+        assert_eq!(err.code, codes::UNSUPPORTED_TYPE, "{data_type}");
+    }
+    let empty = DataType::Timestamp(TimeUnit::Microsecond, Some("".into()));
+    assert_eq!(
+        ColumnType::from_arrow("t", &empty).unwrap(),
+        ColumnType::Timestamp {
+            unit: sdm_contract::Unit::Us,
+            zone: None
+        }
+    );
+}
+
+#[test]
 fn the_cell_vocabulary_is_the_scope_manifests() {
     // scope.schema.json's cell id pattern lists the types in this order.
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))

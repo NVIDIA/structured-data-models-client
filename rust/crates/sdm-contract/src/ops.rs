@@ -266,7 +266,10 @@ pub struct DescribedTable {
 pub struct DescribedColumn {
     pub name: String,
     /// The type the provider handed over, after admission.
-    #[serde(deserialize_with = "crate::types::strict_column_type")]
+    #[serde(
+        serialize_with = "crate::types::checked_column_type",
+        deserialize_with = "crate::types::strict_column_type"
+    )]
     pub received: ColumnType,
     pub dtype: Dtype,
     pub stype: Stype,

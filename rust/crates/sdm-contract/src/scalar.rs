@@ -287,7 +287,24 @@ fn int<T: std::str::FromStr>(tag: &str, text: &Digits) -> Result<T, ScalarError>
         .map_err(|_| ScalarError(format!("{tag}: {} does not fit", text.0)))
 }
 
-fn float<T: std::str::FromStr>(tag: &str, text: &FloatText) -> Result<T, ScalarError> {
+/// The float widths, for the overflow check.
+trait FloatValue: std::str::FromStr {
+    fn is_infinite(&self) -> bool;
+}
+
+impl FloatValue for f32 {
+    fn is_infinite(&self) -> bool {
+        f32::is_infinite(*self)
+    }
+}
+
+impl FloatValue for f64 {
+    fn is_infinite(&self) -> bool {
+        f64::is_infinite(*self)
+    }
+}
+
+fn float<T: FloatValue>(tag: &str, text: &FloatText) -> Result<T, ScalarError> {
     let s = text.0.as_str();
     let finite = {
         let body = s.strip_prefix('-').unwrap_or(s);
@@ -307,8 +324,15 @@ fn float<T: std::str::FromStr>(tag: &str, text: &FloatText) -> Result<T, ScalarE
     if !(finite || matches!(s, "NaN" | "inf" | "-inf")) {
         return Err(ScalarError(format!("{tag}: {s:?} is not a float's text")));
     }
-    s.parse()
-        .map_err(|_| ScalarError(format!("{tag}: {s:?} is not a float's text")))
+    let value: T = s
+        .parse()
+        .map_err(|_| ScalarError(format!("{tag}: {s:?} is not a float's text")))?;
+    // Finite text that rounds to infinity at this width is no float's text:
+    // the encoder writes `inf` for an infinite value.
+    if finite && value.is_infinite() {
+        return Err(ScalarError(format!("{tag}: {s:?} overflows the type")));
+    }
+    Ok(value)
 }
 
 /// The number of decimal digits of `|value|`, for the precision check.
@@ -316,17 +340,30 @@ fn digit_count(text: &str) -> usize {
     text.trim_start_matches('-').len()
 }
 
-fn decimal_shape(tag: &str, p: u8, s: i8, max: u8, v: &Digits) -> Result<(), ScalarError> {
+/// The precision and scale rule a decimal type and a decimal scalar share:
+/// precision from 1 to `max`, and a scale no larger than the precision. A
+/// negative scale is Arrow's, and is kept.
+pub(crate) fn decimal_type_rule(tag: &str, p: u8, s: i8, max: u8) -> Result<(), String> {
     if p == 0 || p > max {
-        return Err(ScalarError(format!(
-            "{tag}: precision {p} is outside 1 to {max}"
-        )));
+        return Err(format!("{tag}: precision {p} is outside 1 to {max}"));
     }
     if i16::from(s) > i16::from(p) {
-        return Err(ScalarError(format!(
-            "{tag}: scale {s} exceeds precision {p}"
-        )));
+        return Err(format!("{tag}: scale {s} exceeds precision {p}"));
     }
+    Ok(())
+}
+
+/// The zone rule a timestamp type and a timestamp scalar share: a zone, if
+/// any, is not empty.
+pub(crate) fn zone_rule(tag: &str, zone: Option<&str>) -> Result<(), String> {
+    match zone {
+        Some("") => Err(format!("{tag}: the zone is empty")),
+        _ => Ok(()),
+    }
+}
+
+fn decimal_shape(tag: &str, p: u8, s: i8, max: u8, v: &Digits) -> Result<(), ScalarError> {
+    decimal_type_rule(tag, p, s, max).map_err(ScalarError)?;
     if digit_count(&v.0) > usize::from(p) {
         return Err(ScalarError(format!(
             "{tag}: {} has more than {p} digits",
@@ -383,9 +420,7 @@ impl TryFrom<ScalarWire> for Scalar {
             ),
             W::Date32 { v } => S::Date32(int("date32", &v)?),
             W::Ts { unit, zone, v } => {
-                if zone.as_deref() == Some("") {
-                    return Err(ScalarError("ts: the zone is empty".into()));
-                }
+                zone_rule("ts", zone.as_deref()).map_err(ScalarError)?;
                 S::Timestamp {
                     unit,
                     zone,
@@ -404,9 +439,22 @@ impl TryFrom<ScalarWire> for Scalar {
     }
 }
 
+impl Scalar {
+    /// Whether the decoder would read this value back: a decimal's precision
+    /// and scale within its type's limits and its value within the
+    /// precision, and a timestamp's zone not empty. Encoding a value that
+    /// fails this fails, so the encoder never writes what the decoder
+    /// refuses.
+    pub fn validate(&self) -> Result<(), ScalarError> {
+        Scalar::try_from(ScalarWire::from(self.clone())).map(|_| ())
+    }
+}
+
 impl Serialize for Scalar {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        ScalarWire::from(self.clone()).serialize(serializer)
+        let wire = ScalarWire::from(self.clone());
+        Scalar::try_from(wire.clone()).map_err(serde::ser::Error::custom)?;
+        wire.serialize(serializer)
     }
 }
 
