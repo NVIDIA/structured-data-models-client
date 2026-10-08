@@ -19,18 +19,20 @@ pub mod data;
 pub mod error;
 pub mod facts;
 pub mod ops;
+pub mod pql;
 pub mod run;
 pub mod scalar;
 pub mod types;
 
 pub use error::{CoreError, CoreWarning, Detail, ErrorKind, codes};
 pub use facts::HostFacts;
+pub use pql::{VALIDATED_QUERY_VERSION, ValidatedQuery, validated_query_schema_json};
 pub use run::{ControlMessage, Step};
 pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 1;
+pub const CONTRACT_VERSION: u32 = 2;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline.

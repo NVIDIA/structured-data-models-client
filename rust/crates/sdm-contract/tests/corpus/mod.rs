@@ -177,7 +177,12 @@ pub fn messages() -> Vec<ControlMessage> {
                     code: "UNKNOWN_COLUMN".into(),
                     message: "no column".into(),
                     severity: Severity::Error,
-                    span: Some(Span { start: 8, end: 17 }),
+                    span: Some(Span {
+                        start_row: 1,
+                        start_col: 8,
+                        end_row: 1,
+                        end_col: 17,
+                    }),
                 }],
             }),
         }),

@@ -254,7 +254,12 @@ fn features() -> QueryFeatures {
     QueryFeatures {
         tables: BTreeSet::from(["users".to_owned()]),
         entity_table: "users".into(),
-        target_span: Some(Span { start: 8, end: 17 }),
+        target_span: Some(Span {
+            start_row: 1,
+            start_col: 8,
+            end_row: 1,
+            end_col: 17,
+        }),
         ..QueryFeatures::default()
     }
 }
@@ -315,6 +320,14 @@ fn each_missing_capability_gives_its_code_in_order() {
     let diagnostics = check_capabilities(&features(), &Profile::named(ProfileName::Timeseries));
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].code, model::MODEL_NO_STATIC_TARGET);
-    assert_eq!(diagnostics[0].span, Some(Span { start: 8, end: 17 }));
+    assert_eq!(
+        diagnostics[0].span,
+        Some(Span {
+            start_row: 1,
+            start_col: 8,
+            end_row: 1,
+            end_col: 17
+        })
+    );
     assert!(diagnostics[0].message.contains("a time-series model"));
 }

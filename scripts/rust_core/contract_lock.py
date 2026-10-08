@@ -6,7 +6,9 @@
 """The contract lock check: existing version entries are never rewritten.
 
 ``rust/crates/sdm-contract/schema/contract.lock`` holds one line per contract
-version, ``<version> sha256:<hex> <schema file>``. This check fails when
+version, ``<version> sha256:<hex> <schema file>``, and ``validated-query.lock``
+beside it the same for the PQL validated-query format, which is versioned on
+its own. For each lock, this check fails when
 
 - a locked schema file no longer has its locked hash,
 - an entry any earlier commit's lock held is missing or different now,
@@ -14,9 +16,9 @@ version, ``<version> sha256:<hex> <schema file>``. This check fails when
   holds even if the branch's own history is rewritten, or
 - an earlier lock, or the base, cannot be read.
 
-That the committed schema is the one the types generate, and that the current
-version has an entry, is checked by ``cargo test -p sdm-contract --test
-schema_lock``. Run from anywhere in the repository; it reads the full history
+That each committed schema is the one the types generate, and that each
+current version has an entry, is checked by ``cargo test -p sdm-contract
+--test schema_lock``. Run from anywhere in the repository; it reads the full history
 of the lock file and the base branch, so CI checks out every commit of
 every branch; ``--base`` names another base, and the root Python test runs
 without one, since its checkout is shallow.
@@ -34,6 +36,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_DIR = Path('rust/crates/sdm-contract/schema')
 LOCK = SCHEMA_DIR / 'contract.lock'
+LOCKS = (LOCK, SCHEMA_DIR / 'validated-query.lock')
 
 Entries = dict[int, tuple[str, str]]
 
@@ -74,7 +77,7 @@ def check(
         elif hashlib.sha256(body).hexdigest() != digest:
             problems.append(
                 f'version {version}: {name} no longer has its locked hash; '
-                f'a schema change needs a new contract version'
+                f'a schema change needs a new version'
             )
     for commit, text in earlier:
         try:
@@ -105,14 +108,14 @@ def _git(*args: str) -> str:
     ).stdout
 
 
-def _base_lock(base: str) -> list[tuple[str, str]]:
+def _base_lock(base: str, lock: Path) -> list[tuple[str, str]]:
     """The lock at the merge base of HEAD and ``base``, if it has one."""
     merge_base = _git('merge-base', 'HEAD', base).strip()
     try:
-        _git('cat-file', '-e', f'{merge_base}:{LOCK}')
+        _git('cat-file', '-e', f'{merge_base}:{lock}')
     except subprocess.CalledProcessError:
         return []  # the base predates the lock
-    return [(merge_base, _git('show', f'{merge_base}:{LOCK}'))]
+    return [(merge_base, _git('show', f'{merge_base}:{lock}'))]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -129,39 +132,50 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    commits = _git('log', '--format=%H', '--', str(LOCK)).split()
+    failed = False
+    for lock in LOCKS:
+        failed |= _check_lock(lock, args.base, args.no_base)
+    return 1 if failed else 0
+
+
+def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
+    """Checks one lock; whether it failed."""
+    commits = _git('log', '--format=%H', '--', str(lock)).split()
     earlier = []
     for commit in commits:
         try:
-            earlier.append((commit, _git('show', f'{commit}:{LOCK}')))
+            earlier.append((commit, _git('show', f'{commit}:{lock}')))
         except subprocess.CalledProcessError:
             continue  # the commit deleted the lock
-    if not args.no_base:
+    if not no_base:
         try:
-            earlier.extend(_base_lock(args.base))
+            earlier.extend(_base_lock(base, lock))
         except subprocess.CalledProcessError as error:
             print(
-                f'contract lock: no merge base with {args.base}: '
+                f'{lock.name}: no merge base with {base}: '
                 f'{error.stderr.strip() or error}',
                 file=sys.stderr,
             )
-            return 1
+            return True
 
     def read_schema(name: str) -> bytes | None:
         path = REPO_ROOT / SCHEMA_DIR / name
         return path.read_bytes() if path.is_file() else None
 
-    current = (REPO_ROOT / LOCK).read_text(encoding='utf-8')
+    path = REPO_ROOT / lock
+    current = path.read_text(encoding='utf-8') if path.is_file() else ''
     problems = check(current, earlier, read_schema)
+    if not current and not problems:
+        problems = [f'{lock} is missing']
     for problem in problems:
-        print(f'contract lock: {problem}', file=sys.stderr)
+        print(f'{lock.name}: {problem}', file=sys.stderr)
     if problems:
-        return 1
+        return True
     print(
-        f'contract lock: {len(parse_lock(current))} version(s) locked, '
+        f'{lock.name}: {len(parse_lock(current))} version(s) locked, '
         f'none rewritten across {len(earlier)} earlier lock(s)'
     )
-    return 0
+    return False
 
 
 if __name__ == '__main__':

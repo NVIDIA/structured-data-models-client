@@ -2,24 +2,55 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The contract schema's regeneration and lock checks.
+//! The regeneration and lock checks of the two versioned schemas: the
+//! contract's (`contract.lock`) and the PQL validated-query format's
+//! (`validated-query.lock`).
 //!
 //! `SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated`
-//! writes the schema of the current version and adds its lock entry; it
+//! writes the schema of each current version and adds its lock entry; it
 //! refuses to rewrite an entry that exists. That entries never change across
 //! history is checked by `scripts/rust_core/contract_lock.py`.
 
 use std::path::{Path, PathBuf};
 
-use sdm_contract::{CONTRACT_VERSION, schema_json};
+use sdm_contract::{
+    CONTRACT_VERSION, VALIDATED_QUERY_VERSION, schema_json, validated_query_schema_json,
+};
 use sha2::{Digest, Sha256};
+
+/// One versioned schema and its lock.
+struct Format {
+    /// The schema file's name before `-<version>.json`.
+    prefix: &'static str,
+    lock: &'static str,
+    version: u32,
+    generate: fn() -> String,
+}
+
+const CONTRACT: Format = Format {
+    prefix: "sdm-contract",
+    lock: "contract.lock",
+    version: CONTRACT_VERSION,
+    generate: schema_json,
+};
+
+const VALIDATED_QUERY: Format = Format {
+    prefix: "pql-validated-query",
+    lock: "validated-query.lock",
+    version: VALIDATED_QUERY_VERSION,
+    generate: validated_query_schema_json,
+};
+
+const FORMATS: [Format; 2] = [CONTRACT, VALIDATED_QUERY];
 
 fn schema_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("schema")
 }
 
-fn schema_file(version: u32) -> String {
-    format!("sdm-contract-{version}.json")
+impl Format {
+    fn schema_file(&self, version: u32) -> String {
+        format!("{}-{version}.json", self.prefix)
+    }
 }
 
 fn sha256(text: &str) -> String {
@@ -53,21 +84,23 @@ fn parse_lock(text: &str) -> Result<Vec<(u32, String, String)>, String> {
     Ok(entries)
 }
 
-/// Checks that the current version is locked to `schema`.
-fn verify(schema: &str, lock: &str, version: u32) -> Result<(), String> {
+/// Checks that `version` of `format` is locked to `schema`.
+fn verify(format: &Format, schema: &str, lock: &str, version: u32) -> Result<(), String> {
     let entries = parse_lock(lock)?;
     let Some((_, hash, file)) = entries.iter().find(|(v, _, _)| *v == version) else {
         return Err(format!(
-            "contract version {version} has no lock entry; a schema change needs a version bump and a new entry"
+            "{} version {version} has no lock entry; a schema change needs a version bump and a new entry",
+            format.prefix
         ));
     };
-    if *file != schema_file(version) {
+    if *file != format.schema_file(version) {
         return Err(format!("version {version} is locked to {file}"));
     }
     if *hash != sha256(schema) {
         return Err(format!(
-            "the schema of contract version {version} differs from its lock entry; \
-             bump CONTRACT_VERSION and add an entry instead of changing a locked version"
+            "the schema of {} version {version} differs from its lock entry; \
+             bump the version and add an entry instead of changing a locked version",
+            format.prefix
         ));
     }
     Ok(())
@@ -77,65 +110,87 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-#[test]
-fn the_committed_schema_is_the_generated_one() {
-    let generated = schema_json();
-    let path = schema_dir().join(schema_file(CONTRACT_VERSION));
-    if std::env::var_os("SDM_CONTRACT_WRITE").is_some() {
-        let lock_path = schema_dir().join("contract.lock");
-        let lock = std::fs::read_to_string(&lock_path).unwrap_or_default();
-        let entries = parse_lock(&lock).unwrap();
-        if let Some((_, hash, _)) = entries.iter().find(|(v, _, _)| *v == CONTRACT_VERSION) {
-            assert_eq!(
-                *hash,
-                sha256(&generated),
-                "version {CONTRACT_VERSION} is locked; bump CONTRACT_VERSION instead"
-            );
+/// Writes the schema of `format`'s current version and adds its lock
+/// entry, refusing to rewrite one that exists.
+fn write(format: &Format, generated: &str) {
+    let lock_path = schema_dir().join(format.lock);
+    let lock = std::fs::read_to_string(&lock_path).unwrap_or_default();
+    let entries = parse_lock(&lock).unwrap();
+    if let Some((_, hash, _)) = entries.iter().find(|(v, _, _)| *v == format.version) {
+        assert_eq!(
+            *hash,
+            sha256(generated),
+            "{} version {} is locked; bump the version instead",
+            format.prefix,
+            format.version
+        );
+    } else {
+        let mut lock = if lock.is_empty() {
+            format!(
+                "# The {} schema lock: one line per version, never rewritten.\n",
+                format.prefix
+            )
         } else {
-            let mut lock = if lock.is_empty() {
-                "# The contract schema lock: one line per contract version, never rewritten.\n"
-                    .to_owned()
-            } else {
-                lock
-            };
-            lock.push_str(&format!(
-                "{CONTRACT_VERSION} sha256:{} {}\n",
-                sha256(&generated),
-                schema_file(CONTRACT_VERSION)
-            ));
-            std::fs::write(&lock_path, lock).unwrap();
-        }
-        std::fs::write(&path, &generated).unwrap();
+            lock
+        };
+        lock.push_str(&format!(
+            "{} sha256:{} {}\n",
+            format.version,
+            sha256(generated),
+            format.schema_file(format.version)
+        ));
+        std::fs::write(&lock_path, lock).unwrap();
     }
-    assert!(
-        read(&path) == generated,
-        "{} differs from the schema the types generate; regenerate it with \
-         SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated",
-        path.display()
-    );
+    std::fs::write(
+        schema_dir().join(format.schema_file(format.version)),
+        generated,
+    )
+    .unwrap();
+}
+
+#[test]
+fn the_committed_schemas_are_the_generated_ones() {
+    for format in &FORMATS {
+        let generated = (format.generate)();
+        if std::env::var_os("SDM_CONTRACT_WRITE").is_some() {
+            write(format, &generated);
+        }
+        let path = schema_dir().join(format.schema_file(format.version));
+        assert!(
+            read(&path) == generated,
+            "{} differs from the schema the types generate; regenerate it with \
+             SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated",
+            path.display()
+        );
+    }
 }
 
 #[test]
 fn every_locked_version_matches_its_committed_schema() {
-    let lock = read(&schema_dir().join("contract.lock"));
-    let entries = parse_lock(&lock).unwrap();
-    assert!(entries.iter().any(|(v, _, _)| *v == CONTRACT_VERSION));
-    for (version, _, file) in &entries {
-        let schema = read(&schema_dir().join(file));
-        verify(&schema, &lock, *version).unwrap();
+    for format in &FORMATS {
+        let lock = read(&schema_dir().join(format.lock));
+        let entries = parse_lock(&lock).unwrap();
+        assert!(entries.iter().any(|(v, _, _)| *v == format.version));
+        for (version, _, file) in &entries {
+            let schema = read(&schema_dir().join(file));
+            verify(format, &schema, &lock, *version).unwrap();
+        }
     }
 }
 
 #[test]
 fn a_schema_change_without_a_version_bump_fails() {
-    let lock = read(&schema_dir().join("contract.lock"));
-    let changed = schema_json().replace("\"step\"", "\"stage\"");
-    assert_ne!(changed, schema_json());
-    let err = verify(&changed, &lock, CONTRACT_VERSION).unwrap_err();
-    assert!(err.contains("bump CONTRACT_VERSION"), "{err}");
-    // A bump with no entry fails too.
-    let err = verify(&changed, &lock, CONTRACT_VERSION + 1).unwrap_err();
-    assert!(err.contains("no lock entry"), "{err}");
+    for (format, word) in [(&CONTRACT, "\"step\""), (&VALIDATED_QUERY, "\"entity\"")] {
+        let lock = read(&schema_dir().join(format.lock));
+        let generated = (format.generate)();
+        let changed = generated.replace(word, "\"renamed\"");
+        assert_ne!(changed, generated);
+        let err = verify(format, &changed, &lock, format.version).unwrap_err();
+        assert!(err.contains("bump the version"), "{err}");
+        // A bump with no entry fails too.
+        let err = verify(format, &changed, &lock, format.version + 1).unwrap_err();
+        assert!(err.contains("no lock entry"), "{err}");
+    }
 }
 
 #[test]

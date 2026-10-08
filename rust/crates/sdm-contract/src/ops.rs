@@ -217,12 +217,16 @@ pub enum Severity {
     Warning,
 }
 
-/// Character offsets into the query text, end exclusive.
+/// Where in the query text a diagnostic or node is, as PQL counts it: rows
+/// from 1, columns from 0 in code points, from the first character of the
+/// first token to the first character of the last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Span {
-    pub start: u32,
-    pub end: u32,
+    pub start_row: u32,
+    pub start_col: u32,
+    pub end_row: u32,
+    pub end_col: u32,
 }
 
 // --- describe_source --------------------------------------------------------------

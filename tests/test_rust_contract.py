@@ -182,7 +182,7 @@ def test_the_lock_check_fails_a_schema_changed_without_a_bump() -> None:
     problems = lock.check(
         entry, [], {'sdm-contract-1.json': b'{"v": 1, "y": 0}\n'}.get
     )
-    assert any('needs a new contract version' in p for p in problems)
+    assert any('needs a new version' in p for p in problems)
     assert lock.check(entry, [], {}.get) == [
         'version 1: sdm-contract-1.json is missing'
     ]

@@ -1,2 +1,3 @@
 # The contract schema lock: one line per contract version, never rewritten.
 1 sha256:fc6d7456b5351e959dde506be889d88b047ad0a2e1265a1617f2ad136882febe sdm-contract-1.json
+2 sha256:aa9486dcbea2465ba84c8760405568f86dc29bbaae0287171cd5b9d90697444d sdm-contract-2.json
