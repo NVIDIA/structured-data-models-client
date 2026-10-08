@@ -8,7 +8,7 @@ A task's checks are active from the moment it lands, as listed in the design's t
 | Task | Half | Status | Evidence | Notes |
 |---|---|---|---|---|
 | T1.1 Phase documents and locked checks | 1a | done | Reviews R1 to R3 (subagent and Codex), design at ec37923 | Third, targeted review round, then implementation proceeds on the orchestrator decisions in [decisions.md](decisions.md); the owner confirms them later (D1) |
-| T1.2 Workspace scaffold | 1a | not started | | Resolve the untracked root `uv.lock` first |
+| T1.2 Workspace scaffold | 1a | done | c682f13, 3f38423, 8b9d5a4, e274372; CI run 37745535713 green: `rust-lint` (fmt, clippy `-D warnings`), `rust-deny` (advisories, bans, licenses, sources ok), `rust-test` (empty crates), existing jobs unchanged; hygiene covers `.rs` | The untracked root `uv.lock` was already gone and is now ignored; two pyo3 0.28 advisories ignored under E1; licences ISC, BSD-3-Clause and Zlib added (ASF category A) and the CDLA-Permissive-2.0 of `webpki-roots` allowed for that crate only (a build dependency of the test host's DuckDB); Rust jobs pin third-party actions by commit, as the organisation's allow list requires; a cold-cache `rust-lint` or `rust-test` takes about 20 minutes, mostly the bundled DuckDB build |
 | T1.3 Zone and calendar vectors | 1a | not started | | |
 | T1.4 `sdm-contract` types, schema and lock | 1a | not started | | |
 | T1.5 `sdm-core` Run state machine | 1a | not started | | |
