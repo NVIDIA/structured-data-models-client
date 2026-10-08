@@ -26,8 +26,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install --upgrade pip 'ruff==0.16.*'
@@ -37,8 +37,8 @@ jobs:
   hygiene:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: python scripts/check_repo_hygiene.py all
@@ -46,8 +46,8 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       # The engine needs its runtime dependencies present to be checked at all,
@@ -96,8 +96,8 @@ jobs:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       # databricks is here for its driver, not for a server: those tests mock
@@ -133,8 +133,8 @@ jobs:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
@@ -172,8 +172,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
@@ -211,7 +211,7 @@ jobs:
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
       # and twine refuses anything that is not a distribution.
       - run: pip install --upgrade twine && twine check dist/*.whl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels
           path: dist/
@@ -224,11 +224,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheels
           path: dist
@@ -269,11 +269,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: wheels
           path: dist
@@ -284,7 +284,7 @@ jobs:
             "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: dist/sbom.cyclonedx.json

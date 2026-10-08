@@ -253,11 +253,12 @@ def test_each_step_moves_the_window_by_its_own_span():
 def test_a_forecast_step_is_the_window_question_asked_on_its_own():
     """Step one of a forecast is the plain question, and so reads against it.
 
-    The AdventureWorks notebook asks a 30 day demand question with an ensemble
-    and the same question forecast three windows out. Its first step can only
-    be read against the plain answer if the two requests are the same, so the
-    ensemble has to reach every step and nothing else may differ. Each later
-    step moves the window along and changes nothing else.
+    The AdventureWorks notebook asks a 30 day demand question and the same
+    question forecast three windows out. Its first step can only be read
+    against the plain answer if the two requests are the same, so an inference
+    config the caller set, here an ensemble, has to reach every step and
+    nothing else may differ. Each later step moves the window along and
+    changes nothing else.
     """
     pytest.importorskip('sdm_relational_engine')
     graph = shop()

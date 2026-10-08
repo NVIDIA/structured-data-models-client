@@ -5,6 +5,14 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
+## Unreleased
+
+### Fixed
+
+- A `KumoRelational` request sends `inference.inference_config` only with the
+  options the caller set, and omits it otherwise. Sending the engine's defaults
+  on every request made SDM-backed deployments refuse every relational request.
+
 ## 1.0.0 - 2026-10-06
 
 The first release. All five distributions declare `1.0.0` and are published
