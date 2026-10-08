@@ -10,12 +10,12 @@
 //! them, with the version it read for each; nothing here reads the
 //! environment or asks `jiff` for its global database.
 //!
-//! Names are matched exactly: a zone resolves only under its canonical
-//! spelling, the one [`TimeZone::iana_name`] gives, so `america/new_york`
-//! and `utc` are refused even though `jiff`'s databases would find them.
-//! Python's `zoneinfo` is case-sensitive on a case-sensitive file system
-//! and not on macOS's default one; the core takes the strict reading
-//! everywhere (Phase 1 decisions, E3; register DT-8).
+//! Names are matched without regard to case, as the reference takes them
+//! (pandas reads `utc` on every platform, and pandas 2 finds
+//! `america/new_york` through pytz), and a zone found under any spelling is
+//! known by its canonical one, the IANA name [`TimeZone::iana_name`] gives:
+//! its source is recorded under that name, so two spellings of one zone are
+//! one entry (Phase 1 decisions, E3; register DT-8).
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -83,9 +83,9 @@ impl ZoneResolver {
         jiff_tzdb::VERSION
     }
 
-    /// The zone `name`, from the first root that has it under exactly that
-    /// spelling, else the bundled database; the source used is recorded
-    /// under the zone's canonical name, which is `name` itself.
+    /// The zone `name`, in any case, from the first root that has it, else
+    /// the bundled database; the source used is recorded under the zone's
+    /// canonical name, whatever spelling asked for it.
     pub fn resolve(&self, name: &str) -> Result<TimeZone, ZoneError> {
         let (zone, source) = self.lookup(name)?;
         let canonical = zone.iana_name().unwrap_or(name).to_owned();
@@ -106,23 +106,22 @@ impl ZoneResolver {
 
     fn lookup(&self, name: &str) -> Result<(TimeZone, ZoneSource), ZoneError> {
         // jiff answers these two from no database at all. UTC is fixed by
-        // definition; Etc/Unknown is jiff's own name, not an IANA zone, and
-        // Python's zoneinfo refuses it, so it is refused here too. Any other
-        // spelling of either falls through and is refused below.
-        if name == "UTC" {
+        // definition, in any case; Etc/Unknown is jiff's own name, not an
+        // IANA zone, and the reference refuses it in any case, so it is
+        // refused here too.
+        if name.eq_ignore_ascii_case("UTC") {
             return Ok((TimeZone::UTC, ZoneSource::Fixed));
         }
-        if name == "Etc/Unknown" {
+        if name.eq_ignore_ascii_case("Etc/Unknown") {
             return Err(ZoneError::Unknown {
                 name: name.to_owned(),
             });
         }
-        // jiff's databases match names without regard to case; only the
-        // canonical spelling is taken.
-        let exact = |zone: TimeZone| (zone.iana_name() == Some(name)).then_some(zone);
+        // jiff's databases match names without regard to case, and give the
+        // zone under the spelling they hold.
         for (index, (root, db)) in self.roots.iter().enumerate() {
             let Some(db) = db else { continue };
-            if let Some(zone) = db.get(name).ok().and_then(exact) {
+            if let Ok(zone) = db.get(name) {
                 let source = ZoneSource::HostRoot {
                     index,
                     path: root.path.clone(),
@@ -131,14 +130,14 @@ impl ZoneResolver {
                 return Ok((zone, source));
             }
         }
-        match self.bundled.get(name).ok().and_then(exact) {
-            Some(zone) => Ok((
+        match self.bundled.get(name) {
+            Ok(zone) => Ok((
                 zone,
                 ZoneSource::Bundled {
                     version: Self::bundled_version().map(str::to_owned),
                 },
             )),
-            None => Err(ZoneError::Unknown {
+            Err(_) => Err(ZoneError::Unknown {
                 name: name.to_owned(),
             }),
         }

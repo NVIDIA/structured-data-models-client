@@ -26,7 +26,7 @@ pub fn start(root: &CompositionRoot, start: StartRun) -> Result<Run, CoreError> 
         )
         .with_field("contract", Detail::Scalar(Scalar::UInt32(start.contract))));
     }
-    // The clock is an instant in UTC, under the zone's one spelling (E3).
+    // The clock is an instant in UTC, spelled as the contract spells it (E5).
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,

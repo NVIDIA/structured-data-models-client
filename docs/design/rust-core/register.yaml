@@ -653,32 +653,37 @@ entries:
     unifying the two rule sets would be a separate change entry.
 
 - id: DT-8
-  title: Zone names only in their canonical spelling
+  title: Zone names in any case, known by their IANA spelling
   kind: change
   old_behavior: >-
-    The reference takes some zone names in another case. pandas reads "utc"
-    as UTC on every platform; pandas 2 resolves zones through pytz, which
-    finds "america/new_york" on every platform; pandas 3 resolves them through
-    zoneinfo, which finds it on a case-insensitive file system (macOS's
-    default) and refuses it on Linux.
+    The reference takes some zone names in another case, depending on the
+    library and the platform. pandas reads "utc" as UTC on every platform;
+    pandas 2 resolves zones through pytz, which finds "america/new_york" on
+    every platform and names it America/New_York; pandas 3 resolves them
+    through zoneinfo, which finds it on a case-insensitive file system
+    (macOS's default), keeping the spelling asked for, and refuses it on
+    Linux.
   new_behavior: >-
-    The core resolves a zone only under its canonical spelling, the IANA name
-    the database holds, and refuses any other spelling as an unknown zone on
-    every platform; "UTC" is the only spelling of UTC.
+    The core resolves a zone name in any case on every platform and knows the
+    zone by its IANA spelling, the name the database holds, as pytz does; any
+    case of "UTC" is UTC, and jiff's placeholder "Etc/Unknown" is refused in
+    any case, as the reference refuses it. Nothing the reference takes is
+    refused.
   affected_inputs: >-
     Zone names in another case wherever the core resolves a zone: Arrow
-    timestamp zones, the host's local zone and zones named in requests.
+    timestamp zones, the host's local zone and zones named in requests; with
+    pandas 3 on Linux, such a name is taken where the reference refuses it.
   cases: [T1.3]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Phase 1 decisions row E3. This refuses input the reference accepts (with
-    pandas 2 on any platform, "utc" with any pandas, and with pandas 3 on
-    macOS), so it waits for the owner (P1B-1 process); the inventory cases
-    that reach it, if any, are listed here when T1.33 runs. Recommendation:
-    approve, since the alternative is a case-insensitive lookup that differs
-    from pandas 3 on Linux, the reference's platform.
+    Phase 1 decisions row E3, revised. The first version (4ce742a) resolved
+    only the canonical spelling and refused the rest, which refused input the
+    reference accepts; the owner's rule is that a refusal of such input is a
+    regression, so the lookup now takes every case. This entry refuses
+    nothing, so it is for the independent reviewer, not the owner. The
+    inventory cases that reach it, if any, are listed here when T1.33 runs.
 
 # --- Orderings ----------------------------------------------------------------
 

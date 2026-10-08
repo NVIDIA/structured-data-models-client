@@ -158,31 +158,43 @@ fn an_unknown_zone_is_refused_by_name_and_not_recorded() {
 }
 
 #[test]
-fn only_the_canonical_spelling_resolves() {
-    // The root holds the zone, and so does the bundled database; jiff would
-    // find both under any case, and neither is taken.
+fn any_case_resolves_and_is_known_by_its_canonical_name() {
+    // The root holds New York; the bundled database holds Tokyo. jiff
+    // finds both under any case, as the reference does, and each is
+    // recorded once, under its IANA spelling.
     let only = fixture(&[("America/New_York", "America/New_York")]);
     let resolver = ZoneResolver::new([root(&only, "2026c")]);
-    for name in [
-        "america/new_york",
-        "AMERICA/NEW_YORK",
-        "utc",
-        "Utc",
-        "etc/unknown",
-    ] {
+    for name in ["america/new_york", "AMERICA/NEW_YORK", "America/New_York"] {
+        let zone = resolver.resolve(name).unwrap();
+        assert_eq!(zone.iana_name(), Some("America/New_York"), "{name}");
+        assert_eq!(summer_offset(&zone), -4 * 3600, "{name}");
+    }
+    for name in ["asia/tokyo", "Asia/Tokyo"] {
+        assert_eq!(
+            resolver.resolve(name).unwrap().iana_name(),
+            Some("Asia/Tokyo")
+        );
+    }
+    for name in ["utc", "Utc", "UTC"] {
+        assert_eq!(resolver.resolve(name).unwrap(), jiff::tz::TimeZone::UTC);
+    }
+    let sources = resolver.sources();
+    let names: Vec<&String> = sources.keys().collect();
+    assert_eq!(names, ["America/New_York", "Asia/Tokyo", "UTC"]);
+    assert!(matches!(
+        sources["America/New_York"],
+        ZoneSource::HostRoot { index: 0, .. }
+    ));
+    assert!(matches!(sources["Asia/Tokyo"], ZoneSource::Bundled { .. }));
+    assert_eq!(sources["UTC"], ZoneSource::Fixed);
+
+    // jiff's own placeholder is refused in every spelling, as the
+    // reference refuses it.
+    for name in ["Etc/Unknown", "etc/unknown", "ETC/UNKNOWN"] {
         assert_eq!(
             resolver.resolve(name).unwrap_err(),
             ZoneError::Unknown { name: name.into() },
             "{name}"
         );
     }
-    // A zone only the bundled database has is refused the same way.
-    assert!(resolver.resolve("asia/tokyo").is_err());
-    assert!(resolver.sources().is_empty());
-
-    resolver.resolve("America/New_York").unwrap();
-    resolver.resolve("Asia/Tokyo").unwrap();
-    resolver.resolve("UTC").unwrap();
-    let names: Vec<String> = resolver.sources().into_keys().collect();
-    assert_eq!(names, ["America/New_York", "Asia/Tokyo", "UTC"]);
 }
