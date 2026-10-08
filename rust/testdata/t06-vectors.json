@@ -11,6 +11,16 @@
  "reference_tzdata": "2026c",
  "reference_tzdata_note": "the expectations were taken over this version; tzdata-2026c/ holds its files for the corpus zones, copied from macOS 26.7.1 /usr/share/zoneinfo, the database the reference read",
  "bundled_tzdata_checked": "2026e",
+ "probe_sources": {
+  "note": "SHA-256 of the T0.6 probe's files, kept outside the repository (chrono-check.md), recorded in Phase 1 batch 1 review fixes from the local copy",
+  "src/main.rs": "51138d3689f40ad8ee82eff5966f635a816ff85e81c83e63dd59919b8e1623ed",
+  "examples/last_dst.rs": "a24043536dda2e4de8e3351c46133f5471e3ab3a4067bb0e31f9c03d2711afc3",
+  "gen_ref.py": "e120ea01132131ef601d27bf943bc25fc91b5f3cbbb9783200b0d2a35439defe",
+  "compare.py": "ac97d256038bc85d12f459c8f000239d679afe23dd7a08f67094299ee43d2cc3",
+  "p2_columns.py": "47093a28f86c8d7e5039fe7f23c244e23e92fb96a0399801340d1be48b3993b3",
+  "Cargo.toml": "1b148479caeefbf03d55c812ba340ea81c8241bffc36da674672715043a9354c",
+  "Cargo.lock": "f9687610b80cb8f664eb664d37277614dcb44c3e81853794a674cc1e9e0dbd35"
+ },
  "chrono": {
   "chrono": "0.4.45",
   "chrono_tz_tzdb": "2025b",

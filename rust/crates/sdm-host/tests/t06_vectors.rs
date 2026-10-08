@@ -100,26 +100,64 @@ fn zone_answer(resolver: &ZoneResolver, task: &Value) -> Value {
     }
 }
 
-/// The reference's answer, with the exception class it raised reduced to
-/// "refused", which is what is promised.
-fn refused_or(answer: &Value) -> Value {
-    if answer.get("error").is_some() {
-        json!("refused")
-    } else {
-        answer.clone()
+/// The refusals of the corpus, by kind. The reference raised `ValueError`
+/// for both, so its answer does not say which; these are read off the
+/// inputs: the spring transitions of London and Dublin, and the calendar
+/// day Samoa skipped, are gaps; their autumn transitions are folds.
+const GAPS: [&str; 7] = [
+    "l2z/Europe/London/2036-03-30 01:30",
+    "l2z/Europe/London/2087-03-30 01:30",
+    "l2z/Europe/London/2200-03-30 01:30",
+    "l2z/Europe/Dublin/2036-03-30 01:30",
+    "l2z/Europe/Dublin/2087-03-30 01:30",
+    "l2z/Europe/Dublin/2200-03-30 01:30",
+    "l2z/Pacific/Apia/2011-12-30 10:00",
+];
+const FOLDS: [&str; 6] = [
+    "l2z/Europe/London/2036-10-26 01:30",
+    "l2z/Europe/London/2087-10-26 01:30",
+    "l2z/Europe/London/2200-10-26 01:30",
+    "l2z/Europe/Dublin/2036-10-26 01:30",
+    "l2z/Europe/Dublin/2087-10-26 01:30",
+    "l2z/Europe/Dublin/2200-10-26 01:30",
+];
+
+/// The reference's answer, with a refusal named by its kind (a gap or a
+/// fold) from the lists above, so a gap answered as a fold, or the
+/// reverse, is a difference.
+fn expected(task: &Value) -> Value {
+    if task["ref"].get("error").is_none() {
+        return task["ref"].clone();
     }
+    let id = task["id"].as_str().unwrap();
+    let error = if GAPS.contains(&id) {
+        "NonExistentTimeError"
+    } else if FOLDS.contains(&id) {
+        "AmbiguousTimeError"
+    } else {
+        panic!("{id}: a refusal of the corpus is in neither list")
+    };
+    json!({ "error": error })
 }
 
 fn check_zones(resolver: &ZoneResolver) -> usize {
     let mut differences = Vec::new();
+    let mut refusals = 0;
     let tasks = tasks(&["zone_from_utc", "zone_to_utc"]);
     for task in &tasks {
         let got = zone_answer(resolver, task);
-        if refused_or(&got) != refused_or(&task["ref"]) {
-            differences.push(format!("{}: want {}, got {got}", task["id"], task["ref"]));
+        let want = expected(task);
+        refusals += usize::from(want.get("error").is_some());
+        if got != want {
+            differences.push(format!("{}: want {want}, got {got}", task["id"]));
         }
     }
     assert!(differences.is_empty(), "{differences:#?}");
+    assert_eq!(
+        refusals,
+        GAPS.len() + FOLDS.len(),
+        "every listed refusal is in the corpus"
+    );
     tasks.len()
 }
 
