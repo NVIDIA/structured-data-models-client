@@ -48,40 +48,49 @@ They pin each other by exact version and are upgraded together.
 
 ### Behaviour worth knowing before you rely on it
 
-**`materialize()` takes the model it is gathering for.** It does not infer one.
+**`materialize()` picks the model from the schema's shape unless you name
+one.** A schema sampled in place, or holding more than one table, or holding a
+relationship, is gathered relationally; anything else is tabular. Pass
+`model=` when that is not what you want.
 
 **`id` holds the key you asked about, on both models.**
 
-**A schema infers a time column by rule, not by name alone.** A timestamp
-empty in more than half the rows, or holding one value wherever it holds any,
-is never taken, nor is one named for when a row was loaded or synced, nor a
-date of birth. A last-edit stamp such as `ModifiedDate` is never taken on a
-table another table links to, and on a table nothing links to only when it is
-the one timestamp left. Of several left, a `created` stamp wins, otherwise the
-one whose values start earliest, placeholder dates such as 1900-01-01 and
-1970-01-01 ignored. Pass `time_columns=` to decide it yourself.
+**A time column is inferred by rule, not by name alone.** A timestamp empty in
+more than half the rows is not taken, nor one holding a single value wherever
+it holds any unless the table has one row, nor one named for when a row was
+loaded or synced, nor a date of birth. A last-edit stamp such as
+`ModifiedDate` is not taken on a table another table links to, and on a table
+nothing links to only when it is the one timestamp left. Of several left, a
+`created` stamp wins, otherwise the one whose values start earliest, with
+placeholder dates such as 1900-01-01 and 1970-01-01 ignored. These read the
+whole table, and a column they could not read stays a candidate. Pass
+`time_columns=` to decide it yourself.
 
-**A `DECIMAL` column travels as the number it is, and a fractional one
-rounds.** A whole-number decimal is sent as `int64`, one too wide for `int64`
-as its digits in a string, and a fractional one as `float64`, which rounds.
-Above 2**53 a float cannot hold even the integer part, so the value is refused
-rather than quietly mangled. Send the column as strings to keep a fractional
-decimal exactly.
+**A `DECIMAL` column travels as the number its type allows.** A decimal
+declared with no scale, holding whole numbers that fit, is sent as `int64`;
+one too wide for `int64` is sent as its digits in a string, which keeps every
+one of them; anything else, including a decimal whose declared scale is above
+zero, is sent as `float64`. A value a `float64` JSON reader would not read
+back exactly is refused rather than quietly rounded. Send the column as
+strings to keep a fractional decimal exactly.
 
 **A CSV or Parquet column with blanks keeps its type instead of becoming
-`float64`.** That is what stops an identifier above 2**53 being rounded on the
-way in.
+`float64`.** That is what stops an identifier past 2**53 being rounded before
+the wire rules could catch it.
 
-**`Schema.from_source` checks every key against every row**, so a schema may
-warn or raise where the keys do not hold.
+**`Schema.from_source` counts each key's repeats and missing values by
+default.** A schema that would once have been built quietly may now warn or
+raise. Pass `check_keys=False` to skip it.
 
-**A semantic model's expressions may call only standard SQL functions**,
-unless you pass `trust_expressions=True`.
+**A semantic model's expressions may call only pure, deterministic built-in
+functions, from an allowlist per dialect.** Pass `trust_expressions=True` to
+keep a column that calls anything else.
 
 **`predictive_query` is not public API.** Write predictive queries through
 `sdm_client.PredictiveQuery`.
 
-**Nothing public hands out a type that is not public.**
+**A public name hands out a public type**, bar a few exceptions recorded with
+their reasons in `tests/test_release_contract.py`, which can only shrink.
 
 ### Compatibility
 
