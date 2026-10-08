@@ -5,14 +5,6 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
-## Unreleased
-
-### Fixed
-
-- A `KumoRelational` request sends `inference.inference_config` only with the
-  options the caller set, and omits it otherwise. Sending the engine's defaults
-  on every request made SDM-backed deployments refuse every relational request.
-
 ## 1.0.0 - 2026-10-06
 
 The first release. All five distributions declare `1.0.0` and are published
@@ -447,6 +439,9 @@ together.
   `Schema.from_source(DatabricksSource(...), {'m': '<metric view>'})` read its rows like a table's, and Databricks refuses that for a measure.
   The column look-up now reads the relation's type from `information_schema` too, so a metric view is refused before any row is read, with a `StructuredDataError` (`INVALID_REQUEST`) that says to use `source.semantic_model('<metric view>')`.
   The engine raises the new `MetricViewAsTableError`, a `ValueError`, pointing to `Graph.from_databricks_metric_view`.
+- **Every `KumoRelational` request carried the engine's default `inference_config`, which SDM-backed deployments refuse.**
+  The request now sends `inference.inference_config` with the options the caller set alone, and omits it when there are none.
+  A deployment that reads the field applies the same defaults to a request that carries none.
 
 ### Behaviour worth knowing before you rely on it
 
