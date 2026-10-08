@@ -1,0 +1,4012 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+ "cases": [
+  {
+   "id": "local-sampler/sampling.neighbor_sample/validation-not-1d",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "a",
+      "b"
+     ],
+     "edge_types": [
+      [
+       "a",
+       "to",
+       "b"
+      ],
+      [
+       "b",
+       "rev_to",
+       "a"
+      ]
+     ],
+     "colptr": {
+      "a__to__b": "invalid",
+      "b__to__a": null
+     },
+     "row": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      },
+      "b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "seed": 123
+    },
+    "calls": []
+   },
+   "expected_error": {
+    "class": "builtins.RuntimeError",
+    "code": "RuntimeError",
+    "message": "Type 'a__to__b' in colptr is not 1D.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/validation-invalid-edge",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "a",
+      "b"
+     ],
+     "edge_types": [
+      [
+       "a",
+       "to",
+       "b"
+      ],
+      [
+       "b",
+       "rev_to",
+       "a"
+      ]
+     ],
+     "colptr": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "row": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      },
+      "b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "seed": 123
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "invalid": 1
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "a",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.RuntimeError",
+    "code": "RuntimeError",
+    "message": "Invalid type 'invalid' found in num_neighbors.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/validation-entity-table",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "a",
+      "b"
+     ],
+     "edge_types": [
+      [
+       "a",
+       "to",
+       "b"
+      ],
+      [
+       "b",
+       "rev_to",
+       "a"
+      ]
+     ],
+     "colptr": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "row": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      },
+      "b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "seed": 123
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "a__to__b": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3,
+          3
+         ]
+        }
+       },
+       "b__rev_to__a": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3,
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "k",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.RuntimeError",
+    "code": "RuntimeError",
+    "message": "Invalid entity table 'k'.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/validation-size-mismatch",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "a",
+      "b"
+     ],
+     "edge_types": [
+      [
+       "a",
+       "to",
+       "b"
+      ],
+      [
+       "b",
+       "rev_to",
+       "a"
+      ]
+     ],
+     "colptr": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "row": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      },
+      "b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "seed": 123
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "a__to__b": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3,
+          3
+         ]
+        }
+       },
+       "b__rev_to__a": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3,
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "a",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.RuntimeError",
+    "code": "RuntimeError",
+    "message": "'seed_node' and 'seed_time' size mismatch.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/validation-same-edge-type",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "a",
+      "b"
+     ],
+     "edge_types": [
+      [
+       "a",
+       "to",
+       "b"
+      ],
+      [
+       "b",
+       "rev_to",
+       "a"
+      ]
+     ],
+     "colptr": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         0,
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "row": {
+      "a__to__b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      },
+      "b__rev_to__a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1,
+         0
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "a": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      },
+      "b": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "seed": 123
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "a__to__b": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3,
+          3
+         ]
+        }
+       },
+       "b__rev_to__a": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3,
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {
+       "a__to__b": [
+        [
+         0,
+         5
+        ],
+        [
+         null,
+         0
+        ]
+       ]
+      },
+      "entity_table": "a",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.RuntimeError",
+    "code": "RuntimeError",
+    "message": "'sampling_time_offsets' and 'num_neighbors' may not contain the same edge type. 'a__to__b' appears in both.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/temporal",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "A",
+       "to",
+       "B"
+      ],
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "A__to__B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         2,
+         4
+        ]
+       }
+      },
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3
+        ]
+       }
+      }
+     },
+     "row": {
+      "A__to__B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         2,
+         0,
+         2
+        ]
+       }
+      },
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         0,
+         3
+        ]
+       }
+      },
+      "B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         2,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "A__to__B": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          1,
+          -1
+         ]
+        }
+       },
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          1,
+          1
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         3,
+         1,
+         3
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "A__to__B": [
+       0,
+       3,
+       4,
+       5,
+       2
+      ],
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "A__to__B": [
+       0,
+       0,
+       1,
+       2,
+       2
+      ],
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "node_id": {
+      "A": [
+       0,
+       1,
+       2,
+       2,
+       0,
+       0
+      ],
+      "B": [
+       0,
+       1,
+       1
+      ]
+     },
+     "batch": {
+      "A": [
+       0,
+       1,
+       2,
+       0,
+       1,
+       2
+      ],
+      "B": [
+       0,
+       1,
+       2
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       3,
+       0,
+       3
+      ],
+      "B": [
+       0,
+       3,
+       0
+      ]
+     },
+     "num_sampled_edges": {
+      "A__to__B": [
+       0,
+       5
+      ],
+      "B__to__A": [
+       3,
+       0
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/static",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "A",
+       "to",
+       "B"
+      ],
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "A__to__B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         2,
+         4
+        ]
+       }
+      },
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3
+        ]
+       }
+      }
+     },
+     "row": {
+      "A__to__B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         2,
+         0,
+         2
+        ]
+       }
+      },
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1
+        ]
+       }
+      }
+     },
+     "node_time": []
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "A__to__B": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          1,
+          -1
+         ]
+        }
+       },
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          1,
+          1
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "A__to__B": [
+       0,
+       3,
+       4,
+       5,
+       6,
+       2
+      ],
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "A__to__B": [
+       0,
+       0,
+       1,
+       1,
+       2,
+       2
+      ],
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "node_id": {
+      "A": [
+       0,
+       1,
+       2,
+       2,
+       0,
+       2,
+       0
+      ],
+      "B": [
+       0,
+       1,
+       1
+      ]
+     },
+     "batch": {
+      "A": [
+       0,
+       1,
+       2,
+       0,
+       1,
+       1,
+       2
+      ],
+      "B": [
+       0,
+       1,
+       2
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       3,
+       0,
+       4
+      ],
+      "B": [
+       0,
+       3,
+       0
+      ]
+     },
+     "num_sampled_edges": {
+      "A__to__B": [
+       0,
+       6
+      ],
+      "B__to__A": [
+       3,
+       0
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/temporal-range",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "A",
+       "to",
+       "B"
+      ],
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "A__to__B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         2,
+         4
+        ]
+       }
+      },
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3
+        ]
+       }
+      }
+     },
+     "row": {
+      "A__to__B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         2,
+         0,
+         2
+        ]
+       }
+      },
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         1
+        ]
+       }
+      }
+     },
+     "node_time": {
+      "A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         1,
+         0,
+         3
+        ]
+       }
+      },
+      "B": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         2,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "num_neighbors": {},
+      "sampling_time_offsets": {
+       "A__to__B": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          [
+           0,
+           1
+          ],
+          [
+           -1,
+           2
+          ]
+         ]
+        }
+       },
+       "B__to__A": [
+        [
+         null,
+         0
+        ],
+        [
+         0,
+         0
+        ]
+       ]
+      },
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         3,
+         1,
+         3
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "A__to__B": [
+       3,
+       4,
+       5,
+       2
+      ],
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "A__to__B": [
+       0,
+       1,
+       1,
+       2
+      ],
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "node_id": {
+      "A": [
+       0,
+       1,
+       2,
+       2,
+       0,
+       2
+      ],
+      "B": [
+       0,
+       1,
+       1
+      ]
+     },
+     "batch": {
+      "A": [
+       0,
+       1,
+       2,
+       0,
+       1,
+       1
+      ],
+      "B": [
+       0,
+       1,
+       2
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       3,
+       0,
+       3
+      ],
+      "B": [
+       0,
+       3,
+       0
+      ]
+     },
+     "num_sampled_edges": {
+      "A__to__B": [
+       0,
+       4
+      ],
+      "B__to__A": [
+       3,
+       0
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-0-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 0
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       4,
+       0,
+       3
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-0-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": 0
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       4,
+       0,
+       3
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-123-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 123
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       6,
+       1,
+       2
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-123-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": 123
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       6,
+       1,
+       2
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-2147483648-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 2147483648
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       2,
+       6,
+       5
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-2147483648-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": 2147483648
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       2,
+       6,
+       5
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-4294967295-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 4294967295
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       3,
+       8,
+       6
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-4294967295-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": 4294967295
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       3,
+       8,
+       6
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-4294967296-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 4294967296
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       7,
+       4,
+       6
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-4294967296-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": 4294967296
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       7,
+       4,
+       6
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-9223372036854775808-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": {
+      "$int": "9223372036854775808"
+     }
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       7,
+       2
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-9223372036854775808-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": {
+       "$int": "9223372036854775808"
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       7,
+       2
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-18446744073709551619-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": {
+      "$int": "18446744073709551619"
+     }
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       7,
+       8,
+       6
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-18446744073709551619-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": {
+       "$int": "18446744073709551619"
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       7,
+       8,
+       6
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-1000000000000000000000000000000-constructor",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": {
+      "$int": "1000000000000000000000000000000"
+     }
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       6,
+       2,
+       1
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-1000000000000000000000000000000-reseeded",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A",
+      "B"
+     ],
+     "edge_types": [
+      [
+       "B",
+       "to",
+       "A"
+      ]
+     ],
+     "colptr": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         10
+        ]
+       }
+      }
+     },
+     "row": {
+      "B__to__A": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9
+        ]
+       }
+      }
+     },
+     "node_time": {},
+     "seed": 1
+    },
+    "calls": [
+     {
+      "num_neighbors": {
+       "B__to__A": {
+        "$ndarray": {
+         "dtype": "int64",
+         "values": [
+          3
+         ]
+        }
+       }
+      },
+      "sampling_time_offsets": {},
+      "entity_table": "A",
+      "seed_node": {
+       "$ndarray": {
+        "dtype": "int64",
+        "values": [
+         0
+        ]
+       }
+      },
+      "seed_time": {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": []
+       }
+      },
+      "reseed": {
+       "$int": "1000000000000000000000000000000"
+      }
+     }
+    ]
+   },
+   "expected": [
+    {
+     "row": {
+      "B__to__A": [
+       0,
+       1,
+       2
+      ]
+     },
+     "col": {
+      "B__to__A": [
+       0,
+       0,
+       0
+      ]
+     },
+     "node_id": {
+      "A": [
+       0
+      ],
+      "B": [
+       6,
+       2,
+       1
+      ]
+     },
+     "batch": {
+      "A": [
+       0
+      ],
+      "B": [
+       0,
+       0,
+       0
+      ]
+     },
+     "num_sampled_nodes": {
+      "A": [
+       1,
+       0
+      ],
+      "B": [
+       0,
+       3
+      ]
+     },
+     "num_sampled_edges": {
+      "B__to__A": [
+       3
+      ]
+     }
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-below-c-int",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A"
+     ],
+     "edge_types": [],
+     "colptr": {},
+     "row": {},
+     "node_time": {},
+     "seed": -2147483649
+    },
+    "calls": []
+   },
+   "expected_error": {
+    "class": "builtins.TypeError",
+    "code": "TypeError",
+    "message": "a seed is an integer from -2**31 up, not -2147483649",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.neighbor_sample/seed-float",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.neighbor_sample",
+   "input": {
+    "sampler": {
+     "node_types": [
+      "A"
+     ],
+     "edge_types": [],
+     "colptr": {},
+     "row": {},
+     "node_time": {},
+     "seed": 1.5
+    },
+    "calls": []
+   },
+   "expected_error": {
+    "class": "builtins.TypeError",
+    "code": "TypeError",
+    "message": "'float' object cannot be interpreted as an integer",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/months-3-earliest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 3
+     }
+    },
+    "bound": "earliest"
+   },
+   "expected": 7257600,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/months-3-latest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 3
+     }
+    },
+    "bound": "latest"
+   },
+   "expected": 8035200,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/months--3-earliest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": -3
+     }
+    },
+    "bound": "earliest"
+   },
+   "expected": -8035200,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/months--3-latest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": -3
+     }
+    },
+    "bound": "latest"
+   },
+   "expected": -7257600,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/years-1-earliest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "years": 1
+     }
+    },
+    "bound": "earliest"
+   },
+   "expected": 31536000,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/years-1-latest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "years": 1
+     }
+    },
+    "bound": "latest"
+   },
+   "expected": 31622400,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/years--1-earliest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "years": -1
+     }
+    },
+    "bound": "earliest"
+   },
+   "expected": -31622400,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/years--1-latest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "years": -1
+     }
+    },
+    "bound": "latest"
+   },
+   "expected": -31536000,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/days-5-earliest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "days": 5
+     }
+    },
+    "bound": "earliest"
+   },
+   "expected": 432000,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_to_seconds/days-5-latest",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_to_seconds",
+   "input": {
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "days": 5
+     }
+    },
+    "bound": "latest"
+   },
+   "expected": 432000,
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-1-plus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1667260800000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 1
+     }
+    },
+    "sign": 1
+   },
+   "expected": [
+    {
+     "ns": 1669852800000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-1-minus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1667260800000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 1
+     }
+    },
+    "sign": -1
+   },
+   "expected": [
+    {
+     "ns": 1664582400000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-2-plus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1664582400000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 2
+     }
+    },
+    "sign": 1
+   },
+   "expected": [
+    {
+     "ns": 1669852800000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-2-minus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1664582400000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 2
+     }
+    },
+    "sign": -1
+   },
+   "expected": [
+    {
+     "ns": 1659312000000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-3-plus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1661990400000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 3
+     }
+    },
+    "sign": 1
+   },
+   "expected": [
+    {
+     "ns": 1669852800000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-3-minus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1661990400000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 3
+     }
+    },
+    "sign": -1
+   },
+   "expected": [
+    {
+     "ns": 1654041600000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-3-new-year-plus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1672531200000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 3
+     }
+    },
+    "sign": 1
+   },
+   "expected": [
+    {
+     "ns": 1680307200000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/month-3-new-year-minus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1672531200000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "months": 3
+     }
+    },
+    "sign": -1
+   },
+   "expected": [
+    {
+     "ns": 1664582400000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/days-30-plus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1672531200000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "days": 30
+     }
+    },
+    "sign": 1
+   },
+   "expected": [
+    {
+     "ns": 1675123200000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/days-30-minus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1672531200000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "days": 30
+     }
+    },
+    "sign": -1
+   },
+   "expected": [
+    {
+     "ns": 1669939200000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/weeks-4-plus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1672531200000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "weeks": 4
+     }
+    },
+    "sign": 1
+   },
+   "expected": [
+    {
+     "ns": 1674950400000000000
+    }
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "local-sampler/sampling.date_offset_apply/weeks-4-minus",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_sampler.py",
+   "operation": "sampling.date_offset_apply",
+   "input": {
+    "timestamps": [
+     1672531200000000000
+    ],
+    "offset": {
+     "n": 1,
+     "kwds": {
+      "weeks": 4
+     }
+    },
+    "sign": -1
+   },
+   "expected": [
+    {
+     "ns": 1670112000000000000
+    }
+   ],
+   "expected_warnings": []
+  }
+ ]
+}

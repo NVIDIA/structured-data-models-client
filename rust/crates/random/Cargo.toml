@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# A leaf: the SQL dialects draw from it (SQLite's seeded order), and so will
+# sampling, which in Phase 7.5 depends on the dialects.
+[package]
+name = "sdm-random"
+description = "numpy's legacy RandomState and C++'s std::mt19937, draw for draw"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

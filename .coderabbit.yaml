@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+language: en-US
+
+tone_instructions:
+  Be concise and technical.
+
+reviews:
+  profile: chill
+  request_changes_workflow: true
+  commit_status: false
+  poem: false                # skips the fun poem in review comments
+  high_level_summary: false
+  suggested_reviewers: false
+  estimate_code_review_effort: false
+  in_progress_fortune: false
+
+  path_instructions:
+    - path: '**/*'
+      instructions: >
+        - Keep reviews short. Leave a brief summary of the issue, proposed fix, and how the proposed fix is better than current code.
+        - Limit review comments to 3 to 5 items maximum, unless additional blockers
+          exist.
+        - Skip repetition. If a pattern repeats, mention it once at a summary
+          level only.
+        - Do not add general suggestions, focus strictly on merge-blocking
+          concerns.
+        - Avoid line-by-line commentary unless it highlights a critical bug or security hole.
+        - Rank issues based on severity. Examples of P0s are issues that could cause runtime errors, data loss, severe maintainability issues, or merge-blocking issues.
+        - Optimization oppotunties should be strictly labeled as suggestions and not issues.
+        - When in doubt, err on the side of fewer comments. Brevity and
+          blocking issues only.
+        - Avoid posting any refactoring issues.
+
+  auto_review:
+    enabled: true
+
+  slop_detection:
+    enabled: true
+
+  chat:
+    auto_reply: true
+    art: false
+    allow_non_org_members: false
+
+  knowledge_base:
+    opt_out: false
+    learnings:
+      scope: local
+    pull_requests:
+      scope: local

@@ -1,0 +1,1604 @@
+{
+ "format_version": 1,
+ "name": "sqlite/marketplace-early",
+ "backend": "sqlite",
+ "task_kind": "regression",
+ "data": {
+  "generator": "marketplace",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_source",
+   "args": {
+    "tables": {
+     "customers": "customers",
+     "items": "items",
+     "reviews": "reviews",
+     "stores": "stores",
+     "purchases": "purchases"
+    },
+    "primary_keys": {
+     "stores": "store_code"
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2],
+    "anchor_time": {
+     "$timestamp": "2024-10-01T00:00:00"
+    },
+    "context_anchor_time": {
+     "$timestamp": "2024-01-04T00:00:00"
+    },
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"customers\")",
+   "params": null,
+   "result": "step-0000.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"customers\")",
+   "params": null,
+   "result": "step-0001.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"customer_id\", \"segment\", \"signup_at\" FROM \"customers\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0002.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "segment",
+     "type_text": "string"
+    },
+    {
+     "name": "signup_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"items\")",
+   "params": null,
+   "result": "step-0003.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"items\")",
+   "params": null,
+   "result": "step-0004.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"item_id\", \"category\", \"price\" FROM \"items\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0005.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "category",
+     "type_text": "string"
+    },
+    {
+     "name": "price",
+     "type_text": "double"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"reviews\")",
+   "params": null,
+   "result": "step-0006.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"reviews\")",
+   "params": null,
+   "result": "step-0007.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"review_id\", \"item_id\", \"rating\", \"body\" FROM \"reviews\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0008.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "review_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "rating",
+     "type_text": "int64"
+    },
+    {
+     "name": "body",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"stores\")",
+   "params": null,
+   "result": "step-0009.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"stores\")",
+   "params": null,
+   "result": "step-0010.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"store_code\", \"region\" FROM \"stores\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0011.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "store_code",
+     "type_text": "string"
+    },
+    {
+     "name": "region",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"purchases\")",
+   "params": null,
+   "result": "step-0012.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"purchases\")",
+   "params": null,
+   "result": "step-0013.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\" FROM \"purchases\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0014.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "purchase_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "amount",
+     "type_text": "double"
+    },
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    },
+    {
+     "name": "store_code",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"customers\")",
+   "params": null,
+   "result": "step-0015.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"items\")",
+   "params": null,
+   "result": "step-0016.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"reviews\")",
+   "params": null,
+   "result": "step-0017.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"stores\")",
+   "params": null,
+   "result": "step-0018.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"purchases\")",
+   "params": null,
+   "result": "step-0019.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"customer_id\") AS d, COUNT(CASE WHEN \"customer_id\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"item_id\") AS d, COUNT(CASE WHEN \"item_id\" IS NULL THEN 1 END) AS z\nFROM \"items\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"review_id\") AS d, COUNT(CASE WHEN \"review_id\" IS NULL THEN 1 END) AS z\nFROM \"reviews\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"store_code\") AS d, COUNT(CASE WHEN \"store_code\" IS NULL THEN 1 END) AS z\nFROM \"stores\"\nUNION ALL\nSELECT 4 AS k, COUNT(*) AS n, COUNT(DISTINCT \"purchase_id\") AS d, COUNT(CASE WHEN \"purchase_id\" IS NULL THEN 1 END) AS z\nFROM \"purchases\"",
+   "params": null,
+   "result": "step-0020.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "k",
+     "type_text": "int64"
+    },
+    {
+     "name": "n",
+     "type_text": "int64"
+    },
+    {
+     "name": "d",
+     "type_text": "int64"
+    },
+    {
+     "name": "z",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"customers\")",
+   "params": null,
+   "result": "step-0021.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"items\")",
+   "params": null,
+   "result": "step-0022.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"reviews\")",
+   "params": null,
+   "result": "step-0023.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"stores\")",
+   "params": null,
+   "result": "step-0024.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"purchases\")",
+   "params": null,
+   "result": "step-0025.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT\n  0 as table_index,\n  MIN(\"purchased_at\") as min_date,\n  MAX(\"purchased_at\") as max_date\nFROM \"purchases\"",
+   "params": null,
+   "result": "step-0026.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "table_index",
+     "type_text": "int64"
+    },
+    {
+     "name": "min_date",
+     "type_text": "string"
+    },
+    {
+     "name": "max_date",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"customer_id\", \"signup_at\"\nFROM \"customers\"\nWHERE \"customer_id\" IS NOT NULL AND \"signup_at\" IS NOT NULL\nORDER BY ((((1369975286 * ((\"customer_id\" % 2147483647 + 2147483647) % 2147483647) + 1202242073) % 2147483647) * ((\"customer_id\" % 2147483647 + 2147483647) % 2147483647) + 976413892) % 2147483647 * ((\"customer_id\" % 2147483647 + 2147483647) % 2147483647) + 327741615) % 2147483647, \"customer_id\", \"signup_at\" LIMIT 10000",
+   "params": null,
+   "result": "step-0027.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "signup_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"purchased_at\" FROM \"purchases\" WHERE \"purchased_at\" IS NOT NULL ORDER BY rowid LIMIT 1",
+   "params": null,
+   "result": "step-0028.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(json_extract(value, '$[0]') AS INTEGER) AS __kumo_id__, CAST(json_extract(value, '$[1]') AS TEXT) AS __kumo_end__, CAST(json_extract(value, '$[2]') AS TEXT) AS __kumo_start__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"purchased_at\"\nFROM __kumo_keys__ tmp\nJOIN \"purchases\"\n  ON \"customer_id\" = tmp.__kumo_id__\n AND \"purchased_at\" <= tmp.__kumo_end__\n AND \"purchased_at\" > tmp.__kumo_start__\nORDER BY __kumo_batch__, \"purchased_at\", \"purchase_id\"",
+   "params": ["[[54,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"],[45,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"],[32,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"],[29,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"],[41,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"],[2,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"],[55,\"2024-01-11T00:00:00.000000\",\"2024-01-04T00:00:00.000000\"]]"],
+   "result": "step-0029.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "purchased_at",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, (SELECT COUNT(*) FROM \"customers\" WHERE \"customer_id\" == tmp.__kumo_id__) as __kumo_matches__, \"customer_id\", \"segment\", \"signup_at\"\nFROM __kumo_keys__ tmp\nJOIN \"customers\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"customer_id\" == tmp.__kumo_id__\n    ORDER BY \"customer_id\", \"segment\", \"signup_at\", rowid\n    LIMIT 1\n)",
+   "params": ["[54,45,32,29,41,2,55,1,2]"],
+   "result": "step-0030.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "__kumo_matches__",
+     "type_text": "int64"
+    },
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "segment",
+     "type_text": "string"
+    },
+    {
+     "name": "signup_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(json_extract(value, '$[0]') AS INTEGER) AS __kumo_id__, CAST(json_extract(value, '$[1]') AS TEXT) AS __kumo_time__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\"\nFROM __kumo_keys__ tmp\nJOIN \"purchases\" fact\nON fact.rowid IN (\n  SELECT rowid\n  FROM \"purchases\"\n  WHERE \"customer_id\" = tmp.__kumo_id__\n  AND \"purchased_at\" <= tmp.__kumo_time__\n  ORDER BY \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", \"store_code\"\n  LIMIT 32\n)\nORDER BY __kumo_batch__, \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", \"store_code\"",
+   "params": ["[[54,\"2024-01-04T00:00:00.000000\"],[45,\"2024-01-04T00:00:00.000000\"],[32,\"2024-01-04T00:00:00.000000\"],[29,\"2024-01-04T00:00:00.000000\"],[41,\"2024-01-04T00:00:00.000000\"],[2,\"2024-01-04T00:00:00.000000\"],[55,\"2024-01-04T00:00:00.000000\"],[1,\"2024-10-01T00:00:00.000000\"],[2,\"2024-10-01T00:00:00.000000\"]]"],
+   "result": "step-0031.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "purchase_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "amount",
+     "type_text": "double"
+    },
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    },
+    {
+     "name": "store_code",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"item_id\", \"category\", \"price\"\nFROM __kumo_keys__ tmp\nJOIN \"items\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == tmp.__kumo_id__\n    ORDER BY \"category\", \"item_id\", \"price\", rowid\n    LIMIT 1\n)",
+   "params": ["[4,2,1,3,5,8,7]"],
+   "result": "step-0032.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "category",
+     "type_text": "string"
+    },
+    {
+     "name": "price",
+     "type_text": "double"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS TEXT) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"store_code\", \"region\"\nFROM __kumo_keys__ tmp\nJOIN \"stores\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"stores\"\n    WHERE \"store_code\" == tmp.__kumo_id__\n    ORDER BY \"region\", \"store_code\", rowid\n    LIMIT 1\n)",
+   "params": ["[\"S03\",\"S04\",\"S01\",\"S05\",\"S02\"]"],
+   "result": "step-0033.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "store_code",
+     "type_text": "string"
+    },
+    {
+     "name": "region",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  }
+ ],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "regression",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "float32"
+    },
+    "entity_table_names": ["customers"],
+    "anchor_time_column": "__kumo_anchor_time"
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "__kumo_anchor_time": {
+       "dtype": "timestamp[us]",
+       "stype": "timestamp",
+       "nullable": false
+      },
+      "TARGET": {
+       "dtype": "float32",
+       "stype": "numerical"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "customers": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "nullable": false
+       },
+       "segment": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "signup_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      },
+      "primary_key": ["instance_id", "customer_id"]
+     },
+     "purchases": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "amount": {
+        "dtype": "float64",
+        "stype": "numerical"
+       },
+       "purchased_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "item_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "store_code": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "items": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "category": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "price": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "stores": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "region": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["customer_id"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["item_id"],
+      "target_table": "items",
+      "target_columns": ["__node_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["store_code"],
+      "target_table": "stores",
+      "target_columns": ["__node_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+     "rows": [
+      [0, 54, "2024-01-04T00:00:00.000000Z", 0.0],
+      [1, 45, "2024-01-04T00:00:00.000000Z", 0.0],
+      [2, 32, "2024-01-04T00:00:00.000000Z", 0.0],
+      [3, 29, "2024-01-04T00:00:00.000000Z", 0.0],
+      [4, 41, "2024-01-04T00:00:00.000000Z", 0.0],
+      [5, 2, "2024-01-04T00:00:00.000000Z", 0.0],
+      [6, 55, "2024-01-04T00:00:00.000000Z", 0.0]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "segment", "signup_at"],
+      "rows": [
+       [0, 54, "business", "2024-01-01T00:00:00.000000Z"],
+       [1, 45, "student", "2024-01-01T00:00:00.000000Z"],
+       [2, 32, "student", "2024-01-01T00:00:00.000000Z"],
+       [3, 29, "retail", "2024-01-01T00:00:00.000000Z"],
+       [4, 41, "business", "2024-01-01T00:00:00.000000Z"],
+       [5, 2, "business", "2024-01-01T00:00:00.000000Z"],
+       [6, 55, "business", "2024-01-01T00:00:00.000000Z"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "customer_id", "item_id", "store_code"],
+      "rows": [
+       [2, 0, 54.05, "2024-01-02T18:00:00.000000Z", 32, 0, 0]
+      ]
+     },
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "category", "price"],
+      "rows": [
+       [2, 0, "kitchen", 45.92]
+      ]
+     },
+     "stores": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "region"],
+      "rows": [
+       [2, 0, "east"]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+     "rows": [
+      [7, 1, "2024-10-01T00:00:00.000000Z"],
+      [8, 2, "2024-10-01T00:00:00.000000Z"]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "segment", "signup_at"],
+      "rows": [
+       [7, 1, "retail", "2024-02-05T00:00:00.000000Z"],
+       [8, 2, "business", "2024-01-01T00:00:00.000000Z"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "customer_id", "item_id", "store_code"],
+      "rows": [
+       [7, 1, 36.45, "2024-07-25T21:00:00.000000Z", 1, 1, 1],
+       [7, 2, 22.43, "2024-07-25T19:00:00.000000Z", 1, 2, 2],
+       [7, 3, 72.97, "2024-06-30T13:00:00.000000Z", 1, 3, 1],
+       [7, 4, 30.94, "2024-06-11T09:00:00.000000Z", 1, 2, 3],
+       [7, 5, 12.57, "2024-06-08T10:00:00.000000Z", 1, 4, 1],
+       [7, 6, 78.65, "2024-05-15T16:00:00.000000Z", 1, 5, 3],
+       [7, 7, 66.66, "2024-05-07T19:00:00.000000Z", 1, 6, 4],
+       [8, 8, 96.83, "2024-09-24T12:00:00.000000Z", 2, 7, 5],
+       [8, 9, 4.67, "2024-08-26T21:00:00.000000Z", 2, 8, 6],
+       [8, 10, 56.99, "2024-08-26T06:00:00.000000Z", 2, 9, 7],
+       [8, 11, 40.17, "2024-08-18T09:00:00.000000Z", 2, 10, 7],
+       [8, 12, 58.07, "2024-07-24T12:00:00.000000Z", 2, 8, 6],
+       [8, 13, 23.6, "2024-07-05T16:00:00.000000Z", 2, 7, 7],
+       [8, 14, 30.11, "2024-05-08T17:00:00.000000Z", 2, 9, 8],
+       [8, 15, 28.21, "2024-04-03T09:00:00.000000Z", 2, 10, 5],
+       [8, 16, 38.71, "2024-03-10T16:00:00.000000Z", 2, 8, 6],
+       [8, 17, 99.4, "2024-02-11T20:00:00.000000Z", 2, 11, 9]
+      ]
+     },
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "category", "price"],
+      "rows": [
+       [7, 1, "garden", 43.39],
+       [7, 2, "kitchen", 28.69],
+       [7, 3, "garden", 25.94],
+       [7, 4, "garden", 46.14],
+       [7, 5, "kitchen", 45.92],
+       [7, 6, "garden", 1.46],
+       [8, 7, "garden", 46.14],
+       [8, 8, "kitchen", 45.92],
+       [8, 9, "garden", 43.39],
+       [8, 10, "kitchen", 14.61],
+       [8, 11, "kitchen", 28.69]
+      ]
+     },
+     "stores": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "region"],
+      "rows": [
+       [7, 1, "east"],
+       [7, 2, "west"],
+       [7, 3, "north"],
+       [7, 4, "north"],
+       [8, 5, "south"],
+       [8, 6, "north"],
+       [8, 7, "west"],
+       [8, 8, "north"],
+       [8, 9, "east"]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction"],
+    "prediction_statistic": "median"
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "regression",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id",
+    "num_context_examples": 7,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "7",
+      "prediction": 85.885706
+     },
+     {
+      "row_index": 1,
+      "id": "8",
+      "prediction": 99.094981
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "builtins.UserWarning",
+   "message": "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+  },
+  {
+   "category": "builtins.UserWarning",
+   "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2023-12-28 00:00:00', however, your data only contains data back to '2024-01-02 18:00:00'."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "every context row has the same answer to 'PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+  }
+ ]
+}

@@ -1,0 +1,58 @@
+{
+ "format_version": 1,
+ "name": "memory/ranking#all-candidates-cold",
+ "backend": "memory",
+ "task_kind": "ranking",
+ "data": {
+  "generator": "shop",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_data",
+   "args": {
+    "tables": ["users", "products", "orders"]
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 3 FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1],
+    "candidates": [98, 99],
+    "anchor_time": {
+     "$timestamp": "2024-10-01T00:00:00"
+    },
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  }
+ ],
+ "steps": [],
+ "payloads": [],
+ "responses": [],
+ "error": {
+  "class": "sdm_client.errors.UnsupportedRequestError",
+  "code": "UNSUPPORTED_REQUEST",
+  "message": "the contexts gathered for candidates 98 and 99 each hold one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features.",
+  "details": {
+   "model": "kumo-relational",
+   "candidates": [98, 99],
+   "classes_in_context": 1
+  }
+ },
+ "result": null,
+ "warnings": []
+}

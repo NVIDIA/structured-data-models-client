@@ -1,0 +1,199 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Every shape scripts/generate_wire_rs.py models, for its tests",
+    "version": "0"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Count": {
+        "description": "A named integer.",
+        "type": "integer",
+        "format": "int32"
+      },
+      "Amount": {
+        "type": "number"
+      },
+      "Anything": {
+        "description": "Any JSON value: the schema has no type."
+      },
+      "Names": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "Mode": {
+        "type": "string",
+        "enum": ["fast", "kebab-case", "1x"]
+      },
+      "Closed": {
+        "description": "An object that names every key it may have.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "self", "camelCase", "maybe", "undeclared"],
+        "properties": {
+          "type": {
+            "description": "A Rust keyword, spelled as a raw identifier.",
+            "type": "string"
+          },
+          "self": {
+            "description": "A keyword no raw identifier can spell.",
+            "type": "boolean"
+          },
+          "camelCase": {
+            "type": "integer"
+          },
+          "2nd": {
+            "type": "string"
+          },
+          "maybe": {
+            "description": "Required, and may be null.",
+            "type": "string",
+            "nullable": true
+          },
+          "perhaps": {
+            "description": "Optional, and may be null.",
+            "type": "integer",
+            "nullable": true
+          },
+          "plain": {
+            "description": "Optional, and never null.",
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          },
+          "level": {
+            "type": "string",
+            "enum": ["low", "high"]
+          },
+          "inner": {
+            "type": "object",
+            "required": ["n"],
+            "properties": {
+              "n": {
+                "type": "integer"
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "bag": {
+            "type": "object"
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "nullable": true
+            }
+          }
+        }
+      },
+      "OpenEmpty": {
+        "description": "Open through an empty schema.",
+        "type": "object",
+        "additionalProperties": {},
+        "properties": {
+          "a": {
+            "type": "string"
+          }
+        }
+      },
+      "OpenDefault": {
+        "description": "Open by default, with a key named like the field for the others.",
+        "type": "object",
+        "properties": {
+          "additional_properties": {
+            "type": "string"
+          }
+        }
+      },
+      "TypedExtra": {
+        "description": "Open to integers only.",
+        "type": "object",
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "properties": {
+          "a": {
+            "type": "string"
+          }
+        }
+      },
+      "Cat": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "lives"],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "lives": {
+            "type": "integer"
+          }
+        }
+      },
+      "Dog": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "Pet": {
+        "description": "Two tags select Cat; Dog, which the mapping leaves out, is selected by its own name.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Cat"
+          },
+          {
+            "$ref": "#/components/schemas/Dog"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "cat": "#/components/schemas/Cat",
+            "kitten": "#/components/schemas/Cat"
+          }
+        }
+      },
+      "Scalar": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean",
+            "nullable": true
+          }
+        ]
+      },
+      "Either": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/schemas/Cat"
+          }
+        ]
+      }
+    }
+  }
+}

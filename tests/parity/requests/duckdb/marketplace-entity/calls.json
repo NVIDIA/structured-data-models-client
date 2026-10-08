@@ -1,0 +1,1028 @@
+{
+ "format": 1,
+ "scenario": "duckdb/marketplace-entity",
+ "transcript": "tests/parity/transcripts/duckdb/marketplace-entity",
+ "calls": [
+  {
+   "host": "schema_from_source",
+   "function": "schema_source_run",
+   "args": [
+    "duckdb",
+    "{\"namespace\": {}, \"semantic_model\": null, \"trust_expressions\": false}",
+    "{\"tables\": {\"customers\": \"customers\", \"items\": \"items\", \"reviews\": \"reviews\", \"stores\": \"stores\", \"purchases\": \"purchases\"}, \"primary_keys\": {\"stores\": \"store_code\"}, \"time_columns\": null, \"relationships\": null, \"check_keys\": true}"
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"customers\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "0f38fcc2c768cd69166f82dc3d61ecf309a75a9313621f40b5a4dac4dfff2187"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'customers'\n  AND database_name = current_database() AND schema_name = current_schema()",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dbddc35e9e8b7c6e993748c59031477358c860020f0ddb969c00e44df418c73d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"customer_id\", \"segment\", \"signup_at\" FROM \"customers\" LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "2f4e420fe16201fa67f2add59765ba36de789237d89f2349cef05203621d97a9"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"items\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dc30f1e5577c2b4a10bfba6ca8755f3bc3f11027b6ef40ad9bf4e97600c16326"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'items'\n  AND database_name = current_database() AND schema_name = current_schema()",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dbddc35e9e8b7c6e993748c59031477358c860020f0ddb969c00e44df418c73d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"item_id\", \"category\", \"price\" FROM \"items\" LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "e3d63ace7642681bf9ae687c7fae67190055b2984579343f396d3de50fb8f8a6"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"reviews\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "cb8210ebf5a1c99b24c2530bf32c792942ae5e6f10bad84537acdd33f4a898a9"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'reviews'\n  AND database_name = current_database() AND schema_name = current_schema()",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dbddc35e9e8b7c6e993748c59031477358c860020f0ddb969c00e44df418c73d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"review_id\", \"item_id\", \"rating\", \"body\" FROM \"reviews\" LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "d82e584c1dca4e00d674606916d34b71efdad888a806f332a551256b25c8f99d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"stores\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "09901ddcc07e49a614afc6058dc1cdde07ef07fafe26262eb9f680e5de08eb64"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'stores'\n  AND database_name = current_database() AND schema_name = current_schema()",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dbddc35e9e8b7c6e993748c59031477358c860020f0ddb969c00e44df418c73d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"store_code\", \"region\" FROM \"stores\" LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "58ad591286a13ab058174125dd43f630c7bd574922728be178279b9fbbe79b3b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"purchases\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "85de442f8ece820722e9c9f37d5eaf941e19d2ccc59653bf01cb461f7758d6bf"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'purchases'\n  AND database_name = current_database() AND schema_name = current_schema()",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dbddc35e9e8b7c6e993748c59031477358c860020f0ddb969c00e44df418c73d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\" FROM \"purchases\" LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "cdb6e14392cc8ef95f31a7b2a042ec025d8a2225fa1c9d68bc8ebaad4da95feb"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'customers'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'\nORDER BY constraint_index",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6fea68a98c1bde0c585cd259efc932c5eb0d2f6a63f5ad3091af327ea3eff859"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'items'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'\nORDER BY constraint_index",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6fea68a98c1bde0c585cd259efc932c5eb0d2f6a63f5ad3091af327ea3eff859"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'reviews'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'\nORDER BY constraint_index",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6fea68a98c1bde0c585cd259efc932c5eb0d2f6a63f5ad3091af327ea3eff859"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'stores'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'\nORDER BY constraint_index",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6fea68a98c1bde0c585cd259efc932c5eb0d2f6a63f5ad3091af327ea3eff859"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'purchases'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'\nORDER BY constraint_index",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6fea68a98c1bde0c585cd259efc932c5eb0d2f6a63f5ad3091af327ea3eff859"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"customer_id\") AS d, COUNT(CASE WHEN \"customer_id\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"item_id\") AS d, COUNT(CASE WHEN \"item_id\" IS NULL THEN 1 END) AS z\nFROM \"items\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"review_id\") AS d, COUNT(CASE WHEN \"review_id\" IS NULL THEN 1 END) AS z\nFROM \"reviews\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"store_code\") AS d, COUNT(CASE WHEN \"store_code\" IS NULL THEN 1 END) AS z\nFROM \"stores\"\nUNION ALL\nSELECT 4 AS k, COUNT(*) AS n, COUNT(DISTINCT \"purchase_id\") AS d, COUNT(CASE WHEN \"purchase_id\" IS NULL THEN 1 END) AS z\nFROM \"purchases\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "9def27b942ce1f00869753e3ebd1cbd50b28ac0428e6cc325801390819d7397a"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"kind\":\"source\",\"source\":{\"namespace\":{},\"semantic_model\":null,\"trust_expressions\":false,\"backend\":\"duckdb\"},\"schema\":{\"tables\":[{\"name\":\"customers\",\"source_name\":\"customers\",\"columns\":[{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"signup_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null}],\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"duplicate_keys\":0},{\"name\":\"items\",\"source_name\":\"items\",\"columns\":[{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"price\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"item_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"reviews\",\"source_name\":\"reviews\",\"columns\":[{\"name\":\"review_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"rating\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"body\",\"dtype\":\"string\",\"stype\":\"text\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"review_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"stores\",\"source_name\":\"stores\",\"columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"region\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"store_code\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"purchases\",\"source_name\":\"purchases\",\"columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"amount\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"purchased_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null},{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"duplicate_keys\":0}],\"relationships\":[[\"reviews\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"customer_id\",\"customers\",\"customer_id\"],[\"purchases\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"store_code\",\"stores\",\"store_code\"]]},\"engine\":[[\"customers\",{\"backend\":\"duckdb\",\"name\":\"customers\",\"raw_source_name\":\"customers\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"customer_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"segment\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"signup_at\",\"expr\":null,\"dtype\":\"date\",\"stype\":\"timestamp\",\"is_pk\":false,\"is_time\":true,\"is_end\":false}],\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"time_choice\":{\"column\":\"signup_at\",\"how\":\"only\",\"among\":[\"signup_at\"],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"segment\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"signup_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"customer_id\":\"BIGINT\",\"segment\":\"VARCHAR\",\"signup_at\":\"TIMESTAMP\"},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"items\",{\"backend\":\"duckdb\",\"name\":\"items\",\"raw_source_name\":\"items\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"item_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"category\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"price\",\"expr\":null,\"dtype\":\"float\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"item_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"category\":\"VARCHAR\",\"item_id\":\"BIGINT\",\"price\":\"DOUBLE\"},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"reviews\",{\"backend\":\"duckdb\",\"name\":\"reviews\",\"raw_source_name\":\"reviews\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"review_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"item_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"rating\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"body\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"text\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"review_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"review_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"rating\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"body\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"body\":\"VARCHAR\",\"item_id\":\"BIGINT\",\"rating\":\"BIGINT\",\"review_id\":\"BIGINT\"},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"stores\",{\"backend\":\"duckdb\",\"name\":\"stores\",\"raw_source_name\":\"stores\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"store_code\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"region\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"store_code\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"region\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"region\":\"VARCHAR\",\"store_code\":\"VARCHAR\"},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"purchases\",{\"backend\":\"duckdb\",\"name\":\"purchases\",\"raw_source_name\":\"purchases\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"purchase_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"customer_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"item_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"amount\",\"expr\":null,\"dtype\":\"float\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"purchased_at\",\"expr\":null,\"dtype\":\"date\",\"stype\":\"timestamp\",\"is_pk\":false,\"is_time\":true,\"is_end\":false},{\"name\":\"store_code\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"time_choice\":{\"column\":\"purchased_at\",\"how\":\"only\",\"among\":[\"purchased_at\"],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"amount\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"purchased_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"amount\":\"DOUBLE\",\"customer_id\":\"BIGINT\",\"item_id\":\"BIGINT\",\"purchase_id\":\"BIGINT\",\"purchased_at\":\"TIMESTAMP\",\"store_code\":\"VARCHAR\"},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}]]}",
+       "[]"
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "predictive_query",
+   "function": "query_text",
+   "args": [
+    "PREDICT customers.segment FOR EACH customers.customer_id"
+   ],
+   "kwargs": {},
+   "returned": "PREDICT customers.segment FOR EACH customers.customer_id"
+  },
+  {
+   "host": "materialize",
+   "function": "materialize_run",
+   "args": [
+    "{\"schema\": {\"kind\": \"source\", \"source\": {\"namespace\": {}, \"semantic_model\": null, \"trust_expressions\": false, \"backend\": \"duckdb\"}, \"schema\": {\"tables\": [{\"name\": \"customers\", \"source_name\": \"customers\", \"columns\": [{\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"signup_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}], \"primary_key\": \"customer_id\", \"time_column\": \"signup_at\", \"duplicate_keys\": 0}, {\"name\": \"items\", \"source_name\": \"items\", \"columns\": [{\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"category\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"price\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"item_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"reviews\", \"source_name\": \"reviews\", \"columns\": [{\"name\": \"review_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"rating\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"body\", \"dtype\": \"string\", \"stype\": \"text\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"review_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"stores\", \"source_name\": \"stores\", \"columns\": [{\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"region\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"store_code\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"purchases\", \"source_name\": \"purchases\", \"columns\": [{\"name\": \"purchase_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"amount\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"purchased_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}, {\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"purchase_id\", \"time_column\": \"purchased_at\", \"duplicate_keys\": 0}], \"relationships\": [[\"reviews\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"customer_id\", \"customers\", \"customer_id\"], [\"purchases\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"store_code\", \"stores\", \"store_code\"]]}, \"engine\": [[\"customers\", {\"backend\": \"duckdb\", \"name\": \"customers\", \"raw_source_name\": \"customers\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"customer_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"segment\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"signup_at\", \"expr\": null, \"dtype\": \"date\", \"stype\": \"timestamp\", \"is_pk\": false, \"is_time\": true, \"is_end\": false}], \"primary_key\": \"customer_id\", \"time_column\": \"signup_at\", \"time_choice\": {\"column\": \"signup_at\", \"how\": \"only\", \"among\": [\"signup_at\"], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"customer_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"segment\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"signup_at\", \"dtype\": \"date\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"customer_id\": \"BIGINT\", \"segment\": \"VARCHAR\", \"signup_at\": \"TIMESTAMP\"}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"items\", {\"backend\": \"duckdb\", \"name\": \"items\", \"raw_source_name\": \"items\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"item_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"category\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"price\", \"expr\": null, \"dtype\": \"float\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"item_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"item_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"category\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"price\", \"dtype\": \"float\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"category\": \"VARCHAR\", \"item_id\": \"BIGINT\", \"price\": \"DOUBLE\"}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"reviews\", {\"backend\": \"duckdb\", \"name\": \"reviews\", \"raw_source_name\": \"reviews\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"review_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"item_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"rating\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"body\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"text\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"review_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"review_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"item_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"rating\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"body\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"body\": \"VARCHAR\", \"item_id\": \"BIGINT\", \"rating\": \"BIGINT\", \"review_id\": \"BIGINT\"}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"stores\", {\"backend\": \"duckdb\", \"name\": \"stores\", \"raw_source_name\": \"stores\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"store_code\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"region\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"store_code\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"store_code\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"region\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"region\": \"VARCHAR\", \"store_code\": \"VARCHAR\"}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"purchases\", {\"backend\": \"duckdb\", \"name\": \"purchases\", \"raw_source_name\": \"purchases\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"purchase_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"customer_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"item_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"amount\", \"expr\": null, \"dtype\": \"float\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"purchased_at\", \"expr\": null, \"dtype\": \"date\", \"stype\": \"timestamp\", \"is_pk\": false, \"is_time\": true, \"is_end\": false}, {\"name\": \"store_code\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"purchase_id\", \"time_column\": \"purchased_at\", \"time_choice\": {\"column\": \"purchased_at\", \"how\": \"only\", \"among\": [\"purchased_at\"], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"purchase_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"customer_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"item_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"amount\", \"dtype\": \"float\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"purchased_at\", \"dtype\": \"date\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"store_code\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"amount\": \"DOUBLE\", \"customer_id\": \"BIGINT\", \"item_id\": \"BIGINT\", \"purchase_id\": \"BIGINT\", \"purchased_at\": \"TIMESTAMP\", \"store_code\": \"VARCHAR\"}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}]]}, \"query\": \"PREDICT customers.segment FOR EACH customers.customer_id\", \"args\": {\"indices\": [1, 2], \"anchor_time\": \"entity\", \"num_context_samples\": 30, \"random_seed\": 7}, \"tags\": {}, \"model\": null}",
+    {}
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT table_name, expressions FROM duckdb_indexes()",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "e53ae991b1dc1468b5e8c5c689c096ba837b95e7deaaf160f5e80c127dfefe6d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"customer_id\", \"segment\", \"signup_at\"\nFROM (SELECT * FROM \"customers\"\nWHERE \"customer_id\" IS NOT NULL AND \"signup_at\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (7)\nORDER BY \"customer_id\", \"segment\", \"signup_at\"",
+       "params": null
+      }
+     ],
+     "warnings": [
+      {
+       "category": "builtins.UserWarning",
+       "message": "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+      }
+     ],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "2f4e420fe16201fa67f2add59765ba36de789237d89f2349cef05203621d97a9"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH __kumo_keys__ AS (\n  SELECT k.i - 1 AS __kumo_batch__, k.v.f0 AS __kumo_id__\n  FROM unnest(from_json(?, '[{\"f0\":\"BIGINT\"}]'))\n    WITH ORDINALITY AS k(v, i)\n)\nSELECT tmp.__kumo_batch__, COUNT(*) OVER (PARTITION BY tmp.__kumo_batch__) AS __kumo_matches__, \"customer_id\", \"signup_at\"\nFROM __kumo_keys__ tmp\nJOIN \"customers\"\n  ON \"customer_id\" = tmp.__kumo_id__\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY tmp.__kumo_batch__\n  ORDER BY \"customer_id\", \"signup_at\"\n) = 1",
+       "params": [
+        "[{\"f0\":50},{\"f0\":4},{\"f0\":16},{\"f0\":46},{\"f0\":44},{\"f0\":7},{\"f0\":43},{\"f0\":24},{\"f0\":26},{\"f0\":21},{\"f0\":60},{\"f0\":35},{\"f0\":14},{\"f0\":25},{\"f0\":15},{\"f0\":19},{\"f0\":52},{\"f0\":6},{\"f0\":12},{\"f0\":40},{\"f0\":20},{\"f0\":48},{\"f0\":18},{\"f0\":13},{\"f0\":59},{\"f0\":31},{\"f0\":23},{\"f0\":57},{\"f0\":1},{\"f0\":58},{\"f0\":1},{\"f0\":2}]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "034b018a86b1813b68d9ee49794a880901b4bed5dde1084aaa8ba12b0f187a54"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH __kumo_keys__ AS (\n  SELECT k.i - 1 AS __kumo_batch__, k.v.f0 AS __kumo_id__, k.v.f1 AS __kumo_time__\n  FROM unnest(from_json(?, '[{\"f0\":\"BIGINT\",\"f1\":\"TIMESTAMP_NS\"}]'))\n    WITH ORDINALITY AS k(v, i)\n)\nSELECT tmp.__kumo_batch__, \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\"\nFROM __kumo_keys__ tmp\nJOIN \"purchases\"\n  ON \"customer_id\" = tmp.__kumo_id__\n AND CAST(\"purchased_at\" AS TIMESTAMP) <= tmp.__kumo_time__\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY tmp.__kumo_batch__\n  ORDER BY CAST(\"purchased_at\" AS TIMESTAMP) DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", \"purchased_at\", \"store_code\"\n) <= 32\nORDER BY tmp.__kumo_batch__, CAST(\"purchased_at\" AS TIMESTAMP) DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", \"purchased_at\", \"store_code\"",
+       "params": [
+        "[{\"f0\":50,\"f1\":\"2024-03-18T00:00:00.000000000\"},{\"f0\":4,\"f1\":\"2024-03-18T00:00:00.000000000\"},{\"f0\":16,\"f1\":\"2024-03-11T00:00:00.000000000\"},{\"f0\":46,\"f1\":\"2024-03-11T00:00:00.000000000\"},{\"f0\":44,\"f1\":\"2024-03-04T00:00:00.000000000\"},{\"f0\":7,\"f1\":\"2024-03-04T00:00:00.000000000\"},{\"f0\":43,\"f1\":\"2024-03-04T00:00:00.000000000\"},{\"f0\":24,\"f1\":\"2024-03-04T00:00:00.000000000\"},{\"f0\":26,\"f1\":\"2024-03-04T00:00:00.000000000\"},{\"f0\":21,\"f1\":\"2024-02-26T00:00:00.000000000\"},{\"f0\":60,\"f1\":\"2024-02-26T00:00:00.000000000\"},{\"f0\":35,\"f1\":\"2024-02-26T00:00:00.000000000\"},{\"f0\":14,\"f1\":\"2024-02-26T00:00:00.000000000\"},{\"f0\":25,\"f1\":\"2024-02-26T00:00:00.000000000\"},{\"f0\":15,\"f1\":\"2024-02-26T00:00:00.000000000\"},{\"f0\":19,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":52,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":6,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":12,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":40,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":20,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":48,\"f1\":\"2024-02-19T00:00:00.000000000\"},{\"f0\":18,\"f1\":\"2024-02-12T00:00:00.000000000\"},{\"f0\":13,\"f1\":\"2024-02-12T00:00:00.000000000\"},{\"f0\":59,\"f1\":\"2024-02-12T00:00:00.000000000\"},{\"f0\":31,\"f1\":\"2024-02-05T00:00:00.000000000\"},{\"f0\":23,\"f1\":\"2024-02-05T00:00:00.000000000\"},{\"f0\":57,\"f1\":\"2024-02-05T00:00:00.000000000\"},{\"f0\":1,\"f1\":\"2024-02-05T00:00:00.000000000\"},{\"f0\":58,\"f1\":\"2024-02-05T00:00:00.000000000\"},{\"f0\":1,\"f1\":\"2024-02-05T00:00:00.000000000\"},{\"f0\":2,\"f1\":\"2024-01-01T00:00:00.000000000\"}]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "94c5407a1a0d1d65f3960cdae23c14e33d357e6d2b67ccf182a0b1093b2af7e4"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"request\":{\"task\":{\"kind\":\"multiclass_classification\",\"target\":{\"column_name\":\"TARGET\",\"dtype\":\"string\",\"table_name\":null},\"entity_table\":\"customers\",\"options\":{}},\"schema\":{\"kind\":\"source\",\"source\":{\"namespace\":{},\"semantic_model\":null,\"trust_expressions\":false,\"backend\":\"duckdb\"},\"schema\":{\"tables\":[{\"name\":\"customers\",\"source_name\":\"customers\",\"columns\":[{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"signup_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null}],\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"duplicate_keys\":0},{\"name\":\"items\",\"source_name\":\"items\",\"columns\":[{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"price\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"item_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"reviews\",\"source_name\":\"reviews\",\"columns\":[{\"name\":\"review_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"rating\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"body\",\"dtype\":\"string\",\"stype\":\"text\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"review_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"stores\",\"source_name\":\"stores\",\"columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"region\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"store_code\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"purchases\",\"source_name\":\"purchases\",\"columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"amount\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"purchased_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null},{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"duplicate_keys\":0}],\"relationships\":[[\"reviews\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"customer_id\",\"customers\",\"customer_id\"],[\"purchases\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"store_code\",\"stores\",\"store_code\"]]},\"engine\":[]},\"entity_table\":\"customers\",\"query\":\"PREDICT customers.segment FOR EACH customers.customer_id\",\"inference\":{\"run_mode\":\"fast\",\"use_prediction_time\":false,\"inference_config\":{\"kind\":\"classification\",\"num_estimators\":1,\"column_shuffle\":false,\"category_shuffle\":false,\"hop_shuffle\":false,\"class_shuffle\":false}},\"requested_inference\":{\"inference_config\":{}},\"frames\":false,\"payloads\":[{\"model\":\"kumo-relational\",\"task\":{\"kind\":\"multiclass_classification\",\"target\":{\"column_name\":\"TARGET\",\"dtype\":\"string\",\"classes\":[\"student\",\"business\",\"retail\"]},\"entity_table_names\":[\"customers\"],\"anchor_time_column\":\"__kumo_anchor_time\"},\"schema\":{\"instance_table\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"__kumo_entity_ref_0\":{\"dtype\":\"int64\",\"stype\":\"ID\"},\"__kumo_anchor_time\":{\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"nullable\":false},\"TARGET\":{\"dtype\":\"string\",\"stype\":\"categorical\"}},\"primary_key\":\"instance_id\"},\"related_tables\":{\"customers\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"customer_id\":{\"dtype\":\"int64\",\"nullable\":false},\"signup_at\":{\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\"}},\"primary_key\":[\"instance_id\",\"customer_id\"]}},\"relationships\":[{\"source_columns\":[\"__kumo_entity_ref_0\"],\"target_table\":\"customers\",\"target_columns\":[\"customer_id\"]}]},\"context\":{\"instance_table\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__kumo_entity_ref_0\",\"__kumo_anchor_time\",\"TARGET\"],\"rows\":[[0,50,\"2024-03-18T00:00:00.000000Z\",\"student\"],[1,4,\"2024-03-18T00:00:00.000000Z\",\"business\"],[2,16,\"2024-03-11T00:00:00.000000Z\",\"student\"],[3,46,\"2024-03-11T00:00:00.000000Z\",\"retail\"],[4,44,\"2024-03-04T00:00:00.000000Z\",\"business\"],[5,7,\"2024-03-04T00:00:00.000000Z\",\"retail\"],[6,43,\"2024-03-04T00:00:00.000000Z\",\"retail\"],[7,24,\"2024-03-04T00:00:00.000000Z\",\"retail\"],[8,26,\"2024-03-04T00:00:00.000000Z\",\"retail\"],[9,21,\"2024-02-26T00:00:00.000000Z\",\"retail\"],[10,60,\"2024-02-26T00:00:00.000000Z\",\"student\"],[11,35,\"2024-02-26T00:00:00.000000Z\",\"business\"],[12,14,\"2024-02-26T00:00:00.000000Z\",\"student\"],[13,25,\"2024-02-26T00:00:00.000000Z\",\"retail\"],[14,15,\"2024-02-26T00:00:00.000000Z\",\"retail\"],[15,19,\"2024-02-19T00:00:00.000000Z\",\"business\"],[16,52,\"2024-02-19T00:00:00.000000Z\",\"business\"],[17,6,\"2024-02-19T00:00:00.000000Z\",\"student\"],[18,12,\"2024-02-19T00:00:00.000000Z\",\"student\"],[19,40,\"2024-02-19T00:00:00.000000Z\",\"retail\"],[20,20,\"2024-02-19T00:00:00.000000Z\",\"student\"],[21,48,\"2024-02-19T00:00:00.000000Z\",\"retail\"],[22,18,\"2024-02-12T00:00:00.000000Z\",\"retail\"],[23,13,\"2024-02-12T00:00:00.000000Z\",\"student\"],[24,59,\"2024-02-12T00:00:00.000000Z\",\"student\"],[25,31,\"2024-02-05T00:00:00.000000Z\",\"retail\"],[26,23,\"2024-02-05T00:00:00.000000Z\",\"student\"],[27,57,\"2024-02-05T00:00:00.000000Z\",\"student\"],[29,58,\"2024-02-05T00:00:00.000000Z\",\"student\"]]},\"related_tables\":{\"customers\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"customer_id\",\"signup_at\"],\"rows\":[[0,50,\"2024-03-18T00:00:00.000000Z\"],[1,4,\"2024-03-18T00:00:00.000000Z\"],[2,16,\"2024-03-11T00:00:00.000000Z\"],[3,46,\"2024-03-11T00:00:00.000000Z\"],[4,44,\"2024-03-04T00:00:00.000000Z\"],[5,7,\"2024-03-04T00:00:00.000000Z\"],[6,43,\"2024-03-04T00:00:00.000000Z\"],[7,24,\"2024-03-04T00:00:00.000000Z\"],[8,26,\"2024-03-04T00:00:00.000000Z\"],[9,21,\"2024-02-26T00:00:00.000000Z\"],[10,60,\"2024-02-26T00:00:00.000000Z\"],[11,35,\"2024-02-26T00:00:00.000000Z\"],[12,14,\"2024-02-26T00:00:00.000000Z\"],[13,25,\"2024-02-26T00:00:00.000000Z\"],[14,15,\"2024-02-26T00:00:00.000000Z\"],[15,19,\"2024-02-19T00:00:00.000000Z\"],[16,52,\"2024-02-19T00:00:00.000000Z\"],[17,6,\"2024-02-19T00:00:00.000000Z\"],[18,12,\"2024-02-19T00:00:00.000000Z\"],[19,40,\"2024-02-19T00:00:00.000000Z\"],[20,20,\"2024-02-19T00:00:00.000000Z\"],[21,48,\"2024-02-19T00:00:00.000000Z\"],[22,18,\"2024-02-12T00:00:00.000000Z\"],[23,13,\"2024-02-12T00:00:00.000000Z\"],[24,59,\"2024-02-12T00:00:00.000000Z\"],[25,31,\"2024-02-05T00:00:00.000000Z\"],[26,23,\"2024-02-05T00:00:00.000000Z\"],[27,57,\"2024-02-05T00:00:00.000000Z\"],[29,58,\"2024-02-05T00:00:00.000000Z\"]]}}},\"predict\":{\"instance_table\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__kumo_entity_ref_0\",\"__kumo_anchor_time\"],\"rows\":[[30,1,\"2024-02-05T00:00:00.000000Z\"],[31,2,\"2024-01-01T00:00:00.000000Z\"]]},\"related_tables\":{\"customers\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"customer_id\",\"signup_at\"],\"rows\":[[30,1,\"2024-02-05T00:00:00.000000Z\"],[31,2,\"2024-01-01T00:00:00.000000Z\"]]}}},\"output\":{\"fields\":[\"prediction\",\"probabilities\"]},\"inference\":{\"run_mode\":\"fast\",\"use_prediction_time\":false,\"inference_config\":{\"kind\":\"classification\",\"num_estimators\":1,\"column_shuffle\":false,\"category_shuffle\":false,\"hop_shuffle\":false,\"class_shuffle\":false}},\"metadata\":{\"source_query\":\"PREDICT customers.segment FOR EACH customers.customer_id\",\"num_context_examples\":30,\"num_prediction_examples\":2}}],\"indices\":[1,2],\"windowed\":false,\"parts\":null,\"decomposition\":null,\"asked\":null,\"context_fingerprint\":null},\"tags\":{},\"model\":{\"backend\":\"duckdb\",\"tables\":[{\"name\":\"customers\",\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"end_time_column\":null,\"columns\":[{\"name\":\"customer_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true},{\"name\":\"signup_at\",\"dtype\":\"date\",\"stype\":\"timestamp\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"customers\\\"\",\"unquoted_name\":\"customers\",\"source_columns\":[{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"segment\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"signup_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"items\",\"primary_key\":\"item_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"item_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true},{\"name\":\"price\",\"dtype\":\"float\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"items\\\"\",\"unquoted_name\":\"items\",\"source_columns\":[{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"reviews\",\"primary_key\":\"review_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"review_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"rating\",\"dtype\":\"int\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"body\",\"dtype\":\"string\",\"stype\":\"text\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"reviews\\\"\",\"unquoted_name\":\"reviews\",\"source_columns\":[{\"name\":\"review_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"rating\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"body\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"stores\",\"primary_key\":\"store_code\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"region\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"stores\\\"\",\"unquoted_name\":\"stores\",\"source_columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"region\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"purchases\",\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"end_time_column\":null,\"columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"customer_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"amount\",\"dtype\":\"float\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"purchased_at\",\"dtype\":\"date\",\"stype\":\"timestamp\",\"expr\":null,\"is_source\":true},{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"purchases\\\"\",\"unquoted_name\":\"purchases\",\"source_columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"amount\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"purchased_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}}],\"edges\":[[\"reviews\",\"item_id\",\"items\"],[\"purchases\",\"customer_id\",\"customers\"],[\"purchases\",\"item_id\",\"items\"],[\"purchases\",\"store_code\",\"stores\"]],\"state\":{\"min_time\":{},\"max_time\":{},\"min_time_unit\":{},\"max_time_unit\":{},\"coverage_warned\":false,\"enforced_key_tables\":[],\"num_rows\":{},\"time_spellings\":{}},\"arguments\":{},\"argument_tables\":{}}}",
+       {}
+      ]
+     },
+     "warnings": [
+      {
+       "category": "sdm_client.core.warnings.SDMWarning",
+       "message": "'items', 'purchases', 'reviews', 'stores' are linked into the schema and not in this request: the sampler reached no row of them from the entities being scored, so the model answers without them. Raise num_hops if they lie further out than the hops sampled, and check the foreign key holds values the parent key actually has if they do not."
+      },
+      {
+       "category": "sdm_client.core.warnings.SDMWarning",
+       "message": "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "host": "predict",
+   "function": "predict_run",
+   "args": [
+    "{\"request\": {\"task\": {\"kind\": \"multiclass_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"string\", \"table_name\": null}, \"entity_table\": \"customers\", \"options\": {}}, \"schema\": {\"kind\": \"source\", \"source\": {\"namespace\": {}, \"semantic_model\": null, \"trust_expressions\": false, \"backend\": \"duckdb\"}, \"schema\": {\"tables\": [{\"name\": \"customers\", \"source_name\": \"customers\", \"columns\": [{\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"signup_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}], \"primary_key\": \"customer_id\", \"time_column\": \"signup_at\", \"duplicate_keys\": 0}, {\"name\": \"items\", \"source_name\": \"items\", \"columns\": [{\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"category\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"price\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"item_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"reviews\", \"source_name\": \"reviews\", \"columns\": [{\"name\": \"review_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"rating\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"body\", \"dtype\": \"string\", \"stype\": \"text\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"review_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"stores\", \"source_name\": \"stores\", \"columns\": [{\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"region\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"store_code\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"purchases\", \"source_name\": \"purchases\", \"columns\": [{\"name\": \"purchase_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"amount\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"purchased_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}, {\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"purchase_id\", \"time_column\": \"purchased_at\", \"duplicate_keys\": 0}], \"relationships\": [[\"reviews\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"customer_id\", \"customers\", \"customer_id\"], [\"purchases\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"store_code\", \"stores\", \"store_code\"]]}, \"engine\": []}, \"entity_table\": \"customers\", \"query\": \"PREDICT customers.segment FOR EACH customers.customer_id\", \"inference\": {\"run_mode\": \"fast\", \"use_prediction_time\": false, \"inference_config\": {\"kind\": \"classification\", \"num_estimators\": 1, \"column_shuffle\": false, \"category_shuffle\": false, \"hop_shuffle\": false, \"class_shuffle\": false}}, \"requested_inference\": {\"inference_config\": {}}, \"frames\": false, \"payloads\": [{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"multiclass_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"string\", \"classes\": [\"student\", \"business\", \"retail\"]}, \"entity_table_names\": [\"customers\"], \"anchor_time_column\": \"__kumo_anchor_time\"}, \"schema\": {\"instance_table\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"__kumo_entity_ref_0\": {\"dtype\": \"int64\", \"stype\": \"ID\"}, \"__kumo_anchor_time\": {\"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"nullable\": false}, \"TARGET\": {\"dtype\": \"string\", \"stype\": \"categorical\"}}, \"primary_key\": \"instance_id\"}, \"related_tables\": {\"customers\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"customer_id\": {\"dtype\": \"int64\", \"nullable\": false}, \"signup_at\": {\"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\"}}, \"primary_key\": [\"instance_id\", \"customer_id\"]}}, \"relationships\": [{\"source_columns\": [\"__kumo_entity_ref_0\"], \"target_table\": \"customers\", \"target_columns\": [\"customer_id\"]}]}, \"context\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\", \"__kumo_anchor_time\", \"TARGET\"], \"rows\": [[0, 50, \"2024-03-18T00:00:00.000000Z\", \"student\"], [1, 4, \"2024-03-18T00:00:00.000000Z\", \"business\"], [2, 16, \"2024-03-11T00:00:00.000000Z\", \"student\"], [3, 46, \"2024-03-11T00:00:00.000000Z\", \"retail\"], [4, 44, \"2024-03-04T00:00:00.000000Z\", \"business\"], [5, 7, \"2024-03-04T00:00:00.000000Z\", \"retail\"], [6, 43, \"2024-03-04T00:00:00.000000Z\", \"retail\"], [7, 24, \"2024-03-04T00:00:00.000000Z\", \"retail\"], [8, 26, \"2024-03-04T00:00:00.000000Z\", \"retail\"], [9, 21, \"2024-02-26T00:00:00.000000Z\", \"retail\"], [10, 60, \"2024-02-26T00:00:00.000000Z\", \"student\"], [11, 35, \"2024-02-26T00:00:00.000000Z\", \"business\"], [12, 14, \"2024-02-26T00:00:00.000000Z\", \"student\"], [13, 25, \"2024-02-26T00:00:00.000000Z\", \"retail\"], [14, 15, \"2024-02-26T00:00:00.000000Z\", \"retail\"], [15, 19, \"2024-02-19T00:00:00.000000Z\", \"business\"], [16, 52, \"2024-02-19T00:00:00.000000Z\", \"business\"], [17, 6, \"2024-02-19T00:00:00.000000Z\", \"student\"], [18, 12, \"2024-02-19T00:00:00.000000Z\", \"student\"], [19, 40, \"2024-02-19T00:00:00.000000Z\", \"retail\"], [20, 20, \"2024-02-19T00:00:00.000000Z\", \"student\"], [21, 48, \"2024-02-19T00:00:00.000000Z\", \"retail\"], [22, 18, \"2024-02-12T00:00:00.000000Z\", \"retail\"], [23, 13, \"2024-02-12T00:00:00.000000Z\", \"student\"], [24, 59, \"2024-02-12T00:00:00.000000Z\", \"student\"], [25, 31, \"2024-02-05T00:00:00.000000Z\", \"retail\"], [26, 23, \"2024-02-05T00:00:00.000000Z\", \"student\"], [27, 57, \"2024-02-05T00:00:00.000000Z\", \"student\"], [29, 58, \"2024-02-05T00:00:00.000000Z\", \"student\"]]}, \"related_tables\": {\"customers\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"customer_id\", \"signup_at\"], \"rows\": [[0, 50, \"2024-03-18T00:00:00.000000Z\"], [1, 4, \"2024-03-18T00:00:00.000000Z\"], [2, 16, \"2024-03-11T00:00:00.000000Z\"], [3, 46, \"2024-03-11T00:00:00.000000Z\"], [4, 44, \"2024-03-04T00:00:00.000000Z\"], [5, 7, \"2024-03-04T00:00:00.000000Z\"], [6, 43, \"2024-03-04T00:00:00.000000Z\"], [7, 24, \"2024-03-04T00:00:00.000000Z\"], [8, 26, \"2024-03-04T00:00:00.000000Z\"], [9, 21, \"2024-02-26T00:00:00.000000Z\"], [10, 60, \"2024-02-26T00:00:00.000000Z\"], [11, 35, \"2024-02-26T00:00:00.000000Z\"], [12, 14, \"2024-02-26T00:00:00.000000Z\"], [13, 25, \"2024-02-26T00:00:00.000000Z\"], [14, 15, \"2024-02-26T00:00:00.000000Z\"], [15, 19, \"2024-02-19T00:00:00.000000Z\"], [16, 52, \"2024-02-19T00:00:00.000000Z\"], [17, 6, \"2024-02-19T00:00:00.000000Z\"], [18, 12, \"2024-02-19T00:00:00.000000Z\"], [19, 40, \"2024-02-19T00:00:00.000000Z\"], [20, 20, \"2024-02-19T00:00:00.000000Z\"], [21, 48, \"2024-02-19T00:00:00.000000Z\"], [22, 18, \"2024-02-12T00:00:00.000000Z\"], [23, 13, \"2024-02-12T00:00:00.000000Z\"], [24, 59, \"2024-02-12T00:00:00.000000Z\"], [25, 31, \"2024-02-05T00:00:00.000000Z\"], [26, 23, \"2024-02-05T00:00:00.000000Z\"], [27, 57, \"2024-02-05T00:00:00.000000Z\"], [29, 58, \"2024-02-05T00:00:00.000000Z\"]]}}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\", \"__kumo_anchor_time\"], \"rows\": [[30, 1, \"2024-02-05T00:00:00.000000Z\"], [31, 2, \"2024-01-01T00:00:00.000000Z\"]]}, \"related_tables\": {\"customers\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"customer_id\", \"signup_at\"], \"rows\": [[30, 1, \"2024-02-05T00:00:00.000000Z\"], [31, 2, \"2024-01-01T00:00:00.000000Z\"]]}}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\"]}, \"inference\": {\"run_mode\": \"fast\", \"use_prediction_time\": false, \"inference_config\": {\"kind\": \"classification\", \"num_estimators\": 1, \"column_shuffle\": false, \"category_shuffle\": false, \"hop_shuffle\": false, \"class_shuffle\": false}}, \"metadata\": {\"source_query\": \"PREDICT customers.segment FOR EACH customers.customer_id\", \"num_context_examples\": 30, \"num_prediction_examples\": 2}}], \"indices\": [1, 2], \"windowed\": false, \"parts\": null, \"decomposition\": null, \"asked\": null, \"context_fingerprint\": null}, \"model\": \"kumo-relational\", \"outputs\": null, \"tags\": {}}",
+    {}
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "call_model",
+     "endpoint": "predict",
+     "session_id": null,
+     "body": {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "multiclass_classification",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "string",
+        "classes": [
+         "student",
+         "business",
+         "retail"
+        ]
+       },
+       "entity_table_names": [
+        "customers"
+       ],
+       "anchor_time_column": "__kumo_anchor_time"
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "stype": "timestamp",
+          "nullable": false
+         },
+         "TARGET": {
+          "dtype": "string",
+          "stype": "categorical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "customers": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "customer_id": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "signup_at": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "customer_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "customers",
+         "target_columns": [
+          "customer_id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          50,
+          "2024-03-18T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          1,
+          4,
+          "2024-03-18T00:00:00.000000Z",
+          "business"
+         ],
+         [
+          2,
+          16,
+          "2024-03-11T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          3,
+          46,
+          "2024-03-11T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          4,
+          44,
+          "2024-03-04T00:00:00.000000Z",
+          "business"
+         ],
+         [
+          5,
+          7,
+          "2024-03-04T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          6,
+          43,
+          "2024-03-04T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          7,
+          24,
+          "2024-03-04T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          8,
+          26,
+          "2024-03-04T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          9,
+          21,
+          "2024-02-26T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          10,
+          60,
+          "2024-02-26T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          11,
+          35,
+          "2024-02-26T00:00:00.000000Z",
+          "business"
+         ],
+         [
+          12,
+          14,
+          "2024-02-26T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          13,
+          25,
+          "2024-02-26T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          14,
+          15,
+          "2024-02-26T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          15,
+          19,
+          "2024-02-19T00:00:00.000000Z",
+          "business"
+         ],
+         [
+          16,
+          52,
+          "2024-02-19T00:00:00.000000Z",
+          "business"
+         ],
+         [
+          17,
+          6,
+          "2024-02-19T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          18,
+          12,
+          "2024-02-19T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          19,
+          40,
+          "2024-02-19T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          20,
+          20,
+          "2024-02-19T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          21,
+          48,
+          "2024-02-19T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          22,
+          18,
+          "2024-02-12T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          23,
+          13,
+          "2024-02-12T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          24,
+          59,
+          "2024-02-12T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          25,
+          31,
+          "2024-02-05T00:00:00.000000Z",
+          "retail"
+         ],
+         [
+          26,
+          23,
+          "2024-02-05T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          27,
+          57,
+          "2024-02-05T00:00:00.000000Z",
+          "student"
+         ],
+         [
+          29,
+          58,
+          "2024-02-05T00:00:00.000000Z",
+          "student"
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "customer_id",
+          "signup_at"
+         ],
+         "rows": [
+          [
+           0,
+           50,
+           "2024-03-18T00:00:00.000000Z"
+          ],
+          [
+           1,
+           4,
+           "2024-03-18T00:00:00.000000Z"
+          ],
+          [
+           2,
+           16,
+           "2024-03-11T00:00:00.000000Z"
+          ],
+          [
+           3,
+           46,
+           "2024-03-11T00:00:00.000000Z"
+          ],
+          [
+           4,
+           44,
+           "2024-03-04T00:00:00.000000Z"
+          ],
+          [
+           5,
+           7,
+           "2024-03-04T00:00:00.000000Z"
+          ],
+          [
+           6,
+           43,
+           "2024-03-04T00:00:00.000000Z"
+          ],
+          [
+           7,
+           24,
+           "2024-03-04T00:00:00.000000Z"
+          ],
+          [
+           8,
+           26,
+           "2024-03-04T00:00:00.000000Z"
+          ],
+          [
+           9,
+           21,
+           "2024-02-26T00:00:00.000000Z"
+          ],
+          [
+           10,
+           60,
+           "2024-02-26T00:00:00.000000Z"
+          ],
+          [
+           11,
+           35,
+           "2024-02-26T00:00:00.000000Z"
+          ],
+          [
+           12,
+           14,
+           "2024-02-26T00:00:00.000000Z"
+          ],
+          [
+           13,
+           25,
+           "2024-02-26T00:00:00.000000Z"
+          ],
+          [
+           14,
+           15,
+           "2024-02-26T00:00:00.000000Z"
+          ],
+          [
+           15,
+           19,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           16,
+           52,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           17,
+           6,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           18,
+           12,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           19,
+           40,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           20,
+           20,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           21,
+           48,
+           "2024-02-19T00:00:00.000000Z"
+          ],
+          [
+           22,
+           18,
+           "2024-02-12T00:00:00.000000Z"
+          ],
+          [
+           23,
+           13,
+           "2024-02-12T00:00:00.000000Z"
+          ],
+          [
+           24,
+           59,
+           "2024-02-12T00:00:00.000000Z"
+          ],
+          [
+           25,
+           31,
+           "2024-02-05T00:00:00.000000Z"
+          ],
+          [
+           26,
+           23,
+           "2024-02-05T00:00:00.000000Z"
+          ],
+          [
+           27,
+           57,
+           "2024-02-05T00:00:00.000000Z"
+          ],
+          [
+           29,
+           58,
+           "2024-02-05T00:00:00.000000Z"
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "rows": [
+         [
+          30,
+          1,
+          "2024-02-05T00:00:00.000000Z"
+         ],
+         [
+          31,
+          2,
+          "2024-01-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "customer_id",
+          "signup_at"
+         ],
+         "rows": [
+          [
+           30,
+           1,
+           "2024-02-05T00:00:00.000000Z"
+          ],
+          [
+           31,
+           2,
+           "2024-01-01T00:00:00.000000Z"
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "classification",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "class_shuffle": false
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT customers.segment FOR EACH customers.customer_id",
+       "num_context_examples": 30,
+       "num_prediction_examples": 2,
+       "request_id": "sdm-<request-id>"
+      }
+     },
+     "warnings": [],
+     "outcome": {
+      "response": "{\"object\": \"prediction.response\", \"id\": \"synthetic-2\", \"model\": \"kumo-relational\", \"metadata\": {\"synthetic\": true}, \"predictions\": [{\"row_index\": 0, \"id\": \"30\", \"prediction\": \"business\", \"probabilities\": {\"business\": 0.387362, \"retail\": 0.32714, \"student\": 0.285498}}, {\"row_index\": 1, \"id\": \"31\", \"prediction\": \"retail\", \"probabilities\": {\"business\": 0.318352, \"retail\": 0.372664, \"student\": 0.308984}}]}"
+     }
+    },
+    {
+     "kind": "done",
+     "value": "{\"model\":\"kumo-relational\",\"request_id\":\"synthetic-2\",\"items\":[{\"row_index\":0,\"id\":1,\"prediction\":\"business\",\"probabilities\":{\"business\":0.387362,\"retail\":0.32714,\"student\":0.285498}},{\"row_index\":1,\"id\":2,\"prediction\":\"retail\",\"probabilities\":{\"business\":0.318352,\"retail\":0.372664,\"student\":0.308984}}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\",\"probabilities\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}",
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "flatten",
+   "function": "flatten",
+   "args": [
+    "{\"model\":\"kumo-relational\",\"request_id\":\"synthetic-2\",\"items\":[{\"row_index\":0,\"id\":1,\"prediction\":\"business\",\"probabilities\":{\"business\":0.387362,\"retail\":0.32714,\"student\":0.285498}},{\"row_index\":1,\"id\":2,\"prediction\":\"retail\",\"probabilities\":{\"business\":0.318352,\"retail\":0.372664,\"student\":0.308984}}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\",\"probabilities\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}"
+   ],
+   "kwargs": {},
+   "returned": {
+    "$table": "529118b0601831776567a5d125868285bb3eaafaeb94771735ee85dcd6a85f01"
+   }
+  }
+ ]
+}

@@ -1,0 +1,4155 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+ "cases": [
+  {
+   "id": "dtype-fidelity/payload.feature_column/int64",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "int64",
+     "values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/int32",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "int32",
+     "values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/uint8",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "uint8",
+     "values": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/float64",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "float64",
+     "values": [
+      0.0,
+      0.5,
+      1.0,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      3.5,
+      4.0,
+      4.5,
+      5.0,
+      5.5,
+      6.0,
+      6.5,
+      7.0,
+      7.5,
+      8.0,
+      8.5,
+      9.0,
+      9.5,
+      10.0,
+      10.5,
+      11.0,
+      11.5
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0.0,
+     0.5,
+     1.0,
+     1.5,
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0,
+     4.5,
+     5.0,
+     5.5,
+     6.0,
+     6.5,
+     7.0,
+     7.5,
+     8.0,
+     8.5,
+     9.0,
+     9.5,
+     10.0,
+     10.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/float32",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "float32",
+     "values": [
+      0.0,
+      0.5,
+      1.0,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      3.5,
+      4.0,
+      4.5,
+      5.0,
+      5.5,
+      6.0,
+      6.5,
+      7.0,
+      7.5,
+      8.0,
+      8.5,
+      9.0,
+      9.5,
+      10.0,
+      10.5,
+      11.0,
+      11.5
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "float32",
+     "stype": "numerical"
+    },
+    "cells": [
+     0.0,
+     0.5,
+     1.0,
+     1.5,
+     2.0,
+     2.5,
+     3.0,
+     3.5,
+     4.0,
+     4.5,
+     5.0,
+     5.5,
+     6.0,
+     6.5,
+     7.0,
+     7.5,
+     8.0,
+     8.5,
+     9.0,
+     9.5,
+     10.0,
+     10.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/bool",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "bool",
+     "values": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "bool",
+     "stype": "categorical"
+    },
+    "cells": [
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/str",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "str",
+     "values": [
+      "s0",
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s7",
+      "s8",
+      "s9",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s14",
+      "s15",
+      "s16",
+      "s17",
+      "s18",
+      "s19",
+      "s20",
+      "s21",
+      "s22",
+      "s23"
+     ]
+    }
+   },
+   "expected": {
+    "stype": "text",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "text"
+    },
+    "cells": [
+     [
+      "s0"
+     ],
+     [
+      "s1"
+     ],
+     [
+      "s2"
+     ],
+     [
+      "s3"
+     ],
+     [
+      "s4"
+     ],
+     [
+      "s5"
+     ],
+     [
+      "s6"
+     ],
+     [
+      "s7"
+     ],
+     [
+      "s8"
+     ],
+     [
+      "s9"
+     ],
+     [
+      "s10"
+     ],
+     [
+      "s11"
+     ],
+     [
+      "s12"
+     ],
+     [
+      "s13"
+     ],
+     [
+      "s14"
+     ],
+     [
+      "s15"
+     ],
+     [
+      "s16"
+     ],
+     [
+      "s17"
+     ],
+     [
+      "s18"
+     ],
+     [
+      "s19"
+     ],
+     [
+      "s20"
+     ],
+     [
+      "s21"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/str_low_cardinality",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "str",
+     "values": [
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b"
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/datetime",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2024-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-02T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-03T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-04T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-05T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-06T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-07T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-08T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-09T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-10T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-11T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-12T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-13T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-14T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-15T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-16T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-17T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-18T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-19T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-20T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-21T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-22T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-23T00:00:00"
+      },
+      {
+       "$timestamp": "2024-01-24T00:00:00"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "timestamp",
+    "declared": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    },
+    "cells": [
+     "2024-01-01T00:00:00.000000Z",
+     "2024-01-02T00:00:00.000000Z",
+     "2024-01-03T00:00:00.000000Z",
+     "2024-01-04T00:00:00.000000Z",
+     "2024-01-05T00:00:00.000000Z",
+     "2024-01-06T00:00:00.000000Z",
+     "2024-01-07T00:00:00.000000Z",
+     "2024-01-08T00:00:00.000000Z",
+     "2024-01-09T00:00:00.000000Z",
+     "2024-01-10T00:00:00.000000Z",
+     "2024-01-11T00:00:00.000000Z",
+     "2024-01-12T00:00:00.000000Z",
+     "2024-01-13T00:00:00.000000Z",
+     "2024-01-14T00:00:00.000000Z",
+     "2024-01-15T00:00:00.000000Z",
+     "2024-01-16T00:00:00.000000Z",
+     "2024-01-17T00:00:00.000000Z",
+     "2024-01-18T00:00:00.000000Z",
+     "2024-01-19T00:00:00.000000Z",
+     "2024-01-20T00:00:00.000000Z",
+     "2024-01-21T00:00:00.000000Z",
+     "2024-01-22T00:00:00.000000Z"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/datetime_tz",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "datetime64[us, UTC-08:00]",
+     "values": [
+      {
+       "$timestamp": "2024-01-01T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-02T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-03T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-04T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-05T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-06T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-07T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-08T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-09T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-10T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-11T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-12T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-13T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-14T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-15T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-16T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-17T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-18T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-19T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-20T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-21T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-22T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-23T00:00:00-08:00"
+      },
+      {
+       "$timestamp": "2024-01-24T00:00:00-08:00"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "timestamp",
+    "declared": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    },
+    "cells": [
+     "2024-01-01T08:00:00.000000Z",
+     "2024-01-02T08:00:00.000000Z",
+     "2024-01-03T08:00:00.000000Z",
+     "2024-01-04T08:00:00.000000Z",
+     "2024-01-05T08:00:00.000000Z",
+     "2024-01-06T08:00:00.000000Z",
+     "2024-01-07T08:00:00.000000Z",
+     "2024-01-08T08:00:00.000000Z",
+     "2024-01-09T08:00:00.000000Z",
+     "2024-01-10T08:00:00.000000Z",
+     "2024-01-11T08:00:00.000000Z",
+     "2024-01-12T08:00:00.000000Z",
+     "2024-01-13T08:00:00.000000Z",
+     "2024-01-14T08:00:00.000000Z",
+     "2024-01-15T08:00:00.000000Z",
+     "2024-01-16T08:00:00.000000Z",
+     "2024-01-17T08:00:00.000000Z",
+     "2024-01-18T08:00:00.000000Z",
+     "2024-01-19T08:00:00.000000Z",
+     "2024-01-20T08:00:00.000000Z",
+     "2024-01-21T08:00:00.000000Z",
+     "2024-01-22T08:00:00.000000Z"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/timedelta",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "timedelta64[s]",
+     "values": [
+      {
+       "$timedelta_us": 0
+      },
+      {
+       "$timedelta_us": 86400000000
+      },
+      {
+       "$timedelta_us": 172800000000
+      },
+      {
+       "$timedelta_us": 259200000000
+      },
+      {
+       "$timedelta_us": 345600000000
+      },
+      {
+       "$timedelta_us": 432000000000
+      },
+      {
+       "$timedelta_us": 518400000000
+      },
+      {
+       "$timedelta_us": 604800000000
+      },
+      {
+       "$timedelta_us": 691200000000
+      },
+      {
+       "$timedelta_us": 777600000000
+      },
+      {
+       "$timedelta_us": 864000000000
+      },
+      {
+       "$timedelta_us": 950400000000
+      },
+      {
+       "$timedelta_us": 1036800000000
+      },
+      {
+       "$timedelta_us": 1123200000000
+      },
+      {
+       "$timedelta_us": 1209600000000
+      },
+      {
+       "$timedelta_us": 1296000000000
+      },
+      {
+       "$timedelta_us": 1382400000000
+      },
+      {
+       "$timedelta_us": 1468800000000
+      },
+      {
+       "$timedelta_us": 1555200000000
+      },
+      {
+       "$timedelta_us": 1641600000000
+      },
+      {
+       "$timedelta_us": 1728000000000
+      },
+      {
+       "$timedelta_us": 1814400000000
+      },
+      {
+       "$timedelta_us": 1900800000000
+      },
+      {
+       "$timedelta_us": 1987200000000
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0,
+     86400000000000,
+     172800000000000,
+     259200000000000,
+     345600000000000,
+     432000000000000,
+     518400000000000,
+     604800000000000,
+     691200000000000,
+     777600000000000,
+     864000000000000,
+     950400000000000,
+     1036800000000000,
+     1123200000000000,
+     1209600000000000,
+     1296000000000000,
+     1382400000000000,
+     1468800000000000,
+     1555200000000000,
+     1641600000000000,
+     1728000000000000,
+     1814400000000000
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/timedelta_beyond_js_safe",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "timedelta64[s]",
+     "values": [
+      {
+       "$timedelta_us": 345600000000000
+      },
+      {
+       "$timedelta_us": 345686400000000
+      },
+      {
+       "$timedelta_us": 345772800000000
+      },
+      {
+       "$timedelta_us": 345859200000000
+      },
+      {
+       "$timedelta_us": 345945600000000
+      },
+      {
+       "$timedelta_us": 346032000000000
+      },
+      {
+       "$timedelta_us": 346118400000000
+      },
+      {
+       "$timedelta_us": 346204800000000
+      },
+      {
+       "$timedelta_us": 346291200000000
+      },
+      {
+       "$timedelta_us": 346377600000000
+      },
+      {
+       "$timedelta_us": 346464000000000
+      },
+      {
+       "$timedelta_us": 346550400000000
+      },
+      {
+       "$timedelta_us": 346636800000000
+      },
+      {
+       "$timedelta_us": 346723200000000
+      },
+      {
+       "$timedelta_us": 346809600000000
+      },
+      {
+       "$timedelta_us": 346896000000000
+      },
+      {
+       "$timedelta_us": 346982400000000
+      },
+      {
+       "$timedelta_us": 347068800000000
+      },
+      {
+       "$timedelta_us": 347155200000000
+      },
+      {
+       "$timedelta_us": 347241600000000
+      },
+      {
+       "$timedelta_us": 347328000000000
+      },
+      {
+       "$timedelta_us": 347414400000000
+      },
+      {
+       "$timedelta_us": 347500800000000
+      },
+      {
+       "$timedelta_us": 347587200000000
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     "345600000000000000",
+     "345686400000000000",
+     "345772800000000000",
+     "345859200000000000",
+     "345945600000000000",
+     "346032000000000000",
+     "346118400000000000",
+     "346204800000000000",
+     "346291200000000000",
+     "346377600000000000",
+     "346464000000000000",
+     "346550400000000000",
+     "346636800000000000",
+     "346723200000000000",
+     "346809600000000000",
+     "346896000000000000",
+     "346982400000000000",
+     "347068800000000000",
+     "347155200000000000",
+     "347241600000000000",
+     "347328000000000000",
+     "347414400000000000"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/bytes",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      },
+      {
+       "$bytes": "AAc="
+      },
+      {
+       "$bytes": "AQc="
+      },
+      {
+       "$bytes": "Agc="
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc=",
+     "AQc=",
+     "Agc=",
+     "AAc="
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/decimal",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "0.1234"
+      },
+      {
+       "$decimal": "1.1234"
+      },
+      {
+       "$decimal": "2.1234"
+      },
+      {
+       "$decimal": "3.1234"
+      },
+      {
+       "$decimal": "4.1234"
+      },
+      {
+       "$decimal": "5.1234"
+      },
+      {
+       "$decimal": "6.1234"
+      },
+      {
+       "$decimal": "7.1234"
+      },
+      {
+       "$decimal": "8.1234"
+      },
+      {
+       "$decimal": "9.1234"
+      },
+      {
+       "$decimal": "10.1234"
+      },
+      {
+       "$decimal": "11.1234"
+      },
+      {
+       "$decimal": "12.1234"
+      },
+      {
+       "$decimal": "13.1234"
+      },
+      {
+       "$decimal": "14.1234"
+      },
+      {
+       "$decimal": "15.1234"
+      },
+      {
+       "$decimal": "16.1234"
+      },
+      {
+       "$decimal": "17.1234"
+      },
+      {
+       "$decimal": "18.1234"
+      },
+      {
+       "$decimal": "19.1234"
+      },
+      {
+       "$decimal": "20.1234"
+      },
+      {
+       "$decimal": "21.1234"
+      },
+      {
+       "$decimal": "22.1234"
+      },
+      {
+       "$decimal": "23.1234"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0.1234,
+     1.1234,
+     2.1234,
+     3.1234,
+     4.1234,
+     5.1234,
+     6.1234,
+     7.1234,
+     8.1234,
+     9.1234,
+     10.1234,
+     11.1234,
+     12.1234,
+     13.1234,
+     14.1234,
+     15.1234,
+     16.1234,
+     17.1234,
+     18.1234,
+     19.1234,
+     20.1234,
+     21.1234
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/decimal_low_cardinality",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      },
+      {
+       "$decimal": "1.25"
+      },
+      {
+       "$decimal": "2.50"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5,
+     1.25,
+     2.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_int",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1,
+     2,
+     3,
+     1,
+     2,
+     3,
+     1,
+     2,
+     3,
+     1,
+     2,
+     3,
+     1,
+     2,
+     3,
+     1,
+     2,
+     3,
+     1,
+     2,
+     3,
+     1
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_int_with_null",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      1,
+      2,
+      null,
+      1,
+      2,
+      null,
+      1,
+      2,
+      null,
+      1,
+      2,
+      null,
+      1,
+      2,
+      null,
+      1,
+      2,
+      null,
+      1,
+      2,
+      null,
+      1,
+      2,
+      null
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_float",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5,
+      1.5,
+      2.5,
+      3.5
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1.5,
+     2.5,
+     3.5,
+     1.5,
+     2.5,
+     3.5,
+     1.5,
+     2.5,
+     3.5,
+     1.5,
+     2.5,
+     3.5,
+     1.5,
+     2.5,
+     3.5,
+     1.5,
+     2.5,
+     3.5,
+     1.5,
+     2.5,
+     3.5,
+     1.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_bool",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "bool",
+     "stype": "categorical"
+    },
+    "cells": [
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_mixed",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      1,
+      "a",
+      2.5,
+      null,
+      1,
+      "a",
+      2.5,
+      null,
+      1,
+      "a",
+      2.5,
+      null,
+      1,
+      "a",
+      2.5,
+      null,
+      1,
+      "a",
+      2.5,
+      null,
+      1,
+      "a",
+      2.5,
+      null
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     "1",
+     "a",
+     "2.5",
+     null,
+     "1",
+     "a",
+     "2.5",
+     null,
+     "1",
+     "a",
+     "2.5",
+     null,
+     "1",
+     "a",
+     "2.5",
+     null,
+     "1",
+     "a",
+     "2.5",
+     null,
+     "1",
+     "a"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_all_null",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_uuid",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$uuid": "7470717b-4f3d-5c24-833d-a7fa0b50c286"
+      },
+      {
+       "$uuid": "4d2e3082-b61a-520c-b98f-b672800e3500"
+      },
+      {
+       "$uuid": "abec06ad-870e-5761-8f76-e626f1ff568e"
+      },
+      {
+       "$uuid": "8b06f660-283e-5499-a56c-f0bee7399c10"
+      },
+      {
+       "$uuid": "a0001600-e6a8-52c9-b335-61bd29ac0a80"
+      },
+      {
+       "$uuid": "a97e5556-e36c-5418-9dfe-f35798cbc793"
+      },
+      {
+       "$uuid": "827c70ac-4b5a-5857-822a-c99221d02d5a"
+      },
+      {
+       "$uuid": "55ccbbaf-a883-55ec-8169-e9ba469527a6"
+      },
+      {
+       "$uuid": "d11bed7e-6c1a-5efe-b99f-e061d361d058"
+      },
+      {
+       "$uuid": "ba0ae0cd-a040-5707-91bc-1a4cb7f2d3f6"
+      },
+      {
+       "$uuid": "0e09c964-6ea2-5f1e-a0b3-3388231ba50d"
+      },
+      {
+       "$uuid": "8bf81128-1310-50f1-862b-af9ca74cd582"
+      },
+      {
+       "$uuid": "c3c944c9-7a8b-5346-bc6b-f8fa7989331d"
+      },
+      {
+       "$uuid": "5941beee-5cf0-55d0-a1ab-3f0868393f1f"
+      },
+      {
+       "$uuid": "b85b3618-32a5-587d-a3e0-a783618cc7f7"
+      },
+      {
+       "$uuid": "fe23414f-248a-5978-919c-43921eaaf797"
+      },
+      {
+       "$uuid": "53e7855e-ce80-524f-8431-2e61afa36506"
+      },
+      {
+       "$uuid": "dc9279c5-193f-5fbc-8beb-ce02bf745dd1"
+      },
+      {
+       "$uuid": "cec69744-7f51-5ce2-91ad-81ef7e09d77d"
+      },
+      {
+       "$uuid": "c8efc3e9-899a-5475-9e68-84a90a8608a1"
+      },
+      {
+       "$uuid": "8c914995-3b23-59fc-b960-d21903261525"
+      },
+      {
+       "$uuid": "c65bece6-10db-520a-81ff-eba580574de6"
+      },
+      {
+       "$uuid": "dba2a09f-e01d-5418-b312-ff5f6015682f"
+      },
+      {
+       "$uuid": "8b3a44d3-1791-511c-9070-fe5046f8e2c7"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "text",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "text"
+    },
+    "cells": [
+     [
+      "7470717b-4f3d-5c24-833d-a7fa0b50c286"
+     ],
+     [
+      "4d2e3082-b61a-520c-b98f-b672800e3500"
+     ],
+     [
+      "abec06ad-870e-5761-8f76-e626f1ff568e"
+     ],
+     [
+      "8b06f660-283e-5499-a56c-f0bee7399c10"
+     ],
+     [
+      "a0001600-e6a8-52c9-b335-61bd29ac0a80"
+     ],
+     [
+      "a97e5556-e36c-5418-9dfe-f35798cbc793"
+     ],
+     [
+      "827c70ac-4b5a-5857-822a-c99221d02d5a"
+     ],
+     [
+      "55ccbbaf-a883-55ec-8169-e9ba469527a6"
+     ],
+     [
+      "d11bed7e-6c1a-5efe-b99f-e061d361d058"
+     ],
+     [
+      "ba0ae0cd-a040-5707-91bc-1a4cb7f2d3f6"
+     ],
+     [
+      "0e09c964-6ea2-5f1e-a0b3-3388231ba50d"
+     ],
+     [
+      "8bf81128-1310-50f1-862b-af9ca74cd582"
+     ],
+     [
+      "c3c944c9-7a8b-5346-bc6b-f8fa7989331d"
+     ],
+     [
+      "5941beee-5cf0-55d0-a1ab-3f0868393f1f"
+     ],
+     [
+      "b85b3618-32a5-587d-a3e0-a783618cc7f7"
+     ],
+     [
+      "fe23414f-248a-5978-919c-43921eaaf797"
+     ],
+     [
+      "53e7855e-ce80-524f-8431-2e61afa36506"
+     ],
+     [
+      "dc9279c5-193f-5fbc-8beb-ce02bf745dd1"
+     ],
+     [
+      "cec69744-7f51-5ce2-91ad-81ef7e09d77d"
+     ],
+     [
+      "c8efc3e9-899a-5475-9e68-84a90a8608a1"
+     ],
+     [
+      "8c914995-3b23-59fc-b960-d21903261525"
+     ],
+     [
+      "c65bece6-10db-520a-81ff-eba580574de6"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_date",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$date": "2024-01-01"
+      },
+      {
+       "$date": "2024-01-02"
+      },
+      {
+       "$date": "2024-01-03"
+      },
+      {
+       "$date": "2024-01-04"
+      },
+      {
+       "$date": "2024-01-05"
+      },
+      {
+       "$date": "2024-01-06"
+      },
+      {
+       "$date": "2024-01-07"
+      },
+      {
+       "$date": "2024-01-08"
+      },
+      {
+       "$date": "2024-01-09"
+      },
+      {
+       "$date": "2024-01-10"
+      },
+      {
+       "$date": "2024-01-11"
+      },
+      {
+       "$date": "2024-01-12"
+      },
+      {
+       "$date": "2024-01-13"
+      },
+      {
+       "$date": "2024-01-14"
+      },
+      {
+       "$date": "2024-01-15"
+      },
+      {
+       "$date": "2024-01-16"
+      },
+      {
+       "$date": "2024-01-17"
+      },
+      {
+       "$date": "2024-01-18"
+      },
+      {
+       "$date": "2024-01-19"
+      },
+      {
+       "$date": "2024-01-20"
+      },
+      {
+       "$date": "2024-01-21"
+      },
+      {
+       "$date": "2024-01-22"
+      },
+      {
+       "$date": "2024-01-23"
+      },
+      {
+       "$date": "2024-01-24"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "timestamp",
+    "declared": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    },
+    "cells": [
+     "2024-01-01T00:00:00.000000Z",
+     "2024-01-02T00:00:00.000000Z",
+     "2024-01-03T00:00:00.000000Z",
+     "2024-01-04T00:00:00.000000Z",
+     "2024-01-05T00:00:00.000000Z",
+     "2024-01-06T00:00:00.000000Z",
+     "2024-01-07T00:00:00.000000Z",
+     "2024-01-08T00:00:00.000000Z",
+     "2024-01-09T00:00:00.000000Z",
+     "2024-01-10T00:00:00.000000Z",
+     "2024-01-11T00:00:00.000000Z",
+     "2024-01-12T00:00:00.000000Z",
+     "2024-01-13T00:00:00.000000Z",
+     "2024-01-14T00:00:00.000000Z",
+     "2024-01-15T00:00:00.000000Z",
+     "2024-01-16T00:00:00.000000Z",
+     "2024-01-17T00:00:00.000000Z",
+     "2024-01-18T00:00:00.000000Z",
+     "2024-01-19T00:00:00.000000Z",
+     "2024-01-20T00:00:00.000000Z",
+     "2024-01-21T00:00:00.000000Z",
+     "2024-01-22T00:00:00.000000Z"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_datetime",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$datetime": "2024-01-01T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-02T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-03T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-04T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-05T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-06T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-07T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-08T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-09T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-10T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-11T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-12T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-13T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-14T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-15T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-16T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-17T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-18T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-19T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-20T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-21T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-22T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-23T00:00:00+00:00"
+      },
+      {
+       "$datetime": "2024-01-24T00:00:00+00:00"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "timestamp",
+    "declared": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    },
+    "cells": [
+     "2024-01-01T00:00:00.000000Z",
+     "2024-01-02T00:00:00.000000Z",
+     "2024-01-03T00:00:00.000000Z",
+     "2024-01-04T00:00:00.000000Z",
+     "2024-01-05T00:00:00.000000Z",
+     "2024-01-06T00:00:00.000000Z",
+     "2024-01-07T00:00:00.000000Z",
+     "2024-01-08T00:00:00.000000Z",
+     "2024-01-09T00:00:00.000000Z",
+     "2024-01-10T00:00:00.000000Z",
+     "2024-01-11T00:00:00.000000Z",
+     "2024-01-12T00:00:00.000000Z",
+     "2024-01-13T00:00:00.000000Z",
+     "2024-01-14T00:00:00.000000Z",
+     "2024-01-15T00:00:00.000000Z",
+     "2024-01-16T00:00:00.000000Z",
+     "2024-01-17T00:00:00.000000Z",
+     "2024-01-18T00:00:00.000000Z",
+     "2024-01-19T00:00:00.000000Z",
+     "2024-01-20T00:00:00.000000Z",
+     "2024-01-21T00:00:00.000000Z",
+     "2024-01-22T00:00:00.000000Z"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_timedelta",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$timedelta_us": 0
+      },
+      {
+       "$timedelta_us": 86400000000
+      },
+      {
+       "$timedelta_us": 172800000000
+      },
+      {
+       "$timedelta_us": 259200000000
+      },
+      {
+       "$timedelta_us": 345600000000
+      },
+      {
+       "$timedelta_us": 432000000000
+      },
+      {
+       "$timedelta_us": 518400000000
+      },
+      {
+       "$timedelta_us": 604800000000
+      },
+      {
+       "$timedelta_us": 691200000000
+      },
+      {
+       "$timedelta_us": 777600000000
+      },
+      {
+       "$timedelta_us": 864000000000
+      },
+      {
+       "$timedelta_us": 950400000000
+      },
+      {
+       "$timedelta_us": 1036800000000
+      },
+      {
+       "$timedelta_us": 1123200000000
+      },
+      {
+       "$timedelta_us": 1209600000000
+      },
+      {
+       "$timedelta_us": 1296000000000
+      },
+      {
+       "$timedelta_us": 1382400000000
+      },
+      {
+       "$timedelta_us": 1468800000000
+      },
+      {
+       "$timedelta_us": 1555200000000
+      },
+      {
+       "$timedelta_us": 1641600000000
+      },
+      {
+       "$timedelta_us": 1728000000000
+      },
+      {
+       "$timedelta_us": 1814400000000
+      },
+      {
+       "$timedelta_us": 1900800000000
+      },
+      {
+       "$timedelta_us": 1987200000000
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     0,
+     86400000000000,
+     172800000000000,
+     259200000000000,
+     345600000000000,
+     432000000000000,
+     518400000000000,
+     604800000000000,
+     691200000000000,
+     777600000000000,
+     864000000000000,
+     950400000000000,
+     1036800000000000,
+     1123200000000000,
+     1209600000000000,
+     1296000000000000,
+     1382400000000000,
+     1468800000000000,
+     1555200000000000,
+     1641600000000000,
+     1728000000000000,
+     1814400000000000
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/object_int_beyond_js_safe",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      9007199254740993,
+      9007199254740995,
+      9007199254740997,
+      9007199254740999,
+      9007199254741001,
+      9007199254741003,
+      9007199254741005,
+      9007199254741007,
+      9007199254741009,
+      9007199254741011,
+      9007199254741013,
+      9007199254741015,
+      9007199254741017,
+      9007199254741019,
+      9007199254741021,
+      9007199254741023,
+      9007199254741025,
+      9007199254741027,
+      9007199254741029,
+      9007199254741031,
+      9007199254741033,
+      9007199254741035,
+      9007199254741037,
+      9007199254741039
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     "9007199254740993",
+     "9007199254740995",
+     "9007199254740997",
+     "9007199254740999",
+     "9007199254741001",
+     "9007199254741003",
+     "9007199254741005",
+     "9007199254741007",
+     "9007199254741009",
+     "9007199254741011",
+     "9007199254741013",
+     "9007199254741015",
+     "9007199254741017",
+     "9007199254741019",
+     "9007199254741021",
+     "9007199254741023",
+     "9007199254741025",
+     "9007199254741027",
+     "9007199254741029",
+     "9007199254741031",
+     "9007199254741033",
+     "9007199254741035"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/int64_beyond_js_safe",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "int64",
+     "values": [
+      9007199254740993,
+      9007199254740995,
+      9007199254740997,
+      9007199254740999,
+      9007199254741001,
+      9007199254741003,
+      9007199254741005,
+      9007199254741007,
+      9007199254741009,
+      9007199254741011,
+      9007199254741013,
+      9007199254741015,
+      9007199254741017,
+      9007199254741019,
+      9007199254741021,
+      9007199254741023,
+      9007199254741025,
+      9007199254741027,
+      9007199254741029,
+      9007199254741031,
+      9007199254741033,
+      9007199254741035,
+      9007199254741037,
+      9007199254741039
+     ]
+    }
+   },
+   "expected": {
+    "stype": "numerical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "numerical"
+    },
+    "cells": [
+     "9007199254740993",
+     "9007199254740995",
+     "9007199254740997",
+     "9007199254740999",
+     "9007199254741001",
+     "9007199254741003",
+     "9007199254741005",
+     "9007199254741007",
+     "9007199254741009",
+     "9007199254741011",
+     "9007199254741013",
+     "9007199254741015",
+     "9007199254741017",
+     "9007199254741019",
+     "9007199254741021",
+     "9007199254741023",
+     "9007199254741025",
+     "9007199254741027",
+     "9007199254741029",
+     "9007199254741031",
+     "9007199254741033",
+     "9007199254741035"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/category_int",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "category",
+     "values": [
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3,
+      1,
+      2,
+      3
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     "1",
+     "2",
+     "3",
+     "1",
+     "2",
+     "3",
+     "1",
+     "2",
+     "3",
+     "1",
+     "2",
+     "3",
+     "1",
+     "2",
+     "3",
+     "1",
+     "2",
+     "3",
+     "1",
+     "2",
+     "3",
+     "1"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/category_str",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "category",
+     "values": [
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b",
+      "a",
+      "b"
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b",
+     "a",
+     "b"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/nullable_int64",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "Int64",
+     "values": [
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      },
+      1,
+      2,
+      {
+       "$na": null
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1,
+     2,
+     null,
+     1
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/nullable_float64",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "Float64",
+     "values": [
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      },
+      1.5,
+      2.5,
+      {
+       "$na": null
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1.5,
+     2.5,
+     null,
+     1.5,
+     2.5,
+     null,
+     1.5,
+     2.5,
+     null,
+     1.5,
+     2.5,
+     null,
+     1.5,
+     2.5,
+     null,
+     1.5,
+     2.5,
+     null,
+     1.5,
+     2.5,
+     null,
+     1.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/nullable_boolean",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "boolean",
+     "values": [
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      },
+      true,
+      false,
+      {
+       "$na": null
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "bool",
+     "stype": "categorical"
+    },
+    "cells": [
+     true,
+     false,
+     null,
+     true,
+     false,
+     null,
+     true,
+     false,
+     null,
+     true,
+     false,
+     null,
+     true,
+     false,
+     null,
+     true,
+     false,
+     null,
+     true,
+     false,
+     null,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/string_extension",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "string",
+     "values": [
+      "s0",
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s7",
+      "s8",
+      "s9",
+      "s10",
+      "s11",
+      "s12",
+      "s13",
+      "s14",
+      "s15",
+      "s16",
+      "s17",
+      "s18",
+      "s19",
+      "s20",
+      "s21",
+      "s22",
+      "s23"
+     ]
+    }
+   },
+   "expected": {
+    "stype": "text",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "text"
+    },
+    "cells": [
+     [
+      "s0"
+     ],
+     [
+      "s1"
+     ],
+     [
+      "s2"
+     ],
+     [
+      "s3"
+     ],
+     [
+      "s4"
+     ],
+     [
+      "s5"
+     ],
+     [
+      "s6"
+     ],
+     [
+      "s7"
+     ],
+     [
+      "s8"
+     ],
+     [
+      "s9"
+     ],
+     [
+      "s10"
+     ],
+     [
+      "s11"
+     ],
+     [
+      "s12"
+     ],
+     [
+      "s13"
+     ],
+     [
+      "s14"
+     ],
+     [
+      "s15"
+     ],
+     [
+      "s16"
+     ],
+     [
+      "s17"
+     ],
+     [
+      "s18"
+     ],
+     [
+      "s19"
+     ],
+     [
+      "s20"
+     ],
+     [
+      "s21"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/stringlist",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ],
+      [
+       "a",
+       "b"
+      ]
+     ]
+    }
+   },
+   "expected": {
+    "stype": "multicategorical",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "multicategorical"
+    },
+    "cells": [
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ],
+     [
+      "a",
+      "b"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/intlist",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ],
+      [
+       1,
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expected": {
+    "stype": "multicategorical",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "multicategorical"
+    },
+    "cells": [
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ],
+     [
+      "1",
+      "2",
+      "3"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/floatlist",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ],
+      [
+       1.5,
+       2.5
+      ]
+     ]
+    }
+   },
+   "expected": {
+    "stype": "multicategorical",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "multicategorical"
+    },
+    "cells": [
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ],
+     [
+      "1.5",
+      "2.5"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/ndarray_float",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      },
+      {
+       "$ndarray": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "multicategorical",
+    "declared": {
+     "dtype": "stringlist",
+     "stype": "multicategorical"
+    },
+    "cells": [
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ],
+     [
+      "1.0",
+      "2.0"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/all_nan_float",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "float64",
+     "values": [
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "categorical"
+    },
+    "cells": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "dtype-fidelity/payload.feature_column/float_with_nan",
+   "source": "packages/structured-data-models-relational-engine/tests/test_payload_dtype_fidelity.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "float64",
+     "values": [
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      },
+      1.5,
+      {
+       "$float": "nan"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "categorical"
+    },
+    "cells": [
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null,
+     1.5,
+     null
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

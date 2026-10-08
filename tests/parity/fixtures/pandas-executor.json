@@ -1,0 +1,2891 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+ "cases": [
+  {
+   "id": "pandas-executor/labels.column/AGE-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.AGE",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      10.0,
+      {
+       "$float": "nan"
+      },
+      30.0
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.column/AGE-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.AGE",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      10.0,
+      30.0
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.column/GENDER-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.GENDER",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "str",
+     "values": [
+      "male",
+      {
+       "$float": "nan"
+      },
+      "female"
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.column/GENDER-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.GENDER",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "str",
+     "values": [
+      "male",
+      "female"
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.column/CAT-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.CAT",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "Int64",
+     "values": [
+      1,
+      {
+       "$na": null
+      },
+      3
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.column/CAT-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.CAT",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "int64",
+     "values": [
+      1,
+      3
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.column/star",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.column",
+   "input": {
+    "fqn": "USERS.*",
+    "tables": {
+     "USERS": {
+      "columns": {
+       "AGE": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         {
+          "$float": "nan"
+         },
+         30.0
+        ]
+       },
+       "GENDER": {
+        "dtype": "str",
+        "values": [
+         "male",
+         {
+          "$float": "nan"
+         },
+         "female"
+        ]
+       },
+       "CAT": {
+        "dtype": "Int64",
+        "values": [
+         1,
+         {
+          "$na": null
+         },
+         3
+        ]
+       }
+      }
+     }
+    },
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "int64",
+     "values": [
+      1,
+      1,
+      1
+     ]
+    },
+    "mask": [
+     true,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-NEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "!=",
+    "right": {
+     "value": "4",
+     "dtype": "int"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-LEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "<=",
+    "right": {
+     "value": "4",
+     "dtype": "int"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-GEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": ">=",
+    "right": {
+     "value": "4",
+     "dtype": "int"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-EQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "=",
+    "right": {
+     "value": "4",
+     "dtype": "int"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-LT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "<",
+    "right": {
+     "value": "4",
+     "dtype": "int"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-GT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": ">",
+    "right": {
+     "value": "4",
+     "dtype": "int"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/float-NEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Float64",
+     "values": [
+      2.5,
+      4.5,
+      {
+       "$na": null
+      },
+      4.5,
+      6.5
+     ]
+    },
+    "op": "!=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/float-LEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Float64",
+     "values": [
+      2.5,
+      4.5,
+      {
+       "$na": null
+      },
+      4.5,
+      6.5
+     ]
+    },
+    "op": "<=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/float-GEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Float64",
+     "values": [
+      2.5,
+      4.5,
+      {
+       "$na": null
+      },
+      4.5,
+      6.5
+     ]
+    },
+    "op": ">=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/float-EQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Float64",
+     "values": [
+      2.5,
+      4.5,
+      {
+       "$na": null
+      },
+      4.5,
+      6.5
+     ]
+    },
+    "op": "=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/float-LT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Float64",
+     "values": [
+      2.5,
+      4.5,
+      {
+       "$na": null
+      },
+      4.5,
+      6.5
+     ]
+    },
+    "op": "<",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/float-GT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Float64",
+     "values": [
+      2.5,
+      4.5,
+      {
+       "$na": null
+      },
+      4.5,
+      6.5
+     ]
+    },
+    "op": ">",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/timestamp-NEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "datetime64[ns]",
+     "values": [
+      {
+       "$timestamp": "2019-06-07T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-12-31T00:00:00"
+      }
+     ]
+    },
+    "op": "!=",
+    "right": {
+     "value": "2023-01-01",
+     "dtype": "date"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/timestamp-LEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "datetime64[ns]",
+     "values": [
+      {
+       "$timestamp": "2019-06-07T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-12-31T00:00:00"
+      }
+     ]
+    },
+    "op": "<=",
+    "right": {
+     "value": "2023-01-01",
+     "dtype": "date"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/timestamp-GEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "datetime64[ns]",
+     "values": [
+      {
+       "$timestamp": "2019-06-07T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-12-31T00:00:00"
+      }
+     ]
+    },
+    "op": ">=",
+    "right": {
+     "value": "2023-01-01",
+     "dtype": "date"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/timestamp-EQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "datetime64[ns]",
+     "values": [
+      {
+       "$timestamp": "2019-06-07T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-12-31T00:00:00"
+      }
+     ]
+    },
+    "op": "=",
+    "right": {
+     "value": "2023-01-01",
+     "dtype": "date"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/timestamp-LT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "datetime64[ns]",
+     "values": [
+      {
+       "$timestamp": "2019-06-07T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-12-31T00:00:00"
+      }
+     ]
+    },
+    "op": "<",
+    "right": {
+     "value": "2023-01-01",
+     "dtype": "date"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/timestamp-GT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "datetime64[ns]",
+     "values": [
+      {
+       "$timestamp": "2019-06-07T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-12-31T00:00:00"
+      }
+     ]
+    },
+    "op": ">",
+    "right": {
+     "value": "2023-01-01",
+     "dtype": "date"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-against-float-NEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "!=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-against-float-LEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "<=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-against-float-GEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": ">=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-against-float-EQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "=",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     false,
+     false,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-against-float-LT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "<",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/int-against-float-GT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": ">",
+    "right": {
+     "value": "4.5",
+     "dtype": "float"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/null-EQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "=",
+    "right": {
+     "value": "NULL",
+     "dtype": null
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     false,
+     true,
+     false,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.rel_op/null-NEQ",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.rel_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "!=",
+    "right": {
+     "value": "NULL",
+     "dtype": null
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     false,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.member_op/in",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.member_op",
+   "input": {
+    "left": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6
+     ]
+    },
+    "op": "IN",
+    "right": {
+     "value": [
+      {
+       "value": "2",
+       "dtype": "int"
+      },
+      {
+       "value": "6",
+       "dtype": "int"
+      }
+     ],
+     "dtype": "intlist"
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.bool_op/AND",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.bool_op",
+   "input": {
+    "left": {
+     "dtype": "bool",
+     "values": [
+      true,
+      false,
+      true,
+      false
+     ]
+    },
+    "op": "AND",
+    "right": {
+     "dtype": "bool",
+     "values": [
+      true,
+      true,
+      false,
+      false
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     false,
+     false,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.bool_op/OR",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.bool_op",
+   "input": {
+    "left": {
+     "dtype": "bool",
+     "values": [
+      true,
+      false,
+      true,
+      false
+     ]
+    },
+    "op": "OR",
+    "right": {
+     "dtype": "bool",
+     "values": [
+      true,
+      true,
+      false,
+      false
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     true,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.bool_op/NOT",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.bool_op",
+   "input": {
+    "left": {
+     "dtype": "bool",
+     "values": [
+      true,
+      false,
+      true,
+      false
+     ]
+    },
+    "op": "NOT",
+    "right": null
+   },
+   "expected": {
+    "dtype": "bool",
+    "values": [
+     false,
+     true,
+     false,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/SUM-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "SUM",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      6.0,
+      0.0,
+      0.0,
+      16.0,
+      2.0,
+      0.0
+     ]
+    },
+    "mask": [
+     true,
+     true,
+     true,
+     true,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/SUM-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "SUM",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      6.0,
+      0.0,
+      0.0,
+      16.0,
+      2.0,
+      0.0
+     ]
+    },
+    "mask": [
+     true,
+     true,
+     true,
+     true,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/AVG-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "AVG",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      3.0,
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      5.333333492279053,
+      2.0,
+      {
+       "$float": "nan"
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/AVG-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "AVG",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      3.0,
+      5.333333492279053,
+      2.0
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/MIN-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MIN",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      2.0,
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      4.0,
+      2.0,
+      {
+       "$float": "nan"
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/MIN-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MIN",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      2.0,
+      4.0,
+      2.0
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/MAX-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MAX",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      4.0,
+      {
+       "$float": "nan"
+      },
+      {
+       "$float": "nan"
+      },
+      6.0,
+      2.0,
+      {
+       "$float": "nan"
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/MAX-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MAX",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      4.0,
+      6.0,
+      2.0
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/COUNT-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "COUNT",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      2.0,
+      0.0,
+      0.0,
+      3.0,
+      1.0,
+      0.0
+     ]
+    },
+    "mask": [
+     true,
+     true,
+     true,
+     true,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/COUNT-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "COUNT",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      2.0,
+      0.0,
+      0.0,
+      3.0,
+      1.0,
+      0.0
+     ]
+    },
+    "mask": [
+     true,
+     true,
+     true,
+     true,
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/LIST_DISTINCT-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "LIST_DISTINCT",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "object",
+     "values": [
+      [
+       {
+        "$np": {
+         "type": "int64",
+         "value": 2
+        }
+       },
+       {
+        "$np": {
+         "type": "int64",
+         "value": 4
+        }
+       }
+      ],
+      {
+       "$na": null
+      },
+      {
+       "$na": null
+      },
+      [
+       {
+        "$np": {
+         "type": "int64",
+         "value": 4
+        }
+       },
+       {
+        "$np": {
+         "type": "int64",
+         "value": 6
+        }
+       }
+      ],
+      [
+       {
+        "$np": {
+         "type": "int64",
+         "value": 2
+        }
+       }
+      ],
+      {
+       "$na": null
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/LIST_DISTINCT-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "LIST_DISTINCT",
+    "feat": {
+     "dtype": "Int64",
+     "values": [
+      2,
+      4,
+      {
+       "$na": null
+      },
+      4,
+      6,
+      6,
+      2
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     1,
+     3,
+     3,
+     3,
+     4
+    ],
+    "batch_size": 6,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "object",
+     "values": [
+      [
+       {
+        "$np": {
+         "type": "int64",
+         "value": 2
+        }
+       },
+       {
+        "$np": {
+         "type": "int64",
+         "value": 4
+        }
+       }
+      ],
+      [
+       {
+        "$np": {
+         "type": "int64",
+         "value": 4
+        }
+       },
+       {
+        "$np": {
+         "type": "int64",
+         "value": 6
+        }
+       }
+      ],
+      [
+       {
+        "$np": {
+         "type": "int64",
+         "value": 2
+        }
+       }
+      ]
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     false,
+     true,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/timestamp-MIN-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MIN",
+    "feat": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-01-10T00:00:00"
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      }
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     2
+    ],
+    "batch_size": 4,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-01T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      },
+      {
+       "$nat": null
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/timestamp-MIN-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MIN",
+    "feat": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-01-10T00:00:00"
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      }
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     2
+    ],
+    "batch_size": 4,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/timestamp-MAX-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MAX",
+    "feat": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-01-10T00:00:00"
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      }
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     2
+    ],
+    "batch_size": 4,
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-10T00:00:00"
+      },
+      {
+       "$nat": null
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      },
+      {
+       "$nat": null
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation_type/timestamp-MAX-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation_type",
+   "input": {
+    "op": "MAX",
+    "feat": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2025-01-10T00:00:00"
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      }
+     ]
+    },
+    "batch": [
+     0,
+     0,
+     2
+    ],
+    "batch_size": 4,
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2025-01-10T00:00:00"
+      },
+      {
+       "$timestamp": "2025-02-01T00:00:00"
+      }
+     ]
+    },
+    "mask": [
+     true,
+     false,
+     true,
+     false
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation/sum-start-0-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation",
+   "input": {
+    "aggregation": {
+     "target": "fact.test",
+     "aggr": "SUM",
+     "start": 0,
+     "end": 2,
+     "unit": "days"
+    },
+    "tables": {
+     "fact": {
+      "columns": {
+       "test": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8
+        ]
+       }
+      }
+     }
+    },
+    "times": {
+     "fact": {
+      "dtype": "datetime64[us]",
+      "values": [
+       {
+        "$timestamp": "2023-01-01T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-02T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-03T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-04T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-05T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-06T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-07T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-08T00:00:00"
+       }
+      ]
+     }
+    },
+    "batches": {
+     "fact": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "anchor_time": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-06T00:00:00"
+      }
+     ]
+    },
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      5.0,
+      15.0
+     ]
+    },
+    "mask": [
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation/sum-start-0-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation",
+   "input": {
+    "aggregation": {
+     "target": "fact.test",
+     "aggr": "SUM",
+     "start": 0,
+     "end": 2,
+     "unit": "days"
+    },
+    "tables": {
+     "fact": {
+      "columns": {
+       "test": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8
+        ]
+       }
+      }
+     }
+    },
+    "times": {
+     "fact": {
+      "dtype": "datetime64[us]",
+      "values": [
+       {
+        "$timestamp": "2023-01-01T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-02T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-03T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-04T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-05T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-06T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-07T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-08T00:00:00"
+       }
+      ]
+     }
+    },
+    "batches": {
+     "fact": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "anchor_time": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-06T00:00:00"
+      }
+     ]
+    },
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      5.0,
+      15.0
+     ]
+    },
+    "mask": [
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation/sum-start-None-filter-na-False",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation",
+   "input": {
+    "aggregation": {
+     "target": "fact.test",
+     "aggr": "SUM",
+     "start": null,
+     "end": 2,
+     "unit": "days"
+    },
+    "tables": {
+     "fact": {
+      "columns": {
+       "test": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8
+        ]
+       }
+      }
+     }
+    },
+    "times": {
+     "fact": {
+      "dtype": "datetime64[us]",
+      "values": [
+       {
+        "$timestamp": "2023-01-01T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-02T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-03T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-04T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-05T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-06T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-07T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-08T00:00:00"
+       }
+      ]
+     }
+    },
+    "batches": {
+     "fact": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "anchor_time": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-06T00:00:00"
+      }
+     ]
+    },
+    "filter_na": false
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      6.0,
+      26.0
+     ]
+    },
+    "mask": [
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "pandas-executor/labels.aggregation/sum-start-None-filter-na-True",
+   "source": "packages/structured-data-models-relational-engine/tests/query/test_pandas_executor.py",
+   "operation": "labels.aggregation",
+   "input": {
+    "aggregation": {
+     "target": "fact.test",
+     "aggr": "SUM",
+     "start": null,
+     "end": 2,
+     "unit": "days"
+    },
+    "tables": {
+     "fact": {
+      "columns": {
+       "test": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8
+        ]
+       }
+      }
+     }
+    },
+    "times": {
+     "fact": {
+      "dtype": "datetime64[us]",
+      "values": [
+       {
+        "$timestamp": "2023-01-01T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-02T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-03T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-04T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-05T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-06T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-07T00:00:00"
+       },
+       {
+        "$timestamp": "2023-01-08T00:00:00"
+       }
+      ]
+     }
+    },
+    "batches": {
+     "fact": [
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "anchor_time": {
+     "dtype": "datetime64[us]",
+     "values": [
+      {
+       "$timestamp": "2023-01-01T00:00:00"
+      },
+      {
+       "$timestamp": "2023-01-06T00:00:00"
+      }
+     ]
+    },
+    "filter_na": true
+   },
+   "expected": {
+    "out": {
+     "dtype": "float32",
+     "values": [
+      6.0,
+      26.0
+     ]
+    },
+    "mask": [
+     true,
+     true
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

@@ -1,0 +1,407 @@
+{
+ "format_version": 1,
+ "name": "memory/marketplace-early",
+ "backend": "memory",
+ "task_kind": "regression",
+ "data": {
+  "generator": "marketplace",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_data",
+   "args": {
+    "tables": ["customers", "items", "reviews", "stores", "purchases"],
+    "primary_keys": {
+     "stores": "store_code"
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2],
+    "anchor_time": {
+     "$timestamp": "2024-10-01T00:00:00"
+    },
+    "context_anchor_time": {
+     "$timestamp": "2024-01-04T00:00:00"
+    },
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "regression",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "float32"
+    },
+    "entity_table_names": ["customers"],
+    "anchor_time_column": "__kumo_anchor_time"
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "__kumo_anchor_time": {
+       "dtype": "timestamp[us]",
+       "stype": "timestamp",
+       "nullable": false
+      },
+      "TARGET": {
+       "dtype": "float32",
+       "stype": "numerical"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "customers": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "nullable": false
+       },
+       "segment": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "signup_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      },
+      "primary_key": ["instance_id", "customer_id"]
+     },
+     "items": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "category": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "price": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "stores": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "region": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "purchases": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "amount": {
+        "dtype": "float64",
+        "stype": "numerical"
+       },
+       "purchased_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "item_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "store_code": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["customer_id"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["item_id"],
+      "target_table": "items",
+      "target_columns": ["__node_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["store_code"],
+      "target_table": "stores",
+      "target_columns": ["__node_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+     "rows": [
+      [0, 32, "2024-01-04T00:00:00.000000Z", 0.0],
+      [1, 54, "2024-01-04T00:00:00.000000Z", 0.0],
+      [2, 2, "2024-01-04T00:00:00.000000Z", 0.0],
+      [3, 55, "2024-01-04T00:00:00.000000Z", 0.0],
+      [4, 41, "2024-01-04T00:00:00.000000Z", 0.0],
+      [5, 29, "2024-01-04T00:00:00.000000Z", 0.0],
+      [6, 45, "2024-01-04T00:00:00.000000Z", 0.0]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "segment", "signup_at"],
+      "rows": [
+       [0, 32, "student", "2024-01-01T00:00:00.000000Z"],
+       [1, 54, "business", "2024-01-01T00:00:00.000000Z"],
+       [2, 2, "business", "2024-01-01T00:00:00.000000Z"],
+       [3, 55, "business", "2024-01-01T00:00:00.000000Z"],
+       [4, 41, "business", "2024-01-01T00:00:00.000000Z"],
+       [5, 29, "retail", "2024-01-01T00:00:00.000000Z"],
+       [6, 45, "student", "2024-01-01T00:00:00.000000Z"]
+      ]
+     },
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "category", "price"],
+      "rows": [
+       [0, 0, "kitchen", 45.92]
+      ]
+     },
+     "stores": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "region"],
+      "rows": [
+       [0, 0, "east"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "customer_id", "item_id", "store_code"],
+      "rows": [
+       [0, 0, 54.05, "2024-01-02T18:00:00.000000Z", 32, 0, 0]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+     "rows": [
+      [7, 1, "2024-10-01T00:00:00.000000Z"],
+      [8, 2, "2024-10-01T00:00:00.000000Z"]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "segment", "signup_at"],
+      "rows": [
+       [7, 1, "retail", "2024-02-05T00:00:00.000000Z"],
+       [8, 2, "business", "2024-01-01T00:00:00.000000Z"]
+      ]
+     },
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "category", "price"],
+      "rows": [
+       [7, 1, "garden", 1.46],
+       [7, 2, "kitchen", 45.92],
+       [7, 3, "garden", 46.14],
+       [7, 4, "kitchen", 28.69],
+       [7, 5, "garden", 25.94],
+       [7, 6, "garden", 43.39],
+       [8, 7, "kitchen", 28.69],
+       [8, 8, "kitchen", 45.92],
+       [8, 9, "kitchen", 14.61],
+       [8, 10, "garden", 43.39],
+       [8, 11, "garden", 46.14]
+      ]
+     },
+     "stores": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "region"],
+      "rows": [
+       [7, 1, "north"],
+       [7, 2, "north"],
+       [7, 3, "east"],
+       [7, 4, "west"],
+       [8, 5, "east"],
+       [8, 6, "north"],
+       [8, 7, "south"],
+       [8, 8, "north"],
+       [8, 9, "west"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "customer_id", "item_id", "store_code"],
+      "rows": [
+       [7, 1, 66.66, "2024-05-07T19:00:00.000000Z", 1, 1, 1],
+       [7, 2, 78.65, "2024-05-15T16:00:00.000000Z", 1, 2, 2],
+       [7, 3, 12.57, "2024-06-08T10:00:00.000000Z", 1, 3, 3],
+       [7, 4, 30.94, "2024-06-11T09:00:00.000000Z", 1, 4, 2],
+       [7, 5, 72.97, "2024-06-30T13:00:00.000000Z", 1, 5, 3],
+       [7, 6, 22.43, "2024-07-25T19:00:00.000000Z", 1, 4, 4],
+       [7, 7, 36.45, "2024-07-25T21:00:00.000000Z", 1, 6, 3],
+       [8, 8, 99.4, "2024-02-11T20:00:00.000000Z", 2, 7, 5],
+       [8, 9, 38.71, "2024-03-10T16:00:00.000000Z", 2, 8, 6],
+       [8, 10, 28.21, "2024-04-03T09:00:00.000000Z", 2, 9, 7],
+       [8, 11, 30.11, "2024-05-08T17:00:00.000000Z", 2, 10, 8],
+       [8, 12, 23.6, "2024-07-05T16:00:00.000000Z", 2, 11, 9],
+       [8, 13, 58.07, "2024-07-24T12:00:00.000000Z", 2, 8, 6],
+       [8, 14, 40.17, "2024-08-18T09:00:00.000000Z", 2, 9, 9],
+       [8, 15, 56.99, "2024-08-26T06:00:00.000000Z", 2, 10, 9],
+       [8, 16, 4.67, "2024-08-26T21:00:00.000000Z", 2, 8, 6],
+       [8, 17, 96.83, "2024-09-24T12:00:00.000000Z", 2, 11, 7]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction"],
+    "prediction_statistic": "median"
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "regression",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id",
+    "num_context_examples": 7,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "7",
+      "prediction": 85.885706
+     },
+     {
+      "row_index": 1,
+      "id": "8",
+      "prediction": 99.094981
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "builtins.UserWarning",
+   "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2023-12-28 00:00:00', however, your data only contains data back to '2024-01-02 18:00:00'."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "every context row has the same answer to 'PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+  }
+ ]
+}

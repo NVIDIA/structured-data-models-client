@@ -1,0 +1,670 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""Schemas over tables left in DuckDB, SQLite and Postgres, sampled there with
+SQL."""
+
+from __future__ import annotations
+
+import json
+import os
+import uuid
+import warnings
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import pytest
+
+pytest.importorskip('sdm_relational_engine.relationallib')
+duckdb = pytest.importorskip('duckdb')
+dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
+
+from sdm_connectors import (  # noqa: E402
+    DuckDBSource,
+    PostgresSource,
+    SQLiteSource,
+)
+
+from sdm_client import (  # noqa: E402
+    KumoTabular,
+    PredictiveQuery,
+    Relationship,
+    Schema,
+    SourceTable,
+    StructuredDataError,
+    Table,
+)
+from sdm_client.core.warnings import SDMWarning  # noqa: E402
+
+QUERY = 'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id'
+TABLES = {'users': 'app_users', 'orders': 'app_orders'}
+
+
+def _frames() -> tuple[pd.DataFrame, pd.DataFrame]:
+    rng = np.random.default_rng(0)
+    users = pd.DataFrame(
+        {
+            'user_id': range(1, 51),
+            'age': rng.integers(18, 70, 50),
+            'country': rng.choice(['US', 'DE', 'IN'], 50),
+        }
+    )
+    # Hourly timestamps over a year, so windows of whole days land exactly on
+    # stored rows: the edges are where a text comparison goes wrong.
+    orders = pd.DataFrame(
+        {
+            'order_id': range(1, 1001),
+            'user_id': rng.integers(1, 51, 1000),
+            'amount': rng.gamma(2, 20, 1000).round(2),
+            'ts': pd.Timestamp('2024-01-01')
+            + pd.to_timedelta(rng.integers(0, 365 * 24, 1000), unit='h'),
+        }
+    )
+    return users, orders
+
+
+USERS, ORDERS = _frames()
+
+
+@pytest.fixture
+def duckdb_source() -> Any:
+    connection = duckdb.connect()
+    connection.register('users_frame', USERS)
+    connection.register('orders_frame', ORDERS)
+    connection.execute('CREATE TABLE app_users AS SELECT * FROM users_frame')
+    connection.execute('CREATE TABLE app_orders AS SELECT * FROM orders_frame')
+    yield DuckDBSource(connection)
+    connection.close()
+
+
+@pytest.fixture
+def sqlite_source(tmp_path: Path) -> Any:
+    connection = dbapi.connect(str(tmp_path / 'sales.sqlite'))
+    # ADBC stores fractional seconds, which a text window bound must match.
+    with connection.cursor() as cursor:
+        cursor.adbc_ingest('app_users', USERS, mode='create')
+        cursor.adbc_ingest('app_orders', ORDERS, mode='create')
+    connection.commit()
+    yield SQLiteSource(connection)
+    connection.close()
+
+
+@pytest.fixture
+def postgres() -> Any:
+    r"""A psycopg connection and a schema of its own, dropped afterwards."""
+    dsn = os.getenv('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        if os.getenv('SDM_REQUIRE_POSTGRES'):
+            pytest.fail(
+                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+            )
+        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
+    psycopg = pytest.importorskip('psycopg')
+
+    namespace = f'sdm_{uuid.uuid4().hex[:8]}'
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(f'CREATE SCHEMA {namespace}')
+        try:
+            yield connection, namespace
+        finally:
+            connection.execute(f'DROP SCHEMA {namespace} CASCADE')
+
+
+def _python_rows(frame: pd.DataFrame) -> list[tuple[Any, ...]]:
+    # psycopg adapts Python values, not numpy's.
+    return [
+        tuple(
+            value.to_pydatetime() if isinstance(value, pd.Timestamp) else value
+            for value in row.values()
+        )
+        for row in frame.to_dict('records')
+    ]
+
+
+@pytest.fixture
+def postgres_source(postgres: Any) -> Any:
+    connection, namespace = postgres
+    for name, frame, columns in (
+        ('app_users', USERS, 'user_id BIGINT, age BIGINT, country TEXT'),
+        (
+            'app_orders',
+            ORDERS,
+            'order_id BIGINT, user_id BIGINT, amount DOUBLE PRECISION, '
+            'ts TIMESTAMP',
+        ),
+    ):
+        connection.execute(f'CREATE TABLE {namespace}.{name} ({columns})')
+        markers = ', '.join(['%s'] * len(frame.columns))
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                f'INSERT INTO {namespace}.{name} VALUES ({markers})',
+                _python_rows(frame),
+            )
+    return PostgresSource(connection, schema=namespace)
+
+
+@pytest.fixture(params=['duckdb', 'sqlite', 'postgres'])
+def source(request: pytest.FixtureRequest) -> Any:
+    return request.getfixturevalue(f'{request.param}_source')
+
+
+def _schema(source: Any, **overrides: Any) -> Schema:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        return Schema.from_source(source, TABLES, **overrides)
+
+
+def _payload(schema: Any, seed: int = 7) -> dict[str, Any]:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        request = PredictiveQuery(QUERY, schema).materialize(
+            indices=[1, 2, 3], random_seed=seed
+        )
+    (payload,) = request._payloads
+    return json.loads(json.dumps(payload, default=str))
+
+
+def _by_hand(described: Schema, source: Any, **source_names: str) -> Schema:
+    r"""``described`` rebuilt from its parts, so nothing it read is kept."""
+    return Schema(
+        {
+            name: SourceTable(
+                name,
+                source_names.get(name, table.source_name),
+                dict(table.columns),
+                primary_key=table.primary_key,
+                time_column=table.time_column,
+            )
+            for name, table in described.tables.items()
+        },
+        described.relationships,
+        source=source,
+    )
+
+
+def test_the_tables_are_described_without_being_read(source: Any) -> None:
+    from sdm_relational_engine.rfm.base import DataBackend
+
+    schema = _schema(source)
+
+    assert schema.source is source
+    assert all(isinstance(t, SourceTable) for t in schema.tables.values())
+    assert not any(hasattr(t, 'data') for t in schema.tables.values())
+    assert schema['users'].source_name == 'app_users'
+    assert schema['users'].primary_key == 'user_id'
+    assert schema['orders'].primary_key == 'order_id'
+    assert schema['orders'].time_column == 'ts'
+    assert schema['orders']['amount'].stype == 'numerical'
+    assert schema['users']['country'].stype == 'categorical'
+    assert schema.relationships == [
+        Relationship('orders', 'user_id', 'users', 'user_id')
+    ]
+    # What the core read of the tables, kept for gathering, is of the
+    # source's backend.
+    assert {table['backend'] for _, table in schema._engine_tables} == {
+        DataBackend(source.backend).value
+    }
+
+
+@pytest.mark.parametrize('seed', [7, 11, 23])
+def test_every_sampled_label_is_the_sum_the_rows_give(
+    source: Any, seed: int
+) -> None:
+    r"""An order exactly on a window edge must count; SQLite compares bounds
+    as text.
+    """
+    rows = _payload(_schema(source), seed)['context']['instance_table']['rows']
+
+    wrong = []
+    for _, user, anchor, label in rows:
+        at = pd.Timestamp(anchor).tz_localize(None)
+        inside = (
+            (ORDERS.user_id == user)
+            & (ORDERS.ts > at)
+            & (ORDERS.ts <= at + pd.Timedelta(days=30))
+        )
+        expected = ORDERS.amount[inside].sum()
+        if not np.isclose(label, expected, rtol=1e-5, atol=1e-3):
+            wrong.append((user, anchor, label, expected))
+    assert rows
+    assert not wrong
+
+
+def test_a_scored_entity_sees_the_history_it_would_in_memory(
+    source: Any,
+) -> None:
+    def history(payload: dict[str, Any]) -> list[tuple[Any, ...]]:
+        table = payload['predict']['related_tables']['orders']
+        at = {name: i for i, name in enumerate(table['columns'])}
+        return sorted(
+            (row[at['user_id']], row[at['ts']], row[at['amount']])
+            for row in table['rows']
+        )
+
+    in_place = _payload(_schema(source))
+    in_memory = _payload({'users': USERS, 'orders': ORDERS})
+
+    assert history(in_place) == history(in_memory)
+    assert (
+        in_place['predict']['instance_table']
+        == in_memory['predict']['instance_table']
+    )
+
+
+def test_a_schema_built_by_hand_asks_what_from_source_asks(
+    source: Any,
+) -> None:
+    described = _schema(source)
+    by_hand, read = (_payload(_by_hand(described, source)), _payload(described))
+
+    if source.backend == 'sqlite':
+        # SQLite cannot seed the context's draw, so only its shape compares.
+        for payload in (by_hand, read):
+            context = payload['context']
+            for table in (
+                context['instance_table'],
+                *context['related_tables'].values(),
+            ):
+                del table['rows']
+    assert by_hand == read
+
+
+_KEYED = (
+    'CREATE TABLE {in_}u (user_id INTEGER PRIMARY KEY)',
+    'CREATE TABLE {in_}o (order_id INTEGER PRIMARY KEY, '
+    'buyer INTEGER REFERENCES {in_}u(user_id), ts TIMESTAMP)',
+    'INSERT INTO {in_}u VALUES (1)',
+    "INSERT INTO {in_}o VALUES (1, 1, '2024-01-01')",
+)
+
+
+@pytest.fixture(params=['duckdb', 'postgres'])
+def keyed_source(request: pytest.FixtureRequest) -> Any:
+    # Postgres names the referenced table with its schema; DuckDB does not.
+    if request.param == 'duckdb':
+        connection = duckdb.connect()
+        for statement in _KEYED:
+            connection.execute(statement.format(in_=''))
+        return DuckDBSource(connection)
+    connection, namespace = request.getfixturevalue('postgres')
+    for statement in _KEYED:
+        connection.execute(statement.format(in_=f'{namespace}.'))
+    return PostgresSource(connection, schema=namespace)
+
+
+def test_a_declared_foreign_key_links_what_names_would_not(
+    keyed_source: Any,
+) -> None:
+    named = Schema.from_source(keyed_source, {'users': 'u', 'orders': 'o'})
+    everything = Schema.from_source(keyed_source)
+
+    assert named.relationships == [
+        Relationship('orders', 'buyer', 'users', 'user_id')
+    ]
+    assert everything.relationships == [
+        Relationship('o', 'buyer', 'u', 'user_id')
+    ]
+
+
+def test_a_foreign_key_lands_on_the_table_whose_name_matches_exactly(
+    postgres: Any,
+) -> None:
+    # Postgres keeps "Parent" and parent apart, so folding case would merge
+    # them and leave the key on whichever was listed last.
+    connection, namespace = postgres
+    for statement in (
+        'CREATE TABLE {in_}"Parent" (parent_id INTEGER PRIMARY KEY)',
+        'CREATE TABLE {in_}parent (parent_id INTEGER PRIMARY KEY)',
+        'CREATE TABLE {in_}child (child_id INTEGER PRIMARY KEY, '
+        'parent_id INTEGER REFERENCES {in_}"Parent"(parent_id))',
+        'INSERT INTO {in_}"Parent" VALUES (1)',
+        'INSERT INTO {in_}parent VALUES (1)',
+        'INSERT INTO {in_}child VALUES (1, 1)',
+    ):
+        connection.execute(statement.format(in_=f'{namespace}.'))
+    source = PostgresSource(connection, schema=namespace)
+
+    schema = Schema.from_source(
+        source, {'Parent': 'Parent', 'parent': 'parent', 'child': 'child'}
+    )
+
+    assert schema.relationships == [
+        Relationship('child', 'parent_id', 'Parent', 'parent_id')
+    ]
+
+
+def test_a_foreign_key_to_a_unique_column_keys_a_keyless_table(
+    postgres: Any,
+) -> None:
+    # Two unique columns leave the engine without a key to infer, so only the
+    # foreign key says which one identifies a region.
+    connection, namespace = postgres
+    for statement in (
+        'CREATE TABLE {in_}region (code TEXT UNIQUE, slug TEXT UNIQUE)',
+        'CREATE TABLE {in_}store (store_id INTEGER PRIMARY KEY, '
+        'ref TEXT UNIQUE)',
+        'CREATE TABLE {in_}sale (sale_id INTEGER PRIMARY KEY, '
+        'region_code TEXT REFERENCES {in_}region(code), '
+        'store_ref TEXT REFERENCES {in_}store(ref), ts TIMESTAMP)',
+        "INSERT INTO {in_}region VALUES ('n', 'north'), ('s', 'south')",
+        "INSERT INTO {in_}store VALUES (1, 'a'), (2, 'b')",
+        # A sale a day for a year, so a 30 day window has history behind it.
+        'INSERT INTO {in_}sale SELECT i, '
+        "CASE WHEN i % 2 = 0 THEN 'n' ELSE 's' END, "
+        "CASE WHEN i % 3 = 0 THEN 'a' ELSE 'b' END, "
+        "TIMESTAMP '2024-01-01' + i * INTERVAL '1 day' "
+        'FROM generate_series(1, 365) AS i',
+    ):
+        connection.execute(statement.format(in_=f'{namespace}.'))
+    source = PostgresSource(connection, schema=namespace)
+
+    with pytest.warns(SDMWarning) as caught:
+        schema = Schema.from_source(source)
+
+    assert schema['region'].primary_key == 'code'
+    assert schema['store'].primary_key == 'store_id'
+    assert schema.relationships == [
+        Relationship('sale', 'region_code', 'region', 'code')
+    ]
+    messages = [str(warning.message) for warning in caught]
+    assert (
+        "sale.store_ref refers to store.ref, but the primary key of 'store' "
+        "is 'store_id'. A relationship joins to a primary key, so none was "
+        "made from it. Pass primary_keys={'store': 'ref'} if 'ref' "
+        "identifies a row of 'store'."
+    ) in messages
+    assert not any('cannot match' in message for message in messages)
+
+    # Sales alternate between the regions daily, so every 30 day label counts
+    # 15 when the join runs through the adopted key.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        request = PredictiveQuery(
+            'PREDICT COUNT(sale.*, 0, 30, days) FOR EACH region.code', schema
+        ).materialize(indices=['n'], random_seed=7)
+    (payload,) = request._payloads
+    context = json.loads(json.dumps(payload, default=str))['context']
+    labels = {(row[1], row[3]) for row in context['instance_table']['rows']}
+    assert labels == {('n', 15.0), ('s', 15.0)}
+
+
+def test_overrides_mean_what_they_mean_on_from_data(
+    duckdb_source: Any,
+) -> None:
+    schema = _schema(
+        duckdb_source,
+        primary_keys={'orders': ('user_id', 'order_id')},
+        relationships=[],
+    )
+
+    assert tuple(schema['orders'].primary_key) == ('user_id', 'order_id')
+    assert schema.relationships == []
+
+
+def test_a_column_with_no_scalar_form_is_left_out_and_named() -> None:
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE t (id INTEGER PRIMARY KEY, tags INTEGER[], x DOUBLE)'
+    )
+    connection.execute('INSERT INTO t VALUES (1, [1, 2], 0.5)')
+
+    with pytest.warns(SDMWarning, match=r'leaves out tags'):
+        schema = Schema.from_source(DuckDBSource(connection), {'t': 't'})
+
+    assert list(schema['t'].columns) == ['id', 'x']
+
+
+def test_a_column_left_out_after_a_question_is_not_sent_by_the_next(
+    source: Any,
+) -> None:
+    schema = _schema(source)
+    _payload(schema)
+    del schema['users']['country']
+
+    assert 'country' not in schema['users']
+    payload = _payload(schema)
+    assert (
+        'country'
+        not in payload['context']['related_tables']['users']['columns']
+    )
+
+    with pytest.raises(StructuredDataError, match='primary key; set that'):
+        del schema['users']['user_id']
+    with pytest.raises(StructuredDataError, match='time column; set that'):
+        del schema['orders']['ts']
+    with pytest.raises(StructuredDataError, match="has no column 'nope'"):
+        del schema['users']['nope']
+
+
+def test_the_tabular_model_is_refused_rather_than_fed_nothing(
+    duckdb_source: Any,
+) -> None:
+    schema = Schema.from_source(
+        duckdb_source, {'users': 'app_users'}, relationships=[]
+    )
+    query = PredictiveQuery('PREDICT users.age FOR EACH users.user_id', schema)
+
+    with pytest.raises(StructuredDataError, match='only the relational'):
+        query.materialize(indices=[1], model=KumoTabular())
+    with pytest.raises(StructuredDataError, match='score with indices='):
+        query.materialize(predict=USERS.head(1))
+
+
+def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
+    duckdb_source: Any,
+) -> None:
+    schema = Schema.from_source(
+        duckdb_source, {'users': 'app_users'}, relationships=[]
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        request = PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema
+        ).materialize(indices=[1, 2])
+
+    assert request.predict_rows == 2
+    assert request.schema.source is duckdb_source
+
+
+@pytest.mark.parametrize(
+    'call, match',
+    [
+        (
+            lambda source: Schema.from_source(source.connection, TABLES),
+            'needs an sdm_connectors',
+        ),
+        (lambda source: Schema.from_source(source, {}), 'leave tables out'),
+        (
+            lambda source: Schema.from_source(source, {'': 'app_users'}),
+            'non-empty strings',
+        ),
+        (
+            lambda source: Schema.from_source(source, {'users': 3}),
+            'map to its name',
+        ),
+        (
+            lambda source: Schema.from_source(source, {'users': 'nope'}),
+            'does not exist',
+        ),
+        (
+            lambda source: _payload(
+                _by_hand(_schema(source), source, orders='nope')
+            ),
+            'does not exist',
+        ),
+        (
+            lambda source: _schema(source, time_columns={'order': 'ts'}),
+            "no table 'order'",
+        ),
+        (
+            lambda source: _schema(source, relationships=['x']),
+            'must be a Relationship',
+        ),
+        (
+            lambda source: Schema.from_source(DuckDBSource(duckdb.connect())),
+            r'DuckDBSource\(\) holds no table to describe',
+        ),
+        (lambda source: SourceTable('t', '', {}), 'needs the name it has'),
+        (
+            lambda source: Schema(
+                {
+                    'users': Table('users', USERS, {}),
+                    'orders': _schema(source)['orders'],
+                },
+                source=source,
+            ),
+            'samples one or the other',
+        ),
+        (
+            lambda source: Schema({'orders': _schema(source)['orders']}),
+            'needs that source',
+        ),
+        (
+            lambda source: Schema(
+                {'users': Table('users', USERS, {})}, source=source
+            ),
+            'which a source does not',
+        ),
+    ],
+    ids=[
+        'a connection',
+        'no tables',
+        'an empty name',
+        'a name mapped to no name',
+        'a missing table',
+        'a missing table built by hand',
+        'an unknown override',
+        'a relationship that is not one',
+        'an empty source',
+        'a table without its source name',
+        'frames and tables in place',
+        'tables in place without their source',
+        'frames with a source',
+    ],
+)
+def test_a_schema_that_cannot_be_sampled_is_refused(
+    duckdb_source: Any, call: Any, match: str
+) -> None:
+    with pytest.raises(StructuredDataError, match=match):
+        call(duckdb_source)
+
+
+def test_a_snapshot_keeps_the_source(duckdb_source: Any) -> None:
+    schema = _schema(duckdb_source)
+    copied = schema.snapshot()
+
+    assert copied.source is duckdb_source
+    assert isinstance(copied['orders'], SourceTable)
+    assert copied['orders'].source_name == 'app_orders'
+    copied['orders']['amount'].stype = 'categorical'
+    assert schema['orders']['amount'].stype == 'numerical'
+
+
+def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        schema = Schema.from_source(source)
+
+    assert set(schema.tables) == {'app_users', 'app_orders'}
+    assert schema['app_orders'].source_name == 'app_orders'
+    assert set(schema['app_orders'].columns) == set(ORDERS.columns)
+    assert schema['app_orders'].time_column == 'ts'
+
+
+def test_a_question_repeats_none_of_the_reads_that_described_the_tables(
+    postgres_source: Any,
+) -> None:
+    r"""The time range is still read per question, so new rows are seen."""
+    import psycopg
+
+    statements: list[str] = []
+
+    class Recorded(psycopg.Cursor):
+        def execute(self, query: Any, *args: Any, **kwargs: Any) -> Any:
+            statements.append(str(query))
+            return super().execute(query, *args, **kwargs)
+
+    postgres_source.connection.cursor_factory = Recorded
+    schema = _schema(postgres_source)
+    described = list(statements)
+    for seed in (7, 11):
+        _payload(schema, seed)
+    asked = statements[len(described) :]
+
+    assert any('information_schema' in sql for sql in described)
+    assert asked
+    assert not set(described) & set(asked)
+
+
+def test_a_question_cannot_change_what_the_next_one_is_given(
+    source: Any,
+) -> None:
+    r"""Every gather writes keys, time columns and semantic types onto the
+    tables it samples; those it is given are copies of what was read."""
+    schema = _schema(source)
+    changed = schema.snapshot()
+    changed['users']['age'].stype = 'categorical'
+    changed['users']['country'].stype = 'text'
+
+    _payload(changed)
+    # What the core read of the tables, which every gather is given a copy of.
+    read = {
+        column['name']: column
+        for name, table in schema._engine_tables
+        if name in ('users', schema['users'].source_name)
+        for column in table['columns']
+    }
+
+    assert str(read['age']['stype']) == 'numerical'
+    assert str(read['country']['stype']) == 'categorical'
+
+
+def _add_members(source: Any, request: pytest.FixtureRequest) -> None:
+    r"""``app_users`` again, every member joining after the last order."""
+    joined = pd.Timestamp('2025-06-01')
+    if source.backend == 'duckdb':
+        source.connection.execute(
+            'CREATE TABLE app_members AS SELECT *, '
+            f"TIMESTAMP '{joined}' AS joined FROM app_users"
+        )
+    elif source.backend == 'sqlite':
+        with source.connection.cursor() as cursor:
+            cursor.adbc_ingest(
+                'app_members', USERS.assign(joined=joined), mode='create'
+            )
+        source.connection.commit()
+    else:
+        connection, namespace = request.getfixturevalue('postgres')
+        connection.execute(
+            f'CREATE TABLE {namespace}.app_members AS SELECT *, '
+            f"TIMESTAMP '{joined}' AS joined FROM {namespace}.app_users"
+        )
+
+
+def test_entities_that_start_after_every_anchor_are_named_as_the_cause(
+    source: Any, request: pytest.FixtureRequest
+) -> None:
+    r"""An entity time column that records an edit puts every entity after
+    the data, so none can be asked about at any anchor. The anchor was blamed,
+    and on Databricks and Snowflake the empty window was bound by NaN.
+    """
+    _add_members(source, request)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)
+        schema = Schema.from_source(
+            source,
+            {'users': 'app_members', 'orders': 'app_orders'},
+            time_columns={'users': 'joined', 'orders': 'ts'},
+        )
+
+    with pytest.raises(StructuredDataError) as raised:
+        PredictiveQuery(QUERY, schema).materialize(indices=[1, 2, 3])
+
+    assert raised.value.code == 'INVALID_REQUEST'
+    message = str(raised.value)
+    assert "No row of 'users' existed at the anchor" in message
+    assert "the earliest 'joined' is 2025-06-01" in message
+    assert 'Pass an earlier anchor_time' not in message

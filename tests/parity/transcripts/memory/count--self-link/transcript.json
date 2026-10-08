@@ -1,0 +1,72 @@
+{
+ "format_version": 1,
+ "name": "memory/count#self-link",
+ "backend": "memory",
+ "task_kind": "count",
+ "data": {
+  "generator": "shop-referrals",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_data",
+   "args": {
+    "tables": ["users", "products", "orders"],
+    "relationships": [
+     {
+      "$relationship": ["orders", "user_id", "users", "user_id"]
+     },
+     {
+      "$relationship": ["orders", "product_id", "products", "product_id"]
+     },
+     {
+      "$relationship": ["users", "referrer_id", "users", "user_id"]
+     }
+    ]
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2, 3],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(users.*, 0, 30, days) FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2, 3],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  }
+ ],
+ "steps": [],
+ "payloads": [],
+ "responses": [],
+ "error": {
+  "class": "sdm_client.errors.StructuredDataError",
+  "code": "INVALID_REQUEST",
+  "message": "Could not find a unique foreign key from table 'users' to 'users'"
+ },
+ "result": null,
+ "warnings": [
+  {
+   "category": "builtins.UserWarning",
+   "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2023-12-29 00:00:00', however, your data only contains data back to '2024-01-02 00:00:00'."
+  }
+ ]
+}

@@ -1,0 +1,629 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+ "cases": [
+  {
+   "id": "composite-key/composite.encode_values/separator-in-second",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     "b\u001fc"
+    ]
+   },
+   "expected": "a\u001fb\\uc",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/separator-in-first",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a\u001fb",
+     "c"
+    ]
+   },
+   "expected": "a\\ub\u001fc",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/customer-region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "AB-10015",
+     "Central"
+    ]
+   },
+   "expected": "AB-10015\u001fCentral",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/three-parts",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     "b",
+     "c"
+    ]
+   },
+   "expected": "a\u001fb\u001fc",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/holds-separator",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "holds\u001fseparator",
+     "y"
+    ]
+   },
+   "expected": "holds\\useparator\u001fy",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/holds-backslash",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "holds\\backslash",
+     "z"
+    ]
+   },
+   "expected": "holds\\\\backslash\u001fz",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/empty-first",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "",
+     "empty-first-part"
+    ]
+   },
+   "expected": "\u001fempty-first-part",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/numbers-and-text",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     7,
+     "x"
+    ]
+   },
+   "expected": "7\u001fx",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/numpy-bool",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     {
+      "$np": {
+       "type": "bool",
+       "value": true
+      }
+     },
+     "x"
+    ]
+   },
+   "expected": "true\u001fx",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/python-bool",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     true,
+     "x"
+    ]
+   },
+   "expected": "true\u001fx",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_value/customer-region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_value",
+   "input": {
+    "value": "AB-10015\u001fCentral",
+    "arity": 2
+   },
+   "expected": [
+    "AB-10015",
+    "Central"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_value/three-parts",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_value",
+   "input": {
+    "value": "a\u001fb\u001fc",
+    "arity": 3
+   },
+   "expected": [
+    "a",
+    "b",
+    "c"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_value/holds-separator",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_value",
+   "input": {
+    "value": "holds\\useparator\u001fy",
+    "arity": 2
+   },
+   "expected": [
+    "holds\u001fseparator",
+    "y"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_value/holds-backslash",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_value",
+   "input": {
+    "value": "holds\\\\backslash\u001fz",
+    "arity": 2
+   },
+   "expected": [
+    "holds\\backslash",
+    "z"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_value/empty-first",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_value",
+   "input": {
+    "value": "\u001fempty-first-part",
+    "arity": 2
+   },
+   "expected": [
+    "",
+    "empty-first-part"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/missing-nan",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     {
+      "$float": "nan"
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "a key column cannot hold a null value",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/missing-none",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     null
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "a key column cannot hold a null value",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/missing-nat",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     {
+      "$nat": null
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "a key column cannot hold a null value",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/missing-np-nan",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     {
+      "$float": "nan"
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "a key column cannot hold a null value",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_values/approximate",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_values",
+   "input": {
+    "parts": [
+     "a",
+     1.5
+    ]
+   },
+   "expected": "a\u001f1.5",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_identity/Customer-ID-Region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_identity",
+   "input": {
+    "columns": [
+     "Customer ID",
+     "Region"
+    ]
+   },
+   "expected": "437573746f6d6572204944_526567696f6e",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_identity/Cust.ID-Region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_identity",
+   "input": {
+    "columns": [
+     "Cust.ID",
+     "Region"
+    ]
+   },
+   "expected": "437573742e4944_526567696f6e",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_identity/back-tick-Region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_identity",
+   "input": {
+    "columns": [
+     "back`tick",
+     "Region"
+    ]
+   },
+   "expected": "6261636b607469636b_526567696f6e",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_identity/has-space-Region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_identity",
+   "input": {
+    "columns": [
+     "has space",
+     "Region"
+    ]
+   },
+   "expected": "686173207370616365_526567696f6e",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_identity/a-b-c",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_identity",
+   "input": {
+    "columns": [
+     "a",
+     "b",
+     "c"
+    ]
+   },
+   "expected": "61_62_63",
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/Customer-ID-Region",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_437573746f6d6572204944_526567696f6e"
+   },
+   "expected": [
+    "Customer ID",
+    "Region"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/a_b-c",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_615f62_63"
+   },
+   "expected": [
+    "a_b",
+    "c"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/a-b_c",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_61_625f63"
+   },
+   "expected": [
+    "a",
+    "b_c"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/a-b-c",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_61_62_63"
+   },
+   "expected": [
+    "a",
+    "b",
+    "c"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/holds-colon-y",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_686f6c64733a636f6c6f6e_79"
+   },
+   "expected": [
+    "holds:colon",
+    "y"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/Cust.ID-R",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_437573742e4944_52"
+   },
+   "expected": [
+    "Cust.ID",
+    "R"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/back-tick-R",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_6261636b607469636b_52"
+   },
+   "expected": [
+    "back`tick",
+    "R"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/n-code-x",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_c3bc6ec3af636f6465_78"
+   },
+   "expected": [
+    "ünïcode",
+    "x"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/prefix-only",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_"
+   },
+   "expected": null,
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/not-hex",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "__kumo_key_nothex"
+   },
+   "expected": null,
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/customer-id",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "Customer ID"
+   },
+   "expected": null,
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_identity/too-long",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_identity",
+   "input": {
+    "columns": [
+     "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "An identity over ['xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] needs a column name longer than 200 characters, which a warehouse will not accept. Add a column holding that identity and declare it instead.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.decode_identity/plain-name",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.decode_identity",
+   "input": {
+    "derived": "user_id"
+   },
+   "expected": null,
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_frame/superstore",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_frame",
+   "input": {
+    "frame": {
+     "columns": {
+      "Customer ID": {
+       "dtype": "str",
+       "values": [
+        "AB-10015",
+        "AB-10015",
+        "ZZ-00001",
+        "ZZ-00001"
+       ]
+      },
+      "Region": {
+       "dtype": "str",
+       "values": [
+        "Central",
+        "East",
+        "Central",
+        "West"
+       ]
+      },
+      "Segment": {
+       "dtype": "str",
+       "values": [
+        "Consumer",
+        "Consumer",
+        "Corporate",
+        "Corporate"
+       ]
+      }
+     }
+    },
+    "columns": [
+     "Customer ID",
+     "Region"
+    ]
+   },
+   "expected": [
+    "AB-10015\u001fCentral",
+    "AB-10015\u001fEast",
+    "ZZ-00001\u001fCentral",
+    "ZZ-00001\u001fWest"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "composite-key/composite.encode_frame/missing-column",
+   "source": "packages/structured-data-models-relational-engine/tests/test_composite_primary_key.py",
+   "operation": "composite.encode_frame",
+   "input": {
+    "frame": {
+     "columns": {
+      "Customer ID": {
+       "dtype": "str",
+       "values": [
+        "AB-10015",
+        "AB-10015",
+        "ZZ-00001",
+        "ZZ-00001"
+       ]
+      },
+      "Region": {
+       "dtype": "str",
+       "values": [
+        "Central",
+        "East",
+        "Central",
+        "West"
+       ]
+      },
+      "Segment": {
+       "dtype": "str",
+       "values": [
+        "Consumer",
+        "Consumer",
+        "Corporate",
+        "Corporate"
+       ]
+      }
+     }
+    },
+    "columns": [
+     "Customer ID",
+     "Nope"
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "composite key columns ['Nope'] are not present; a table referencing this key must carry every one of ['Customer ID', 'Nope']",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  }
+ ]
+}

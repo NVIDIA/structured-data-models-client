@@ -1,0 +1,2245 @@
+{
+ "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+ "cases": [
+  {
+   "id": "time-and-keys/schema.from_data/stype-timestamp-sets-time-column",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "review": {
+      "columns": {
+       "rid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2021-01-01",
+         "2021-02-01",
+         "2021-03-01"
+        ]
+       }
+      }
+     }
+    },
+    "edits": [
+     {
+      "table": "review",
+      "column": "date",
+      "set": "stype",
+      "value": "timestamp"
+     }
+    ]
+   },
+   "expected": {
+    "tables": {
+     "review": {
+      "primary_key": "rid",
+      "time_column": "date",
+      "columns": {
+       "rid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "date": {
+        "dtype": "string",
+        "stype": "timestamp"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "review.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date']), or set schema['review']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/two-timestamps-decline",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "a": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2021-02-01T00:00:00"
+         }
+        ]
+       },
+       "b": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2022-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2022-02-01T00:00:00"
+         }
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": "a",
+      "columns": {
+       "a": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "b": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/naming-one-of-two-timestamps",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "a": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2021-02-01T00:00:00"
+         }
+        ]
+       },
+       "b": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2022-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2022-02-01T00:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "edits": [
+     {
+      "table": "t",
+      "column": "b",
+      "set": "stype",
+      "value": "timestamp"
+     }
+    ]
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": "a",
+      "columns": {
+       "a": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "b": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/second-timestamp-does-not-displace",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "seq": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "created": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2021-02-01T00:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "edits": [
+     {
+      "table": "t",
+      "column": "seq",
+      "set": "dtype",
+      "value": "timestamp[us]"
+     },
+     {
+      "table": "t",
+      "column": "seq",
+      "set": "stype",
+      "value": "timestamp"
+     }
+    ]
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": "created",
+      "columns": {
+       "seq": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "created": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/primary-key-is-not-time-column",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "k": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "t": "k"
+    },
+    "edits": [
+     {
+      "table": "t",
+      "column": "k",
+      "set": "dtype",
+      "value": "timestamp[us]"
+     },
+     {
+      "table": "t",
+      "column": "k",
+      "set": "stype",
+      "value": "timestamp"
+     }
+    ]
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": "k",
+      "time_column": null,
+      "columns": {
+       "k": {
+        "dtype": "timestamp[us]",
+        "stype": "ID"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/text-dates-0",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01",
+         "2013-06-15",
+         "2014-02-20",
+         "2013-01-01",
+         "2013-06-15",
+         "2014-02-20",
+         "2013-01-01",
+         "2013-06-15",
+         "2014-02-20",
+         "2013-01-01",
+         "2013-06-15",
+         "2014-02-20"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "date": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date']), or set schema['t']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/text-dates-1",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01T04:05:06",
+         "2013-06-15T00:00:00",
+         "2014-02-20T23:59:59",
+         "2013-01-01T04:05:06",
+         "2013-06-15T00:00:00",
+         "2014-02-20T23:59:59",
+         "2013-01-01T04:05:06",
+         "2013-06-15T00:00:00",
+         "2014-02-20T23:59:59",
+         "2013-01-01T04:05:06",
+         "2013-06-15T00:00:00",
+         "2014-02-20T23:59:59"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "date": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date']), or set schema['t']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/text-dates-2",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01 04:05:06",
+         "2013-06-15 00:00:00",
+         "2014-02-20 23:59:59",
+         "2013-01-01 04:05:06",
+         "2013-06-15 00:00:00",
+         "2014-02-20 23:59:59",
+         "2013-01-01 04:05:06",
+         "2013-06-15 00:00:00",
+         "2014-02-20 23:59:59",
+         "2013-01-01 04:05:06",
+         "2013-06-15 00:00:00",
+         "2014-02-20 23:59:59"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "date": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date']), or set schema['t']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/text-dates-3",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2013/01/01",
+         "2013/06/15",
+         "2014/02/20",
+         "2013/01/01",
+         "2013/06/15",
+         "2014/02/20",
+         "2013/01/01",
+         "2013/06/15",
+         "2014/02/20",
+         "2013/01/01",
+         "2013/06/15",
+         "2014/02/20"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "date": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date']), or set schema['t']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/text-dates-4",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01T04:05:06Z",
+         "2013-06-15T00:00:00Z",
+         "2014-02-20T00:00:00Z",
+         "2013-01-01T04:05:06Z",
+         "2013-06-15T00:00:00Z",
+         "2014-02-20T00:00:00Z",
+         "2013-01-01T04:05:06Z",
+         "2013-06-15T00:00:00Z",
+         "2014-02-20T00:00:00Z",
+         "2013-01-01T04:05:06Z",
+         "2013-06-15T00:00:00Z",
+         "2014-02-20T00:00:00Z"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "date": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date']), or set schema['t']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/text-dates-5",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "date": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01T04:05:06+05:30",
+         "2013-06-15T00:00:00-08:00",
+         "2014-02-20T00:00:00+0000",
+         "2013-01-01T04:05:06+05:30",
+         "2013-06-15T00:00:00-08:00",
+         "2014-02-20T00:00:00+0000",
+         "2013-01-01T04:05:06+05:30",
+         "2013-06-15T00:00:00-08:00",
+         "2014-02-20T00:00:00+0000",
+         "2013-01-01T04:05:06+05:30",
+         "2013-06-15T00:00:00-08:00",
+         "2014-02-20T00:00:00+0000"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "date": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.date holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['date'] = pd.to_datetime(frame['date'], utc=True), or set schema['t']['date'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/codes",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "4711-01-02",
+         "A-12-9",
+         "ZX-0001",
+         "4711-01-02",
+         "A-12-9",
+         "ZX-0001",
+         "4711-01-02",
+         "A-12-9",
+         "ZX-0001",
+         "4711-01-02",
+         "A-12-9",
+         "ZX-0001"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/starts-with-date",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01-REV-7",
+         "2013-01-01-REV-8",
+         "2013-01-01-REV-7",
+         "2013-01-01-REV-8",
+         "2013-01-01-REV-7",
+         "2013-01-01-REV-8",
+         "2013-01-01-REV-7",
+         "2013-01-01-REV-8",
+         "2013-01-01-REV-7",
+         "2013-01-01-REV-8",
+         "2013-01-01-REV-7",
+         "2013-01-01-REV-8"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/partly-dates",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "2013-01-01",
+         "not a date"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/impossible-dates",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "2024-02-31",
+         "2024-99-99",
+         "2024-00-00",
+         "2024-02-31",
+         "2024-99-99",
+         "2024-00-00",
+         "2024-02-31",
+         "2024-99-99",
+         "2024-00-00",
+         "2024-02-31",
+         "2024-99-99",
+         "2024-00-00"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/part-code-dates",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "4711-01-02",
+         "4711-01-03",
+         "4711-01-02",
+         "4711-01-03",
+         "4711-01-02",
+         "4711-01-03",
+         "4711-01-02",
+         "4711-01-03",
+         "4711-01-02",
+         "4711-01-03",
+         "4711-01-02",
+         "4711-01-03"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/two-formats",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "2024-01-01",
+         "March 5, 2024"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/dates-and-z",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "2024-01-01T10:00:00Z",
+         "2024-06-15T11:00:00Z",
+         "2024-01-01T10:00:00Z",
+         "2024-06-15T11:00:00Z",
+         "2024-01-01T10:00:00Z",
+         "2024-06-15T11:00:00Z",
+         "2024-01-01T10:00:00Z",
+         "2024-06-15T11:00:00Z",
+         "2024-01-01T10:00:00Z",
+         "2024-06-15T11:00:00Z",
+         "2024-01-01T10:00:00Z",
+         "2024-06-15T11:00:00Z"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.d holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['d'] = pd.to_datetime(frame['d']), or set schema['t']['d'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/dates-and-offsets",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "d": {
+        "dtype": "str",
+        "values": [
+         "2024-01-01T10:00:00+05:30",
+         "2024-06-15T11:00:00-08:00",
+         "2024-01-01T10:00:00+05:30",
+         "2024-06-15T11:00:00-08:00",
+         "2024-01-01T10:00:00+05:30",
+         "2024-06-15T11:00:00-08:00",
+         "2024-01-01T10:00:00+05:30",
+         "2024-06-15T11:00:00-08:00",
+         "2024-01-01T10:00:00+05:30",
+         "2024-06-15T11:00:00-08:00",
+         "2024-01-01T10:00:00+05:30",
+         "2024-06-15T11:00:00-08:00"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "d": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.d holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['d'] = pd.to_datetime(frame['d'], utc=True), or set schema['t']['d'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/found-time-column",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "when": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         },
+         {
+          "$timestamp": "2021-01-01T00:00:00"
+         }
+        ]
+       },
+       "other": {
+        "dtype": "str",
+        "values": [
+         "2021-01-01",
+         "2021-01-01",
+         "2021-01-01",
+         "2021-01-01"
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "when": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "other": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.other holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['other'] = pd.to_datetime(frame['other']), or set schema['t']['other'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/keyless-parent",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "airports": {
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "ATL",
+         "ORD",
+         "LAX"
+        ]
+       },
+       "CITY": {
+        "dtype": "str",
+        "values": [
+         "Atlanta",
+         "Chicago",
+         "LA"
+        ]
+       }
+      }
+     },
+     "sales": {
+      "columns": {
+       "SALE_ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "ATL",
+         "ORD",
+         "ATL",
+         "LAX"
+        ]
+       },
+       "AMOUNT": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         20.0,
+         30.0,
+         40.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "airports": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "CITY": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "sales": {
+      "primary_key": "SALE_ID",
+      "time_column": null,
+      "columns": {
+       "SALE_ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "AMOUNT": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "'airports' has no primary key, and nothing can link to a table without one: every relationship pointing at 'airports' is dropped, so nothing is gathered through it, and a question about another table reaches it only where 'airports' names that table itself. 'IATA_CODE' identifies every row of 'airports' and is named by another table too, which makes it either a key or a foreign key that happens not to repeat in the rows read. If it identifies 'airports', say so with primary_keys={'airports': 'IATA_CODE'}; if it instead names the rows of the table it is shared with, that table is the one that needs the key."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/keyless-parent-declared",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "airports": {
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "ATL",
+         "ORD",
+         "LAX"
+        ]
+       },
+       "CITY": {
+        "dtype": "str",
+        "values": [
+         "Atlanta",
+         "Chicago",
+         "LA"
+        ]
+       }
+      }
+     },
+     "sales": {
+      "columns": {
+       "SALE_ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "ATL",
+         "ORD",
+         "ATL",
+         "LAX"
+        ]
+       },
+       "AMOUNT": {
+        "dtype": "float64",
+        "values": [
+         10.0,
+         20.0,
+         30.0,
+         40.0
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "airports": "IATA_CODE"
+    }
+   },
+   "expected": {
+    "tables": {
+     "airports": {
+      "primary_key": "IATA_CODE",
+      "time_column": null,
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "CITY": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "sales": {
+      "primary_key": "SALE_ID",
+      "time_column": null,
+      "columns": {
+       "SALE_ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "AMOUNT": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [
+     [
+      "sales",
+      "IATA_CODE",
+      "airports",
+      "IATA_CODE"
+     ]
+    ],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/unique-foreign-key",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "line_items": {
+      "columns": {
+       "ORDER_NO": {
+        "dtype": "str",
+        "values": [
+         "O1",
+         "O2"
+        ]
+       },
+       "LINE_NO": {
+        "dtype": "int64",
+        "values": [
+         1,
+         1
+        ]
+       },
+       "sku": {
+        "dtype": "str",
+        "values": [
+         "A",
+         "B"
+        ]
+       }
+      }
+     },
+     "shipments": {
+      "columns": {
+       "SHIPMENT_ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "ORDER_NO": {
+        "dtype": "str",
+        "values": [
+         "O1",
+         "O1",
+         "O2"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "line_items": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "ORDER_NO": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "LINE_NO": {
+        "dtype": "int64",
+        "stype": "numerical"
+       },
+       "sku": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "shipments": {
+      "primary_key": "SHIPMENT_ID",
+      "time_column": null,
+      "columns": {
+       "SHIPMENT_ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "ORDER_NO": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "'line_items' has no primary key, and nothing can link to a table without one: every relationship pointing at 'line_items' is dropped, so nothing is gathered through it, and a question about another table reaches it only where 'line_items' names that table itself. 'ORDER_NO' identifies every row of 'line_items' and is named by another table too, which makes it either a key or a foreign key that happens not to repeat in the rows read. If it identifies 'line_items', say so with primary_keys={'line_items': 'ORDER_NO'}; if it instead names the rows of the table it is shared with, that table is the one that needs the key."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/declared-parent-key",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "orders": {
+      "columns": {
+       "ORDER_NO": {
+        "dtype": "str",
+        "values": [
+         "O1",
+         "O2"
+        ]
+       },
+       "total": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     },
+     "line_items": {
+      "columns": {
+       "ORDER_NO": {
+        "dtype": "str",
+        "values": [
+         "O1",
+         "O2"
+        ]
+       },
+       "LINE_NO": {
+        "dtype": "int64",
+        "values": [
+         1,
+         1
+        ]
+       },
+       "sku": {
+        "dtype": "str",
+        "values": [
+         "A",
+         "B"
+        ]
+       }
+      }
+     },
+     "shipments": {
+      "columns": {
+       "SHIPMENT_ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "ORDER_NO": {
+        "dtype": "str",
+        "values": [
+         "O1",
+         "O1",
+         "O2"
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "orders": "ORDER_NO"
+    }
+   },
+   "expected": {
+    "tables": {
+     "orders": {
+      "primary_key": "ORDER_NO",
+      "time_column": null,
+      "columns": {
+       "ORDER_NO": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "total": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "line_items": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "ORDER_NO": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "LINE_NO": {
+        "dtype": "int64",
+        "stype": "numerical"
+       },
+       "sku": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "shipments": {
+      "primary_key": "SHIPMENT_ID",
+      "time_column": null,
+      "columns": {
+       "SHIPMENT_ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "ORDER_NO": {
+        "dtype": "string",
+        "stype": "ID"
+       }
+      }
+     }
+    },
+    "relationships": [
+     [
+      "line_items",
+      "ORDER_NO",
+      "orders",
+      "ORDER_NO"
+     ],
+     [
+      "shipments",
+      "ORDER_NO",
+      "orders",
+      "ORDER_NO"
+     ]
+    ],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/lone-table",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "airports": {
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "ATL",
+         "ORD"
+        ]
+       },
+       "CITY": {
+        "dtype": "str",
+        "values": [
+         "Atlanta",
+         "Chi"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "airports": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "CITY": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/repeated-column",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "parent": {
+      "columns": {
+       "code": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "a",
+         "b"
+        ]
+       },
+       "n": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "code": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "parent": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "code": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "n": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "code": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/float-measure",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "parent": {
+      "columns": {
+       "amount": {
+        "dtype": "float64",
+        "values": [
+         1.5,
+         2.5,
+         3.5
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "amount": {
+        "dtype": "float64",
+        "values": [
+         1.5,
+         2.5
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "parent": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "amount": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "amount": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/null-bearing",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "parent": {
+      "columns": {
+       "code": {
+        "dtype": "str",
+        "values": [
+         "a",
+         {
+          "$float": "nan"
+         },
+         "b"
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "code": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "parent": {
+      "primary_key": null,
+      "time_column": null,
+      "columns": {
+       "code": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "code": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/table-with-key",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "parent": {
+      "columns": {
+       "code": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b"
+        ]
+       },
+       "n": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "code": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b"
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "parent": "n"
+    }
+   },
+   "expected": {
+    "tables": {
+     "parent": {
+      "primary_key": "n",
+      "time_column": null,
+      "columns": {
+       "code": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "n": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "code": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "time-and-keys/schema.from_data/time-column-not-a-key",
+   "source": "packages/structured-data-models-client/tests/test_inferred_time_and_keys.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "parent": {
+      "columns": {
+       "day": {
+        "dtype": "str",
+        "values": [
+         "2021-01-01",
+         "2021-01-02"
+        ]
+       },
+       "n": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "day": {
+        "dtype": "str",
+        "values": [
+         "2021-01-01",
+         "2021-01-02"
+        ]
+       }
+      }
+     }
+    },
+    "time_columns": {
+     "parent": "day"
+    }
+   },
+   "expected": {
+    "tables": {
+     "parent": {
+      "primary_key": null,
+      "time_column": "day",
+      "columns": {
+       "day": {
+        "dtype": "string",
+        "stype": "timestamp"
+       },
+       "n": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "day": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "child.day holds dates but is stored as text, so it is not the time column and no temporal query can use it. Convert it before inferring: frame['day'] = pd.to_datetime(frame['day']), or set schema['child']['day'].stype = 'timestamp' afterwards."
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

@@ -1,0 +1,1860 @@
+{
+ "format_version": 1,
+ "name": "lakebase/classification",
+ "backend": "lakebase",
+ "task_kind": "classification",
+ "data": {
+  "generator": "shop",
+  "seed": 0,
+  "namespace": {
+   "schema": "parity_shop"
+  },
+  "connection": {
+   "autocommit": true
+  }
+ },
+ "calls": [
+  {
+   "call": "Schema.from_source",
+   "args": {
+    "tables": {
+     "users": "users",
+     "products": "products",
+     "orders": "orders"
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT products.category FOR EACH products.product_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2],
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_shop", "users"],
+   "result": "step-0000.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_shop", "users"],
+   "result": "step-0001.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_shop\".\"users\""],
+   "result": "step-0002.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"user_id\", \"age\", \"country\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"user_id\", \"age\", \"country\")) AS __kumo_order_1__, \"user_id\", \"age\", \"country\" FROM \"parity_shop\".\"users\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0003.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "user_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "age",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "country",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_shop", "products"],
+   "result": "step-0004.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_shop", "products"],
+   "result": "step-0005.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_shop\".\"products\""],
+   "result": "step-0006.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"product_id\", \"category\", \"price\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"product_id\", \"category\", \"price\")) AS __kumo_order_1__, \"product_id\", \"category\", \"price\" FROM \"parity_shop\".\"products\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0007.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "product_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "category",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "price",
+     "type_code": 701,
+     "internal_size": 8,
+     "type_display": "float8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_shop", "orders"],
+   "result": "step-0008.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_shop", "orders"],
+   "result": "step-0009.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_shop\".\"orders\""],
+   "result": "step-0010.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\")) AS __kumo_order_1__, \"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\" FROM \"parity_shop\".\"orders\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0011.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "order_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "user_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "product_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "quantity",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "ordered_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*), MIN(\"ordered_at\"), MAX(\"ordered_at\"), COUNT(\"ordered_at\")\nFROM \"parity_shop\".\"orders\"",
+   "params": null,
+   "result": "step-0012.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "min",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "max",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_shop", "users"],
+   "result": "step-0013.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_shop", "products"],
+   "result": "step-0014.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_shop", "orders"],
+   "result": "step-0015.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_shop\".\"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"product_id\") AS d, COUNT(CASE WHEN \"product_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_shop\".\"products\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_shop\".\"orders\"",
+   "params": null,
+   "result": "step-0016.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "k",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "n",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "d",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "z",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_shop\".\"users\"",
+   "params": null,
+   "result": "step-0017.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_shop\".\"products\"",
+   "params": null,
+   "result": "step-0018.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_shop\".\"orders\"",
+   "params": null,
+   "result": "step-0019.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS table_index, MIN(\"ordered_at\") AS min_date, MAX(\"ordered_at\") AS max_date\nFROM \"parity_shop\".\"orders\"",
+   "params": null,
+   "result": "step-0020.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "table_index",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "min_date",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "max_date",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT setseed(%s)",
+   "params": [0.8071317425028082],
+   "result": null,
+   "error": null,
+   "description": [
+    {
+     "name": "setseed",
+     "type_code": 2278,
+     "internal_size": 4,
+     "type_display": "2278"
+    }
+   ]
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"product_id\", \"category\"\nFROM \"parity_shop\".\"products\"\nWHERE \"product_id\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+   "params": null,
+   "result": "step-0022.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "product_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "category",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"product_id\", \"price\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"price\", \"product_id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_shop\".\"products\"\n    ON \"product_id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "params": ["[10,5,3,4,6,11,2,1,7,12,8,9,1,2]"],
+   "result": "step-0023.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "product_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "price",
+     "type_code": 701,
+     "internal_size": 8,
+     "type_display": "float8"
+    },
+    {
+     "name": "__kumo_row__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "__kumo_matches__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\",\n         ROW_NUMBER() OVER (ORDER BY \"ordered_at\" DESC, \"order_id\", \"product_id\", \"quantity\", \"user_id\") AS __KUMO_ROW__\n  FROM \"parity_shop\".\"orders\"\n  WHERE \"product_id\" = TMP.__KUMO_ID__\n    AND \"ordered_at\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ordered_at\" DESC, \"order_id\", \"product_id\", \"quantity\", \"user_id\"\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "params": ["[{\"id\":10,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":5,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":3,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":4,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":6,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":11,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":2,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":1,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":7,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":12,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":8,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":9,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":1,\"e\":\"2024-12-29T09:00:00+00:00\"},{\"id\":2,\"e\":\"2024-12-29T09:00:00+00:00\"}]"],
+   "result": "step-0024.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "order_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "user_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "product_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "quantity",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "ordered_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "__kumo_row__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"user_id\", \"age\", \"country\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"age\", CAST(\"country\" AS text), \"user_id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_shop\".\"users\"\n    ON \"user_id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "params": ["[21,38,3,5,37,27,30,13,7,18,1,34,10,26,25,17,33,2,8,31,6,11,35,29,14,22,15,23,39,9,19,4,12,20]"],
+   "result": "step-0025.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "user_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "age",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "country",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_row__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "__kumo_matches__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  }
+ ],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "multiclass_classification",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "string",
+     "classes": ["books", "tools", "games"]
+    },
+    "entity_table_names": ["products"],
+    "anchor_time_column": "__kumo_anchor_time"
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "__kumo_anchor_time": {
+       "dtype": "timestamp[us]",
+       "stype": "timestamp",
+       "nullable": false
+      },
+      "TARGET": {
+       "dtype": "string",
+       "stype": "categorical"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "products": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "product_id": {
+        "dtype": "int64",
+        "nullable": false
+       },
+       "price": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": ["instance_id", "product_id"]
+     },
+     "orders": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "quantity": {
+        "dtype": "int64",
+        "stype": "numerical"
+       },
+       "ordered_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "product_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "users": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "age": {
+        "dtype": "int64",
+        "stype": "numerical"
+       },
+       "country": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "products",
+      "target_columns": ["product_id"]
+     },
+     {
+      "source_table": "orders",
+      "source_columns": ["product_id"],
+      "target_table": "products",
+      "target_columns": ["product_id"]
+     },
+     {
+      "source_table": "orders",
+      "source_columns": ["user_id"],
+      "target_table": "users",
+      "target_columns": ["__node_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+     "rows": [
+      [0, 10, "2024-12-29T09:00:00.000000Z", "books"],
+      [1, 5, "2024-12-29T09:00:00.000000Z", "books"],
+      [2, 3, "2024-12-29T09:00:00.000000Z", "tools"],
+      [3, 4, "2024-12-29T09:00:00.000000Z", "books"],
+      [4, 6, "2024-12-29T09:00:00.000000Z", "tools"],
+      [5, 11, "2024-12-29T09:00:00.000000Z", "books"],
+      [8, 7, "2024-12-29T09:00:00.000000Z", "books"],
+      [9, 12, "2024-12-29T09:00:00.000000Z", "books"],
+      [10, 8, "2024-12-29T09:00:00.000000Z", "books"],
+      [11, 9, "2024-12-29T09:00:00.000000Z", "books"]
+     ]
+    },
+    "related_tables": {
+     "products": {
+      "format": "arrays",
+      "columns": ["instance_id", "product_id", "price"],
+      "rows": [
+       [0, 10, 6.29],
+       [1, 5, 69.1],
+       [2, 3, 64.23],
+       [3, 4, 37.11],
+       [4, 6, 35.13],
+       [5, 11, 64.17],
+       [8, 7, 78.94],
+       [9, 12, 69.0],
+       [10, 8, 95.21],
+       [11, 9, 67.94]
+      ]
+     },
+     "orders": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "quantity", "ordered_at", "product_id", "user_id"],
+      "rows": [
+       [0, 0, 3, "2024-12-21T14:00:00.000000Z", 10, 0],
+       [0, 1, 1, "2024-12-16T12:00:00.000000Z", 10, 1],
+       [0, 2, 3, "2024-12-15T14:00:00.000000Z", 10, 2],
+       [0, 3, 3, "2024-12-09T19:00:00.000000Z", 10, 3],
+       [0, 4, 2, "2024-12-09T19:00:00.000000Z", 10, 4],
+       [0, 5, 4, "2024-11-27T12:00:00.000000Z", 10, 5],
+       [0, 6, 4, "2024-11-27T09:00:00.000000Z", 10, 6],
+       [0, 7, 4, "2024-11-24T08:00:00.000000Z", 10, 7],
+       [0, 8, 3, "2024-11-21T16:00:00.000000Z", 10, 6],
+       [0, 9, 4, "2024-11-14T19:00:00.000000Z", 10, 3],
+       [0, 10, 2, "2024-11-11T08:00:00.000000Z", 10, 0],
+       [0, 11, 1, "2024-11-08T08:00:00.000000Z", 10, 8],
+       [0, 12, 3, "2024-11-08T08:00:00.000000Z", 10, 8],
+       [0, 13, 4, "2024-11-05T15:00:00.000000Z", 10, 9],
+       [0, 14, 1, "2024-11-03T17:00:00.000000Z", 10, 10],
+       [0, 15, 3, "2024-11-03T15:00:00.000000Z", 10, 2],
+       [0, 16, 1, "2024-11-03T14:00:00.000000Z", 10, 11],
+       [0, 17, 2, "2024-11-03T11:00:00.000000Z", 10, 7],
+       [0, 18, 3, "2024-10-30T18:00:00.000000Z", 10, 12],
+       [0, 19, 1, "2024-10-27T10:00:00.000000Z", 10, 7],
+       [0, 20, 2, "2024-10-19T18:00:00.000000Z", 10, 13],
+       [0, 21, 4, "2024-10-14T13:00:00.000000Z", 10, 14],
+       [0, 22, 1, "2024-09-28T19:00:00.000000Z", 10, 7],
+       [0, 23, 2, "2024-09-25T12:00:00.000000Z", 10, 10],
+       [0, 24, 1, "2024-09-22T15:00:00.000000Z", 10, 15],
+       [0, 25, 4, "2024-09-21T18:00:00.000000Z", 10, 16],
+       [0, 26, 3, "2024-09-15T12:00:00.000000Z", 10, 17],
+       [0, 27, 2, "2024-08-23T13:00:00.000000Z", 10, 18],
+       [0, 28, 2, "2024-08-22T13:00:00.000000Z", 10, 15],
+       [0, 29, 2, "2024-08-21T13:00:00.000000Z", 10, 4],
+       [0, 30, 3, "2024-08-14T11:00:00.000000Z", 10, 0],
+       [0, 31, 4, "2024-08-11T10:00:00.000000Z", 10, 8],
+       [1, 32, 2, "2024-12-29T09:00:00.000000Z", 5, 19],
+       [1, 33, 3, "2024-12-26T19:00:00.000000Z", 5, 20],
+       [1, 34, 4, "2024-12-26T08:00:00.000000Z", 5, 21],
+       [1, 35, 4, "2024-12-18T11:00:00.000000Z", 5, 22],
+       [1, 36, 3, "2024-12-17T11:00:00.000000Z", 5, 23],
+       [1, 37, 4, "2024-12-16T12:00:00.000000Z", 5, 22],
+       [1, 38, 4, "2024-12-15T09:00:00.000000Z", 5, 24],
+       [1, 39, 1, "2024-12-14T16:00:00.000000Z", 5, 25],
+       [1, 40, 4, "2024-12-13T17:00:00.000000Z", 5, 26],
+       [1, 41, 2, "2024-12-12T17:00:00.000000Z", 5, 27],
+       [1, 42, 1, "2024-12-09T19:00:00.000000Z", 5, 28],
+       [1, 43, 1, "2024-12-09T11:00:00.000000Z", 5, 29],
+       [1, 44, 2, "2024-12-08T12:00:00.000000Z", 5, 30],
+       [1, 45, 1, "2024-12-05T18:00:00.000000Z", 5, 26],
+       [1, 46, 2, "2024-11-29T10:00:00.000000Z", 5, 25],
+       [1, 47, 4, "2024-11-28T09:00:00.000000Z", 5, 31],
+       [1, 48, 4, "2024-11-17T14:00:00.000000Z", 5, 32],
+       [1, 49, 4, "2024-11-09T08:00:00.000000Z", 5, 19],
+       [1, 50, 4, "2024-11-07T17:00:00.000000Z", 5, 21],
+       [1, 51, 1, "2024-11-02T09:00:00.000000Z", 5, 24],
+       [1, 52, 1, "2024-10-31T19:00:00.000000Z", 5, 33],
+       [1, 53, 2, "2024-10-28T15:00:00.000000Z", 5, 29],
+       [1, 54, 1, "2024-10-25T18:00:00.000000Z", 5, 30],
+       [1, 55, 1, "2024-10-15T19:00:00.000000Z", 5, 34],
+       [1, 56, 4, "2024-10-13T11:00:00.000000Z", 5, 35],
+       [1, 57, 3, "2024-09-28T19:00:00.000000Z", 5, 25],
+       [1, 58, 4, "2024-09-17T19:00:00.000000Z", 5, 36],
+       [1, 59, 1, "2024-09-17T12:00:00.000000Z", 5, 29],
+       [1, 60, 3, "2024-09-12T19:00:00.000000Z", 5, 33],
+       [1, 61, 2, "2024-09-02T18:00:00.000000Z", 5, 37],
+       [1, 62, 1, "2024-08-29T12:00:00.000000Z", 5, 33],
+       [1, 63, 2, "2024-08-23T13:00:00.000000Z", 5, 38],
+       [2, 64, 2, "2024-12-19T11:00:00.000000Z", 3, 39],
+       [2, 65, 2, "2024-12-17T11:00:00.000000Z", 3, 40],
+       [2, 66, 3, "2024-12-12T11:00:00.000000Z", 3, 41],
+       [2, 67, 2, "2024-12-11T16:00:00.000000Z", 3, 42],
+       [2, 68, 2, "2024-12-09T19:00:00.000000Z", 3, 43],
+       [2, 69, 3, "2024-12-07T11:00:00.000000Z", 3, 44],
+       [2, 70, 2, "2024-11-30T19:00:00.000000Z", 3, 41],
+       [2, 71, 3, "2024-11-28T14:00:00.000000Z", 3, 45],
+       [2, 72, 4, "2024-11-25T15:00:00.000000Z", 3, 46],
+       [2, 73, 3, "2024-11-18T17:00:00.000000Z", 3, 47],
+       [2, 74, 3, "2024-11-17T14:00:00.000000Z", 3, 43],
+       [2, 75, 2, "2024-11-14T19:00:00.000000Z", 3, 48],
+       [2, 76, 3, "2024-11-14T08:00:00.000000Z", 3, 49],
+       [2, 77, 3, "2024-11-10T13:00:00.000000Z", 3, 50],
+       [2, 78, 1, "2024-10-31T19:00:00.000000Z", 3, 49],
+       [2, 79, 2, "2024-10-31T16:00:00.000000Z", 3, 49],
+       [2, 80, 3, "2024-10-30T12:00:00.000000Z", 3, 51],
+       [2, 81, 3, "2024-10-27T10:00:00.000000Z", 3, 42],
+       [2, 82, 2, "2024-10-22T08:00:00.000000Z", 3, 52],
+       [2, 83, 2, "2024-10-20T13:00:00.000000Z", 3, 53],
+       [2, 84, 3, "2024-10-14T19:00:00.000000Z", 3, 54],
+       [2, 85, 4, "2024-10-14T18:00:00.000000Z", 3, 52],
+       [2, 86, 3, "2024-10-09T08:00:00.000000Z", 3, 42],
+       [2, 87, 1, "2024-10-04T19:00:00.000000Z", 3, 53],
+       [2, 88, 1, "2024-10-04T11:00:00.000000Z", 3, 39],
+       [2, 89, 4, "2024-10-02T11:00:00.000000Z", 3, 55],
+       [2, 90, 4, "2024-10-01T19:00:00.000000Z", 3, 41],
+       [2, 91, 2, "2024-09-30T08:00:00.000000Z", 3, 50],
+       [2, 92, 3, "2024-09-07T12:00:00.000000Z", 3, 46],
+       [2, 93, 4, "2024-09-01T15:00:00.000000Z", 3, 39],
+       [2, 94, 2, "2024-08-27T17:00:00.000000Z", 3, 48],
+       [2, 95, 4, "2024-08-21T13:00:00.000000Z", 3, 43],
+       [3, 96, 3, "2024-12-26T08:00:00.000000Z", 4, 56],
+       [3, 97, 2, "2024-12-22T17:00:00.000000Z", 4, 57],
+       [3, 98, 4, "2024-12-22T13:00:00.000000Z", 4, 58],
+       [3, 99, 4, "2024-12-20T12:00:00.000000Z", 4, 58],
+       [3, 100, 1, "2024-12-15T09:00:00.000000Z", 4, 59],
+       [3, 101, 1, "2024-11-28T19:00:00.000000Z", 4, 60],
+       [3, 102, 2, "2024-11-27T09:00:00.000000Z", 4, 61],
+       [3, 103, 4, "2024-11-24T17:00:00.000000Z", 4, 62],
+       [3, 104, 3, "2024-11-22T13:00:00.000000Z", 4, 57],
+       [3, 105, 3, "2024-11-08T08:00:00.000000Z", 4, 58],
+       [3, 106, 1, "2024-11-04T09:00:00.000000Z", 4, 63],
+       [3, 107, 1, "2024-11-03T17:00:00.000000Z", 4, 64],
+       [3, 108, 3, "2024-10-30T12:00:00.000000Z", 4, 63],
+       [3, 109, 4, "2024-10-29T18:00:00.000000Z", 4, 65],
+       [3, 110, 3, "2024-10-27T18:00:00.000000Z", 4, 66],
+       [3, 111, 1, "2024-10-26T08:00:00.000000Z", 4, 67],
+       [3, 112, 2, "2024-10-22T17:00:00.000000Z", 4, 56],
+       [3, 113, 3, "2024-10-22T13:00:00.000000Z", 4, 57],
+       [3, 114, 2, "2024-10-14T18:00:00.000000Z", 4, 68],
+       [3, 115, 1, "2024-10-13T11:00:00.000000Z", 4, 60],
+       [3, 116, 1, "2024-10-11T16:00:00.000000Z", 4, 69],
+       [3, 117, 2, "2024-10-11T09:00:00.000000Z", 4, 56],
+       [3, 118, 1, "2024-10-09T08:00:00.000000Z", 4, 70],
+       [3, 119, 2, "2024-10-03T19:00:00.000000Z", 4, 71],
+       [3, 120, 3, "2024-09-25T08:00:00.000000Z", 4, 72],
+       [3, 121, 4, "2024-09-17T19:00:00.000000Z", 4, 65],
+       [3, 122, 4, "2024-09-12T16:00:00.000000Z", 4, 73],
+       [3, 123, 4, "2024-09-06T17:00:00.000000Z", 4, 64],
+       [3, 124, 3, "2024-09-05T10:00:00.000000Z", 4, 67],
+       [3, 125, 4, "2024-08-23T13:00:00.000000Z", 4, 74],
+       [3, 126, 1, "2024-08-22T18:00:00.000000Z", 4, 73],
+       [3, 127, 4, "2024-08-11T09:00:00.000000Z", 4, 68],
+       [4, 128, 1, "2024-12-28T10:00:00.000000Z", 6, 75],
+       [4, 129, 3, "2024-12-26T19:00:00.000000Z", 6, 76],
+       [4, 130, 1, "2024-12-11T16:00:00.000000Z", 6, 77],
+       [4, 131, 3, "2024-12-07T12:00:00.000000Z", 6, 78],
+       [4, 132, 2, "2024-12-05T18:00:00.000000Z", 6, 79],
+       [4, 133, 4, "2024-12-03T10:00:00.000000Z", 6, 79],
+       [4, 134, 3, "2024-12-01T18:00:00.000000Z", 6, 80],
+       [4, 135, 1, "2024-11-30T19:00:00.000000Z", 6, 81],
+       [4, 136, 1, "2024-11-28T19:00:00.000000Z", 6, 82],
+       [4, 137, 3, "2024-11-25T15:00:00.000000Z", 6, 83],
+       [4, 138, 2, "2024-11-19T14:00:00.000000Z", 6, 79],
+       [4, 139, 4, "2024-11-15T08:00:00.000000Z", 6, 84],
+       [4, 140, 4, "2024-11-14T12:00:00.000000Z", 6, 81],
+       [4, 141, 4, "2024-11-10T13:00:00.000000Z", 6, 79],
+       [4, 142, 2, "2024-11-05T15:00:00.000000Z", 6, 80],
+       [4, 143, 3, "2024-10-30T18:00:00.000000Z", 6, 85],
+       [4, 144, 1, "2024-10-28T15:00:00.000000Z", 6, 86],
+       [4, 145, 4, "2024-10-27T18:00:00.000000Z", 6, 85],
+       [4, 146, 3, "2024-10-22T13:00:00.000000Z", 6, 87],
+       [4, 147, 2, "2024-10-22T11:00:00.000000Z", 6, 88],
+       [4, 148, 2, "2024-10-19T10:00:00.000000Z", 6, 89],
+       [4, 149, 2, "2024-10-15T10:00:00.000000Z", 6, 90],
+       [4, 150, 3, "2024-10-03T19:00:00.000000Z", 6, 91],
+       [4, 151, 2, "2024-10-03T08:00:00.000000Z", 6, 87],
+       [4, 152, 1, "2024-10-02T14:00:00.000000Z", 6, 79],
+       [4, 153, 4, "2024-10-02T09:00:00.000000Z", 6, 92],
+       [4, 154, 1, "2024-09-30T13:00:00.000000Z", 6, 92],
+       [4, 155, 4, "2024-09-18T19:00:00.000000Z", 6, 93],
+       [4, 156, 3, "2024-09-14T11:00:00.000000Z", 6, 77],
+       [4, 157, 1, "2024-08-30T11:00:00.000000Z", 6, 94],
+       [4, 158, 1, "2024-08-29T12:00:00.000000Z", 6, 95],
+       [4, 159, 3, "2024-08-23T13:00:00.000000Z", 6, 94],
+       [5, 160, 3, "2024-12-20T17:00:00.000000Z", 11, 96],
+       [5, 161, 2, "2024-12-20T12:00:00.000000Z", 11, 97],
+       [5, 162, 4, "2024-12-12T17:00:00.000000Z", 11, 98],
+       [5, 163, 2, "2024-12-12T11:00:00.000000Z", 11, 99],
+       [5, 164, 4, "2024-12-11T16:00:00.000000Z", 11, 100],
+       [5, 165, 3, "2024-12-02T16:00:00.000000Z", 11, 101],
+       [5, 166, 3, "2024-11-08T08:00:00.000000Z", 11, 97],
+       [5, 167, 4, "2024-11-05T12:00:00.000000Z", 11, 102],
+       [5, 168, 2, "2024-10-22T08:00:00.000000Z", 11, 103],
+       [5, 169, 4, "2024-10-19T18:00:00.000000Z", 11, 104],
+       [5, 170, 4, "2024-10-04T11:00:00.000000Z", 11, 101],
+       [5, 171, 4, "2024-10-03T09:00:00.000000Z", 11, 99],
+       [5, 172, 2, "2024-10-03T08:00:00.000000Z", 11, 105],
+       [5, 173, 3, "2024-10-02T09:00:00.000000Z", 11, 103],
+       [5, 174, 3, "2024-09-22T15:00:00.000000Z", 11, 106],
+       [5, 175, 4, "2024-09-22T15:00:00.000000Z", 11, 107],
+       [5, 176, 3, "2024-09-12T19:00:00.000000Z", 11, 106],
+       [5, 177, 1, "2024-09-11T15:00:00.000000Z", 11, 108],
+       [5, 178, 3, "2024-09-07T10:00:00.000000Z", 11, 109],
+       [5, 179, 4, "2024-09-06T17:00:00.000000Z", 11, 106],
+       [5, 180, 1, "2024-09-05T16:00:00.000000Z", 11, 96],
+       [5, 181, 3, "2024-09-03T19:00:00.000000Z", 11, 96],
+       [5, 182, 3, "2024-09-01T14:00:00.000000Z", 11, 110],
+       [5, 183, 3, "2024-09-01T09:00:00.000000Z", 11, 99],
+       [5, 184, 4, "2024-08-30T19:00:00.000000Z", 11, 111],
+       [5, 185, 2, "2024-08-30T11:00:00.000000Z", 11, 112],
+       [5, 186, 2, "2024-08-22T13:00:00.000000Z", 11, 107],
+       [5, 187, 3, "2024-08-10T16:00:00.000000Z", 11, 98],
+       [5, 188, 4, "2024-08-09T16:00:00.000000Z", 11, 113],
+       [5, 189, 3, "2024-08-08T13:00:00.000000Z", 11, 114],
+       [5, 190, 3, "2024-08-08T10:00:00.000000Z", 11, 115],
+       [5, 191, 4, "2024-08-08T09:00:00.000000Z", 11, 113],
+       [8, 256, 3, "2024-12-28T10:00:00.000000Z", 7, 157],
+       [8, 257, 3, "2024-12-26T08:00:00.000000Z", 7, 158],
+       [8, 258, 2, "2024-12-20T11:00:00.000000Z", 7, 159],
+       [8, 259, 1, "2024-12-15T09:00:00.000000Z", 7, 160],
+       [8, 260, 2, "2024-12-14T16:00:00.000000Z", 7, 161],
+       [8, 261, 4, "2024-12-14T14:00:00.000000Z", 7, 159],
+       [8, 262, 4, "2024-12-05T13:00:00.000000Z", 7, 162],
+       [8, 263, 4, "2024-12-03T10:00:00.000000Z", 7, 163],
+       [8, 264, 1, "2024-11-30T19:00:00.000000Z", 7, 164],
+       [8, 265, 4, "2024-11-30T14:00:00.000000Z", 7, 165],
+       [8, 266, 3, "2024-11-27T12:00:00.000000Z", 7, 162],
+       [8, 267, 1, "2024-11-26T17:00:00.000000Z", 7, 166],
+       [8, 268, 2, "2024-11-22T12:00:00.000000Z", 7, 167],
+       [8, 269, 1, "2024-11-15T08:00:00.000000Z", 7, 168],
+       [8, 270, 4, "2024-11-14T19:00:00.000000Z", 7, 169],
+       [8, 271, 1, "2024-11-13T19:00:00.000000Z", 7, 170],
+       [8, 272, 3, "2024-11-10T13:00:00.000000Z", 7, 163],
+       [8, 273, 4, "2024-11-03T17:00:00.000000Z", 7, 171],
+       [8, 274, 2, "2024-11-01T11:00:00.000000Z", 7, 163],
+       [8, 275, 4, "2024-10-27T10:00:00.000000Z", 7, 161],
+       [8, 276, 1, "2024-10-22T11:00:00.000000Z", 7, 172],
+       [8, 277, 3, "2024-10-19T11:00:00.000000Z", 7, 173],
+       [8, 278, 3, "2024-10-10T14:00:00.000000Z", 7, 174],
+       [8, 279, 4, "2024-10-09T11:00:00.000000Z", 7, 162],
+       [8, 280, 4, "2024-10-07T19:00:00.000000Z", 7, 163],
+       [8, 281, 3, "2024-09-30T13:00:00.000000Z", 7, 173],
+       [8, 282, 1, "2024-09-21T11:00:00.000000Z", 7, 164],
+       [8, 283, 1, "2024-09-15T12:00:00.000000Z", 7, 157],
+       [8, 284, 1, "2024-09-14T12:00:00.000000Z", 7, 175],
+       [8, 285, 3, "2024-09-10T09:00:00.000000Z", 7, 164],
+       [8, 286, 3, "2024-09-01T15:00:00.000000Z", 7, 176],
+       [8, 287, 4, "2024-08-27T17:00:00.000000Z", 7, 169],
+       [9, 288, 2, "2024-12-11T08:00:00.000000Z", 12, 177],
+       [9, 289, 3, "2024-12-08T12:00:00.000000Z", 12, 178],
+       [9, 290, 2, "2024-12-04T17:00:00.000000Z", 12, 179],
+       [9, 291, 1, "2024-12-03T10:00:00.000000Z", 12, 180],
+       [9, 292, 4, "2024-11-28T09:00:00.000000Z", 12, 181],
+       [9, 293, 3, "2024-11-27T12:00:00.000000Z", 12, 182],
+       [9, 294, 1, "2024-11-13T19:00:00.000000Z", 12, 183],
+       [9, 295, 2, "2024-11-03T14:00:00.000000Z", 12, 181],
+       [9, 296, 1, "2024-11-02T09:00:00.000000Z", 12, 184],
+       [9, 297, 4, "2024-10-22T17:00:00.000000Z", 12, 185],
+       [9, 298, 2, "2024-10-19T17:00:00.000000Z", 12, 186],
+       [9, 299, 3, "2024-10-19T11:00:00.000000Z", 12, 187],
+       [9, 300, 1, "2024-10-15T10:00:00.000000Z", 12, 188],
+       [9, 301, 4, "2024-10-14T18:00:00.000000Z", 12, 189],
+       [9, 302, 1, "2024-10-14T18:00:00.000000Z", 12, 187],
+       [9, 303, 4, "2024-10-10T09:00:00.000000Z", 12, 190],
+       [9, 304, 1, "2024-10-09T11:00:00.000000Z", 12, 185],
+       [9, 305, 4, "2024-10-04T11:00:00.000000Z", 12, 191],
+       [9, 306, 3, "2024-09-14T12:00:00.000000Z", 12, 192],
+       [9, 307, 4, "2024-09-12T19:00:00.000000Z", 12, 193],
+       [9, 308, 2, "2024-09-10T13:00:00.000000Z", 12, 194],
+       [9, 309, 4, "2024-09-01T09:00:00.000000Z", 12, 195],
+       [9, 310, 4, "2024-08-27T17:00:00.000000Z", 12, 177],
+       [9, 311, 3, "2024-08-18T10:00:00.000000Z", 12, 183],
+       [9, 312, 4, "2024-08-16T12:00:00.000000Z", 12, 196],
+       [9, 313, 3, "2024-08-14T11:00:00.000000Z", 12, 189],
+       [9, 314, 1, "2024-08-04T10:00:00.000000Z", 12, 188],
+       [9, 315, 4, "2024-07-31T14:00:00.000000Z", 12, 177],
+       [9, 316, 3, "2024-07-31T10:00:00.000000Z", 12, 189],
+       [9, 317, 1, "2024-07-27T19:00:00.000000Z", 12, 184],
+       [9, 318, 2, "2024-07-27T10:00:00.000000Z", 12, 197],
+       [9, 319, 4, "2024-07-26T15:00:00.000000Z", 12, 198],
+       [10, 320, 2, "2024-12-26T08:00:00.000000Z", 8, 199],
+       [10, 321, 1, "2024-12-20T17:00:00.000000Z", 8, 200],
+       [10, 322, 1, "2024-12-19T13:00:00.000000Z", 8, 201],
+       [10, 323, 3, "2024-12-19T11:00:00.000000Z", 8, 202],
+       [10, 324, 3, "2024-12-08T12:00:00.000000Z", 8, 203],
+       [10, 325, 4, "2024-12-07T12:00:00.000000Z", 8, 204],
+       [10, 326, 3, "2024-12-01T10:00:00.000000Z", 8, 204],
+       [10, 327, 2, "2024-11-26T17:00:00.000000Z", 8, 204],
+       [10, 328, 4, "2024-11-26T12:00:00.000000Z", 8, 205],
+       [10, 329, 2, "2024-11-24T08:00:00.000000Z", 8, 206],
+       [10, 330, 1, "2024-11-19T14:00:00.000000Z", 8, 207],
+       [10, 331, 4, "2024-11-10T15:00:00.000000Z", 8, 208],
+       [10, 332, 2, "2024-11-08T08:00:00.000000Z", 8, 209],
+       [10, 333, 1, "2024-11-05T12:00:00.000000Z", 8, 204],
+       [10, 334, 1, "2024-10-31T19:00:00.000000Z", 8, 210],
+       [10, 335, 4, "2024-10-29T18:00:00.000000Z", 8, 211],
+       [10, 336, 2, "2024-10-29T17:00:00.000000Z", 8, 202],
+       [10, 337, 3, "2024-10-27T13:00:00.000000Z", 8, 199],
+       [10, 338, 4, "2024-10-25T17:00:00.000000Z", 8, 201],
+       [10, 339, 3, "2024-10-24T19:00:00.000000Z", 8, 212],
+       [10, 340, 4, "2024-10-20T13:00:00.000000Z", 8, 213],
+       [10, 341, 4, "2024-10-19T10:00:00.000000Z", 8, 209],
+       [10, 342, 2, "2024-10-14T19:00:00.000000Z", 8, 214],
+       [10, 343, 3, "2024-10-14T18:00:00.000000Z", 8, 215],
+       [10, 344, 2, "2024-10-14T13:00:00.000000Z", 8, 200],
+       [10, 345, 2, "2024-10-11T16:00:00.000000Z", 8, 208],
+       [10, 346, 4, "2024-10-09T11:00:00.000000Z", 8, 214],
+       [10, 347, 3, "2024-10-04T19:00:00.000000Z", 8, 213],
+       [10, 348, 1, "2024-10-03T19:00:00.000000Z", 8, 216],
+       [10, 349, 2, "2024-10-03T09:00:00.000000Z", 8, 208],
+       [10, 350, 2, "2024-10-01T19:00:00.000000Z", 8, 208],
+       [10, 351, 4, "2024-09-22T19:00:00.000000Z", 8, 216],
+       [11, 352, 4, "2024-12-29T09:00:00.000000Z", 9, 217],
+       [11, 353, 3, "2024-12-26T19:00:00.000000Z", 9, 218],
+       [11, 354, 2, "2024-12-22T17:00:00.000000Z", 9, 219],
+       [11, 355, 2, "2024-12-21T14:00:00.000000Z", 9, 220],
+       [11, 356, 4, "2024-12-14T16:00:00.000000Z", 9, 221],
+       [11, 357, 1, "2024-12-14T14:00:00.000000Z", 9, 222],
+       [11, 358, 2, "2024-12-08T12:00:00.000000Z", 9, 223],
+       [11, 359, 3, "2024-12-07T08:00:00.000000Z", 9, 224],
+       [11, 360, 2, "2024-12-05T18:00:00.000000Z", 9, 225],
+       [11, 361, 3, "2024-12-02T16:00:00.000000Z", 9, 217],
+       [11, 362, 2, "2024-11-29T10:00:00.000000Z", 9, 221],
+       [11, 363, 2, "2024-11-26T17:00:00.000000Z", 9, 226],
+       [11, 364, 1, "2024-11-24T08:00:00.000000Z", 9, 221],
+       [11, 365, 3, "2024-11-20T19:00:00.000000Z", 9, 227],
+       [11, 366, 1, "2024-11-18T17:00:00.000000Z", 9, 228],
+       [11, 367, 1, "2024-11-15T08:00:00.000000Z", 9, 227],
+       [11, 368, 1, "2024-11-08T08:00:00.000000Z", 9, 222],
+       [11, 369, 1, "2024-10-22T08:00:00.000000Z", 9, 229],
+       [11, 370, 1, "2024-10-19T18:00:00.000000Z", 9, 230],
+       [11, 371, 1, "2024-10-19T17:00:00.000000Z", 9, 231],
+       [11, 372, 2, "2024-10-19T11:00:00.000000Z", 9, 229],
+       [11, 373, 3, "2024-10-15T10:00:00.000000Z", 9, 218],
+       [11, 374, 1, "2024-10-15T10:00:00.000000Z", 9, 217],
+       [11, 375, 2, "2024-10-11T15:00:00.000000Z", 9, 218],
+       [11, 376, 3, "2024-10-06T16:00:00.000000Z", 9, 231],
+       [11, 377, 4, "2024-09-30T17:00:00.000000Z", 9, 222],
+       [11, 378, 1, "2024-09-21T11:00:00.000000Z", 9, 232],
+       [11, 379, 3, "2024-09-04T11:00:00.000000Z", 9, 233],
+       [11, 380, 1, "2024-09-01T15:00:00.000000Z", 9, 217],
+       [11, 381, 2, "2024-09-01T09:00:00.000000Z", 9, 232],
+       [11, 382, 4, "2024-08-19T17:00:00.000000Z", 9, 221],
+       [11, 383, 3, "2024-08-18T19:00:00.000000Z", 9, 220]
+      ]
+     },
+     "users": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "age", "country"],
+      "rows": [
+       [0, 0, 64, "US"],
+       [0, 1, 53, "US"],
+       [0, 2, 18, "US"],
+       [0, 3, 21, "DE"],
+       [0, 4, 36, "DE"],
+       [0, 5, 26, "US"],
+       [0, 6, 69, "DE"],
+       [0, 7, 24, "IN"],
+       [0, 8, 27, "US"],
+       [0, 9, 56, "DE"],
+       [0, 10, 62, "DE"],
+       [0, 11, 33, "IN"],
+       [0, 12, 68, "IN"],
+       [0, 13, 31, "IN"],
+       [0, 14, 43, "IN"],
+       [0, 15, 19, "DE"],
+       [0, 16, 23, "IN"],
+       [0, 17, 65, "IN"],
+       [0, 18, 37, "IN"],
+       [1, 19, 34, "DE"],
+       [1, 20, 57, "DE"],
+       [1, 21, 54, "IN"],
+       [1, 22, 53, "US"],
+       [1, 23, 68, "IN"],
+       [1, 24, 31, "IN"],
+       [1, 25, 24, "IN"],
+       [1, 26, 65, "US"],
+       [1, 27, 56, "DE"],
+       [1, 28, 21, "DE"],
+       [1, 29, 26, "US"],
+       [1, 30, 19, "DE"],
+       [1, 31, 33, "IN"],
+       [1, 32, 36, "DE"],
+       [1, 33, 62, "DE"],
+       [1, 34, 38, "DE"],
+       [1, 35, 42, "US"],
+       [1, 36, 42, "DE"],
+       [1, 37, 18, "US"],
+       [1, 38, 37, "IN"],
+       [2, 39, 34, "DE"],
+       [2, 40, 68, "IN"],
+       [2, 41, 42, "US"],
+       [2, 42, 24, "IN"],
+       [2, 43, 36, "DE"],
+       [2, 44, 56, "DE"],
+       [2, 45, 57, "DE"],
+       [2, 46, 43, "IN"],
+       [2, 47, 35, "US"],
+       [2, 48, 21, "DE"],
+       [2, 49, 62, "DE"],
+       [2, 50, 65, "US"],
+       [2, 51, 26, "US"],
+       [2, 52, 42, "DE"],
+       [2, 53, 31, "IN"],
+       [2, 54, 19, "DE"],
+       [2, 55, 23, "IN"],
+       [3, 56, 54, "IN"],
+       [3, 57, 39, "US"],
+       [3, 58, 27, "US"],
+       [3, 59, 31, "IN"],
+       [3, 60, 42, "US"],
+       [3, 61, 69, "DE"],
+       [3, 62, 64, "US"],
+       [3, 63, 26, "US"],
+       [3, 64, 62, "DE"],
+       [3, 65, 42, "DE"],
+       [3, 66, 68, "IN"],
+       [3, 67, 57, "DE"],
+       [3, 68, 42, "DE"],
+       [3, 69, 42, "US"],
+       [3, 70, 24, "IN"],
+       [3, 71, 18, "US"],
+       [3, 72, 57, "IN"],
+       [3, 73, 19, "DE"],
+       [3, 74, 21, "DE"],
+       [4, 75, 65, "IN"],
+       [4, 76, 57, "DE"],
+       [4, 77, 24, "IN"],
+       [4, 78, 57, "IN"],
+       [4, 79, 65, "US"],
+       [4, 80, 56, "DE"],
+       [4, 81, 42, "US"],
+       [4, 82, 42, "US"],
+       [4, 83, 43, "IN"],
+       [4, 84, 54, "IN"],
+       [4, 85, 68, "IN"],
+       [4, 86, 26, "US"],
+       [4, 87, 39, "US"],
+       [4, 88, 19, "DE"],
+       [4, 89, 27, "US"],
+       [4, 90, 34, "DE"],
+       [4, 91, 18, "US"],
+       [4, 92, 42, "DE"],
+       [4, 93, 38, "DE"],
+       [4, 94, 21, "DE"],
+       [4, 95, 62, "DE"],
+       [5, 96, 43, "IN"],
+       [5, 97, 27, "US"],
+       [5, 98, 56, "DE"],
+       [5, 99, 42, "US"],
+       [5, 100, 24, "IN"],
+       [5, 101, 34, "DE"],
+       [5, 102, 57, "IN"],
+       [5, 103, 42, "DE"],
+       [5, 104, 31, "IN"],
+       [5, 105, 39, "US"],
+       [5, 106, 62, "DE"],
+       [5, 107, 19, "DE"],
+       [5, 108, 65, "IN"],
+       [5, 109, 38, "DE"],
+       [5, 110, 36, "DE"],
+       [5, 111, 41, "US"],
+       [5, 112, 21, "DE"],
+       [5, 113, 69, "DE"],
+       [5, 114, 57, "DE"],
+       [5, 115, 41, "US"],
+       [8, 157, 65, "IN"],
+       [8, 158, 56, "DE"],
+       [8, 159, 27, "US"],
+       [8, 160, 31, "IN"],
+       [8, 161, 24, "IN"],
+       [8, 162, 26, "US"],
+       [8, 163, 65, "US"],
+       [8, 164, 42, "US"],
+       [8, 165, 38, "DE"],
+       [8, 166, 57, "IN"],
+       [8, 167, 43, "IN"],
+       [8, 168, 54, "IN"],
+       [8, 169, 21, "DE"],
+       [8, 170, 35, "US"],
+       [8, 171, 62, "DE"],
+       [8, 172, 19, "DE"],
+       [8, 173, 42, "DE"],
+       [8, 174, 69, "DE"],
+       [8, 175, 23, "IN"],
+       [8, 176, 34, "DE"],
+       [9, 177, 21, "DE"],
+       [9, 178, 19, "DE"],
+       [9, 179, 39, "US"],
+       [9, 180, 65, "US"],
+       [9, 181, 33, "IN"],
+       [9, 182, 26, "US"],
+       [9, 183, 35, "US"],
+       [9, 184, 31, "IN"],
+       [9, 185, 54, "IN"],
+       [9, 186, 42, "DE"],
+       [9, 187, 42, "DE"],
+       [9, 188, 34, "DE"],
+       [9, 189, 64, "US"],
+       [9, 190, 27, "US"],
+       [9, 191, 68, "IN"],
+       [9, 192, 23, "IN"],
+       [9, 193, 62, "DE"],
+       [9, 194, 42, "US"],
+       [9, 195, 42, "US"],
+       [9, 196, 56, "DE"],
+       [9, 197, 38, "DE"],
+       [9, 198, 37, "IN"],
+       [10, 199, 56, "DE"],
+       [10, 200, 43, "IN"],
+       [10, 201, 19, "DE"],
+       [10, 202, 34, "DE"],
+       [10, 203, 36, "DE"],
+       [10, 204, 57, "IN"],
+       [10, 205, 68, "IN"],
+       [10, 206, 24, "IN"],
+       [10, 207, 65, "US"],
+       [10, 208, 42, "US"],
+       [10, 209, 27, "US"],
+       [10, 210, 62, "DE"],
+       [10, 211, 42, "DE"],
+       [10, 212, 21, "DE"],
+       [10, 213, 31, "IN"],
+       [10, 214, 26, "US"],
+       [10, 215, 64, "US"],
+       [10, 216, 18, "US"],
+       [11, 217, 34, "DE"],
+       [11, 218, 57, "DE"],
+       [11, 219, 39, "US"],
+       [11, 220, 64, "US"],
+       [11, 221, 24, "IN"],
+       [11, 222, 27, "US"],
+       [11, 223, 36, "DE"],
+       [11, 224, 43, "IN"],
+       [11, 225, 65, "US"],
+       [11, 226, 57, "IN"],
+       [11, 227, 54, "IN"],
+       [11, 228, 35, "US"],
+       [11, 229, 42, "DE"],
+       [11, 230, 31, "IN"],
+       [11, 231, 42, "DE"],
+       [11, 232, 42, "US"],
+       [11, 233, 33, "IN"]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+     "rows": [
+      [12, 1, "2024-12-29T09:00:00.000000Z"],
+      [13, 2, "2024-12-29T09:00:00.000000Z"]
+     ]
+    },
+    "related_tables": {
+     "products": {
+      "format": "arrays",
+      "columns": ["instance_id", "product_id", "price"],
+      "rows": [
+       [12, 1, 44.37],
+       [13, 2, 50.1]
+      ]
+     },
+     "orders": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "quantity", "ordered_at", "product_id", "user_id"],
+      "rows": [
+       [12, 384, 2, "2024-12-26T08:00:00.000000Z", 1, 234],
+       [12, 385, 4, "2024-12-22T13:00:00.000000Z", 1, 235],
+       [12, 386, 3, "2024-12-20T17:00:00.000000Z", 1, 236],
+       [12, 387, 2, "2024-12-20T12:00:00.000000Z", 1, 235],
+       [12, 388, 4, "2024-12-12T17:00:00.000000Z", 1, 237],
+       [12, 389, 1, "2024-12-08T12:00:00.000000Z", 1, 238],
+       [12, 390, 2, "2024-12-07T08:00:00.000000Z", 1, 236],
+       [12, 391, 3, "2024-12-05T13:00:00.000000Z", 1, 239],
+       [12, 392, 4, "2024-12-02T16:00:00.000000Z", 1, 240],
+       [12, 393, 3, "2024-11-29T10:00:00.000000Z", 1, 241],
+       [12, 394, 2, "2024-11-25T15:00:00.000000Z", 1, 236],
+       [12, 395, 2, "2024-11-22T12:00:00.000000Z", 1, 236],
+       [12, 396, 1, "2024-11-10T15:00:00.000000Z", 1, 242],
+       [12, 397, 3, "2024-10-31T16:00:00.000000Z", 1, 243],
+       [12, 398, 1, "2024-10-14T13:00:00.000000Z", 1, 236],
+       [12, 399, 4, "2024-10-11T16:00:00.000000Z", 1, 242],
+       [12, 400, 1, "2024-10-07T19:00:00.000000Z", 1, 244],
+       [12, 401, 2, "2024-10-04T11:00:00.000000Z", 1, 240],
+       [12, 402, 1, "2024-10-02T09:00:00.000000Z", 1, 245],
+       [12, 403, 2, "2024-09-26T17:00:00.000000Z", 1, 246],
+       [12, 404, 3, "2024-09-25T08:00:00.000000Z", 1, 246],
+       [12, 405, 3, "2024-09-22T16:00:00.000000Z", 1, 236],
+       [12, 406, 1, "2024-09-22T15:00:00.000000Z", 1, 243],
+       [12, 407, 2, "2024-09-11T15:00:00.000000Z", 1, 247],
+       [12, 408, 4, "2024-09-10T13:00:00.000000Z", 1, 248],
+       [12, 409, 4, "2024-09-02T18:00:00.000000Z", 1, 249],
+       [12, 410, 3, "2024-08-31T16:00:00.000000Z", 1, 250],
+       [12, 411, 4, "2024-08-30T19:00:00.000000Z", 1, 251],
+       [12, 412, 1, "2024-08-21T14:00:00.000000Z", 1, 245],
+       [12, 413, 1, "2024-08-15T18:00:00.000000Z", 1, 252],
+       [12, 414, 2, "2024-08-12T17:00:00.000000Z", 1, 243],
+       [12, 415, 2, "2024-08-08T09:00:00.000000Z", 1, 253],
+       [13, 416, 3, "2024-12-29T09:00:00.000000Z", 2, 254],
+       [13, 417, 2, "2024-12-26T08:00:00.000000Z", 2, 255],
+       [13, 418, 2, "2024-12-21T14:00:00.000000Z", 2, 256],
+       [13, 419, 2, "2024-12-09T19:00:00.000000Z", 2, 257],
+       [13, 420, 2, "2024-12-09T11:00:00.000000Z", 2, 258],
+       [13, 421, 2, "2024-11-28T09:00:00.000000Z", 2, 259],
+       [13, 422, 4, "2024-11-19T15:00:00.000000Z", 2, 260],
+       [13, 423, 1, "2024-11-11T08:00:00.000000Z", 2, 256],
+       [13, 424, 1, "2024-11-10T15:00:00.000000Z", 2, 261],
+       [13, 425, 3, "2024-11-03T11:00:00.000000Z", 2, 262],
+       [13, 426, 3, "2024-11-01T11:00:00.000000Z", 2, 263],
+       [13, 427, 1, "2024-10-25T18:00:00.000000Z", 2, 260],
+       [13, 428, 4, "2024-10-23T19:00:00.000000Z", 2, 264],
+       [13, 429, 2, "2024-10-22T17:00:00.000000Z", 2, 264],
+       [13, 430, 2, "2024-10-10T14:00:00.000000Z", 2, 265],
+       [13, 431, 2, "2024-10-09T11:00:00.000000Z", 2, 264],
+       [13, 432, 4, "2024-10-01T19:00:00.000000Z", 2, 261],
+       [13, 433, 3, "2024-09-30T13:00:00.000000Z", 2, 266],
+       [13, 434, 1, "2024-09-28T19:00:00.000000Z", 2, 262],
+       [13, 435, 2, "2024-09-26T17:00:00.000000Z", 2, 267],
+       [13, 436, 2, "2024-09-25T12:00:00.000000Z", 2, 268],
+       [13, 437, 1, "2024-09-11T15:00:00.000000Z", 2, 269],
+       [13, 438, 1, "2024-09-07T10:00:00.000000Z", 2, 270],
+       [13, 439, 2, "2024-09-05T10:00:00.000000Z", 2, 271],
+       [13, 440, 4, "2024-09-04T11:00:00.000000Z", 2, 259],
+       [13, 441, 2, "2024-09-02T18:00:00.000000Z", 2, 272],
+       [13, 442, 3, "2024-08-31T16:00:00.000000Z", 2, 273],
+       [13, 443, 1, "2024-08-29T12:00:00.000000Z", 2, 268],
+       [13, 444, 4, "2024-08-25T13:00:00.000000Z", 2, 268],
+       [13, 445, 4, "2024-08-23T13:00:00.000000Z", 2, 274],
+       [13, 446, 4, "2024-08-16T14:00:00.000000Z", 2, 269],
+       [13, 447, 2, "2024-08-05T12:00:00.000000Z", 2, 255]
+      ]
+     },
+     "users": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "age", "country"],
+      "rows": [
+       [12, 234, 54, "IN"],
+       [12, 235, 27, "US"],
+       [12, 236, 43, "IN"],
+       [12, 237, 56, "DE"],
+       [12, 238, 36, "DE"],
+       [12, 239, 26, "US"],
+       [12, 240, 34, "DE"],
+       [12, 241, 24, "IN"],
+       [12, 242, 42, "US"],
+       [12, 243, 62, "DE"],
+       [12, 244, 65, "US"],
+       [12, 245, 42, "DE"],
+       [12, 246, 57, "IN"],
+       [12, 247, 65, "IN"],
+       [12, 248, 42, "US"],
+       [12, 249, 18, "US"],
+       [12, 250, 41, "US"],
+       [12, 251, 41, "US"],
+       [12, 252, 21, "DE"],
+       [12, 253, 69, "DE"],
+       [13, 254, 34, "DE"],
+       [13, 255, 56, "DE"],
+       [13, 256, 64, "US"],
+       [13, 257, 36, "DE"],
+       [13, 258, 26, "US"],
+       [13, 259, 33, "IN"],
+       [13, 260, 19, "DE"],
+       [13, 261, 42, "US"],
+       [13, 262, 24, "IN"],
+       [13, 263, 65, "US"],
+       [13, 264, 54, "IN"],
+       [13, 265, 69, "DE"],
+       [13, 266, 42, "DE"],
+       [13, 267, 57, "IN"],
+       [13, 268, 62, "DE"],
+       [13, 269, 65, "IN"],
+       [13, 270, 38, "DE"],
+       [13, 271, 57, "DE"],
+       [13, 272, 18, "US"],
+       [13, 273, 41, "US"],
+       [13, 274, 37, "IN"]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction", "probabilities"]
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "classification",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false,
+     "class_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT products.category FOR EACH products.product_id",
+    "num_context_examples": 12,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "12",
+      "prediction": "tools",
+      "probabilities": {
+       "books": 0.350635,
+       "tools": 0.649365
+      }
+     },
+     {
+      "row_index": 1,
+      "id": "13",
+      "prediction": "books",
+      "probabilities": {
+       "books": 0.548545,
+       "tools": 0.451455
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+  }
+ ]
+}

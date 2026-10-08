@@ -1,0 +1,1109 @@
+{
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/databricks/sampler.py": [
+  {
+   "branch": [
+    89,
+    90
+   ],
+   "reason": "An internal guard: _projections is asked only for columns the sampler took from the graph's own tables (its columns_dict, base/sampler.py:281-287 and _get_query_columns_dict), so no column is ever unknown. The core keeps the same guard in SqlBackend::projections. Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    105,
+    108
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    110,
+    111
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    110,
+    119
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    154,
+    158
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary. Offline it is reachable only by replaying the recorded live calls in a host test, as `tests/parity/test_live_call_shapes.py::test_databricks_calls_record_and_replay` does."
+  },
+  {
+   "branch": [
+    159,
+    161
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    161,
+    162
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    161,
+    165
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    170,
+    184
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary. Offline it is reachable only by replaying the recorded live calls in a host test, as `tests/parity/test_live_call_shapes.py::test_databricks_calls_record_and_replay` does."
+  },
+  {
+   "branch": [
+    172,
+    173
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary. Offline it is reachable only by replaying the recorded live calls in a host test, as `tests/parity/test_live_call_shapes.py::test_databricks_calls_record_and_replay` does."
+  },
+  {
+   "branch": [
+    241,
+    242
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    269,
+    270
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    331,
+    365
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    372,
+    375
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    419,
+    422
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    431,
+    443
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    458,
+    462
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/duckdb/sampler.py": [
+  {
+   "branch": [
+    42,
+    -26
+   ],
+   "reason": "Unreachable from sdm_client: it builds KumoRelational without optimize (sdm_client/materializers/relational.py:251)."
+  },
+  {
+   "branch": [
+    67,
+    68
+   ],
+   "reason": "Unreachable from sdm_client on a SQL source: the only columns without a physical source column, or with an expression, are composite keys' derived columns, named __kumo_key_... (base/composite_key.py:31), and the SQL sampler refuses every column with the reserved __kumo_ prefix while it is made (base/sql_sampler.py:39-62), before this line. The driver fixture duckdb-a-pair-of-key-columns records that refusal, which is itself a Python bug: a composite key cannot be sampled on a SQL source; in memory composite keys are sampled (memory-sequences), where this code does not run. It is reachable only by skipping that refusal, as `tests/rust_core/rfm/test_driver_fixtures.py::test_the_core_runs_what_the_engine_runs[duckdb-a-pair-of-key-columns]` does (test_driver_fixtures.py:278-284) to hold the core to the error today's sampler raises."
+  },
+  {
+   "branch": [
+    75,
+    76
+   ],
+   "reason": "Unreachable from sdm_client on a SQL source: the only columns without a physical source column, or with an expression, are composite keys' derived columns, named __kumo_key_... (base/composite_key.py:31), and the SQL sampler refuses every column with the reserved __kumo_ prefix while it is made (base/sql_sampler.py:39-62), before this line. The driver fixture duckdb-a-pair-of-key-columns records that refusal, which is itself a Python bug: a composite key cannot be sampled on a SQL source; in memory composite keys are sampled (memory-sequences), where this code does not run."
+  },
+  {
+   "branch": [
+    98,
+    99
+   ],
+   "reason": "Unreachable with the DuckDB sdm-connectors requires (duckdb>=1.5.0, packages/sdm-connectors/pyproject.toml:50-51): duckdb_indexes() writes every index's expressions as a bracketed list, '[col]', '[a, b]', \"['((a + 1))']\" or '[\\'\"Card No\"\\']', all four of which the driver fixture duckdb-keys-and-indexes holds. The core ports the check (init.rs, indexed_column, unit-tested on an unbracketed one)."
+  },
+  {
+   "branch": [
+    318,
+    331
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/local/graph_store.py": [
+  {
+   "branch": [
+    33,
+    39
+   ],
+   "reason": "Unreachable from sdm_client: it builds KumoRelational with verbose=False (sdm_client/materializers/relational.py:251), so the graph store is never handed a ProgressLogger."
+  },
+  {
+   "branch": [
+    90,
+    91
+   ],
+   "reason": "Unreachable from sdm_client: the in-memory sampler asks get_node_id only for the query's entity table, which the graph holds and which has a primary key (PQL refuses FOR EACH on a column that is not one: 'The column used in FOR EACH has to be a primary key'), and with at least one key, since sdm_client always names indices."
+  },
+  {
+   "branch": [
+    93,
+    94
+   ],
+   "reason": "Unreachable from sdm_client: the in-memory sampler asks get_node_id only for the query's entity table, which the graph holds and which has a primary key (PQL refuses FOR EACH on a column that is not one: 'The column used in FOR EACH has to be a primary key'), and with at least one key, since sdm_client always names indices."
+  },
+  {
+   "branch": [
+    98,
+    99
+   ],
+   "reason": "Unreachable from sdm_client: the in-memory sampler asks get_node_id only for the query's entity table, which the graph holds and which has a primary key (PQL refuses FOR EACH on a column that is not one: 'The column used in FOR EACH has to be a primary key'), and with at least one key, since sdm_client always names indices."
+  },
+  {
+   "branch": [
+    104,
+    111
+   ],
+   "reason": "Unreachable from sdm_client: _get_task_table refuses indices that do not cast to the entity key's dtype (rfm.py:2333-2346; the driver fixtures *-uncastable-index) before _get_context reaches this cast, so the keys cast as a whole. It is reachable only by calling LocalGraphStore.get_node_id directly, as `packages/sdm-client/tests/test_pinned_context_and_keys.py::test_a_key_that_cannot_be_cast_gets_the_engines_own_message`, `packages/sdm-client/tests/test_pinned_context_and_keys.py::test_a_key_the_engine_does_not_hold_is_still_reported_clearly` do."
+  },
+  {
+   "branch": [
+    132,
+    133
+   ],
+   "reason": "Unreachable from sdm_client: validate_entity_references is asked about the task's entity table, which always has a primary key (PQL refuses FOR EACH on a column that is not one)."
+  },
+  {
+   "branch": [
+    234,
+    241
+   ],
+   "reason": "Reachable only by a key column changed in place after Schema.from_data read it: a table without a time column has no valid row only if it has no rows or every key is missing. sdm_client checks a key for missing values as the key is set on a frame (sdm_client/schema.py:596-603, _a_key_missing_values) and refuses an empty frame as 'Data frame is empty' (backend/local/table.py:73), but Schema.from_data keeps the caller's frame, so a key set to NaN afterwards reaches the graph store, which refuses it as 'Found no valid rows in table ...'. The corpus cannot write that change. `tests/rust_core/rfm/test_sampling_gaps.py::test_a_key_set_to_nan_after_the_schema[products]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_key_set_to_nan_after_the_schema[users]` make the call through today's Python and through the core's request host, and compare the refusal and warnings. The other branch, a table whose time column is empty, is taken (local-graph-store no-valid-rows)."
+  },
+  {
+   "branch": [
+    323,
+    327
+   ],
+   "reason": "Taken only when (latest - earliest time + 1) in seconds times the destination table's row count passes 2**63: a century of data needs about 2.9 billion rows, a table no in-memory frame holds offline. Both ways sort the edges by destination, then time, stably; the core sorts by that pair directly (graph_store.rs, argsort), so it has no fallback to take."
+  },
+  {
+   "branch": [
+    376,
+    377
+   ],
+   "reason": "Called only from the int64 overflow fallback of get_csc above, which needs billions of rows; the core sorts by destination and time directly (graph_store.rs, argsort)."
+  },
+  {
+   "branch": [
+    376,
+    381
+   ],
+   "reason": "Called only from the int64 overflow fallback of get_csc above, which needs billions of rows; the core sorts by destination and time directly (graph_store.rs, argsort)."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/local/sampler.py": [
+  {
+   "branch": [
+    99,
+    102
+   ],
+   "reason": "Reachable only with random_seed=None, which sdm_client passes through, and held by `tests/rust_core/rfm/test_driver_fixtures.py::test_an_unseeded_context_on_a_fresh_model`: it leaves the neighbor sampler's generator as it is. That is not comparable as a fixture or transcript: with random_seed=None the entity draws before it come from the system's entropy (numpy's RandomState(None); the core's from getrandom), so no payload can be recorded. The neighbor sampler itself is comparable on a fresh model: both sides build it with seed 123 (csrc/neighbor_sampler.cpp:628, the core's driver/local.rs:177), and tests/rust_core/rfm/test_driver_fixtures.py (test_an_unseeded_context_on_a_fresh_model) compares the first unseeded _get_context of a fresh in-memory model with the core's run. Later calls on the same model differ: Python's generator carries on from the earlier calls, while each run of the core starts again at 123. The core does not carry the generator from one run to the next yet."
+  },
+  {
+   "branch": [
+    180,
+    181
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/postgres/sampler.py": [
+  {
+   "branch": [
+    73,
+    74
+   ],
+   "reason": "An internal guard: _projections is asked only for columns the sampler took from the graph's own tables (its columns_dict, base/sampler.py:281-287 and _get_query_columns_dict), so no column is ever unknown. The core keeps the same guard in SqlBackend::projections."
+  },
+  {
+   "branch": [
+    93,
+    95
+   ],
+   "reason": "Unreachable from sdm_client: every statement PostgreSQL reads through _flatten selects __kumo_batch__ except rows_by_ids (postgres/dialect.py:385-409), which _sample_entity_table runs only for forecast entity ids (postgres/sampler.py:174-183). Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    174,
+    183
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    175,
+    177
+   ],
+   "reason": "Reachable only with random_seed=None, which sdm_client passes through: the entity draw reads PostgreSQL's random rows without SELECT setseed(...) first. That statement is the same in every run, but the rows it returns, and every draw after them, come from the database's and the system's entropy, so a transcript of it cannot be recorded again byte for byte. `tests/rust_core/rfm/test_sampling_gaps.py::test_the_first_unseeded_entity_read[postgres]` makes the call through today's Python and holds the core's task table run to today's statements, SQL and parameters, through the end of the first entity draw; what follows depends on the system's entropy on both sides and is not compared."
+  },
+  {
+   "branch": [
+    266,
+    267
+   ],
+   "reason": "Unreachable: _by_pkey is asked for keys only when a hop finds keys it has not read (base/sql_sampler.py:568-585, under mask.any()), or for the request's own entities, of which sdm_client always names at least one."
+  },
+  {
+   "branch": [
+    291,
+    300
+   ],
+   "reason": "Unreachable: rows_by_key always selects __kumo_matches__ (postgres/dialect.py:411-454), and _frame keeps a result's columns even when it has no rows (postgres/table.py:128-141), so every frame _by_pkey reads holds it."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/snow/sampler.py": [
+  {
+   "branch": [
+    89,
+    93
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary. Offline it is reachable only by replaying the recorded live calls in a host test, as `tests/parity/test_live_call_shapes.py::test_snowflake_calls_record_and_replay` does."
+  },
+  {
+   "branch": [
+    94,
+    96
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    96,
+    97
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    96,
+    100
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    106,
+    111
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary. Offline it is reachable only by replaying the recorded live calls in a host test, as `tests/parity/test_live_call_shapes.py::test_snowflake_calls_record_and_replay` does."
+  },
+  {
+   "branch": [
+    112,
+    119
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary. Offline it is reachable only by replaying the recorded live calls in a host test, as `tests/parity/test_live_call_shapes.py::test_snowflake_calls_record_and_replay` does."
+  },
+  {
+   "branch": [
+    140,
+    141
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    176,
+    177
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    216,
+    217
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    257,
+    258
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    285,
+    286
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    345,
+    372
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    382,
+    385
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    435,
+    438
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    446,
+    451
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  },
+  {
+   "branch": [
+    462,
+    465
+   ],
+   "reason": "Live backend only. Databricks and Snowflake are reached through a live warehouse, and their transcripts were recorded once and replay offline (the brief allows no live access in this phase); none of them takes this branch, and recording one that does needs credentials. The core's Databricks and Snowflake reads are held to the recorded live calls by P75.replay and P75.boundary."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/sqlite/sampler.py": [
+  {
+   "branch": [
+    83,
+    -63
+   ],
+   "reason": "Unreachable from sdm_client: it builds KumoRelational without optimize (sdm_client/materializers/relational.py:251)."
+  },
+  {
+   "branch": [
+    91,
+    92
+   ],
+   "reason": "Unreachable from sdm_client on a SQL source: the only columns without a physical source column, or with an expression, are composite keys' derived columns, named __kumo_key_... (base/composite_key.py:31), and the SQL sampler refuses every column with the reserved __kumo_ prefix while it is made (base/sql_sampler.py:39-62), before this line. The driver fixture duckdb-a-pair-of-key-columns records that refusal, which is itself a Python bug: a composite key cannot be sampled on a SQL source; in memory composite keys are sampled (memory-sequences), where this code does not run."
+  },
+  {
+   "branch": [
+    98,
+    99
+   ],
+   "reason": "Unreachable from sdm_client on a SQL source: the only columns without a physical source column, or with an expression, are composite keys' derived columns, named __kumo_key_... (base/composite_key.py:31), and the SQL sampler refuses every column with the reserved __kumo_ prefix while it is made (base/sql_sampler.py:39-62), before this line. The driver fixture duckdb-a-pair-of-key-columns records that refusal, which is itself a Python bug: a composite key cannot be sampled on a SQL source; in memory composite keys are sampled (memory-sequences), where this code does not run."
+  },
+  {
+   "branch": [
+    283,
+    284
+   ],
+   "reason": "Reachable only with random_seed=None, which sdm_client passes through: the entity draw reads SQLite's rows in a random order (ORDER BY RANDOM()) rather than by the seeded hash. That statement is the same in every run, but the rows it returns, and every draw after them, come from the database's and the system's entropy, so a transcript of it cannot be recorded again byte for byte. `tests/rust_core/rfm/test_sampling_gaps.py::test_the_first_unseeded_entity_read[sqlite]` makes the call through today's Python and holds the core's task table run to today's statements, SQL and parameters, through the end of the first entity draw; what follows depends on the system's entropy on both sides and is not compared."
+  },
+  {
+   "branch": [
+    285,
+    288
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/base/sampler.py": [
+  {
+   "branch": [
+    320,
+    322
+   ],
+   "reason": "Unreachable from sdm_client: no graph it builds has an end time column. _build_graph sets keys and time columns only (sdm_client/materializers/relational.py:330-383), and the engine tables it copies have theirs cleared (sdm_client/materializers/sources.py:78-80)."
+  },
+  {
+   "branch": [
+    472,
+    473
+   ],
+   "reason": "Unreachable: _no_entity_at_anchor has one caller, _empty_sample_reason (base/sampler.py:559), which has already returned for an anchor that is not a Timestamp (base/sampler.py:542-543)."
+  },
+  {
+   "branch": [
+    479,
+    480
+   ],
+   "reason": "Reachable only by an entity table whose every time is pd.Timestamp.max, the last instant pandas holds, which get_min_time also gives for a table without a time: _no_entity_at_anchor then finds no entity at the anchor, and no context example is collected. An entity table whose time column holds no time is refused before any sample is drawn: in memory the graph store finds no valid row (backend/local/graph_store.py:232-242); on a database the entity read keeps only rows with a time and finds none (base/sampler.py:688-692; the driver fixture duckdb-no-signup-times). The corpus data holds no such times. `tests/rust_core/rfm/test_sampling_gaps.py::test_entity_times_at_the_last_instant[memory]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_entity_times_at_the_last_instant[sqlite]` make the call in memory and on SQLite through today's Python and hold the core's task table run to today's refusal and the warnings before it."
+  },
+  {
+   "branch": [
+    649,
+    650
+   ],
+   "reason": "Unreachable from sdm_client: _get_task_table always asks for at least 100 context examples (rfm.py:99-104, 2189) and refuses max_pq_iterations below 1 (rfm.py:2178), so neither count is zero."
+  },
+  {
+   "branch": [
+    651,
+    655
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. It is reachable only by calling the engine without indices, as `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[0]`, `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[7]`, `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[12345]` do."
+  },
+  {
+   "branch": [
+    671,
+    672
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    677,
+    678
+   ],
+   "reason": "Unreachable from sdm_client: no graph it builds has an end time column. _build_graph sets keys and time columns only (sdm_client/materializers/relational.py:330-383), and the engine tables it copies have theirs cleared (sdm_client/materializers/sources.py:78-80)."
+  },
+  {
+   "branch": [
+    705,
+    706
+   ],
+   "reason": "Unreachable from sdm_client: no graph it builds has an end time column. _build_graph sets keys and time columns only (sdm_client/materializers/relational.py:330-383), and the engine tables it copies have theirs cleared (sdm_client/materializers/sources.py:78-80)."
+  },
+  {
+   "branch": [
+    719,
+    721
+   ],
+   "reason": "Unreachable from sdm_client: no graph it builds has an end time column. _build_graph sets keys and time columns only (sdm_client/materializers/relational.py:330-383), and the engine tables it copies have theirs cleared (sdm_client/materializers/sources.py:78-80)."
+  },
+  {
+   "branch": [
+    721,
+    722
+   ],
+   "reason": "Unreachable from sdm_client: no graph it builds has an end time column. _build_graph sets keys and time columns only (sdm_client/materializers/relational.py:330-383), and the engine tables it copies have theirs cleared (sdm_client/materializers/sources.py:78-80)."
+  },
+  {
+   "branch": [
+    758,
+    760
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    760,
+    761
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    760,
+    770
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    763,
+    764
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    763,
+    768
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    771,
+    772
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    771,
+    773
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    790,
+    791
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. It is reachable only by calling the engine without indices, as `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[0]`, `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[7]`, `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[12345]` do."
+  },
+  {
+   "branch": [
+    791,
+    793
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    791,
+    808
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids). It is reachable only by calling the engine without indices, as `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[0]`, `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[7]`, `tests/determinism/test_determinism_rng.py::test_test_then_training_candidates_share_one_stream[12345]` do."
+  },
+  {
+   "branch": [
+    799,
+    800
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    799,
+    803
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    820,
+    855
+   ],
+   "reason": "Unreachable from sdm_client: _get_task_table always asks for context examples (rfm.py:99-104, 2189), so a temporal question always takes the walk back."
+  },
+  {
+   "branch": [
+    827,
+    828
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    845,
+    847
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    889,
+    897
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    898,
+    899
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    898,
+    901
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    939,
+    940
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    964,
+    970
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    1165,
+    1166
+   ],
+   "reason": "Reachable only by a frame changed in place after Schema.from_data read it, which the corpus cannot write: a text column whose first sampled cell is list-like, which _normalize_text returns as it is. Schema.from_data keeps the caller's frame, and the engine types an object column by its first valid value, so a column holding one text and then tuples, typed text, stays a text column; Schema.from_source leaves list columns out (sdm_client/schema.py:1640-1645), but a frame is checked only when its table is made. `tests/rust_core/rfm/test_sampling_gaps.py::test_a_text_column_of_tuples` makes that call through today's Python and through the core's request host, and compares their payloads and warnings."
+  },
+  {
+   "branch": [
+    1173,
+    1175
+   ],
+   "reason": "Unreachable: _normalize_text has one caller (base/sampler.py:330), which passes the default max_words=50, so the max_words=None paths are dead."
+  },
+  {
+   "branch": [
+    1179,
+    1185
+   ],
+   "reason": "Unreachable: _normalize_text has one caller (base/sampler.py:330), which passes the default max_words=50, so the max_words=None paths are dead."
+  },
+  {
+   "branch": [
+    1205,
+    1206
+   ],
+   "reason": "Unreachable: _window_fits_after is given the target's aggregations of a temporal question (base/sampler.py:547-552), and PQL gives every such aggregation a time range, so there is at least one window and each has an end."
+  },
+  {
+   "branch": [
+    1208,
+    1209
+   ],
+   "reason": "Unreachable: _window_fits_after is given the target's aggregations of a temporal question (base/sampler.py:547-552), and PQL gives every such aggregation a time range, so there is at least one window and each has an end."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/base/sql_sampler.py": [
+  {
+   "branch": [
+    81,
+    82
+   ],
+   "reason": "An internal guard, as its message says ('Internal error'): each request position is looked up once, so the database returns at most one row for it unless the dialect's statement is wrong. The core keeps the same guard (sql.rs, request_order). It is reachable only by a sampler made to return a row twice, as `tests/determinism/test_determinism_batch.py::test_the_entity_rows_of_a_query`, `tests/determinism/test_determinism_batch.py::test_the_entity_rows_of_a_subgraph`, `tests/determinism/test_determinism_batch.py::test_the_rows_a_foreign_key_points_at` do."
+  },
+  {
+   "branch": [
+    142,
+    143
+   ],
+   "reason": "Live backend only. A column with an expression, and so without a physical source column, reaches a SQL sampler from sdm_client in two ways. A Databricks metric view or a Snowflake semantic view keeps a view's column expression (sdm_client/materializers/sources.py:235-260 builds the graph with Graph.from_databricks_metric_view or from_snowflake_semantic_view, which keep it at rfm/graph.py:1275-1286 and 1625-1640); _view_expr_message (rfm/graph.py:177-207) keeps an expression without function calls even when trust_expressions is false. Those views are reached only through a live warehouse, and no recorded transcript asks of one (the brief allows no live access in this phase). The other way, a composite key's derived column named __kumo_key_... (base/composite_key.py:31), is refused with every column of the reserved __kumo_ prefix while the SQL sampler is made (base/sql_sampler.py:36-62), before this line; the driver fixture duckdb-a-pair-of-key-columns records that refusal, which is itself a Python bug: a composite key cannot be sampled on a SQL source. sdm_client makes no other column with an expression. So the core's port of these lines (SqlBackend::new, driver/sql.rs:138-174) is not compared with today's Python offline; a live run on a view compares it. Offline it is reachable only by skipping the reserved-prefix refusal, as `tests/rust_core/rfm/test_driver_fixtures.py::test_the_core_runs_what_the_engine_runs[duckdb-a-pair-of-key-columns]` does (test_driver_fixtures.py:278-284)."
+  },
+  {
+   "branch": [
+    159,
+    160
+   ],
+   "reason": "Live backend only. A column with an expression, and so without a physical source column, reaches a SQL sampler from sdm_client in two ways. A Databricks metric view or a Snowflake semantic view keeps a view's column expression (sdm_client/materializers/sources.py:235-260 builds the graph with Graph.from_databricks_metric_view or from_snowflake_semantic_view, which keep it at rfm/graph.py:1275-1286 and 1625-1640); _view_expr_message (rfm/graph.py:177-207) keeps an expression without function calls even when trust_expressions is false. Those views are reached only through a live warehouse, and no recorded transcript asks of one (the brief allows no live access in this phase). The other way, a composite key's derived column named __kumo_key_... (base/composite_key.py:31), is refused with every column of the reserved __kumo_ prefix while the SQL sampler is made (base/sql_sampler.py:36-62), before this line; the driver fixture duckdb-a-pair-of-key-columns records that refusal, which is itself a Python bug: a composite key cannot be sampled on a SQL source. sdm_client makes no other column with an expression. So the core's port of these lines (SqlBackend::new, driver/sql.rs:138-174) is not compared with today's Python offline; a live run on a view compares it. Offline it is reachable only by skipping the reserved-prefix refusal, as `tests/rust_core/rfm/test_driver_fixtures.py::test_the_core_runs_what_the_engine_runs[duckdb-a-pair-of-key-columns]` does (test_driver_fixtures.py:278-284)."
+  },
+  {
+   "branch": [
+    315,
+    316
+   ],
+   "reason": "Unreachable: the table read always has the foreign key being traversed among its columns (key_ref), a scalar that is not its time column, so the loop above adds at least that term."
+  },
+  {
+   "branch": [
+    390,
+    391
+   ],
+   "reason": "Reachable only by a list column put back into a schema after Schema.from_source left it out: Schema.from_source leaves every column of a list dtype (intlist, floatlist, stringlist) out of the schema it sends, with a warning (sdm_client/schema.py:1640-1645, 'a request carries one scalar value per cell'; the driver fixture duckdb-sequences records it), but a schema's columns is a dict the caller may write, and the engine table keeps the column's list dtype, so _tie_break_terms skips it when the entity rows are read and ordered. The corpus has no words for that edit. `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[duckdb-VARCHAR[]]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[duckdb-INTEGER[]]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[duckdb-DOUBLE[]]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[postgres-text[]]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[postgres-int[]]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[postgres-float8[]]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[postgres-text[]-some-null]`, `tests/rust_core/rfm/test_sampling_gaps.py::test_a_list_column_put_back[postgres-text[]-empty]` make the call on DuckDB and PostgreSQL through today's Python and hold the core's task table and context runs to it, statements included."
+  },
+  {
+   "branch": [
+    761,
+    762
+   ],
+   "reason": "Reached only by sample_lagged_target: the backends' label reads pass columns_dict without the entity table (for example backend/postgres/sampler.py:234-238). It asks the autoregressive form of a temporal query (base/sampler.py:1000), which drops the entity filter, so it reads at most the entity key and never more than one entity column. It is reachable only by calling the sampler's rows directly with the entity table among the columns, as `tests/determinism/test_determinism_batch.py::test_the_entity_rows_of_a_query` does."
+  },
+  {
+   "branch": [
+    792,
+    780
+   ],
+   "reason": "Unreachable: sample_target adds every aggregated table's time column to columns_dict (base/sampler.py:656-658) before asking."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/base/utils.py": [
+  {
+   "branch": [
+    65,
+    66
+   ],
+   "reason": "Unreachable from sdm_client: two callers hand to_naive_utc a Series, and neither is handed a zoned one. The TaskTable time_column setter (inference/task.py:216-230) converts the ANCHOR_TIMESTAMP columns of the context and prediction frames, which _get_task_table builds (rfm.py:2398-2415) from the anchor times the sampler drew, held as naive datetime64[ns] as the graph holds every time, or from anchors _check_anchor_time already made naive UTC (rfm.py:470-482; its zoned Timestamp branch is taken by the *-zoned-anchor driver fixtures); and sample_subgraph converts the anchor times of a task table so built (base/sampler.py:289-290). Zoned columns in memory, DuckDB TIMESTAMPTZ under a session time zone, PostgreSQL timestamptz, SQLite text with offsets, zoned anchors, anchor_time='entity' and lagged targets were probed with public calls, and none takes it. A caller of the engine that builds a TaskTable over a zoned time column does; sdm_client builds none."
+  }
+ ],
+ "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/rfm.py": [
+  {
+   "branch": [
+    652,
+    653
+   ],
+   "reason": "Unreachable from sdm_client: it builds KumoRelational without optimize (sdm_client/materializers/relational.py:251)."
+  },
+  {
+   "branch": [
+    682,
+    689
+   ],
+   "reason": "Unreachable: every graph's backend is one of the six handled before it (DataBackend has no other member)."
+  },
+  {
+   "branch": [
+    1883,
+    1884
+   ],
+   "reason": "Unreachable: add_lagged_target has one caller, _get_task_table, which calls it only for a temporal question with lag_timesteps > 0 (rfm.py:2428-2439), whose task always has its ANCHOR_TIMESTAMP time column."
+  },
+  {
+   "branch": [
+    1890,
+    1891
+   ],
+   "reason": "Unreachable: add_lagged_target has one caller, _get_task_table, which calls it only for a temporal question with lag_timesteps > 0 (rfm.py:2428-2439), whose task always has its ANCHOR_TIMESTAMP time column."
+  },
+  {
+   "branch": [
+    1897,
+    1898
+   ],
+   "reason": "Unreachable: add_lagged_target has one caller, _get_task_table, which calls it only for a temporal question with lag_timesteps > 0 (rfm.py:2428-2439), whose task always has its ANCHOR_TIMESTAMP time column."
+  },
+  {
+   "branch": [
+    2010,
+    2011
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    2152,
+    2156
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    2192,
+    2197
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    2202,
+    2203
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2203,
+    2204
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2203,
+    2205
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2205,
+    2206
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2205,
+    2207
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2207,
+    2208
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2207,
+    2209
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2209,
+    2210
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2209,
+    2211
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2211,
+    2212
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2211,
+    2214
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2224,
+    2225
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    2227,
+    2228
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2229,
+    2230
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2229,
+    2231
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2231,
+    2237
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2231,
+    2239
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2278,
+    2279
+   ],
+   "reason": "Unreachable from sdm_client: decompose.py asks a FORECAST question as one plain aggregation per step (sdm_client/decompose.py:115-122, 245-266), so no query reaching the engine has problem type FORECAST or forecast entity ids (query.rfm_entity_ids)."
+  },
+  {
+   "branch": [
+    2301,
+    2302
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2302,
+    2303
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2302,
+    2308
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2308,
+    2309
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2308,
+    2313
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2313,
+    2314
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2313,
+    2320
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2320,
+    2321
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2320,
+    2327
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn. Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2330,
+    2355
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    2355,
+    2356
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2356,
+    2357
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2356,
+    2362
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2362,
+    2363
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2362,
+    2367
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2367,
+    2368
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2367,
+    2374
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2374,
+    2375
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2374,
+    2381
+   ],
+   "reason": "Unreachable from sdm_client: it passes no logger to _get_task_table (sdm_client/materializers/relational.py:186-200)."
+  },
+  {
+   "branch": [
+    2402,
+    2403
+   ],
+   "reason": "Unreachable from sdm_client: it always passes indices to _get_task_table (sdm_client/materializers/relational.py:186-200), so num_test_examples is 0 (rfm.py:2190) and no test examples are drawn."
+  },
+  {
+   "branch": [
+    2454,
+    2455
+   ],
+   "reason": "Unreachable from sdm_client: materialize_task resolves num_neighbors (rfm.py:1175-1185) before it calls _get_context (rfm.py:1459). It is reachable only by calling _get_context directly, as `tests/rust_core/rfm/test_rfm_errors.py::test_unknown_reference` does."
+  },
+  {
+   "branch": [
+    2462,
+    2463
+   ],
+   "reason": "Unreachable from sdm_client: it refuses more hops than the endpoint reads first (sdm_client/materializers/relational.py:676-699)."
+  },
+  {
+   "branch": [
+    2472,
+    2473
+   ],
+   "reason": "Unreachable from sdm_client: materialize_task calls _get_context with _validate_references=False (rfm.py:1459-1466). It is reachable only by calling _get_context directly: `tests/rust_core/rfm/test_rfm_errors.py::test_unknown_reference` asks the engine directly and checks the core's context run raises the same TaskReferenceError."
+  },
+  {
+   "branch": [
+    2485,
+    2486
+   ],
+   "reason": "Unreachable from sdm_client: _get_task_table refuses an 'entity' anchor for an entity table without a time column first (rfm.py:2262-2266; the *-entity-anchor-timeless driver fixtures), so no task reaching _get_context asks for one."
+  },
+  {
+   "branch": [
+    2492,
+    2502
+   ],
+   "reason": "Unreachable from sdm_client: the task _get_task_table builds always has the ANCHOR_TIMESTAMP time column or uses the entities' own times (rfm.py:2407-2416), and sdm_client passes that task on."
+  }
+ ]
+}

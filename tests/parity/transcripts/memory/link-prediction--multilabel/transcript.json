@@ -1,0 +1,79 @@
+{
+ "format_version": 1,
+ "name": "memory/link-prediction#multilabel",
+ "backend": "memory",
+ "task_kind": "link-prediction",
+ "data": {
+  "generator": "shop-catalog",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_data",
+   "args": {
+    "tables": ["users", "products", "orders", "catalog"],
+    "primary_keys": {
+     "catalog": "sku"
+    },
+    "relationships": [
+     {
+      "$relationship": ["orders", "user_id", "users", "user_id"]
+     },
+     {
+      "$relationship": ["orders", "product_id", "products", "product_id"]
+     },
+     {
+      "$relationship": ["orders", "product_id", "catalog", "sku"]
+     }
+    ]
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2, 3],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2, 3],
+    "anchor_time": {
+     "$timestamp": "2024-10-01T00:00:00"
+    },
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  }
+ ],
+ "steps": [],
+ "payloads": [],
+ "responses": [],
+ "error": {
+  "class": "sdm_client.errors.UnsupportedRequestError",
+  "code": "UNSUPPORTED_REQUEST",
+  "message": "orders.product_id links to 'catalog' and 'products', so LIST_DISTINCT(orders.product_id) cannot say which table's rows it ranks. Keep one of these relationships in the schema for this question"
+ },
+ "result": null,
+ "warnings": []
+}

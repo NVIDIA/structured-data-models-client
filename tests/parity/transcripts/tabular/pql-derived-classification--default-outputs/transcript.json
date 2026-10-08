@@ -1,0 +1,160 @@
+{
+ "format_version": 1,
+ "name": "tabular/pql-derived-classification#default-outputs",
+ "backend": "tabular",
+ "task_kind": "classification",
+ "data": {
+  "generator": "wire-snapshot",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT people.segment FOR EACH people.user_id",
+    "schema": {
+     "$frames": ["people"]
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "predict": {
+     "$frame": {
+      "table": "people",
+      "head": 3,
+      "drop": ["segment"]
+     }
+    }
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-tabular",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [],
+ "payloads": [
+  {
+   "model": "kumo-tabular",
+   "task": {
+    "kind": "classification",
+    "target": {
+     "column_name": "segment",
+     "dtype": "string"
+    }
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "user_id": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "age": {
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      "segment": {
+       "dtype": "string",
+       "stype": "categorical"
+      },
+      "churn": {
+       "dtype": "int64",
+       "stype": "numerical"
+      }
+     },
+     "primary_key": ["user_id"]
+    }
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["user_id", "age", "segment", "churn"],
+     "rows": [
+      [3, 23.0, "south", 1],
+      [4, 24.0, "north", 0],
+      [5, 25.0, "north", 1],
+      [6, 26.0, "south", 0],
+      [7, 27.0, "north", 1],
+      [8, 28.0, "north", 0],
+      [9, 29.0, "south", 1],
+      [10, 30.0, "north", 0],
+      [11, 31.0, "north", 1]
+     ]
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["user_id", "age", "churn"],
+     "rows": [
+      [0, 20.0, 0],
+      [1, 21.0, 1],
+      [2, 22.0, 0]
+     ]
+    }
+   },
+   "output": {
+    "fields": ["prediction", "probabilities"]
+   },
+   "metadata": {
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-3",
+    "model": "kumo-tabular",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "[0]",
+      "prediction": "north",
+      "probabilities": {
+       "north": 0.531925,
+       "south": 0.468075
+      }
+     },
+     {
+      "row_index": 1,
+      "id": "[1]",
+      "prediction": "south",
+      "probabilities": {
+       "north": 0.450341,
+       "south": 0.549659
+      }
+     },
+     {
+      "row_index": 2,
+      "id": "[2]",
+      "prediction": "south",
+      "probabilities": {
+       "north": 0.49935,
+       "south": 0.50065
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": []
+}

@@ -1,0 +1,796 @@
+{
+  "base_candidate": "cf46656a8403a54cccef5bd446a4bdec684c47bb",
+  "entries": [
+    {
+      "constants": {
+        "DAY": "'{\"n\": 1, \"kwds\": {\"days\": 1}}'",
+        "DROP": "object()",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "FIXTURE_FILES": "('local-sampler.json', 'local-graph-store.json', 'sampler-utils.json', 'pandas-executor.json')",
+        "KEY": "'KeyError'",
+        "LABELS_QUERIES": "('PREDICT SUM(orders.amount, 0, 7, days) FOR EACH users.user_id', 'PREDICT COUNT(orders.*, 0, 40000000, months) FOR EACH users.user_id', 'PREDICT MIN(orders.amount, 0, 1, seconds) IS NULL FOR EACH users.user_id', 'PREDICT AVG(orders.amount, 0, 7, days) > 2 FOR EACH users.user_id WHERE users.user_id > 1')",
+        "LABELS_SCHEMA": "{'tables': {'users': {'cols': [{'name': 'user_id', 'stype': 'ID', 'dtype': 'int', 'timestamp_format': None}], 'pkey': 'user_id', 'time_col': None, 'end_time_col': None}, 'orders': {'cols': [{'name': 'order_id', 'stype': 'ID', 'dtype': 'int', 'timestamp_format': None}, {'name': 'user_id', 'stype': 'ID', 'dtype': 'int', 'timestamp_format': None}, {'name': 'amount', 'stype': 'numerical', 'dtype': 'float', 'timestamp_format': None}, {'name': 'ordered_at', 'stype': 'timestamp', 'dtype': 'time', 'timestamp_format': None}], 'pkey': 'order_id', 'time_col': 'ordered_at', 'end_time_col': None}}, 'col_groups': [{'columns': [{'table_name': 'orders', 'col_name': 'user_id'}, {'table_name': 'users', 'col_name': 'user_id'}]}]}",
+        "MEMORY": "'MemoryError'",
+        "MUTATION_SEED": "20261003",
+        "NEGATIVE": "(-1, -2 ** 31 - 1, -2 ** 63 - 1, -2 ** 200)",
+        "NO_ROOM": "2 ** 59",
+        "OK": "'ok'",
+        "OVERFLOW": "'OverflowError'",
+        "REPO": "Path(__file__).resolve().parents[4]",
+        "RUNTIME": "'RuntimeError'",
+        "TOO_BIG": "(2 ** 61, 2 ** 63, 2 ** 64, 2 ** 200)",
+        "TYPE": "'TypeError'",
+        "UNREADABLE_JSON": "('', 'x', '{', '[1e400]', '{\"n\": 1}}')",
+        "VALUE": "'ValueError'"
+      },
+      "id": "rust/bindings/python/tests/test_hostile.py:random_cases",
+      "line": 72,
+      "rng_calls": [
+        "n.RandomState(1)",
+        "n.RandomState(s)",
+        "n.RandomState(s)",
+        "n.RandomState(s)"
+      ],
+      "source": "rust/bindings/python/tests/test_hostile.py",
+      "source_sha256": "539e9b59cce8d41b2236198bf746b1d2eea4f07c1a6eea64e01f6a0999e30561"
+    },
+    {
+      "constants": {
+        "DAY": "'{\"n\": 1, \"kwds\": {\"days\": 1}}'",
+        "DROP": "object()",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "FIXTURE_FILES": "('local-sampler.json', 'local-graph-store.json', 'sampler-utils.json', 'pandas-executor.json')",
+        "KEY": "'KeyError'",
+        "LABELS_QUERIES": "('PREDICT SUM(orders.amount, 0, 7, days) FOR EACH users.user_id', 'PREDICT COUNT(orders.*, 0, 40000000, months) FOR EACH users.user_id', 'PREDICT MIN(orders.amount, 0, 1, seconds) IS NULL FOR EACH users.user_id', 'PREDICT AVG(orders.amount, 0, 7, days) > 2 FOR EACH users.user_id WHERE users.user_id > 1')",
+        "LABELS_SCHEMA": "{'tables': {'users': {'cols': [{'name': 'user_id', 'stype': 'ID', 'dtype': 'int', 'timestamp_format': None}], 'pkey': 'user_id', 'time_col': None, 'end_time_col': None}, 'orders': {'cols': [{'name': 'order_id', 'stype': 'ID', 'dtype': 'int', 'timestamp_format': None}, {'name': 'user_id', 'stype': 'ID', 'dtype': 'int', 'timestamp_format': None}, {'name': 'amount', 'stype': 'numerical', 'dtype': 'float', 'timestamp_format': None}, {'name': 'ordered_at', 'stype': 'timestamp', 'dtype': 'time', 'timestamp_format': None}], 'pkey': 'order_id', 'time_col': 'ordered_at', 'end_time_col': None}}, 'col_groups': [{'columns': [{'table_name': 'orders', 'col_name': 'user_id'}, {'table_name': 'users', 'col_name': 'user_id'}]}]}",
+        "MEMORY": "'MemoryError'",
+        "MUTATION_SEED": "20261003",
+        "NEGATIVE": "(-1, -2 ** 31 - 1, -2 ** 63 - 1, -2 ** 200)",
+        "NO_ROOM": "2 ** 59",
+        "OK": "'ok'",
+        "OVERFLOW": "'OverflowError'",
+        "REPO": "Path(__file__).resolve().parents[4]",
+        "RUNTIME": "'RuntimeError'",
+        "TOO_BIG": "(2 ** 61, 2 ** 63, 2 ** 64, 2 ** 200)",
+        "TYPE": "'TypeError'",
+        "UNREADABLE_JSON": "('', 'x', '{', '[1e400]', '{\"n\": 1}}')",
+        "VALUE": "'ValueError'"
+      },
+      "id": "rust/bindings/python/tests/test_hostile.py:op_cases",
+      "line": 1046,
+      "rng_calls": [
+        "random.Random(MUTATION_SEED)"
+      ],
+      "source": "rust/bindings/python/tests/test_hostile.py",
+      "source_sha256": "539e9b59cce8d41b2236198bf746b1d2eea4f07c1a6eea64e01f6a0999e30561"
+    },
+    {
+      "constants": {
+        "MUST": "(1e+16, 1000000000000000.0, 9999999999999998.0, 1e+22, 1e-05, 1e-07, 0.0001, 5e-324, 2.2250738585072014e-308, 1.7976931348623157e+308, -0.0, 0.1, 1 / 3, float('nan'), float('inf'), float('-inf'), 2 ** 63, 2 ** 64, -2 ** 64 - 1, 10 ** 40, '\u00e9\u4e2d\ud83d\ude00\\u2028\\x00\"\\\\/\\x7f\\ufeff', [[1, [2.5, ['x']]], []])",
+        "SEED": "20261005",
+        "_ZONES": "(None, 'UTC', 'America/New_York', 'Asia/Kolkata', 'Europe/London', '+05:30', '-03:00')"
+      },
+      "id": "tests/rust_core/dialects/accept_json.py:cases",
+      "line": 299,
+      "rng_calls": [
+        "random.Random(SEED)"
+      ],
+      "source": "tests/rust_core/dialects/accept_json.py",
+      "source_sha256": "25118a93c9a2b6390b0a17d842e1f6ed1e96840136d07d64d6e24d699d72d1eb"
+    },
+    {
+      "constants": {
+        "BOUNDS": "((0, 2 ** 31 - 1), (0, 1), (0, 2), (0, 7), (0, 10), (0, 100), (-50, 50), (0, 1000), (1, 2 ** 31 - 1), (0, 2 ** 31), (0, 2 ** 32 - 1), (0, 2 ** 32), (0, 2 ** 32 + 1), (0, 2 ** 40), (-2 ** 40, 2 ** 40), (0, 2 ** 62), (-2 ** 63, 2 ** 63 - 1))",
+        "EDGES": "(0, 1, 2, 42, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 1, 2 ** 63 - 1, 2 ** 63, 2 ** 64 - 1, 2 ** 64, 2 ** 64 + 1, 2 ** 96, 2 ** 128 + 12345, 10 ** 40)",
+        "NUM_SEEDS": "10000",
+        "SEED": "20261004"
+      },
+      "id": "tests/rust_core/dialects/accept_rng.py:seeds",
+      "line": 77,
+      "rng_calls": [
+        "random.Random(SEED)"
+      ],
+      "source": "tests/rust_core/dialects/accept_rng.py",
+      "source_sha256": "9d3ceeaa760710dd60746224dda2e94d17d3ca24700c769362530130ae541045"
+    },
+    {
+      "constants": {
+        "NUM_EXPRESSIONS": "50000",
+        "SEED": "20261006",
+        "_FUNCTIONS": "('upper', 'UPPER', 'Upper', 'coalesce', 'iff', 'IFF', 'if', 'div0', 'named_struct', 'xxhash64', 'md5_number_lower64', 'regexp_like', 'date_trunc', 'to_timestamp_ltz', 'array_construct', 'concat_ws', 'cast', 'try_cast', 'round', 'abs', 'secret', 'http_request', 'SYSTEM$WAIT', 'my_udf', 'udf$1', 'sum', 'count', 'current_date', 'escape', 'exists', 'filter', 'insert', 'truncate', 'identifier', 'decimal', 'varchar', 'VARCHAR', 'timestamp_ltz', 'number', 'map', 'struct', '\u017fecret', 'upp\u0435r', 'transform', 'get', 'any', 'all', 'not', 'case', 'in', 'distinct')",
+        "_IDENTS": "('x', 'amount', 'price', 'qty', 'o.total', 'ORDERS.MERGE', 'a.select', 't.x.y', '$col', 'col$1', '_y', 'x1', 'na\u00efve', '\u00e9t\u00e9', 'x\u0301', '\u017felect', '\u212a', '\u0130d', 'stra\u00dfe', '\ufb01le', '\u03c3\u03a3', '\u01c5', '\u0663\u0664', 'x\u00b2', '\u00bd', '\u00aa', 'x\\u200dy', '\\ue000', '\u4e2d\u6587', '\ud835\udc00')",
+        "_KEYWORDS": "('select', 'SELECT', 'Select', 'table', 'update', 'delete', 'merge', 'create', 'alter', 'drop', 'grant', 'revoke', 'execute', 'insert', 'truncate', 'from', 'FROM', 'not', 'NOT', 'case', 'when', 'then', 'else', 'end', 'is', 'distinct', 'like', 'ilike', 'rlike', 'regexp', 'escape', 'in', 'between', 'and', 'or', 'as', 'AS', 'interval', 'over', 'any', 'some', 'all', 'exists', 'for', 'both', 'leading', 'trailing', 'placing', 'by', 'div', 'collate', 'current_user', 'CURRENT_DATE', 'current_timestamp', 'localtime', 'localtimestamp', 'session_user', 'current_catalog', 'identifier')",
+        "_LITERALS": "(\"'abc'\", \"'it''s'\", \"'a\\\\'b'\", \"'select'\", \"'--'\", \"'\u00e9'\", \"''\", '\"name\"', '\"na\"\"me\"', '\"a\\\\b\"', '\"select\"', '`col`', '`a``b`', '`a\\\\`', '$$x$$', '$$select 1$$', '$$$$', '1', '2.5', '1e3', '0x1F', \"'unterminated\", '\"unterminated', '`unterminated', '$$unterminated', \"X'00'\")",
+        "_PUNCTUATION": "('+', '-', '*', '/', '%', '=', '<', '>', '!=', '<>', '||', '|', '&', '^', '~', ',', '(', ')', '(', ')', '[', ']', '?', ':', '::', '.', ';', '--', '/*', '*/', '|>', '->>', '->', '$', '\\\\', '!')",
+        "_SPACES": "(' ', ' ', ' ', ' ', '', '', '  ', '\\t', '\\n', '\\r\\n', '\\x0b', '\\x0c', '\\x1c', '\\x1f', '\\x85', '\\xa0', '\\u2003', '\\u2028', '\\u3000', '\\u200b')",
+        "_TYPES": "('VARCHAR', 'varchar', 'DECIMAL', 'number', 'timestamp_ntz', 'string', 'char', 'vector', 'int', 'my_type')"
+      },
+      "id": "tests/rust_core/dialects/accept_view_expr.py:expressions",
+      "line": 368,
+      "rng_calls": [
+        "random.Random(SEED)"
+      ],
+      "source": "tests/rust_core/dialects/accept_view_expr.py",
+      "source_sha256": "b260419bb503ff12f24c613c211e193c5e8854294cbec26086d2dcd52634440c"
+    },
+    {
+      "constants": {
+        "AGGREGATIONS": "('SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'LIST_DISTINCT')",
+        "F32_MAX": "3.4028234663852886e+38",
+        "FEATURE_KINDS": "('float32', 'float32', 'float64', 'int64', 'int64-edge', 'Int64', 'Float64', 'datetime64[ns]')",
+        "HERE": "Path(__file__).resolve().parent",
+        "LABELS_SEED": "20261015",
+        "NUM_GROUPS": "100000",
+        "PQL_CORPUS": "REPO / 'tests' / 'parity' / 'pql' / 'valid.json'",
+        "REPO": "HERE.parents[2]",
+        "TEMPLATES": "('PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) FOR EACH products.product_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT COUNT(orders.* WHERE orders.status {op} {status}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT {agg}(orders.{num} WHERE orders.{num} {op} {const}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) {op} {const} AND {agg}(orders.{num}, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) = 0 OR COUNT(reviews.*, {start}, {end}, {unit}) = 0 FOR EACH users.user_id', 'PREDICT NOT COUNT(reviews.*, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT {agg}(reviews.rating, {start}, {end}, {unit}) FOR EACH users.user_id WHERE users.age {op} {const}', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) FOR EACH users.user_id WHERE users.country = {country}', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) FOR EACH users.user_id ASSUMING COUNT(reviews.*, {start}, {end}, {unit}) {op} {const}', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) IS NULL FOR EACH users.user_id', 'PREDICT LIST_DISTINCT(orders.product_id, {start}, {end}, {unit}) RANK TOP 3 FOR EACH users.user_id', 'PREDICT users.{ucol} FOR EACH users.user_id', 'PREDICT users.age {op} {const} FOR EACH users.user_id', 'PREDICT users.country = {country} FOR EACH users.user_id', 'PREDICT products.price FOR EACH products.product_id WHERE products.category = {country}', 'PREDICT products.tags FOR EACH products.product_id')",
+        "UNITS": "('seconds', 'minutes', 'hours', 'days', 'weeks', 'months')",
+        "_REFERENCE": "{'labels.aggregation_type': _aggregation_type, 'labels.aggregation': _aggregation}"
+      },
+      "id": "tests/rust_core/labels/_labels.py:aggregation_type_inputs",
+      "line": 162,
+      "rng_calls": [
+        "random.Random(LABELS_SEED)"
+      ],
+      "source": "tests/rust_core/labels/_labels.py",
+      "source_sha256": "dff35566f19ad264fd295d8193b5fe34d5b9592cf3af7bfcaecf23fa37cd496e"
+    },
+    {
+      "constants": {
+        "AGGREGATIONS": "('SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'LIST_DISTINCT')",
+        "F32_MAX": "3.4028234663852886e+38",
+        "FEATURE_KINDS": "('float32', 'float32', 'float64', 'int64', 'int64-edge', 'Int64', 'Float64', 'datetime64[ns]')",
+        "HERE": "Path(__file__).resolve().parent",
+        "LABELS_SEED": "20261015",
+        "NUM_GROUPS": "100000",
+        "PQL_CORPUS": "REPO / 'tests' / 'parity' / 'pql' / 'valid.json'",
+        "REPO": "HERE.parents[2]",
+        "TEMPLATES": "('PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) FOR EACH products.product_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT COUNT(orders.* WHERE orders.status {op} {status}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT {agg}(orders.{num} WHERE orders.{num} {op} {const}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) {op} {const} AND {agg}(orders.{num}, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) = 0 OR COUNT(reviews.*, {start}, {end}, {unit}) = 0 FOR EACH users.user_id', 'PREDICT NOT COUNT(reviews.*, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT {agg}(reviews.rating, {start}, {end}, {unit}) FOR EACH users.user_id WHERE users.age {op} {const}', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) FOR EACH users.user_id WHERE users.country = {country}', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) FOR EACH users.user_id ASSUMING COUNT(reviews.*, {start}, {end}, {unit}) {op} {const}', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) IS NULL FOR EACH users.user_id', 'PREDICT LIST_DISTINCT(orders.product_id, {start}, {end}, {unit}) RANK TOP 3 FOR EACH users.user_id', 'PREDICT users.{ucol} FOR EACH users.user_id', 'PREDICT users.age {op} {const} FOR EACH users.user_id', 'PREDICT users.country = {country} FOR EACH users.user_id', 'PREDICT products.price FOR EACH products.product_id WHERE products.category = {country}', 'PREDICT products.tags FOR EACH products.product_id')",
+        "UNITS": "('seconds', 'minutes', 'hours', 'days', 'weeks', 'months')",
+        "_REFERENCE": "{'labels.aggregation_type': _aggregation_type, 'labels.aggregation': _aggregation}"
+      },
+      "id": "tests/rust_core/labels/_labels.py:aggregation_inputs",
+      "line": 195,
+      "rng_calls": [
+        "random.Random(LABELS_SEED + 1)"
+      ],
+      "source": "tests/rust_core/labels/_labels.py",
+      "source_sha256": "dff35566f19ad264fd295d8193b5fe34d5b9592cf3af7bfcaecf23fa37cd496e"
+    },
+    {
+      "constants": {
+        "AGGREGATIONS": "('SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'LIST_DISTINCT')",
+        "F32_MAX": "3.4028234663852886e+38",
+        "FEATURE_KINDS": "('float32', 'float32', 'float64', 'int64', 'int64-edge', 'Int64', 'Float64', 'datetime64[ns]')",
+        "HERE": "Path(__file__).resolve().parent",
+        "LABELS_SEED": "20261015",
+        "NUM_GROUPS": "100000",
+        "PQL_CORPUS": "REPO / 'tests' / 'parity' / 'pql' / 'valid.json'",
+        "REPO": "HERE.parents[2]",
+        "TEMPLATES": "('PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) FOR EACH products.product_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT COUNT(orders.* WHERE orders.status {op} {status}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT {agg}(orders.{num} WHERE orders.{num} {op} {const}, {start}, {end}, {unit}) FOR EACH users.user_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) {op} {const} AND {agg}(orders.{num}, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) = 0 OR COUNT(reviews.*, {start}, {end}, {unit}) = 0 FOR EACH users.user_id', 'PREDICT NOT COUNT(reviews.*, {start}, {end}, {unit}) {op} {const} FOR EACH users.user_id', 'PREDICT {agg}(reviews.rating, {start}, {end}, {unit}) FOR EACH users.user_id WHERE users.age {op} {const}', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) FOR EACH users.user_id WHERE users.country = {country}', 'PREDICT COUNT(orders.*, {start}, {end}, {unit}) FOR EACH users.user_id ASSUMING COUNT(reviews.*, {start}, {end}, {unit}) {op} {const}', 'PREDICT {agg}(orders.{num}, {start}, {end}, {unit}) IS NULL FOR EACH users.user_id', 'PREDICT LIST_DISTINCT(orders.product_id, {start}, {end}, {unit}) RANK TOP 3 FOR EACH users.user_id', 'PREDICT users.{ucol} FOR EACH users.user_id', 'PREDICT users.age {op} {const} FOR EACH users.user_id', 'PREDICT users.country = {country} FOR EACH users.user_id', 'PREDICT products.price FOR EACH products.product_id WHERE products.category = {country}', 'PREDICT products.tags FOR EACH products.product_id')",
+        "UNITS": "('seconds', 'minutes', 'hours', 'days', 'weeks', 'months')",
+        "_REFERENCE": "{'labels.aggregation_type': _aggregation_type, 'labels.aggregation': _aggregation}"
+      },
+      "id": "tests/rust_core/labels/_labels.py:generated_questions",
+      "line": 435,
+      "rng_calls": [
+        "random.Random(LABELS_SEED + 2)"
+      ],
+      "source": "tests/rust_core/labels/_labels.py",
+      "source_sha256": "dff35566f19ad264fd295d8193b5fe34d5b9592cf3af7bfcaecf23fa37cd496e"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/labels/accept_generated.py:test_questions_label_as_today",
+      "line": 119,
+      "rng_calls": [
+        "random.Random(LABELS_SEED + 3)"
+      ],
+      "source": "tests/rust_core/labels/accept_generated.py",
+      "source_sha256": "b67bcdda6af92df091a046582b91cfb8d7c3c5cce77e9b878df4dc0d8dae202f"
+    },
+    {
+      "constants": {
+        "AGGRS": "('SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNT_DISTINCT', 'FIRST', 'LAST', 'LIST_DISTINCT')",
+        "BOOLS": "('true', 'false', 'True', 'False', 'TRUE', 'FALSE')",
+        "COMMON_YEARS": "(1700, 1800, 1900, 2001, 2023, 2100, 2200, 2300, 1, 99, 100)",
+        "INT_EDGES": "('0', '1', '-1', '2147483647', '2147483648', '-2147483648', '-2147483649', '9223372036854775807', '9223372036854775808', '-9223372036854775808', '-9223372036854775809', '99999999999999999999999', '007', '-0')",
+        "JUNK": "(';', '*', '@', '$', '%', '^', '&', '{', '}', '[', ']', '\\u200b', '|')",
+        "LEAP_YEARS": "(1600, 1896, 1904, 2000, 2004, 2020, 2024, 2400, 4, 96, 400)",
+        "MODES": "('TRAINING', 'INFERENCE')",
+        "NEG_INFTY": "('-INF', '-INFINITY', '-inf', '-infinity')",
+        "NULLS": "('NULL', 'null')",
+        "PROFILES": "('RELATIONAL', 'TABULAR', 'TIMESERIES', 'ANOMALY', 'FINE_TUNING')",
+        "SIMPLE_OPS": "('=', '!=', '<', '<=', '>', '>=')",
+        "TIME_UNITS": "('days', 'weeks', 'months', 'hours', 'minutes', 'seconds')",
+        "UNICODE_SPACES": "('\\t', '\\n', '\\r', '\\x0b', '\\x0c', '\\x1c', '\\x1d', '\\x1e', '\\x1f', '\\x85', '\\xa0', '\\u1680', '\\u2000', '\\u2001', '\\u2002', '\\u2003', '\\u2004', '\\u2005', '\\u2006', '\\u2007', '\\u2008', '\\u2009', '\\u200a', '\\u2028', '\\u2029', '\\u202f', '\\u205f', '\\u3000')",
+        "VOCABULARY": "('PREDICT', 'FOR EACH', 'FOR', 'WHERE', 'ASSUMING', 'AND', 'OR', 'NOT', 'COUNT', 'SUM', '(', ')', ',', '.', '=', '>', 'IS', 'IN', 'NULL', 'days', 'RANK', 'TOP', 'CLASSIFY', 'FORECAST', 'TIMEFRAMES', '10', '-1', '1.5', \"'x'\", '2024-01-01', '12:00:00', 'orders.amount', 'users.*', 'foo', '`a b`', '-INF')",
+        "WORD_OPS": "('IS', 'IS NOT', 'IN', 'IS IN', 'LIKE', 'NOT LIKE', 'CONTAINS', 'NOT CONTAINS', 'STARTS WITH', 'ENDS WITH')"
+      },
+      "id": "tests/rust_core/pql/_generate.py:queries",
+      "line": 636,
+      "rng_calls": [
+        "random.Random(seed)"
+      ],
+      "source": "tests/rust_core/pql/_generate.py",
+      "source_sha256": "5db0ab4e9c2f3b95f5ded80339c024f07dd3a97548def12b767623d9fb40f111"
+    },
+    {
+      "constants": {
+        "AGGRS": "('SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNT_DISTINCT', 'FIRST', 'LAST', 'LIST_DISTINCT')",
+        "BOOLS": "('true', 'false', 'True', 'False', 'TRUE', 'FALSE')",
+        "COMMON_YEARS": "(1700, 1800, 1900, 2001, 2023, 2100, 2200, 2300, 1, 99, 100)",
+        "INT_EDGES": "('0', '1', '-1', '2147483647', '2147483648', '-2147483648', '-2147483649', '9223372036854775807', '9223372036854775808', '-9223372036854775808', '-9223372036854775809', '99999999999999999999999', '007', '-0')",
+        "JUNK": "(';', '*', '@', '$', '%', '^', '&', '{', '}', '[', ']', '\\u200b', '|')",
+        "LEAP_YEARS": "(1600, 1896, 1904, 2000, 2004, 2020, 2024, 2400, 4, 96, 400)",
+        "MODES": "('TRAINING', 'INFERENCE')",
+        "NEG_INFTY": "('-INF', '-INFINITY', '-inf', '-infinity')",
+        "NULLS": "('NULL', 'null')",
+        "PROFILES": "('RELATIONAL', 'TABULAR', 'TIMESERIES', 'ANOMALY', 'FINE_TUNING')",
+        "SIMPLE_OPS": "('=', '!=', '<', '<=', '>', '>=')",
+        "TIME_UNITS": "('days', 'weeks', 'months', 'hours', 'minutes', 'seconds')",
+        "UNICODE_SPACES": "('\\t', '\\n', '\\r', '\\x0b', '\\x0c', '\\x1c', '\\x1d', '\\x1e', '\\x1f', '\\x85', '\\xa0', '\\u1680', '\\u2000', '\\u2001', '\\u2002', '\\u2003', '\\u2004', '\\u2005', '\\u2006', '\\u2007', '\\u2008', '\\u2009', '\\u200a', '\\u2028', '\\u2029', '\\u202f', '\\u205f', '\\u3000')",
+        "VOCABULARY": "('PREDICT', 'FOR EACH', 'FOR', 'WHERE', 'ASSUMING', 'AND', 'OR', 'NOT', 'COUNT', 'SUM', '(', ')', ',', '.', '=', '>', 'IS', 'IN', 'NULL', 'days', 'RANK', 'TOP', 'CLASSIFY', 'FORECAST', 'TIMEFRAMES', '10', '-1', '1.5', \"'x'\", '2024-01-01', '12:00:00', 'orders.amount', 'users.*', 'foo', '`a b`', '-INF')",
+        "WORD_OPS": "('IS', 'IS NOT', 'IN', 'IS IN', 'LIKE', 'NOT LIKE', 'CONTAINS', 'NOT CONTAINS', 'STARTS WITH', 'ENDS WITH')"
+      },
+      "id": "tests/rust_core/pql/_generate.py:date_literals",
+      "line": 772,
+      "rng_calls": [
+        "random.Random(seed)"
+      ],
+      "source": "tests/rust_core/pql/_generate.py",
+      "source_sha256": "5db0ab4e9c2f3b95f5ded80339c024f07dd3a97548def12b767623d9fb40f111"
+    },
+    {
+      "constants": {
+        "FIELDS": "('prediction', 'probabilities', 'quantiles', 'scores', 'rankings', 'embeddings', 'explanation')",
+        "MERGES": "300",
+        "RANKED": "3000",
+        "RANKED_SEED": "20261021",
+        "RESULTS": "600",
+        "RESULTS_SEED": "20261022"
+      },
+      "id": "tests/rust_core/request/accept_request_generated.py:results",
+      "line": 153,
+      "rng_calls": [
+        "random.Random(RESULTS_SEED)"
+      ],
+      "source": "tests/rust_core/request/accept_request_generated.py",
+      "source_sha256": "dac69f55729efec248a49ac873c2d6e9ff4bc276efc849d32feda9a7369542b5"
+    },
+    {
+      "constants": {
+        "FIELDS": "('prediction', 'probabilities', 'quantiles', 'scores', 'rankings', 'embeddings', 'explanation')",
+        "MERGES": "300",
+        "RANKED": "3000",
+        "RANKED_SEED": "20261021",
+        "RESULTS": "600",
+        "RESULTS_SEED": "20261022"
+      },
+      "id": "tests/rust_core/request/accept_request_generated.py:test_absent",
+      "line": 213,
+      "rng_calls": [
+        "random.Random(RESULTS_SEED + 1)"
+      ],
+      "source": "tests/rust_core/request/accept_request_generated.py",
+      "source_sha256": "dac69f55729efec248a49ac873c2d6e9ff4bc276efc849d32feda9a7369542b5"
+    },
+    {
+      "constants": {
+        "FIELDS": "('prediction', 'probabilities', 'quantiles', 'scores', 'rankings', 'embeddings', 'explanation')",
+        "MERGES": "300",
+        "RANKED": "3000",
+        "RANKED_SEED": "20261021",
+        "RESULTS": "600",
+        "RESULTS_SEED": "20261022"
+      },
+      "id": "tests/rust_core/request/accept_request_generated.py:test_merge",
+      "line": 248,
+      "rng_calls": [
+        "random.Random(RESULTS_SEED + 2)"
+      ],
+      "source": "tests/rust_core/request/accept_request_generated.py",
+      "source_sha256": "dac69f55729efec248a49ac873c2d6e9ff4bc276efc849d32feda9a7369542b5"
+    },
+    {
+      "constants": {
+        "FIELDS": "('prediction', 'probabilities', 'quantiles', 'scores', 'rankings', 'embeddings', 'explanation')",
+        "MERGES": "300",
+        "RANKED": "3000",
+        "RANKED_SEED": "20261021",
+        "RESULTS": "600",
+        "RESULTS_SEED": "20261022"
+      },
+      "id": "tests/rust_core/request/accept_request_generated.py:_ranked_inputs",
+      "line": 312,
+      "rng_calls": [
+        "random.Random(RANKED_SEED)"
+      ],
+      "source": "tests/rust_core/request/accept_request_generated.py",
+      "source_sha256": "dac69f55729efec248a49ac873c2d6e9ff4bc276efc849d32feda9a7369542b5"
+    },
+    {
+      "constants": {
+        "LINE": "re.compile('request_replay: (\\\\d+) recordings, (\\\\d+) calls')",
+        "MUTATIONS": "('body', 'sql', 'response', 'warning', 'done', 'raised')",
+        "SEED": "20261024"
+      },
+      "id": "tests/rust_core/request/accept_request_rust_replay.py:test_the_replay_fails_on_a_changed_recording",
+      "line": 238,
+      "rng_calls": [
+        "random.Random(f'{SEED}-{kind}').choice(places)",
+        "random.Random(f'{SEED}-{kind}')"
+      ],
+      "source": "tests/rust_core/request/accept_request_rust_replay.py",
+      "source_sha256": "de320166290237db90ca13d0232e3e97c8e4637dbc504c2b29a9ed84183329a0"
+    },
+    {
+      "constants": {
+        "ASCII": "[chr(c) for c in range(32, 127)]",
+        "AWKWARD": "[0.1, 0.1 + 0.2, 1e+16, 1e-07, 1e-05, 1.5e-05, 5e-324, 2.2250738585072014e-308, 1.7976931348623157e+308, -0.0, 0.0, 1.0, -1.0, 1.2345678901234568e+17, 1e+21, 1e+22, 9007199254740992.0, 3.141592653589793, 100.0, -2.5e-310]",
+        "COUNT": "2000",
+        "FLOATS": "4",
+        "LIMIT": "30 * 1024 * 1024",
+        "NON_ASCII": "['\u00e9', '\u00fc', '\u00df', '\u00ff', '\\x80', '\\xa0', '\u2603', '\u4e2d', '\\u2028', '\\u2029']",
+        "NON_BMP": "['\\ufeff', '\\uffff', '\ud83d\ude00', '\ud834\udd1e', '\\U0010ffff']",
+        "NOTE_ROOM": "200",
+        "ORDERS_PER_USER": "6",
+        "QUERY": "'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id'",
+        "SEED": "20261023",
+        "SPECIAL": "['\\x00', '\\x01', '\\x08', '\\t', '\\n', '\\r', '\\x1f', '\\x7f', '\"', '\\\\']",
+        "USERS": "1000"
+      },
+      "id": "tests/rust_core/request/accept_request_size.py:test_generated_payloads_count_alike",
+      "line": 155,
+      "rng_calls": [
+        "random.Random(SEED)"
+      ],
+      "source": "tests/rust_core/request/accept_request_size.py",
+      "source_sha256": "b8976b72aa47825646d86f6f63ef243e397105d887e7b81f26684408971ae42c"
+    },
+    {
+      "constants": {
+        "ASCII": "[chr(c) for c in range(32, 127)]",
+        "AWKWARD": "[0.1, 0.1 + 0.2, 1e+16, 1e-07, 1e-05, 1.5e-05, 5e-324, 2.2250738585072014e-308, 1.7976931348623157e+308, -0.0, 0.0, 1.0, -1.0, 1.2345678901234568e+17, 1e+21, 1e+22, 9007199254740992.0, 3.141592653589793, 100.0, -2.5e-310]",
+        "COUNT": "2000",
+        "FLOATS": "4",
+        "LIMIT": "30 * 1024 * 1024",
+        "NON_ASCII": "['\u00e9', '\u00fc', '\u00df', '\u00ff', '\\x80', '\\xa0', '\u2603', '\u4e2d', '\\u2028', '\\u2029']",
+        "NON_BMP": "['\\ufeff', '\\uffff', '\ud83d\ude00', '\ud834\udd1e', '\\U0010ffff']",
+        "NOTE_ROOM": "200",
+        "ORDERS_PER_USER": "6",
+        "QUERY": "'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id'",
+        "SEED": "20261023",
+        "SPECIAL": "['\\x00', '\\x01', '\\x08', '\\t', '\\n', '\\r', '\\x1f', '\\x7f', '\"', '\\\\']",
+        "USERS": "1000"
+      },
+      "id": "tests/rust_core/request/accept_request_size.py:_frames",
+      "line": 233,
+      "rng_calls": [
+        "np.random.RandomState(SEED % 2 ** 32)"
+      ],
+      "source": "tests/rust_core/request/accept_request_size.py",
+      "source_sha256": "b8976b72aa47825646d86f6f63ef243e397105d887e7b81f26684408971ae42c"
+    },
+    {
+      "constants": {
+        "PIECES": "('0', '1', '7', '42', '-', '+', '.', 'e', 'E', ',', ', ', ' ', '\\t', '\\n', '[', ']', 'nan', 'NaN', 'inf', 'Infinity', '-Infinity', 'x', '0x1', '_', '\"', '\"a\"', '{', '}', ':', 'true', 'null', '\\\\u0041', '\\\\ud800', '1e400', '9223372036854775808', '00', '1.5', '()', '\u00e9')",
+        "REPO": "Path(__file__).resolve().parents[3]",
+        "ROWS": "4000",
+        "SEED": "20261003"
+      },
+      "id": "tests/rust_core/rfm/test_sequences.py:_rows",
+      "line": 87,
+      "rng_calls": [
+        "np.random.RandomState(SEED)"
+      ],
+      "source": "tests/rust_core/rfm/test_sequences.py",
+      "source_sha256": "95f1ae01f5aceb85424287ab48a1dfb249bcf2dc3d07831b855dfe262657ff7f"
+    },
+    {
+      "constants": {
+        "BLOCKED": "{'all': (), 'no-python': ('numpy', 'pandas', 'dateutil', 'pytz', 'torch', 'sdm_relational_engine', 'sdm_client', 'predictive_query'), 'no-engine': ('pandas', 'dateutil', 'pytz', 'torch', 'sdm_relational_engine', 'sdm_client', 'predictive_query')}",
+        "HERE": "Path(__file__).resolve().parent"
+      },
+      "id": "tests/rust_core/sampling/_jobs.py:python_jobs",
+      "line": 71,
+      "rng_calls": [
+        "random.Random(RNG_SEED + 11)"
+      ],
+      "source": "tests/rust_core/sampling/_jobs.py",
+      "source_sha256": "b495a4cc8815745e9460b6b76a168d6f8dcd7c0d56f522e4c413b7a29cb40c5f"
+    },
+    {
+      "constants": {
+        "BLOCKED": "{'all': (), 'no-python': ('numpy', 'pandas', 'dateutil', 'pytz', 'torch', 'sdm_relational_engine', 'sdm_client', 'predictive_query'), 'no-engine': ('pandas', 'dateutil', 'pytz', 'torch', 'sdm_relational_engine', 'sdm_client', 'predictive_query')}",
+        "HERE": "Path(__file__).resolve().parent"
+      },
+      "id": "tests/rust_core/sampling/_jobs.py:array_jobs",
+      "line": 161,
+      "rng_calls": [
+        "random.Random(STORE_SEED)",
+        "random.Random(LABELS_SEED + 9)"
+      ],
+      "source": "tests/rust_core/sampling/_jobs.py",
+      "source_sha256": "b495a4cc8815745e9460b6b76a168d6f8dcd7c0d56f522e4c413b7a29cb40c5f"
+    },
+    {
+      "constants": {
+        "CPP_REFERENCE": "HERE / 'mt19937_reference.cpp'",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "GRAPH_SEED": "20261011",
+        "HERE": "Path(__file__).resolve().parent",
+        "INSTALLED": "'SDM_P7_WHEEL_INSTALLED'",
+        "INTERVAL_MAXIMA": "(0, 1, 2, 3, 6, 100, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 33 + 5, 2 ** 40, 2 ** 62, 2 ** 63 - 2)",
+        "NS_MAX": "2 ** 63 - 1",
+        "NS_MIN": "-2 ** 63 + 1",
+        "NUM_GRAPHS": "10000",
+        "NUM_PAIRS": "100000",
+        "NUM_SEEDS": "10000",
+        "NUM_STORES": "1000",
+        "NUM_TEXTS": "20000",
+        "OFFSET_SEED": "20261013",
+        "OFFSET_UNITS": "('years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds')",
+        "RANDINT_BOUNDS": "((0, 1), (0, 2), (0, 7), (0, 10), (-50, 50), (0, 1000), (0, 2 ** 31 - 1), (1, 2 ** 31 - 1), (0, 2 ** 31), (0, 2 ** 32 - 1), (0, 2 ** 32), (0, 2 ** 32 + 1), (0, 2 ** 40), (-2 ** 40, 2 ** 40), (0, 2 ** 62), (-2 ** 63, 2 ** 63 - 1))",
+        "REPO": "HERE.parents[2]",
+        "RNG_SEED": "20261010",
+        "SEED_EDGES": "(0, 1, 2, 7, 42, 123, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 1, 2 ** 63 - 1, 2 ** 63, 2 ** 64 - 1, 2 ** 64, 2 ** 64 + 1, 2 ** 96, 2 ** 128 + 12345, 10 ** 40)",
+        "STORE_KEYS": "('report', 'masks', 'keys', 'node_ids', 'time', 'time_range', 'colptr', 'row')",
+        "STORE_SEED": "20261012",
+        "TEXT_SEED": "20261014",
+        "TRANSCRIPTS": "REPO / 'tests' / 'parity' / 'transcripts'",
+        "_MONTH_ENDS": "('2024-01-31', '2024-02-29', '2023-02-28', '2024-03-31', '2024-04-30', '2000-02-29', '1900-02-28', '2100-02-28', '1970-01-31', '2023-12-31', '2024-02-28', '2023-03-29', '2262-03-31', '1677-10-31')"
+      },
+      "id": "tests/rust_core/sampling/_sampling.py:seeds",
+      "line": 199,
+      "rng_calls": [
+        "random.Random(RNG_SEED)"
+      ],
+      "source": "tests/rust_core/sampling/_sampling.py",
+      "source_sha256": "db5b5e170c3b07fdfb7b228c2fc4e1d1f6d41856919afd128e5e1402dbf5aca5"
+    },
+    {
+      "constants": {
+        "CPP_REFERENCE": "HERE / 'mt19937_reference.cpp'",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "GRAPH_SEED": "20261011",
+        "HERE": "Path(__file__).resolve().parent",
+        "INSTALLED": "'SDM_P7_WHEEL_INSTALLED'",
+        "INTERVAL_MAXIMA": "(0, 1, 2, 3, 6, 100, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 33 + 5, 2 ** 40, 2 ** 62, 2 ** 63 - 2)",
+        "NS_MAX": "2 ** 63 - 1",
+        "NS_MIN": "-2 ** 63 + 1",
+        "NUM_GRAPHS": "10000",
+        "NUM_PAIRS": "100000",
+        "NUM_SEEDS": "10000",
+        "NUM_STORES": "1000",
+        "NUM_TEXTS": "20000",
+        "OFFSET_SEED": "20261013",
+        "OFFSET_UNITS": "('years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds')",
+        "RANDINT_BOUNDS": "((0, 1), (0, 2), (0, 7), (0, 10), (-50, 50), (0, 1000), (0, 2 ** 31 - 1), (1, 2 ** 31 - 1), (0, 2 ** 31), (0, 2 ** 32 - 1), (0, 2 ** 32), (0, 2 ** 32 + 1), (0, 2 ** 40), (-2 ** 40, 2 ** 40), (0, 2 ** 62), (-2 ** 63, 2 ** 63 - 1))",
+        "REPO": "HERE.parents[2]",
+        "RNG_SEED": "20261010",
+        "SEED_EDGES": "(0, 1, 2, 7, 42, 123, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 1, 2 ** 63 - 1, 2 ** 63, 2 ** 64 - 1, 2 ** 64, 2 ** 64 + 1, 2 ** 96, 2 ** 128 + 12345, 10 ** 40)",
+        "STORE_KEYS": "('report', 'masks', 'keys', 'node_ids', 'time', 'time_range', 'colptr', 'row')",
+        "STORE_SEED": "20261012",
+        "TEXT_SEED": "20261014",
+        "TRANSCRIPTS": "REPO / 'tests' / 'parity' / 'transcripts'",
+        "_MONTH_ENDS": "('2024-01-31', '2024-02-29', '2023-02-28', '2024-03-31', '2024-04-30', '2000-02-29', '1900-02-28', '2100-02-28', '1970-01-31', '2023-12-31', '2024-02-28', '2023-03-29', '2262-03-31', '1677-10-31')"
+      },
+      "id": "tests/rust_core/sampling/_sampling.py:mt_jobs",
+      "line": 358,
+      "rng_calls": [
+        "random.Random(RNG_SEED + 1)"
+      ],
+      "source": "tests/rust_core/sampling/_sampling.py",
+      "source_sha256": "db5b5e170c3b07fdfb7b228c2fc4e1d1f6d41856919afd128e5e1402dbf5aca5"
+    },
+    {
+      "constants": {
+        "CPP_REFERENCE": "HERE / 'mt19937_reference.cpp'",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "GRAPH_SEED": "20261011",
+        "HERE": "Path(__file__).resolve().parent",
+        "INSTALLED": "'SDM_P7_WHEEL_INSTALLED'",
+        "INTERVAL_MAXIMA": "(0, 1, 2, 3, 6, 100, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 33 + 5, 2 ** 40, 2 ** 62, 2 ** 63 - 2)",
+        "NS_MAX": "2 ** 63 - 1",
+        "NS_MIN": "-2 ** 63 + 1",
+        "NUM_GRAPHS": "10000",
+        "NUM_PAIRS": "100000",
+        "NUM_SEEDS": "10000",
+        "NUM_STORES": "1000",
+        "NUM_TEXTS": "20000",
+        "OFFSET_SEED": "20261013",
+        "OFFSET_UNITS": "('years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds')",
+        "RANDINT_BOUNDS": "((0, 1), (0, 2), (0, 7), (0, 10), (-50, 50), (0, 1000), (0, 2 ** 31 - 1), (1, 2 ** 31 - 1), (0, 2 ** 31), (0, 2 ** 32 - 1), (0, 2 ** 32), (0, 2 ** 32 + 1), (0, 2 ** 40), (-2 ** 40, 2 ** 40), (0, 2 ** 62), (-2 ** 63, 2 ** 63 - 1))",
+        "REPO": "HERE.parents[2]",
+        "RNG_SEED": "20261010",
+        "SEED_EDGES": "(0, 1, 2, 7, 42, 123, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 1, 2 ** 63 - 1, 2 ** 63, 2 ** 64 - 1, 2 ** 64, 2 ** 64 + 1, 2 ** 96, 2 ** 128 + 12345, 10 ** 40)",
+        "STORE_KEYS": "('report', 'masks', 'keys', 'node_ids', 'time', 'time_range', 'colptr', 'row')",
+        "STORE_SEED": "20261012",
+        "TEXT_SEED": "20261014",
+        "TRANSCRIPTS": "REPO / 'tests' / 'parity' / 'transcripts'",
+        "_MONTH_ENDS": "('2024-01-31', '2024-02-29', '2023-02-28', '2024-03-31', '2024-04-30', '2000-02-29', '1900-02-28', '2100-02-28', '1970-01-31', '2023-12-31', '2024-02-28', '2023-03-29', '2262-03-31', '1677-10-31')"
+      },
+      "id": "tests/rust_core/sampling/_sampling.py:graphs",
+      "line": 544,
+      "rng_calls": [
+        "random.Random(seed)"
+      ],
+      "source": "tests/rust_core/sampling/_sampling.py",
+      "source_sha256": "db5b5e170c3b07fdfb7b228c2fc4e1d1f6d41856919afd128e5e1402dbf5aca5"
+    },
+    {
+      "constants": {
+        "CPP_REFERENCE": "HERE / 'mt19937_reference.cpp'",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "GRAPH_SEED": "20261011",
+        "HERE": "Path(__file__).resolve().parent",
+        "INSTALLED": "'SDM_P7_WHEEL_INSTALLED'",
+        "INTERVAL_MAXIMA": "(0, 1, 2, 3, 6, 100, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 33 + 5, 2 ** 40, 2 ** 62, 2 ** 63 - 2)",
+        "NS_MAX": "2 ** 63 - 1",
+        "NS_MIN": "-2 ** 63 + 1",
+        "NUM_GRAPHS": "10000",
+        "NUM_PAIRS": "100000",
+        "NUM_SEEDS": "10000",
+        "NUM_STORES": "1000",
+        "NUM_TEXTS": "20000",
+        "OFFSET_SEED": "20261013",
+        "OFFSET_UNITS": "('years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds')",
+        "RANDINT_BOUNDS": "((0, 1), (0, 2), (0, 7), (0, 10), (-50, 50), (0, 1000), (0, 2 ** 31 - 1), (1, 2 ** 31 - 1), (0, 2 ** 31), (0, 2 ** 32 - 1), (0, 2 ** 32), (0, 2 ** 32 + 1), (0, 2 ** 40), (-2 ** 40, 2 ** 40), (0, 2 ** 62), (-2 ** 63, 2 ** 63 - 1))",
+        "REPO": "HERE.parents[2]",
+        "RNG_SEED": "20261010",
+        "SEED_EDGES": "(0, 1, 2, 7, 42, 123, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 1, 2 ** 63 - 1, 2 ** 63, 2 ** 64 - 1, 2 ** 64, 2 ** 64 + 1, 2 ** 96, 2 ** 128 + 12345, 10 ** 40)",
+        "STORE_KEYS": "('report', 'masks', 'keys', 'node_ids', 'time', 'time_range', 'colptr', 'row')",
+        "STORE_SEED": "20261012",
+        "TEXT_SEED": "20261014",
+        "TRANSCRIPTS": "REPO / 'tests' / 'parity' / 'transcripts'",
+        "_MONTH_ENDS": "('2024-01-31', '2024-02-29', '2023-02-28', '2024-03-31', '2024-04-30', '2000-02-29', '1900-02-28', '2100-02-28', '1970-01-31', '2023-12-31', '2024-02-28', '2023-03-29', '2262-03-31', '1677-10-31')"
+      },
+      "id": "tests/rust_core/sampling/_sampling.py:offset_pairs",
+      "line": 1051,
+      "rng_calls": [
+        "random.Random(OFFSET_SEED)"
+      ],
+      "source": "tests/rust_core/sampling/_sampling.py",
+      "source_sha256": "db5b5e170c3b07fdfb7b228c2fc4e1d1f6d41856919afd128e5e1402dbf5aca5"
+    },
+    {
+      "constants": {
+        "CPP_REFERENCE": "HERE / 'mt19937_reference.cpp'",
+        "FIXTURES": "REPO / 'tests' / 'parity' / 'fixtures'",
+        "GRAPH_SEED": "20261011",
+        "HERE": "Path(__file__).resolve().parent",
+        "INSTALLED": "'SDM_P7_WHEEL_INSTALLED'",
+        "INTERVAL_MAXIMA": "(0, 1, 2, 3, 6, 100, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 33 + 5, 2 ** 40, 2 ** 62, 2 ** 63 - 2)",
+        "NS_MAX": "2 ** 63 - 1",
+        "NS_MIN": "-2 ** 63 + 1",
+        "NUM_GRAPHS": "10000",
+        "NUM_PAIRS": "100000",
+        "NUM_SEEDS": "10000",
+        "NUM_STORES": "1000",
+        "NUM_TEXTS": "20000",
+        "OFFSET_SEED": "20261013",
+        "OFFSET_UNITS": "('years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds')",
+        "RANDINT_BOUNDS": "((0, 1), (0, 2), (0, 7), (0, 10), (-50, 50), (0, 1000), (0, 2 ** 31 - 1), (1, 2 ** 31 - 1), (0, 2 ** 31), (0, 2 ** 32 - 1), (0, 2 ** 32), (0, 2 ** 32 + 1), (0, 2 ** 40), (-2 ** 40, 2 ** 40), (0, 2 ** 62), (-2 ** 63, 2 ** 63 - 1))",
+        "REPO": "HERE.parents[2]",
+        "RNG_SEED": "20261010",
+        "SEED_EDGES": "(0, 1, 2, 7, 42, 123, 2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 1, 2 ** 63 - 1, 2 ** 63, 2 ** 64 - 1, 2 ** 64, 2 ** 64 + 1, 2 ** 96, 2 ** 128 + 12345, 10 ** 40)",
+        "STORE_KEYS": "('report', 'masks', 'keys', 'node_ids', 'time', 'time_range', 'colptr', 'row')",
+        "STORE_SEED": "20261012",
+        "TEXT_SEED": "20261014",
+        "TRANSCRIPTS": "REPO / 'tests' / 'parity' / 'transcripts'",
+        "_MONTH_ENDS": "('2024-01-31', '2024-02-29', '2023-02-28', '2024-03-31', '2024-04-30', '2000-02-29', '1900-02-28', '2100-02-28', '1970-01-31', '2023-12-31', '2024-02-28', '2023-03-29', '2262-03-31', '1677-10-31')"
+      },
+      "id": "tests/rust_core/sampling/_sampling.py:texts",
+      "line": 1129,
+      "rng_calls": [
+        "random.Random(TEXT_SEED)"
+      ],
+      "source": "tests/rust_core/sampling/_sampling.py",
+      "source_sha256": "db5b5e170c3b07fdfb7b228c2fc4e1d1f6d41856919afd128e5e1402dbf5aca5"
+    },
+    {
+      "constants": {
+        "HASH_SEEDS": "('0', '1', '2', '3', '4242', '987654')",
+        "LARGE_SEEDS": "(2 ** 31, 2 ** 32 - 1, 2 ** 32, 2 ** 63, 2 ** 64 + 3, 10 ** 30)",
+        "QUESTIONS": "('PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', 'PREDICT products.category FOR EACH products.product_id')"
+      },
+      "id": "tests/rust_core/sampling/accept_fixes.py:_static_sampler",
+      "line": 78,
+      "rng_calls": [
+        "np.random.RandomState(0)"
+      ],
+      "source": "tests/rust_core/sampling/accept_fixes.py",
+      "source_sha256": "305d95381d26cb7524bf086cf36139adb85b79b92399b8cb69c6b9451e775599"
+    },
+    {
+      "constants": {
+        "HASH_SEEDS": "('0', '1', '2', '3', '4242', '987654')",
+        "LARGE_SEEDS": "(2 ** 31, 2 ** 32 - 1, 2 ** 32, 2 ** 63, 2 ** 64 + 3, 10 ** 30)",
+        "QUESTIONS": "('PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', 'PREDICT products.category FOR EACH products.product_id')"
+      },
+      "id": "tests/rust_core/sampling/accept_fixes.py:_entity_model",
+      "line": 146,
+      "rng_calls": [
+        "np.random.RandomState(0)"
+      ],
+      "source": "tests/rust_core/sampling/accept_fixes.py",
+      "source_sha256": "305d95381d26cb7524bf086cf36139adb85b79b92399b8cb69c6b9451e775599"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_graph_store.py:_graphs",
+      "line": 41,
+      "rng_calls": [
+        "random.Random(STORE_SEED)"
+      ],
+      "source": "tests/rust_core/sampling/accept_graph_store.py",
+      "source_sha256": "b6579813b07db978a06082aa08e03b6d931415bc3e72b295920d4fa3fb0ef732"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_graph_store.py:test_random_graphs_store_as_today",
+      "line": 104,
+      "rng_calls": [
+        "random.Random(STORE_SEED + 1)"
+      ],
+      "source": "tests/rust_core/sampling/accept_graph_store.py",
+      "source_sha256": "b6579813b07db978a06082aa08e03b6d931415bc3e72b295920d4fa3fb0ef732"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_offsets.py:test_seconds_ns_and_pooling_match_pandas",
+      "line": 99,
+      "rng_calls": [
+        "random.Random(OFFSET_SEED + 1)"
+      ],
+      "source": "tests/rust_core/sampling/accept_offsets.py",
+      "source_sha256": "287b1375bf74615735ae04c83264b4769e68be6cdfe44c60d8fb6eef9ec85e00"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_rng.py:_compare",
+      "line": 56,
+      "rng_calls": [
+        "random.Random(RNG_SEED + 7)"
+      ],
+      "source": "tests/rust_core/sampling/accept_rng.py",
+      "source_sha256": "5b88d9f0b09c2cdcb9aab55672900fb3f453389c6eeefa01f273131275a1a72d"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_rng.py:test_random_state_by_number_and_by_words",
+      "line": 89,
+      "rng_calls": [
+        "module.RandomState(seed if seed < 2 ** 32 else seed_words(seed))",
+        "np.random.RandomState(np.array(seed_words(seed), dtype=np.uint32))",
+        "np.random.RandomState(seed)"
+      ],
+      "source": "tests/rust_core/sampling/accept_rng.py",
+      "source_sha256": "5b88d9f0b09c2cdcb9aab55672900fb3f453389c6eeefa01f273131275a1a72d"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_rng.py:test_random_state_by_long_word_lists",
+      "line": 105,
+      "rng_calls": [
+        "random.Random(RNG_SEED + 3)",
+        "module.RandomState(index[i])",
+        "np.random.RandomState(np.array(index[i], dtype=np.uint32))"
+      ],
+      "source": "tests/rust_core/sampling/accept_rng.py",
+      "source_sha256": "5b88d9f0b09c2cdcb9aab55672900fb3f453389c6eeefa01f273131275a1a72d"
+    },
+    {
+      "constants": {},
+      "id": "tests/rust_core/sampling/accept_rng.py:test_random_state_refuses_what_numpy_refuses",
+      "line": 129,
+      "rng_calls": [
+        "module.RandomState(seed)"
+      ],
+      "source": "tests/rust_core/sampling/accept_rng.py",
+      "source_sha256": "5b88d9f0b09c2cdcb9aab55672900fb3f453389c6eeefa01f273131275a1a72d"
+    },
+    {
+      "constants": {
+        "AUDIT_NEIGHBORS": "{'sampler': {'node_types': ['A', 'B'], 'edge_types': [['A', 'to', 'B'], ['B', 'to', 'A']], 'colptr': {'A__to__B': {'$ndarray': {'dtype': 'int64', 'values': [0, 2, 4]}}, 'B__to__A': {'$ndarray': {'dtype': 'int64', 'values': [I64_MIN, 0, 1, 2]}}}, 'row': {'A__to__B': {'$ndarray': {'dtype': 'int64', 'values': [0, 2, 0, 2]}}, 'B__to__A': {'$ndarray': {'dtype': 'int64', 'values': [0, 1, 1]}}}, 'node_time': {'A': {'$ndarray': {'dtype': 'int64', 'values': [1, 0, 3]}}, 'B': {'$ndarray': {'dtype': 'int64', 'values': [2, 1]}}}}, 'calls': [{'num_neighbors': {'A__to__B': {'$ndarray': {'dtype': 'int64', 'values': [1, 1]}}, 'B__to__A': {'$ndarray': {'dtype': 'int64', 'values': [1, 1]}}}, 'sampling_time_offsets': {}, 'entity_table': 'B', 'seed_node': {'$ndarray': {'dtype': 'int64', 'values': [0, 1]}}, 'seed_time': {'$ndarray': {'dtype': 'int64', 'values': [1, 1]}}}]}",
+        "AUDIT_OFFSET": "{'timestamps': [1667260800000000000], 'offset': {'n': 2 ** 62, 'kwds': {'days': 86400, 'weeks': I64_MIN, 'seconds': -12}}, 'sign': 1}",
+        "BINDING": "REPO / 'rust' / 'bindings' / 'python'",
+        "EDGES": "(0, 1, -1, 2, 2 ** 31 - 1, -2 ** 31, 2 ** 31, 2 ** 32, 2 ** 53 + 1, 2 ** 62, -2 ** 62, I64_MAX, I64_MIN, I64_MAX - 1, I64_MIN + 1)",
+        "NUM_GRAPHS": "600",
+        "NUM_OFFSETS": "3000",
+        "PAST_INT64": "({'n': 1, 'kwds': {'years': 10 ** 12}}, {'n': 1, 'kwds': {'days': 2 ** 62}}, {'n': 1, 'kwds': {'weeks': 2 ** 62}}, {'n': 1, 'kwds': {'months': -2 ** 62}}, {'n': 3, 'kwds': {'years': 2 ** 40, 'days': -5}})",
+        "SEED": "20261016"
+      },
+      "id": "tests/rust_core/sampling/driver/accept_driver_debug.py:jobs",
+      "line": 206,
+      "rng_calls": [
+        "random.Random(SEED)"
+      ],
+      "source": "tests/rust_core/sampling/driver/accept_driver_debug.py",
+      "source_sha256": "d26f494676688377fda63c7d8359875641b25f856d4330f647ed1b819453c21b"
+    },
+    {
+      "constants": {
+        "COUNT": "100000",
+        "OPERATIONS": "('dates.day_comes_first', 'dates.looks_unambiguous', 'dates.shapes_written', 'dates.reads_as_a_date', 'dates.conversion_that_works', 'time_column.read', 'infer.timestamp')",
+        "SEED": "20261007",
+        "_COLUMNS": "('created_at', 'date', 'ts', 'value', 'x', 'updated', 'order_dt')",
+        "_FULL_MONTHS": "('January', 'March', 'September', 'December')",
+        "_JUNK": "('', ' ', 'n/a', 'unknown', 'TBD', '-', 'abc', 'AB-1234', '12345', '0', 'NaT')",
+        "_MONTHS": "('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')",
+        "_ZONES": "('Z', '+00:00', '+05:30', '-08:00', '+0530', '-0800', '+05', ' UTC', 'UTC', ' GMT', ' EST', ' America/New_York', ' XYZ')"
+      },
+      "id": "tests/rust_core/schema/_dates.py:columns",
+      "line": 227,
+      "rng_calls": [
+        "random.Random(seed)"
+      ],
+      "source": "tests/rust_core/schema/_dates.py",
+      "source_sha256": "3bedc6c766d7774459b575cabe04bad289384d3b3c56ff0d584ea5c244e2cde4"
+    },
+    {
+      "constants": {
+        "ENGINE": "REPO / 'packages' / 'sdm-relational-engine'",
+        "HERE": "Path(__file__).resolve().parent",
+        "METRIC_SEED": "20261008",
+        "REPO": "HERE.parents[2]",
+        "SEMANTIC_SEED": "20261009",
+        "YAML11": "('yes', 'No', 'on', 'OFF', '~', 'null', 'true', '0x1A', '017', '1_000', '1:30', '+.inf', '.NaN', '1.5e+3', '1e3', '2021-01-01', '2021-01-01 10:00:00', '0o17')",
+        "_ALIASES": "('users', 'products', 'customer', 'nation', 'region', 'j1', 'J2', 'c')",
+        "_COLUMNS": "('id', 'user_id', 'amount', 'ts', 'category', 'x', 'Name', 'n_name')",
+        "_FUNCTIONS": "('UPPER', 'lower', 'coalesce', 'date_trunc', 'abs', 'my_udf', 'secret')",
+        "_PLUGIN": "\"\\nimport json, os, sys\\n\\n_OUT = os.environ['SDM_P65_VIEW_CAPTURE']\\n_SEEN = {'metric': [], 'semantic': []}\\n\\n\\ndef _keep():\\n    with open(_OUT, 'w') as handle:\\n        json.dump(_SEEN, handle)\\n\\n\\ndef pytest_configure(config):\\n    import yaml\\n    from sdm_relational_engine.rfm.backend.databricks import metric_view\\n\\n    parse = metric_view.parse_metric_view\\n\\n    def parse_metric_view(definition, *args, **kwargs):\\n        trust = kwargs.get('trust_expressions', args[0] if args else False)\\n        if isinstance(definition, str):\\n            _SEEN['metric'].append([definition, bool(trust)])\\n            _keep()\\n        return parse(definition, *args, **kwargs)\\n\\n    metric_view.parse_metric_view = parse_metric_view\\n    load = yaml.safe_load\\n\\n    def safe_load(stream):\\n        if isinstance(stream, str):\\n            frame = sys._getframe(1)\\n            while frame is not None:\\n                if frame.f_code.co_name == 'from_snowflake_semantic_view':\\n                    _SEEN['semantic'].append(stream)\\n                    _keep()\\n                    break\\n                frame = frame.f_back\\n        return load(stream)\\n\\n    yaml.safe_load = safe_load\\n    _keep()\\n\"",
+        "_RAW": "'__raw_{}__'",
+        "_TYPES": "('NUMBER(38,0)', 'NUMBER(10,2)', 'FLOAT', 'VARCHAR(16777216)', 'TIMESTAMP_NTZ(9)', 'DATE', 'BOOLEAN')"
+      },
+      "id": "tests/rust_core/schema/_views.py:metric_views",
+      "line": 382,
+      "rng_calls": [
+        "random.Random(seed)"
+      ],
+      "source": "tests/rust_core/schema/_views.py",
+      "source_sha256": "a41d306c59a6d112c01af372f989e68397a246b541185f7cbe2c763332384823"
+    },
+    {
+      "constants": {
+        "ENGINE": "REPO / 'packages' / 'sdm-relational-engine'",
+        "HERE": "Path(__file__).resolve().parent",
+        "METRIC_SEED": "20261008",
+        "REPO": "HERE.parents[2]",
+        "SEMANTIC_SEED": "20261009",
+        "YAML11": "('yes', 'No', 'on', 'OFF', '~', 'null', 'true', '0x1A', '017', '1_000', '1:30', '+.inf', '.NaN', '1.5e+3', '1e3', '2021-01-01', '2021-01-01 10:00:00', '0o17')",
+        "_ALIASES": "('users', 'products', 'customer', 'nation', 'region', 'j1', 'J2', 'c')",
+        "_COLUMNS": "('id', 'user_id', 'amount', 'ts', 'category', 'x', 'Name', 'n_name')",
+        "_FUNCTIONS": "('UPPER', 'lower', 'coalesce', 'date_trunc', 'abs', 'my_udf', 'secret')",
+        "_PLUGIN": "\"\\nimport json, os, sys\\n\\n_OUT = os.environ['SDM_P65_VIEW_CAPTURE']\\n_SEEN = {'metric': [], 'semantic': []}\\n\\n\\ndef _keep():\\n    with open(_OUT, 'w') as handle:\\n        json.dump(_SEEN, handle)\\n\\n\\ndef pytest_configure(config):\\n    import yaml\\n    from sdm_relational_engine.rfm.backend.databricks import metric_view\\n\\n    parse = metric_view.parse_metric_view\\n\\n    def parse_metric_view(definition, *args, **kwargs):\\n        trust = kwargs.get('trust_expressions', args[0] if args else False)\\n        if isinstance(definition, str):\\n            _SEEN['metric'].append([definition, bool(trust)])\\n            _keep()\\n        return parse(definition, *args, **kwargs)\\n\\n    metric_view.parse_metric_view = parse_metric_view\\n    load = yaml.safe_load\\n\\n    def safe_load(stream):\\n        if isinstance(stream, str):\\n            frame = sys._getframe(1)\\n            while frame is not None:\\n                if frame.f_code.co_name == 'from_snowflake_semantic_view':\\n                    _SEEN['semantic'].append(stream)\\n                    _keep()\\n                    break\\n                frame = frame.f_back\\n        return load(stream)\\n\\n    yaml.safe_load = safe_load\\n    _keep()\\n\"",
+        "_RAW": "'__raw_{}__'",
+        "_TYPES": "('NUMBER(38,0)', 'NUMBER(10,2)', 'FLOAT', 'VARCHAR(16777216)', 'TIMESTAMP_NTZ(9)', 'DATE', 'BOOLEAN')"
+      },
+      "id": "tests/rust_core/schema/_views.py:semantic_views",
+      "line": 621,
+      "rng_calls": [
+        "random.Random(seed)"
+      ],
+      "source": "tests/rust_core/schema/_views.py",
+      "source_sha256": "a41d306c59a6d112c01af372f989e68397a246b541185f7cbe2c763332384823"
+    },
+    {
+      "constants": {
+        "CASES": "400",
+        "PARITY": "Path(__file__).resolve().parents[1] / 'parity'",
+        "PINNED_ORDER": "[1, 9, 10, 12, 13, 19, 20, 23, 24, 28, 0, 2, 3, 4, 6, 8, 11, 14, 16, 18, 22, 25, 26, 30, 5, 7, 15, 17, 21, 27, 29, 31, 32, 34, 36, 37, 39, 43, 48, 49, 50, 51, 53, 56, 33, 38, 40, 41, 44, 54, 55, 57, 45, 52, 58, 59, 60, 35, 42, 46, 47, 61, 62, 63]",
+        "PINNED_SCORES": "[0.5, None, 0.5, 0.5, 0.5, 0.25, 0.5, 0.25, 0.5, 0.75, 0.75, 0.5, None, None, 0.5, 0.25, 0.5, 0.25, 0.5, 0.75, 0.75, 0.25, 0.5, 0.75, 0.75, 0.5, 0.5, 0.25, 0.75, 0.25, 0.5, None, 0.75, 0.5, 0.75, 0.25, 0.75, 0.75, 0.5, 0.75, 0.5, 0.5, 0.25, None, 0.5, 0.25, 0.25, 0.25, 0.75, 0.75, 0.75, 0.75, 0.25, 0.75, 0.5, 0.5, 0.75, 0.5, None, 0.5, 0.5, 0.25, None, 0.75]",
+        "SEED": "20261004"
+      },
+      "id": "tests/rust_core/test_ranked_nan_order.py:_rankings",
+      "line": 44,
+      "rng_calls": [
+        "random.Random(SEED)"
+      ],
+      "source": "tests/rust_core/test_ranked_nan_order.py",
+      "source_sha256": "a9575fa7af047844a494a3aff4449fae90c1f4e813f0e9e1e2e7f9663d202e2d"
+    }
+  ],
+  "scope": "Source discovery index; final semantic generators and seed dispositions are separate"
+}

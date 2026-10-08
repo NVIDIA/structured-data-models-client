@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-dialects"
+description = "SQL dialects"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# BLAKE2b, for the PostgreSQL seed (`postgres_seed`).
+blake2 = "0.11"
+sdm-protocol = { path = "../protocol" }
+sdm-pql = { path = "../pql" }
+sdm-random = { path = "../random" }
+serde_json.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

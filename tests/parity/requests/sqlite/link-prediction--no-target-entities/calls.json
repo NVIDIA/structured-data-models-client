@@ -1,0 +1,461 @@
+{
+ "format": 1,
+ "scenario": "sqlite/link-prediction#no-target-entities",
+ "transcript": "tests/parity/transcripts/sqlite/link-prediction--no-target-entities",
+ "calls": [
+  {
+   "host": "schema_from_source",
+   "function": "schema_source_run",
+   "args": [
+    "sqlite",
+    "{\"namespace\": {}, \"semantic_model\": null, \"trust_expressions\": false}",
+    "{\"tables\": {\"users\": \"users\", \"products\": \"products\", \"orders\": \"orders\"}, \"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"check_keys\": true}"
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"users\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "95a38b0f3ac2720d7465e7372232a78a94d0b38454a3630195028424017590af"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA index_list(\"users\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "518a7c8092fb5057cc8f9ec7d8d0032d6558c1f559ff383f71485f4db639525c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"user_id\", \"age\", \"country\" FROM \"users\" ORDER BY rowid LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "cbf8a8cfa7d3583d6843fea9512ab763fced2bf55cef4935c171ae76f100b3aa"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"products\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "f5a67397e41283a2382765c2089cb7ef270dedf0d3ee2ce003b77ef28531a425"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA index_list(\"products\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "518a7c8092fb5057cc8f9ec7d8d0032d6558c1f559ff383f71485f4db639525c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"product_id\", \"category\", \"price\" FROM \"products\" ORDER BY rowid LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "11383ebab8838dde40fec4c61d156c2cac7f19f6ab26a90a81ae57a1d7c11850"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA table_info(\"orders\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "bf6147674512d60c12c075473d91448c78060f83b184752a01fa25d20525522c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA index_list(\"orders\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "518a7c8092fb5057cc8f9ec7d8d0032d6558c1f559ff383f71485f4db639525c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\" FROM \"orders\" ORDER BY rowid LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "53ba94ece27720c9bcf5ad01f04f1ce51598506b462ced9e4021f28c188f4143"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*), MIN(\"ordered_at\"), MAX(\"ordered_at\"), COUNT(\"ordered_at\")\nFROM \"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "fcbca190162d27236c727a7c576e6e09653c5b78ea293fb555c6db2350a607bf"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA foreign_key_list(\"users\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "64677369459bc97d4f61cddf10fb5dfecd81da714f7d93a5de42d76a93f214b2"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA foreign_key_list(\"products\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "64677369459bc97d4f61cddf10fb5dfecd81da714f7d93a5de42d76a93f214b2"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA foreign_key_list(\"orders\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "64677369459bc97d4f61cddf10fb5dfecd81da714f7d93a5de42d76a93f214b2"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"product_id\") AS d, COUNT(CASE WHEN \"product_id\" IS NULL THEN 1 END) AS z\nFROM \"products\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "365d7a799e4b07bb9070b6361cff389dc63169b632106882066db4a978809e1b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"kind\":\"source\",\"source\":{\"namespace\":{},\"semantic_model\":null,\"trust_expressions\":false,\"backend\":\"sqlite\"},\"schema\":{\"tables\":[{\"name\":\"users\",\"source_name\":\"users\",\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"age\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"country\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"user_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"products\",\"source_name\":\"products\",\"columns\":[{\"name\":\"product_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"price\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"product_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"orders\",\"source_name\":\"orders\",\"columns\":[{\"name\":\"order_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"product_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"quantity\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"ordered_at\",\"dtype\":\"string\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null}],\"primary_key\":\"order_id\",\"time_column\":\"ordered_at\",\"duplicate_keys\":0}],\"relationships\":[[\"orders\",\"user_id\",\"users\",\"user_id\"],[\"orders\",\"product_id\",\"products\",\"product_id\"]]},\"engine\":[[\"users\",{\"backend\":\"sqlite\",\"name\":\"users\",\"raw_source_name\":\"users\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"user_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"age\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"country\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"user_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"age\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"country\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"products\",{\"backend\":\"sqlite\",\"name\":\"products\",\"raw_source_name\":\"products\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"product_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"category\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"price\",\"expr\":null,\"dtype\":\"float\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"product_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"orders\",{\"backend\":\"sqlite\",\"name\":\"orders\",\"raw_source_name\":\"orders\",\"place\":{\"catalog\":null,\"schema\":null,\"row_filter\":null},\"columns\":[{\"name\":\"order_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"user_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"product_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"quantity\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"ordered_at\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"timestamp\",\"is_pk\":false,\"is_time\":true,\"is_end\":false}],\"primary_key\":\"order_id\",\"time_column\":\"ordered_at\",\"time_choice\":{\"column\":\"ordered_at\",\"how\":\"only\",\"among\":[\"ordered_at\"],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"order_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"quantity\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"ordered_at\",\"dtype\":null,\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{},\"sample_source\":null,\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}]]}",
+       "[]"
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "predictive_query",
+   "function": "query_text",
+   "args": [
+    "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id"
+   ],
+   "kwargs": {},
+   "returned": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id"
+  },
+  {
+   "host": "materialize",
+   "function": "materialize_run",
+   "args": [
+    "{\"schema\": {\"kind\": \"source\", \"source\": {\"namespace\": {}, \"semantic_model\": null, \"trust_expressions\": false, \"backend\": \"sqlite\"}, \"schema\": {\"tables\": [{\"name\": \"users\", \"source_name\": \"users\", \"columns\": [{\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"age\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"country\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"user_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"products\", \"source_name\": \"products\", \"columns\": [{\"name\": \"product_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"category\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"price\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"product_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"orders\", \"source_name\": \"orders\", \"columns\": [{\"name\": \"order_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"product_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"quantity\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"ordered_at\", \"dtype\": \"string\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}], \"primary_key\": \"order_id\", \"time_column\": \"ordered_at\", \"duplicate_keys\": 0}], \"relationships\": [[\"orders\", \"user_id\", \"users\", \"user_id\"], [\"orders\", \"product_id\", \"products\", \"product_id\"]]}, \"engine\": [[\"users\", {\"backend\": \"sqlite\", \"name\": \"users\", \"raw_source_name\": \"users\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"user_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"age\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"country\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"user_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"user_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"age\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"country\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"products\", {\"backend\": \"sqlite\", \"name\": \"products\", \"raw_source_name\": \"products\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"product_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"category\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"price\", \"expr\": null, \"dtype\": \"float\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"product_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"product_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"category\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"price\", \"dtype\": \"float\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"orders\", {\"backend\": \"sqlite\", \"name\": \"orders\", \"raw_source_name\": \"orders\", \"place\": {\"catalog\": null, \"schema\": null, \"row_filter\": null}, \"columns\": [{\"name\": \"order_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"user_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"product_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"quantity\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"ordered_at\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"timestamp\", \"is_pk\": false, \"is_time\": true, \"is_end\": false}], \"primary_key\": \"order_id\", \"time_column\": \"ordered_at\", \"time_choice\": {\"column\": \"ordered_at\", \"how\": \"only\", \"among\": [\"ordered_at\"], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"order_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"user_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"product_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"quantity\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"ordered_at\", \"dtype\": null, \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {}, \"sample_source\": null, \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}]]}, \"query\": \"PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id\", \"args\": {\"indices\": [1, 2, 3], \"anchor_time\": {\"$timestamp\": \"2024-10-01T00:00:00\"}, \"num_context_samples\": 30, \"num_neighbors\": [16], \"random_seed\": 7}, \"tags\": {}, \"model\": null}",
+    {}
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA index_list(\"users\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "518a7c8092fb5057cc8f9ec7d8d0032d6558c1f559ff383f71485f4db639525c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA index_list(\"products\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "518a7c8092fb5057cc8f9ec7d8d0032d6558c1f559ff383f71485f4db639525c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "PRAGMA index_list(\"orders\")",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "518a7c8092fb5057cc8f9ec7d8d0032d6558c1f559ff383f71485f4db639525c"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT\n  0 as table_index,\n  MIN(\"ordered_at\") as min_date,\n  MAX(\"ordered_at\") as max_date\nFROM \"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [
+      {
+       "category": "builtins.UserWarning",
+       "message": "Missing 5 indices in 3 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+      }
+     ],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "4ec84dcc78710ce52f722b5ffbb4a68b2b171caf59646c0e7b84fe7a48573763"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"user_id\"\nFROM \"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY ((((1369975286 * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 1202242073) % 2147483647) * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 976413892) % 2147483647 * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 327741615) % 2147483647, \"user_id\" LIMIT 10000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "7f2a4de19a36c31f027fb2fd657d11d8c67adddc401b86fd4246e62cb2258668"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"ordered_at\" FROM \"orders\" WHERE \"ordered_at\" IS NOT NULL ORDER BY rowid LIMIT 1",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "a9b40d8150b013320e726ca415ed1843be8b6fcbd95e15c2be450aba5d05376a"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(json_extract(value, '$[0]') AS INTEGER) AS __kumo_id__, CAST(json_extract(value, '$[1]') AS TEXT) AS __kumo_end__, CAST(json_extract(value, '$[2]') AS TEXT) AS __kumo_start__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"product_id\", \"ordered_at\"\nFROM __kumo_keys__ tmp\nJOIN \"orders\"\n  ON \"user_id\" = tmp.__kumo_id__\n AND \"ordered_at\" <= tmp.__kumo_end__\n AND \"ordered_at\" > tmp.__kumo_start__\nORDER BY __kumo_batch__, \"ordered_at\", \"order_id\", \"product_id\"",
+       "params": [
+        "[[7,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[29,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[26,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[21,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[6,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[38,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[33,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[32,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[8,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[28,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[16,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[10,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[24,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[4,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[37,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[34,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[39,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[9,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[25,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[36,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[2,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[3,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[19,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[15,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[27,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[18,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[1,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[20,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[31,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[17,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[11,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[13,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[22,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[40,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[14,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[23,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[12,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[30,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[35,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[5,\"2024-10-01T00:00:00.000000\",\"2024-09-01T00:00:00.000000\"],[39,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[32,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[10,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[35,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[37,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[29,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[27,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[9,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[24,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[3,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[28,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[40,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[17,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[7,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[34,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[25,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[21,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[15,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[20,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[5,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[33,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[4,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[26,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[11,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[8,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[31,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[23,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[18,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[6,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[14,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[2,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[16,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[1,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[19,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[36,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[38,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[12,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[13,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[30,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[22,\"2024-09-01T00:00:00.000000\",\"2024-08-02T00:00:00.000000\"],[4,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[36,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[38,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[33,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[20,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[7,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[37,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[29,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[24,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[11,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[18,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[28,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[27,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[23,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[31,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[13,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[3,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[5,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[6,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[35,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[34,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[22,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[39,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[9,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[40,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[26,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[15,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[14,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[8,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[17,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[16,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[2,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[19,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[25,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[30,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[10,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[21,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[12,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[32,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[1,\"2024-08-02T00:00:00.000000\",\"2024-07-03T00:00:00.000000\"],[25,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[23,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[22,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[3,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[30,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[5,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[12,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[29,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[19,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[24,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[9,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[8,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[1,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[21,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[38,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[34,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[17,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[6,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[35,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[26,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[39,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[40,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[31,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[28,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[13,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[15,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[2,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[32,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[33,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[14,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[36,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[20,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[16,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[37,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[7,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[18,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[4,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[10,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[27,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[11,\"2024-07-03T00:00:00.000000\",\"2024-06-03T00:00:00.000000\"],[35,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[39,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[12,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[9,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[26,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[40,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[6,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[16,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[32,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[7,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[31,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[4,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[23,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[22,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[13,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[33,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[38,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[36,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[1,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[30,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[37,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[19,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[21,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[25,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[34,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[15,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[8,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[20,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[28,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[18,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[5,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[24,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[11,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[2,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[14,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[3,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[29,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[10,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[17,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[27,\"2024-06-03T00:00:00.000000\",\"2024-05-04T00:00:00.000000\"],[37,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[26,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[14,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[33,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[27,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[30,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[3,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[29,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[9,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[8,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[25,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[28,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[22,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[7,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[32,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[16,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[34,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[18,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[4,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[6,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[2,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[5,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[15,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[23,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[13,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[39,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[31,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[20,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[24,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[36,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[21,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[11,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[12,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[10,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[17,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[35,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[19,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[40,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[1,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[38,\"2024-05-04T00:00:00.000000\",\"2024-04-04T00:00:00.000000\"],[19,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[11,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[32,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[23,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[13,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[4,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[35,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[33,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[10,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[2,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[39,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[6,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[17,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[21,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[20,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[22,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[27,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[5,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[25,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[38,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[36,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[31,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[7,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[26,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[30,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[9,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[15,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[8,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[12,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[24,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[3,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[34,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[40,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[29,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[18,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[1,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[16,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[14,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[37,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[28,\"2024-04-04T00:00:00.000000\",\"2024-03-05T00:00:00.000000\"],[15,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[29,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[7,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[30,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[14,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[38,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[25,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[8,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[3,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[36,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[20,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[13,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[6,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[28,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[32,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[24,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[16,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[12,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[22,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[40,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[31,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[19,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[27,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[9,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[4,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[23,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[18,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[37,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[1,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[11,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[35,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[17,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[10,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[21,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[39,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[5,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[2,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[26,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[33,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"],[34,\"2024-03-05T00:00:00.000000\",\"2024-02-04T00:00:00.000000\"]]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "ae2121a01d53d1f3e0230684d1029b6da5d010f8ca30a538aaca90f5a468170b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, (SELECT COUNT(*) FROM \"users\" WHERE \"user_id\" == tmp.__kumo_id__) as __kumo_matches__, \"user_id\", \"age\", \"country\"\nFROM __kumo_keys__ tmp\nJOIN \"users\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"users\"\n    WHERE \"user_id\" == tmp.__kumo_id__\n    ORDER BY \"age\", \"country\", \"user_id\", rowid\n    LIMIT 1\n)",
+       "params": [
+        "[7,29,6,33,37,34,39,9,25,2,3,19,15,27,1,20,31,17,13,22,14,35,39,37,29,27,17,7,21,15,1,2,3]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "812c7955f0185da3aca376250bcf942f7856b025f829f144d492e761a644f830"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(json_extract(value, '$[0]') AS INTEGER) AS __kumo_id__, CAST(json_extract(value, '$[1]') AS TEXT) AS __kumo_time__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\"\nFROM __kumo_keys__ tmp\nJOIN \"orders\" fact\nON fact.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"user_id\" = tmp.__kumo_id__\n  AND \"ordered_at\" <= tmp.__kumo_time__\n  ORDER BY \"ordered_at\" DESC, \"order_id\", \"product_id\", \"quantity\", \"user_id\"\n  LIMIT 16\n)\nORDER BY __kumo_batch__, \"ordered_at\" DESC, \"order_id\", \"product_id\", \"quantity\", \"user_id\"",
+       "params": [
+        "[[7,\"2024-09-01T00:00:00.000000\"],[29,\"2024-09-01T00:00:00.000000\"],[6,\"2024-09-01T00:00:00.000000\"],[33,\"2024-09-01T00:00:00.000000\"],[37,\"2024-09-01T00:00:00.000000\"],[34,\"2024-09-01T00:00:00.000000\"],[39,\"2024-09-01T00:00:00.000000\"],[9,\"2024-09-01T00:00:00.000000\"],[25,\"2024-09-01T00:00:00.000000\"],[2,\"2024-09-01T00:00:00.000000\"],[3,\"2024-09-01T00:00:00.000000\"],[19,\"2024-09-01T00:00:00.000000\"],[15,\"2024-09-01T00:00:00.000000\"],[27,\"2024-09-01T00:00:00.000000\"],[1,\"2024-09-01T00:00:00.000000\"],[20,\"2024-09-01T00:00:00.000000\"],[31,\"2024-09-01T00:00:00.000000\"],[17,\"2024-09-01T00:00:00.000000\"],[13,\"2024-09-01T00:00:00.000000\"],[22,\"2024-09-01T00:00:00.000000\"],[14,\"2024-09-01T00:00:00.000000\"],[35,\"2024-09-01T00:00:00.000000\"],[39,\"2024-08-02T00:00:00.000000\"],[37,\"2024-08-02T00:00:00.000000\"],[29,\"2024-08-02T00:00:00.000000\"],[27,\"2024-08-02T00:00:00.000000\"],[17,\"2024-08-02T00:00:00.000000\"],[7,\"2024-08-02T00:00:00.000000\"],[21,\"2024-08-02T00:00:00.000000\"],[15,\"2024-08-02T00:00:00.000000\"],[1,\"2024-10-01T00:00:00.000000\"],[2,\"2024-10-01T00:00:00.000000\"],[3,\"2024-10-01T00:00:00.000000\"]]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "ec0b8cc0ce73fa58e6f7c7e44a6a1e7d28b39af42a67fa036905f622a3d27ce9"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"refused\":{\"class\":\"sdm_client.errors.StructuredDataError\",\"code\":\"INVALID_REQUEST\",\"message\":\"Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.\",\"details\":{},\"status\":null,\"chain\":[{\"class\":\"builtins.ValueError\",\"message\":\"Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.\"}]},\"tags\":{},\"model\":{\"backend\":\"sqlite\",\"tables\":[{\"name\":\"users\",\"primary_key\":\"user_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"age\",\"dtype\":\"int\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"country\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"users\\\"\",\"unquoted_name\":\"users\",\"source_columns\":[{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"age\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"country\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"products\",\"primary_key\":\"product_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"product_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true},{\"name\":\"price\",\"dtype\":\"float\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"products\\\"\",\"unquoted_name\":\"products\",\"source_columns\":[{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"orders\",\"primary_key\":\"order_id\",\"time_column\":\"ordered_at\",\"end_time_column\":null,\"columns\":[{\"name\":\"order_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"user_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"product_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"quantity\",\"dtype\":\"int\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"ordered_at\",\"dtype\":\"string\",\"stype\":\"timestamp\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"orders\\\"\",\"unquoted_name\":\"orders\",\"source_columns\":[{\"name\":\"order_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"quantity\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"ordered_at\",\"dtype\":null,\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}}],\"edges\":[[\"orders\",\"user_id\",\"users\"],[\"orders\",\"product_id\",\"products\"]],\"state\":{\"min_time\":{\"orders\":1704542400000000000},\"max_time\":{\"orders\":1735462800000000000},\"min_time_unit\":{\"orders\":\"us\"},\"max_time_unit\":{\"orders\":\"us\"},\"coverage_warned\":false,\"enforced_key_tables\":[],\"num_rows\":{},\"time_spellings\":{\"orders\":[\"T\",6,\"\"]}},\"arguments\":{},\"argument_tables\":{}}}",
+       {}
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  }
+ ]
+}

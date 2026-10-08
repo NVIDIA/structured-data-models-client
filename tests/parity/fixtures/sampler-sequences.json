@@ -1,0 +1,1558 @@
+{
+ "source": "tests/rust_core/rfm/test_sequences.py",
+ "cases": [
+  {
+   "id": "sampler-sequences/sampling.to_list/row-0-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1.5, 2, 3]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.5,
+        2.0,
+        3.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-1-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[ 1 , 2 ]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-1-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[ 1 , 2 ]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1,
+        2
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-2-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-2-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-3-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-3-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-4-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "4",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        4.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-4-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "4",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        4
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-5-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1,2,]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-5-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1,2,]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1,
+        2
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-6-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2, ]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.0,
+        -1.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-6-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2, ]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1,
+        2,
+        0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-7-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "  ",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        -1.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-7-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "  ",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-8-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[nan, inf, -Infinity]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        {
+         "$float": "nan"
+        },
+        {
+         "$float": "inf"
+        },
+        {
+         "$float": "-inf"
+        }
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-8-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[nan, inf, -Infinity]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[nan, inf, -Infinity]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-9-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1e40, -1e-50, 0.1]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        {
+         "$float": "inf"
+        },
+        -0.0,
+        0.10000000149011612
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-10-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[+3, -4, .5, 6.]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        3.0,
+        -4.0,
+        0.5,
+        6.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-10-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[+3, -4, .5, 6.]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[+3, -4, .5, 6.]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-11-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[[1, 2]]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.0
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-11-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[[1, 2]]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1,
+        2
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-12-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1,,2]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1,,2]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-12-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1,,2]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1,,2]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-13-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1; 2]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1; 2]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-13-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1; 2]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1; 2]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-14-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1 2]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1 2]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-14-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1 2]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1 2]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-15-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[0x10]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[0x10]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-15-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[0x10]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[0x10]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-16-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1e]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1e]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-16-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1e]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1e]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-17-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "not a list",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "not a list",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-17-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "not a list",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "not a list",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-18-string",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[9223372036854775808, -9223372036854775809, - 5]",
+     "[1]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[9223372036854775808, -9223372036854775809, - 5]",
+     "[1]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/row-18-intlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[9223372036854775808, -9223372036854775809, - 5]",
+     "[1]"
+    ],
+    "dtype": "intlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        9223372036854775807,
+        9223372036854775807,
+        -5
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/arrow-read",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2.5]",
+     "[]",
+     "[3]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.5
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        3.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/arrow-missing",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2.5]",
+     null
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1, 2.5]",
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/arrow-unread",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2.5]",
+     "[1 2]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1, 2.5]",
+     "[1 2]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/arrow-none",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/arrow-all-missing",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     null,
+     null
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     null,
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/str-read",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "str",
+    "values": [
+     "[1, 2.5]",
+     "[]",
+     "[3]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.5
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        3.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/str-missing",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "str",
+    "values": [
+     "[1, 2.5]",
+     null
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "str",
+    "values": [
+     "[1, 2.5]",
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/str-unread",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "str",
+    "values": [
+     "[1, 2.5]",
+     "[1 2]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "str",
+    "values": [
+     "[1, 2.5]",
+     "[1 2]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/str-none",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "str",
+    "values": [],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "str",
+    "values": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/str-all-missing",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "str",
+    "values": [
+     null,
+     null
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "str",
+    "values": [
+     null,
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/object-read",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "object",
+    "values": [
+     "[1, 2.5]",
+     "[]",
+     "[3]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.5
+       ]
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": []
+      }
+     },
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        3.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/object-missing",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "object",
+    "values": [
+     "[1, 2.5]",
+     null
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     "[1, 2.5]",
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/object-unread",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "object",
+    "values": [
+     "[1, 2.5]",
+     "[1 2]"
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     "[1, 2.5]",
+     "[1 2]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/object-none",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "object",
+    "values": [],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/object-all-missing",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "object",
+    "values": [
+     null,
+     null
+    ],
+    "dtype": "string",
+    "stype": "sequence"
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     null,
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/floatlist",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2]"
+    ],
+    "dtype": "floatlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "object",
+    "values": [
+     {
+      "$ndarray": {
+       "dtype": "float32",
+       "values": [
+        1.0,
+        2.0
+       ]
+      }
+     }
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/stringlist-unread",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[a]"
+    ],
+    "dtype": "stringlist",
+    "stype": null
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[a]"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-sequences/sampling.to_list/not-a-sequence",
+   "source": "tests/rust_core/rfm/test_sequences.py",
+   "operation": "sampling.to_list",
+   "input": {
+    "series": "arrow",
+    "values": [
+     "[1, 2]"
+    ],
+    "dtype": "string",
+    "stype": "text"
+   },
+   "expected": {
+    "dtype": "string[pyarrow]",
+    "values": [
+     "[1, 2]"
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

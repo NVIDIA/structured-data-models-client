@@ -1,0 +1,24 @@
+structured-data-models-relational-engine
+Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This distribution builds a C++ extension from first-party source, and vendors
+one third-party artifact. Paths below are as packaged in the wheel, which is
+the published distribution; in the source tree they sit under src/.
+
+sdm_relational_engine/rfm/assets/mermaid.min.js
+-----------------------------------------------
+
+mermaid 11.15.0, MIT licensed, bundled so that Graph.visualize() renders a
+graph offline in notebook environments that block external scripts. The bundle
+is upstream bytes, unmodified; its SHA-256 is pinned in rfm/assets/VENDORED.md
+and asserted by tests/test_vendored_mermaid.py. Its own components are
+enumerated in the third-party section of LICENSE, and its licence text is in
+rfm/assets/MERMAID_LICENSE.
+
+The payload types this driver builds a prediction request from are first-party
+source in this distribution, under sdm_relational_engine/rfm. The Universal
+TFM wire types are not among them: those live in structured-data-models-api, which this
+distribution depends on, as does the Predictive Query Language. Both are
+resolved by the package manager at install time.

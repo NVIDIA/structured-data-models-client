@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# We don't release source code (aka sdist), so we technically do not need to
+# write MANIFEST.in at all, but it is useful to avoid including relationallib in the
+# source distribution when someone accidentally build and distribute sdist.
+global-exclude *

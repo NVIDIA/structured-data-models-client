@@ -1,0 +1,318 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://nvidia.com/sdm-client/parity/transcript-v1.schema.json",
+ "title": "sdm-client parity transcript, format version 1",
+ "description": "One scenario: how its data is made, the public API calls it makes, the database steps they took, the payloads sent and what the model answered, and the decoded result or the error the run ended in. See tests/parity/FORMAT.md.",
+ "type": "object",
+ "required": [
+  "format_version",
+  "name",
+  "backend",
+  "task_kind",
+  "data",
+  "calls",
+  "steps",
+  "payloads",
+  "responses",
+  "result"
+ ],
+ "properties": {
+  "format_version": {"const": 1},
+  "name": {"type": "string", "pattern": "^[A-Za-z0-9_./#-]+$"},
+  "backend": {"type": "string", "minLength": 1},
+  "task_kind": {"type": "string", "minLength": 1},
+  "data": {"$ref": "#/$defs/data"},
+  "stand_in": {"$ref": "#/$defs/stand_in"},
+  "calls": {"type": "array", "items": {"$ref": "#/$defs/call"}},
+  "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+  "payloads": {"type": "array", "items": {"type": "object"}},
+  "responses": {"type": "array", "items": {"$ref": "#/$defs/response"}},
+  "error": {"$ref": "#/$defs/outcome_error"},
+  "result": {"$ref": "#/$defs/arrow_ref"},
+  "answer": {"$ref": "#/$defs/answer"},
+  "warnings": {"type": "array", "items": {"$ref": "#/$defs/warning"}}
+ },
+ "additionalProperties": false,
+ "$defs": {
+  "arrow_ref": {
+   "description": "A path, relative to the transcript's directory, of an Arrow IPC file; null when there is none.",
+   "oneOf": [
+    {"type": "null"},
+    {"type": "string", "pattern": "^[A-Za-z0-9_.-]+\\.arrow$"}
+   ]
+  },
+  "data": {
+   "type": "object",
+   "required": ["generator", "seed"],
+   "properties": {
+    "generator": {"type": "string", "minLength": 1},
+    "seed": {"type": "integer"},
+    "namespace": {"type": "object", "additionalProperties": {"type": "string"}},
+    "connection": {"type": "object"},
+    "view": {"type": "string"},
+    "session": {
+     "description": "The session's settings the run reads under, such as {\"TimeZone\": \"America/New_York\"}; absent for the database's defaults.",
+     "type": "object",
+     "additionalProperties": {"type": "string"}
+    },
+    "column_types": {
+     "description": "The type a column is stored as, by \"table.column\", instead of the one its frame gives it; on SQLite, an empty type declares the column with none.",
+     "type": "object",
+     "propertyNames": {"pattern": "^[^.]+\\.[^.]+$"},
+     "additionalProperties": {"type": "string"}
+    },
+    "twin": {
+     "description": "For a session-zone scenario, the name of its twin: the same scenario with naive columns in a UTC session.",
+     "type": "string",
+     "pattern": "^[A-Za-z0-9_./#-]+$"
+    }
+   },
+   "additionalProperties": false
+  },
+  "call": {
+   "type": "object",
+   "required": ["call", "args"],
+   "properties": {
+    "call": {
+     "enum": [
+      "Schema.from_source",
+      "Schema.from_data",
+      "PredictiveQuery",
+      "PredictiveQuery.materialize",
+      "Request",
+      "SDMClient.predict",
+      "SDMClient.fit",
+      "FittedModel.predict",
+      "FittedModel.close",
+      "PredictionResult.merge",
+      "PredictionResult.to_pandas"
+     ]
+    },
+    "args": {"type": "object"}
+   },
+   "additionalProperties": false
+  },
+  "error": {
+   "oneOf": [
+    {"type": "null"},
+    {
+     "type": "object",
+     "required": ["type", "message"],
+     "properties": {
+      "type": {"type": "string"},
+      "message": {"type": "string"},
+      "args": {"type": "array"},
+      "attributes": {"type": "object"}
+     },
+     "additionalProperties": false
+    }
+   ]
+  },
+  "description": {
+   "description": "A driver's cursor.description after the statement: one object per column; null when the driver gave none.",
+   "oneOf": [
+    {"type": "null"},
+    {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+       "name": {"type": "string"},
+       "type_code": true,
+       "type_text": {"type": "string"},
+       "display_size": true,
+       "internal_size": true,
+       "precision": true,
+       "scale": true,
+       "null_ok": true,
+       "type_display": {"type": "string"}
+      },
+      "additionalProperties": false
+     }
+    }
+   ]
+  },
+  "fetch_call": {
+   "description": "An Arrow fetch: the driver's method, and the arguments the run called it with.",
+   "type": "object",
+   "required": ["method", "args", "kwargs"],
+   "properties": {
+    "method": {"type": "string"},
+    "args": {"type": "array"},
+    "kwargs": {"type": "object"}
+   },
+   "additionalProperties": false
+  },
+  "failed_fetch": {
+   "description": "A fetch that raised, before the step's result was fetched.",
+   "type": "object",
+   "required": ["fetch", "error"],
+   "properties": {
+    "fetch": {"enum": ["rows", "arrow"]},
+    "call": {"$ref": "#/$defs/fetch_call"},
+    "error": {"$ref": "#/$defs/error"}
+   },
+   "additionalProperties": false
+  },
+  "table_data": {
+   "description": "A table the run wrote to the database, inline.",
+   "type": "object",
+   "required": ["columns", "types", "rows"],
+   "properties": {
+    "columns": {"type": "array", "items": {"type": "string"}},
+    "types": {"type": "array", "items": {"type": "string"}},
+    "rows": {"type": "array", "items": {"type": "array"}}
+   },
+   "additionalProperties": false
+  },
+  "step": {
+   "type": "object",
+   "required": ["op"],
+   "properties": {
+    "op": {"enum": ["execute", "ingest", "register", "commit", "paramstyle"]}
+   },
+   "oneOf": [
+    {
+     "properties": {
+      "op": {"const": "execute"},
+      "sql": {"type": "string"},
+      "params": true,
+      "result": {"$ref": "#/$defs/arrow_ref"},
+      "error": {"$ref": "#/$defs/error"},
+      "description": {"$ref": "#/$defs/description"},
+      "fetch": {"enum": ["rows", "arrow", "none"]},
+      "fetch_call": {"$ref": "#/$defs/fetch_call"},
+      "fetch_errors": {"type": "array", "items": {"$ref": "#/$defs/failed_fetch"}}
+     },
+     "required": ["op", "sql", "params", "result", "error"],
+     "additionalProperties": false
+    },
+    {
+     "properties": {
+      "op": {"const": "ingest"},
+      "table": {"type": "string"},
+      "mode": {"type": "string"},
+      "data": {"$ref": "#/$defs/table_data"},
+      "error": {"$ref": "#/$defs/error"}
+     },
+     "required": ["op", "table", "mode", "data", "error"],
+     "additionalProperties": false
+    },
+    {
+     "properties": {
+      "op": {"const": "register"},
+      "name": {"type": "string"},
+      "data": {"$ref": "#/$defs/table_data"},
+      "error": {"$ref": "#/$defs/error"}
+     },
+     "required": ["op", "name", "data", "error"],
+     "additionalProperties": false
+    },
+    {
+     "properties": {"op": {"const": "commit"}},
+     "required": ["op"],
+     "additionalProperties": false
+    },
+    {
+     "properties": {
+      "op": {"const": "paramstyle"},
+      "style": {"type": ["string", "null"]}
+     },
+     "required": ["op", "style"],
+     "additionalProperties": false
+    }
+   ]
+  },
+  "stand_in": {
+   "description": "How the stand-in model misbehaves for this scenario; absent for one that behaves.",
+   "type": "object",
+   "properties": {
+    "seed": {"const": "row"},
+    "omit": {"type": "array", "items": {"type": "string"}},
+    "omit_at": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": ["at", "fields"],
+      "properties": {
+       "at": {"type": "integer", "minimum": 0},
+       "fields": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+     }
+    },
+    "items_at": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": ["at", "items"],
+      "properties": {
+       "at": {"type": "integer", "minimum": 0},
+       "items": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+     }
+    },
+    "fail": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": ["at", "status"],
+      "properties": {
+       "at": {"type": "integer", "minimum": 0},
+       "status": {"type": "integer", "minimum": 100, "maximum": 599},
+       "body": {}
+      },
+      "additionalProperties": false
+     }
+    }
+   },
+   "additionalProperties": false
+  },
+  "response": {
+   "description": "One request the run sent the model, and what the stand-in answered; body is null for a 204, and a session call's own body is kept under request.",
+   "type": "object",
+   "required": ["method", "path", "status", "body"],
+   "properties": {
+    "method": {"enum": ["POST", "DELETE"]},
+    "path": {"type": "string", "pattern": "^/v1/"},
+    "request": {"type": "object"},
+    "status": {"type": "integer", "minimum": 100, "maximum": 599},
+    "body": {}
+   },
+   "additionalProperties": false
+  },
+  "outcome_error": {
+   "description": "What the run's last call raised, when it raised.",
+   "type": "object",
+   "required": ["class", "code", "message"],
+   "properties": {
+    "class": {"type": "string", "minLength": 1},
+    "code": {"type": ["string", "null"]},
+    "message": {"type": "string"},
+    "details": {"type": "object"},
+    "status_code": {"type": "integer"}
+   },
+   "additionalProperties": false
+  },
+  "answer": {
+   "description": "What the decoded result holds that its frame does not show.",
+   "type": "object",
+   "properties": {
+    "unscored_candidates": {"type": "array"},
+    "explanation": {"type": "object"}
+   },
+   "additionalProperties": false
+  },
+  "warning": {
+   "type": "object",
+   "required": ["category", "message"],
+   "properties": {
+    "category": {"type": "string"},
+    "message": {"type": "string"}
+   },
+   "additionalProperties": false
+  }
+ }
+}

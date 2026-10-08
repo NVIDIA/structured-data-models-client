@@ -1,0 +1,2850 @@
+{
+ "scenarios": {
+  "databricks/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.00012629199773073196
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004281250003259629
+    }
+   ],
+   "queries": 24
+  },
+  "databricks/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0008001669993973337
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005481249972945079
+    }
+   ],
+   "queries": 25
+  },
+  "databricks/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003129169999738224
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006740829994669184
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003114589999313466
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006206250036484562
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00026366700330981985
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006207079932210036
+    }
+   ],
+   "queries": 43
+  },
+  "databricks/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00033404099667677656
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004948330024490133
+    }
+   ],
+   "queries": 25
+  },
+  "databricks/metric-view/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 8.674999844515696e-05
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00032012500014388934
+    }
+   ],
+   "queries": 21
+  },
+  "databricks/metric-view/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0007382080002571456
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00039591699896845967
+    }
+   ],
+   "queries": 22
+  },
+  "databricks/metric-view/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0002937500030384399
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004467920007300563
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003144999936921522
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00045775000035064295
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00025266699958592653
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00044387500383891165
+    }
+   ],
+   "queries": 40
+  },
+  "databricks/metric-view/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00034191599843325093
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003833329974440858
+    }
+   ],
+   "queries": 22
+  },
+  "databricks/metric-view/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005805420005344786
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003537500015227124
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005919169998378493
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003495420023682527
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005798339989269152
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00036879099934594706
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005940000046393834
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003831249996437691
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005821660015499219
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003516249998938292
+    }
+   ],
+   "queries": 58
+  },
+  "databricks/metric-view/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00037608300044666976
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00047199999971780926
+    }
+   ],
+   "queries": 22
+  },
+  "databricks/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0006054170007701032
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004832909980905242
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0006144579965621233
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004882919965893961
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.000601416002609767
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00048520800191909075
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005762500004493631
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00046633300371468067
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005751669959863648
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004632920026779175
+    }
+   ],
+   "queries": 61
+  },
+  "databricks/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003709579978021793
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006596250022994354
+    }
+   ],
+   "queries": 25
+  },
+  "duckdb/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 8.104200242087245e-05
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003813330040429719
+    }
+   ],
+   "queries": 19
+  },
+  "duckdb/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0006910419979249127
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004863340000156313
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/count#midday": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005279580000205897
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004501250004977919
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/count#timestamp-new-york": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005312499997671694
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00044370900286594406
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/count#timestamptz-new-york": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005505829976755194
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004579169981298037
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00028595900221262127
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006129579996922985
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0002737079994403757
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005891249966225587
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00024508300703018904
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006084580018068664
+    }
+   ],
+   "queries": 34
+  },
+  "duckdb/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003256249983678572
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00047937499766703695
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/link-prediction": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005728749965783209
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00035316700814291835
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/link-prediction#decimal-keys": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0006025420007063076
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00040770800842437893
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/link-prediction#decimal-keys-scaled": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.000599584003794007
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004283330054022372
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/link-prediction#no-target-entities": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005712499987566844
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.0002165829937439412
+    }
+   ],
+   "queries": 19
+  },
+  "duckdb/marketplace-early": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00014520800323225558
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0002737499962677248
+    }
+   ],
+   "queries": 29
+  },
+  "duckdb/marketplace-entity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.00010750000365078449
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.0001667500037001446
+    }
+   ],
+   "queries": 25
+  },
+  "duckdb/marketplace-filter": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.000970416993368417
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.00023437500203726813
+    }
+   ],
+   "queries": 28
+  },
+  "duckdb/marketplace-garbled": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.001019290997646749
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0005564590028370731
+    }
+   ],
+   "queries": 29
+  },
+  "duckdb/marketplace-static": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.00015591600094921887
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 8,
+     "rust_seconds": 0.001469374998123385
+    }
+   ],
+   "queries": 32
+  },
+  "duckdb/marketplace-stores": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00025270799960708246
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0008684999993420206
+    }
+   ],
+   "queries": 29
+  },
+  "duckdb/marketplace-sum": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003112499980488792
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 5,
+     "rust_seconds": 0.001476665995141957
+    }
+   ],
+   "queries": 30
+  },
+  "duckdb/marketplace-timeless": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 7.795800047460943e-05
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.0004824579955311492
+    }
+   ],
+   "queries": 13
+  },
+  "duckdb/marketplace-windows": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.002299040999787394
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.00047820799954934046
+    }
+   ],
+   "queries": 30
+  },
+  "duckdb/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005967920005787164
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004348330039647408
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005432920006569475
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004222089992254041
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005403750037658028
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004224169970257208
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005431250028777868
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004151250032009557
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.000544541995623149
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004175829963060096
+    }
+   ],
+   "queries": 48
+  },
+  "duckdb/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00034008299553534016
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006375829980242997
+    }
+   ],
+   "queries": 20
+  },
+  "duckdb/regression#decimal-entity-keys": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0007517500198446214
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004882500215899199
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003558750031515956
+    }
+   ],
+   "queries": 27
+  },
+  "duckdb/regression#decimal-mixed-indices": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0006467079801950604
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004497909976635128
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00033429102040827274
+    }
+   ],
+   "queries": 24
+  },
+  "duckdb/session": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0006921669992152601
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004779590090038255
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0007844579959055409
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00046116599696688354
+    }
+   ],
+   "queries": 25
+  },
+  "duckdb/session#holdout": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0007920409989310429
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004778750007972121
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0008005419949768111
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00046616699546575546
+    }
+   ],
+   "queries": 25
+  },
+  "lakebase/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00012183399667264894
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004919169950881042
+    }
+   ],
+   "queries": 25
+  },
+  "lakebase/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0009082089964067563
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006327919982140884
+    }
+   ],
+   "queries": 26
+  },
+  "lakebase/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00042787499842233956
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007658750037080608
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0003749169991351664
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007918330011307262
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0003719590022228658
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.000770334001572337
+    }
+   ],
+   "queries": 46
+  },
+  "lakebase/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0004428750035003759
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005972910003038123
+    }
+   ],
+   "queries": 26
+  },
+  "lakebase/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007351669992203824
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005537920005735941
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007446250019711442
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005959580012131482
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007479580017388798
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005654580018017441
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.000742000003810972
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005773329976364039
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007202089982456528
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005556659962167032
+    }
+   ],
+   "queries": 66
+  },
+  "lakebase/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005100419948576018
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0008276669977931306
+    }
+   ],
+   "queries": 26
+  },
+  "memory/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00023687499924562871
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.00048466700536664575
+    }
+   ],
+   "queries": 0
+  },
+  "memory/classification#absent-field": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00022879199241288006
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005200839950703084
+    }
+   ],
+   "queries": 0
+  },
+  "memory/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005389169964473695
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.000701625001966022
+    }
+   ],
+   "queries": 0
+  },
+  "memory/count#categorical-keys": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005916249938309193
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0007704579911660403
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005991249927319586
+    }
+   ],
+   "queries": 0
+  },
+  "memory/count#nim-5xx": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00056412500271108
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0007237920071929693
+    }
+   ],
+   "queries": 0
+  },
+  "memory/count#self-link": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005746250099036843
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0010545419936534017
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0002337500045541674
+    }
+   ],
+   "queries": 0
+  },
+  "memory/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004150419990764931
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0008062089982558973
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00037520800105994567
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0007703749943175353
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0003517079967423342
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0007901669960119762
+    }
+   ],
+   "queries": 0
+  },
+  "memory/forecast#explanations-by-step": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00041420801426284015
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0008353750017704442
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0003863750025629997
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0008232079999288544
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.000366834006854333
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0008004169940249994
+    }
+   ],
+   "queries": 0
+  },
+  "memory/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004218339963699691
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006329590032692067
+    }
+   ],
+   "queries": 0
+  },
+  "memory/link-prediction": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00048066599993035197
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005635000125039369
+    }
+   ],
+   "queries": 0
+  },
+  "memory/link-prediction#multilabel": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005775830068159848
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0009377499955007806
+    }
+   ],
+   "queries": 0
+  },
+  "memory/link-prediction#no-target-entities": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004681249993154779
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0002989170025102794
+    }
+   ],
+   "queries": 0
+  },
+  "memory/link-prediction#top-k": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00047541600361000746
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005670420068781823
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-early": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0002976670002681203
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.00031533300352748483
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-entity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00027354200574336573
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.00029020900547038764
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-filter": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0006231670049601234
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.00036920799902873114
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-static": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00037120799970580265
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0014147080000839196
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-stores": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004228329999023117
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.001076250002370216
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-sum": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00045029199827695265
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0019097909971605986
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-timeless": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 9.504199988441542e-05
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005352500011213124
+    }
+   ],
+   "queries": 0
+  },
+  "memory/marketplace-windows": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.002975499999593012
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.000555708997126203
+    }
+   ],
+   "queries": 0
+  },
+  "memory/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004416250012582168
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005574589958996512
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004347909998614341
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005701250047422945
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004501250004977919
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005939170005149208
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.000455540997791104
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005679169989889488
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044629199692280963
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005657500005327165
+    }
+   ],
+   "queries": 0
+  },
+  "memory/ranking#all-candidates-cold": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00046958299935795367
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006540000031236559
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005185000045457855
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006787089951103553
+    }
+   ],
+   "queries": 0
+  },
+  "memory/ranking#no-positive-probability": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005219589947955683
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006485409976448864
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005086250021122396
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006672079907730222
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044579200039152056
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005617080023512244
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044291699305176735
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005766669928561896
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044141701073385775
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005729999975301325
+    }
+   ],
+   "queries": 0
+  },
+  "memory/ranking#tied-scores": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004464170051505789
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005939580005360767
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044566600990947336
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005730830016545951
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00045029199100099504
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005939169932389632
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.000468917001853697
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005949590122327209
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004617919912561774
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006019579886924475
+    }
+   ],
+   "queries": 0
+  },
+  "memory/ranking#unscored-candidate": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004624580033123493
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.000586207999731414
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004563330003293231
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005821250088047236
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004481670039240271
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.000598999991780147
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004572500038193539
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006120829930296168
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044520800292957574
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005789169954368845
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00044554099440574646
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0005781249928986654
+    }
+   ],
+   "queries": 0
+  },
+  "memory/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0004616250007529743
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0008224170014727861
+    }
+   ],
+   "queries": 0
+  },
+  "memory/regression#nim-4xx": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.00046262500109151006
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0008447919972240925
+    }
+   ],
+   "queries": 0
+  },
+  "memory/session": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005334169982234016
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.000720458003343083
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005329170089680701
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006847909971838817
+    }
+   ],
+   "queries": 0
+  },
+  "memory/session#holdout": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005439169908640906
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0007117920031305403
+    },
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0005408330034697428
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0006897910061525181
+    }
+   ],
+   "queries": 0
+  },
+  "postgres/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00011154099775012583
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004522500021266751
+    }
+   ],
+   "queries": 25
+  },
+  "postgres/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0008776670001680031
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006423329978133552
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/count#midday": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0006811249986640178
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.000585292000323534
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/count#timestamp-kolkata": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0006932079995749518
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005875409988220781
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/count#timestamptz-new-york": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007525830005761236
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006260419977479614
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0004239170011715032
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007847080050851218
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00039808300061849877
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007785420020809397
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0003667499986477196
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0008263329946203157
+    }
+   ],
+   "queries": 46
+  },
+  "postgres/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00044158300443086773
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006392079958459362
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/inactivity#midday": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00037066699587740004
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005555410025408491
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/inactivity#timestamptz-kolkata": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00039754199679009616
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005683749986928888
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/link-prediction": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007187080045696348
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004975830088369548
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/link-prediction#decimal-keys": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.000787125012720935
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005403329996624961
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/link-prediction#no-target-entities": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007521670049754903
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.0003227080014767125
+    }
+   ],
+   "queries": 25
+  },
+  "postgres/marketplace-early": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00019058299949392676
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0003237910059397109
+    }
+   ],
+   "queries": 39
+  },
+  "postgres/marketplace-entity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00016583300021011382
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.00017345800006296486
+    }
+   ],
+   "queries": 35
+  },
+  "postgres/marketplace-filter": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0011995419990853406
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.0003353339998284355
+    }
+   ],
+   "queries": 38
+  },
+  "postgres/marketplace-garbled": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.001083000002836343
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0006564579962287098
+    }
+   ],
+   "queries": 39
+  },
+  "postgres/marketplace-static": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00024158399901352823
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 8,
+     "rust_seconds": 0.0021703340025851503
+    }
+   ],
+   "queries": 42
+  },
+  "postgres/marketplace-stores": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00032537499646423385
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0011060830001952127
+    }
+   ],
+   "queries": 39
+  },
+  "postgres/marketplace-sum": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0004272500009392388
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 5,
+     "rust_seconds": 0.0019545830000424758
+    }
+   ],
+   "queries": 40
+  },
+  "postgres/marketplace-timeless": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00011995800014119595
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.0005550420028157532
+    }
+   ],
+   "queries": 17
+  },
+  "postgres/marketplace-windows": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0034475409993319772
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0006339160026982427
+    }
+   ],
+   "queries": 40
+  },
+  "postgres/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007408329984173179
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005581250006798655
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007133749968488701
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006160410048323683
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007621670010848902
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005926669982727617
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007167079966166057
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005777909973403439
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007628329985891469
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005597920026048087
+    }
+   ],
+   "queries": 66
+  },
+  "postgres/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005048750026617199
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.000818915999843739
+    }
+   ],
+   "queries": 26
+  },
+  "postgres/session": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0010533749882597476
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006542089977301657
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0010728750057751313
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006684590043732896
+    }
+   ],
+   "queries": 32
+  },
+  "postgres/session#holdout": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0010425410000607371
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006458330026362091
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0010517499904381111
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006642500084126368
+    }
+   ],
+   "queries": 32
+  },
+  "relational/pql-count-aggregation": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 0,
+     "rust_seconds": 0.0001556249990244396
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 0,
+     "rust_seconds": 0.0004120419980608858
+    }
+   ],
+   "queries": 0
+  },
+  "snowflake/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.000130749998788815
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005181250016903505
+    }
+   ],
+   "queries": 18
+  },
+  "snowflake/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005674169951817021
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.000611915995250456
+    }
+   ],
+   "queries": 19
+  },
+  "snowflake/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00031695800134912133
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007373749976977706
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003077079963986762
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007550000009359792
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003018329953192733
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007197500017355196
+    }
+   ],
+   "queries": 31
+  },
+  "snowflake/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00033974999678321183
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006059579973225482
+    }
+   ],
+   "queries": 19
+  },
+  "snowflake/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0004957499986630864
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005544590021600015
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00048366600094595924
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005454160054796375
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00047887499385979027
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005471250042319298
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00048674999561626464
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005387080018408597
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00047666600585216656
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005471670010592788
+    }
+   ],
+   "queries": 43
+  },
+  "snowflake/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00036754099710378796
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007510840005124919
+    }
+   ],
+   "queries": 19
+  },
+  "snowflake/semantic-view/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.00013000000035390258
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004900829953840002
+    }
+   ],
+   "queries": 15
+  },
+  "snowflake/semantic-view/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0005800419967272319
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006119160025264136
+    }
+   ],
+   "queries": 16
+  },
+  "snowflake/semantic-view/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00032379200274590403
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007129580044420436
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003017089984496124
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007093339954735711
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0002897500016842969
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007095420005498454
+    }
+   ],
+   "queries": 28
+  },
+  "snowflake/semantic-view/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0003316670045023784
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005907500017201528
+    }
+   ],
+   "queries": 16
+  },
+  "snowflake/semantic-view/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0004895829988527112
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005610000007436611
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0004764580007758923
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005506669986061752
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0004800829992746003
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005449590025818907
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0004737089984701015
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005404170005931519
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00046662499516969547
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005482080014189705
+    }
+   ],
+   "queries": 40
+  },
+  "snowflake/semantic-view/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.00036633299896493554
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0007364580014836974
+    }
+   ],
+   "queries": 16
+  },
+  "sqlite/classification": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 7.887499668868259e-05
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0003872500019497238
+    }
+   ],
+   "queries": 22
+  },
+  "sqlite/count": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007086249970598146
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0005070000042906031
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/count#key-decimal": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007004170038271695
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00044025000534020364
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/count#key-numeric": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007012090063653886
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004314580000936985
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/count#key-untyped": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007069169951137155
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00043820799328386784
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/forecast": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00033058400003938004
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006051669988664798
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0003120830006082542
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006219160059117712
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0002844580012606457
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006074170014471747
+    }
+   ],
+   "queries": 43
+  },
+  "sqlite/inactivity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0003744999994523823
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00048291699931723997
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/link-prediction": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0006089590024203062
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0003714159975061193
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/link-prediction#no-target-entities": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005963750008959323
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.00023279200831893831
+    }
+   ],
+   "queries": 22
+  },
+  "sqlite/marketplace-early": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.00017483300325693563
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0002552500009187497
+    }
+   ],
+   "queries": 34
+  },
+  "sqlite/marketplace-entity": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.00010283299343427643
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00016999999934341758
+    }
+   ],
+   "queries": 30
+  },
+  "sqlite/marketplace-filter": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.000948291999520734
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.00022412499674828723
+    }
+   ],
+   "queries": 33
+  },
+  "sqlite/marketplace-garbled": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.000829625001642853
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.000502790993778035
+    }
+   ],
+   "queries": 34
+  },
+  "sqlite/marketplace-static": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 0.00017041699902620167
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 9,
+     "rust_seconds": 0.001524999999674037
+    }
+   ],
+   "queries": 37
+  },
+  "sqlite/marketplace-stores": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0002781250004773028
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.0008279579997179098
+    }
+   ],
+   "queries": 34
+  },
+  "sqlite/marketplace-sum": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0003273330003139563
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 5,
+     "rust_seconds": 0.0014142080035526305
+    }
+   ],
+   "queries": 35
+  },
+  "sqlite/marketplace-timeless": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 1,
+     "rust_seconds": 6.983300409046933e-05
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 2,
+     "rust_seconds": 0.00047104099940042943
+    }
+   ],
+   "queries": 14
+  },
+  "sqlite/marketplace-windows": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0026989999969373457
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 4,
+     "rust_seconds": 0.000472542000352405
+    }
+   ],
+   "queries": 35
+  },
+  "sqlite/ranking": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005573750022449531
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00044254199747228995
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005678340021404438
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004260419955244288
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005931670020800084
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00043929200182901695
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005683749986928888
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00043116699816891924
+    },
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0005546669999603182
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004287089977879077
+    }
+   ],
+   "queries": 63
+  },
+  "sqlite/regression": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0004120419980608858
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0006522089970530942
+    }
+   ],
+   "queries": 23
+  },
+  "sqlite/session": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.0007103339885361493
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00042804099211934954
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0007052079890854657
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00043158300104551017
+    }
+   ],
+   "queries": 28
+  },
+  "sqlite/session#holdout": {
+   "calls": [
+    {
+     "method": "sample_target",
+     "queries": 3,
+     "rust_seconds": 0.000738916001864709
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.00042749999556690454
+    },
+    {
+     "method": "sample_target",
+     "queries": 2,
+     "rust_seconds": 0.0007188749877968803
+    },
+    {
+     "method": "sample_subgraph",
+     "queries": 3,
+     "rust_seconds": 0.0004494580061873421
+    }
+   ],
+   "queries": 28
+  },
+  "tabular/batches": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/direct-classification": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/direct-classification#default-outputs": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/direct-regression": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/pql-derived-classification": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/pql-derived-classification#default-outputs": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/pql-derived-regression": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/pql-predict-frame": {
+   "calls": [],
+   "queries": 0
+  },
+  "tabular/pql-predict-frame#default-outputs": {
+   "calls": [],
+   "queries": 0
+  }
+ }
+}

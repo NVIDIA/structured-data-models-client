@@ -1,0 +1,260 @@
+{
+ "format": 1,
+ "scenario": "tabular/pql-predict-frame#default-outputs",
+ "transcript": "tests/parity/transcripts/tabular/pql-predict-frame--default-outputs",
+ "calls": [
+  {
+   "host": "predictive_query",
+   "function": "query_text",
+   "args": [
+    "PREDICT people.churn FOR EACH people.user_id"
+   ],
+   "kwargs": {},
+   "returned": "PREDICT people.churn FOR EACH people.user_id"
+  },
+  {
+   "host": "predictive_query",
+   "function": "data_schema",
+   "args": [
+    {
+     "people": {
+      "$table": "ac86e2ed7431e8e823f4c2cddf69f576b29ede205ae4d5caa9aa4708b21997bc"
+     }
+    },
+    "{\"people\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}}",
+    "{\"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"edits\": []}"
+   ],
+   "kwargs": {},
+   "returned": {
+    "$tuple": [
+     "{\"kind\":\"data\",\"tables\":[\"people\"],\"options\":{\"primary_keys\":null,\"time_columns\":null,\"relationships\":null,\"edits\":[]},\"schema\":{\"tables\":[{\"name\":\"people\",\"source_name\":null,\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":\"numerical\"},{\"name\":\"age\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"churn\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"user_id\",\"time_column\":null,\"duplicate_keys\":0}],\"relationships\":[]}}",
+     "[]"
+    ]
+   }
+  },
+  {
+   "host": "materialize",
+   "function": "materialize_run",
+   "args": [
+    "{\"schema\": {\"kind\": \"data\", \"tables\": [\"people\"], \"options\": {\"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"edits\": []}, \"schema\": {\"tables\": [{\"name\": \"people\", \"source_name\": null, \"columns\": [{\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": \"numerical\"}, {\"name\": \"age\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"churn\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"user_id\", \"time_column\": null, \"duplicate_keys\": 0}], \"relationships\": []}}, \"query\": \"PREDICT people.churn FOR EACH people.user_id\", \"args\": {\"predict\": {\"$frame\": \"arg/predict\"}}, \"tags\": {\"schema/people\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}, \"arg/predict\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}}}, \"model\": null}",
+    {
+     "schema/people": {
+      "$table": "ac86e2ed7431e8e823f4c2cddf69f576b29ede205ae4d5caa9aa4708b21997bc"
+     },
+     "arg/predict": {
+      "$table": "aa2275e939aff70aa10fbfcdb2d5256f265aa71a2384ef0cfd4063aefd4a60aa"
+     }
+    }
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"request\":{\"task\":{\"kind\":\"classification\",\"target\":{\"column_name\":\"churn\",\"dtype\":\"int64\",\"table_name\":\"people\"},\"entity_table\":null,\"options\":{}},\"schema\":{\"kind\":\"data\",\"tables\":[\"people\"],\"options\":{\"primary_keys\":null,\"time_columns\":null,\"relationships\":null,\"edits\":[]},\"schema\":{\"tables\":[{\"name\":\"people\",\"source_name\":null,\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":\"numerical\"},{\"name\":\"age\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"churn\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"user_id\",\"time_column\":null,\"duplicate_keys\":0}],\"relationships\":[]}},\"entity_table\":\"people\",\"query\":\"PREDICT people.churn FOR EACH people.user_id\",\"inference\":{},\"requested_inference\":{},\"frames\":true,\"payloads\":null,\"indices\":[],\"windowed\":false,\"parts\":null,\"decomposition\":null,\"asked\":null,\"context_fingerprint\":\"8744852a8b2a0513\",\"rows\":{\"context\":[3,4,5,6,7,8,9,10,11],\"predict\":null}},\"tags\":{\"context\":{\"user_id\":{\"dtype\":\"int64\"},\"age\":{\"dtype\":\"float64\"},\"segment\":{\"dtype\":\"str\"},\"churn\":{\"dtype\":\"int64\"}},\"predict\":{\"user_id\":{\"dtype\":\"int64\"},\"age\":{\"dtype\":\"float64\"},\"segment\":{\"dtype\":\"str\"}}},\"model\":null}",
+       {
+        "context": {
+         "$table": "12a8e8dffea40d46c5b5d6a55f4fe6a1186afbe6c590c67f237d00d87b9b9afe"
+        },
+        "predict": {
+         "$table": "f6c29ce7a60e3c06791b92e21441ba3d09561411f38e0e9204f2197aa430b03a"
+        }
+       }
+      ]
+     },
+     "warnings": [
+      {
+       "category": "sdm_client.core.warnings.SDMWarning",
+       "message": "people.churn holds two whole numbers, which is how a binary label is usually written, so this is being asked as a classification. If they are quantities rather than labels, pass task=\"regression\" to ask for one; pass task=\"classification\" to say this was meant and silence this."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "host": "predict",
+   "function": "predict_run",
+   "args": [
+    "{\"request\": {\"task\": {\"kind\": \"classification\", \"target\": {\"column_name\": \"churn\", \"dtype\": \"int64\", \"table_name\": \"people\"}, \"entity_table\": null, \"options\": {}}, \"schema\": {\"kind\": \"data\", \"tables\": [\"people\"], \"options\": {\"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"edits\": []}, \"schema\": {\"tables\": [{\"name\": \"people\", \"source_name\": null, \"columns\": [{\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": \"numerical\"}, {\"name\": \"age\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"churn\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"user_id\", \"time_column\": null, \"duplicate_keys\": 0}], \"relationships\": []}}, \"entity_table\": \"people\", \"query\": \"PREDICT people.churn FOR EACH people.user_id\", \"inference\": {}, \"requested_inference\": {}, \"frames\": true, \"payloads\": null, \"indices\": [], \"windowed\": false, \"parts\": null, \"decomposition\": null, \"asked\": null, \"context_fingerprint\": \"8744852a8b2a0513\", \"rows\": {\"context\": [3, 4, 5, 6, 7, 8, 9, 10, 11], \"predict\": null}}, \"model\": \"kumo-tabular\", \"outputs\": null, \"tags\": {\"schema/people\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}, \"context\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}, \"predict\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}}}}",
+    {
+     "schema/people": {
+      "$table": "ac86e2ed7431e8e823f4c2cddf69f576b29ede205ae4d5caa9aa4708b21997bc"
+     },
+     "context": {
+      "$table": "12a8e8dffea40d46c5b5d6a55f4fe6a1186afbe6c590c67f237d00d87b9b9afe"
+     },
+     "predict": {
+      "$table": "f6c29ce7a60e3c06791b92e21441ba3d09561411f38e0e9204f2197aa430b03a"
+     }
+    }
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "call_model",
+     "endpoint": "predict",
+     "session_id": null,
+     "body": {
+      "model": "kumo-tabular",
+      "task": {
+       "kind": "classification",
+       "target": {
+        "column_name": "churn",
+        "dtype": "int64"
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "user_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "age": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "segment": {
+          "dtype": "string",
+          "stype": "categorical"
+         },
+         "churn": {
+          "dtype": "int64",
+          "stype": "categorical"
+         }
+        },
+        "primary_key": [
+         "user_id"
+        ]
+       }
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "user_id",
+         "age",
+         "segment",
+         "churn"
+        ],
+        "rows": [
+         [
+          3,
+          23.0,
+          "south",
+          1
+         ],
+         [
+          4,
+          24.0,
+          "north",
+          0
+         ],
+         [
+          5,
+          25.0,
+          "north",
+          1
+         ],
+         [
+          6,
+          26.0,
+          "south",
+          0
+         ],
+         [
+          7,
+          27.0,
+          "north",
+          1
+         ],
+         [
+          8,
+          28.0,
+          "north",
+          0
+         ],
+         [
+          9,
+          29.0,
+          "south",
+          1
+         ],
+         [
+          10,
+          30.0,
+          "north",
+          0
+         ],
+         [
+          11,
+          31.0,
+          "north",
+          1
+         ]
+        ]
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "user_id",
+         "age",
+         "segment"
+        ],
+        "rows": [
+         [
+          0,
+          20.0,
+          "south"
+         ],
+         [
+          1,
+          21.0,
+          "north"
+         ],
+         [
+          2,
+          22.0,
+          "north"
+         ]
+        ]
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "metadata": {
+       "request_id": "sdm-<request-id>"
+      }
+     },
+     "warnings": [],
+     "outcome": {
+      "response": "{\"object\": \"prediction.response\", \"id\": \"synthetic-3\", \"model\": \"kumo-tabular\", \"metadata\": {\"synthetic\": true}, \"predictions\": [{\"row_index\": 0, \"id\": \"[0]\", \"prediction\": \"1\", \"probabilities\": {\"0\": 0.400091, \"1\": 0.599909}}, {\"row_index\": 1, \"id\": \"[1]\", \"prediction\": \"0\", \"probabilities\": {\"0\": 0.537099, \"1\": 0.462901}}, {\"row_index\": 2, \"id\": \"[2]\", \"prediction\": \"0\", \"probabilities\": {\"0\": 0.525287, \"1\": 0.474713}}]}"
+     }
+    },
+    {
+     "kind": "done",
+     "value": "{\"model\":\"kumo-tabular\",\"request_id\":\"synthetic-3\",\"items\":[{\"row_index\":0,\"id\":0,\"prediction\":1,\"probabilities\":{\"0\":0.400091,\"1\":0.599909}},{\"row_index\":1,\"id\":1,\"prediction\":0,\"probabilities\":{\"0\":0.537099,\"1\":0.462901}},{\"row_index\":2,\"id\":2,\"prediction\":0,\"probabilities\":{\"0\":0.525287,\"1\":0.474713}}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\",\"probabilities\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}",
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "flatten",
+   "function": "flatten",
+   "args": [
+    "{\"model\":\"kumo-tabular\",\"request_id\":\"synthetic-3\",\"items\":[{\"row_index\":0,\"id\":0,\"prediction\":1,\"probabilities\":{\"0\":0.400091,\"1\":0.599909}},{\"row_index\":1,\"id\":1,\"prediction\":0,\"probabilities\":{\"0\":0.537099,\"1\":0.462901}},{\"row_index\":2,\"id\":2,\"prediction\":0,\"probabilities\":{\"0\":0.525287,\"1\":0.474713}}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\",\"probabilities\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}"
+   ],
+   "kwargs": {},
+   "returned": {
+    "$table": "0d1b2b3b88e449479601d190b12636d8ad87686b97b164261f44ee7de7f2ac58"
+   }
+  }
+ ]
+}

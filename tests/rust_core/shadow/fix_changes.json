@@ -1,0 +1,82 @@
+{
+  "request-gaps/client.run/a-tabular-target-dropped-after-its-schema": {
+    "fix": "dropped-target-or-entity-column",
+    "why": "Phase 9 task 7b refuses a target dropped after Schema.from_data by name as INVALID_REQUEST with a remedy, instead of the original Python KeyError for 'churn'; direct original core and Python fixture runs confirm this intended difference."
+  },
+  "arrow-switch/client.run/feature-arrow_large_string": {
+    "fix": "arrow-large-string-feature",
+    "why": "An unsupported Arrow large-string feature receives UNSUPPORTED_REQUEST naming users.f instead of the old engine's INTERNAL_ERROR (DV42)."
+  },
+  "arrow-switch/client.run/key-uint64_past_int64": {
+    "fix": "uint64-entity-keys",
+    "why": "A uint64 entity key above int64 is sent as the text its schema declares, instead of refusing representable keys as outside int64 (task 7b and DV42)."
+  },
+  "arrow-switch/client.run/feature-arrow_duration": {
+    "fix": "arrow-duration-feature",
+    "why": "An unsupported Arrow duration feature receives UNSUPPORTED_REQUEST naming users.f instead of the old engine's INTERNAL_ERROR (DV45)."
+  },
+  "arrow-switch/client.run/feature-arrow_dictionary": {
+    "fix": "arrow-dictionary-feature",
+    "why": "An unsupported Arrow dictionary feature receives UNSUPPORTED_REQUEST naming users.f instead of the old engine's INTERNAL_ERROR (DV45)."
+  },
+  "arrow-switch/client.run/key-arrow_large_string": {
+    "fix": "arrow-large-string-key",
+    "why": "An unsupported Arrow large-string key receives UNSUPPORTED_REQUEST naming users.user_id instead of the old engine's INTERNAL_ERROR (DV45)."
+  },
+  "arrow-switch/client.run/feature-arrow_time32": {
+    "fix": "arrow-time32-feature",
+    "why": "An unsupported Arrow time32 feature receives UNSUPPORTED_REQUEST naming its actual dtype instead of an incompatible date/semantic-type INVALID_REQUEST (DV45)."
+  },
+  "arrow-switch/client.run/feature-arrow_time64": {
+    "fix": "arrow-time64-feature",
+    "why": "An unsupported Arrow time64 feature receives UNSUPPORTED_REQUEST naming its actual dtype instead of an incompatible date/semantic-type INVALID_REQUEST (DV45)."
+  },
+  "driver/driver.materialize/duckdb-a-pair-of-key-columns": {
+    "fix": "composite-keys-on-sql",
+    "why": "A composite key's derived column is the client's own expression, so the SQL backends' reserved prefix no longer refuses it and the question is answered."
+  },
+  "driver/driver.materialize/duckdb-a-time-of-day": {
+    "fix": "time-of-day-column",
+    "why": "A TIME column is text and never the time column, so the question is answered where every value read as NaT and no context was found."
+  },
+  "driver/driver.materialize/duckdb-null-foreign-keys": {
+    "fix": "null-foreign-key",
+    "why": "A null foreign key joins no row, where today's read its code -1 as the last row looked up and sent that unrelated row."
+  },
+  "driver/driver.materialize/postgres-a-time-of-day": {
+    "fix": "time-of-day-column",
+    "why": "A TIME column is text and never the time column, so the question is answered where every value read as NaT and no context was found."
+  },
+  "driver/driver.materialize/postgres-null-foreign-keys": {
+    "fix": "null-foreign-key",
+    "why": "A null foreign key joins no row, where today's read its code -1 as the last row looked up and sent that unrelated row."
+  },
+  "driver/driver.materialize/sqlite-earliest-time-unreadable": {
+    "fix": "sqlite-unreadable-time-bounds",
+    "why": "An unreadable earliest text time is dropped like the others, where MIN gave it and today's failed the request with Expected pd.Timestamp, got NaT."
+  },
+  "driver/driver.materialize/sqlite-null-foreign-keys": {
+    "fix": "null-foreign-key",
+    "why": "A null foreign key joins no row, where today's read its code -1 as the last row looked up and sent that unrelated row."
+  },
+  "duckdb/regression#decimal-entity-keys": {
+    "fix": "decimal-entity-keys",
+    "why": "A whole DECIMAL entity key is read as the integers it holds, where today's engine refused the task table's data type as INTERNAL_ERROR."
+  },
+  "memory/link-prediction#multilabel": {
+    "fix": "multilabel-link-prediction",
+    "why": "LIST_DISTINCT of a key linked to two tables is refused by name as UNSUPPORTED_REQUEST, where today's ended in the engine's NotImplementedError as INTERNAL_ERROR."
+  },
+  "messages-engine/client.run/link-prediction-over-a-key-linked-to-two-tables": {
+    "fix": "multilabel-link-prediction",
+    "why": "LIST_DISTINCT of a key linked to two tables is refused by name as UNSUPPORTED_REQUEST, where today's ended in the engine's NotImplementedError as INTERNAL_ERROR."
+  },
+  "request-branches/client.run/a-column-the-engine-cannot-type": {
+    "fix": "complex-period-interval-columns",
+    "why": "A complex column is refused as UNSUPPORTED_REQUEST naming the column and its dtype, where today's was the engine's failure as INTERNAL_ERROR."
+  },
+  "request-branches/client.run/a-frame-holding-the-column-a-composite-key-folds-into": {
+    "fix": "column-named-like-a-derived-key",
+    "why": "A frame column named like a composite key's derived column is refused by name, where today's refused a key the caller never named."
+  }
+}

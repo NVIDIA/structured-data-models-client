@@ -1,0 +1,1191 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+ "cases": [
+  {
+   "id": "local-graph-store/sampling.graph_store/shop",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "USERS": {
+      "columns": {
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         0,
+         1,
+         {
+          "$na": null
+         },
+         2,
+         1,
+         3,
+         4
+        ]
+       },
+       "TIME": {
+        "dtype": "str",
+        "values": [
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         {
+          "$float": "nan"
+         }
+        ]
+       },
+       "TEXT": {
+        "dtype": "str",
+        "values": [
+         "this is!",
+         "text",
+         {
+          "$float": "nan"
+         },
+         "",
+         " abc",
+         "hello!world",
+         "?. :"
+        ]
+       }
+      }
+     },
+     "ORDERS": {
+      "columns": {
+       "ORDER_ID": {
+        "dtype": "str",
+        "values": [
+         "0",
+         "1",
+         "2",
+         "3",
+         "4",
+         "5",
+         "6",
+         "7",
+         "8"
+        ]
+       },
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         0,
+         1,
+         4,
+         2,
+         5,
+         {
+          "$na": null
+         },
+         4,
+         3,
+         3
+        ]
+       },
+       "TIME": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2023-01-08T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-07T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-06T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-05T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-04T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-03T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-02T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-01T00:00:00"
+         },
+         {
+          "$nat": null
+         }
+        ]
+       }
+      }
+     },
+     "VIEWS": {
+      "columns": {
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         0,
+         1,
+         4,
+         2,
+         5,
+         {
+          "$na": null
+         },
+         4,
+         3,
+         3
+        ]
+       },
+       "TIME": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2023-01-09T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-08T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-07T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-06T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-05T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-04T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-03T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-02T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-01T00:00:00"
+         }
+        ]
+       }
+      }
+     },
+     "RETURNS": {
+      "columns": {
+       "ORDER_ID": {
+        "dtype": "str",
+        "values": [
+         "2",
+         "4",
+         "7"
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "USERS",
+       "primary_key": "USER_ID",
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "string",
+         "stype": "timestamp"
+        },
+        {
+         "name": "TEXT",
+         "dtype": "string",
+         "stype": "text"
+        }
+       ]
+      },
+      {
+       "name": "ORDERS",
+       "primary_key": "ORDER_ID",
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "ORDER_ID",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "date",
+         "stype": "timestamp"
+        }
+       ]
+      },
+      {
+       "name": "VIEWS",
+       "primary_key": null,
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "date",
+         "stype": "timestamp"
+        }
+       ]
+      },
+      {
+       "name": "RETURNS",
+       "primary_key": null,
+       "time_column": null,
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "ORDER_ID",
+         "dtype": "string",
+         "stype": "text"
+        }
+       ]
+      }
+     ],
+     "edges": [
+      {
+       "src_table": "ORDERS",
+       "fkey": "USER_ID",
+       "dst_table": "USERS"
+      },
+      {
+       "src_table": "VIEWS",
+       "fkey": "USER_ID",
+       "dst_table": "USERS"
+      },
+      {
+       "src_table": "RETURNS",
+       "fkey": "ORDER_ID",
+       "dst_table": "ORDERS"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "report": {
+     "USERS": {
+      "input_rows": 7,
+      "output_rows": 4,
+      "null_primary_key_rows": 1,
+      "duplicate_primary_key_rows": 1,
+      "null_time_rows": 1
+     },
+     "ORDERS": {
+      "input_rows": 9,
+      "output_rows": 8,
+      "null_primary_key_rows": 0,
+      "duplicate_primary_key_rows": 0,
+      "null_time_rows": 1
+     },
+     "VIEWS": {
+      "input_rows": 9,
+      "output_rows": 9,
+      "null_primary_key_rows": 0,
+      "duplicate_primary_key_rows": 0,
+      "null_time_rows": 0
+     },
+     "RETURNS": {
+      "input_rows": 3,
+      "output_rows": 3,
+      "null_primary_key_rows": 0,
+      "duplicate_primary_key_rows": 0,
+      "null_time_rows": 0
+     }
+    },
+    "masks": {
+     "USERS": [
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false
+     ],
+     "ORDERS": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+     ]
+    },
+    "keys": {
+     "USERS": [
+      0,
+      1,
+      2,
+      3
+     ],
+     "ORDERS": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7"
+     ]
+    },
+    "node_ids": {
+     "USERS": [
+      0,
+      1,
+      3,
+      5
+     ],
+     "ORDERS": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+     ]
+    },
+    "time": {
+     "USERS": [
+      631152000,
+      631152000,
+      631152000,
+      631152000,
+      631152000,
+      631152000,
+      -9223372037
+     ],
+     "ORDERS": [
+      1673136000,
+      1673049600,
+      1672963200,
+      1672876800,
+      1672790400,
+      1672704000,
+      1672617600,
+      1672531200,
+      -9223372037
+     ],
+     "VIEWS": [
+      1673222400,
+      1673136000,
+      1673049600,
+      1672963200,
+      1672876800,
+      1672790400,
+      1672704000,
+      1672617600,
+      1672531200
+     ]
+    },
+    "time_range": {
+     "USERS": [
+      631152000000000000,
+      631152000000000000
+     ],
+     "ORDERS": [
+      1672531200000000000,
+      1673136000000000000
+     ],
+     "VIEWS": [
+      1672531200000000000,
+      1673222400000000000
+     ]
+    },
+    "colptr": {
+     "ORDERS__USER_ID__USERS": [
+      0,
+      1,
+      2,
+      2,
+      3,
+      3,
+      4,
+      4
+     ],
+     "USERS____###REV###__USER_ID__ORDERS": [
+      0,
+      1,
+      2,
+      2,
+      3,
+      3,
+      3,
+      3,
+      4,
+      4
+     ],
+     "VIEWS__USER_ID__USERS": [
+      0,
+      1,
+      2,
+      2,
+      3,
+      3,
+      5,
+      5
+     ],
+     "USERS____###REV###__USER_ID__VIEWS": [
+      0,
+      1,
+      2,
+      2,
+      3,
+      3,
+      3,
+      3,
+      4,
+      5
+     ],
+     "RETURNS__ORDER_ID__ORDERS": [
+      0,
+      0,
+      0,
+      1,
+      1,
+      2,
+      2,
+      2,
+      3,
+      3
+     ],
+     "ORDERS____###REV###__ORDER_ID__RETURNS": [
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    "row": {
+     "ORDERS__USER_ID__USERS": [
+      0,
+      1,
+      3,
+      7
+     ],
+     "USERS____###REV###__USER_ID__ORDERS": [
+      0,
+      1,
+      3,
+      5
+     ],
+     "VIEWS__USER_ID__USERS": [
+      0,
+      1,
+      3,
+      8,
+      7
+     ],
+     "USERS____###REV###__USER_ID__VIEWS": [
+      0,
+      1,
+      3,
+      5,
+      5
+     ],
+     "RETURNS__ORDER_ID__ORDERS": [
+      0,
+      1,
+      2
+     ],
+     "ORDERS____###REV###__ORDER_ID__RETURNS": [
+      2,
+      4,
+      7
+     ]
+    }
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-graph-store/sampling.graph_store/only-USERS",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "USERS": {
+      "columns": {
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         0,
+         1,
+         {
+          "$na": null
+         },
+         2,
+         1,
+         3,
+         4
+        ]
+       },
+       "TIME": {
+        "dtype": "str",
+        "values": [
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         "1990-01-01",
+         {
+          "$float": "nan"
+         }
+        ]
+       },
+       "TEXT": {
+        "dtype": "str",
+        "values": [
+         "this is!",
+         "text",
+         {
+          "$float": "nan"
+         },
+         "",
+         " abc",
+         "hello!world",
+         "?. :"
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "USERS",
+       "primary_key": "USER_ID",
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "string",
+         "stype": "timestamp"
+        },
+        {
+         "name": "TEXT",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ]
+      }
+     ],
+     "edges": []
+    }
+   },
+   "expected": {
+    "report": {
+     "USERS": {
+      "input_rows": 7,
+      "output_rows": 4,
+      "null_primary_key_rows": 1,
+      "duplicate_primary_key_rows": 1,
+      "null_time_rows": 1
+     }
+    },
+    "masks": {
+     "USERS": [
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false
+     ]
+    },
+    "keys": {
+     "USERS": [
+      0,
+      1,
+      2,
+      3
+     ]
+    },
+    "node_ids": {
+     "USERS": [
+      0,
+      1,
+      3,
+      5
+     ]
+    },
+    "time": {
+     "USERS": [
+      631152000,
+      631152000,
+      631152000,
+      631152000,
+      631152000,
+      631152000,
+      -9223372037
+     ]
+    },
+    "time_range": {
+     "USERS": [
+      631152000000000000,
+      631152000000000000
+     ]
+    },
+    "colptr": {},
+    "row": {}
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-graph-store/sampling.graph_store/only-ORDERS",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "ORDERS": {
+      "columns": {
+       "ORDER_ID": {
+        "dtype": "str",
+        "values": [
+         "0",
+         "1",
+         "2",
+         "3",
+         "4",
+         "5",
+         "6",
+         "7",
+         "8"
+        ]
+       },
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         0,
+         1,
+         4,
+         2,
+         5,
+         {
+          "$na": null
+         },
+         4,
+         3,
+         3
+        ]
+       },
+       "TIME": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2023-01-08T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-07T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-06T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-05T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-04T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-03T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-02T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-01T00:00:00"
+         },
+         {
+          "$nat": null
+         }
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "ORDERS",
+       "primary_key": "ORDER_ID",
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "ORDER_ID",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "date",
+         "stype": "timestamp"
+        }
+       ]
+      }
+     ],
+     "edges": []
+    }
+   },
+   "expected": {
+    "report": {
+     "ORDERS": {
+      "input_rows": 9,
+      "output_rows": 8,
+      "null_primary_key_rows": 0,
+      "duplicate_primary_key_rows": 0,
+      "null_time_rows": 1
+     }
+    },
+    "masks": {
+     "ORDERS": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+     ]
+    },
+    "keys": {
+     "ORDERS": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7"
+     ]
+    },
+    "node_ids": {
+     "ORDERS": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+     ]
+    },
+    "time": {
+     "ORDERS": [
+      1673136000,
+      1673049600,
+      1672963200,
+      1672876800,
+      1672790400,
+      1672704000,
+      1672617600,
+      1672531200,
+      -9223372037
+     ]
+    },
+    "time_range": {
+     "ORDERS": [
+      1672531200000000000,
+      1673136000000000000
+     ]
+    },
+    "colptr": {},
+    "row": {}
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-graph-store/sampling.graph_store/only-VIEWS",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "VIEWS": {
+      "columns": {
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         0,
+         1,
+         4,
+         2,
+         5,
+         {
+          "$na": null
+         },
+         4,
+         3,
+         3
+        ]
+       },
+       "TIME": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2023-01-09T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-08T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-07T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-06T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-05T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-04T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-03T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-02T00:00:00"
+         },
+         {
+          "$timestamp": "2023-01-01T00:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "VIEWS",
+       "primary_key": null,
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "date",
+         "stype": "timestamp"
+        }
+       ]
+      }
+     ],
+     "edges": []
+    }
+   },
+   "expected": {
+    "report": {
+     "VIEWS": {
+      "input_rows": 9,
+      "output_rows": 9,
+      "null_primary_key_rows": 0,
+      "duplicate_primary_key_rows": 0,
+      "null_time_rows": 0
+     }
+    },
+    "masks": {},
+    "keys": {},
+    "node_ids": {},
+    "time": {
+     "VIEWS": [
+      1673222400,
+      1673136000,
+      1673049600,
+      1672963200,
+      1672876800,
+      1672790400,
+      1672704000,
+      1672617600,
+      1672531200
+     ]
+    },
+    "time_range": {
+     "VIEWS": [
+      1672531200000000000,
+      1673222400000000000
+     ]
+    },
+    "colptr": {},
+    "row": {}
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-graph-store/sampling.graph_store/only-RETURNS",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "RETURNS": {
+      "columns": {
+       "ORDER_ID": {
+        "dtype": "str",
+        "values": [
+         "2",
+         "4",
+         "7"
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "RETURNS",
+       "primary_key": null,
+       "time_column": null,
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "ORDER_ID",
+         "dtype": "string",
+         "stype": "ID"
+        }
+       ]
+      }
+     ],
+     "edges": []
+    }
+   },
+   "expected": {
+    "report": {
+     "RETURNS": {
+      "input_rows": 3,
+      "output_rows": 3,
+      "null_primary_key_rows": 0,
+      "duplicate_primary_key_rows": 0,
+      "null_time_rows": 0
+     }
+    },
+    "masks": {},
+    "keys": {},
+    "node_ids": {},
+    "time": {},
+    "time_range": {},
+    "colptr": {},
+    "row": {}
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-graph-store/sampling.graph_store/sanitization-precedence",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "USERS": {
+      "columns": {
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         {
+          "$na": null
+         },
+         1,
+         1,
+         2
+        ]
+       },
+       "TIME": {
+        "dtype": "str",
+        "values": [
+         {
+          "$float": "nan"
+         },
+         {
+          "$float": "nan"
+         },
+         {
+          "$float": "nan"
+         },
+         "2025-01-01"
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "USERS",
+       "primary_key": "USER_ID",
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "string",
+         "stype": "timestamp"
+        }
+       ]
+      }
+     ],
+     "edges": []
+    }
+   },
+   "expected": {
+    "report": {
+     "USERS": {
+      "input_rows": 4,
+      "output_rows": 1,
+      "null_primary_key_rows": 1,
+      "duplicate_primary_key_rows": 1,
+      "null_time_rows": 1
+     }
+    },
+    "masks": {
+     "USERS": [
+      false,
+      false,
+      false,
+      true
+     ]
+    },
+    "keys": {
+     "USERS": [
+      2
+     ]
+    },
+    "node_ids": {
+     "USERS": [
+      3
+     ]
+    },
+    "time": {
+     "USERS": [
+      -9223372037,
+      -9223372037,
+      -9223372037,
+      1735689600
+     ]
+    },
+    "time_range": {
+     "USERS": [
+      1735689600000000000,
+      1735689600000000000
+     ]
+    },
+    "colptr": {},
+    "row": {}
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "local-graph-store/sampling.graph_store/no-valid-rows",
+   "source": "packages/structured-data-models-relational-engine/tests/backend/local/test_local_graph_store.py",
+   "operation": "sampling.graph_store",
+   "input": {
+    "tables": {
+     "USERS": {
+      "columns": {
+       "USER_ID": {
+        "dtype": "Int64",
+        "values": [
+         {
+          "$na": null
+         },
+         1
+        ]
+       },
+       "TIME": {
+        "dtype": "str",
+        "values": [
+         {
+          "$float": "nan"
+         },
+         {
+          "$float": "nan"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "graph": {
+     "tables": [
+      {
+       "name": "USERS",
+       "primary_key": "USER_ID",
+       "time_column": "TIME",
+       "end_time_column": null,
+       "columns": [
+        {
+         "name": "USER_ID",
+         "dtype": "int",
+         "stype": "ID"
+        },
+        {
+         "name": "TIME",
+         "dtype": "string",
+         "stype": "timestamp"
+        }
+       ]
+      }
+     ],
+     "edges": []
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Found no valid rows in table 'USERS'. Please make sure that there exists valid non-N/A primary key and time column pairs in this table.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  }
+ ]
+}

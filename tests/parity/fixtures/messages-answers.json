@@ -1,0 +1,9373 @@
+{
+ "source": "packages/structured-data-models-client/diagnostics.json",
+ "cases": [
+  {
+   "id": "messages-answers/client.run/explaining-two-entities",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational",
+       "outputs": [
+        "prediction",
+        "explanation"
+       ]
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "an explanation covers exactly 1 entity, and this request scores 2; ask for one at a time",
+    "details_keys": [
+     "model",
+     "scored"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/explaining-with-a-large-context",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1
+       ],
+       "num_context_samples": 1001,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational",
+       "outputs": [
+        "prediction",
+        "explanation"
+       ]
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "an explanation is only produced in the mode the smaller context budget selects, and this request was gathered with num_context_samples above 1,000. Re-materialize with num_context_samples=1000 or fewer",
+    "details_keys": [
+     "context_rows_fast",
+     "model"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/an-inference-option-the-model-does-not-read",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT SUM(orders.quantity, 0, 30, days) FOR EACH products.product_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1
+       ],
+       "inference_config": {
+        "output_type": "mean"
+       },
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "kumo-relational does not read inference option(s) ['output_type']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one. A regression's statistic is chosen with materialize(..., prediction_statistic=...) instead: 'median', the default, or 'mean'",
+    "details_keys": [
+     "model",
+     "unsupported"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/more-classes-than-the-model-classifies",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "c0",
+         "c1",
+         "c2",
+         "c3",
+         "c4",
+         "c5",
+         "c6",
+         "c7",
+         "c8",
+         "c9",
+         "c10",
+         "c11"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         0.0,
+         1.0,
+         2.0,
+         3.0,
+         4.0,
+         5.0,
+         6.0,
+         7.0,
+         8.0,
+         9.0,
+         10.0,
+         11.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT products.category FOR EACH products.product_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1
+       ],
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "kumo-relational classifies at most 10 classes, and the gathered context carries 11 distinct values of the target; predict a coarser target, or narrow the context to the classes you care about",
+    "details_keys": [
+     "classes",
+     "limit",
+     "model"
+    ]
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/scoring-every-row-of-a-static-question",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT products.category FOR EACH products.product_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2,
+        3,
+        4
+       ],
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "no context rows are left: every row that could be context is also being scored, and a row carrying the answer being asked for is not sent as context. Score fewer rows, so that the rest are there to learn from",
+    "details_keys": [
+     "context_rows",
+     "model"
+    ]
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "4 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/one-class-in-the-context",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "books",
+         "books",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT products.category FOR EACH products.product_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1
+       ],
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "every context row has the same products.category, and a classification needs at least two classes to learn from. Gather a wider context with num_context_samples, or ask about entities whose answers differ",
+    "details_keys": [
+     "classes_in_context",
+     "model",
+     "target"
+    ]
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/one-value-in-the-context",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         9.5,
+         9.5,
+         9.5,
+         9.5
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT products.price FOR EACH products.product_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1
+       ],
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     },
+     {
+      "call": "PredictionResult.to_pandas",
+      "args": {}
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-1",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "4",
+         "prediction": 27.554757
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected": {
+    "requests": [
+     [
+      "POST",
+      "/v1/predictions"
+     ]
+    ],
+    "frame": {
+     "columns": {
+      "row_index": {
+       "dtype": "int64",
+       "values": [
+        0
+       ]
+      },
+      "id": {
+       "dtype": "int64",
+       "values": [
+        1
+       ]
+      },
+      "prediction": {
+       "dtype": "float64",
+       "values": [
+        27.554757
+       ]
+      }
+     }
+    }
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+    },
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "every context row has the same products.price, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/the-endpoint-refuses-a-text-column",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 422,
+      "body": {
+       "title": "Unprocessable Entity",
+       "status": 422,
+       "code": "UNSUPPORTED_FEATURE",
+       "detail": "semantic type 'text' is unsupported"
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.NimRequestError",
+    "code": "UNSUPPORTED_FEATURE",
+    "message": "semantic type 'text' is unsupported",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/the-endpoint-refuses-a-cardinality",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 422,
+      "body": {
+       "title": "Unprocessable Entity",
+       "status": 422,
+       "code": "UNSUPPORTED_FEATURE",
+       "detail": "categorical cardinality 13812 exceeds limit 10000"
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.NimRequestError",
+    "code": "UNSUPPORTED_FEATURE",
+    "message": "categorical cardinality 13812 exceeds limit 10000",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/the-endpoint-fails",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 500,
+      "body": {
+       "title": "Internal Server Error",
+       "status": 500
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.NimRequestError",
+    "code": "NimRequestError",
+    "message": "Internal Server Error",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/the-endpoint-answers-what-is-not-a-response",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "predictions": "none"
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "kumo-relational returned a response that does not match the contract: PredictionResponse response is missing required field 'id'",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/the-endpoint-refuses-a-text-column-it-names",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "Schema.set",
+      "args": {
+       "table": "users",
+       "column": "country",
+       "attribute": "stype",
+       "value": "text"
+      }
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ]
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 422,
+      "body": {
+       "title": "Unprocessable Entity",
+       "status": 422,
+       "code": "UNSUPPORTED_FEATURE",
+       "detail": "semantic type 'text' is unsupported"
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.NimRequestError",
+    "code": "UNSUPPORTED_FEATURE",
+    "message": "semantic type 'text' is unsupported. In this request that is users.country. Set a supported type on each, e.g. schema['users']['country'].stype = 'categorical'",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "users.country is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/an-answer-for-a-row-not-asked",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-2",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 9,
+         "id": "12",
+         "prediction": 69.370331
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response names row_index 9, and this batch asked about 2 rows",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/an-answer-with-a-step",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-2",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "12",
+         "prediction": 69.370331,
+         "forecast_step": 1
+        },
+        {
+         "row_index": 1,
+         "id": "13",
+         "prediction": 94.445654
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "a 'regression' answer carries a forecast step, which only a forecast has",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/an-answer-twice",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-2",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "12",
+         "prediction": 69.370331
+        },
+        {
+         "row_index": 0,
+         "id": "12",
+         "prediction": 69.370331
+        },
+        {
+         "row_index": 1,
+         "id": "13",
+         "prediction": 94.445654
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response answers row 0 more than once",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/an-answer-without-an-id",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-2",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "prediction": 69.370331
+        },
+        {
+         "row_index": 1,
+         "id": "13",
+         "prediction": 94.445654
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the answer for row 0 carries no id, and this batch asked under 12, so the two cannot be matched",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/an-answer-under-another-id",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-2",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "nobody",
+         "prediction": 69.370331
+        },
+        {
+         "row_index": 1,
+         "id": "13",
+         "prediction": 94.445654
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response pairs row_index 0 with id 'nobody', and this batch asked about 12 there",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/a-row-unanswered",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ]
+       },
+       "age": {
+        "dtype": "int64",
+        "values": [
+         25,
+         32,
+         41,
+         19,
+         57,
+         38
+        ]
+       },
+       "country": {
+        "dtype": "str",
+        "values": [
+         "US",
+         "DE",
+         "IN",
+         "US",
+         "DE",
+         "IN"
+        ]
+       }
+      }
+     },
+     "products": {
+      "columns": {
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "category": {
+        "dtype": "str",
+        "values": [
+         "books",
+         "games",
+         "tools",
+         "books"
+        ]
+       },
+       "price": {
+        "dtype": "float64",
+        "values": [
+         10.5,
+         20.0,
+         7.25,
+         12.0
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "product_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2,
+         1,
+         4,
+         3,
+         2
+        ]
+       },
+       "quantity": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4,
+         1,
+         2,
+         3,
+         4
+        ]
+       },
+       "ordered_at": {
+        "dtype": "datetime64[us]",
+        "values": [
+         {
+          "$timestamp": "2024-01-02T08:00:00"
+         },
+         {
+          "$timestamp": "2024-01-11T09:00:00"
+         },
+         {
+          "$timestamp": "2024-01-20T10:00:00"
+         },
+         {
+          "$timestamp": "2024-01-29T11:00:00"
+         },
+         {
+          "$timestamp": "2024-02-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-02-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-02-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-03-05T15:00:00"
+         },
+         {
+          "$timestamp": "2024-03-14T16:00:00"
+         },
+         {
+          "$timestamp": "2024-03-23T08:00:00"
+         },
+         {
+          "$timestamp": "2024-04-01T09:00:00"
+         },
+         {
+          "$timestamp": "2024-04-10T10:00:00"
+         },
+         {
+          "$timestamp": "2024-04-19T11:00:00"
+         },
+         {
+          "$timestamp": "2024-04-28T12:00:00"
+         },
+         {
+          "$timestamp": "2024-05-07T13:00:00"
+         },
+         {
+          "$timestamp": "2024-05-16T14:00:00"
+         },
+         {
+          "$timestamp": "2024-05-25T15:00:00"
+         },
+         {
+          "$timestamp": "2024-06-03T16:00:00"
+         },
+         {
+          "$timestamp": "2024-06-12T08:00:00"
+         },
+         {
+          "$timestamp": "2024-06-21T09:00:00"
+         },
+         {
+          "$timestamp": "2024-06-30T10:00:00"
+         },
+         {
+          "$timestamp": "2024-07-09T11:00:00"
+         },
+         {
+          "$timestamp": "2024-07-18T12:00:00"
+         },
+         {
+          "$timestamp": "2024-07-27T13:00:00"
+         },
+         {
+          "$timestamp": "2024-08-05T14:00:00"
+         },
+         {
+          "$timestamp": "2024-08-14T15:00:00"
+         },
+         {
+          "$timestamp": "2024-08-23T16:00:00"
+         },
+         {
+          "$timestamp": "2024-09-01T08:00:00"
+         },
+         {
+          "$timestamp": "2024-09-10T09:00:00"
+         },
+         {
+          "$timestamp": "2024-09-19T10:00:00"
+         },
+         {
+          "$timestamp": "2024-09-28T11:00:00"
+         },
+         {
+          "$timestamp": "2024-10-07T12:00:00"
+         },
+         {
+          "$timestamp": "2024-10-16T13:00:00"
+         },
+         {
+          "$timestamp": "2024-10-25T14:00:00"
+         },
+         {
+          "$timestamp": "2024-11-03T15:00:00"
+         },
+         {
+          "$timestamp": "2024-11-12T16:00:00"
+         },
+         {
+          "$timestamp": "2024-11-21T08:00:00"
+         },
+         {
+          "$timestamp": "2024-11-30T09:00:00"
+         },
+         {
+          "$timestamp": "2024-12-09T10:00:00"
+         },
+         {
+          "$timestamp": "2024-12-18T11:00:00"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {}
+     },
+     {
+      "call": "PredictiveQuery",
+      "args": {
+       "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+      }
+     },
+     {
+      "call": "PredictiveQuery.materialize",
+      "args": {
+       "indices": [
+        1,
+        2
+       ],
+       "num_context_samples": 12,
+       "random_seed": 7
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-2",
+       "model": "kumo-relational",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "12",
+         "prediction": 69.370331
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response left row(s) [1] unanswered",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "messages-answers/client.run/tabular-an-answer-for-a-row-not-asked",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {
+       "tables": [
+        "people"
+       ]
+      }
+     },
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification",
+       "schema": {
+        "$schema": null
+       },
+       "entity_table": "people"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-3",
+       "model": "kumo-tabular",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 7,
+         "id": "[0]",
+         "prediction": "1",
+         "probabilities": {
+          "0": 0.400091,
+          "1": 0.599909
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response names row_index 7, and this batch asked about 3 rows",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-an-answer-twice",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {
+       "tables": [
+        "people"
+       ]
+      }
+     },
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification",
+       "schema": {
+        "$schema": null
+       },
+       "entity_table": "people"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-3",
+       "model": "kumo-tabular",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "[0]",
+         "prediction": "1",
+         "probabilities": {
+          "0": 0.400091,
+          "1": 0.599909
+         }
+        },
+        {
+         "row_index": 0,
+         "id": "[0]",
+         "prediction": "1",
+         "probabilities": {
+          "0": 0.400091,
+          "1": 0.599909
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response answers row 0 more than once",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-an-answer-under-another-key",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {
+       "tables": [
+        "people"
+       ]
+      }
+     },
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification",
+       "schema": {
+        "$schema": null
+       },
+       "entity_table": "people"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-3",
+       "model": "kumo-tabular",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "[99]",
+         "prediction": "1",
+         "probabilities": {
+          "0": 0.400091,
+          "1": 0.599909
+         }
+        },
+        {
+         "row_index": 1,
+         "id": "[1]",
+         "prediction": "0",
+         "probabilities": {
+          "0": 0.537099,
+          "1": 0.462901
+         }
+        },
+        {
+         "row_index": 2,
+         "id": "[2]",
+         "prediction": "0",
+         "probabilities": {
+          "0": 0.525287,
+          "1": 0.474713
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response pairs row_index 0 with id '[99]', and this batch asked about 0 there",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-a-row-unanswered",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {
+       "tables": [
+        "people"
+       ]
+      }
+     },
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification",
+       "schema": {
+        "$schema": null
+       },
+       "entity_table": "people"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-3",
+       "model": "kumo-tabular",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "[0]",
+         "prediction": "1",
+         "probabilities": {
+          "0": 0.400091,
+          "1": 0.599909
+         }
+        },
+        {
+         "row_index": 1,
+         "id": "[1]",
+         "prediction": "0",
+         "probabilities": {
+          "0": 0.537099,
+          "1": 0.462901
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "the response left row(s) [2] unanswered",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-the-endpoint-answers-what-is-not-a-response",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "id": 3
+      }
+     }
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "message": "kumo-tabular returned a response that does not match the contract: PredictionResponse response has 'id' = 3, where the contract requires a string",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-a-text-column",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {
+       "tables": [
+        "people"
+       ]
+      }
+     },
+     {
+      "call": "Schema.set",
+      "args": {
+       "table": "people",
+       "column": "segment",
+       "attribute": "stype",
+       "value": "text"
+      }
+     },
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification",
+       "schema": {
+        "$schema": null
+       },
+       "entity_table": "people"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     },
+     {
+      "call": "PredictionResult.to_pandas",
+      "args": {}
+     }
+    ],
+    "responses": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "status": 200,
+      "body": {
+       "object": "prediction.response",
+       "id": "synthetic-3",
+       "model": "kumo-tabular",
+       "metadata": {
+        "synthetic": true
+       },
+       "predictions": [
+        {
+         "row_index": 0,
+         "id": "[0]",
+         "prediction": "1",
+         "probabilities": {
+          "0": 0.400091,
+          "1": 0.599909
+         }
+        },
+        {
+         "row_index": 1,
+         "id": "[1]",
+         "prediction": "0",
+         "probabilities": {
+          "0": 0.537099,
+          "1": 0.462901
+         }
+        },
+        {
+         "row_index": 2,
+         "id": "[2]",
+         "prediction": "0",
+         "probabilities": {
+          "0": 0.525287,
+          "1": 0.474713
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "expected": {
+    "requests": [
+     [
+      "POST",
+      "/v1/predictions"
+     ]
+    ],
+    "frame": {
+     "columns": {
+      "row_index": {
+       "dtype": "int64",
+       "values": [
+        0,
+        1,
+        2
+       ]
+      },
+      "id": {
+       "dtype": "int64",
+       "values": [
+        0,
+        1,
+        2
+       ]
+      },
+      "prediction": {
+       "dtype": "int64",
+       "values": [
+        1,
+        0,
+        0
+       ]
+      },
+      "probability_0": {
+       "dtype": "float64",
+       "values": [
+        0.400091,
+        0.537099,
+        0.525287
+       ]
+      },
+      "probability_1": {
+       "dtype": "float64",
+       "values": [
+        0.599909,
+        0.462901,
+        0.474713
+       ]
+      }
+     }
+    }
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    },
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "kumo-tabular cannot read a text column, so segment travel(s) as categorical instead. "
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-a-column-the-schema-does-not-describe",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     },
+     "wider": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       },
+       "extra": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Schema.from_data",
+      "args": {
+       "tables": [
+        "people"
+       ]
+      }
+     },
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "wider"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "wider",
+         "rows": [
+          0,
+          2
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification",
+       "schema": {
+        "$schema": null
+       },
+       "entity_table": "people"
+      }
+     },
+     {
+      "call": "SDMClient.predict",
+      "args": {
+       "model": "kumo-tabular"
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "schema does not describe context column(s) ['extra']",
+    "details_keys": []
+   },
+   "expected_warnings": [
+    {
+     "category": "sdm_client.core.warnings.SDMWarning",
+     "message": "2 of the 2 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+    }
+   ]
+  },
+  {
+   "id": "messages-answers/client.run/tabular-a-regression-to-the-relational-session",
+   "source": "packages/structured-data-models-client/diagnostics.json",
+   "operation": "client.run",
+   "input": {
+    "tables": {
+     "people": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11
+        ]
+       },
+       "age": {
+        "dtype": "float64",
+        "values": [
+         20.0,
+         21.0,
+         22.0,
+         23.0,
+         24.0,
+         25.0,
+         26.0,
+         27.0,
+         28.0,
+         29.0,
+         30.0,
+         31.0
+        ]
+       },
+       "segment": {
+        "dtype": "str",
+        "values": [
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north",
+         "south",
+         "north",
+         "north"
+        ]
+       },
+       "churn": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1,
+         0,
+         1
+        ]
+       }
+      }
+     }
+    },
+    "calls": [
+     {
+      "call": "Request",
+      "args": {
+       "context": {
+        "$frame": {
+         "table": "people"
+        }
+       },
+       "predict": {
+        "$frame": {
+         "table": "people",
+         "rows": [
+          0,
+          3
+         ],
+         "drop": [
+          "churn"
+         ]
+        }
+       },
+       "target": "churn",
+       "task": "classification"
+      }
+     },
+     {
+      "call": "SDMClient.fit",
+      "args": {
+       "model": "kumo-relational"
+      }
+     }
+    ],
+    "responses": []
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "message": "a relational request has to be gathered first, and this one was not. Build it with PredictiveQuery(...).materialize(indices=[...], model='kumo-relational'). A schema of one table is gathered for the tabular model unless the relational one is named, rather than with Request(context=..., predict=...), which is the single-table form",
+    "details_keys": [
+     "model"
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

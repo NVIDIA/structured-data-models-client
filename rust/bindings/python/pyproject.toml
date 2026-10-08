@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "sdm-core"
+# The crate's version, so `sdm_core._native.version()` and the wheel agree.
+dynamic = ["version"]
+description = "The Rust core of sdm-client; internal, with no public API of its own"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.10"
+authors = [{ name = "NVIDIA" }]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+]
+# pyarrow is not required: the module imports it only when Arrow data crosses,
+# and works with every pyarrow from 8.0.0 on, which is what Databricks Runtime
+# 14.3 and serverless environment 1 ship.
+dependencies = []
+
+[project.urls]
+Source = "https://github.com/NVIDIA/structured-data-models-client"
+
+[tool.maturin]
+module-name = "sdm_core._native"
+python-source = "python"
+manifest-path = "Cargo.toml"
+
+# https://cibuildwheel.pypa.io/en/stable/options/
+# One stable-ABI wheel per architecture serves Python 3.10 and every later
+# version, so only the cp310 build runs.
+[tool.cibuildwheel]
+build = "cp310-*"
+# musllinux is not a libc this project builds or tests against.
+skip = "*-musllinux_*"
+# Every wheel passes the smoke test in the container that built it, and then
+# the binding's own tests, with the newest pyarrow and again with pyarrow
+# 8.0.0 and numpy 1.23.5, which Databricks Runtime 14.3 and serverless
+# environment 1 ship. The project is the repository root, where cibuildwheel
+# is run from.
+test-requires = ["numpy", "pandas", "pyarrow", "pytest"]
+test-command = [
+    "python {project}/tests/rust_core/smoke.py",
+    "python -m pytest {project}/rust/bindings/python/tests -q -p no:cacheprovider",
+    "python -m pip install -q 'numpy==1.23.5' 'pyarrow==8.0.0'",
+    "python -c \"import pyarrow; print('binding tests with pyarrow', pyarrow.__version__)\"",
+    "python -m pytest {project}/rust/bindings/python/tests -q -p no:cacheprovider",
+]
+
+[tool.cibuildwheel.linux]
+# Databricks runs both, on classic clusters and on serverless compute.
+archs = ["x86_64", "aarch64"]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# The images carry no Rust; this installs the release rust/rust-toolchain.toml
+# pins, so the container builds with the compiler every other build uses.
+before-all = "sh {project}/rust/bindings/python/install-rust.sh {project}/rust"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }

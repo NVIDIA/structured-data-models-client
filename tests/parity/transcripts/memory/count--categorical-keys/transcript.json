@@ -1,0 +1,50 @@
+{
+ "format_version": 1,
+ "name": "memory/count#categorical-keys",
+ "backend": "memory",
+ "task_kind": "count",
+ "data": {
+  "generator": "shop-categorical-keys",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_data",
+   "args": {
+    "tables": ["users", "products", "orders"]
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2, 3],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": ["1", "2"],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  }
+ ],
+ "steps": [],
+ "payloads": [],
+ "responses": [],
+ "error": {
+  "class": "sdm_client.errors.StructuredDataError",
+  "code": "INVALID_REQUEST",
+  "message": "Task references 2 unresolved row(s) in table 'users' after graph sanitization"
+ },
+ "result": null,
+ "warnings": []
+}

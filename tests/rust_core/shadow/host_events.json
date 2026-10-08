@@ -1,0 +1,300 @@
+{
+  "containers": {
+    "schema/list-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (list), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/dict-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a mapping (dict), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/array-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (ndarray), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/array-list-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (ndarray), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/deep-list": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (list), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/deep-dict": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a mapping (dict), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/deep-tuple": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (tuple), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/deep-array": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (ndarray), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/shared-list": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (list), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/shared-array": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (list), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "schema/ordinary-list": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "UNSUPPORTED_REQUEST",
+      "message": "[UNSUPPORTED_REQUEST] users.feature holds a container (list), and a nested column is not something this client can send. Multi-label targets are not supported by these models; for a feature, give one value per row",
+      "warnings": []
+    },
+    "indices/list-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/dict-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/array-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/array-list-cycle": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/deep-list": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/deep-dict": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/deep-tuple": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/deep-array": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/shared-list": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/shared-array": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    },
+    "indices/ordinary-list": {
+      "class": "sdm_client.errors.StructuredDataError",
+      "code": "INVALID_REQUEST",
+      "message": "[INVALID_REQUEST] gathering options apply only to relational materialization: ['random_seed']. Pass indices=[...] with model=KumoRelational() to gather this schema as a graph",
+      "warnings": []
+    }
+  },
+  "scalars": {
+    "metadata/float": {
+      "absent": [],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "metadata/float64": {
+      "absent": [],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "metadata/longdouble": {
+      "absent": [],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "metadata/complex": {
+      "absent": [],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "metadata/complex128": {
+      "absent": [],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "metadata/clongdouble": {
+      "absent": [],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "populated-metadata/float": {
+      "absent": [
+        "scores"
+      ],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "populated-metadata/float64": {
+      "absent": [
+        "scores"
+      ],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "populated-metadata/longdouble": {
+      "absent": [
+        "scores"
+      ],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "populated-metadata/complex": {
+      "absent": [
+        "scores"
+      ],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "populated-metadata/complex128": {
+      "absent": [
+        "scores"
+      ],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "populated-metadata/clongdouble": {
+      "absent": [
+        "scores"
+      ],
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "inference/float": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "inference/float64": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "inference/longdouble": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "inference/complex": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "inference/complex128": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "inference/clongdouble": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "task_options/float": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "task_options/float64": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "task_options/longdouble": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "task_options/complex": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "task_options/complex128": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    },
+    "task_options/clongdouble": {
+      "value_preserved": true,
+      "scalar_identity": true,
+      "shared_identity": true
+    }
+  },
+  "metric": [
+    {
+      "category": "sdm_connectors._warnings.ViewConversionWarning",
+      "message": "Could not fully convert the metric view definition 'sales_mv' into a graph:\n- Failed to add column 'quantity' since it calls 'mystery', which is not a pure built-in SQL function, and expressions taken from the metric view are executed as SQL under your warehouse credentials. Pass trust_expressions=True to keep it if you trust whoever authored the view"
+    }
+  ],
+  "semantic": [
+    {
+      "category": "sdm_connectors._warnings.ViewConversionWarning",
+      "message": "Could not fully convert the semantic view definition 'DB.SCH.GPU_FLEET_SV' into a graph:\n- Failed to add column 'HALL' of table 'RACKS' since it calls 'mystery', which is not a pure built-in SQL function, and expressions taken from the semantic view are executed as SQL under your warehouse credentials. Pass trust_expressions=True to keep it if you trust whoever authored the view\n- Failed to add column 'DC_REGION' of table 'RACKS' since its expression references other tables"
+    }
+  ],
+  "panic": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "message": "[INTERNAL_ERROR] the core panicked; this is a bug in it; sdm-core failed unexpectedly, please report it",
+    "visible_cause": false
+  }
+}

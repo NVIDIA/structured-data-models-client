@@ -1,0 +1,31 @@
+structured-data-models-client
+Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+--------------------------------------------------------------------------------
+Vendored source
+--------------------------------------------------------------------------------
+
+One tree is vendored into this repository as source and ships with it.
+Everything else this project depends on is resolved by the package manager at
+install time and is not covered by this file.
+
+packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/assets/mermaid.min.js
+---------------------------------------------------------------------------------
+
+mermaid 11.15.0, MIT licensed, bundled so that Graph.visualize() renders a
+graph entirely offline. That matters in the notebook environments this client
+is used from: Snowflake and Databricks block external scripts, so a diagram
+that fetched from a CDN would simply not draw.
+
+The bundle is upstream bytes, unmodified, and its SHA-256 is pinned in
+rfm/assets/VENDORED.md and asserted by tests/test_vendored_mermaid.py. It is a
+bundle, so the components inside it are enumerated in the third-party section
+of LICENSE, each with the licence it declares at the version mermaid pins. The
+copyright notices themselves are mermaid's own, carried verbatim in
+rfm/assets/MERMAID_LICENSE.
+
+Everything else in this repository, including the Predictive Query Language in
+packages/structured-data-models-pql, is first-party NVIDIA source maintained here under the
+licence above.

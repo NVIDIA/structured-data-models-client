@@ -1,0 +1,2556 @@
+{
+ "format_version": 1,
+ "name": "sqlite/marketplace-timeless",
+ "backend": "sqlite",
+ "task_kind": "classification",
+ "data": {
+  "generator": "marketplace",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_source",
+   "args": {
+    "tables": {
+     "items": "items",
+     "reviews": "reviews"
+    },
+    "primary_keys": {}
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT items.category FOR EACH items.item_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"items\")",
+   "params": null,
+   "result": "step-0000.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"items\")",
+   "params": null,
+   "result": "step-0001.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"item_id\", \"category\", \"price\" FROM \"items\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0002.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "category",
+     "type_text": "string"
+    },
+    {
+     "name": "price",
+     "type_text": "double"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"reviews\")",
+   "params": null,
+   "result": "step-0003.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"reviews\")",
+   "params": null,
+   "result": "step-0004.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"review_id\", \"item_id\", \"rating\", \"body\" FROM \"reviews\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0005.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "review_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "rating",
+     "type_text": "int64"
+    },
+    {
+     "name": "body",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"items\")",
+   "params": null,
+   "result": "step-0006.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"reviews\")",
+   "params": null,
+   "result": "step-0007.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"item_id\") AS d, COUNT(CASE WHEN \"item_id\" IS NULL THEN 1 END) AS z\nFROM \"items\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"review_id\") AS d, COUNT(CASE WHEN \"review_id\" IS NULL THEN 1 END) AS z\nFROM \"reviews\"",
+   "params": null,
+   "result": "step-0008.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "k",
+     "type_text": "int64"
+    },
+    {
+     "name": "n",
+     "type_text": "int64"
+    },
+    {
+     "name": "d",
+     "type_text": "int64"
+    },
+    {
+     "name": "z",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"items\")",
+   "params": null,
+   "result": "step-0009.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"reviews\")",
+   "params": null,
+   "result": "step-0010.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"item_id\", \"category\"\nFROM \"items\"\nWHERE \"item_id\" IS NOT NULL\nORDER BY ((((1369975286 * ((\"item_id\" % 2147483647 + 2147483647) % 2147483647) + 1202242073) % 2147483647) * ((\"item_id\" % 2147483647 + 2147483647) % 2147483647) + 976413892) % 2147483647 * ((\"item_id\" % 2147483647 + 2147483647) % 2147483647) + 327741615) % 2147483647, \"item_id\", \"category\" LIMIT 10000",
+   "params": null,
+   "result": "step-0011.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "category",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, (SELECT COUNT(*) FROM \"items\" WHERE \"item_id\" == tmp.__kumo_id__) as __kumo_matches__, \"item_id\", \"price\"\nFROM __kumo_keys__ tmp\nJOIN \"items\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == tmp.__kumo_id__\n    ORDER BY \"item_id\", \"price\", rowid\n    LIMIT 1\n)",
+   "params": ["[2,3,5,1,7,8,4,6,1,2]"],
+   "result": "step-0012.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "__kumo_matches__",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "price",
+     "type_text": "double"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"review_id\", \"item_id\", \"rating\", \"body\"\nFROM __kumo_keys__ tmp\nJOIN \"reviews\" fact\nON fact.rowid IN (\n  SELECT rowid\n  FROM \"reviews\"\n  WHERE \"item_id\" = tmp.__kumo_id__\n  ORDER BY \"review_id\", \"body\", \"item_id\", \"rating\"\n  LIMIT 32\n)\nORDER BY __kumo_batch__, \"review_id\", \"body\", \"item_id\", \"rating\"",
+   "params": ["[2,3,5,1,7,8,4,6,1,2]"],
+   "result": "step-0013.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "review_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "rating",
+     "type_text": "int64"
+    },
+    {
+     "name": "body",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  }
+ ],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "multiclass_classification",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "string",
+     "classes": ["garden", "kitchen"]
+    },
+    "entity_table_names": ["items"]
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "TARGET": {
+       "dtype": "string",
+       "stype": "categorical"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "items": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "item_id": {
+        "dtype": "int64",
+        "nullable": false
+       },
+       "price": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": ["instance_id", "item_id"]
+     },
+     "reviews": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "rating": {
+        "dtype": "int64",
+        "stype": "numerical"
+       },
+       "body": {
+        "dtype": "stringlist",
+        "stype": "text"
+       },
+       "item_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "items",
+      "target_columns": ["item_id"]
+     },
+     {
+      "source_table": "reviews",
+      "source_columns": ["item_id"],
+      "target_table": "items",
+      "target_columns": ["item_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "TARGET"],
+     "rows": [
+      [1, 3, "garden"],
+      [2, 5, "garden"],
+      [4, 7, "kitchen"],
+      [5, 8, "garden"],
+      [6, 4, "kitchen"],
+      [7, 6, "kitchen"]
+     ]
+    },
+    "related_tables": {
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "item_id", "price"],
+      "rows": [
+       [1, 3, 25.94],
+       [2, 5, 46.14],
+       [4, 7, 14.61],
+       [5, 8, 1.46],
+       [6, 4, 45.92],
+       [7, 6, 5.07]
+      ]
+     },
+     "reviews": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "rating", "body", "item_id"],
+      "rows": [
+       [
+        1,
+        32,
+        1,
+        ["again", "late", "shipping", "early", "poor", "value", "size", "meh", "early"],
+        3
+       ],
+       [
+        1,
+        33,
+        2,
+        ["ok", "late", "nice", "would", "wow", "cheap", "early", "meh", "early", "fast", "size", "pack", "poor", "zip", "pack", "late", "ok", "bad", "nice", "great", "sturdy", "fast", "pack", "quality", "love", "early", "solid", "buy"],
+        3
+       ],
+       [
+        1,
+        34,
+        1,
+        ["not", "broke", "box", "quality", "gift", "bad", "wow", "sturdy", "quality", "sturdy", "gift", "again", "sturdy", "not", "broke", "fast", "great", "wow", "not"],
+        3
+       ],
+       [
+        1,
+        35,
+        5,
+        ["not", "color", "wow", "great", "gift", "wow", "ok", "broke", "size", "color", "shipping", "ok", "pack", "early", "quality", "gift", "poor", "cheap", "value", "cheap"],
+        3
+       ],
+       [
+        1,
+        36,
+        1,
+        ["box", "recommend", "gift", "not", "pack", "box", "recommend", "size", "cheap", "broke", "buy", "again", "size", "returned", "box", "color", "cheap"],
+        3
+       ],
+       [
+        1,
+        37,
+        4,
+        ["would", "gift", "poor", "box", "not", "returned", "returned", "returned", "not", "quality", "size", "broke"],
+        3
+       ],
+       [
+        1,
+        38,
+        3,
+        ["wow", "nice", "quality", "shipping", "would", "wow", "ok", "gift", "bad", "buy", "gift", "returned", "early"],
+        3
+       ],
+       [
+        1,
+        39,
+        1,
+        ["solid", "buy", "nice", "size", "cheap", "nice", "fast", "box", "shipping", "meh", "love"],
+        3
+       ],
+       [
+        1,
+        40,
+        1,
+        ["wow", "pack", "fast", "early", "buy", "late", "cheap", "recommend", "bad", "cheap", "value", "buy", "late", "quality", "bad", "shipping", "ok", "great", "quality", "buy", "wow", "meh", "recommend", "wow", "bad", "ok", "love", "ok", "wow"],
+        3
+       ],
+       [
+        1,
+        41,
+        2,
+        ["buy", "value", "sturdy", "poor", "buy", "would", "box", "nice", "great", "size", "returned", "poor", "box", "ok", "buy", "fast"],
+        3
+       ],
+       [
+        1,
+        42,
+        2,
+        ["shipping", "shipping", "gift", "zip", "wow", "wow", "ok", "cheap", "color", "returned", "bad", "bad", "again", "size", "gift", "love", "early", "color", "fast", "again", "meh", "cheap", "solid", "late", "love", "pack", "fast", "ok"],
+        3
+       ],
+       [
+        1,
+        43,
+        1,
+        ["returned", "quality", "quality", "value", "late", "meh", "sturdy", "poor", "gift", "returned", "bad", "value", "broke", "solid", "wow"],
+        3
+       ],
+       [
+        1,
+        44,
+        4,
+        ["buy", "would", "zip", "shipping", "sturdy", "early", "zip", "love", "wow", "quality"],
+        3
+       ],
+       [
+        1,
+        45,
+        1,
+        ["size", "sturdy", "cheap", "color", "great", "late", "nice", "ok", "poor", "again", "early", "value", "buy", "late", "meh", "poor", "returned", "meh", "shipping", "not", "fast", "quality"],
+        3
+       ],
+       [
+        1,
+        46,
+        4,
+        ["size", "great", "value", "zip", "recommend", "bad", "solid", "buy", "pack", "sturdy", "recommend", "returned", "fast", "again", "gift", "quality", "bad", "ok", "buy", "recommend"],
+        3
+       ],
+       [
+        1,
+        47,
+        1,
+        ["recommend", "recommend", "solid", "early", "bad", "gift", "box", "nice", "meh", "recommend", "love", "bad", "gift", "shipping", "buy", "cheap", "wow"],
+        3
+       ],
+       [
+        1,
+        48,
+        5,
+        ["bad", "ok", "poor", "love", "pack", "late", "early", "bad", "ok", "buy", "quality", "wow", "gift", "zip", "wow", "late"],
+        3
+       ],
+       [
+        1,
+        49,
+        5,
+        ["great", "poor", "color", "love", "size", "poor", "fast", "meh", "quality", "early", "again", "quality", "ok", "solid", "bad", "wow", "poor"],
+        3
+       ],
+       [
+        1,
+        50,
+        1,
+        ["gift", "zip", "bad", "love", "pack", "size", "would", "poor", "shipping", "ok", "love", "cheap", "recommend", "fast", "poor", "ok", "buy", "love", "buy"],
+        3
+       ],
+       [
+        1,
+        51,
+        2,
+        ["box", "shipping", "size", "buy", "color", "broke", "bad", "solid", "meh", "again", "quality", "returned", "gift", "solid", "not", "meh", "nice", "ok", "quality", "ok", "ok", "nice", "ok", "bad"],
+        3
+       ],
+       [
+        1,
+        52,
+        4,
+        ["not", "value", "ok", "would", "fast", "wow", "solid", "ok", "meh", "poor", "great", "love", "nice", "fast", "ok", "early", "zip", "shipping", "not", "pack", "gift", "box", "returned", "cheap", "poor", "would"],
+        3
+       ],
+       [
+        1,
+        53,
+        5,
+        ["shipping", "shipping", "ok", "recommend", "recommend", "again", "returned", "poor", "not"],
+        3
+       ],
+       [
+        1,
+        54,
+        4,
+        ["fast", "returned", "solid", "quality", "returned", "late", "wow", "pack", "box", "quality"],
+        3
+       ],
+       [
+        1,
+        55,
+        3,
+        ["buy", "ok", "broke", "poor", "poor", "early", "not", "gift", "solid", "quality", "great", "would"],
+        3
+       ],
+       [
+        1,
+        56,
+        2,
+        ["not", "shipping", "meh", "would", "wow", "value", "again", "solid", "recommend", "color", "again", "not", "not", "color", "buy", "solid", "early", "size", "quality", "sturdy", "shipping", "size", "shipping", "size", "cheap"],
+        3
+       ],
+       [
+        1,
+        57,
+        2,
+        ["gift", "quality", "buy", "not", "quality", "returned", "sturdy", "solid"],
+        3
+       ],
+       [
+        1,
+        58,
+        3,
+        ["would", "quality", "late", "cheap", "fast", "poor", "solid", "size", "solid", "would", "cheap", "pack", "value", "late", "would", "not", "color", "broke", "color", "size", "color", "love", "love", "wow"],
+        3
+       ],
+       [
+        1,
+        59,
+        2,
+        ["not", "zip", "not", "box", "bad", "love", "not", "solid", "solid"],
+        3
+       ],
+       [
+        1,
+        60,
+        5,
+        ["shipping", "recommend", "zip", "bad", "not", "ok", "pack", "value", "bad", "size", "poor", "early", "broke", "bad"],
+        3
+       ],
+       [
+        1,
+        61,
+        3,
+        ["nice", "recommend", "ok", "nice", "quality", "recommend", "pack", "buy", "early", "quality", "nice", "gift", "nice", "not", "zip", "poor", "cheap", "wow", "again", "would", "returned", "bad"],
+        3
+       ],
+       [
+        1,
+        62,
+        5,
+        ["quality", "poor", "solid", "meh", "poor", "solid", "poor", "late", "value", "cheap", "value", "wow", "pack", "sturdy", "great", "box", "shipping", "bad", "zip", "zip", "love", "broke", "gift", "sturdy"],
+        3
+       ],
+       [
+        1,
+        63,
+        5,
+        ["again", "returned", "zip", "zip", "late", "solid", "love", "ok", "buy", "would", "recommend", "early"],
+        3
+       ],
+       [
+        2,
+        64,
+        3,
+        ["quality", "wow", "broke", "great", "again", "love", "wow", "pack", "solid", "sturdy", "color", "quality", "bad", "not", "cheap", "color", "size", "would", "broke", "solid", "early", "buy", "fast", "again"],
+        5
+       ],
+       [
+        2,
+        65,
+        1,
+        ["box", "would", "zip", "again", "color", "shipping", "sturdy", "cheap", "value", "great", "cheap", "cheap", "recommend", "again", "gift", "would", "would"],
+        5
+       ],
+       [
+        2,
+        66,
+        4,
+        ["love", "broke", "love", "solid", "not", "not", "would", "value", "returned", "great", "buy", "bad", "buy", "would", "color", "pack", "cheap", "value", "bad", "meh", "size", "meh", "buy", "ok", "gift"],
+        5
+       ],
+       [
+        2,
+        67,
+        1,
+        ["love", "again", "early", "shipping", "bad", "zip", "buy", "box", "pack", "sturdy", "wow", "value", "sturdy", "great", "cheap", "value", "great", "wow", "color", "quality", "quality", "box", "again", "cheap", "size", "bad", "again", "pack"],
+        5
+       ],
+       [
+        2,
+        68,
+        3,
+        ["pack", "again", "returned", "value", "recommend", "pack", "returned", "nice", "recommend", "gift", "zip", "great", "ok", "size", "solid"],
+        5
+       ],
+       [
+        2,
+        69,
+        5,
+        ["bad", "sturdy", "nice", "color", "returned", "love", "wow", "late", "recommend", "returned", "value", "nice", "early", "again", "solid"],
+        5
+       ],
+       [
+        2,
+        70,
+        4,
+        ["love", "love", "poor", "pack", "early", "quality", "buy", "ok", "shipping", "great", "again", "gift", "returned", "solid", "fast", "late", "fast", "love", "quality"],
+        5
+       ],
+       [
+        2,
+        71,
+        3,
+        ["returned", "bad", "fast", "value", "fast", "buy", "fast", "sturdy", "ok", "not", "great"],
+        5
+       ],
+       [
+        2,
+        72,
+        2,
+        ["size", "great", "box", "box", "cheap", "late", "love", "ok", "value", "broke", "recommend", "early", "pack", "gift", "late"],
+        5
+       ],
+       [
+        2,
+        73,
+        3,
+        ["value", "poor", "early", "broke", "late", "returned", "nice", "poor", "again", "early", "wow"],
+        5
+       ],
+       [
+        2,
+        74,
+        2,
+        ["solid", "solid", "nice", "shipping", "sturdy", "poor", "great", "ok", "sturdy", "again", "shipping", "cheap", "size"],
+        5
+       ],
+       [
+        2,
+        75,
+        5,
+        ["broke", "shipping", "love", "gift", "buy", "again", "cheap", "meh", "box", "zip", "box", "would", "early", "box", "nice", "size", "late", "meh", "shipping", "great", "gift", "poor", "shipping"],
+        5
+       ],
+       [
+        2,
+        76,
+        2,
+        ["great", "solid", "broke", "bad", "would", "love", "poor", "box", "meh", "love", "wow", "late", "great", "again", "buy", "not", "zip", "gift", "shipping"],
+        5
+       ],
+       [
+        2,
+        77,
+        1,
+        ["cheap", "quality", "again", "solid", "poor", "shipping", "shipping", "ok", "gift", "buy", "love", "wow", "buy", "recommend", "buy", "would", "great"],
+        5
+       ],
+       [
+        2,
+        78,
+        1,
+        ["not", "cheap", "broke", "would", "would", "not", "would", "would", "meh"],
+        5
+       ],
+       [
+        2,
+        79,
+        1,
+        ["sturdy", "love", "cheap", "recommend", "bad", "again", "returned", "not", "solid", "solid", "buy", "meh", "great", "not", "wow", "broke"],
+        5
+       ],
+       [
+        2,
+        80,
+        1,
+        ["color", "recommend", "love", "color", "fast", "pack", "pack", "wow", "zip", "returned", "would", "again", "broke", "sturdy", "wow", "buy", "wow", "returned", "pack", "late"],
+        5
+       ],
+       [
+        2,
+        81,
+        1,
+        ["zip", "shipping", "cheap", "love", "early", "early", "pack", "box", "poor", "color", "buy", "poor", "great", "ok", "quality", "box", "again", "pack", "zip", "buy", "buy", "fast", "great", "wow", "pack", "gift", "quality", "cheap", "ok"],
+        5
+       ],
+       [
+        2,
+        82,
+        2,
+        ["value", "returned", "buy", "love", "nice", "buy", "color", "quality", "size"],
+        5
+       ],
+       [
+        2,
+        83,
+        1,
+        ["meh", "color", "recommend", "returned", "wow", "shipping", "early", "solid", "early", "would", "zip", "solid", "pack", "pack", "broke", "zip", "recommend", "early", "early", "buy", "zip", "recommend", "cheap"],
+        5
+       ],
+       [
+        2,
+        84,
+        4,
+        ["early", "early", "returned", "ok", "wow", "fast", "color", "not", "size"],
+        5
+       ],
+       [
+        2,
+        85,
+        2,
+        ["would", "again", "meh", "pack", "sturdy", "late", "recommend", "quality", "recommend", "returned", "love", "again", "sturdy", "solid", "size", "love", "fast", "would", "meh", "pack"],
+        5
+       ],
+       [
+        2,
+        86,
+        5,
+        ["quality", "value", "gift", "broke", "zip", "fast", "value", "buy", "nice", "value", "broke", "early", "gift", "love", "returned", "size", "again", "box", "pack", "cheap", "meh", "value", "again", "poor", "not"],
+        5
+       ],
+       [
+        2,
+        87,
+        2,
+        ["meh", "nice", "ok", "size", "pack", "box", "ok", "recommend", "value", "sturdy", "pack", "returned", "shipping", "sturdy", "box", "pack", "recommend", "meh", "box", "sturdy", "great", "size", "quality"],
+        5
+       ],
+       [
+        2,
+        88,
+        3,
+        ["again", "value", "zip", "returned", "returned", "color", "love", "bad", "wow", "size", "nice", "gift", "would", "buy", "value", "value", "poor", "wow", "color", "wow", "poor", "quality", "shipping", "broke", "late", "returned"],
+        5
+       ],
+       [
+        2,
+        89,
+        5,
+        ["solid", "love", "returned", "early", "late", "zip", "bad", "box", "again", "poor", "early", "sturdy", "color", "love", "early", "zip"],
+        5
+       ],
+       [
+        2,
+        90,
+        1,
+        ["fast", "great", "zip", "early", "great", "ok", "not", "bad", "shipping", "size", "box", "broke", "size", "size", "meh", "sturdy", "love", "buy", "would", "nice", "bad", "poor", "again", "box", "great", "broke"],
+        5
+       ],
+       [
+        2,
+        91,
+        1,
+        ["would", "zip", "poor", "fast", "returned", "ok", "ok", "not", "love", "pack", "nice", "great", "buy", "broke", "wow", "value", "solid", "buy", "quality", "sturdy", "buy", "nice", "late", "would", "color"],
+        5
+       ],
+       [
+        2,
+        92,
+        3,
+        ["zip", "love", "wow", "value", "late", "late", "early", "nice", "quality", "box", "gift", "solid"],
+        5
+       ],
+       [
+        2,
+        93,
+        1,
+        ["great", "size", "fast", "value", "poor", "zip", "great", "returned", "early", "poor", "buy", "shipping", "pack", "quality", "love", "late", "nice", "color", "would", "quality", "quality", "shipping", "meh", "would"],
+        5
+       ],
+       [
+        2,
+        94,
+        5,
+        ["solid", "nice", "quality", "recommend", "buy", "box", "would", "love", "great", "early", "solid", "ok", "late", "early", "meh", "early", "nice", "zip", "sturdy", "great"],
+        5
+       ],
+       [
+        2,
+        95,
+        5,
+        ["fast", "box", "cheap", "returned", "fast", "shipping", "zip", "sturdy", "meh", "shipping", "ok", "gift", "ok", "color", "early", "early", "fast", "size", "value", "not", "zip", "love"],
+        5
+       ],
+       [
+        4,
+        128,
+        2,
+        ["bad", "size", "value", "fast", "recommend", "broke", "cheap", "buy", "value", "again", "meh", "again", "buy"],
+        7
+       ],
+       [
+        4,
+        129,
+        1,
+        ["meh", "nice", "again", "meh", "great", "pack", "shipping", "buy", "fast", "early", "nice", "not", "broke", "great", "meh", "shipping", "early", "would", "fast", "wow", "wow", "buy", "again", "late"],
+        7
+       ],
+       [
+        4,
+        130,
+        5,
+        ["wow", "value", "wow", "fast", "would", "solid", "zip", "value", "fast", "recommend", "shipping", "returned", "early"],
+        7
+       ],
+       [
+        4,
+        131,
+        4,
+        ["would", "great", "fast", "pack", "returned", "recommend", "great", "would", "quality", "pack", "returned", "recommend", "ok"],
+        7
+       ],
+       [
+        4,
+        132,
+        4,
+        ["great", "late", "nice", "not", "love", "solid", "cheap", "color", "ok", "gift"],
+        7
+       ],
+       [
+        4,
+        133,
+        5,
+        ["early", "great", "buy", "would", "poor", "size", "value", "color"],
+        7
+       ],
+       [
+        4,
+        134,
+        4,
+        ["quality", "gift", "box", "would", "not", "again", "gift", "fast", "returned", "broke", "would", "poor", "great", "shipping", "shipping", "not", "great", "color", "fast", "box", "love", "wow", "box", "late", "gift", "bad", "box", "early"],
+        7
+       ],
+       [
+        4,
+        135,
+        5,
+        ["broke", "pack", "not", "solid", "broke", "ok", "not", "pack", "nice", "nice", "again", "fast", "great", "wow", "recommend", "quality", "size", "fast", "would"],
+        7
+       ],
+       [
+        4,
+        136,
+        4,
+        ["not", "ok", "again", "solid", "poor", "bad", "not", "cheap", "poor", "gift", "poor", "quality", "box", "not", "broke", "ok", "great", "gift", "early", "would", "wow", "meh", "great", "shipping", "returned", "size", "recommend"],
+        7
+       ],
+       [
+        4,
+        137,
+        1,
+        ["returned", "solid", "box", "would", "cheap", "zip", "solid", "pack", "late", "value", "broke", "solid", "bad", "buy", "early"],
+        7
+       ],
+       [
+        4,
+        138,
+        4,
+        ["cheap", "nice", "quality", "box", "box", "color", "broke", "wow", "not", "not", "bad", "meh", "zip", "sturdy", "value", "buy", "sturdy", "sturdy", "early", "buy", "poor", "broke", "again"],
+        7
+       ],
+       [
+        4,
+        139,
+        4,
+        ["would", "ok", "gift", "poor", "nice", "poor", "buy", "wow", "solid", "wow", "recommend", "sturdy", "color", "nice", "love", "nice", "solid", "poor", "returned", "cheap", "broke", "would", "again", "would", "returned", "wow", "would", "would", "gift"],
+        7
+       ],
+       [
+        4,
+        140,
+        2,
+        ["shipping", "shipping", "wow", "gift", "gift", "pack", "ok", "nice", "cheap", "box", "returned"],
+        7
+       ],
+       [
+        4,
+        141,
+        4,
+        ["bad", "cheap", "again", "buy", "solid", "cheap", "meh", "solid", "solid"],
+        7
+       ],
+       [
+        4,
+        142,
+        5,
+        ["returned", "value", "ok", "solid", "sturdy", "returned", "value", "sturdy", "box", "recommend"],
+        7
+       ],
+       [
+        4,
+        143,
+        1,
+        ["not", "returned", "early", "great", "meh", "meh", "meh", "meh"],
+        7
+       ],
+       [
+        4,
+        144,
+        4,
+        ["color", "great", "would", "buy", "late", "shipping", "size", "gift", "wow", "poor", "bad", "nice", "size", "color", "zip", "cheap", "nice", "again", "love", "broke", "meh", "great", "gift", "poor", "not", "early", "sturdy"],
+        7
+       ],
+       [
+        4,
+        145,
+        1,
+        ["love", "again", "meh", "love", "recommend", "value", "fast", "meh", "broke", "love", "broke", "wow", "early", "love", "box", "fast", "pack", "great", "bad", "shipping", "pack", "buy"],
+        7
+       ],
+       [
+        4,
+        146,
+        1,
+        ["again", "poor", "wow", "quality", "value", "meh", "box", "bad", "wow", "quality", "solid", "bad", "not", "bad", "sturdy", "early", "returned", "color", "wow", "late", "ok", "buy", "sturdy"],
+        7
+       ],
+       [
+        4,
+        147,
+        4,
+        ["broke", "wow", "nice", "bad", "pack", "solid", "buy", "shipping", "nice", "box", "size", "poor", "value", "shipping", "wow", "love", "color", "ok", "love", "solid", "pack", "wow", "broke", "early", "nice", "not", "quality", "not", "recommend"],
+        7
+       ],
+       [
+        4,
+        148,
+        2,
+        ["poor", "cheap", "great", "gift", "color", "shipping", "recommend", "box", "wow", "great", "late", "recommend", "shipping", "fast", "meh", "fast", "color", "broke", "gift", "not", "fast", "meh", "returned", "value"],
+        7
+       ],
+       [
+        4,
+        149,
+        3,
+        ["again", "returned", "early", "zip", "box", "would", "not", "not", "fast", "box", "not", "nice", "pack", "bad", "returned", "again", "great", "late", "ok", "poor", "zip", "ok", "returned"],
+        7
+       ],
+       [
+        4,
+        150,
+        4,
+        ["pack", "pack", "poor", "not", "love", "fast", "early", "would", "ok", "nice", "gift", "gift"],
+        7
+       ],
+       [
+        4,
+        151,
+        3,
+        ["sturdy", "again", "not", "not", "shipping", "returned", "again", "fast", "value", "poor", "zip", "recommend", "nice", "not", "nice", "quality", "great", "love", "bad", "poor", "poor", "love", "size", "gift", "buy"],
+        7
+       ],
+       [
+        4,
+        152,
+        4,
+        ["quality", "nice", "size", "gift", "again", "not", "gift", "shipping", "great", "fast", "nice", "box", "not", "pack", "cheap", "quality", "zip", "love", "sturdy", "wow", "quality", "gift", "size", "size", "gift"],
+        7
+       ],
+       [
+        4,
+        153,
+        1,
+        ["would", "gift", "again", "bad", "shipping", "returned", "nice", "size", "quality"],
+        7
+       ],
+       [
+        4,
+        154,
+        4,
+        ["value", "gift", "meh", "cheap", "love", "solid", "gift", "poor", "returned", "poor", "bad", "late", "late", "broke", "quality"],
+        7
+       ],
+       [
+        4,
+        155,
+        3,
+        ["broke", "recommend", "gift", "nice", "poor", "would", "color", "recommend", "cheap", "zip", "pack", "cheap"],
+        7
+       ],
+       [
+        4,
+        156,
+        1,
+        ["cheap", "love", "returned", "meh", "shipping", "gift", "meh", "not", "sturdy", "again", "shipping"],
+        7
+       ],
+       [
+        4,
+        157,
+        4,
+        ["meh", "size", "sturdy", "love", "zip", "shipping", "returned", "solid", "love", "recommend", "late"],
+        7
+       ],
+       [
+        4,
+        158,
+        2,
+        ["returned", "pack", "ok", "cheap", "wow", "great", "great", "again", "ok", "wow", "meh", "early", "buy", "late", "meh", "early", "broke", "zip", "box"],
+        7
+       ],
+       [
+        4,
+        159,
+        5,
+        ["love", "early", "pack", "zip", "color", "nice", "cheap", "quality"],
+        7
+       ],
+       [
+        5,
+        160,
+        5,
+        ["ok", "gift", "value", "returned", "poor", "value", "buy", "wow", "solid", "meh"],
+        8
+       ],
+       [
+        5,
+        161,
+        2,
+        ["recommend", "sturdy", "meh", "solid", "fast", "early", "recommend", "poor", "size", "early", "value", "meh", "returned", "sturdy", "size", "again", "ok", "love", "early", "not", "again"],
+        8
+       ],
+       [
+        5,
+        162,
+        3,
+        ["value", "gift", "value", "size", "early", "cheap", "sturdy", "love", "poor", "wow", "gift", "returned", "cheap", "value", "love", "zip", "returned", "returned", "zip", "great", "late", "again", "broke", "great"],
+        8
+       ],
+       [
+        5,
+        163,
+        3,
+        ["returned", "pack", "late", "nice", "recommend", "fast", "quality", "ok", "bad", "not", "great", "fast", "wow", "buy", "great", "returned", "zip", "sturdy"],
+        8
+       ],
+       [
+        5,
+        164,
+        4,
+        ["great", "again", "poor", "fast", "bad", "meh", "fast", "cheap", "great", "poor", "not"],
+        8
+       ],
+       [
+        5,
+        165,
+        2,
+        ["size", "quality", "value", "gift", "cheap", "returned", "again", "zip", "recommend", "solid", "again", "early", "shipping", "love", "quality", "love", "zip", "fast", "value", "again", "bad", "value", "returned", "solid", "poor", "sturdy", "pack", "not", "poor"],
+        8
+       ],
+       [
+        5,
+        166,
+        3,
+        ["would", "zip", "not", "box", "zip", "recommend", "value", "great"],
+        8
+       ],
+       [
+        5,
+        167,
+        3,
+        ["ok", "shipping", "fast", "again", "returned", "meh", "color", "recommend", "late", "love", "color", "not", "broke", "shipping", "recommend", "recommend", "late"],
+        8
+       ],
+       [
+        5,
+        168,
+        5,
+        ["ok", "nice", "box", "again", "love", "cheap", "buy", "again", "value", "bad", "buy", "solid", "bad", "buy", "value"],
+        8
+       ],
+       [
+        5,
+        169,
+        3,
+        ["nice", "early", "value", "not", "late", "zip", "gift", "returned", "great", "broke", "poor", "zip", "quality", "box", "wow", "would"],
+        8
+       ],
+       [
+        5,
+        170,
+        3,
+        ["box", "again", "zip", "buy", "love", "value", "early", "recommend", "not", "quality", "early", "pack", "quality", "solid", "buy", "late", "returned", "quality", "cheap", "solid", "love", "returned", "poor", "buy"],
+        8
+       ],
+       [
+        5,
+        171,
+        4,
+        ["great", "again", "meh", "cheap", "zip", "not", "pack", "shipping", "meh", "gift", "fast", "zip", "poor", "again", "nice", "solid", "shipping", "sturdy", "recommend", "value", "gift", "cheap", "value", "nice"],
+        8
+       ],
+       [
+        5,
+        172,
+        1,
+        ["box", "would", "box", "gift", "fast", "color", "sturdy", "wow", "box", "shipping", "zip", "recommend", "not", "cheap", "value", "meh", "shipping", "color", "quality", "zip", "great", "gift", "gift"],
+        8
+       ],
+       [
+        5,
+        173,
+        5,
+        ["love", "returned", "size", "quality", "broke", "fast", "bad", "great", "late", "fast", "nice", "zip", "wow", "value", "sturdy", "not", "poor", "shipping", "poor", "gift", "wow", "wow", "early", "value", "solid"],
+        8
+       ],
+       [
+        5,
+        174,
+        3,
+        ["sturdy", "would", "gift", "early", "quality", "nice", "pack", "returned", "returned", "value"],
+        8
+       ],
+       [
+        5,
+        175,
+        1,
+        ["great", "pack", "great", "buy", "color", "poor", "sturdy", "quality", "meh", "solid", "pack", "wow", "zip"],
+        8
+       ],
+       [
+        5,
+        176,
+        1,
+        ["wow", "early", "bad", "quality", "fast", "would", "would", "again", "love", "great", "great", "meh", "sturdy", "broke", "wow", "quality", "fast", "fast", "recommend", "size", "gift", "wow", "broke", "broke", "color", "size"],
+        8
+       ],
+       [
+        5,
+        177,
+        3,
+        ["buy", "pack", "fast", "gift", "broke", "color", "bad", "returned", "again", "sturdy", "fast", "not"],
+        8
+       ],
+       [
+        5,
+        178,
+        4,
+        ["would", "late", "gift", "great", "gift", "buy", "returned", "broke", "solid", "box", "shipping", "again", "would", "cheap", "ok", "meh", "gift", "love", "recommend", "fast", "meh", "gift", "fast", "bad", "recommend"],
+        8
+       ],
+       [
+        5,
+        179,
+        2,
+        ["meh", "size", "not", "late", "sturdy", "would", "recommend", "recommend", "recommend", "color", "value", "fast", "not", "returned", "color", "would", "wow", "poor", "zip", "late", "buy", "pack", "recommend", "love", "recommend", "meh", "size"],
+        8
+       ],
+       [
+        5,
+        180,
+        4,
+        ["cheap", "sturdy", "value", "recommend", "color", "nice", "size", "pack", "love", "solid", "recommend", "box", "ok", "buy", "not", "poor", "gift", "great", "again", "box", "quality", "wow", "late", "poor", "box", "late"],
+        8
+       ],
+       [
+        5,
+        181,
+        3,
+        ["late", "late", "bad", "color", "wow", "nice", "returned", "love", "buy"],
+        8
+       ],
+       [
+        5,
+        182,
+        5,
+        ["box", "returned", "great", "buy", "shipping", "fast", "recommend", "meh", "returned", "poor", "would", "nice", "again", "again", "box", "zip", "shipping", "ok", "love", "solid", "size", "sturdy", "sturdy", "late", "sturdy"],
+        8
+       ],
+       [
+        5,
+        183,
+        2,
+        ["fast", "ok", "solid", "fast", "would", "great", "pack", "again", "bad", "sturdy", "value", "size", "value", "color", "not", "zip", "broke", "nice", "would", "color", "meh", "again", "gift", "sturdy", "ok", "meh", "recommend", "value"],
+        8
+       ],
+       [
+        5,
+        184,
+        2,
+        ["wow", "early", "would", "fast", "gift", "great", "recommend", "gift", "love", "great", "sturdy", "early", "zip", "buy", "again", "bad", "ok", "late", "bad", "again", "value", "bad", "again", "cheap", "returned", "returned", "gift", "shipping"],
+        8
+       ],
+       [
+        5,
+        185,
+        3,
+        ["value", "bad", "wow", "pack", "solid", "zip", "returned", "late", "shipping", "wow", "ok", "buy", "not", "cheap", "recommend", "nice", "quality", "solid", "size", "buy", "sturdy", "broke", "value", "meh", "bad"],
+        8
+       ],
+       [
+        5,
+        186,
+        3,
+        ["value", "bad", "returned", "color", "ok", "nice", "fast", "box", "nice", "early", "not", "zip", "shipping", "pack", "early", "not", "zip"],
+        8
+       ],
+       [
+        5,
+        187,
+        5,
+        ["early", "meh", "size", "shipping", "value", "quality", "not", "pack", "bad", "gift", "early", "returned", "early", "not", "bad", "solid", "bad", "great"],
+        8
+       ],
+       [
+        5,
+        188,
+        4,
+        ["fast", "nice", "pack", "zip", "gift", "gift", "buy", "size", "nice", "fast", "bad", "pack", "recommend", "buy", "broke", "color", "value", "again", "ok", "late", "again", "color", "ok", "shipping", "solid", "value", "buy", "recommend", "returned"],
+        8
+       ],
+       [
+        5,
+        189,
+        5,
+        ["sturdy", "wow", "value", "cheap", "sturdy", "sturdy", "late", "buy", "pack", "broke", "bad", "shipping", "sturdy", "again", "value", "early", "fast", "gift", "value"],
+        8
+       ],
+       [
+        5,
+        190,
+        3,
+        ["broke", "value", "cheap", "solid", "would", "nice", "poor", "quality", "would", "poor", "again", "poor", "quality", "meh", "ok", "returned", "gift", "late", "box", "fast", "cheap", "poor", "sturdy", "zip"],
+        8
+       ],
+       [
+        5,
+        191,
+        5,
+        ["wow", "box", "would", "meh", "love", "ok", "solid", "color", "broke", "color", "love", "not", "color", "color"],
+        8
+       ],
+       [
+        6,
+        192,
+        4,
+        ["fast", "returned", "cheap", "buy", "wow", "fast", "not", "buy", "pack", "gift", "size", "would", "buy", "cheap", "ok", "poor", "fast", "size", "wow", "pack", "fast", "pack", "meh", "ok", "value"],
+        4
+       ],
+       [
+        6,
+        193,
+        5,
+        ["value", "bad", "pack", "nice", "would", "early", "again", "recommend", "color", "broke", "size", "zip", "love", "returned", "early", "pack", "quality", "sturdy"],
+        4
+       ],
+       [
+        6,
+        194,
+        5,
+        ["bad", "late", "poor", "great", "returned", "meh", "pack", "ok", "cheap", "quality", "fast", "sturdy", "returned", "again", "meh", "nice", "late", "shipping", "love", "value", "color", "wow", "recommend", "quality", "bad", "ok", "returned"],
+        4
+       ],
+       [
+        6,
+        195,
+        2,
+        ["pack", "early", "love", "fast", "cheap", "quality", "again", "meh", "box", "bad", "pack", "buy", "fast", "size", "fast", "sturdy", "again"],
+        4
+       ],
+       [
+        6,
+        196,
+        1,
+        ["cheap", "ok", "box", "cheap", "again", "color", "love", "love", "quality", "buy", "not", "sturdy", "sturdy", "broke", "value", "would", "late", "quality", "meh", "sturdy", "great", "color", "love", "cheap", "cheap"],
+        4
+       ],
+       [
+        6,
+        197,
+        3,
+        ["great", "returned", "gift", "late", "recommend", "late", "sturdy", "box", "great"],
+        4
+       ],
+       [
+        6,
+        198,
+        5,
+        ["pack", "box", "ok", "quality", "recommend", "fast", "recommend", "fast", "meh", "returned", "fast", "meh", "ok"],
+        4
+       ],
+       [
+        6,
+        199,
+        5,
+        ["buy", "fast", "buy", "buy", "color", "box", "would", "would", "shipping", "wow", "meh", "not", "broke", "quality", "cheap", "not", "gift"],
+        4
+       ],
+       [
+        6,
+        200,
+        3,
+        ["early", "again", "early", "pack", "returned", "fast", "meh", "sturdy", "solid", "poor", "color", "value", "cheap", "buy", "love", "returned", "fast", "late", "buy", "box", "love", "again", "box"],
+        4
+       ],
+       [
+        6,
+        201,
+        5,
+        ["poor", "love", "returned", "wow", "quality", "poor", "fast", "love", "size", "buy", "late", "early", "size", "wow", "color", "gift", "early", "buy", "value", "solid", "sturdy"],
+        4
+       ],
+       [
+        6,
+        202,
+        4,
+        ["would", "solid", "cheap", "pack", "value", "would", "pack", "great", "color", "early", "cheap", "solid", "returned", "again", "zip", "wow", "box", "buy"],
+        4
+       ],
+       [
+        6,
+        203,
+        3,
+        ["ok", "gift", "love", "broke", "poor", "fast", "recommend", "zip"],
+        4
+       ],
+       [
+        6,
+        204,
+        4,
+        ["buy", "buy", "quality", "solid", "solid", "recommend", "returned", "ok", "poor", "not", "box", "would", "shipping", "returned", "again", "cheap", "meh", "great", "love", "quality", "poor", "color", "wow", "bad", "cheap", "nice", "not", "great"],
+        4
+       ],
+       [
+        6,
+        205,
+        1,
+        ["size", "gift", "meh", "bad", "love", "value", "not", "solid", "size", "love", "returned", "bad", "returned", "wow", "solid", "sturdy", "box", "sturdy", "pack", "zip", "love", "shipping", "solid", "poor", "would", "zip", "poor", "shipping"],
+        4
+       ],
+       [
+        6,
+        206,
+        1,
+        ["broke", "cheap", "early", "ok", "cheap", "sturdy", "cheap", "love", "cheap", "early", "sturdy", "would", "box", "shipping", "zip", "again", "returned", "zip", "buy", "meh", "pack", "wow", "fast", "zip"],
+        4
+       ],
+       [
+        6,
+        207,
+        1,
+        ["bad", "meh", "ok", "broke", "meh", "broke", "wow", "late", "recommend", "meh", "nice", "pack", "size", "cheap", "ok", "value", "shipping", "shipping", "gift", "early"],
+        4
+       ],
+       [
+        6,
+        208,
+        4,
+        ["not", "broke", "pack", "early", "size", "again", "shipping", "buy", "again", "poor", "gift", "bad", "size", "cheap", "not", "poor", "size", "solid", "meh"],
+        4
+       ],
+       [
+        6,
+        209,
+        5,
+        ["great", "poor", "nice", "poor", "wow", "broke", "color", "not", "size", "great", "again", "box", "gift", "would", "shipping", "shipping", "size", "quality", "sturdy"],
+        4
+       ],
+       [
+        6,
+        210,
+        5,
+        ["size", "wow", "color", "broke", "fast", "returned", "bad", "size", "shipping", "love", "would", "wow", "fast", "cheap", "sturdy", "recommend", "fast", "bad"],
+        4
+       ],
+       [
+        6,
+        211,
+        3,
+        ["poor", "broke", "quality", "early", "late", "ok", "fast", "fast", "love", "ok", "size"],
+        4
+       ],
+       [
+        6,
+        212,
+        3,
+        ["solid", "love", "would", "recommend", "ok", "solid", "nice", "quality", "zip", "returned"],
+        4
+       ],
+       [
+        6,
+        213,
+        5,
+        ["buy", "value", "poor", "meh", "quality", "returned", "would", "love", "wow", "shipping", "size", "cheap", "meh", "ok", "broke", "again", "wow", "great", "gift", "meh", "zip", "nice", "shipping", "color", "great", "pack", "ok", "bad"],
+        4
+       ],
+       [
+        6,
+        214,
+        2,
+        ["late", "size", "quality", "value", "pack", "broke", "value", "wow", "recommend", "broke", "sturdy", "would", "again", "box", "ok", "love", "not", "wow", "shipping", "poor", "meh"],
+        4
+       ],
+       [
+        6,
+        215,
+        4,
+        ["pack", "late", "quality", "zip", "recommend", "recommend", "returned", "size", "again", "box", "value", "returned", "bad", "love", "not", "again", "gift", "gift", "gift", "nice", "late", "nice", "returned", "nice", "color"],
+        4
+       ],
+       [
+        6,
+        216,
+        4,
+        ["bad", "recommend", "meh", "pack", "value", "recommend", "value", "great", "buy", "late", "poor", "broke", "sturdy", "bad", "poor", "shipping", "gift", "solid"],
+        4
+       ],
+       [
+        6,
+        217,
+        4,
+        ["zip", "cheap", "zip", "love", "solid", "solid", "late", "nice", "great", "meh", "poor", "again", "cheap", "shipping", "poor", "meh", "would", "late", "cheap", "poor"],
+        4
+       ],
+       [
+        6,
+        218,
+        2,
+        ["box", "solid", "love", "quality", "size", "broke", "recommend", "zip", "sturdy", "wow", "great", "zip", "late", "color"],
+        4
+       ],
+       [
+        6,
+        219,
+        3,
+        ["not", "early", "box", "box", "not", "quality", "meh", "broke", "wow", "box", "poor", "pack", "meh", "solid", "broke", "wow", "value", "box", "recommend", "sturdy"],
+        4
+       ],
+       [
+        6,
+        220,
+        3,
+        ["zip", "broke", "buy", "recommend", "gift", "pack", "broke", "recommend", "value", "quality", "cheap", "size", "poor", "meh", "poor", "bad", "size", "solid", "shipping", "quality", "love", "fast", "box", "pack", "pack"],
+        4
+       ],
+       [
+        6,
+        221,
+        4,
+        ["meh", "cheap", "great", "quality", "value", "fast", "bad", "great", "love", "gift"],
+        4
+       ],
+       [
+        6,
+        222,
+        3,
+        ["fast", "not", "box", "quality", "box", "again", "box", "value", "wow", "buy", "quality", "would", "shipping", "love", "box", "color", "size"],
+        4
+       ],
+       [
+        6,
+        223,
+        4,
+        ["poor", "pack", "late", "recommend", "buy", "late", "poor", "box", "pack", "buy", "returned", "pack", "fast", "late", "wow", "broke", "love", "broke", "nice", "sturdy", "quality", "solid", "size", "returned", "gift", "early", "size"],
+        4
+       ],
+       [
+        7,
+        224,
+        2,
+        ["bad", "shipping", "shipping", "not", "not", "shipping", "cheap", "quality", "box", "early", "recommend", "zip", "zip", "bad", "meh", "love", "sturdy", "late", "zip", "quality", "love", "shipping", "cheap", "again", "quality", "nice", "value", "zip"],
+        6
+       ],
+       [
+        7,
+        225,
+        2,
+        ["value", "color", "again", "broke", "solid", "late", "wow", "bad"],
+        6
+       ],
+       [
+        7,
+        226,
+        2,
+        ["nice", "bad", "would", "solid", "gift", "returned", "meh", "gift", "bad", "wow", "gift", "quality", "again", "poor", "not", "poor", "cheap", "early", "value", "sturdy", "quality", "again", "quality", "poor", "buy", "nice"],
+        6
+       ],
+       [
+        7,
+        227,
+        1,
+        ["color", "wow", "bad", "late", "size", "nice", "solid", "again", "would", "again", "again", "love", "bad", "late", "box", "would", "buy", "love", "ok", "great", "wow", "box", "wow", "great"],
+        6
+       ],
+       [
+        7,
+        228,
+        4,
+        ["box", "cheap", "returned", "cheap", "early", "box", "color", "sturdy", "broke", "fast"],
+        6
+       ],
+       [
+        7,
+        229,
+        1,
+        ["would", "shipping", "great", "early", "size", "poor", "late", "not", "wow"],
+        6
+       ],
+       [
+        7,
+        230,
+        5,
+        ["bad", "late", "early", "wow", "solid", "size", "recommend", "value", "box", "fast", "bad", "poor", "love", "nice", "zip", "solid", "early", "broke", "meh", "would", "color", "broke", "early"],
+        6
+       ],
+       [
+        7,
+        231,
+        2,
+        ["poor", "recommend", "poor", "nice", "ok", "cheap", "quality", "recommend"],
+        6
+       ],
+       [
+        7,
+        232,
+        5,
+        ["late", "color", "box", "early", "recommend", "pack", "recommend", "broke", "early", "again", "value", "bad", "recommend", "zip", "great", "nice", "meh"],
+        6
+       ],
+       [
+        7,
+        233,
+        1,
+        ["shipping", "love", "solid", "again", "not", "gift", "shipping", "solid", "solid", "nice", "solid", "fast", "returned", "box", "broke", "great", "nice", "poor", "pack", "meh", "box", "ok"],
+        6
+       ],
+       [
+        7,
+        234,
+        4,
+        ["shipping", "shipping", "broke", "nice", "buy", "would", "broke", "buy", "not", "zip", "again", "bad", "fast", "color", "poor", "ok", "would", "solid", "returned", "nice", "quality", "cheap", "bad", "quality", "size"],
+        6
+       ],
+       [
+        7,
+        235,
+        3,
+        ["shipping", "great", "quality", "size", "recommend", "color", "broke", "cheap"],
+        6
+       ],
+       [
+        7,
+        236,
+        2,
+        ["again", "great", "poor", "great", "again", "gift", "fast", "quality", "gift", "meh", "size", "recommend", "buy", "great", "pack", "poor"],
+        6
+       ],
+       [
+        7,
+        237,
+        5,
+        ["again", "gift", "not", "size", "poor", "cheap", "box", "meh", "love", "great", "quality", "shipping", "love", "recommend", "buy", "shipping", "poor", "poor", "meh", "returned"],
+        6
+       ],
+       [
+        7,
+        238,
+        5,
+        ["solid", "broke", "solid", "great", "early", "meh", "shipping", "great", "gift", "solid", "returned", "pack", "size", "early"],
+        6
+       ],
+       [
+        7,
+        239,
+        5,
+        ["pack", "would", "great", "returned", "ok", "quality", "poor", "bad", "would", "ok", "bad", "recommend", "nice", "zip", "zip", "recommend", "broke", "shipping", "solid", "sturdy", "early", "value", "love", "buy"],
+        6
+       ],
+       [
+        7,
+        240,
+        1,
+        ["shipping", "value", "not", "solid", "nice", "quality", "value", "ok", "returned", "value", "box", "great", "great", "broke", "would", "ok", "solid", "late", "broke", "love", "quality"],
+        6
+       ],
+       [
+        7,
+        241,
+        1,
+        ["zip", "great", "love", "nice", "early", "value", "fast", "broke", "meh", "broke", "pack", "late", "gift", "quality", "fast", "nice", "pack", "ok", "poor", "wow", "color"],
+        6
+       ],
+       [
+        7,
+        242,
+        3,
+        ["not", "box", "meh", "would", "sturdy", "not", "nice", "again", "quality", "love", "pack", "color", "would", "wow", "bad", "bad", "color", "sturdy", "zip", "solid", "value", "color", "sturdy", "again", "not", "meh", "fast", "fast", "returned"],
+        6
+       ],
+       [
+        7,
+        243,
+        1,
+        ["returned", "recommend", "recommend", "wow", "nice", "not", "zip", "sturdy", "solid", "recommend", "bad", "poor", "buy", "meh", "returned", "poor", "color", "sturdy", "sturdy", "meh", "wow", "returned", "buy", "broke", "early", "cheap", "early"],
+        6
+       ],
+       [
+        7,
+        244,
+        4,
+        ["quality", "would", "poor", "quality", "early", "quality", "sturdy", "early", "broke", "buy"],
+        6
+       ],
+       [
+        7,
+        245,
+        4,
+        ["size", "not", "bad", "ok", "great", "wow", "broke", "nice", "great", "early", "nice", "solid", "shipping", "shipping", "fast", "quality", "ok", "size", "would", "zip", "solid", "recommend", "cheap", "quality"],
+        6
+       ],
+       [
+        7,
+        246,
+        5,
+        ["pack", "meh", "ok", "late", "ok", "ok", "recommend", "late", "wow", "value", "buy", "ok", "broke", "early", "recommend", "love", "early"],
+        6
+       ],
+       [
+        7,
+        247,
+        2,
+        ["fast", "size", "sturdy", "returned", "late", "value", "would", "ok", "cheap"],
+        6
+       ],
+       [
+        7,
+        248,
+        5,
+        ["again", "recommend", "poor", "bad", "great", "meh", "early", "zip", "poor", "sturdy", "poor", "value", "bad", "bad", "sturdy", "bad", "color", "great", "meh", "ok", "sturdy", "love", "gift"],
+        6
+       ],
+       [
+        7,
+        249,
+        4,
+        ["value", "quality", "quality", "ok", "poor", "recommend", "late", "not", "again", "wow", "wow", "recommend", "late", "early", "again"],
+        6
+       ],
+       [
+        7,
+        250,
+        4,
+        ["quality", "early", "buy", "box", "meh", "early", "quality", "returned", "returned", "zip", "pack", "broke"],
+        6
+       ],
+       [
+        7,
+        251,
+        4,
+        ["value", "bad", "recommend", "value", "love", "not", "again", "sturdy", "wow", "not", "late", "solid", "box", "fast", "broke", "bad", "meh", "value", "gift", "buy", "solid", "late"],
+        6
+       ],
+       [
+        7,
+        252,
+        5,
+        ["late", "nice", "wow", "solid", "fast", "again", "box", "cheap", "zip", "early", "value", "ok", "bad", "zip", "pack", "shipping", "not"],
+        6
+       ],
+       [
+        7,
+        253,
+        3,
+        ["bad", "broke", "bad", "bad", "box", "sturdy", "color", "nice", "size", "broke", "fast", "great", "ok", "solid", "sturdy", "box", "zip", "fast", "meh", "great"],
+        6
+       ],
+       [
+        7,
+        254,
+        2,
+        ["solid", "early", "meh", "returned", "again", "broke", "sturdy", "ok", "zip", "would", "shipping", "again", "recommend", "bad", "buy", "wow", "returned", "quality", "returned"],
+        6
+       ],
+       [
+        7,
+        255,
+        3,
+        ["not", "box", "poor", "ok", "solid", "bad", "bad", "gift", "pack", "color"],
+        6
+       ]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0"],
+     "rows": [
+      [8, 1],
+      [9, 2]
+     ]
+    },
+    "related_tables": {
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "item_id", "price"],
+      "rows": [
+       [8, 1, 28.69],
+       [9, 2, 43.39]
+      ]
+     },
+     "reviews": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "rating", "body", "item_id"],
+      "rows": [
+       [
+        8,
+        256,
+        4,
+        ["ok", "box", "sturdy", "returned", "love", "recommend", "quality", "cheap", "ok", "would", "fast", "would", "size", "nice", "ok", "nice", "fast", "wow"],
+        1
+       ],
+       [
+        8,
+        257,
+        1,
+        ["size", "quality", "bad", "shipping", "gift", "quality", "early", "fast", "quality", "returned", "shipping", "bad", "gift", "late", "early", "value", "size", "value", "sturdy", "gift", "love", "pack"],
+        1
+       ],
+       [
+        8,
+        258,
+        1,
+        ["sturdy", "solid", "zip", "value", "gift", "wow", "not", "box", "sturdy", "box", "great", "broke", "color", "late", "meh", "nice", "sturdy", "size", "buy"],
+        1
+       ],
+       [
+        8,
+        259,
+        1,
+        ["again", "sturdy", "great", "not", "box", "again", "size", "shipping", "love", "fast", "solid", "not", "quality", "zip", "recommend", "solid", "recommend", "size", "color", "gift", "love", "bad", "gift", "sturdy", "wow", "fast", "would", "zip"],
+        1
+       ],
+       [
+        8,
+        260,
+        4,
+        ["value", "late", "zip", "solid", "would", "size", "meh", "bad", "late", "zip", "solid", "broke", "poor", "again", "broke", "zip", "not", "again"],
+        1
+       ],
+       [
+        8,
+        261,
+        3,
+        ["shipping", "bad", "shipping", "again", "would", "not", "returned", "value", "quality", "love", "great", "bad", "value", "bad", "fast", "nice", "size", "early", "size", "zip", "meh", "returned", "size", "nice", "early", "love", "would", "ok", "meh"],
+        1
+       ],
+       [
+        8,
+        262,
+        4,
+        ["fast", "not", "color", "recommend", "box", "great", "would", "fast", "poor", "ok", "fast", "nice", "poor", "color", "broke", "size", "size", "poor", "zip", "buy", "box", "great", "shipping", "recommend", "again", "broke"],
+        1
+       ],
+       [
+        8,
+        263,
+        1,
+        ["not", "cheap", "box", "value", "late", "not", "quality", "poor", "value"],
+        1
+       ],
+       [
+        8,
+        264,
+        5,
+        ["poor", "wow", "poor", "poor", "poor", "buy", "size", "pack", "size", "size", "color", "broke", "not", "wow", "again", "color", "returned", "quality"],
+        1
+       ],
+       [
+        8,
+        265,
+        1,
+        ["pack", "buy", "value", "buy", "cheap", "not", "cheap", "not", "pack", "early", "size", "nice", "recommend", "meh", "not", "again", "pack", "poor", "shipping", "solid", "returned", "bad", "quality", "cheap", "quality", "quality", "ok", "gift"],
+        1
+       ],
+       [
+        8,
+        266,
+        1,
+        ["solid", "solid", "great", "would", "not", "wow", "great", "wow"],
+        1
+       ],
+       [
+        8,
+        267,
+        3,
+        ["box", "color", "quality", "shipping", "color", "shipping", "quality", "meh", "not", "bad", "gift", "color", "not", "poor", "love"],
+        1
+       ],
+       [
+        8,
+        268,
+        4,
+        ["solid", "wow", "great", "late", "cheap", "would", "meh", "fast", "wow", "fast", "solid", "solid", "again", "zip", "zip", "quality", "early", "early", "solid", "gift", "pack", "nice", "again", "not", "cheap", "poor", "sturdy", "value"],
+        1
+       ],
+       [
+        8,
+        269,
+        3,
+        ["solid", "shipping", "love", "late", "ok", "sturdy", "love", "wow", "box", "broke", "box", "solid"],
+        1
+       ],
+       [
+        8,
+        270,
+        4,
+        ["cheap", "size", "buy", "late", "sturdy", "love", "bad", "broke", "box", "gift", "fast", "love", "recommend", "ok", "solid", "quality", "shipping", "pack", "recommend", "quality", "color", "buy", "returned"],
+        1
+       ],
+       [
+        8,
+        271,
+        1,
+        ["gift", "quality", "meh", "shipping", "value", "wow", "wow", "quality"],
+        1
+       ],
+       [
+        8,
+        272,
+        1,
+        ["poor", "early", "returned", "box", "color", "shipping", "zip", "would", "would", "ok", "fast", "box", "meh", "quality", "bad", "wow", "again", "returned", "meh", "gift", "color", "returned", "ok", "would"],
+        1
+       ],
+       [
+        8,
+        273,
+        1,
+        ["sturdy", "quality", "early", "solid", "fast", "love", "wow", "meh", "value"],
+        1
+       ],
+       [
+        8,
+        274,
+        4,
+        ["great", "late", "quality", "cheap", "bad", "nice", "nice", "poor", "early", "late", "cheap", "quality", "again", "gift", "solid", "solid"],
+        1
+       ],
+       [
+        8,
+        275,
+        1,
+        ["sturdy", "quality", "box", "color", "cheap", "box", "recommend", "buy", "buy", "value", "love", "late", "bad", "solid", "love", "cheap", "box", "great", "shipping"],
+        1
+       ],
+       [
+        8,
+        276,
+        3,
+        ["late", "pack", "broke", "returned", "would", "quality", "poor", "poor", "shipping", "value", "pack", "ok", "shipping", "quality", "quality", "poor", "fast", "early", "gift", "cheap", "zip", "size", "again", "late", "shipping", "gift"],
+        1
+       ],
+       [
+        8,
+        277,
+        3,
+        ["color", "fast", "recommend", "buy", "recommend", "shipping", "gift", "bad", "poor", "cheap"],
+        1
+       ],
+       [
+        8,
+        278,
+        1,
+        ["pack", "zip", "would", "bad", "nice", "gift", "quality", "nice", "zip", "pack"],
+        1
+       ],
+       [
+        8,
+        279,
+        5,
+        ["shipping", "cheap", "broke", "buy", "broke", "value", "sturdy", "color", "solid", "buy", "value", "nice"],
+        1
+       ],
+       [
+        8,
+        280,
+        4,
+        ["recommend", "poor", "nice", "early", "recommend", "poor", "color", "solid", "late"],
+        1
+       ],
+       [
+        8,
+        281,
+        5,
+        ["bad", "sturdy", "bad", "wow", "broke", "quality", "nice", "love", "cheap", "sturdy", "fast"],
+        1
+       ],
+       [
+        8,
+        282,
+        1,
+        ["love", "box", "love", "color", "poor", "nice", "color", "wow", "late", "gift", "buy", "fast", "recommend", "bad", "late", "early", "ok", "meh", "early", "shipping", "pack", "color", "box", "nice", "wow", "poor", "buy", "sturdy"],
+        1
+       ],
+       [
+        8,
+        283,
+        5,
+        ["nice", "not", "fast", "quality", "love", "wow", "sturdy", "buy", "again", "buy", "solid", "meh", "ok", "love", "ok", "value", "size", "pack", "meh", "great", "pack", "early", "again", "returned", "size", "buy"],
+        1
+       ],
+       [
+        8,
+        284,
+        4,
+        ["color", "gift", "late", "cheap", "fast", "would", "early", "pack", "meh", "bad", "pack", "sturdy", "cheap", "value", "not", "buy", "nice", "love", "buy", "bad", "recommend", "broke", "value", "solid", "value", "solid", "value", "value", "not"],
+        1
+       ],
+       [
+        8,
+        285,
+        4,
+        ["returned", "returned", "recommend", "would", "color", "size", "great", "late", "shipping", "box", "great", "quality", "cheap", "color"],
+        1
+       ],
+       [
+        8,
+        286,
+        5,
+        ["color", "nice", "not", "recommend", "would", "zip", "again", "solid", "poor", "pack", "fast", "solid", "great", "value", "size", "great", "buy", "ok", "size", "size", "nice", "box", "cheap"],
+        1
+       ],
+       [
+        8,
+        287,
+        2,
+        ["meh", "love", "ok", "early", "nice", "bad", "early", "not", "recommend", "size", "sturdy", "sturdy", "zip", "love", "late", "not", "buy", "pack", "ok", "not", "cheap", "wow", "late"],
+        1
+       ],
+       [
+        9,
+        288,
+        2,
+        ["sturdy", "ok", "box", "returned", "early", "wow", "meh", "broke", "bad", "gift", "meh", "cheap", "solid", "returned", "ok", "late", "not", "love", "not", "great", "zip", "buy", "buy", "wow", "returned", "great", "zip"],
+        2
+       ],
+       [
+        9,
+        289,
+        1,
+        ["meh", "recommend", "quality", "cheap", "wow", "love", "size", "shipping", "sturdy", "not", "nice", "late", "quality", "solid", "shipping", "again", "shipping", "solid", "size", "quality", "pack"],
+        2
+       ],
+       [
+        9,
+        290,
+        1,
+        ["fast", "solid", "great", "gift", "nice", "again", "size", "value", "solid", "gift", "not", "poor", "meh", "color", "shipping", "fast", "poor", "shipping", "size", "color", "poor", "not"],
+        2
+       ],
+       [
+        9,
+        291,
+        5,
+        ["sturdy", "wow", "color", "meh", "early", "gift", "fast", "wow", "ok", "fast", "value"],
+        2
+       ],
+       [
+        9,
+        292,
+        4,
+        ["color", "box", "ok", "shipping", "early", "pack", "love", "would", "would", "wow", "gift", "wow", "wow", "bad", "early", "size", "solid", "great", "shipping", "broke", "ok", "recommend", "value", "ok", "broke", "broke", "color", "zip", "bad"],
+        2
+       ],
+       [
+        9,
+        293,
+        4,
+        ["love", "pack", "recommend", "gift", "bad", "color", "not", "gift", "great", "value", "shipping", "would", "would", "great", "meh", "bad", "broke", "meh", "value", "recommend"],
+        2
+       ],
+       [
+        9,
+        294,
+        2,
+        ["cheap", "gift", "shipping", "love", "pack", "poor", "again", "cheap", "size", "wow", "pack", "meh", "would", "size", "broke", "wow", "gift", "fast", "early", "color", "solid", "late", "not", "fast", "recommend", "early", "broke"],
+        2
+       ],
+       [
+        9,
+        295,
+        1,
+        ["fast", "gift", "not", "poor", "would", "would", "quality", "would", "returned", "cheap", "ok", "shipping", "color", "box", "quality", "fast", "love", "early", "early", "cheap", "cheap", "would", "color", "recommend", "love", "early", "quality", "love"],
+        2
+       ],
+       [
+        9,
+        296,
+        1,
+        ["love", "meh", "early", "great", "not", "love", "zip", "returned", "cheap", "zip", "shipping", "would", "solid", "zip", "bad", "returned", "solid", "sturdy", "great", "zip", "late", "cheap", "not", "color", "late", "late"],
+        2
+       ],
+       [
+        9,
+        297,
+        2,
+        ["ok", "recommend", "broke", "gift", "late", "ok", "recommend", "solid", "late", "quality"],
+        2
+       ],
+       [
+        9,
+        298,
+        3,
+        ["value", "gift", "broke", "meh", "zip", "value", "shipping", "pack", "returned", "meh", "size", "value", "box", "fast", "solid"],
+        2
+       ],
+       [
+        9,
+        299,
+        1,
+        ["nice", "quality", "value", "fast", "love", "value", "value", "love", "nice", "shipping", "recommend"],
+        2
+       ],
+       [
+        9,
+        300,
+        4,
+        ["size", "ok", "great", "buy", "color", "broke", "recommend", "shipping", "solid", "solid", "would", "nice", "buy", "fast", "returned", "color", "sturdy", "great", "zip", "zip"],
+        2
+       ],
+       [
+        9,
+        301,
+        2,
+        ["broke", "buy", "quality", "pack", "early", "broke", "wow", "wow"],
+        2
+       ],
+       [
+        9,
+        302,
+        2,
+        ["not", "buy", "color", "meh", "box", "value", "solid", "size", "size", "sturdy", "pack", "cheap", "cheap", "quality", "value"],
+        2
+       ],
+       [
+        9,
+        303,
+        5,
+        ["broke", "ok", "returned", "late", "color", "cheap", "love", "not", "wow", "fast", "value", "solid", "gift", "solid", "early", "early", "bad", "quality"],
+        2
+       ],
+       [
+        9,
+        304,
+        1,
+        ["bad", "wow", "would", "color", "gift", "recommend", "great", "box", "value", "poor", "again", "quality", "not", "wow", "would", "late", "solid", "ok", "gift", "shipping", "meh", "nice", "sturdy", "recommend", "wow", "pack", "gift"],
+        2
+       ],
+       [
+        9,
+        305,
+        1,
+        ["meh", "would", "quality", "shipping", "shipping", "zip", "late", "size", "size", "box", "pack", "would", "buy", "ok"],
+        2
+       ],
+       [
+        9,
+        306,
+        4,
+        ["color", "solid", "early", "wow", "early", "value", "returned", "love", "quality", "cheap", "late", "again", "zip", "great", "late", "sturdy", "broke", "wow", "color", "nice", "pack", "shipping"],
+        2
+       ],
+       [
+        9,
+        307,
+        3,
+        ["ok", "bad", "zip", "quality", "bad", "early", "gift", "shipping"],
+        2
+       ],
+       [
+        9,
+        308,
+        4,
+        ["gift", "gift", "returned", "again", "shipping", "again", "not", "solid"],
+        2
+       ],
+       [
+        9,
+        309,
+        3,
+        ["great", "sturdy", "wow", "late", "great", "early", "meh", "buy", "value", "size", "sturdy"],
+        2
+       ],
+       [
+        9,
+        310,
+        5,
+        ["returned", "quality", "early", "broke", "gift", "cheap", "fast", "pack", "solid", "size", "wow", "quality", "early", "box", "size", "love", "late", "gift", "bad", "early"],
+        2
+       ],
+       [
+        9,
+        311,
+        4,
+        ["recommend", "nice", "bad", "meh", "color", "cheap", "color", "sturdy", "size", "nice", "great", "ok"],
+        2
+       ],
+       [
+        9,
+        312,
+        4,
+        ["poor", "zip", "not", "fast", "size", "recommend", "color", "gift", "value", "size", "not", "cheap"],
+        2
+       ],
+       [
+        9,
+        313,
+        1,
+        ["broke", "love", "recommend", "solid", "value", "early", "solid", "recommend", "ok", "quality", "size", "early", "solid", "not", "shipping"],
+        2
+       ],
+       [
+        9,
+        314,
+        4,
+        ["color", "sturdy", "returned", "sturdy", "gift", "would", "ok", "sturdy", "poor", "recommend", "shipping", "box", "cheap", "wow", "sturdy", "would", "nice", "buy", "ok", "box", "sturdy", "buy", "zip", "late"],
+        2
+       ],
+       [
+        9,
+        315,
+        1,
+        ["nice", "wow", "early", "great", "early", "sturdy", "poor", "size", "box", "sturdy"],
+        2
+       ],
+       [
+        9,
+        316,
+        5,
+        ["not", "quality", "color", "late", "meh", "ok", "early", "color", "returned", "returned", "nice", "nice", "cheap", "wow", "meh", "zip", "would", "would", "zip", "gift", "great"],
+        2
+       ],
+       [
+        9,
+        317,
+        3,
+        ["poor", "broke", "value", "solid", "box", "recommend", "bad", "gift", "box", "love", "meh", "value", "pack", "broke", "great"],
+        2
+       ],
+       [
+        9,
+        318,
+        4,
+        ["poor", "poor", "fast", "pack", "shipping", "late", "color", "bad", "size", "poor", "nice", "sturdy", "cheap", "gift", "ok", "pack", "value", "again", "color", "gift", "buy", "great", "late", "fast", "nice", "wow"],
+        2
+       ],
+       [
+        9,
+        319,
+        5,
+        ["zip", "color", "cheap", "quality", "zip", "wow", "shipping", "again", "solid", "solid", "nice", "quality"],
+        2
+       ]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction", "probabilities"]
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "classification",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false,
+     "class_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT items.category FOR EACH items.item_id",
+    "num_context_examples": 8,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "8",
+      "prediction": "garden",
+      "probabilities": {
+       "garden": 0.502795,
+       "kitchen": 0.497205
+      }
+     },
+     {
+      "row_index": 1,
+      "id": "9",
+      "prediction": "garden",
+      "probabilities": {
+       "garden": 0.609086,
+       "kitchen": 0.390914
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "builtins.UserWarning",
+   "message": "Missing 3 indices in 2 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "reviews.body is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "2 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+  }
+ ]
+}

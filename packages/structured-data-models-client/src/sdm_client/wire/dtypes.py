@@ -1,0 +1,701 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import math
+from collections.abc import Iterable, Mapping
+from decimal import Decimal
+from numbers import Integral
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from sdm_client.errors import StructuredDataError
+
+JSON_SAFE_INT_MAX = 9007199254740991
+JSON_SAFE_INT_MIN = -9007199254740991
+
+# The range the wire's `int64` represents. Beyond it a value cannot be sent
+# under that dtype whatever its Python type, so the declaration and the cells
+# would disagree.
+INT64_MAX = 2**63 - 1
+INT64_MIN = -(2**63)
+
+# Ordered from narrowest to widest; anything outside this map (timestamps,
+# strings) has no numeric widening and falls back to 'string'.
+_NUMERIC_WIDTH = {
+    'bool': 0,
+    'int32': 1,
+    'int64': 2,
+    'float32': 3,
+    'float64': 4,
+}
+
+# `infer_tfm_dtype`'s answer for a column that carries no type information at
+# all, so that it contributes nothing to a widening. Distinct from every real
+# wire dtype, and never emitted into a payload.
+UNTYPED = ''
+
+# What `pandas.api.types.infer_dtype` reports for the contents of an `object`
+# column, mapped to the wire dtype that represents those values. `object` is a
+# container, not a type: classifying it by the container alone declares numbers
+# as strings, which changes what the model is asked to predict on.
+_OBJECT_CONTENT_DTYPES = {
+    'integer': 'int64',
+    'floating': 'float64',
+    'mixed-integer-float': 'float64',
+    'boolean': 'bool',
+    'date': 'timestamp[us]',
+    'datetime': 'timestamp[us]',
+    'datetime64': 'timestamp[us]',
+}
+
+
+def _holds_only_scalars(dtype: Any) -> bool:
+    r"""Whether a column of ``dtype`` cannot contain a sequence.
+
+    Asked of the dtype rather than by elimination: ``is_object_dtype`` alone
+    would call an Arrow-backed list column scalar, and that is what
+    ``pd.read_parquet(dtype_backend='pyarrow')`` gives for one.
+    """
+    arrow_type = getattr(dtype, 'pyarrow_dtype', None)
+    if arrow_type is not None:
+        return _arrow_holds_only_scalars(arrow_type)
+    return bool(
+        pd.api.types.is_numeric_dtype(dtype)
+        or pd.api.types.is_bool_dtype(dtype)
+        or pd.api.types.is_datetime64_any_dtype(dtype)
+        or pd.api.types.is_timedelta64_dtype(dtype)
+        or isinstance(dtype, pd.StringDtype)
+        or dtype == 'str'
+    )
+
+
+def _arrow_holds_only_scalars(arrow_type: Any) -> bool:
+    r"""The same question of an Arrow type, through its wrappers.
+
+    Answered by naming what is *safe to skip* rather than what must be walked.
+    Listing the unsafe types is how a list view, then Arrow binary, then a
+    binary view each got through in turn. Every new Arrow type defaulted to
+    the fast path, and the fast path is the one that can be wrong. This way an
+    unfamiliar type is walked: slower, and correct.
+
+    Types that wrap another, including dictionaries, run-end encodings, and
+    extensions, are unwrapped first because a dictionary of lists is still a
+    column of lists.
+    """
+    import pyarrow as pa
+
+    while True:
+        if isinstance(arrow_type, pa.BaseExtensionType):
+            arrow_type = arrow_type.storage_type
+            continue
+        if pa.types.is_dictionary(arrow_type) or pa.types.is_run_end_encoded(
+            arrow_type
+        ):
+            arrow_type = arrow_type.value_type
+            continue
+        break
+
+    # Each of these gives pandas a scalar cell: a number, a `str`, a
+    # `Timestamp`, a `timedelta`, `None`. Two are deliberately absent. Binary,
+    # because pandas hands those back as `bytes`. And `month_day_nano_interval`,
+    # because its cell is a `MonthDayNano` (a NamedTuple and thus a `tuple`),
+    # which the cell rule refuses, correctly: it has no scalar form on the wire.
+    checks = (
+        'is_integer',
+        'is_floating',
+        'is_decimal',
+        'is_boolean',
+        'is_string',
+        'is_large_string',
+        'is_string_view',
+        'is_date',
+        'is_time',
+        'is_timestamp',
+        'is_duration',
+        'is_null',
+    )
+    return any(
+        getattr(pa.types, name)(arrow_type)
+        for name in checks
+        if hasattr(pa.types, name)
+    )
+
+
+def require_scalar_cells(series: pd.Series, described: str) -> None:
+    r"""Refuse a column whose cells are lists or mappings.
+
+    The contract carries a `stringlist` dtype, and says what it is for: array
+    cells exist "so that the stringlist dtype can carry JSON arrays **without
+    permitting array-valued prediction scalars**": temporal link prediction
+    labels, which no model reachable from here serves.
+
+    Nothing in this client sends one. `pandas.api.types.infer_dtype` reports a
+    list column as `mixed`, which falls through to `string`. `serialize_cell`
+    ends in `str(value)`. A column of lists used to travel as the *repr* of
+    a Python list, `"['a', 'b']"`, as an ordinary category. That is silent, and
+    the model is asked about text that was never in the data.
+
+    Raised here rather than only where a schema is built, because a value can
+    reach the wire without one: the rows being scored are not part of the
+    schema, and a caller may supply a schema of their own.
+
+    A warehouse `binary` column arrives as one `bytes` per row. It is refused
+    for having no cell form on the wire, which is not the mistake a nested
+    column is, so it is told apart.
+    """
+    # Skipped only for a dtype that cannot hold a sequence, which is most of
+    # them on the hot path for every table in every request. Asked the other way
+    # round on purpose: `is_object_dtype` alone would let an Arrow-backed list
+    # column through, and that is what `pd.read_parquet(dtype_backend='pyarrow')`
+    # gives for one.
+    if _holds_only_scalars(series.dtype):
+        return
+    for value in series:
+        if not is_container(value):
+            continue
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            raise StructuredDataError(
+                f'{described} holds raw bytes ({type(value).__name__}), and '
+                f'the contract has no cell that carries them. It is already '
+                f'one value per row, so what it needs is a reading rather '
+                f'than a flattening: decode the column to text, or leave it '
+                f'out of the schema',
+                code='UNSUPPORTED_REQUEST',
+            )
+        shape = 'a mapping' if isinstance(value, Mapping) else 'a container'
+        raise StructuredDataError(
+            f'{described} holds {shape} ({type(value).__name__}), and a '
+            f'nested column is not something this client can send. '
+            f'Multi-label targets are not supported by these models; for a '
+            f'feature, give one value per row',
+            code='UNSUPPORTED_REQUEST',
+        )
+
+
+def is_container(value: Any) -> bool:
+    r"""Whether ``value`` holds other values rather than being one.
+
+    Asked as a property, not as a list of types. Enumerating them is how a
+    tuple, then a mapping, then a `range`, then a nested Series each turned out
+    to be missing. Every one of them would have been written by
+    :func:`serialize_cell`'s `str()` fallback as its *repr*: `"[1, 2]"`,
+    `"{'a': 1}"`, `"range(0, 2)"`.
+
+    A `str` is iterable and is exactly what a text column holds, so it is the
+    one exception. Legitimate scalar values, including numbers, `Decimal`,
+    `UUID`, and timestamps, are not iterable.
+    """
+    if isinstance(value, str):
+        return False
+    return isinstance(value, (Iterable, Mapping, bytes, memoryview))
+
+
+def infer_tfm_dtype(series: pd.Series) -> str:
+    r"""The wire dtype that represents ``series``' values.
+
+    An ``object`` column is classified by what it holds, not by the fact that
+    it is ``object``: ``pd.read_sql`` over an all-null integer column, a frame
+    built from records, and a column that has been through ``fillna`` are all
+    ``object`` while holding perfectly ordinary numbers.
+
+    An ``object`` column with no non-null values is reported as
+    :data:`UNTYPED` rather than guessed at, so that a frame which happens to be
+    missing a feature entirely cannot re-type the same column in another frame.
+
+    Every integer width is reported as ``int64``, narrow ones included. The
+    two model paths used to disagree here: one reported the true width and the
+    other always reported ``int64``. Identical data was described two
+    ways. The server decodes both through ``int()`` and cannot tell them
+    apart, so the choice is about which description to standardize on, and
+    ``int64`` is the one that is never wrong: every narrower value fits it,
+    while the reverse is not true of a column that is widened after its dtype
+    is taken.
+
+    Being consistent matters more than being narrow. The server requires a
+    task's declared target dtype to equal the schema's dtype for that column
+    exactly, and answers 422 when they differ, so a second rule anywhere is a
+    rejected request rather than a cosmetic difference.
+    """
+    dtype = series.dtype
+    if pd.api.types.is_bool_dtype(dtype):
+        return 'bool'
+    if pd.api.types.is_datetime64_any_dtype(dtype):
+        return 'timestamp[us]'
+    if pd.api.types.is_integer_dtype(dtype):
+        return _whole_numbers_dtype(series, dtype)
+    if pd.api.types.is_float_dtype(dtype):
+        return 'float64' if dtype.itemsize > 4 else 'float32'
+    decimal_type = arrow_decimal_type(dtype)
+    if decimal_type is not None:
+        return _decimal_dtype(series, decimal_type)
+    if pd.api.types.is_object_dtype(dtype):
+        content = pd.api.types.infer_dtype(series, skipna=True)
+        if content == 'empty':
+            return UNTYPED
+        if content == 'decimal':
+            return _decimal_dtype(series)
+        if content == 'integer':
+            return _whole_numbers_dtype(series, dtype)
+        return _OBJECT_CONTENT_DTYPES.get(content, 'string')
+    return 'string'
+
+
+#: Digits an int64 always holds. 18 nines is 999999999999999999, below
+#: INT64_MAX; the 19th digit is where it starts depending on the value.
+_INT64_SAFE_PRECISION = 18
+
+
+def arrow_decimal_type(dtype: Any) -> Any | None:
+    r"""``dtype``'s Arrow decimal type, or ``None`` if it is not one.
+
+    A warehouse ``DECIMAL`` reaches us two ways. Read through pandas it is an
+    ``object`` column of :class:`~decimal.Decimal`. Read through Arrow, which
+    the connectors now prefer because it keeps a wide integer exact, it is an
+    ``ArrowDtype``, which satisfies none of the pandas dtype
+    predicates and so used to be announced as ``string``. An id column
+    announced as a string stops being an id to the model.
+
+    Read off the dtype rather than by importing pyarrow: this package depends
+    on pandas and numpy only, and a client should not gain a build dependency
+    to name a column.
+    """
+    arrow_type = getattr(dtype, 'pyarrow_dtype', None)
+    if arrow_type is None or not str(arrow_type).startswith('decimal'):
+        return None
+    if not isinstance(getattr(arrow_type, 'scale', None), int):
+        return None
+    return arrow_type
+
+
+def _whole_numbers_dtype(series: pd.Series, dtype: Any) -> str:
+    r"""Use ``int64`` for fitting whole numbers and ``string`` otherwise.
+
+    The rule that a whole number too wide for an ``int64`` travels as its
+    digits was applied to a decimal column and not to the integer column
+    beside it. A ``uint64`` or a Python ``int`` past the range was announced as
+    ``int64``, a dtype the values provably cannot hold, and the request
+    failed at serialization instead of being described correctly here.
+
+    Only the two that can exceed are read. Every signed numpy width fits an
+    ``int64`` by construction, and that is the hot path.
+    """
+    if not _may_hold_more_than_an_int64(dtype):
+        return 'int64'
+    for value in series:
+        if _is_missing(value):
+            continue
+        try:
+            if not INT64_MIN <= int(value) <= INT64_MAX:
+                return 'string'
+        except (TypeError, ValueError, OverflowError):
+            return 'string'
+    return 'int64'
+
+
+def _may_hold_more_than_an_int64(dtype: Any) -> bool:
+    """Whether a column of ``dtype`` can carry a value an ``int64`` cannot."""
+    if pd.api.types.is_object_dtype(dtype):
+        return True
+    return 'uint64' in str(dtype).lower()
+
+
+def _decimal_dtype(series: pd.Series, arrow_type: Any | None = None) -> str:
+    r"""``int64`` for a whole-number ``Decimal`` column, ``float64`` otherwise.
+
+    ``DECIMAL`` and ``NUMBER`` are how a warehouse spells an exact number, and
+    a driver hands them back as ``Decimal`` objects. Calling the column
+    ``float64`` because that is what floats are made of loses every value past
+    2**53, which includes most warehouse ids. A column whose values are whole
+    is reported as the integer it is, and travels under the rule that keeps
+    those exact.
+
+    A whole number too wide even for ``int64`` travels as ``string``, which
+    keeps the digits exactly and is what the relational encoder does with the
+    same input. Anything else is a ``float64``, and :func:`serialize_cell`
+    refuses the values that cannot survive one.
+    """
+    if arrow_type is not None:
+        # The declared type answers both questions without reading a cell: a
+        # scale above zero cannot be whole, and 18 digits always fit int64.
+        # Only an ambiguous precision has to look at the values.
+        if arrow_type.scale > 0:
+            return 'float64'
+        if arrow_type.precision <= _INT64_SAFE_PRECISION:
+            return 'int64'
+
+    integral = True
+    for value in series:
+        if _is_missing(value):
+            continue
+        if not isinstance(value, Decimal):
+            return 'float64'
+        if not value.is_finite():
+            return 'float64'
+        # `as_tuple().exponent` and `adjusted()` answer "is it whole" and "how
+        # many digits" off the representation, so a 400-digit value never has
+        # to be materialised as an int just to be measured.
+        if value.as_tuple().exponent < 0 and value != value.to_integral_value():
+            return 'float64'
+        if value.adjusted() >= _INT64_SAFE_PRECISION and not (
+            INT64_MIN <= value <= INT64_MAX
+        ):
+            integral = False
+    return 'int64' if integral else 'string'
+
+
+def widen_tfm_dtype(dtypes: Iterable[str]) -> str:
+    r"""The narrowest wire dtype that can hold every one of ``dtypes``.
+
+    A column typed differently in two frames must travel under a dtype that
+    represents both, otherwise the values of one frame are coerced to the other
+    frame's dtype and silently corrupted.
+
+    :data:`UNTYPED` candidates are dropped: a column that carries no type
+    information cannot make the union any wider, and letting it widen the union
+    to ``'string'`` would re-type the other frame's real values.
+    """
+    candidates = [dtype for dtype in dict.fromkeys(dtypes) if dtype]
+    if not candidates:
+        return 'string'
+    if len(candidates) == 1:
+        return candidates[0]
+    if any(dtype not in _NUMERIC_WIDTH for dtype in candidates):
+        return 'string'
+    widest = max(candidates, key=_NUMERIC_WIDTH.__getitem__)
+    if widest == 'float32' and 'int64' in candidates:
+        return 'float64'
+    return widest
+
+
+#: Deep enough for any real inference mapping, shallow enough that the walk
+#: below cannot exhaust the interpreter stack before reporting.
+_MAX_JSON_DEPTH = 100
+
+
+def _refuse_inexact_integer(value: Any) -> None:
+    r"""Refuse an integer a float64 JSON reader would not read back exactly.
+
+    Asked by round trip rather than against the safe-integer bound. Every
+    integer up to that bound is representable, but so are plenty above it:
+    ``2 ** 53`` is exact and only the odd numbers past it are not. Refusing on
+    the bound alone would reject values that travel perfectly well.
+    """
+    if not isinstance(value, Integral) or isinstance(value, bool):
+        return
+    number = int(value)
+    try:
+        if int(float(number)) == number:
+            return
+    except (OverflowError, ValueError):
+        pass
+    raise StructuredDataError(
+        f'value {number} cannot be sent as a JSON number without losing '
+        f'precision, since a float64 does not hold it exactly; pass it as a '
+        f'string if the model accepts one',
+        code='INVALID_REQUEST',
+    )
+
+
+def json_ready(
+    value: Any, _depth: int = 0, _seen: frozenset[int] = frozenset()
+) -> Any:
+    r"""``value`` with numpy scalars replaced by their Python equivalents.
+
+    Anything a caller reads out of their own frame is a numpy scalar, and the
+    JSON encoder has no rule for one. Thus,
+    ``inference={'seed': df['seed'][0]}``
+    used to die inside ``requests`` as a ``TypeError`` naming neither the key
+    nor this client. Applied to the small hand-written parts of a payload;
+    table cells go through :func:`serialize_cell`, which types them properly.
+
+    An integer too large for a float64 to hold exactly is refused rather than
+    sent. A table column has a declared type and can travel as a string, but
+    these keys have whatever meaning the model gives them, so a string may not
+    be what the far side reads. Refusing names the value at the call site;
+    sending it means a reader on a float64 JSON stack gets a different number
+    than the caller passed.
+    """
+    if isinstance(value, np.generic):
+        value = value.item()
+    _refuse_inexact_integer(value)
+    if id(value) in _seen:
+        raise StructuredDataError(
+            'this value refers back to itself, so it cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        )
+    if _depth > _MAX_JSON_DEPTH:
+        # Reached before the interpreter's own limit, so a nested or cyclic
+        # mapping is named here rather than escaping the payload build as a
+        # bare RecursionError, which the transport's guard never sees.
+        raise StructuredDataError(
+            f'this value nests more than {_MAX_JSON_DEPTH} levels deep, or '
+            f'refers back to itself, so it cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        )
+    if isinstance(value, Mapping):
+        nested = _seen | {id(value)}
+        return {
+            key: json_ready(item, _depth + 1, nested)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        nested = _seen | {id(value)}
+        return [json_ready(item, _depth + 1, nested) for item in value]
+    return value
+
+
+def _is_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    try:
+        result = pd.isna(value)
+    except (TypeError, ValueError):
+        return False
+    if isinstance(result, (bool, np.bool_)):
+        return bool(result)
+    return False  # Array-likes (lists, ndarrays) are values, not nulls.
+
+
+def _require_finite(value: Any) -> None:
+    r"""``inf`` has no JSON literal; emitting it produces invalid JSON.
+
+    Asked of the value rather than of its type: a ``Decimal('Infinity')`` from
+    a warehouse is as unsendable as a ``float('inf')``, and testing only for
+    ``float`` let it through to fail later inside the JSON encoder, as a
+    transport error that named neither the column nor the value.
+    """
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise StructuredDataError(
+                f'value {value!r} is not JSON-representable; replace '
+                'non-finite numbers with a finite value or a null',
+                code='INVALID_REQUEST',
+            )
+        return
+    if isinstance(value, (float, np.floating)) and not math.isfinite(value):
+        raise StructuredDataError(
+            f'value {value!r} is not JSON-representable; replace non-finite '
+            'numbers with a finite value or a null',
+            code='INVALID_REQUEST',
+        )
+
+
+def _exceeds_float64(value: Any) -> bool:
+    r"""Whether ``value`` carries precision a ``float64`` would drop.
+
+    Two shapes reach the float branch already carrying more than a float64
+    holds. A numeric *string* is exact text, and `float()` rounds it without
+    complaint. A `longdouble` is wider than a `float64` on the platforms that
+    have one, so the same digits are lost on the way down. Both are silent,
+    which is the one thing the wire rules exist to prevent.
+    """
+    if isinstance(value, str):
+        try:
+            exact = Decimal(value)
+        except (ArithmeticError, ValueError):
+            return False
+        if not exact.is_finite():
+            return False
+        return Decimal(repr(float(exact))) != exact
+    if isinstance(value, np.floating) and value.dtype.itemsize > 8:
+        if not np.isfinite(value):
+            return False
+        return np.longdouble(float(value)) != value
+    return False
+
+
+def _integral_value(value: Any) -> int | None:
+    r"""``value`` as an ``int`` when it is a whole number, else ``None``.
+
+    Asked of the value, not of its type. ``numbers.Integral`` covers ``int``
+    and ``np.integer`` but not ``Decimal``, and a numpy integer compares equal
+    to the ``float`` it rounds to. A type test and an ``!=`` each let a
+    different unrepresentable value through the guard below.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, Integral):
+        return int(value)
+    if (
+        isinstance(value, Decimal)
+        and value.is_finite()
+        and value == value.to_integral_value()
+    ):
+        return int(value)
+    return None
+
+
+def serialize_cell(value: Any, dtype: str) -> Any:
+    if _is_missing(value):
+        return None
+    if dtype == 'timestamp[us]':
+        timestamp = pd.Timestamp(value)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.tz_localize('UTC')
+        else:
+            timestamp = timestamp.tz_convert('UTC')
+        return timestamp.isoformat(timespec='microseconds').replace(
+            '+00:00', 'Z'
+        )
+    if dtype in ('int64', 'int32'):
+        _require_finite(value)
+        integer_value = int(value)
+        if not isinstance(value, Integral) and integer_value != value:
+            raise StructuredDataError(
+                f'value {value!r} cannot be sent as {dtype} without losing its '
+                'fractional part',
+                code='INVALID_REQUEST',
+            )
+        if not INT64_MIN <= integer_value <= INT64_MAX:
+            raise StructuredDataError(
+                f'value {value!r} is outside the range {dtype} represents '
+                f'({INT64_MIN} to {INT64_MAX}); send the column as strings',
+                code='INVALID_REQUEST',
+            )
+        if (
+            integer_value > JSON_SAFE_INT_MAX
+            or integer_value < JSON_SAFE_INT_MIN
+        ):
+            return str(integer_value)
+        return integer_value
+    if dtype in ('float64', 'float32'):
+        _require_finite(value)
+        try:
+            number = float(value)
+        except OverflowError:
+            # A Python int has no width, so `float()` refuses outright rather
+            # than returning `inf` the way a wide Decimal does. Same fault,
+            # different exception, and it must not escape raw.
+            raise StructuredDataError(
+                f'value {value!r} is outside the range {dtype} represents; '
+                'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            ) from None
+        if not math.isfinite(number):
+            # A finite value whose float conversion is not: too large for
+            # the dtype to hold at all, rather than merely rounded by it.
+            raise StructuredDataError(
+                f'value {value!r} is outside the range {dtype} represents; '
+                'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            )
+        if _exceeds_float64(value):
+            raise StructuredDataError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision; send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            )
+        whole = _integral_value(value)
+        if (
+            whole is None
+            and isinstance(value, Decimal)
+            and abs(value) > JSON_SAFE_INT_MAX
+        ):
+            # Past 2**53 a float64 cannot even hold the integer part, so the
+            # fractional value it becomes is not a rounding of the original in
+            # any useful sense. Below that the loss is ordinary float
+            # behaviour, which any float column already has.
+            raise StructuredDataError(
+                f'value {value!r} is too large for {dtype} to represent; '
+                'send the column as strings to keep it exact',
+                code='INVALID_REQUEST',
+            )
+        if whole is not None and int(number) != whole:
+            raise StructuredDataError(
+                f'value {value!r} cannot be sent as {dtype} without losing '
+                f'precision, because it is outside the range a {dtype} '
+                'represents exactly; give the column the same integer dtype '
+                'in every frame, or convert it to strings',
+                code='INVALID_REQUEST',
+            )
+        return number
+    if dtype == 'bool':
+        return bool(value)
+    if isinstance(value, Decimal):
+        # `str` switches to scientific notation once the exponent is positive,
+        # so a whole number too wide for int64 (the reason this column is a
+        # string at all) would travel as '1E+400' rather than its digits.
+        return format(value, 'f')
+    return str(value)
+
+
+def serialize_column(series: pd.Series, dtype: str) -> list[Any]:
+    # Every table reaches the wire through here, including the rows being
+    # scored, which no schema describes. A list cell would otherwise be written
+    # by `serialize_cell`'s `str(value)` fallback as the repr of a Python list.
+    require_scalar_cells(series, f'column {series.name!r}')
+    return [serialize_cell(value, dtype) for value in series.tolist()]
+
+
+_TRUE = frozenset({'true', 't', '1'})
+_FALSE = frozenset({'false', 'f', '0'})
+
+
+def _as_bool(value: Any) -> Any:
+    """A declared bool read back from what the wire spells it as.
+
+    `bool('false')` is True, so a string is matched against the spellings
+    rather than cast. Anything else is returned untouched, as everywhere else
+    here.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE:
+            return True
+        if text in _FALSE:
+            return False
+        return value
+    if isinstance(value, Integral) and value in (0, 1):
+        return bool(value)
+    return value
+
+
+def as_declared(value: Any, dtype: str | None) -> Any:
+    r"""``value`` read back as ``dtype``, or unchanged if it cannot be.
+
+    The wire is text in places where the caller had a number: an integer wider
+    than a double travels as a base-10 string by contract, and one endpoint
+    renders a class label as a string where the other sends the number. Both
+    are legal, and both leave the caller holding a different type depending on
+    which model answered. Thus, `result.prediction == 0` counted nothing on one
+    of them, silently and in the direction of "this class never occurs".
+
+    Reading it back is a cast, not a parse: anything that does not convert
+    exactly is returned untouched rather than guessed at.
+
+    A bool is an int in Python and is not a number the caller wrote, so it is
+    excluded from the numeric branches. From text, `int` accepts only an exact
+    integer literal, so reaching the conversion means it was one. From a
+    number,
+    `int(1.9)` does not raise and a value that is not whole is not this integer
+    under another name, which is true of a float, a numpy float and a `Decimal`
+    alike and so is asked of the value rather than of its type.
+
+    A declared `bool` is read from the spellings the wire actually uses,
+    because
+    `bool('false')` is True and would invert the answer.
+    """
+    if value is None or dtype is None:
+        return value
+    if dtype.startswith('bool'):
+        return _as_bool(value)
+    if isinstance(value, bool):
+        return value
+    try:
+        if dtype.startswith('int'):
+            read = int(value)
+            if isinstance(value, str):
+                return read
+            return read if read == value else value
+        if dtype.startswith('float'):
+            return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return value
+    return value

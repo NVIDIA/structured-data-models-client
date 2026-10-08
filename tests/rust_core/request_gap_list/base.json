@@ -1,0 +1,1577 @@
+{
+ "commit": "484ff3516dc9382ee6e2f1ee0abae350487a8b98",
+ "request_coverage_gaps": {
+  "packages/sdm-client/src/sdm_client/adapters/relational.py": [
+   {
+    "branch": [
+     90,
+     96
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given without requested_inference: the request then holds an empty requested_inference (request.py:529), so _keys_the_caller_set is handed None (adapters/relational.py:165-167), which is neither a mapping nor a dataclass instance. PredictiveQuery.materialize always records what was asked. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_request_built_from_envelopes_without_what_was_asked."
+   },
+   {
+    "branch": [
+     134,
+     135
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope without an inference section: the engine writes one into every envelope (payload.py:349-353). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (an-envelope-without-inference)."
+   },
+   {
+    "branch": [
+     157,
+     158
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope without an inference section: the engine writes one into every envelope (payload.py:349-353). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (an-envelope-without-inference)."
+   },
+   {
+    "branch": [
+     160,
+     161
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope whose inference section has no inference_config: the engine always writes one (payload.py:349-353). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (an-envelope-without-an-inference-config)."
+   },
+   {
+    "branch": [
+     193,
+     197
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given several envelopes. A materialize gathers one batch: sdm_client never calls KumoRelational.batch_mode (rfm.py:755), so _resolve_batch_size takes every prediction example (rfm.py:1223-1226); and fit() refuses a ranking or forecast asked in parts before session_plan (client.py:618-620). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (a-fit-of-two-batches)."
+   },
+   {
+    "branch": [
+     213,
+     215
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope without a context: the engine always writes one (payload.py:314). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (a-fit-of-an-envelope-without-context)."
+   },
+   {
+    "branch": [
+     394,
+     395
+    ],
+    "reason": "Defensive: the limits always carry classes_max, so the ceiling is never empty."
+   },
+   {
+    "branch": [
+     558,
+     565
+    ],
+    "reason": "Reachable only when a send fails without the endpoint's answer (a dropped connection, a body that is not JSON) and the failure's text carries the endpoint's wording for a refusal, so the error reworded is a StructuredDataError and not a NimRequestError. The fixture flows answer every request with a status and a body, and the transcripts record the endpoint's own answers, so neither can. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (test_a_failed_send_that_reads_as_a_refusal)."
+   },
+   {
+    "branch": [
+     571,
+     574
+    ],
+    "reason": "Unreachable from sdm_client: only a NimRequestError carries status_code (errors.py:172), and _reworded rebuilds a NimRequestError on the branch before (adapters/relational.py:558-564); every other error it is given is a StructuredDataError from the transport, which has none."
+   },
+   {
+    "branch": [
+     571,
+     575
+    ],
+    "reason": "Reachable only when a send fails without the endpoint's answer (a dropped connection, a body that is not JSON) and the failure's text carries the endpoint's wording for a refusal, so the error reworded is a StructuredDataError and not a NimRequestError. The fixture flows answer every request with a status and a body, and the transcripts record the endpoint's own answers, so neither can. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (test_a_failed_send_that_reads_as_a_refusal)."
+   },
+   {
+    "branch": [
+     625,
+     627
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope whose inference names no run mode: the engine always writes run_mode (payload.py:350). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (an-explanation-asked-of-an-envelope-without-a-run-mode). coverage.py records that call as the arc 625->628, into the expression the return at 627 spans, so the branch stays listed."
+   },
+   {
+    "branch": [
+     652,
+     653
+    ],
+    "reason": "Defensive: the engine always names the target column TARGET; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     671,
+     672
+    ],
+    "reason": "Defensive: the engine always writes the target into the context instance table; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (a-fit-of-an-envelope-without-context)."
+   },
+   {
+    "branch": [
+     687,
+     688
+    ],
+    "reason": "Defensive: the engine always writes the target into the context instance table; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     709,
+     710
+    ],
+    "reason": "Defensive: the engine always writes each related table schema as a mapping; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     737,
+     738
+    ],
+    "reason": "Defensive: the engine always writes an entity reference and row indices; forecasts are decomposed before sending; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     746,
+     747
+    ],
+    "reason": "Defensive: the engine always writes an entity reference and row indices; forecasts are decomposed before sending; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     766,
+     767
+    ],
+    "reason": "Unreachable from sdm_client: every item the adapter attributes was read from a response by PredictionItem.from_dict (sdm_api/generated/tfm_api.py), which refuses an item whose row_index is missing or null (_require_int, ResponseContractError) before any adapter sees it, so index is never None here."
+   },
+   {
+    "branch": [
+     780,
+     781
+    ],
+    "reason": "Defensive: the engine always writes an entity reference and row indices; forecasts are decomposed before sending; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     781,
+     782
+    ],
+    "reason": "Defensive: the engine always writes an entity reference and row indices; forecasts are decomposed before sending; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     781,
+     794
+    ],
+    "reason": "Defensive: the engine always writes an entity reference and row indices; forecasts are decomposed before sending; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     805,
+     820
+    ],
+    "reason": "Defensive: the engine always writes an entity reference and row indices; forecasts are decomposed before sending; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     851,
+     865
+    ],
+    "reason": "Defensive: the engine always declares the entity reference relationship with one column; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     852,
+     853
+    ],
+    "reason": "Defensive: the engine always declares the entity reference relationship with one column; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     856,
+     857
+    ],
+    "reason": "Defensive: the engine always declares the entity reference relationship with one column; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/adapters/tabular.py": [
+   {
+    "branch": [
+     344,
+     345
+    ],
+    "reason": "Unreachable from sdm_client: declared is None only for a session that pinned no instance table columns (_declared_by, adapters/tabular.py:370-383), and FittedModel.predict always passes the envelope fit() pinned (client.py:171-173, the payload of client.py:620 less its context), whose schema the tabular adapter writes with every column and its dtype (adapters/tabular.py:_envelope)."
+   },
+   {
+    "branch": [
+     345,
+     346
+    ],
+    "reason": "Unreachable from sdm_client: declared is None only for a session that pinned no instance table columns (_declared_by, adapters/tabular.py:370-383), and FittedModel.predict always passes the envelope fit() pinned (client.py:171-173, the payload of client.py:620 less its context), whose schema the tabular adapter writes with every column and its dtype (adapters/tabular.py:_envelope)."
+   },
+   {
+    "branch": [
+     345,
+     347
+    ],
+    "reason": "Unreachable from sdm_client: declared is None only for a session that pinned no instance table columns (_declared_by, adapters/tabular.py:370-383), and FittedModel.predict always passes the envelope fit() pinned (client.py:171-173, the payload of client.py:620 less its context), whose schema the tabular adapter writes with every column and its dtype (adapters/tabular.py:_envelope)."
+   },
+   {
+    "branch": [
+     372,
+     373
+    ],
+    "reason": "Defensive: a tabular session always pins a schema with instance table columns."
+   },
+   {
+    "branch": [
+     377,
+     378
+    ],
+    "reason": "Defensive: a tabular session always pins a schema with instance table columns."
+   },
+   {
+    "branch": [
+     471,
+     472
+    ],
+    "reason": "Defensive: the tabular envelope always carries a predict table and row indices."
+   },
+   {
+    "branch": [
+     475,
+     476
+    ],
+    "reason": "Defensive: the tabular envelope always carries a predict table and row indices."
+   },
+   {
+    "branch": [
+     504,
+     505
+    ],
+    "reason": "Unreachable from sdm_client: every item the adapter attributes was read from a response by PredictionItem.from_dict (sdm_api/generated/tfm_api.py), which refuses an item whose row_index is missing or null (_require_int, ResponseContractError) before any adapter sees it, so index is never None here."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/client.py": [
+   {
+    "branch": [
+     70,
+     74
+    ],
+    "reason": "Defensive: MODELS names only the tabular and relational models, so no other id reaches here."
+   },
+   {
+    "branch": [
+     694,
+     695
+    ],
+    "reason": "Unreachable from sdm_client: _prepare refuses a str, and bytes naming anything, at _require_output_names (client.py:677, 1192-1209), and empty bytes as naming no field (client.py:689-693), before this check."
+   },
+   {
+    "branch": [
+     794,
+     798
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given envelopes with no rows to score. A materialize always has something to score: it refuses indices naming no entity (materializers/relational.py:128-133), and the engine writes a predict row for each, so predict() sends it (client.py:406-407). Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (an-envelope-with-nothing-to-score)."
+   },
+   {
+    "branch": [
+     800,
+     801
+    ],
+    "reason": "Unreachable from sdm_client through any call: an empty answer is built only for a request with nothing to score (client.py:155-156, 406-407), a gathered one returns at client.py:794-798, and a request built from frames always has an entity table, since Request(...) defaults it to 'instance' (request.py:323) and refuses None as a table name. Only assigning None to request.entity_table by hand reaches it."
+   },
+   {
+    "branch": [
+     887,
+     888
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope whose schema describes no instance_table: SDMClient.fit pins it, and any FittedModel.predict, relational or tabular, then reads no key dtypes off it (_pinned_dtypes). Every envelope the engine or the tabular adapter writes describes its instance table. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_fitted_model_asked_of_an_envelope_describing_no_instance_table."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/materializers/relational.py": [
+   {
+    "branch": [
+     203,
+     204
+    ],
+    "reason": "Defensive: the engine task always has a task type and materialize_task always gathers a part."
+   },
+   {
+    "branch": [
+     233,
+     234
+    ],
+    "reason": "Defensive: the engine task always has a task type and materialize_task always gathers a part."
+   },
+   {
+    "branch": [
+     353,
+     354
+    ],
+    "reason": "Reachable only through the Schema(tables, relationships, source=...) constructor, which leaves _engine_tables unset (schema.py:865); Schema.from_source always sets it (schema.py:1231), and no corpus vocabulary calls the constructor. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (test_a_source_schema_built_by_its_constructor)."
+   },
+   {
+    "branch": [
+     389,
+     390
+    ],
+    "reason": "Unreachable from sdm_client: every assignment or append of relationships settles them (schema.py:926-950): each must point at its target table's primary key, and _each_link_once keeps one of each, so two links share a source table, column and target table only if they share the target column too, and are one link."
+   },
+   {
+    "branch": [
+     474,
+     477
+    ],
+    "reason": "Unreachable from sdm_client: a TypeError is a call-signature error only when raised at a call this module makes (_is_call_signature_error, materializers/relational.py:493-503), and the client calls the engine only with keyword arguments it names itself (materializers/relational.py:185-229)."
+   },
+   {
+    "branch": [
+     497,
+     503
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a TypeError raised in this module, and sdm_client calls the engine correctly."
+   },
+   {
+    "branch": [
+     501,
+     502
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a TypeError raised in this module, and sdm_client calls the engine correctly."
+   },
+   {
+    "branch": [
+     600,
+     601
+    ],
+    "reason": "Defensive: the payload is always a dict with instance rows, under the caps already checked."
+   },
+   {
+    "branch": [
+     604,
+     605
+    ],
+    "reason": "Defensive: the payload is always a dict with instance rows, under the caps already checked."
+   },
+   {
+    "branch": [
+     612,
+     613
+    ],
+    "reason": "Defensive: the payload is always a dict with instance rows, under the caps already checked."
+   },
+   {
+    "branch": [
+     619,
+     620
+    ],
+    "reason": "Defensive: the payload is always a dict with instance rows, under the caps already checked."
+   },
+   {
+    "branch": [
+     814,
+     815
+    ],
+    "reason": "Defensive: _to_time reaches this only for a column of text (_holds_text, materializers/relational.py:731, 768-773) written in one date shape, and shapes_written counts a shape only where one of its values reads as a date (core/dates.py:79-84); reads_as_a_date of the whole column tries the same readings value by value (format='mixed', core/dates.py:107-122), so that value reads there too."
+   },
+   {
+    "branch": [
+     1205,
+     1206
+    ],
+    "reason": "Defensive: the engine always writes context and predict halves with entity references."
+   },
+   {
+    "branch": [
+     1213,
+     1214
+    ],
+    "reason": "Defensive: the engine always writes context and predict halves with entity references."
+   },
+   {
+    "branch": [
+     1255,
+     1256
+    ],
+    "reason": "Defensive: the engine always writes columns and rows as lists."
+   },
+   {
+    "branch": [
+     1273,
+     1274
+    ],
+    "reason": "Defensive: the engine always writes an entity reference, and an anchor for a window."
+   },
+   {
+    "branch": [
+     1290,
+     1291
+    ],
+    "reason": "Defensive: the engine always writes instance ids, entity references and anchors."
+   },
+   {
+    "branch": [
+     1292,
+     1293
+    ],
+    "reason": "Defensive: the engine always writes instance ids, entity references and anchors."
+   },
+   {
+    "branch": [
+     1308,
+     1309
+    ],
+    "reason": "Defensive: the engine always writes instance ids in every table."
+   },
+   {
+    "branch": [
+     1310,
+     1311
+    ],
+    "reason": "Defensive: the engine always writes instance ids in every table."
+   },
+   {
+    "branch": [
+     1338,
+     1336
+    ],
+    "reason": "Defensive: the engine always writes the related tables as a mapping."
+   },
+   {
+    "branch": [
+     1466,
+     1470
+    ],
+    "reason": "Reachable only by deleting a table from schema.tables, the schema's own dict, which it hands out by reference (schema.py:1238-1240); every relationship set or appended names tables the schema has (schema.py:937-950). Neither corpus vocabulary makes such an edit, and the host has none to make: Phase 9's wrapper decides whether Schema.tables stays a live dict."
+   },
+   {
+    "branch": [
+     1511,
+     1512
+    ],
+    "reason": "Defensive: the relational runtime always names the text stype as unread."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/materializers/sources.py": [
+   {
+    "branch": [
+     58,
+     59
+    ],
+    "reason": "Reachable only by a schema over a source that has not read a table it describes, two ways: the Schema(tables, relationships, source=...) constructor, whose schema has read no table yet (schema.py:865), and a table another Schema.from_source schema described put into schema.tables; Schema.from_source reads and keeps every table it describes (schema.py:1231). The fixture flows read a source only as far as its catalog, and the transcripts make no statement between calls. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_source_schema_built_by_its_constructor and tests/rust_core/test_request_beyond_the_corpus.py::test_a_table_another_source_schema_described."
+   },
+   {
+    "branch": [
+     59,
+     60
+    ],
+    "reason": "Reachable only through the Schema(tables, relationships, source=...) constructor over a semantic model, which no corpus vocabulary calls and which needs a live warehouse; Schema.from_source reads and keeps every table it describes (schema.py:1231)."
+   },
+   {
+    "branch": [
+     59,
+     63
+    ],
+    "reason": "Reachable only by a schema over a source that has not read a table it describes, two ways: the Schema(tables, relationships, source=...) constructor, whose schema has read no table yet (schema.py:865), and a table another Schema.from_source schema described put into schema.tables; Schema.from_source reads and keeps every table it describes (schema.py:1231). The fixture flows read a source only as far as its catalog, and the transcripts make no statement between calls. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_source_schema_built_by_its_constructor and tests/rust_core/test_request_beyond_the_corpus.py::test_a_table_another_source_schema_described."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/request.py": [
+   {
+    "branch": [
+     216,
+     217
+    ],
+    "reason": "Reachable only by assigning a request built from frames an entity table of None, a schema of None or a target of no name before it is sent: Request(...) names all three, a gathered request returns at the line above (it carries payloads), and no corpus vocabulary assigns a request's attributes. The tabular send then refuses schema[None]. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_request_from_frames_whose_entity_table_was_unset."
+   },
+   {
+    "branch": [
+     840,
+     841
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), called without entity_table, which reads it off the envelopes; materialize always names it (materializers/relational.py:158-169). The core's copy (sdm_request::relational::entity_table_in) is held to today's answers by its unit test; the core's own materialize always names the table too."
+   },
+   {
+    "branch": [
+     840,
+     845
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), called without entity_table, which reads it off the envelopes; materialize always names it (materializers/relational.py:158-169). The core's copy (sdm_request::relational::entity_table_in) is held to today's answers by its unit test; the core's own materialize always names the table too."
+   },
+   {
+    "branch": [
+     843,
+     840
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), called without entity_table, which reads it off the envelopes; materialize always names it (materializers/relational.py:158-169). The core's copy (sdm_request::relational::entity_table_in) is held to today's answers by its unit test; the core's own materialize always names the table too."
+   },
+   {
+    "branch": [
+     843,
+     844
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), called without entity_table, which reads it off the envelopes; materialize always names it (materializers/relational.py:158-169). The core's copy (sdm_request::relational::entity_table_in) is held to today's answers by its unit test; the core's own materialize always names the table too."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/result.py": [
+   {
+    "branch": [
+     231,
+     232
+    ],
+    "reason": "Unreachable from sdm_client: _names_its_step is set only on the answer of a forecast asked in parts (client.py:1129) or a merge of one (result.py:308), and such an answer has a row for every step: a gathered forecast scores at least one entity (materializers/relational.py:128-133), and normalize refuses an answer that leaves a row unanswered."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/wire/dtypes.py": [
+   {
+    "branch": [
+     502,
+     503
+    ],
+    "reason": "Defensive: serialize_cell refuses a value whose float is not finite before asking this (wire/dtypes.py:567-586), and text whose decimal is NaN or infinite has no finite float."
+   },
+   {
+    "branch": [
+     505,
+     506
+    ],
+    "reason": "Task 6 input, not testable on this platform: a column of numpy long doubles. On Linux x86-64 np.longdouble is 80-bit (itemsize 16), and Schema.from_data takes such a column (wire/dtypes.py:231-232 types any float over 4 bytes float64), so this is reachable there; on macOS arm64, where this phase ran, np.longdouble is float64. Arrow has no long double type, so the core cannot be given the column as typed Arrow; whether describe_frames refuses it or narrows it to float64 is a Phase 9 decision."
+   },
+   {
+    "branch": [
+     506,
+     507
+    ],
+    "reason": "Task 6 input, not testable on this platform: a column of numpy long doubles. On Linux x86-64 np.longdouble is 80-bit (itemsize 16), and Schema.from_data takes such a column (wire/dtypes.py:231-232 types any float over 4 bytes float64), so this is reachable there; on macOS arm64, where this phase ran, np.longdouble is float64. Arrow has no long double type, so the core cannot be given the column as typed Arrow; whether describe_frames refuses it or narrows it to float64 is a Phase 9 decision."
+   },
+   {
+    "branch": [
+     506,
+     508
+    ],
+    "reason": "Task 6 input, not testable on this platform: a column of numpy long doubles. On Linux x86-64 np.longdouble is 80-bit (itemsize 16), and Schema.from_data takes such a column (wire/dtypes.py:231-232 types any float over 4 bytes float64), so this is reachable there; on macOS arm64, where this phase ran, np.longdouble is float64. Arrow has no long double type, so the core cannot be given the column as typed Arrow; whether describe_frames refuses it or narrows it to float64 is a Phase 9 decision."
+   }
+  ],
+  "packages/sdm-client/src/sdm_client/wire/keys.py": [
+   {
+    "branch": [
+     66,
+     67
+    ],
+    "reason": "Defensive: the engine envelope always carries an entity reference column in lists; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     71,
+     72
+    ],
+    "reason": "Defensive: the engine envelope always carries an entity reference column in lists; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (a-fit-of-an-envelope-without-context)."
+   },
+   {
+    "branch": [
+     84,
+     85
+    ],
+    "reason": "Defensive: the engine envelope always carries an entity reference column in lists; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     89,
+     91
+    ],
+    "reason": "Defensive: the engine envelope always carries an entity reference column in lists; only Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given other envelopes, reaches it."
+   },
+   {
+    "branch": [
+     213,
+     217
+    ],
+    "reason": "Unreachable from sdm_client: both callers pass a frame holding every key column, request.py:245-260 after returning where a key column is missing from either half, and wire/keys.py:275-278 after the same check of the frame; scored_keys, which would pass none, has no caller in sdm_client."
+   },
+   {
+    "branch": [
+     240,
+     241
+    ],
+    "reason": "Defensive: the dtypes are always read before keys are taken from a frame."
+   },
+   {
+    "branch": [
+     277,
+     278
+    ],
+    "reason": "Unreachable from sdm_client: its one caller, _warn_scoring_what_was_pinned (client.py:928), passes _pinned_dtypes of the pinned envelope (client.py:157-161, 878-893), which is a mapping for every envelope either adapter writes, since both write the instance table schema's columns; scored_keys, which would pass None, has no caller in sdm_client."
+   },
+   {
+    "branch": [
+     307,
+     308
+    ],
+    "reason": "Defensive: the context half always carries keyed rows of full length."
+   },
+   {
+    "branch": [
+     312,
+     313
+    ],
+    "reason": "Defensive: the context half always carries keyed rows of full length."
+   },
+   {
+    "branch": [
+     330,
+     331
+    ],
+    "reason": "Defensive: the context half always carries keyed rows of full length."
+   },
+   {
+    "branch": [
+     352,
+     353
+    ],
+    "reason": "Defensive: the related tables always carry instance ids as lists."
+   },
+   {
+    "branch": [
+     354,
+     355
+    ],
+    "reason": "Defensive: the related tables always carry instance ids as lists."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/databricks/table.py": [
+   {
+    "branch": [
+     351,
+     352
+    ],
+    "reason": "Untestable offline: an empty Databricks table met at the gather, which needs a live warehouse; and, as for PostgreSQL, Schema.from_source refuses an empty table first, so only one emptied between the two calls reaches it."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/duckdb/table.py": [
+   {
+    "branch": [
+     169,
+     170
+    ],
+    "reason": "Unreachable from sdm_client: no DuckDB sampler counts its rows, so this is never called."
+   },
+   {
+    "branch": [
+     169,
+     172
+    ],
+    "reason": "Unreachable from sdm_client: no DuckDB sampler counts its rows, so this is never called."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/local/table.py": [
+   {
+    "branch": [
+     134,
+     135
+    ],
+    "reason": "Unreachable from sdm_client: _forget_derived_key is called only by Table._drop_derived_key when a composite key is replaced (base/table.py:445-451, from 592 and 598), and no frame table's key is ever replaced: each gather builds fresh engine tables from the frames (materializers/relational.py:364-369) and sets each key once (materializers/relational.py:372-375)."
+   },
+   {
+    "branch": [
+     134,
+     136
+    ],
+    "reason": "Unreachable from sdm_client: _forget_derived_key is called only by Table._drop_derived_key when a composite key is replaced (base/table.py:445-451, from 592 and 598), and no frame table's key is ever replaced: each gather builds fresh engine tables from the frames (materializers/relational.py:364-369) and sets each key once (materializers/relational.py:372-375)."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/postgres/table.py": [
+   {
+    "branch": [
+     501,
+     502
+    ],
+    "reason": "Reachable only when a table is emptied between Schema.from_source and the gather: from_source reads a sample of each table and refuses an empty one there (postgres/table.py:487, through base/table.py:932), and neither corpus vocabulary changes a database between calls. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py (test_a_postgres_table_emptied_after_its_schema_was_read)."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/backend/snow/table.py": [
+   {
+    "branch": [
+     456,
+     457
+    ],
+    "reason": "Untestable offline: a Snowflake table SHOW TABLES lists twice or not at all, or one emptied after Schema.from_source read it, which needs a live warehouse."
+   },
+   {
+    "branch": [
+     461,
+     462
+    ],
+    "reason": "Untestable offline: a Snowflake table SHOW TABLES lists twice or not at all, or one emptied after Schema.from_source read it, which needs a live warehouse."
+   },
+   {
+    "branch": [
+     469,
+     470
+    ],
+    "reason": "Untestable offline: a Snowflake table SHOW TABLES lists twice or not at all, or one emptied after Schema.from_source read it, which needs a live warehouse."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/base/table.py": [
+   {
+    "branch": [
+     180,
+     182
+    ],
+    "reason": "Defensive: the gather always copies a table under its schema name."
+   },
+   {
+    "branch": [
+     410,
+     411
+    ],
+    "reason": "Unreachable from sdm_client: the schema refuses a key naming a column it lacks or its time column (schema.py:575-588, Table._check_key), and a time column that is part of the key (schema.py:615-624), on every assignment; check_consistent asks again before the graph is built (materializers/relational.py:346)."
+   },
+   {
+    "branch": [
+     434,
+     435
+    ],
+    "reason": "Defensive: a derived name always starts with the derived prefix, so the collision test never holds."
+   },
+   {
+    "branch": [
+     447,
+     449
+    ],
+    "reason": "Unreachable from sdm_client: a key is replaced on an engine table only by a second assignment, and the gather assigns each key once to a fresh table (materializers/relational.py:364-375); over a source a composite key is refused by the reserved-prefix check before the graph is built."
+   },
+   {
+    "branch": [
+     449,
+     450
+    ],
+    "reason": "Unreachable from sdm_client: a key is replaced on an engine table only by a second assignment, and the gather assigns each key once to a fresh table (materializers/relational.py:364-375); over a source a composite key is refused by the reserved-prefix check before the graph is built."
+   },
+   {
+    "branch": [
+     449,
+     451
+    ],
+    "reason": "Unreachable from sdm_client: a key is replaced on an engine table only by a second assignment, and the gather assigns each key once to a fresh table (materializers/relational.py:364-375); over a source a composite key is refused by the reserved-prefix check before the graph is built."
+   },
+   {
+    "branch": [
+     473,
+     474
+    ],
+    "reason": "Unreachable from sdm_client: every SQL backend's table sets _SQL_TEXT_TYPE (backend/databricks, duckdb, postgres, snow and sqlite table.py), so a SQL composite key always folds here, and the local table folds its keys in its own _materialize_derived_key. A SQL composite key is refused only later, when the sampler is built and finds its derived column's name reserved (base/sql_sampler.py:59)."
+   },
+   {
+    "branch": [
+     495,
+     496
+    ],
+    "reason": "Unreachable from sdm_client: _sample_values is asked only of a SQL composite key's derived column (line 536), an expression column _materialize_derived_key has just added (line 488), which the table's source never holds. Such a key folds here, and its gather is refused afterwards, when the sampler is built and finds the derived column's name reserved (base/sql_sampler.py:59)."
+   },
+   {
+    "branch": [
+     497,
+     499
+    ],
+    "reason": "Unreachable from sdm_client: the derived column _sample_values is asked of was added through add_columns, which samples every expression column it adds into the expression sample (base/table.py:228-232), so it is always found there."
+   },
+   {
+    "branch": [
+     538,
+     539
+    ],
+    "reason": "Not reached from sdm_client by any route found: the folded sample is always found (lines 497-498), and every part of a composite key is a column the table read from its source, which its source sample holds, the parts having been checked against the table's columns (lines 403-408). A part that is an expression column, which no route found builds, would reach it."
+   },
+   {
+    "branch": [
+     542,
+     544
+    ],
+    "reason": "Not reached offline: the warehouse must fold the sample of a key that refuse_unfoldable_dtypes let through otherwise than pandas does, and DuckDB, the one SQL backend a recording reads offline, folds whole numbers, whole decimals, text and UUIDs as pandas does (Phase 8.5 coverage-gap verifier's probes). Whether a live warehouse does is checked by this refusal, which no live recording holds a composite key to reach."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/base/utils.py": [
+   {
+    "branch": [
+     34,
+     35
+    ],
+    "reason": "Unreachable from sdm_client: used only by graph time-series inference, which sdm_client never calls."
+   },
+   {
+    "branch": [
+     34,
+     36
+    ],
+    "reason": "Unreachable from sdm_client: used only by graph time-series inference, which sdm_client never calls."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/graph.py": [
+   {
+    "branch": [
+     471,
+     474
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client passes infer_metadata=False and verbose=False, so neither link inference nor printing runs."
+   },
+   {
+    "branch": [
+     474,
+     475
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client passes infer_metadata=False and verbose=False, so neither link inference nor printing runs."
+   },
+   {
+    "branch": [
+     2232,
+     2233
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2232,
+     2236
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2236,
+     2237
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2236,
+     2241
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2243,
+     2244
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2243,
+     2251
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2252,
+     2253
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2252,
+     2259
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2266,
+     2267
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2266,
+     2268
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client relationships name one column, so a link is never made on several."
+   },
+   {
+    "branch": [
+     2290,
+     2291
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2290,
+     2292
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2293,
+     2294
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2293,
+     2297
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2299,
+     2300
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2299,
+     2301
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2301,
+     2302
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   },
+   {
+    "branch": [
+     2301,
+     2303
+    ],
+    "reason": "Unreachable from sdm_client: only reached by a link on several columns, which sdm_client never makes."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/inference/context.py": [
+   {
+    "branch": [
+     88,
+     89
+    ],
+    "reason": "Defensive: the engine always names an entity table."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/inference/payload.py": [
+   {
+    "branch": [
+     180,
+     181
+    ],
+    "reason": "Unreachable from sdm_client: the materializer caps the prediction rows at 1,000 before this check."
+   },
+   {
+    "branch": [
+     211,
+     213
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope whose predict half holds no instance_table mapping, which the endpoint then refuses for a categorical cardinality: the adapter names the columns it counts with high_cardinality_columns (adapters/relational.py:593-600), which reads past it. Every envelope the engine writes holds both halves, each with an instance table and related tables whose columns and rows are lists of full length, and a fit's session body, which has no predict half, takes the branch at line 208 instead. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_cardinality_refusal_of_an_edited_envelope[a-predict-half-without-an-instance-table]."
+   },
+   {
+    "branch": [
+     214,
+     206
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope whose predict half holds no related_tables mapping, which the endpoint then refuses for a categorical cardinality: the adapter names the columns it counts with high_cardinality_columns (adapters/relational.py:593-600), which reads past it. Every envelope the engine writes holds both halves, each with an instance table and related tables whose columns and rows are lists of full length, and a fit's session body, which has no predict half, takes the branch at line 208 instead. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_cardinality_refusal_of_an_edited_envelope[a-predict-half-without-related-tables]."
+   },
+   {
+    "branch": [
+     216,
+     215
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope one of whose related tables is not a mapping, which the endpoint then refuses for a categorical cardinality: the adapter names the columns it counts with high_cardinality_columns (adapters/relational.py:593-600), which reads past it. Every envelope the engine writes holds both halves, each with an instance table and related tables whose columns and rows are lists of full length, and a fit's session body, which has no predict half, takes the branch at line 208 instead. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_cardinality_refusal_of_an_edited_envelope[a-related-table-that-is-not-a-table]."
+   },
+   {
+    "branch": [
+     251,
+     252
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope one of whose tables has no list of columns, which the endpoint then refuses for a categorical cardinality: the adapter names the columns it counts with high_cardinality_columns (adapters/relational.py:593-600), which reads past it. Every envelope the engine writes holds both halves, each with an instance table and related tables whose columns and rows are lists of full length, and a fit's session body, which has no predict half, takes the branch at line 208 instead. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_cardinality_refusal_of_an_edited_envelope[a-related-table-without-columns]."
+   },
+   {
+    "branch": [
+     256,
+     257
+    ],
+    "reason": "Reachable only through Request.materialized(payloads=...), the public way to build a request from envelopes, which no corpus vocabulary calls (tests/parity/_fixture_ops.py Flow, scripts/parity/_parity runner), given an envelope one of whose rows is shorter than its columns, which the endpoint then refuses for a categorical cardinality: the adapter names the columns it counts with high_cardinality_columns (adapters/relational.py:593-600), which reads past it. Every envelope the engine writes holds both halves, each with an instance table and related tables whose columns and rows are lists of full length, and a fit's session body, which has no predict half, takes the branch at line 208 instead. Held to today's Python through the host by tests/rust_core/test_request_beyond_the_corpus.py::test_a_cardinality_refusal_of_an_edited_envelope[a-context-row-cut-short]."
+   },
+   {
+    "branch": [
+     271,
+     272
+    ],
+    "reason": "Not in the coverage corpus by its size: reached only by a payload over 30 MiB, which no transcript or fixture records; tests/rust_core/request/accept_request_size.py (P85.size) holds the core to Python at 30 MiB - 1, 30 MiB and 30 MiB + 1 bytes instead."
+   },
+   {
+    "branch": [
+     271,
+     274
+    ],
+    "reason": "Not in the coverage corpus by its size: reached only by a payload over 30 MiB, which no transcript or fixture records; tests/rust_core/request/accept_request_size.py (P85.size) holds the core to Python at 30 MiB - 1, 30 MiB and 30 MiB + 1 bytes instead."
+   },
+   {
+    "branch": [
+     451,
+     452
+    ],
+    "reason": "Defensive: the entity table is always sampled with its primary key."
+   },
+   {
+    "branch": [
+     485,
+     489
+    ],
+    "reason": "Defensive: the context always holds training rows with targets."
+   },
+   {
+    "branch": [
+     489,
+     490
+    ],
+    "reason": "Unreachable from sdm_client: _iter_task_requests sets context.y_test to None before writing the payload."
+   },
+   {
+    "branch": [
+     494,
+     495
+    ],
+    "reason": "Unreachable from sdm_client: _iter_task_requests sets context.y_test to None before writing the payload."
+   },
+   {
+    "branch": [
+     494,
+     502
+    ],
+    "reason": "Unreachable from sdm_client: _iter_task_requests sets context.y_test to None before writing the payload."
+   },
+   {
+    "branch": [
+     499,
+     502
+    ],
+    "reason": "Defensive: the materializer refuses indices naming no entity before gathering."
+   },
+   {
+    "branch": [
+     520,
+     521
+    ],
+    "reason": "Defensive: the entity table is always sampled with its key, and every instance is seeded from it."
+   },
+   {
+    "branch": [
+     522,
+     523
+    ],
+    "reason": "Defensive: the entity table is always sampled with its key, and every instance is seeded from it."
+   },
+   {
+    "branch": [
+     536,
+     539
+    ],
+    "reason": "Defensive: the entity table is always sampled with its key, and every instance is seeded from it."
+   },
+   {
+    "branch": [
+     545,
+     546
+    ],
+    "reason": "Defensive: the entity table is always sampled with its key, and every instance is seeded from it."
+   },
+   {
+    "branch": [
+     562,
+     569
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     563,
+     564
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     569,
+     570
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     569,
+     571
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     571,
+     572
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     571,
+     580
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     575,
+     576
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     580,
+     581
+    ],
+    "reason": "Defensive: the sampler always gives rows aligned with the batch."
+   },
+   {
+    "branch": [
+     610,
+     611
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     616,
+     617
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     635,
+     636
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     637,
+     638
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     644,
+     645
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     655,
+     656
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     663,
+     664
+    ],
+    "reason": "Defensive: every sampled link joins tables of the subgraph, so its pairs are never empty."
+   },
+   {
+    "branch": [
+     710,
+     711
+    ],
+    "reason": "Defensive: the sampler always gives each link its rows and pointers."
+   },
+   {
+    "branch": [
+     713,
+     714
+    ],
+    "reason": "Defensive: the sampler always gives each link its rows and pointers."
+   },
+   {
+    "branch": [
+     713,
+     715
+    ],
+    "reason": "Defensive: the sampler always gives each link its rows and pointers."
+   },
+   {
+    "branch": [
+     721,
+     722
+    ],
+    "reason": "Defensive: the sampler always gives each link its rows and pointers."
+   },
+   {
+    "branch": [
+     725,
+     726
+    ],
+    "reason": "Defensive: the sampler always gives each link its rows and pointers."
+   },
+   {
+    "branch": [
+     729,
+     730
+    ],
+    "reason": "Defensive: the sampler always gives each link its rows and pointers."
+   },
+   {
+    "branch": [
+     784,
+     785
+    ],
+    "reason": "Unreachable from sdm_client: rankings and forecasts are decomposed into single questions before gathering."
+   },
+   {
+    "branch": [
+     786,
+     787
+    ],
+    "reason": "Unreachable from sdm_client: rankings and forecasts are decomposed into single questions before gathering."
+   },
+   {
+    "branch": [
+     926,
+     927
+    ],
+    "reason": "Unreachable from sdm_client: the relational materializer calls materialize_task without explain (materializers/relational.py:214-230 forwards num_neighbors, num_hops, inference_config, use_prediction_time, return_embeddings and random_seed only), so _output_fields is always told explain=False; sdm_client asks for an explanation through the outputs it sends, not through the engine."
+   },
+   {
+    "branch": [
+     934,
+     935
+    ],
+    "reason": "Defensive: materialize_task always resolves an inference config."
+   },
+   {
+    "branch": [
+     1001,
+     1002
+    ],
+    "reason": "Unreachable from sdm_client: a link prediction's target values come from the LIST_DISTINCT aggregation of the pandas executor every sampler uses (rfm/query/pandas_executor.py, execute_aggregation_type), which drops null values and keeps only the entities that hold at least one, so every target value of a gathered link prediction is a list."
+   },
+   {
+    "branch": [
+     1246,
+     1247
+    ],
+    "reason": "Unreachable from any caller: a numpy datetime64 is a numpy scalar (np.generic), which lines 1217-1218 turn into a Python value with .item() first, so the value is never a datetime64 here."
+   },
+   {
+    "branch": [
+     1327,
+     1332
+    ],
+    "reason": "Defensive: a stringlist cell that is a list, tuple or array returns at payload.py:1307-1318, and for any other value _json_value gives no list (payload.py:1214-1269: lists come only from lists, tuples and arrays), so it is refused at 1328."
+   },
+   {
+    "branch": [
+     1376,
+     1377
+    ],
+    "reason": "Defensive: every finite value whose float is infinite is refused before this: numeric text and long doubles by _exceeds_float64 (payload.py:1350-1354, 1394-1413), whole numbers by _survives_float or the OverflowError (1356-1375), and fractional decimals by _json_value (1222-1230)."
+   },
+   {
+    "branch": [
+     1409,
+     1410
+    ],
+    "reason": "Task 6 input, not testable on this platform: a column of numpy long doubles. On Linux x86-64 np.longdouble is 80-bit (itemsize 16), and Schema.from_data takes such a column (wire/dtypes.py:231-232 types any float over 4 bytes float64), so this is reachable there; on macOS arm64, where this phase ran, np.longdouble is float64. Arrow has no long double type, so the core cannot be given the column as typed Arrow; whether describe_frames refuses it or narrows it to float64 is a Phase 9 decision."
+   },
+   {
+    "branch": [
+     1410,
+     1411
+    ],
+    "reason": "Task 6 input, not testable on this platform: a column of numpy long doubles. On Linux x86-64 np.longdouble is 80-bit (itemsize 16), and Schema.from_data takes such a column (wire/dtypes.py:231-232 types any float over 4 bytes float64), so this is reachable there; on macOS arm64, where this phase ran, np.longdouble is float64. Arrow has no long double type, so the core cannot be given the column as typed Arrow; whether describe_frames refuses it or narrows it to float64 is a Phase 9 decision."
+   },
+   {
+    "branch": [
+     1410,
+     1412
+    ],
+    "reason": "Task 6 input, not testable on this platform: a column of numpy long doubles. On Linux x86-64 np.longdouble is 80-bit (itemsize 16), and Schema.from_data takes such a column (wire/dtypes.py:231-232 types any float over 4 bytes float64), so this is reachable there; on macOS arm64, where this phase ran, np.longdouble is float64. Arrow has no long double type, so the core cannot be given the column as typed Arrow; whether describe_frames refuses it or narrows it to float64 is a Phase 9 decision."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/inference/task.py": [
+   {
+    "branch": [
+     60,
+     61
+    ],
+    "reason": "Defensive: the engine always builds a supported task of one entity table with context and prediction rows."
+   },
+   {
+    "branch": [
+     69,
+     70
+    ],
+    "reason": "Defensive: the engine always builds a supported task of one entity table with context and prediction rows."
+   },
+   {
+    "branch": [
+     73,
+     74
+    ],
+    "reason": "Defensive: the engine always builds a supported task of one entity table with context and prediction rows."
+   },
+   {
+    "branch": [
+     85,
+     91
+    ],
+    "reason": "Defensive: the engine always builds a supported task of one entity table with context and prediction rows."
+   },
+   {
+    "branch": [
+     104,
+     107
+    ],
+    "reason": "Defensive: the engine always builds a supported task of one entity table with context and prediction rows."
+   },
+   {
+    "branch": [
+     211,
+     212
+    ],
+    "reason": "Unreachable from sdm_client: the time_column getter is read only by KumoRelational.add_lagged_target (rfm.py:1883-1915), which refuses a task without a time column before it reads it, and which _get_task_table calls only for a temporal question with lag_timesteps above zero (rfm.py:2428-2439), whose context and prediction rows always carry their anchor times. anchor_time='entity' gathers a task with no time column, but only for a static question, which adds no lagged targets."
+   },
+   {
+    "branch": [
+     228,
+     227
+    ],
+    "reason": "Unreachable from sdm_client: the setter reaches the loop only for a named time column, which only TaskTable.__init__ gives it (task.py:104-105), from the engine's _get_task_table (rfm.py:2407-2416): ANCHOR_TIMESTAMP when the context's anchor times are a series, and then so are the prediction rows', both frames holding the column (rfm.py:2298-2353, 2397-2405). With anchor_time='entity' both are 'entity', which the setter keeps without the loop (task.py:218-220)."
+   },
+   {
+    "branch": [
+     249,
+     250
+    ],
+    "reason": "Unreachable from sdm_client: the request path never looks a task column up by name."
+   },
+   {
+    "branch": [
+     249,
+     251
+    ],
+    "reason": "Unreachable from sdm_client: the request path never looks a task column up by name."
+   },
+   {
+    "branch": [
+     280,
+     281
+    ],
+    "reason": "Defensive: the task frame never repeats or lacks a column it adds."
+   },
+   {
+    "branch": [
+     284,
+     285
+    ],
+    "reason": "Defensive: the task frame never repeats or lacks a column it adds."
+   },
+   {
+    "branch": [
+     348,
+     349
+    ],
+    "reason": "Unreachable from sdm_client: the request path never shows a task table."
+   },
+   {
+    "branch": [
+     348,
+     351
+    ],
+    "reason": "Unreachable from sdm_client: the request path never shows a task table."
+   },
+   {
+    "branch": [
+     353,
+     354
+    ],
+    "reason": "Unreachable from sdm_client: the request path never shows a task table."
+   },
+   {
+    "branch": [
+     353,
+     356
+    ],
+    "reason": "Unreachable from sdm_client: the request path never shows a task table."
+   },
+   {
+    "branch": [
+     380,
+     382
+    ],
+    "reason": "Unreachable from sdm_client: the task kinds outside classification, regression, forecasting and link prediction are the multilabel ones, and the engine's _get_task_type (rfm.py:2006-2048) never makes one: a LIST_DISTINCT over a column that is no single foreign key is refused there instead. A link prediction is gathered, and returns at line 381."
+   }
+  ],
+  "packages/sdm-relational-engine/src/sdm_relational_engine/rfm/rfm.py": [
+   {
+    "branch": [
+     279,
+     280
+    ],
+    "reason": "Unreachable from sdm_client: a gathered link prediction's last entity table is the table its LIST_DISTINCT column links to (_get_task_table, rfm.py:2384-2394), and a graph links a column only to a table with a primary key (Graph.validate refuses an edge to one without, graph.py:2745-2750)."
+   },
+   {
+    "branch": [
+     1107,
+     1112
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client always passes verbose=False."
+   },
+   {
+    "branch": [
+     1141,
+     1143
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1143,
+     1144
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1143,
+     1151
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1151,
+     1152
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1151,
+     1156
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1180,
+     1181
+    ],
+    "reason": "Unreachable from sdm_client: the materializer refuses num_hops below 1 or above hops_max, 6 (materializers/relational.py:678-697, models.py:58), before the engine sees it, and the engine's maximum is 6 in every run mode (rfm.py:106-111)."
+   },
+   {
+    "branch": [
+     1203,
+     1204
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1205,
+     1206
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client never asks for an explanation while gathering."
+   },
+   {
+    "branch": [
+     1225,
+     1227
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client sets no batch size."
+   },
+   {
+    "branch": [
+     1227,
+     1228
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client sets no batch size."
+   },
+   {
+    "branch": [
+     1227,
+     1229
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client sets no batch size."
+   },
+   {
+    "branch": [
+     1412,
+     1413
+    ],
+    "reason": "Unreachable from sdm_client: the task table is gathered for the same run mode it is materialized with (materializers/relational.py:178-229), _get_task_table asks the sampler for at most _MAX_CONTEXT_SIZE[run_mode] context examples (rfm.py:2189), and the sampler keeps at most that many (base/sampler.py:882-914; indices are always given, so no test examples are drawn); _narrow_context only narrows."
+   },
+   {
+    "branch": [
+     1419,
+     1423
+    ],
+    "reason": "Unreachable from sdm_client: forecasts are decomposed into single steps before gathering."
+   },
+   {
+    "branch": [
+     1433,
+     1437
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client sets no batch size, so it is never past the maximum."
+   },
+   {
+    "branch": [
+     1446,
+     1447
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client sets no batch size and caps the entities first, so every gather is one batch."
+   },
+   {
+    "branch": [
+     1451,
+     1452
+    ],
+    "reason": "Unreachable from sdm_client: reached only with more than one batch, which sdm_client never gathers."
+   },
+   {
+    "branch": [
+     1451,
+     1454
+    ],
+    "reason": "Unreachable from sdm_client: reached only with more than one batch, which sdm_client never gathers."
+   },
+   {
+    "branch": [
+     1482,
+     1483
+    ],
+    "reason": "Defensive: the payload writer always writes one instance row per prediction row of the batch."
+   },
+   {
+    "branch": [
+     1489,
+     1494
+    ],
+    "reason": "Unreachable from sdm_client: sdm_client sets no batch size and caps the entities first, so every gather is one batch."
+   },
+   {
+    "branch": [
+     1494,
+     1495
+    ],
+    "reason": "Not in the coverage corpus by its size: reached only by a payload over 30 MiB, which no transcript or fixture records; tests/rust_core/request/accept_request_size.py (P85.size) holds the core to Python at 30 MiB - 1, 30 MiB and 30 MiB + 1 bytes instead."
+   }
+  ]
+ },
+ "request_fixture_exclusions": {
+  "messages-client/client.run/fitting-on-a-serving-endpoint": "SDMClient.for_databricks_serving makes a client whose transport says it serves no sessions; that capability check (transport.serves_sessions) stays in the Python wrapper's transport, which the core never sees.",
+  "messages-request/client.run/predict-over-a-source": "Builds a DuckDB database for the case and reads it with Schema.from_source. The Rust runner's DuckDB database answers only its catalog (what lists the tables, and the error of a table it lacks), and describing a table in its source reads its rows, so the runner cannot build this schema. The refusal of rows given as predict= is raised in PredictiveQuery.materialize (sdm_client/query.py), before anything is read; the core's copy of it is held to today's class, code and message through scripts/parity/request_host.py over a real DuckDB database by tests/rust_core/test_request_over_a_source.py.",
+  "messages-request/client.run/tabular-model-over-a-source": "Builds a DuckDB database for the case and reads it with Schema.from_source. The Rust runner's DuckDB database answers only its catalog (what lists the tables, and the error of a table it lacks), and describing a table in its source reads its rows, so the runner cannot build this schema. The refusal of the tabular model over a source is raised in PredictiveQuery.materialize (sdm_client/query.py), before anything is read; the core's copy of it is held to today's class, code and message through scripts/parity/request_host.py over a real DuckDB database by tests/rust_core/test_request_over_a_source.py.",
+  "request-paths/client.run/a-question-over-tables-in-their-source": "Builds a DuckDB database for the case and reads it with Schema.from_source. The Rust runner's DuckDB database answers only its catalog (what lists the tables, and the error of a table it lacks), and describing a table in its source reads its rows, so the runner cannot build this schema. The same calls (Schema.from_source over DuckDB, a count gathered over the source, predict and to_pandas) are the duckdb/count transcript, and its recording holds the core to them.",
+  "request-paths/client.run/the-halves-of-a-direct-request": "Reads request.context and request.predict back as frames (Request.halves), which Request._half does in the Python wrapper (its ledger destination is python); the core never builds frames from envelopes.",
+  "request-paths/client.run/the-halves-of-a-gathered-classification": "Reads request.context and request.predict back as frames (Request.halves), which Request._half does in the Python wrapper (its ledger destination is python); the core never builds frames from envelopes.",
+  "request-paths/client.run/the-halves-of-a-gathered-count": "Reads request.context and request.predict back as frames (Request.halves), which Request._half does in the Python wrapper (its ledger destination is python); the core never builds frames from envelopes.",
+  "request-paths/client.run/the-halves-of-a-gathered-forecast": "Reads request.context and request.predict back as frames (Request.halves), which Request._half does in the Python wrapper (its ledger destination is python); the core never builds frames from envelopes.",
+  "request-shapes/client.run/a-column-left-out-of-a-table-in-its-source": "Builds a DuckDB database for the case and reads it with Schema.from_source. The Rust runner's DuckDB database answers only its catalog (what lists the tables, and the error of a table it lacks), and describing a table in its source reads its rows, so the runner cannot build this schema. No transcript leaves a column out of a table in its source; tests/rust_core/test_request_over_a_source.py runs this case's calls through scripts/parity/request_host.py over a real DuckDB database, the column left out of the schema the host holds, and holds the core to today's posted bodies and frame."
+ }
+}

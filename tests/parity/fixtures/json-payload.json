@@ -1,0 +1,798 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+ "cases": [
+  {
+   "id": "json-payload/payload.cell_json_value/uint64-max",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": {
+     "$np": {
+      "type": "uint64",
+      "value": {
+       "$int": "18446744073709551615"
+      }
+     }
+    },
+    "dtype": "int64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value 18446744073709551615 is outside the range int64 represents (-9223372036854775808 to 9223372036854775807); send the column as strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/2-40",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": 1099511627776,
+    "dtype": "int64"
+   },
+   "expected": 1099511627776,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/2-62",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": 4611686018427387904,
+    "dtype": "int64"
+   },
+   "expected": "4611686018427387904",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/minus-2-63",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": -9223372036854775808,
+    "dtype": "int64"
+   },
+   "expected": "-9223372036854775808",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/decimal-1e400",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": {
+     "$decimal": "1E+400"
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000' cannot be sent as float64 without losing precision; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/10-400",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": {
+     "$int": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 cannot be sent as float64 without losing precision; give the column an integer dtype, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/2-53-plus-one",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": 9007199254740993,
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value 9007199254740993 cannot be sent as float64 without losing precision; give the column an integer dtype, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/wide-whole-decimal",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": {
+     "$decimal": "9223372036854775809.00"
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value '9223372036854775809.00' cannot be sent as float64 without losing precision; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/decimal-1.5",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": {
+     "$decimal": "1.5"
+    },
+    "dtype": "float64"
+   },
+   "expected": 1.5,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/int-42",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": 42,
+    "dtype": "float64"
+   },
+   "expected": 42.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/2-53",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": 9007199254740992,
+    "dtype": "float64"
+   },
+   "expected": 9007199254740992.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/2-53-minus-one",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": 9007199254740991,
+    "dtype": "float64"
+   },
+   "expected": 9007199254740991.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/minus-2-53",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": -9007199254740992,
+    "dtype": "float64"
+   },
+   "expected": -9007199254740992.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/minus-2-53-minus-one",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": -9007199254740993,
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value -9007199254740993 cannot be sent as float64 without losing precision; give the column an integer dtype, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/numeric-string-too-wide",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": "9223372036854775809",
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value '9223372036854775809' cannot be sent as float64 without losing precision; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.cell_json_value/numeric-string-1.5",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.cell_json_value",
+   "input": {
+    "value": "1.5",
+    "dtype": "float64"
+   },
+   "expected": 1.5,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.json_value/huge-fractional",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.json_value",
+   "input": {
+    "value": {
+     "$decimal": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.1"
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "value Decimal('10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.1') is too large for float64 to represent; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.json_value/decimal-1.5",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.json_value",
+   "input": {
+    "value": {
+     "$decimal": "1.5"
+    }
+   },
+   "expected": 1.5,
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.json_value/decimal-1e400",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.json_value",
+   "input": {
+    "value": {
+     "$decimal": "1E+400"
+    }
+   },
+   "expected": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-0-forward",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1.5"
+      },
+      {
+       "$decimal": "2.5"
+      }
+     ]
+    }
+   },
+   "expected": "float64",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-0-reverse",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "2.5"
+      },
+      {
+       "$decimal": "1.5"
+      }
+     ]
+    }
+   },
+   "expected": "float64",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-1-forward",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1"
+      },
+      {
+       "$decimal": "2"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-1-reverse",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "2"
+      },
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-2-forward",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9223372036854775809"
+      },
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-2-reverse",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1"
+      },
+      {
+       "$decimal": "9223372036854775809"
+      }
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-3-forward",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1.5"
+      },
+      {
+       "$decimal": "9223372036854775809.00"
+      }
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.decimal_dtype_name/case-3-reverse",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.decimal_dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9223372036854775809.00"
+      },
+      {
+       "$decimal": "1.5"
+      }
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.dtype_name/lists-and-null",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      [
+       "a"
+      ],
+      null,
+      {
+       "$ndarray": {
+        "dtype": "str",
+        "values": [
+         "b"
+        ]
+       }
+      }
+     ]
+    }
+   },
+   "expected": "stringlist",
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.dtype_name/list-then-string",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      [
+       "a"
+      ],
+      "b"
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Columns with stringlist values must contain only arrays or nulls.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.dtype_name/string-then-list",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      "b",
+      [
+       "a"
+      ]
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Columns with stringlist values must contain only arrays or nulls.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.dtype_name/null-item",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.dtype_name",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      [
+       "a",
+       null
+      ]
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "stringlist columns must not contain null items, but got ['a', None].",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.target_json_value/array",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.target_json_value",
+   "input": {
+    "task_type": "temporal_link_prediction",
+    "value": {
+     "$ndarray": {
+      "dtype": "str",
+      "values": [
+       "1",
+       "2"
+      ]
+     }
+    }
+   },
+   "expected": [
+    "1",
+    "2"
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.target_json_value/scalar",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.target_json_value",
+   "input": {
+    "task_type": "temporal_link_prediction",
+    "value": "item-1"
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Link prediction target values must be stringlist arrays, but got 'item-1'.",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.target_json_value/null-item",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.target_json_value",
+   "input": {
+    "task_type": "temporal_link_prediction",
+    "value": [
+     "item-1",
+     null
+    ]
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Link prediction target stringlist values must not contain null items, but got ['item-1', None].",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.feature_column/non-finite-inf",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "float64",
+     "values": [
+      1.0,
+      1.0,
+      1.0,
+      {
+       "$float": "inf"
+      },
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Column 'USERS.FEATURE' row 3: encountered a non-finite value (inf); NIM requests must contain finite numbers or nulls",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.feature_column/non-finite--inf",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "float64",
+     "values": [
+      1.0,
+      1.0,
+      1.0,
+      {
+       "$float": "-inf"
+      },
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "builtins.ValueError",
+    "code": "ValueError",
+    "message": "Column 'USERS.FEATURE' row 3: encountered a non-finite value (-inf); NIM requests must contain finite numbers or nulls",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.feature_column/fractional-decimals",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "-0.50"
+      },
+      {
+       "$decimal": "-1.50"
+      },
+      {
+       "$decimal": "-2.50"
+      },
+      {
+       "$decimal": "-3.50"
+      },
+      {
+       "$decimal": "-4.50"
+      },
+      {
+       "$decimal": "-5.50"
+      },
+      {
+       "$decimal": "-6.50"
+      },
+      {
+       "$decimal": "-7.50"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "float64",
+     "stype": "categorical"
+    },
+    "cells": [
+     -0.5,
+     -1.5,
+     -2.5,
+     -3.5,
+     -4.5,
+     -5.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.feature_column/whole-decimals",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "0"
+      },
+      {
+       "$decimal": "1"
+      },
+      {
+       "$decimal": "2"
+      },
+      {
+       "$decimal": "3"
+      },
+      {
+       "$decimal": "4"
+      },
+      {
+       "$decimal": "5"
+      },
+      {
+       "$decimal": "6"
+      },
+      {
+       "$decimal": "7"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "int64",
+     "stype": "categorical"
+    },
+    "cells": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "json-payload/payload.feature_column/wide-decimals",
+   "source": "packages/structured-data-models-relational-engine/tests/test_json_payload.py",
+   "operation": "payload.feature_column",
+   "input": {
+    "feature": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "123456789012345678901234567800"
+      },
+      {
+       "$decimal": "123456789012345678901234567801"
+      },
+      {
+       "$decimal": "123456789012345678901234567802"
+      },
+      {
+       "$decimal": "123456789012345678901234567803"
+      },
+      {
+       "$decimal": "123456789012345678901234567804"
+      },
+      {
+       "$decimal": "123456789012345678901234567805"
+      },
+      {
+       "$decimal": "123456789012345678901234567806"
+      },
+      {
+       "$decimal": "123456789012345678901234567807"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "stype": "categorical",
+    "declared": {
+     "dtype": "string",
+     "stype": "categorical"
+    },
+    "cells": [
+     "123456789012345678901234567800",
+     "123456789012345678901234567801",
+     "123456789012345678901234567802",
+     "123456789012345678901234567803",
+     "123456789012345678901234567804",
+     "123456789012345678901234567805"
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

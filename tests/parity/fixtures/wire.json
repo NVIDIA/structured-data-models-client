@@ -1,0 +1,1186 @@
+{
+ "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+ "cases": [
+  {
+   "id": "wire/wire.infer_dtype/whole-decimal",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9007199254740993"
+      },
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/fractional-decimal",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "12.3456"
+      }
+     ]
+    }
+   },
+   "expected": "float64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/wide-decimal",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "123456789012345678901234567890"
+      }
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/int64-max-decimal",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9223372036854775807"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/uint64-in-range",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "uint64",
+     "values": [
+      5,
+      6
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/uint64-past",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "uint64",
+     "values": [
+      {
+       "$int": "18446744073709551615"
+      },
+      1
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/UInt64-past",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "UInt64",
+     "values": [
+      {
+       "$int": "18446744073709551615"
+      },
+      1
+     ]
+    }
+   },
+   "expected": "string",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/plain-int",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "int64",
+     "values": [
+      9007199254740993,
+      1
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/decimal-object",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "123"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/arrow-whole",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "decimal128(38, 0)[pyarrow]",
+     "values": [
+      {
+       "$decimal": "123"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/arrow-fractional",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "decimal128(38, 2)[pyarrow]",
+     "values": [
+      {
+       "$decimal": "1.50"
+      }
+     ]
+    }
+   },
+   "expected": "float64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.infer_dtype/arrow-narrow",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.infer_dtype",
+   "input": {
+    "series": {
+     "dtype": "decimal128(18, 0)[pyarrow]",
+     "values": [
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": "int64",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/past-safe",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9007199254740993"
+      },
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "int64",
+    "cells": [
+     "9007199254740993",
+     1
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/null",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9007199254740993"
+      },
+      null
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "int64",
+    "cells": [
+     "9007199254740993",
+     null
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/decimal-nan",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "NaN"
+      },
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "int64",
+    "cells": [
+     null,
+     1
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/fractional",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "12.3456"
+      },
+      {
+       "$decimal": "1.00"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "float64",
+    "cells": [
+     12.3456,
+     1.0
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/too-wide",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "123456789012345678901234567890"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "123456789012345678901234567890"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/past-int64-9223372036854775808",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9223372036854775808"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "9223372036854775808"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/past-int64-18446744073709551616",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "18446744073709551616"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "18446744073709551616"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/past-int64-100000000000000000000",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "100000000000000000000"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "100000000000000000000"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/digits-1e400",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1E+400"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/digits-1E30",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1E+30"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "1000000000000000000000000000000"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/digits-2-70",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "1180591620717411303424"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "1180591620717411303424"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/mixed-width",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "9223372036854775808"
+      },
+      {
+       "$decimal": "1"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "9223372036854775808",
+     "1"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/fractional-past-safe",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "12345678901234567.8901"
+      }
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value Decimal('12345678901234567.8901') is too large for float64 to represent; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/infinity",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "object",
+     "values": [
+      {
+       "$decimal": "Infinity"
+      }
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value Decimal('Infinity') is not JSON-representable; replace non-finite numbers with a finite value or a null",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/uint64-declared-int64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "uint64",
+     "values": [
+      5,
+      6
+     ]
+    },
+    "dtype": "int64"
+   },
+   "expected": {
+    "dtype": "int64",
+    "cells": [
+     5,
+     6
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/uint64-past-declared-int64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "uint64",
+     "values": [
+      {
+       "$int": "18446744073709551615"
+      },
+      1
+     ]
+    },
+    "dtype": "int64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 18446744073709551615 is outside the range int64 represents (-9223372036854775808 to 9223372036854775807); send the column as strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/uint64-past-inferred",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "uint64",
+     "values": [
+      {
+       "$int": "18446744073709551615"
+      },
+      1
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "18446744073709551615",
+     "1"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/UInt64-past-declared-int64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "UInt64",
+     "values": [
+      {
+       "$int": "18446744073709551615"
+      },
+      1
+     ]
+    },
+    "dtype": "int64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 18446744073709551615 is outside the range int64 represents (-9223372036854775808 to 9223372036854775807); send the column as strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/UInt64-past-inferred",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "UInt64",
+     "values": [
+      {
+       "$int": "18446744073709551615"
+      },
+      1
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "string",
+    "cells": [
+     "18446744073709551615",
+     "1"
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/plain-int-column",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "int64",
+     "values": [
+      9007199254740993,
+      1
+     ]
+    },
+    "dtype": "int64"
+   },
+   "expected": {
+    "dtype": "int64",
+    "cells": [
+     "9007199254740993",
+     1
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/float-column",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "float64",
+     "values": [
+      1.5,
+      2.5
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "float64",
+    "cells": [
+     1.5,
+     2.5
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_column/large-float",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_column",
+   "input": {
+    "series": {
+     "dtype": "float64",
+     "values": [
+      1.2345678901234568e+16
+     ]
+    }
+   },
+   "expected": {
+    "dtype": "float64",
+    "cells": [
+     1.2345678901234568e+16
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/int-past-safe-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": 9007199254740993,
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9007199254740993 cannot be sent as float64 without losing precision, because it is outside the range a float64 represents exactly; give the column the same integer dtype in every frame, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/decimal-past-safe-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$decimal": "9007199254740993"
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value Decimal('9007199254740993') cannot be sent as float64 without losing precision, because it is outside the range a float64 represents exactly; give the column the same integer dtype in every frame, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/np-int64-past-safe-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$np": {
+      "type": "int64",
+      "value": 9007199254740993
+     }
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value np.int64(9007199254740993) cannot be sent as float64 without losing precision, because it is outside the range a float64 represents exactly; give the column the same integer dtype in every frame, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/int-3-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": 3,
+    "dtype": "float64"
+   },
+   "expected": 3.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/decimal-3-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$decimal": "3"
+    },
+    "dtype": "float64"
+   },
+   "expected": 3.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/np-int64-3-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$np": {
+      "type": "int64",
+      "value": 3
+     }
+    },
+    "dtype": "float64"
+   },
+   "expected": 3.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/int64-max",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": 9223372036854775807,
+    "dtype": "int64"
+   },
+   "expected": "9223372036854775807",
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/int64-max-plus-one",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$int": "9223372036854775808"
+    },
+    "dtype": "int64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9223372036854775808 is outside the range int64 represents (-9223372036854775808 to 9223372036854775807); send the column as strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/bool-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": true,
+    "dtype": "float64"
+   },
+   "expected": 1.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/10-400-in-float64",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$int": "10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 is outside the range float64 represents; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/float-1.5",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": 1.5,
+    "dtype": "float64"
+   },
+   "expected": 1.5,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/2-53",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": 9007199254740992,
+    "dtype": "float64"
+   },
+   "expected": 9007199254740992.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/decimal-past-cutoff",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$decimal": "9007199254740991.1"
+    },
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value Decimal('9007199254740991.1') is too large for float64 to represent; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/decimal-1.5",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": {
+     "$decimal": "1.5"
+    },
+    "dtype": "float64"
+   },
+   "expected": 1.5,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/2-53-plus-one",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": 9007199254740993,
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9007199254740993 cannot be sent as float64 without losing precision, because it is outside the range a float64 represents exactly; give the column the same integer dtype in every frame, or convert it to strings",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/numeric-string-too-wide",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": "9223372036854775809",
+    "dtype": "float64"
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value '9223372036854775809' cannot be sent as float64 without losing precision; send the column as strings to keep it exact",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/numeric-string-1.5",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": "1.5",
+    "dtype": "float64"
+   },
+   "expected": 1.5,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.serialize_cell/numeric-string-42",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.serialize_cell",
+   "input": {
+    "value": "42",
+    "dtype": "float64"
+   },
+   "expected": 42.0,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/nested",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "a": [
+      1,
+      2
+     ],
+     "b": {
+      "c": 3
+     }
+    }
+   },
+   "expected": {
+    "a": [
+     1,
+     2
+    ],
+    "b": {
+     "c": 3
+    }
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/seed-past-float",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "seed": 9007199254740993
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9007199254740993 cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/np-seed-past-float",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "seed": {
+      "$np": {
+       "type": "int64",
+       "value": 9007199254740993
+      }
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9007199254740993 cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/np-seed-4",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "seed": {
+      "$np": {
+       "type": "int64",
+       "value": 4
+      }
+     }
+    }
+   },
+   "expected": {
+    "seed": 4
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/uint64-seed",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "seed": {
+      "$np": {
+       "type": "uint64",
+       "value": {
+        "$int": "18446744073709551615"
+       }
+      }
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 18446744073709551615 cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/2-53",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": 9007199254740992
+   },
+   "expected": 9007199254740992,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/2-53-plus-two",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": 9007199254740994
+   },
+   "expected": 9007199254740994,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/minus-2-53",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": -9007199254740992
+   },
+   "expected": -9007199254740992,
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/2-53-plus-one",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": 9007199254740993
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9007199254740993 cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/minus-2-53-minus-one",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": -9007199254740993
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value -9007199254740993 cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/bool",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "explain": true
+    }
+   },
+   "expected": {
+    "explain": true
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "wire/wire.json_ready/nested-past-float",
+   "source": "packages/structured-data-models-client/tests/test_wire_integer_exactness.py",
+   "operation": "wire.json_ready",
+   "input": {
+    "value": {
+     "opts": {
+      "seeds": [
+       1,
+       9007199254740993
+      ]
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "value 9007199254740993 cannot be sent as a JSON number without losing precision, since a float64 does not hold it exactly; pass it as a string if the model accepts one",
+    "details_keys": []
+   },
+   "expected_warnings": []
+  }
+ ]
+}

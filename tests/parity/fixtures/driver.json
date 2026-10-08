@@ -1,0 +1,4966 @@
+{
+ "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+ "cases": [
+  {
+   "id": "driver/driver.materialize/duckdb-keys-and-indexes",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases",
+     "cards"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE customers ADD PRIMARY KEY (customer_id)",
+     "ALTER TABLE customers ALTER COLUMN signup_at SET NOT NULL",
+     "ALTER TABLE items ADD PRIMARY KEY (item_id)",
+     "ALTER TABLE stores ADD PRIMARY KEY (store_code)",
+     "ALTER TABLE purchases ADD PRIMARY KEY (purchase_id)",
+     "ALTER TABLE purchases ALTER COLUMN purchased_at SET NOT NULL",
+     "ALTER TABLE purchases ALTER COLUMN customer_id SET NOT NULL",
+     "CREATE INDEX purchases_customer ON purchases (customer_id)",
+     "CREATE INDEX purchases_item_time ON purchases (item_id, purchased_at)",
+     "CREATE INDEX purchases_cents ON purchases ((amount * 100))",
+     "CREATE TABLE cards (\"Card No\" BIGINT PRIMARY KEY, customer_id BIGINT UNIQUE, issued_at TIMESTAMP NOT NULL)",
+     "INSERT INTO cards SELECT 1000 + customer_id, customer_id, signup_at FROM customers WHERE customer_id % 3 = 0",
+     "CREATE INDEX cards_number ON cards (\"Card No\")",
+     "CREATE INDEX reviews_item ON reviews (item_id)",
+     "CREATE TABLE archive AS SELECT * FROM purchases LIMIT 5",
+     "CREATE INDEX archive_customer ON archive (customer_id)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "6ab345544afcb50ee06ff18ba865274690ecdc7cd0185dd7dce88255dd3a0297",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 3 indices in 2 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-every-key-indexed",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE customers ADD PRIMARY KEY (customer_id)",
+     "ALTER TABLE items ADD PRIMARY KEY (item_id)",
+     "ALTER TABLE reviews ADD PRIMARY KEY (review_id)",
+     "ALTER TABLE stores ADD PRIMARY KEY (store_code)",
+     "ALTER TABLE purchases ADD PRIMARY KEY (purchase_id)",
+     "CREATE INDEX reviews_item ON reviews (item_id)",
+     "CREATE INDEX purchases_customer ON purchases (customer_id)",
+     "CREATE INDEX purchases_item ON purchases (item_id)",
+     "CREATE INDEX purchases_store ON purchases (store_code)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "98114fbfbc7dd0a926e99c4118a7e21963f3dbc2f995a5c306ccebf6c8419f44",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-one-keyed-table",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers"
+    ],
+    "primary_keys": {},
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "model": "kumo-relational"
+    },
+    "setup": [
+     "ALTER TABLE customers ADD PRIMARY KEY (customer_id)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "e1faabd2ef2925b47517d85d1567439cb11f4a235716380fbf1ff2eb608304b0",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-keys-and-indexes",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases",
+     "cards"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE customers RENAME TO customers_loaded",
+     "CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, segment TEXT, signup_at TEXT NOT NULL)",
+     "INSERT INTO customers SELECT * FROM customers_loaded",
+     "DROP TABLE customers_loaded",
+     "ALTER TABLE items RENAME TO items_loaded",
+     "CREATE TABLE items (item_id INTEGER PRIMARY KEY, category TEXT, price REAL)",
+     "INSERT INTO items SELECT * FROM items_loaded",
+     "DROP TABLE items_loaded",
+     "ALTER TABLE stores RENAME TO stores_loaded",
+     "CREATE TABLE stores (store_code TEXT PRIMARY KEY, region TEXT)",
+     "INSERT INTO stores SELECT * FROM stores_loaded",
+     "DROP TABLE stores_loaded",
+     "ALTER TABLE purchases RENAME TO purchases_loaded",
+     "CREATE TABLE purchases (purchase_id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, item_id INTEGER, amount REAL, purchased_at TEXT NOT NULL, store_code TEXT)",
+     "INSERT INTO purchases SELECT * FROM purchases_loaded",
+     "DROP TABLE purchases_loaded",
+     "CREATE INDEX purchases_customer ON purchases (customer_id)",
+     "CREATE INDEX purchases_item_time ON purchases (item_id, purchased_at)",
+     "CREATE TABLE cards (card_no INTEGER PRIMARY KEY, customer_id INTEGER UNIQUE, issued_at TEXT NOT NULL)",
+     "INSERT INTO cards SELECT 1000 + customer_id, customer_id, signup_at FROM customers WHERE customer_id % 3 = 0"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "6f35ed6a258332bd70864cef358e65dc9b8851c615f9ca7dc64dfaaecb61149b",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 3 indices in 2 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-every-key-indexed",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE customers RENAME TO customers_loaded",
+     "CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, segment TEXT, signup_at TEXT NOT NULL)",
+     "INSERT INTO customers SELECT * FROM customers_loaded",
+     "DROP TABLE customers_loaded",
+     "ALTER TABLE items RENAME TO items_loaded",
+     "CREATE TABLE items (item_id INTEGER PRIMARY KEY, category TEXT, price REAL)",
+     "INSERT INTO items SELECT * FROM items_loaded",
+     "DROP TABLE items_loaded",
+     "ALTER TABLE stores RENAME TO stores_loaded",
+     "CREATE TABLE stores (store_code TEXT PRIMARY KEY, region TEXT)",
+     "INSERT INTO stores SELECT * FROM stores_loaded",
+     "DROP TABLE stores_loaded",
+     "ALTER TABLE purchases RENAME TO purchases_loaded",
+     "CREATE TABLE purchases (purchase_id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, item_id INTEGER, amount REAL, purchased_at TEXT NOT NULL, store_code TEXT)",
+     "INSERT INTO purchases SELECT * FROM purchases_loaded",
+     "DROP TABLE purchases_loaded",
+     "CREATE INDEX reviews_item ON reviews (item_id)",
+     "CREATE UNIQUE INDEX reviews_id ON reviews (review_id)",
+     "CREATE INDEX purchases_customer ON purchases (customer_id)",
+     "CREATE INDEX purchases_item ON purchases (item_id)",
+     "CREATE INDEX purchases_store ON purchases (store_code)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "9add2df8e186b5d1de272ed296aee9ffc1a8129bb099fafb8c18571398926d9a",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE parity_driver.customers ADD PRIMARY KEY (customer_id)",
+     "ALTER TABLE parity_driver.customers ALTER COLUMN signup_at SET NOT NULL",
+     "ALTER TABLE parity_driver.items ADD PRIMARY KEY (item_id)",
+     "ALTER TABLE parity_driver.reviews ADD PRIMARY KEY (review_id)",
+     "ALTER TABLE parity_driver.stores ADD PRIMARY KEY (store_code)",
+     "ALTER TABLE parity_driver.purchases ADD PRIMARY KEY (purchase_id)",
+     "ALTER TABLE parity_driver.purchases ALTER COLUMN purchased_at SET NOT NULL",
+     "ALTER TABLE parity_driver.purchases ALTER COLUMN customer_id SET NOT NULL",
+     "CREATE INDEX purchases_customer ON parity_driver.purchases (customer_id)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "f332cdd5ba312b0e7dd1a87c1d0faed06060fd9e0a6888feada651cb13038e1c",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-keys-stores",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH stores.store_code",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      "S01",
+      "S02"
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "ALTER TABLE customers ADD PRIMARY KEY (customer_id)",
+     "ALTER TABLE items ADD PRIMARY KEY (item_id)",
+     "ALTER TABLE reviews ADD PRIMARY KEY (review_id)",
+     "ALTER TABLE stores ADD PRIMARY KEY (store_code)",
+     "ALTER TABLE purchases ADD PRIMARY KEY (purchase_id)",
+     "CREATE INDEX reviews_item ON reviews (item_id)",
+     "CREATE INDEX purchases_customer ON purchases (customer_id)",
+     "CREATE INDEX purchases_item ON purchases (item_id)",
+     "CREATE INDEX purchases_store ON purchases (store_code)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "38eda75c9f2515bb92a823d46c5a027fe2530b48939c788d130ce24c18ed0aa6",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "reviews.body is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-keys-stores",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH stores.store_code",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      "S01",
+      "S02"
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "ALTER TABLE customers RENAME TO customers_loaded",
+     "CREATE TABLE customers (customer_id INTEGER PRIMARY KEY, segment TEXT, signup_at TEXT NOT NULL)",
+     "INSERT INTO customers SELECT * FROM customers_loaded",
+     "DROP TABLE customers_loaded",
+     "ALTER TABLE items RENAME TO items_loaded",
+     "CREATE TABLE items (item_id INTEGER PRIMARY KEY, category TEXT, price REAL)",
+     "INSERT INTO items SELECT * FROM items_loaded",
+     "DROP TABLE items_loaded",
+     "ALTER TABLE stores RENAME TO stores_loaded",
+     "CREATE TABLE stores (store_code TEXT PRIMARY KEY, region TEXT)",
+     "INSERT INTO stores SELECT * FROM stores_loaded",
+     "DROP TABLE stores_loaded",
+     "ALTER TABLE purchases RENAME TO purchases_loaded",
+     "CREATE TABLE purchases (purchase_id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL, item_id INTEGER, amount REAL, purchased_at TEXT NOT NULL, store_code TEXT)",
+     "INSERT INTO purchases SELECT * FROM purchases_loaded",
+     "DROP TABLE purchases_loaded",
+     "CREATE INDEX reviews_item ON reviews (item_id)",
+     "CREATE UNIQUE INDEX reviews_id ON reviews (review_id)",
+     "CREATE INDEX purchases_customer ON purchases (customer_id)",
+     "CREATE INDEX purchases_item ON purchases (item_id)",
+     "CREATE INDEX purchases_store ON purchases (store_code)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "e2905696133198b8c71be7f401006a1daf7fe649c1f07caf711681266db51463",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "reviews.body is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-keys-stores",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH stores.store_code",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      "S01",
+      "S02"
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "ALTER TABLE parity_driver.customers ADD PRIMARY KEY (customer_id)",
+     "ALTER TABLE parity_driver.customers ALTER COLUMN signup_at SET NOT NULL",
+     "ALTER TABLE parity_driver.items ADD PRIMARY KEY (item_id)",
+     "ALTER TABLE parity_driver.reviews ADD PRIMARY KEY (review_id)",
+     "ALTER TABLE parity_driver.stores ADD PRIMARY KEY (store_code)",
+     "ALTER TABLE parity_driver.purchases ADD PRIMARY KEY (purchase_id)",
+     "ALTER TABLE parity_driver.purchases ALTER COLUMN purchased_at SET NOT NULL",
+     "ALTER TABLE parity_driver.purchases ALTER COLUMN customer_id SET NOT NULL",
+     "CREATE INDEX purchases_customer ON parity_driver.purchases (customer_id)"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "cf97eb7c53e7f757c46c25fe2ef26c14f011aa2e7ff981f5d81e4fec088b3cfe",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "reviews.body is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-stores-again",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      4,
+      4,
+      4,
+      4
+     ]
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "7c8d9eb8ea6f1548d86360217d8cbb9a847ea5ee07f8f0eceee9de1ecd135c8b",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-stores-again",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      4,
+      4,
+      4,
+      4
+     ]
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "8b73b0a51f5686df2446f75c8c4ab9cc27a646c077848b5ac6629a48651000c0",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-dangling-stores",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "UPDATE purchases SET store_code = 'S99'"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "f7ae72ffc54fc37a7a90b87ebb8e3afb68c1a97a4c33a8c2b5db2437b0e0865f",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'stores' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-dangling-stores",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "UPDATE purchases SET store_code = 'S99'"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "318745974625ca96b2ccc207a77551fc9207042d11a96a9c14f97d65fb9902f5",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'stores' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-dangling-stores",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "UPDATE parity_driver.purchases SET store_code = 'S99'"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "1e0f37da151a3a0a6285e849f1ecac4b2817d4171cddc02d189da6daf0e0a390",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'stores' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-few-vips",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 1
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "4e945df2e79fe5d6e43094b9a8d2e82148005ca59b2a22e83967fe60bc7fabfb",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 1,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-vips-over-two-batches",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 1000,
+     "max_pq_iterations": 11
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "b3c84f6f2d262de195f586841a7eca07facb67558713f0417fca819c89d43799",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 11,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-enough-in-one-batch",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 2
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "095ec17a0ca0d4d7ad33c587b776b36072c36365775db506b64fc037a9874043",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-few-vips",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 1
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "1b614bf3db3b2eb7b2112060e91505fbbf4994bf8b5bbce62009b8866da360be",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 1,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-vips-over-two-batches",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 1000,
+     "max_pq_iterations": 11
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "49aec47e8e89be154efab99b29711233349dc02dcc1d4ffb184e62185495585b",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 11,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-enough-in-one-batch",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 2
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "21a930b426b97daff3660e5771c29c58b139f65e6ef4c5b4d1d52d8e1f1f5d66",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-few-vips",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 1
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "573af7955d280fe5a8f255af7fa3a31ec104e6a566652217ea5a2bc63fb19f99",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 1,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-vips-over-two-batches",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 1000,
+     "max_pq_iterations": 11
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "aff1edaf270f95588782c4a4208e12f3579275624e8adcf6c7783bb4f702d4bc",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 11,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-enough-in-one-batch",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 2
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "84be6fc09e5c13a36cad29469e4fc397cbf1c5434c30075f9f421aadcf1a8153",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-few-vips",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 1
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "621fdb4516a511654139482961ba6df70e5df3331e79a0439c95ac65b51f89f2",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 1,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-vips-over-two-batches",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'vip'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 1000,
+     "max_pq_iterations": 11
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "186fee014b28a9d24cea68da70686172e51fa580026b8a1f242870ee35205630",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'vip'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Failed to collect 1,000 context examples within 11,000 candidates. To improve coverage, consider increasing the number of PQ iterations using the 'max_pq_iterations' option. This warning will not be shown again in this run."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-enough-in-one-batch",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-large",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1
+     ],
+     "num_context_samples": 30,
+     "max_pq_iterations": 2
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "1b0fb0490e0b0f0fab5437b591eae7af116d6549d7d8cd099c51fe2b4a88403f",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-sequences",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace-extras",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases",
+     "cards",
+     "stock"
+    ],
+    "primary_keys": {
+     "stores": "store_code",
+     "cards": "card_no",
+     "stock": [
+      "store_code",
+      "item_id"
+     ]
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "stypes": {
+     "items.dims": "sequence"
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "34b3218174519f568a52032138f7bb7ec3d380ef6ebd25c4c8d698910eb0e89c",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "table 'stock' has the composite primary key ['store_code', 'item_id'], and a predictive query can only name a single key column, so this query is resolved against 'stock' as though it had no key. The request still carries the composite key; only the query does not see it. Name a single column as the primary key if the query needs to identify a row of 'stock'."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-sequences",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-extras",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases",
+     "cards"
+    ],
+    "primary_keys": {
+     "stores": "store_code",
+     "cards": "card_no"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "ALTER TABLE items ADD COLUMN sizes DOUBLE[]",
+     "UPDATE items SET sizes = [item_id * 1.5, 2.0]"
+    ],
+    "stypes": {
+     "items.dims": "sequence"
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "8d3cca37327c59f73088b06c0851bfc094fea6d9d28dacf77287b8d12951b72a",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "items leaves out sizes (floatlist): a request carries one scalar value per cell, and these hold none"
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-sequences",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-extras",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases",
+     "cards"
+    ],
+    "primary_keys": {
+     "stores": "store_code",
+     "cards": "card_no"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "stypes": {
+     "items.dims": "sequence"
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "347cbabae46d71c1dd278ae04c1ecb02c883f5215627d35612a21054e2cc30c7",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-sequences",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-extras",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases",
+     "cards"
+    ],
+    "primary_keys": {
+     "stores": "store_code",
+     "cards": "card_no"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8,
+      8
+     ]
+    },
+    "stypes": {
+     "items.dims": "sequence"
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "c7f59b2ba003083f05fd16f03ebc49017aa44ccfd03078294b79ae066b2a7a35",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-a-pair-of-key-columns",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-extras",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases",
+     "cards",
+     "stock"
+    ],
+    "primary_keys": {
+     "stores": "store_code",
+     "cards": "card_no",
+     "stock": [
+      "store_code",
+      "item_id"
+     ]
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "eb735ff1017c411146c66eefcb04e02a34942f76a206bbd99fa2c08df281503d",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "table 'stock' has the composite primary key ['store_code', 'item_id'], and a predictive query can only name a single key column, so this query is resolved against 'stock' as though it had no key. The request still carries the composite key; only the query does not see it. Name a single column as the primary key if the query needs to identify a row of 'stock'."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 11 indices in 6 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'stock' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-column-types",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT SUM(purchases.amount, 0, 30, days) FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE items ADD COLUMN released DATE",
+     "UPDATE items SET released = DATE '2024-01-01' + CAST(item_id AS INTEGER)",
+     "ALTER TABLE items ADD COLUMN code UUID",
+     "UPDATE items SET code = md5(CAST(item_id AS VARCHAR))::UUID",
+     "ALTER TABLE items ADD COLUMN cost DECIMAL(10,2)",
+     "UPDATE items SET cost = price",
+     "ALTER TABLE items ADD COLUMN spec JSON",
+     "UPDATE items SET spec = '{\"w\": 1, \"tags\": [\"a\"]}'",
+     "ALTER TABLE items ADD COLUMN listed_at TIMESTAMPTZ",
+     "UPDATE items SET listed_at = TIMESTAMPTZ '2024-01-01 00:00:00+02'",
+     "ALTER TABLE items ADD COLUMN huge HUGEINT",
+     "UPDATE items SET huge = item_id",
+     "ALTER TABLE items ADD COLUMN tiny UTINYINT",
+     "UPDATE items SET tiny = item_id",
+     "ALTER TABLE items ADD COLUMN weight FLOAT",
+     "UPDATE items SET weight = price",
+     "ALTER TABLE items ADD COLUMN heavy BOOLEAN",
+     "UPDATE items SET heavy = item_id % 2 = 0"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "1034d6eb069d22117322cb737fa10be3608efded84cf24223ea529ff56152352",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-a-date-past-2262",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT SUM(purchases.amount, 0, 30, days) FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE items ADD COLUMN released DATE",
+     "UPDATE items SET released = CASE WHEN item_id = 3 THEN DATE '9999-12-31' ELSE DATE '2024-01-01' END"
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Out of bounds nanosecond timestamp: 9999-12-31 00:00:00",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-a-time-of-day",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT SUM(purchases.amount, 0, 30, days) FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE items ADD COLUMN opens TIME",
+     "UPDATE items SET opens = TIME '10:00:00'"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "fab854c11d7e02a41ddeb7d41ab4ab87147ee6558984c78e5a908345291604d9",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-column-types",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT SUM(purchases.amount, 0, 30, days) FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE parity_driver.items ADD COLUMN released DATE",
+     "UPDATE parity_driver.items SET released = DATE '2024-01-01' + item_id::int",
+     "ALTER TABLE parity_driver.items ADD COLUMN code UUID",
+     "UPDATE parity_driver.items SET code = md5(item_id::text)::uuid",
+     "ALTER TABLE parity_driver.items ADD COLUMN cost NUMERIC(10,2)",
+     "UPDATE parity_driver.items SET cost = price",
+     "ALTER TABLE parity_driver.items ADD COLUMN units NUMERIC(10,0)",
+     "UPDATE parity_driver.items SET units = CASE WHEN item_id = 2 THEN 'NaN'::numeric ELSE item_id END",
+     "ALTER TABLE parity_driver.items ADD COLUMN ratio NUMERIC",
+     "UPDATE parity_driver.items SET ratio = CASE WHEN item_id = 3 THEN 'NaN'::numeric ELSE price / 3 END",
+     "ALTER TABLE parity_driver.items ADD COLUMN spec JSONB",
+     "UPDATE parity_driver.items SET spec = jsonb_build_object('w', item_id, 'é', jsonb_build_array(1.5, 'x', true, null))",
+     "ALTER TABLE parity_driver.items ADD COLUMN note JSON",
+     "UPDATE parity_driver.items SET note = '\"just text\"'",
+     "ALTER TABLE parity_driver.items ADD COLUMN host INET",
+     "UPDATE parity_driver.items SET host = '192.168.0.1'",
+     "ALTER TABLE parity_driver.items ADD COLUMN page XML",
+     "UPDATE parity_driver.items SET page = '<a/>'",
+     "ALTER TABLE parity_driver.items ADD COLUMN fee MONEY",
+     "UPDATE parity_driver.items SET fee = 12.5",
+     "ALTER TABLE parity_driver.items ADD COLUMN heavy BOOLEAN",
+     "UPDATE parity_driver.items SET heavy = item_id % 2 = 0",
+     "ALTER TABLE parity_driver.items ADD COLUMN weight REAL",
+     "UPDATE parity_driver.items SET weight = price",
+     "ALTER TABLE parity_driver.items ADD COLUMN rank SMALLINT",
+     "UPDATE parity_driver.items SET rank = item_id::smallint"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "ddf33d9fa9e0dc4204c22d20a36ebfbce503677a751239ca265856eaa69d7ff6",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-a-date-past-2262",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT SUM(purchases.amount, 0, 30, days) FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE parity_driver.items ADD COLUMN released DATE",
+     "UPDATE parity_driver.items SET released = CASE WHEN item_id = 3 THEN DATE '9999-12-31' ELSE DATE '2024-01-01' END"
+    ]
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Out of bounds nanosecond timestamp: 9999-12-31 00:00:00",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-a-time-of-day",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT SUM(purchases.amount, 0, 30, days) FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "ALTER TABLE parity_driver.items ADD COLUMN opens TIME",
+     "UPDATE parity_driver.items SET opens = TIME '10:00:00'"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "1781c9564cabc29f87657a01567f6988ae87a7101315a642230170db84b7bcb8",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-null-foreign-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "UPDATE purchases SET item_id = NULL WHERE purchase_id % 7 = 0",
+     "UPDATE purchases SET store_code = NULL WHERE purchase_id % 11 = 0"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "8ccc77d4115aa354ea47004b01a3a3509f738ec7ce28b9822413a6a6ec7417c5",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-null-primary-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "UPDATE purchases SET purchase_id = NULL WHERE customer_id IN (1, 2)"
+    ],
+    "check_keys": false
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "113d3b5df66dbd321028edeccec422dee59a53bc4f60168bec3de7425a908960",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-null-foreign-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "UPDATE purchases SET item_id = NULL WHERE purchase_id % 7 = 0",
+     "UPDATE purchases SET store_code = NULL WHERE purchase_id % 11 = 0"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "42200d298ec758e1df5977b9518546046eae2863b56c10a9e360a1e6b0de89c6",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-null-primary-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "UPDATE purchases SET purchase_id = NULL WHERE customer_id IN (1, 2)"
+    ],
+    "check_keys": false
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "f4dd7553fbf22ce5e6fa84496b2248db3b02d5d68e759685bfe18c8fd16889db",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 7 indices in 4 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-null-foreign-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      8,
+      8
+     ]
+    },
+    "setup": [
+     "UPDATE parity_driver.purchases SET item_id = NULL WHERE purchase_id % 7 = 0",
+     "UPDATE parity_driver.purchases SET store_code = NULL WHERE purchase_id % 11 = 0"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "f0019a498a7de63ef80a2a5f78caeb3bd0bf204805af9a205417b63ffc81b61e",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-null-primary-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "UPDATE parity_driver.purchases SET purchase_id = NULL WHERE customer_id IN (1, 2)"
+    ],
+    "check_keys": false
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "bee74ce07dcea9f28fb821b0cd8a670e8bbfaa5c36a4918cfa06d072de81c546",
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-float-keys",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0,
+     "column_types": {
+      "customers.customer_id": "DOUBLE",
+      "purchases.customer_id": "DOUBLE"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1.0,
+      2.0
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "48cba7e437aee03901fe3c2b0a0f13fff96b15d1cf37d96f7c1866b8f5211f3d",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-zoned-anchor",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "anchor_time": {
+      "$timestamp": "2024-10-01T02:00:00+02:00"
+     }
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "144643ea7cab2b9249f8ea9b93781e08496c31913b6b79951269d421fd5c9ef2",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-zoned-anchor",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "anchor_time": {
+      "$timestamp": "2024-10-01T02:00:00+02:00"
+     }
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "59db891bd24ea1e631cf093b9cfc8777e3898aba0598480cf751e3957b25ccfb",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-filter-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is not the reason: it is 2024-11-30 21:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00, which leaves room after it for the query's whole window. No entity passed \"customers.segment = 'nobody'\", so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-filter-keeps-none-late",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2024-12-29T00:00:00"
+     },
+     "context_anchor_time": {
+      "$timestamp": "2024-12-20T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is most likely the reason: it is 2024-12-20 00:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00. Context examples come from before the anchor and each needs the query's full window of data after it, so an anchor at or near the end of the range leaves none to draw from. Pass an earlier anchor_time, or shorten the window the query asks about.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Aggregation for context examples at timestamp '2024-12-20 00:00:00' will leak information from the prediction anchor timestamp '2024-12-29 00:00:00'. Please make sure this is intended."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-static-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. Is your predictive query too restrictive?",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-anchor-before-data",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2023-01-01T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor timestamp '2023-01-01 00:00:00' is before the earliest timestamp '2024-01-02 18:00:00' in the data.",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-context-before-data",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2024-10-01T00:00:00"
+     },
+     "context_anchor_time": {
+      "$timestamp": "2023-01-01T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Context anchor timestamp is too early or aggregation time range is too large. To make this prediction, we would need data back to '2023-01-01 00:00:00', however, your data only contains data back to '2024-01-02 18:00:00'.",
+    "details_keys": [
+     "window_outran_the_data"
+    ],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-entity-anchor-temporal",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' is only valid for static predictive queries",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-no-pq-iterations",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "max_pq_iterations": 0
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'max_pq_iterations' must be greater than zero (got 0)",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-entity-context-only",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2024-10-01T00:00:00"
+     },
+     "context_anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' needs to be shared for context and prediction examples",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-entity-prediction-only",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": "entity",
+     "context_anchor_time": {
+      "$timestamp": "2024-10-01T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' needs to be shared for context and prediction examples",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-entity-anchor-timeless",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT items.category FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' requires the entity table 'items' to have a time column",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-negative-lag",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "lag_timesteps": -1
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'lag_timesteps' cannot be negative (got -1)",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-exclude-unknown-table",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "nothing": [
+       "segment"
+      ]
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names table 'nothing', which is not in the graph. Available tables: ['customers', 'items', 'purchases', 'reviews', 'stores']",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-exclude-unknown-column",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "customers": [
+       "nothing"
+      ]
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names column 'nothing' of table 'customers', which is not one of its feature columns (primary and foreign keys are never sent as features). Excludable columns: ['segment', 'signup_at']",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-uncastable-index",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      "one"
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'indices' must hold values matching the primary key of 'customers', which is int64; indices[0] is 'one'",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-filter-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is not the reason: it is 2024-11-30 21:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00, which leaves room after it for the query's whole window. No entity passed \"customers.segment = 'nobody'\", so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-filter-keeps-none-late",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2024-12-29T00:00:00"
+     },
+     "context_anchor_time": {
+      "$timestamp": "2024-12-20T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is most likely the reason: it is 2024-12-20 00:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00. Context examples come from before the anchor and each needs the query's full window of data after it, so an anchor at or near the end of the range leaves none to draw from. Pass an earlier anchor_time, or shorten the window the query asks about.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Aggregation for context examples at timestamp '2024-12-20 00:00:00' will leak information from the prediction anchor timestamp '2024-12-29 00:00:00'. Please make sure this is intended."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-static-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. Is your predictive query too restrictive?",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-anchor-before-data",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2023-01-01T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor timestamp '2023-01-01 00:00:00' is before the earliest timestamp '2024-01-02 18:00:00' in the data.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-context-before-data",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2024-10-01T00:00:00"
+     },
+     "context_anchor_time": {
+      "$timestamp": "2023-01-01T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Context anchor timestamp is too early or aggregation time range is too large. To make this prediction, we would need data back to '2023-01-01 00:00:00', however, your data only contains data back to '2024-01-02 18:00:00'.",
+    "details_keys": [
+     "window_outran_the_data"
+    ],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-entity-anchor-temporal",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' is only valid for static predictive queries",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-no-pq-iterations",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "max_pq_iterations": 0
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'max_pq_iterations' must be greater than zero (got 0)",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-entity-context-only",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": {
+      "$timestamp": "2024-10-01T00:00:00"
+     },
+     "context_anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' needs to be shared for context and prediction examples",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-entity-prediction-only",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": "entity",
+     "context_anchor_time": {
+      "$timestamp": "2024-10-01T00:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' needs to be shared for context and prediction examples",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-entity-anchor-timeless",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT items.category FOR EACH items.item_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Anchor time 'entity' requires the entity table 'items' to have a time column",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-negative-lag",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "lag_timesteps": -1
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'lag_timesteps' cannot be negative (got -1)",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-exclude-unknown-table",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "nothing": [
+       "segment"
+      ]
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names table 'nothing', which is not in the graph. Available tables: ['customers', 'items', 'purchases', 'reviews', 'stores']",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-exclude-unknown-column",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "customers": [
+       "nothing"
+      ]
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names column 'nothing' of table 'customers', which is not one of its feature columns (primary and foreign keys are never sent as features). Excludable columns: ['segment', 'signup_at']",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-uncastable-index",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      "one"
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'indices' must hold values matching the primary key of 'customers', which is int64[pyarrow]; indices[0] is 'one'",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-garbled-filter-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is not the reason: it is 2024-11-30 21:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00, which leaves room after it for the query's whole window. No entity passed \"customers.segment = 'nobody'\", so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-15 24:00:00', '2024-10-21 24:00:00', '2024-10-30 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-garbled-negative-lag",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "lag_timesteps": -1
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'lag_timesteps' cannot be negative (got -1)",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-15 24:00:00', '2024-10-21 24:00:00', '2024-10-30 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-garbled-exclude-unknown-column",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "customers": [
+       "nothing"
+      ]
+     }
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names column 'nothing' of table 'customers', which is not one of its feature columns (primary and foreign keys are never sent as features). Excludable columns: ['segment', 'signup_at']",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-15 24:00:00', '2024-10-21 24:00:00', '2024-10-30 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-garbled-filter-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is not the reason: it is 2024-11-30 21:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00, which leaves room after it for the query's whole window. No entity passed \"customers.segment = 'nobody'\", so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-15 24:00:00', '2024-10-30 24:00:00', '2024-10-21 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-garbled-negative-lag",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "lag_timesteps": -1
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'lag_timesteps' cannot be negative (got -1)",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-15 24:00:00', '2024-10-30 24:00:00', '2024-10-21 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-garbled-exclude-unknown-column",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "customers": [
+       "nothing"
+      ]
+     }
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names column 'nothing' of table 'customers', which is not one of its feature columns (primary and foreign keys are never sent as features). Excludable columns: ['segment', 'signup_at']",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-15 24:00:00', '2024-10-30 24:00:00', '2024-10-21 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-garbled-filter-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ]
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. The anchor time is not the reason: it is 2024-11-30 21:00:00, and 'purchases' holds data from 2024-01-02 18:00:00 to 2024-12-30 21:00:00, which leaves room after it for the query's whole window. No entity passed \"customers.segment = 'nobody'\", so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 1 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-21 24:00:00', '2024-10-15 24:00:00', '2024-10-30 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-garbled-negative-lag",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "lag_timesteps": -1
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'lag_timesteps' cannot be negative (got -1)",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-21 24:00:00', '2024-10-15 24:00:00', '2024-10-30 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/postgres-garbled-exclude-unknown-column",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "postgres",
+    "data": {
+     "generator": "marketplace-garbled",
+     "seed": 0,
+     "namespace": {
+      "schema": "parity_driver"
+     }
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "num_context_samples": 30,
+     "indices": [
+      1
+     ],
+     "exclude_cols_dict": {
+      "customers": [
+       "nothing"
+      ]
+     }
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "'exclude_cols_dict' names column 'nothing' of table 'customers', which is not one of its feature columns (primary and foreign keys are never sent as features). Excludable columns: ['segment', 'signup_at']",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Could not parse 21 of 666 value(s) of time column 'purchased_at' (for example ['2024-10-21 24:00:00', '2024-10-15 24:00:00', '2024-10-30 24:00:00']); they were dropped as 'NaT'"
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-timeless-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT items.category FOR EACH items.item_id WHERE items.category = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. Is your predictive query too restrictive?",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"items.category = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-own-time-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. Is your predictive query too restrictive?",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-no-purchase-yet",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT purchases.amount FOR EACH purchases.purchase_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "anchor_time": {
+      "$timestamp": "2024-01-01T12:00:00"
+     },
+     "context_anchor_time": {
+      "$timestamp": "2024-01-01T12:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. No row of 'purchases' existed at the anchor: it is 2024-01-01 12:00:00, and the earliest 'purchased_at' is 2024-01-02 18:00:00. Context examples only ask about an entity that existed by its anchor. If 'purchased_at' does not record when each entity began, set the time column of 'purchases' to None.",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-assuming",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id ASSUMING COUNT(purchases.*, 0, 7, days) > 0",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "ea3fc301a908ea3c776456b5fd10fad1b647ddbb717a72587da7af64c3e04837",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-too-many-tables",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace-wide",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases",
+     "notes_01",
+     "notes_02",
+     "notes_03",
+     "notes_04",
+     "notes_05",
+     "notes_06",
+     "notes_07",
+     "notes_08",
+     "notes_09",
+     "notes_10",
+     "notes_11",
+     "notes_12"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      4,
+      4
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Cannot query from a graph with more than 15 tables (got 16). Please create a feature request at 'https://github.com/NVIDIA/structured-data-models-client' if you must go beyond this for your use-case.",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-timeless-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT items.category FOR EACH items.item_id WHERE items.category = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. Is your predictive query too restrictive?",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"items.category = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-own-time-keeps-none",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id WHERE customers.segment = 'nobody'",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "anchor_time": "entity"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. Is your predictive query too restrictive?",
+    "details_keys": [],
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the entity filter \"customers.segment = 'nobody'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+     ],
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-no-purchase-yet",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT purchases.amount FOR EACH purchases.purchase_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "anchor_time": {
+      "$timestamp": "2024-01-01T12:00:00"
+     },
+     "context_anchor_time": {
+      "$timestamp": "2024-01-01T12:00:00"
+     }
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to collect any context examples. No row of 'purchases' existed at the anchor: it is 2024-01-01 12:00:00, and the earliest 'purchased_at' is 2024-01-02 18:00:00. Context examples only ask about an entity that existed by its anchor. If 'purchased_at' does not record when each entity began, set the time column of 'purchases' to None.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-assuming",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id ASSUMING COUNT(purchases.*, 0, 7, days) > 0",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "14eb9c9a3326b0bb42c38f54789fddeca3592757cccf21e2b1f35224b9914ece",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-too-many-tables",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-wide",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases",
+     "notes_01",
+     "notes_02",
+     "notes_03",
+     "notes_04",
+     "notes_05",
+     "notes_06",
+     "notes_07",
+     "notes_08",
+     "notes_09",
+     "notes_10",
+     "notes_11",
+     "notes_12"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30,
+     "num_neighbors": [
+      4,
+      4
+     ]
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Cannot query from a graph with more than 15 tables (got 16). Please create a feature request at 'https://github.com/NVIDIA/structured-data-models-client' if you must go beyond this for your use-case.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 21 indices in 17 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-multicategorical-target",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "stypes": {
+     "customers.segment": "multicategorical"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "message": "the relational engine failed while building this request: NotImplementedError: Task type not yet supported",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-multicategorical-target",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "stypes": {
+     "customers.segment": "multicategorical"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "message": "the relational engine failed while building this request: NotImplementedError: Task type not yet supported",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-no-signup-times",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "UPDATE customers SET signup_at = NULL"
+    ],
+    "time_columns": {
+     "customers": "signup_at"
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Failed to find any rows in the entity table 'customers'.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-a-table-without-times",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace-untimed",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "e1faabd2ef2925b47517d85d1567439cb11f4a235716380fbf1ff2eb608304b0",
+    "warnings": [
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "the graph was built without some of the rows given to it [purchases: 701 of 701 rows dropped (701 with no time)]. Those rows are not in the context the model sees; fill the missing values or drop the rows yourself if that is not what you meant."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'items', 'purchases', 'reviews', 'stores' are linked into the schema and not in this request: the sampler reached no row of them from the entities being scored, so the model answers without them. Raise num_hops if they lie further out than the hops sampled, and check the foreign key holds values the parent key actually has if they do not."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-a-table-without-times",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace-untimed",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "time_columns": {
+     "purchases": "purchased_at"
+    }
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "e1faabd2ef2925b47517d85d1567439cb11f4a235716380fbf1ff2eb608304b0",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 8 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'items', 'purchases', 'reviews', 'stores' are linked into the schema and not in this request: the sampler reached no row of them from the entities being scored, so the model answers without them. Raise num_hops if they lie further out than the hops sampled, and check the foreign key holds values the parent key actually has if they do not."
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/memory-an-unknown-key",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "memory",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      999999
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Task references 1 unresolved row(s) in table 'customers' after graph sanitization",
+    "details_keys": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/sqlite-earliest-time-unreadable",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "sqlite",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "UPDATE purchases SET purchased_at = '' WHERE purchase_id = 3"
+    ]
+   },
+   "expected": {
+    "payloads": 1,
+    "sha256": "40b19349da45a4ebb5d79e47a5062f10cdb772e1401d1ef147db22f6c8aec617",
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ],
+     [
+      "builtins.UserWarning",
+      "Could not parse 1 of 338 value(s) of time column 'purchased_at' (for example ['']); they were dropped as 'NaT'"
+     ],
+     [
+      "sdm_client.core.warnings.SDMWarning",
+      "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-a-scored-key-repeats",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      1,
+      2
+     ],
+     "num_context_samples": 30
+    },
+    "setup": [
+     "INSERT INTO customers SELECT * FROM customers WHERE customer_id = 1"
+    ],
+    "check_keys": false
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Cannot score 1: more than one row of table 'customers' holds this value of 'customer_id', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row.",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "driver/driver.materialize/duckdb-an-unknown-key",
+   "source": "tests/rust_core/rfm/test_driver_fixtures.py",
+   "operation": "driver.materialize",
+   "input": {
+    "backend": "duckdb",
+    "data": {
+     "generator": "marketplace",
+     "seed": 0
+    },
+    "tables": [
+     "customers",
+     "items",
+     "reviews",
+     "stores",
+     "purchases"
+    ],
+    "primary_keys": {
+     "stores": "store_code"
+    },
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH customers.customer_id",
+    "options": {
+     "random_seed": 7,
+     "indices": [
+      999999
+     ],
+     "num_context_samples": 30
+    }
+   },
+   "expected_error": {
+    "class": "sdm_client.errors.StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "\"The primary keys [999999] do not exist in the 'customers' table\"",
+    "details_keys": [],
+    "warnings": [
+     [
+      "builtins.UserWarning",
+      "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+     ]
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

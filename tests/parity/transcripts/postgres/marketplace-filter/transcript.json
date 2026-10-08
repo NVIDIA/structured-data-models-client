@@ -1,0 +1,1910 @@
+{
+ "format_version": 1,
+ "name": "postgres/marketplace-filter",
+ "backend": "postgres",
+ "task_kind": "classification",
+ "data": {
+  "generator": "marketplace",
+  "seed": 0,
+  "namespace": {
+   "schema": "parity_marketplace"
+  },
+  "connection": {
+   "autocommit": true
+  }
+ },
+ "calls": [
+  {
+   "call": "Schema.from_source",
+   "args": {
+    "tables": {
+     "customers": "customers",
+     "items": "items",
+     "reviews": "reviews",
+     "stores": "stores",
+     "purchases": "purchases"
+    },
+    "primary_keys": {
+     "stores": "store_code"
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) > 1 FOR EACH customers.customer_id WHERE customers.segment = 'retail'"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2],
+    "num_context_samples": 30,
+    "lag_timesteps": 2,
+    "num_neighbors": [8, 0],
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_marketplace", "customers"],
+   "result": "step-0000.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_marketplace", "customers"],
+   "result": "step-0001.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_marketplace\".\"customers\""],
+   "result": "step-0002.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"customer_id\", \"segment\", \"signup_at\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"customer_id\", \"segment\", \"signup_at\")) AS __kumo_order_1__, \"customer_id\", \"segment\", \"signup_at\" FROM \"parity_marketplace\".\"customers\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0003.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "customer_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "segment",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "signup_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_marketplace", "items"],
+   "result": "step-0004.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_marketplace", "items"],
+   "result": "step-0005.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_marketplace\".\"items\""],
+   "result": "step-0006.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"item_id\", \"category\", \"price\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"item_id\", \"category\", \"price\")) AS __kumo_order_1__, \"item_id\", \"category\", \"price\" FROM \"parity_marketplace\".\"items\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0007.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "item_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "category",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "price",
+     "type_code": 701,
+     "internal_size": 8,
+     "type_display": "float8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_marketplace", "reviews"],
+   "result": "step-0008.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_marketplace", "reviews"],
+   "result": "step-0009.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_marketplace\".\"reviews\""],
+   "result": "step-0010.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"review_id\", \"item_id\", \"rating\", \"body\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"review_id\", \"item_id\", \"rating\", \"body\")) AS __kumo_order_1__, \"review_id\", \"item_id\", \"rating\", \"body\" FROM \"parity_marketplace\".\"reviews\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0011.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "review_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "item_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "rating",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "body",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_marketplace", "stores"],
+   "result": "step-0012.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_marketplace", "stores"],
+   "result": "step-0013.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_marketplace\".\"stores\""],
+   "result": "step-0014.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"store_code\", \"region\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"store_code\", \"region\")) AS __kumo_order_1__, \"store_code\", \"region\" FROM \"parity_marketplace\".\"stores\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0015.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "store_code",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "region",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+   "params": ["parity_marketplace", "purchases"],
+   "result": "step-0016.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "data_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "udt_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "numeric_scale",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "is_nullable",
+     "type_code": 1043,
+     "display_size": 3,
+     "type_display": "varchar(3)"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "format_type",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+   "params": ["parity_marketplace", "purchases"],
+   "result": "step-0017.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_type",
+     "type_code": 1043,
+     "type_display": "varchar"
+    },
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+   "params": ["\"parity_marketplace\".\"purchases\""],
+   "result": "step-0018.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "relkind",
+     "type_code": 18,
+     "internal_size": 1,
+     "type_display": "\"char\""
+    },
+    {
+     "name": "?column?",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT md5(record_send(ROW(\"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\")) AS __kumo_order_1__, \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\" FROM \"parity_marketplace\".\"purchases\" ORDER BY 1, 2 LIMIT 1000",
+   "params": null,
+   "result": "step-0019.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_order_0__",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_order_1__",
+     "type_code": 17,
+     "type_display": "bytea"
+    },
+    {
+     "name": "purchase_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "customer_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "item_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "amount",
+     "type_code": 701,
+     "internal_size": 8,
+     "type_display": "float8"
+    },
+    {
+     "name": "purchased_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "store_code",
+     "type_code": 25,
+     "type_display": "text"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_marketplace", "customers"],
+   "result": "step-0020.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_marketplace", "items"],
+   "result": "step-0021.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_marketplace", "reviews"],
+   "result": "step-0022.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_marketplace", "stores"],
+   "result": "step-0023.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+   "params": ["parity_marketplace", "purchases"],
+   "result": "step-0024.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "constraint_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_schema",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "table_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "column_name",
+     "type_code": 19,
+     "internal_size": 64,
+     "type_display": "name"
+    },
+    {
+     "name": "ordinal_position",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"customer_id\") AS d, COUNT(CASE WHEN \"customer_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"item_id\") AS d, COUNT(CASE WHEN \"item_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"items\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"review_id\") AS d, COUNT(CASE WHEN \"review_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"reviews\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"store_code\") AS d, COUNT(CASE WHEN \"store_code\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"stores\"\nUNION ALL\nSELECT 4 AS k, COUNT(*) AS n, COUNT(DISTINCT \"purchase_id\") AS d, COUNT(CASE WHEN \"purchase_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"purchases\"",
+   "params": null,
+   "result": "step-0025.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "k",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "n",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "d",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "z",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"customers\"",
+   "params": null,
+   "result": "step-0026.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"items\"",
+   "params": null,
+   "result": "step-0027.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"reviews\"",
+   "params": null,
+   "result": "step-0028.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"stores\"",
+   "params": null,
+   "result": "step-0029.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"purchases\"",
+   "params": null,
+   "result": "step-0030.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "count",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS table_index, MIN(\"purchased_at\") AS min_date, MAX(\"purchased_at\") AS max_date\nFROM \"parity_marketplace\".\"purchases\"",
+   "params": null,
+   "result": "step-0031.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "table_index",
+     "type_code": 23,
+     "internal_size": 4,
+     "type_display": "int4"
+    },
+    {
+     "name": "min_date",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "max_date",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT setseed(%s)",
+   "params": [0.8071317425028082],
+   "result": null,
+   "error": null,
+   "description": [
+    {
+     "name": "setseed",
+     "type_code": 2278,
+     "internal_size": 4,
+     "type_display": "2278"
+    }
+   ]
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"customer_id\", \"segment\", \"signup_at\"\nFROM \"parity_marketplace\".\"customers\"\nWHERE \"customer_id\" IS NOT NULL AND \"signup_at\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+   "params": null,
+   "result": "step-0033.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "customer_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "segment",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "signup_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"purchased_at\"\nFROM TMP\nJOIN \"parity_marketplace\".\"purchases\"\n  ON \"customer_id\" = TMP.__KUMO_ID__\n AND \"purchased_at\" <= TMP.__KUMO_END_TIME__\n AND \"purchased_at\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"purchased_at\", \"purchase_id\"",
+   "params": ["[{\"id\":57,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-11-30T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":50,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":16,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":4,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":57,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":44,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":58,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":23,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":13,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":59,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":9,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":20,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":12,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":14,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":60,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":19,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":35,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":6,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":52,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":5,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":47,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":30,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":38,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":37,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":42,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":8,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":11,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":33,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":34,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":49,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":39,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":17,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":51,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":10,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":32,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":54,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":41,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":45,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":55,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"}]"],
+   "result": "step-0034.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "purchased_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"purchased_at\"\nFROM TMP\nJOIN \"parity_marketplace\".\"purchases\"\n  ON \"customer_id\" = TMP.__KUMO_ID__\n AND \"purchased_at\" <= TMP.__KUMO_END_TIME__\n AND \"purchased_at\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"purchased_at\", \"purchase_id\"",
+   "params": ["[{\"id\":53,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-11-30T21:00:00+00:00\",\"s\":\"2024-10-01T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-10-31T21:00:00+00:00\",\"s\":\"2024-09-01T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-10-01T21:00:00+00:00\",\"s\":\"2024-08-02T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-09-01T21:00:00+00:00\",\"s\":\"2024-07-03T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-08-02T21:00:00+00:00\",\"s\":\"2024-06-03T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-07-03T21:00:00+00:00\",\"s\":\"2024-05-04T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-06-03T21:00:00+00:00\",\"s\":\"2024-04-04T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-05-04T21:00:00+00:00\",\"s\":\"2024-03-05T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-04-04T21:00:00+00:00\",\"s\":\"2024-02-04T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-03-05T21:00:00+00:00\",\"s\":\"2024-01-05T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-02-04T21:00:00+00:00\",\"s\":\"2023-12-06T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-01-05T21:00:00+00:00\",\"s\":\"2023-11-06T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-12-30T21:00:00+00:00\",\"s\":\"2024-10-31T21:00:00+00:00\"}]"],
+   "result": "step-0035.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "purchased_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"customer_id\", \"segment\", \"signup_at\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"customer_id\", CAST(\"segment\" AS text), \"signup_at\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_marketplace\".\"customers\"\n    ON \"customer_id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+   "params": ["[53,25,56,7,28,31,43,24,36,18,40,29,26,3,27,46,22,21,1,15,48,22,26,53,40,24,46,27,28,1,1,2]"],
+   "result": "step-0036.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "customer_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "segment",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "signup_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "__kumo_row__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "__kumo_matches__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\",\n         ROW_NUMBER() OVER (ORDER BY \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", CAST(\"store_code\" AS text)) AS __KUMO_ROW__\n  FROM \"parity_marketplace\".\"purchases\"\n  WHERE \"customer_id\" = TMP.__KUMO_ID__\n    AND \"purchased_at\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", CAST(\"store_code\" AS text)\n  LIMIT 8\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+   "params": ["[{\"id\":53,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":25,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":56,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":7,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":31,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":43,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":36,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":18,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":29,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":3,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":21,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":15,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":48,\"e\":\"2024-11-30T21:00:00+00:00\"},{\"id\":22,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":26,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":53,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":40,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":24,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":46,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":27,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":28,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-31T21:00:00+00:00\"},{\"id\":1,\"e\":\"2024-12-30T21:00:00+00:00\"},{\"id\":2,\"e\":\"2024-12-30T21:00:00+00:00\"}]"],
+   "result": "step-0037.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "purchase_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "customer_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "item_id",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    },
+    {
+     "name": "amount",
+     "type_code": 701,
+     "internal_size": 8,
+     "type_display": "float8"
+    },
+    {
+     "name": "purchased_at",
+     "type_code": 1114,
+     "internal_size": 8,
+     "type_display": "timestamp"
+    },
+    {
+     "name": "store_code",
+     "type_code": 25,
+     "type_display": "text"
+    },
+    {
+     "name": "__kumo_row__",
+     "type_code": 20,
+     "internal_size": 8,
+     "type_display": "int8"
+    }
+   ],
+   "fetch": "rows"
+  }
+ ],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "binary_classification",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "bool",
+     "classes": ["false", "true"],
+     "positive_class": "true"
+    },
+    "entity_table_names": ["customers"],
+    "anchor_time_column": "__kumo_anchor_time"
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "__kumo_anchor_time": {
+       "dtype": "timestamp[us]",
+       "stype": "timestamp",
+       "nullable": false
+      },
+      "TARGET": {
+       "dtype": "bool",
+       "stype": "categorical"
+      },
+      "__kumo_arl0__": {
+       "dtype": "bool"
+      },
+      "__kumo_arl1__": {
+       "dtype": "bool"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "customers": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "nullable": false
+       },
+       "segment": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "signup_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      },
+      "primary_key": ["instance_id", "customer_id"]
+     },
+     "purchases": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "amount": {
+        "dtype": "float64",
+        "stype": "numerical"
+       },
+       "purchased_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["customer_id"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET", "__kumo_arl0__", "__kumo_arl1__"],
+     "rows": [
+      [0, 53, "2024-11-30T21:00:00.000000Z", false, true, true],
+      [1, 25, "2024-11-30T21:00:00.000000Z", false, true, true],
+      [2, 56, "2024-11-30T21:00:00.000000Z", false, true, false],
+      [3, 7, "2024-11-30T21:00:00.000000Z", true, false, false],
+      [4, 28, "2024-11-30T21:00:00.000000Z", false, true, false],
+      [5, 31, "2024-11-30T21:00:00.000000Z", false, false, false],
+      [6, 43, "2024-11-30T21:00:00.000000Z", true, false, false],
+      [7, 24, "2024-11-30T21:00:00.000000Z", false, false, false],
+      [8, 36, "2024-11-30T21:00:00.000000Z", false, false, false],
+      [9, 18, "2024-11-30T21:00:00.000000Z", false, true, false],
+      [10, 40, "2024-11-30T21:00:00.000000Z", false, false, true],
+      [11, 29, "2024-11-30T21:00:00.000000Z", true, true, false],
+      [12, 26, "2024-11-30T21:00:00.000000Z", false, false, true],
+      [13, 3, "2024-11-30T21:00:00.000000Z", true, false, false],
+      [14, 27, "2024-11-30T21:00:00.000000Z", false, true, false],
+      [15, 46, "2024-11-30T21:00:00.000000Z", false, true, false],
+      [16, 22, "2024-11-30T21:00:00.000000Z", false, false, false],
+      [17, 21, "2024-11-30T21:00:00.000000Z", true, false, false],
+      [18, 1, "2024-11-30T21:00:00.000000Z", false, true, true],
+      [19, 15, "2024-11-30T21:00:00.000000Z", false, false, false],
+      [20, 48, "2024-11-30T21:00:00.000000Z", false, true, false],
+      [21, 22, "2024-10-31T21:00:00.000000Z", false, false, false],
+      [22, 26, "2024-10-31T21:00:00.000000Z", false, true, true],
+      [23, 53, "2024-10-31T21:00:00.000000Z", true, true, false],
+      [24, 40, "2024-10-31T21:00:00.000000Z", false, true, false],
+      [25, 24, "2024-10-31T21:00:00.000000Z", false, false, false],
+      [26, 46, "2024-10-31T21:00:00.000000Z", true, false, false],
+      [27, 27, "2024-10-31T21:00:00.000000Z", true, false, false],
+      [28, 28, "2024-10-31T21:00:00.000000Z", true, false, true],
+      [29, 1, "2024-10-31T21:00:00.000000Z", true, true, false]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "segment", "signup_at"],
+      "rows": [
+       [0, 53, "retail", "2024-01-15T00:00:00.000000Z"],
+       [1, 25, "retail", "2024-02-26T00:00:00.000000Z"],
+       [2, 56, "retail", "2024-01-29T00:00:00.000000Z"],
+       [3, 7, "retail", "2024-03-04T00:00:00.000000Z"],
+       [4, 28, "retail", "2024-01-22T00:00:00.000000Z"],
+       [5, 31, "retail", "2024-02-05T00:00:00.000000Z"],
+       [6, 43, "retail", "2024-03-04T00:00:00.000000Z"],
+       [7, 24, "retail", "2024-03-04T00:00:00.000000Z"],
+       [8, 36, "retail", "2024-01-08T00:00:00.000000Z"],
+       [9, 18, "retail", "2024-02-12T00:00:00.000000Z"],
+       [10, 40, "retail", "2024-02-19T00:00:00.000000Z"],
+       [11, 29, "retail", "2024-01-01T00:00:00.000000Z"],
+       [12, 26, "retail", "2024-03-04T00:00:00.000000Z"],
+       [13, 3, "retail", "2024-01-22T00:00:00.000000Z"],
+       [14, 27, "retail", "2024-01-29T00:00:00.000000Z"],
+       [15, 46, "retail", "2024-03-11T00:00:00.000000Z"],
+       [16, 22, "retail", "2024-01-08T00:00:00.000000Z"],
+       [17, 21, "retail", "2024-02-26T00:00:00.000000Z"],
+       [18, 1, "retail", "2024-02-05T00:00:00.000000Z"],
+       [19, 15, "retail", "2024-02-26T00:00:00.000000Z"],
+       [20, 48, "retail", "2024-02-19T00:00:00.000000Z"],
+       [21, 22, "retail", "2024-01-08T00:00:00.000000Z"],
+       [22, 26, "retail", "2024-03-04T00:00:00.000000Z"],
+       [23, 53, "retail", "2024-01-15T00:00:00.000000Z"],
+       [24, 40, "retail", "2024-02-19T00:00:00.000000Z"],
+       [25, 24, "retail", "2024-03-04T00:00:00.000000Z"],
+       [26, 46, "retail", "2024-03-11T00:00:00.000000Z"],
+       [27, 27, "retail", "2024-01-29T00:00:00.000000Z"],
+       [28, 28, "retail", "2024-01-22T00:00:00.000000Z"],
+       [29, 1, "retail", "2024-02-05T00:00:00.000000Z"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "customer_id"],
+      "rows": [
+       [0, 0, 2.19, "2024-11-28T09:00:00.000000Z", 53],
+       [0, 1, 22.73, "2024-11-01T15:00:00.000000Z", 53],
+       [0, 2, 37.26, "2024-10-22T19:00:00.000000Z", 53],
+       [0, 3, 62.64, "2024-10-05T08:00:00.000000Z", 53],
+       [0, 4, 60.06, "2024-09-23T18:00:00.000000Z", 53],
+       [0, 5, 21.08, "2024-09-01T10:00:00.000000Z", 53],
+       [0, 6, 42.99, "2024-08-06T21:00:00.000000Z", 53],
+       [0, 7, 70.72, "2024-07-11T20:00:00.000000Z", 53],
+       [1, 8, 14.94, "2024-11-30T12:00:00.000000Z", 25],
+       [1, 9, 23.82, "2024-11-10T17:00:00.000000Z", 25],
+       [1, 10, 85.65, "2024-11-06T09:00:00.000000Z", 25],
+       [1, 11, 33.42, "2024-10-21T17:00:00.000000Z", 25],
+       [1, 12, 29.63, "2024-10-19T18:00:00.000000Z", 25],
+       [1, 13, 91.89, "2024-09-02T13:00:00.000000Z", 25],
+       [1, 14, 63.76, "2024-07-11T13:00:00.000000Z", 25],
+       [1, 15, 72.98, "2024-07-06T15:00:00.000000Z", 25],
+       [2, 16, 10.04, "2024-11-30T14:00:00.000000Z", 56],
+       [2, 17, 85.74, "2024-11-29T08:00:00.000000Z", 56],
+       [2, 18, 87.08, "2024-11-27T06:00:00.000000Z", 56],
+       [2, 19, 73.72, "2024-11-02T21:00:00.000000Z", 56],
+       [2, 20, 17.72, "2024-08-28T13:00:00.000000Z", 56],
+       [2, 21, 90.55, "2024-04-16T09:00:00.000000Z", 56],
+       [2, 22, 56.53, "2024-04-05T12:00:00.000000Z", 56],
+       [2, 23, 69.61, "2024-02-24T19:00:00.000000Z", 56],
+       [3, 24, 12.87, "2024-11-30T10:00:00.000000Z", 7],
+       [3, 25, 73.85, "2024-10-31T18:00:00.000000Z", 7],
+       [3, 26, 66.73, "2024-09-21T17:00:00.000000Z", 7],
+       [3, 27, 49.73, "2024-09-19T20:00:00.000000Z", 7],
+       [3, 28, 97.34, "2024-09-02T15:00:00.000000Z", 7],
+       [3, 29, 96.48, "2024-08-21T11:00:00.000000Z", 7],
+       [3, 30, 92.0, "2024-07-29T08:00:00.000000Z", 7],
+       [3, 31, 75.25, "2024-07-25T16:00:00.000000Z", 7],
+       [4, 32, 20.84, "2024-11-26T10:00:00.000000Z", 28],
+       [4, 33, 87.58, "2024-11-15T18:00:00.000000Z", 28],
+       [4, 34, 37.8, "2024-09-29T16:00:00.000000Z", 28],
+       [4, 35, 11.96, "2024-09-29T14:00:00.000000Z", 28],
+       [4, 36, 47.84, "2024-09-18T06:00:00.000000Z", 28],
+       [4, 37, 35.29, "2024-09-17T12:00:00.000000Z", 28],
+       [4, 38, 22.87, "2024-07-23T09:00:00.000000Z", 28],
+       [4, 39, 81.39, "2024-06-28T20:00:00.000000Z", 28],
+       [5, 40, 32.53, "2024-10-10T15:00:00.000000Z", 31],
+       [5, 41, 35.3, "2024-08-30T17:00:00.000000Z", 31],
+       [5, 42, 48.59, "2024-08-11T21:00:00.000000Z", 31],
+       [5, 43, 36.26, "2024-07-17T07:00:00.000000Z", 31],
+       [5, 44, 39.39, "2024-07-09T21:00:00.000000Z", 31],
+       [5, 45, 29.24, "2024-06-26T12:00:00.000000Z", 31],
+       [5, 46, 92.8, "2024-06-25T11:00:00.000000Z", 31],
+       [5, 47, 50.98, "2024-06-04T07:00:00.000000Z", 31],
+       [6, 48, 29.6, "2024-09-19T08:00:00.000000Z", 43],
+       [6, 49, 73.15, "2024-09-11T14:00:00.000000Z", 43],
+       [6, 50, 54.07, "2024-08-10T19:00:00.000000Z", 43],
+       [6, 51, 50.47, "2024-08-02T07:00:00.000000Z", 43],
+       [6, 52, 42.18, "2024-07-18T20:00:00.000000Z", 43],
+       [6, 53, 7.56, "2024-06-22T18:00:00.000000Z", 43],
+       [6, 54, 34.18, "2024-05-31T06:00:00.000000Z", 43],
+       [6, 55, 17.0, "2024-05-27T07:00:00.000000Z", 43],
+       [7, 56, 39.62, "2024-11-10T21:00:00.000000Z", 24],
+       [7, 57, 41.74, "2024-09-03T07:00:00.000000Z", 24],
+       [7, 58, 37.0, "2024-07-18T10:00:00.000000Z", 24],
+       [7, 59, 30.0, "2024-07-04T13:00:00.000000Z", 24],
+       [7, 60, 10.83, "2024-07-01T15:00:00.000000Z", 24],
+       [7, 61, 77.54, "2024-06-26T06:00:00.000000Z", 24],
+       [7, 62, 52.72, "2024-06-11T09:00:00.000000Z", 24],
+       [7, 63, 98.84, "2024-06-05T13:00:00.000000Z", 24],
+       [8, 64, 64.76, "2024-11-28T19:00:00.000000Z", 36],
+       [8, 65, 12.21, "2024-07-04T10:00:00.000000Z", 36],
+       [8, 66, 92.46, "2024-06-04T09:00:00.000000Z", 36],
+       [8, 67, 2.42, "2024-05-21T10:00:00.000000Z", 36],
+       [8, 68, 83.12, "2024-04-26T17:00:00.000000Z", 36],
+       [8, 69, 48.24, "2024-02-27T12:00:00.000000Z", 36],
+       [8, 70, 73.92, "2024-02-02T19:00:00.000000Z", 36],
+       [8, 71, 57.51, "2024-01-13T15:00:00.000000Z", 36],
+       [9, 72, 6.42, "2024-11-21T19:00:00.000000Z", 18],
+       [9, 73, 61.54, "2024-11-06T15:00:00.000000Z", 18],
+       [9, 74, 2.97, "2024-11-04T18:00:00.000000Z", 18],
+       [9, 75, 38.78, "2024-10-04T19:00:00.000000Z", 18],
+       [9, 76, 36.7, "2024-09-02T11:00:00.000000Z", 18],
+       [9, 77, 54.71, "2024-08-25T14:00:00.000000Z", 18],
+       [9, 78, 65.54, "2024-08-24T15:00:00.000000Z", 18],
+       [9, 79, 64.41, "2024-07-17T20:00:00.000000Z", 18],
+       [10, 80, 84.44, "2024-10-24T20:00:00.000000Z", 40],
+       [10, 81, 83.06, "2024-10-22T07:00:00.000000Z", 40],
+       [10, 82, 70.98, "2024-07-15T09:00:00.000000Z", 40],
+       [10, 83, 9.74, "2024-06-28T17:00:00.000000Z", 40],
+       [10, 84, 82.45, "2024-05-09T09:00:00.000000Z", 40],
+       [10, 85, 17.36, "2024-02-26T18:00:00.000000Z", 40],
+       [10, 86, 50.24, "2024-02-23T16:00:00.000000Z", 40],
+       [11, 87, 14.73, "2024-11-23T15:00:00.000000Z", 29],
+       [11, 88, 30.78, "2024-11-06T13:00:00.000000Z", 29],
+       [11, 89, 52.85, "2024-10-31T21:00:00.000000Z", 29],
+       [11, 90, 52.18, "2024-08-27T08:00:00.000000Z", 29],
+       [11, 91, 15.09, "2024-08-26T10:00:00.000000Z", 29],
+       [11, 92, 34.57, "2024-08-12T10:00:00.000000Z", 29],
+       [11, 93, 87.34, "2024-08-07T17:00:00.000000Z", 29],
+       [11, 94, 73.51, "2024-05-22T11:00:00.000000Z", 29],
+       [12, 95, 50.26, "2024-11-22T19:00:00.000000Z", 26],
+       [12, 96, 0.91, "2024-10-31T21:00:00.000000Z", 26],
+       [12, 97, 75.01, "2024-10-15T08:00:00.000000Z", 26],
+       [12, 98, 93.08, "2024-09-23T16:00:00.000000Z", 26],
+       [12, 99, 28.33, "2024-09-20T11:00:00.000000Z", 26],
+       [12, 100, 73.74, "2024-08-02T21:00:00.000000Z", 26],
+       [12, 101, 65.07, "2024-07-28T13:00:00.000000Z", 26],
+       [12, 102, 34.28, "2024-07-20T15:00:00.000000Z", 26],
+       [13, 103, 29.07, "2024-10-15T12:00:00.000000Z", 3],
+       [13, 104, 18.04, "2024-09-26T21:00:00.000000Z", 3],
+       [13, 105, 39.8, "2024-09-18T15:00:00.000000Z", 3],
+       [13, 106, 31.01, "2024-08-11T08:00:00.000000Z", 3],
+       [13, 107, 11.01, "2024-07-02T11:00:00.000000Z", 3],
+       [13, 108, 54.39, "2024-07-02T07:00:00.000000Z", 3],
+       [13, 109, 86.83, "2024-06-20T20:00:00.000000Z", 3],
+       [13, 110, 90.79, "2024-06-06T21:00:00.000000Z", 3],
+       [14, 111, 72.63, "2024-11-23T12:00:00.000000Z", 27],
+       [14, 112, 64.7, "2024-11-21T07:00:00.000000Z", 27],
+       [14, 113, 96.64, "2024-10-25T08:00:00.000000Z", 27],
+       [14, 114, 64.21, "2024-09-30T16:00:00.000000Z", 27],
+       [14, 115, 21.49, "2024-08-23T14:00:00.000000Z", 27],
+       [14, 116, 66.19, "2024-08-06T21:00:00.000000Z", 27],
+       [14, 117, 51.35, "2024-06-21T14:00:00.000000Z", 27],
+       [14, 118, 79.99, "2024-05-30T14:00:00.000000Z", 27],
+       [15, 119, 75.43, "2024-11-21T19:00:00.000000Z", 46],
+       [15, 120, 83.1, "2024-11-10T08:00:00.000000Z", 46],
+       [15, 121, 11.62, "2024-10-19T15:00:00.000000Z", 46],
+       [15, 122, 11.91, "2024-09-06T09:00:00.000000Z", 46],
+       [15, 123, 0.91, "2024-08-29T11:00:00.000000Z", 46],
+       [15, 124, 18.21, "2024-07-27T11:00:00.000000Z", 46],
+       [15, 125, 6.56, "2024-07-12T19:00:00.000000Z", 46],
+       [15, 126, 74.58, "2024-07-09T09:00:00.000000Z", 46],
+       [16, 127, 92.95, "2024-09-07T13:00:00.000000Z", 22],
+       [16, 128, 40.96, "2024-08-14T09:00:00.000000Z", 22],
+       [16, 129, 47.64, "2024-08-08T12:00:00.000000Z", 22],
+       [16, 130, 3.55, "2024-05-31T11:00:00.000000Z", 22],
+       [16, 131, 37.97, "2024-05-12T14:00:00.000000Z", 22],
+       [16, 132, 59.33, "2024-03-05T06:00:00.000000Z", 22],
+       [16, 133, 69.71, "2024-02-11T19:00:00.000000Z", 22],
+       [17, 134, 84.21, "2024-09-28T13:00:00.000000Z", 21],
+       [17, 135, 85.67, "2024-07-30T09:00:00.000000Z", 21],
+       [17, 136, 54.06, "2024-07-30T08:00:00.000000Z", 21],
+       [17, 137, 73.42, "2024-07-14T16:00:00.000000Z", 21],
+       [17, 138, 36.22, "2024-06-25T18:00:00.000000Z", 21],
+       [17, 139, 78.51, "2024-05-09T12:00:00.000000Z", 21],
+       [17, 140, 93.76, "2024-03-08T14:00:00.000000Z", 21],
+       [18, 141, 1.26, "2024-11-12T20:00:00.000000Z", 1],
+       [18, 142, 29.28, "2024-11-10T07:00:00.000000Z", 1],
+       [18, 143, 94.88, "2024-11-09T08:00:00.000000Z", 1],
+       [18, 144, 2.02, "2024-10-30T10:00:00.000000Z", 1],
+       [18, 145, 35.09, "2024-10-18T09:00:00.000000Z", 1],
+       [18, 146, 36.45, "2024-07-25T21:00:00.000000Z", 1],
+       [18, 147, 22.43, "2024-07-25T19:00:00.000000Z", 1],
+       [18, 148, 72.97, "2024-06-30T13:00:00.000000Z", 1],
+       [19, 149, 6.94, "2024-11-27T08:00:00.000000Z", 15],
+       [19, 150, 49.0, "2024-09-29T12:00:00.000000Z", 15],
+       [19, 151, 77.06, "2024-08-02T12:00:00.000000Z", 15],
+       [19, 152, 86.94, "2024-07-20T15:00:00.000000Z", 15],
+       [19, 153, 23.58, "2024-07-16T18:00:00.000000Z", 15],
+       [19, 154, 12.25, "2024-06-22T08:00:00.000000Z", 15],
+       [19, 155, 66.35, "2024-06-15T19:00:00.000000Z", 15],
+       [19, 156, 94.14, "2024-04-30T10:00:00.000000Z", 15],
+       [20, 157, 1.92, "2024-11-28T16:00:00.000000Z", 48],
+       [20, 158, 24.46, "2024-11-04T06:00:00.000000Z", 48],
+       [20, 159, 88.76, "2024-05-05T18:00:00.000000Z", 48],
+       [21, 160, 92.95, "2024-09-07T13:00:00.000000Z", 22],
+       [21, 161, 40.96, "2024-08-14T09:00:00.000000Z", 22],
+       [21, 162, 47.64, "2024-08-08T12:00:00.000000Z", 22],
+       [21, 163, 3.55, "2024-05-31T11:00:00.000000Z", 22],
+       [21, 164, 37.97, "2024-05-12T14:00:00.000000Z", 22],
+       [21, 165, 59.33, "2024-03-05T06:00:00.000000Z", 22],
+       [21, 166, 69.71, "2024-02-11T19:00:00.000000Z", 22],
+       [22, 167, 0.91, "2024-10-31T21:00:00.000000Z", 26],
+       [22, 168, 75.01, "2024-10-15T08:00:00.000000Z", 26],
+       [22, 169, 93.08, "2024-09-23T16:00:00.000000Z", 26],
+       [22, 170, 28.33, "2024-09-20T11:00:00.000000Z", 26],
+       [22, 171, 73.74, "2024-08-02T21:00:00.000000Z", 26],
+       [22, 172, 65.07, "2024-07-28T13:00:00.000000Z", 26],
+       [22, 173, 34.28, "2024-07-20T15:00:00.000000Z", 26],
+       [22, 174, 95.68, "2024-07-09T15:00:00.000000Z", 26],
+       [23, 175, 37.26, "2024-10-22T19:00:00.000000Z", 53],
+       [23, 176, 62.64, "2024-10-05T08:00:00.000000Z", 53],
+       [23, 177, 60.06, "2024-09-23T18:00:00.000000Z", 53],
+       [23, 178, 21.08, "2024-09-01T10:00:00.000000Z", 53],
+       [23, 179, 42.99, "2024-08-06T21:00:00.000000Z", 53],
+       [23, 180, 70.72, "2024-07-11T20:00:00.000000Z", 53],
+       [23, 181, 61.52, "2024-06-13T15:00:00.000000Z", 53],
+       [23, 182, 3.12, "2024-05-29T13:00:00.000000Z", 53],
+       [24, 183, 84.44, "2024-10-24T20:00:00.000000Z", 40],
+       [24, 184, 83.06, "2024-10-22T07:00:00.000000Z", 40],
+       [24, 185, 70.98, "2024-07-15T09:00:00.000000Z", 40],
+       [24, 186, 9.74, "2024-06-28T17:00:00.000000Z", 40],
+       [24, 187, 82.45, "2024-05-09T09:00:00.000000Z", 40],
+       [24, 188, 17.36, "2024-02-26T18:00:00.000000Z", 40],
+       [24, 189, 50.24, "2024-02-23T16:00:00.000000Z", 40],
+       [25, 190, 41.74, "2024-09-03T07:00:00.000000Z", 24],
+       [25, 191, 37.0, "2024-07-18T10:00:00.000000Z", 24],
+       [25, 192, 30.0, "2024-07-04T13:00:00.000000Z", 24],
+       [25, 193, 10.83, "2024-07-01T15:00:00.000000Z", 24],
+       [25, 194, 77.54, "2024-06-26T06:00:00.000000Z", 24],
+       [25, 195, 52.72, "2024-06-11T09:00:00.000000Z", 24],
+       [25, 196, 98.84, "2024-06-05T13:00:00.000000Z", 24],
+       [25, 197, 78.7, "2024-05-24T11:00:00.000000Z", 24],
+       [26, 198, 11.62, "2024-10-19T15:00:00.000000Z", 46],
+       [26, 199, 11.91, "2024-09-06T09:00:00.000000Z", 46],
+       [26, 200, 0.91, "2024-08-29T11:00:00.000000Z", 46],
+       [26, 201, 18.21, "2024-07-27T11:00:00.000000Z", 46],
+       [26, 202, 6.56, "2024-07-12T19:00:00.000000Z", 46],
+       [26, 203, 74.58, "2024-07-09T09:00:00.000000Z", 46],
+       [26, 204, 38.61, "2024-07-08T12:00:00.000000Z", 46],
+       [26, 205, 22.43, "2024-06-18T11:00:00.000000Z", 46],
+       [27, 206, 96.64, "2024-10-25T08:00:00.000000Z", 27],
+       [27, 207, 64.21, "2024-09-30T16:00:00.000000Z", 27],
+       [27, 208, 21.49, "2024-08-23T14:00:00.000000Z", 27],
+       [27, 209, 66.19, "2024-08-06T21:00:00.000000Z", 27],
+       [27, 210, 51.35, "2024-06-21T14:00:00.000000Z", 27],
+       [27, 211, 79.99, "2024-05-30T14:00:00.000000Z", 27],
+       [27, 212, 56.96, "2024-03-17T14:00:00.000000Z", 27],
+       [28, 213, 37.8, "2024-09-29T16:00:00.000000Z", 28],
+       [28, 214, 11.96, "2024-09-29T14:00:00.000000Z", 28],
+       [28, 215, 47.84, "2024-09-18T06:00:00.000000Z", 28],
+       [28, 216, 35.29, "2024-09-17T12:00:00.000000Z", 28],
+       [28, 217, 22.87, "2024-07-23T09:00:00.000000Z", 28],
+       [28, 218, 81.39, "2024-06-28T20:00:00.000000Z", 28],
+       [28, 219, 77.44, "2024-05-15T09:00:00.000000Z", 28],
+       [28, 220, 7.02, "2024-03-22T09:00:00.000000Z", 28],
+       [29, 221, 2.02, "2024-10-30T10:00:00.000000Z", 1],
+       [29, 222, 35.09, "2024-10-18T09:00:00.000000Z", 1],
+       [29, 223, 36.45, "2024-07-25T21:00:00.000000Z", 1],
+       [29, 224, 22.43, "2024-07-25T19:00:00.000000Z", 1],
+       [29, 225, 72.97, "2024-06-30T13:00:00.000000Z", 1],
+       [29, 226, 30.94, "2024-06-11T09:00:00.000000Z", 1],
+       [29, 227, 12.57, "2024-06-08T10:00:00.000000Z", 1],
+       [29, 228, 78.65, "2024-05-15T16:00:00.000000Z", 1]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "__kumo_arl0__", "__kumo_arl1__"],
+     "rows": [
+      [30, 1, "2024-12-30T21:00:00.000000Z", false, true],
+      [31, 2, "2024-12-30T21:00:00.000000Z", false, false]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "segment", "signup_at"],
+      "rows": [
+       [30, 1, "retail", "2024-02-05T00:00:00.000000Z"],
+       [31, 2, "business", "2024-01-01T00:00:00.000000Z"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "customer_id"],
+      "rows": [
+       [30, 229, 1.26, "2024-11-12T20:00:00.000000Z", 1],
+       [30, 230, 29.28, "2024-11-10T07:00:00.000000Z", 1],
+       [30, 231, 94.88, "2024-11-09T08:00:00.000000Z", 1],
+       [30, 232, 2.02, "2024-10-30T10:00:00.000000Z", 1],
+       [30, 233, 35.09, "2024-10-18T09:00:00.000000Z", 1],
+       [30, 234, 36.45, "2024-07-25T21:00:00.000000Z", 1],
+       [30, 235, 22.43, "2024-07-25T19:00:00.000000Z", 1],
+       [30, 236, 72.97, "2024-06-30T13:00:00.000000Z", 1],
+       [31, 237, 58.13, "2024-11-11T19:00:00.000000Z", 2],
+       [31, 238, 96.83, "2024-09-24T12:00:00.000000Z", 2],
+       [31, 239, 4.67, "2024-08-26T21:00:00.000000Z", 2],
+       [31, 240, 56.99, "2024-08-26T06:00:00.000000Z", 2],
+       [31, 241, 40.17, "2024-08-18T09:00:00.000000Z", 2],
+       [31, 242, 58.07, "2024-07-24T12:00:00.000000Z", 2],
+       [31, 243, 23.6, "2024-07-05T16:00:00.000000Z", 2],
+       [31, 244, 30.11, "2024-05-08T17:00:00.000000Z", 2]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction", "probabilities"]
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "classification",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false,
+     "class_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT COUNT(purchases.*, 0, 30, days) > 1 FOR EACH customers.customer_id WHERE customers.segment = 'retail'",
+    "num_context_examples": 30,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "30",
+      "prediction": "False",
+      "probabilities": {
+       "False": 0.56884,
+       "True": 0.43116
+      }
+     },
+     {
+      "row_index": 1,
+      "id": "31",
+      "prediction": "False",
+      "probabilities": {
+       "False": 0.542289,
+       "True": 0.457711
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "the entity filter \"customers.segment = 'retail'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "'items', 'reviews', 'stores' are linked into the schema and not in this request: the sampler reached no row of them from the entities being scored, so the model answers without them. Raise num_hops if they lie further out than the hops sampled, and check the foreign key holds values the parent key actually has if they do not."
+  }
+ ]
+}

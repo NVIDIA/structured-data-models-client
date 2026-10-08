@@ -1,0 +1,154 @@
+{
+ "format_version": 1,
+ "name": "tabular/direct-regression",
+ "backend": "tabular",
+ "task_kind": "regression",
+ "data": {
+  "generator": "wire-snapshot",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Request",
+   "args": {
+    "context": {
+     "$frame": {
+      "table": "people"
+     }
+    },
+    "predict": {
+     "$frame": {
+      "table": "people",
+      "head": 3,
+      "drop": ["age"]
+     }
+    },
+    "target": "age",
+    "task": "regression"
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-tabular",
+    "outputs": ["prediction"]
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [],
+ "payloads": [
+  {
+   "model": "kumo-tabular",
+   "task": {
+    "kind": "regression",
+    "target": {
+     "column_name": "age",
+     "dtype": "float64"
+    }
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "user_id": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "age": {
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      "segment": {
+       "dtype": "string",
+       "stype": "categorical"
+      },
+      "churn": {
+       "dtype": "int64",
+       "stype": "numerical"
+      }
+     },
+     "primary_key": ["user_id"]
+    }
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["user_id", "age", "segment", "churn"],
+     "rows": [
+      [0, 20.0, "south", 0],
+      [1, 21.0, "north", 1],
+      [2, 22.0, "north", 0],
+      [3, 23.0, "south", 1],
+      [4, 24.0, "north", 0],
+      [5, 25.0, "north", 1],
+      [6, 26.0, "south", 0],
+      [7, 27.0, "north", 1],
+      [8, 28.0, "north", 0],
+      [9, 29.0, "south", 1],
+      [10, 30.0, "north", 0],
+      [11, 31.0, "north", 1]
+     ]
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["user_id", "segment", "churn"],
+     "rows": [
+      [0, "south", 0],
+      [1, "north", 1],
+      [2, "north", 0]
+     ]
+    }
+   },
+   "output": {
+    "fields": ["prediction"]
+   },
+   "metadata": {
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-3",
+    "model": "kumo-tabular",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "[0]",
+      "prediction": 50.817874
+     },
+     {
+      "row_index": 1,
+      "id": "[1]",
+      "prediction": 12.099198
+     },
+     {
+      "row_index": 2,
+      "id": "[2]",
+      "prediction": 40.169431
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "3 of the 3 rows being scored are also in context, carrying the 'age' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+  }
+ ]
+}

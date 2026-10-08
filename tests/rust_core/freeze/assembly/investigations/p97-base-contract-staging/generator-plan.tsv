@@ -1,0 +1,33 @@
+id	source	callable	stream_seeds	minimum_samples_per_stream	source_population_or_unit
+pql.queries	tests/rust_core/pql/_generate.py	queries	20261002,31,32	256	50000 accepted baseline queries; 31/32 documented custom-profile streams
+pql.date_literals	tests/rust_core/pql/_generate.py	date_literals	20261003	256	100000 literals
+dialects.random_state	tests/rust_core/dialects/accept_rng.py	seeds	20261004	256	10000 generated integer seeds plus complete source edge prefix
+dialects.json	tests/rust_core/dialects/accept_json.py	cases	20261005	256	23000 calls; retain source MUST prefix and each function/backend subgroup
+dialects.view_expressions	tests/rust_core/dialects/accept_view_expr.py	expressions	20261006	256	50000 expressions
+schema.date_columns	tests/rust_core/schema/_dates.py	columns	20261007	256	100000 columns
+schema.metric_views	tests/rust_core/schema/_views.py	metric_views	20261008	256	10000 views, retain trust variants
+schema.semantic_views	tests/rust_core/schema/_views.py	semantic_views	20261009	256	10000 views, retain source query outcomes
+sampling.random_state	tests/rust_core/sampling/_sampling.py	seeds	20261010	256	10000 seeds plus complete SEED_EDGES; all util/int/list invocation modes
+sampling.random_draws	tests/rust_core/sampling/accept_rng.py	_compare	20261017	256	RNG_SEED+7 draw-sequence stream over sampled integer seeds
+sampling.random_word_lists	tests/rust_core/sampling/accept_rng.py	test_random_state_by_long_word_lists	20261013	128	RNG_SEED+3 generated word-list seeds and draw sequences
+sampling.mt19937	tests/rust_core/sampling/_sampling.py	mt_jobs	20261011	256	RNG_SEED+1 operation streams over sampled integer seeds
+sampling.graphs	tests/rust_core/sampling/_sampling.py	graphs	20261011	256	10000 graphs, retaining all calls/reseeds in selected graph
+sampling.graph_store	tests/rust_core/sampling/accept_graph_store.py	_graphs	20261012	256	1000 stores
+sampling.graph_store_calls	tests/rust_core/sampling/accept_graph_store.py	test_random_graphs_store_as_today	20261013	256	STORE_SEED+1 sampling calls over selected stores
+sampling.offset_pairs	tests/rust_core/sampling/_sampling.py	offset_pairs	20261013	256	100000 timestamp/offset sequences, preserve every sequential application
+sampling.offset_pooling	tests/rust_core/sampling/accept_offsets.py	test_seconds_ns_and_pooling_match_pandas	20261014	256	OFFSET_SEED+1 seconds/ns/pooling cases
+sampling.text	tests/rust_core/sampling/_sampling.py	texts	20261014	256	20000 texts, each max_words variant retained
+sampling.debug_jobs	tests/rust_core/sampling/driver/accept_driver_debug.py	jobs	20261016	256	3000 hostile offsets and 600 hostile graphs; complete fixed audit prefix
+labels.aggregation_type	tests/rust_core/labels/_labels.py	aggregation_type_inputs	20261015	256	At least100000 groups across generated batches; count distinct input batches
+labels.aggregation	tests/rust_core/labels/_labels.py	aggregation_inputs	20261016	256	3000 windows
+labels.questions	tests/rust_core/labels/_labels.py	generated_questions	20261017	256	1500 generated questions plus all corpus resolvable questions
+labels.question_batches	tests/rust_core/labels/accept_generated.py	test_questions_label_as_today	20261018	256	LABELS_SEED+3; both batches of each selected resolved question
+request.results	tests/rust_core/request/accept_request_generated.py	results	20261022	256	600 results; preserve complete construction and to_pandas input
+request.absent	tests/rust_core/request/accept_request_generated.py	test_absent	20261023	256	600 requested-field lists tied to original result stream
+request.merge	tests/rust_core/request/accept_request_generated.py	test_merge	20261024	256	300 merged-part selections tied to original result stream
+request.ranked	tests/rust_core/request/accept_request_generated.py	_ranked_inputs	20261021	256	3000 ranked inputs
+request.payload_size	tests/rust_core/request/accept_request_size.py	test_generated_payloads_count_alike	20261023	256	2000 payloads, preserving parsed values and original JSON spellings
+rfm.sequences	tests/rust_core/rfm/test_sequences.py	_rows	20261003	256	4000 sequence rows; all caller separator/operation variants retained
+request.ranked_nan	tests/rust_core/test_ranked_nan_order.py	_rankings	20261004	256	400 rankings
+sampling.hashseed_python_jobs	tests/rust_core/sampling/_jobs.py	python_jobs	20261021	128	RNG_SEED+11 extra composite jobs, not PYTHONHASHSEED values
+sampling.hashseed_array_jobs	tests/rust_core/sampling/_jobs.py	array_jobs	20261012,20261024	128	STORE_SEED and LABELS_SEED+9 extra Arrow jobs, both subgroups

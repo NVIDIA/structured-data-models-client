@@ -1,0 +1,1567 @@
+{
+ "format": 1,
+ "scenario": "postgres/marketplace-early",
+ "transcript": "tests/parity/transcripts/postgres/marketplace-early",
+ "calls": [
+  {
+   "host": "schema_from_source",
+   "function": "schema_source_run",
+   "args": [
+    "postgres",
+    "{\"namespace\": {\"schema\": \"parity_marketplace\"}, \"semantic_model\": null, \"trust_expressions\": false}",
+    "{\"tables\": {\"customers\": \"customers\", \"items\": \"items\", \"reviews\": \"reviews\", \"stores\": \"stores\", \"purchases\": \"purchases\"}, \"primary_keys\": {\"stores\": \"store_code\"}, \"time_columns\": null, \"relationships\": null, \"check_keys\": true}"
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "customers"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "bb4472f13944468647abfaed0c6ea4ee3804e4cd8e2664f2af69d3b26f3251ee"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_marketplace",
+        "customers"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_marketplace\".\"customers\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6ea168b7633d5d53b3c79ad6207a1e93dd8ff53637b42cf524c6da97a8f11f1f"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"customer_id\", \"segment\", \"signup_at\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"customer_id\", \"segment\", \"signup_at\")) AS __kumo_order_1__, \"customer_id\", \"segment\", \"signup_at\" FROM \"parity_marketplace\".\"customers\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "60d741fe4cbfd8ce657882c38a11833c001fba25e85abeb418251c0e3742afda"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "items"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "3f9ec53ca45fbeab96a74d252894bdab901e2502923fd8d06e03241c19647bf2"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_marketplace",
+        "items"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_marketplace\".\"items\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6ea168b7633d5d53b3c79ad6207a1e93dd8ff53637b42cf524c6da97a8f11f1f"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"item_id\", \"category\", \"price\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"item_id\", \"category\", \"price\")) AS __kumo_order_1__, \"item_id\", \"category\", \"price\" FROM \"parity_marketplace\".\"items\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "4f0b2d8fb2b289d187a2f4c43bc4c63c42a9892b36ac3937f93e6ee084948b0a"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "reviews"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "d3c796e2ca264fb559f6c1f134d9cabeab79d6b20d924000a6974be770d6fd4d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_marketplace",
+        "reviews"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_marketplace\".\"reviews\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "82bfcbb42b3410d605bded84e027ebd729e0cbbb8f433ab44f64e9e6d40f53fb"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"review_id\", \"item_id\", \"rating\", \"body\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"review_id\", \"item_id\", \"rating\", \"body\")) AS __kumo_order_1__, \"review_id\", \"item_id\", \"rating\", \"body\" FROM \"parity_marketplace\".\"reviews\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "d4839a5c8e5215f1e8ebc40fce8c0382699ec393557dff633d2bf60fcdc9171b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "stores"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "083ad32377920455f8fea443b646029ba203532390563d63c361dc5ad21a9288"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_marketplace",
+        "stores"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_marketplace\".\"stores\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6ea168b7633d5d53b3c79ad6207a1e93dd8ff53637b42cf524c6da97a8f11f1f"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"store_code\", \"region\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"store_code\", \"region\")) AS __kumo_order_1__, \"store_code\", \"region\" FROM \"parity_marketplace\".\"stores\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "b37db5781692c28daa40f12563d37105925eb4e3637ab2b543e4bcc52383187d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "purchases"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "91fff1ae141c20cef3689995eababa905fac8078412305b7f7c3e0ecf2e982cb"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_marketplace",
+        "purchases"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_marketplace\".\"purchases\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "1403d3273fb0d2d6f93f5b8de2d564f7832d96f39dbdc564190d4190c9bfda9a"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\")) AS __kumo_order_1__, \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\" FROM \"parity_marketplace\".\"purchases\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "c7adcb6430a3cb16bf7b389a1deba048a44b57974b1e3dc0f5c243f8dc66b8a0"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "customers"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "items"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "reviews"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "stores"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_marketplace",
+        "purchases"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"customer_id\") AS d, COUNT(CASE WHEN \"customer_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"item_id\") AS d, COUNT(CASE WHEN \"item_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"items\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"review_id\") AS d, COUNT(CASE WHEN \"review_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"reviews\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"store_code\") AS d, COUNT(CASE WHEN \"store_code\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"stores\"\nUNION ALL\nSELECT 4 AS k, COUNT(*) AS n, COUNT(DISTINCT \"purchase_id\") AS d, COUNT(CASE WHEN \"purchase_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_marketplace\".\"purchases\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "5c4cc2baab316450e1aba053589eef9a0c53126ffbbf9522e14fcfc42af39a51"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"kind\":\"source\",\"source\":{\"namespace\":{\"schema\":\"parity_marketplace\"},\"semantic_model\":null,\"trust_expressions\":false,\"backend\":\"postgres\"},\"schema\":{\"tables\":[{\"name\":\"customers\",\"source_name\":\"customers\",\"columns\":[{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"signup_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null}],\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"duplicate_keys\":0},{\"name\":\"items\",\"source_name\":\"items\",\"columns\":[{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"price\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"item_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"reviews\",\"source_name\":\"reviews\",\"columns\":[{\"name\":\"review_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"rating\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"body\",\"dtype\":\"string\",\"stype\":\"text\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"review_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"stores\",\"source_name\":\"stores\",\"columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"region\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"store_code\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"purchases\",\"source_name\":\"purchases\",\"columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"amount\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"purchased_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null},{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"duplicate_keys\":0}],\"relationships\":[[\"reviews\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"customer_id\",\"customers\",\"customer_id\"],[\"purchases\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"store_code\",\"stores\",\"store_code\"]]},\"engine\":[[\"customers\",{\"backend\":\"postgres\",\"name\":\"customers\",\"raw_source_name\":\"customers\",\"place\":{\"catalog\":null,\"schema\":\"parity_marketplace\",\"row_filter\":null},\"columns\":[{\"name\":\"customer_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"segment\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"signup_at\",\"expr\":null,\"dtype\":\"date\",\"stype\":\"timestamp\",\"is_pk\":false,\"is_time\":true,\"is_end\":false}],\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"time_choice\":{\"column\":\"signup_at\",\"how\":\"only\",\"among\":[\"signup_at\"],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"segment\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"signup_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"customer_id\":\"bigint\",\"segment\":\"text\",\"signup_at\":\"timestamp without time zone\"},\"sample_source\":\"\\\"parity_marketplace\\\".\\\"customers\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"items\",{\"backend\":\"postgres\",\"name\":\"items\",\"raw_source_name\":\"items\",\"place\":{\"catalog\":null,\"schema\":\"parity_marketplace\",\"row_filter\":null},\"columns\":[{\"name\":\"item_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"category\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"price\",\"expr\":null,\"dtype\":\"float\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"item_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"category\":\"text\",\"item_id\":\"bigint\",\"price\":\"double precision\"},\"sample_source\":\"\\\"parity_marketplace\\\".\\\"items\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"reviews\",{\"backend\":\"postgres\",\"name\":\"reviews\",\"raw_source_name\":\"reviews\",\"place\":{\"catalog\":null,\"schema\":\"parity_marketplace\",\"row_filter\":null},\"columns\":[{\"name\":\"review_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"item_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"rating\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"body\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"text\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"review_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"review_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"rating\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"body\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"body\":\"text\",\"item_id\":\"bigint\",\"rating\":\"bigint\",\"review_id\":\"bigint\"},\"sample_source\":\"\\\"parity_marketplace\\\".\\\"reviews\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"stores\",{\"backend\":\"postgres\",\"name\":\"stores\",\"raw_source_name\":\"stores\",\"place\":{\"catalog\":null,\"schema\":\"parity_marketplace\",\"row_filter\":null},\"columns\":[{\"name\":\"store_code\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"region\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"store_code\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"region\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"region\":\"text\",\"store_code\":\"text\"},\"sample_source\":\"\\\"parity_marketplace\\\".\\\"stores\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"purchases\",{\"backend\":\"postgres\",\"name\":\"purchases\",\"raw_source_name\":\"purchases\",\"place\":{\"catalog\":null,\"schema\":\"parity_marketplace\",\"row_filter\":null},\"columns\":[{\"name\":\"purchase_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"customer_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"item_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"amount\",\"expr\":null,\"dtype\":\"float\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"purchased_at\",\"expr\":null,\"dtype\":\"date\",\"stype\":\"timestamp\",\"is_pk\":false,\"is_time\":true,\"is_end\":false},{\"name\":\"store_code\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"time_choice\":{\"column\":\"purchased_at\",\"how\":\"only\",\"among\":[\"purchased_at\"],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"amount\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"purchased_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"amount\":\"double precision\",\"customer_id\":\"bigint\",\"item_id\":\"bigint\",\"purchase_id\":\"bigint\",\"purchased_at\":\"timestamp without time zone\",\"store_code\":\"text\"},\"sample_source\":\"\\\"parity_marketplace\\\".\\\"purchases\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}]]}",
+       "[]"
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "predictive_query",
+   "function": "query_text",
+   "args": [
+    "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id"
+   ],
+   "kwargs": {},
+   "returned": "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id"
+  },
+  {
+   "host": "materialize",
+   "function": "materialize_run",
+   "args": [
+    "{\"schema\": {\"kind\": \"source\", \"source\": {\"namespace\": {\"schema\": \"parity_marketplace\"}, \"semantic_model\": null, \"trust_expressions\": false, \"backend\": \"postgres\"}, \"schema\": {\"tables\": [{\"name\": \"customers\", \"source_name\": \"customers\", \"columns\": [{\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"signup_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}], \"primary_key\": \"customer_id\", \"time_column\": \"signup_at\", \"duplicate_keys\": 0}, {\"name\": \"items\", \"source_name\": \"items\", \"columns\": [{\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"category\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"price\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"item_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"reviews\", \"source_name\": \"reviews\", \"columns\": [{\"name\": \"review_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"rating\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"body\", \"dtype\": \"string\", \"stype\": \"text\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"review_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"stores\", \"source_name\": \"stores\", \"columns\": [{\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"region\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"store_code\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"purchases\", \"source_name\": \"purchases\", \"columns\": [{\"name\": \"purchase_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"amount\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"purchased_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}, {\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"purchase_id\", \"time_column\": \"purchased_at\", \"duplicate_keys\": 0}], \"relationships\": [[\"reviews\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"customer_id\", \"customers\", \"customer_id\"], [\"purchases\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"store_code\", \"stores\", \"store_code\"]]}, \"engine\": [[\"customers\", {\"backend\": \"postgres\", \"name\": \"customers\", \"raw_source_name\": \"customers\", \"place\": {\"catalog\": null, \"schema\": \"parity_marketplace\", \"row_filter\": null}, \"columns\": [{\"name\": \"customer_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"segment\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"signup_at\", \"expr\": null, \"dtype\": \"date\", \"stype\": \"timestamp\", \"is_pk\": false, \"is_time\": true, \"is_end\": false}], \"primary_key\": \"customer_id\", \"time_column\": \"signup_at\", \"time_choice\": {\"column\": \"signup_at\", \"how\": \"only\", \"among\": [\"signup_at\"], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"customer_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"segment\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"signup_at\", \"dtype\": \"date\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"customer_id\": \"bigint\", \"segment\": \"text\", \"signup_at\": \"timestamp without time zone\"}, \"sample_source\": \"\\\"parity_marketplace\\\".\\\"customers\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"items\", {\"backend\": \"postgres\", \"name\": \"items\", \"raw_source_name\": \"items\", \"place\": {\"catalog\": null, \"schema\": \"parity_marketplace\", \"row_filter\": null}, \"columns\": [{\"name\": \"item_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"category\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"price\", \"expr\": null, \"dtype\": \"float\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"item_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"item_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"category\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"price\", \"dtype\": \"float\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"category\": \"text\", \"item_id\": \"bigint\", \"price\": \"double precision\"}, \"sample_source\": \"\\\"parity_marketplace\\\".\\\"items\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"reviews\", {\"backend\": \"postgres\", \"name\": \"reviews\", \"raw_source_name\": \"reviews\", \"place\": {\"catalog\": null, \"schema\": \"parity_marketplace\", \"row_filter\": null}, \"columns\": [{\"name\": \"review_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"item_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"rating\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"body\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"text\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"review_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"review_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"item_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"rating\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"body\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"body\": \"text\", \"item_id\": \"bigint\", \"rating\": \"bigint\", \"review_id\": \"bigint\"}, \"sample_source\": \"\\\"parity_marketplace\\\".\\\"reviews\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"stores\", {\"backend\": \"postgres\", \"name\": \"stores\", \"raw_source_name\": \"stores\", \"place\": {\"catalog\": null, \"schema\": \"parity_marketplace\", \"row_filter\": null}, \"columns\": [{\"name\": \"store_code\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"region\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"store_code\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"store_code\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"region\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"region\": \"text\", \"store_code\": \"text\"}, \"sample_source\": \"\\\"parity_marketplace\\\".\\\"stores\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"purchases\", {\"backend\": \"postgres\", \"name\": \"purchases\", \"raw_source_name\": \"purchases\", \"place\": {\"catalog\": null, \"schema\": \"parity_marketplace\", \"row_filter\": null}, \"columns\": [{\"name\": \"purchase_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"customer_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"item_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"amount\", \"expr\": null, \"dtype\": \"float\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"purchased_at\", \"expr\": null, \"dtype\": \"date\", \"stype\": \"timestamp\", \"is_pk\": false, \"is_time\": true, \"is_end\": false}, {\"name\": \"store_code\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"purchase_id\", \"time_column\": \"purchased_at\", \"time_choice\": {\"column\": \"purchased_at\", \"how\": \"only\", \"among\": [\"purchased_at\"], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"purchase_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"customer_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"item_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"amount\", \"dtype\": \"float\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"purchased_at\", \"dtype\": \"date\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"store_code\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"amount\": \"double precision\", \"customer_id\": \"bigint\", \"item_id\": \"bigint\", \"purchase_id\": \"bigint\", \"purchased_at\": \"timestamp without time zone\", \"store_code\": \"text\"}, \"sample_source\": \"\\\"parity_marketplace\\\".\\\"purchases\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}]]}, \"query\": \"PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id\", \"args\": {\"indices\": [1, 2], \"anchor_time\": {\"$timestamp\": \"2024-10-01T00:00:00\"}, \"context_anchor_time\": {\"$timestamp\": \"2024-01-04T00:00:00\"}, \"num_context_samples\": 30, \"random_seed\": 7}, \"tags\": {}, \"model\": null}",
+    {}
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"customers\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "5366c03707a8cfa84177278c6d6fed5abf11556e30d45c63b85ae7f94555f04b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"items\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "cceb446927de253b1f976caa49774b87d4e6abfcb679e5db8a413861a123038a"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"reviews\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "b80fef79d777af494dcb306c868f5e859d90e1c0780be1dc5ab0ad55de46ede9"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"stores\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "a2cb22224bbe912d50ea5a04806299eaa680c3029d9b578dc913a3a567f3b106"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_marketplace\".\"purchases\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "0232495f82872964ca398a7d51fe47de346e70b05c7c5097e2031e418a17415b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT 0 AS table_index, MIN(\"purchased_at\") AS min_date, MAX(\"purchased_at\") AS max_date\nFROM \"parity_marketplace\".\"purchases\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "51b5d9814316b414b9701516b9d2561c6da1da615656c8afe543c88b04eba9b3"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT setseed(%s)",
+       "params": [
+        0.8071317425028082
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "3e3f13238c25cdf8cdfffe4075f5275fcf48a409fd537eff3dda9aa43d71f5c2"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"customer_id\", \"signup_at\"\nFROM \"parity_marketplace\".\"customers\"\nWHERE \"customer_id\" IS NOT NULL AND \"signup_at\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "33059723e2ff3078b0ecc590c8c2312ae5bb1c0ce97261c4d03eae07613afc5a"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"purchased_at\"\nFROM TMP\nJOIN \"parity_marketplace\".\"purchases\"\n  ON \"customer_id\" = TMP.__KUMO_ID__\n AND \"purchased_at\" <= TMP.__KUMO_END_TIME__\n AND \"purchased_at\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"purchased_at\", \"purchase_id\"",
+       "params": [
+        "[{\"id\":41,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"},{\"id\":55,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"},{\"id\":45,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"},{\"id\":54,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-01-11T00:00:00+00:00\",\"s\":\"2024-01-04T00:00:00+00:00\"}]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "97106cbf0a6761ba176285a280c423138d26439e2750e9bdffad67bb98c94a23"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"customer_id\", \"segment\", \"signup_at\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"customer_id\", CAST(\"segment\" AS text), \"signup_at\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_marketplace\".\"customers\"\n    ON \"customer_id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+       "params": [
+        "[41,29,55,2,45,54,32,1,2]"
+       ]
+      }
+     ],
+     "warnings": [
+      {
+       "category": "builtins.UserWarning",
+       "message": "Context anchor timestamp is too early or aggregation time range is too large. To form proper input data, we would need data back to '2023-12-28 00:00:00', however, your data only contains data back to '2024-01-02 18:00:00'."
+      }
+     ],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "020d3bfd4a98bebf3d9a125033a742ed87e9f692126df49a16f2514d1bc808f5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\",\n         ROW_NUMBER() OVER (ORDER BY \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", CAST(\"store_code\" AS text)) AS __KUMO_ROW__\n  FROM \"parity_marketplace\".\"purchases\"\n  WHERE \"customer_id\" = TMP.__KUMO_ID__\n    AND \"purchased_at\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", CAST(\"store_code\" AS text)\n  LIMIT 32\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+       "params": [
+        "[{\"id\":41,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":55,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":45,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":54,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-01-04T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-01T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-10-01T00:00:00+00:00\"}]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "fd3c2ebe731aa18010cf8dfa2d5cbc30b3b9baf8207b194c4a15474a5d7c33a4"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"item_id\", \"category\", \"price\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY CAST(\"category\" AS text), \"item_id\", \"price\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_marketplace\".\"items\"\n    ON \"item_id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+       "params": [
+        "[4,2,1,3,5,8,7]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "1cc1a0563b08048d84d3be19a13b536640885bb859cb68dc04e230b2c4553481"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::text AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"store_code\", \"region\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY CAST(\"region\" AS text), CAST(\"store_code\" AS text)) AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_marketplace\".\"stores\"\n    ON \"store_code\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+       "params": [
+        "[\"S03\",\"S04\",\"S01\",\"S05\",\"S02\"]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "3ad5347442bda00cc7c0a0875fed2abc33621db0143ab64f01781029894eddeb"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"request\":{\"task\":{\"kind\":\"regression\",\"target\":{\"column_name\":\"TARGET\",\"dtype\":\"float32\",\"table_name\":null},\"entity_table\":\"customers\",\"options\":{}},\"schema\":{\"kind\":\"source\",\"source\":{\"namespace\":{\"schema\":\"parity_marketplace\"},\"semantic_model\":null,\"trust_expressions\":false,\"backend\":\"postgres\"},\"schema\":{\"tables\":[{\"name\":\"customers\",\"source_name\":\"customers\",\"columns\":[{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"signup_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null}],\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"duplicate_keys\":0},{\"name\":\"items\",\"source_name\":\"items\",\"columns\":[{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"price\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"item_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"reviews\",\"source_name\":\"reviews\",\"columns\":[{\"name\":\"review_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"rating\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"body\",\"dtype\":\"string\",\"stype\":\"text\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"review_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"stores\",\"source_name\":\"stores\",\"columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"region\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"store_code\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"purchases\",\"source_name\":\"purchases\",\"columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"customer_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"item_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"amount\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"purchased_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null},{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"duplicate_keys\":0}],\"relationships\":[[\"reviews\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"customer_id\",\"customers\",\"customer_id\"],[\"purchases\",\"item_id\",\"items\",\"item_id\"],[\"purchases\",\"store_code\",\"stores\",\"store_code\"]]},\"engine\":[]},\"entity_table\":\"customers\",\"query\":\"PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id\",\"inference\":{\"run_mode\":\"fast\",\"use_prediction_time\":false,\"inference_config\":{\"kind\":\"regression\",\"num_estimators\":1,\"column_shuffle\":false,\"category_shuffle\":false,\"hop_shuffle\":false,\"target_transforms\":[\"quantile\"],\"output_type\":\"median\"}},\"requested_inference\":{\"inference_config\":{}},\"frames\":false,\"payloads\":[{\"model\":\"kumo-relational\",\"task\":{\"kind\":\"regression\",\"target\":{\"column_name\":\"TARGET\",\"dtype\":\"float32\"},\"entity_table_names\":[\"customers\"],\"anchor_time_column\":\"__kumo_anchor_time\"},\"schema\":{\"instance_table\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"__kumo_entity_ref_0\":{\"dtype\":\"int64\",\"stype\":\"ID\"},\"__kumo_anchor_time\":{\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"nullable\":false},\"TARGET\":{\"dtype\":\"float32\",\"stype\":\"numerical\"}},\"primary_key\":\"instance_id\"},\"related_tables\":{\"customers\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"customer_id\":{\"dtype\":\"int64\",\"nullable\":false},\"segment\":{\"dtype\":\"string\",\"stype\":\"categorical\"},\"signup_at\":{\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\"}},\"primary_key\":[\"instance_id\",\"customer_id\"]},\"purchases\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"__node_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"amount\":{\"dtype\":\"float64\",\"stype\":\"numerical\"},\"purchased_at\":{\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\"},\"customer_id\":{\"dtype\":\"int64\",\"stype\":\"ID\"},\"item_id\":{\"dtype\":\"int64\",\"stype\":\"ID\"},\"store_code\":{\"dtype\":\"int64\",\"stype\":\"ID\"}},\"primary_key\":[\"instance_id\",\"__node_id\"]},\"items\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"__node_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"category\":{\"dtype\":\"string\",\"stype\":\"categorical\"},\"price\":{\"dtype\":\"float64\",\"stype\":\"numerical\"}},\"primary_key\":[\"instance_id\",\"__node_id\"]},\"stores\":{\"columns\":{\"instance_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"__node_id\":{\"dtype\":\"int64\",\"stype\":\"ID\",\"nullable\":false},\"region\":{\"dtype\":\"string\",\"stype\":\"categorical\"}},\"primary_key\":[\"instance_id\",\"__node_id\"]}},\"relationships\":[{\"source_columns\":[\"__kumo_entity_ref_0\"],\"target_table\":\"customers\",\"target_columns\":[\"customer_id\"]},{\"source_table\":\"purchases\",\"source_columns\":[\"customer_id\"],\"target_table\":\"customers\",\"target_columns\":[\"customer_id\"]},{\"source_table\":\"purchases\",\"source_columns\":[\"item_id\"],\"target_table\":\"items\",\"target_columns\":[\"__node_id\"]},{\"source_table\":\"purchases\",\"source_columns\":[\"store_code\"],\"target_table\":\"stores\",\"target_columns\":[\"__node_id\"]}]},\"context\":{\"instance_table\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__kumo_entity_ref_0\",\"__kumo_anchor_time\",\"TARGET\"],\"rows\":[[0,41,\"2024-01-04T00:00:00.000000Z\",0.0],[1,29,\"2024-01-04T00:00:00.000000Z\",0.0],[2,55,\"2024-01-04T00:00:00.000000Z\",0.0],[3,2,\"2024-01-04T00:00:00.000000Z\",0.0],[4,45,\"2024-01-04T00:00:00.000000Z\",0.0],[5,54,\"2024-01-04T00:00:00.000000Z\",0.0],[6,32,\"2024-01-04T00:00:00.000000Z\",0.0]]},\"related_tables\":{\"customers\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"customer_id\",\"segment\",\"signup_at\"],\"rows\":[[0,41,\"business\",\"2024-01-01T00:00:00.000000Z\"],[1,29,\"retail\",\"2024-01-01T00:00:00.000000Z\"],[2,55,\"business\",\"2024-01-01T00:00:00.000000Z\"],[3,2,\"business\",\"2024-01-01T00:00:00.000000Z\"],[4,45,\"student\",\"2024-01-01T00:00:00.000000Z\"],[5,54,\"business\",\"2024-01-01T00:00:00.000000Z\"],[6,32,\"student\",\"2024-01-01T00:00:00.000000Z\"]]},\"purchases\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__node_id\",\"amount\",\"purchased_at\",\"customer_id\",\"item_id\",\"store_code\"],\"rows\":[[6,0,54.05,\"2024-01-02T18:00:00.000000Z\",32,0,0]]},\"items\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__node_id\",\"category\",\"price\"],\"rows\":[[6,0,\"kitchen\",45.92]]},\"stores\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__node_id\",\"region\"],\"rows\":[[6,0,\"east\"]]}}},\"predict\":{\"instance_table\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__kumo_entity_ref_0\",\"__kumo_anchor_time\"],\"rows\":[[7,1,\"2024-10-01T00:00:00.000000Z\"],[8,2,\"2024-10-01T00:00:00.000000Z\"]]},\"related_tables\":{\"customers\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"customer_id\",\"segment\",\"signup_at\"],\"rows\":[[7,1,\"retail\",\"2024-02-05T00:00:00.000000Z\"],[8,2,\"business\",\"2024-01-01T00:00:00.000000Z\"]]},\"purchases\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__node_id\",\"amount\",\"purchased_at\",\"customer_id\",\"item_id\",\"store_code\"],\"rows\":[[7,1,36.45,\"2024-07-25T21:00:00.000000Z\",1,1,1],[7,2,22.43,\"2024-07-25T19:00:00.000000Z\",1,2,2],[7,3,72.97,\"2024-06-30T13:00:00.000000Z\",1,3,1],[7,4,30.94,\"2024-06-11T09:00:00.000000Z\",1,2,3],[7,5,12.57,\"2024-06-08T10:00:00.000000Z\",1,4,1],[7,6,78.65,\"2024-05-15T16:00:00.000000Z\",1,5,3],[7,7,66.66,\"2024-05-07T19:00:00.000000Z\",1,6,4],[8,8,96.83,\"2024-09-24T12:00:00.000000Z\",2,7,5],[8,9,4.67,\"2024-08-26T21:00:00.000000Z\",2,8,6],[8,10,56.99,\"2024-08-26T06:00:00.000000Z\",2,9,7],[8,11,40.17,\"2024-08-18T09:00:00.000000Z\",2,10,7],[8,12,58.07,\"2024-07-24T12:00:00.000000Z\",2,8,6],[8,13,23.6,\"2024-07-05T16:00:00.000000Z\",2,7,7],[8,14,30.11,\"2024-05-08T17:00:00.000000Z\",2,9,8],[8,15,28.21,\"2024-04-03T09:00:00.000000Z\",2,10,5],[8,16,38.71,\"2024-03-10T16:00:00.000000Z\",2,8,6],[8,17,99.4,\"2024-02-11T20:00:00.000000Z\",2,11,9]]},\"items\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__node_id\",\"category\",\"price\"],\"rows\":[[7,1,\"garden\",43.39],[7,2,\"kitchen\",28.69],[7,3,\"garden\",25.94],[7,4,\"garden\",46.14],[7,5,\"kitchen\",45.92],[7,6,\"garden\",1.46],[8,7,\"garden\",46.14],[8,8,\"kitchen\",45.92],[8,9,\"garden\",43.39],[8,10,\"kitchen\",14.61],[8,11,\"kitchen\",28.69]]},\"stores\":{\"format\":\"arrays\",\"columns\":[\"instance_id\",\"__node_id\",\"region\"],\"rows\":[[7,1,\"east\"],[7,2,\"west\"],[7,3,\"north\"],[7,4,\"north\"],[8,5,\"south\"],[8,6,\"north\"],[8,7,\"west\"],[8,8,\"north\"],[8,9,\"east\"]]}}},\"output\":{\"fields\":[\"prediction\"]},\"inference\":{\"run_mode\":\"fast\",\"use_prediction_time\":false,\"inference_config\":{\"kind\":\"regression\",\"num_estimators\":1,\"column_shuffle\":false,\"category_shuffle\":false,\"hop_shuffle\":false,\"target_transforms\":[\"quantile\"],\"output_type\":\"median\"}},\"metadata\":{\"source_query\":\"PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id\",\"num_context_examples\":7,\"num_prediction_examples\":2}}],\"indices\":[1,2],\"windowed\":true,\"parts\":null,\"decomposition\":null,\"asked\":null,\"context_fingerprint\":null},\"tags\":{},\"model\":{\"backend\":\"postgres\",\"tables\":[{\"name\":\"customers\",\"primary_key\":\"customer_id\",\"time_column\":\"signup_at\",\"end_time_column\":null,\"columns\":[{\"name\":\"customer_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true},{\"name\":\"signup_at\",\"dtype\":\"date\",\"stype\":\"timestamp\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_marketplace\\\".\\\"customers\\\"\",\"unquoted_name\":\"parity_marketplace.customers\",\"source_columns\":[{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"segment\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"signup_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"customer_id\":\"bigint\",\"segment\":\"text\",\"signup_at\":\"timestamp without time zone\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"items\",\"primary_key\":\"item_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"item_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true},{\"name\":\"price\",\"dtype\":\"float\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_marketplace\\\".\\\"items\\\"\",\"unquoted_name\":\"parity_marketplace.items\",\"source_columns\":[{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"item_id\":\"bigint\",\"category\":\"text\",\"price\":\"double precision\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"reviews\",\"primary_key\":\"review_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"review_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"rating\",\"dtype\":\"int\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"body\",\"dtype\":\"string\",\"stype\":\"text\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_marketplace\\\".\\\"reviews\\\"\",\"unquoted_name\":\"parity_marketplace.reviews\",\"source_columns\":[{\"name\":\"review_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"rating\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"body\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"review_id\":\"bigint\",\"item_id\":\"bigint\",\"rating\":\"bigint\",\"body\":\"text\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"stores\",\"primary_key\":\"store_code\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"region\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_marketplace\\\".\\\"stores\\\"\",\"unquoted_name\":\"parity_marketplace.stores\",\"source_columns\":[{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"region\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"store_code\":\"text\",\"region\":\"text\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"purchases\",\"primary_key\":\"purchase_id\",\"time_column\":\"purchased_at\",\"end_time_column\":null,\"columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"customer_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"amount\",\"dtype\":\"float\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"purchased_at\",\"dtype\":\"date\",\"stype\":\"timestamp\",\"expr\":null,\"is_source\":true},{\"name\":\"store_code\",\"dtype\":\"string\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_marketplace\\\".\\\"purchases\\\"\",\"unquoted_name\":\"parity_marketplace.purchases\",\"source_columns\":[{\"name\":\"purchase_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"customer_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"item_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"amount\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"purchased_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"store_code\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"purchase_id\":\"bigint\",\"customer_id\":\"bigint\",\"item_id\":\"bigint\",\"amount\":\"double precision\",\"purchased_at\":\"timestamp without time zone\",\"store_code\":\"text\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}}],\"edges\":[[\"reviews\",\"item_id\",\"items\"],[\"purchases\",\"customer_id\",\"customers\"],[\"purchases\",\"item_id\",\"items\"],[\"purchases\",\"store_code\",\"stores\"]],\"state\":{\"min_time\":{\"purchases\":1704218400000000000},\"max_time\":{\"purchases\":1735592400000000000},\"min_time_unit\":{\"purchases\":\"us\"},\"max_time_unit\":{\"purchases\":\"us\"},\"coverage_warned\":false,\"enforced_key_tables\":[],\"num_rows\":{\"customers\":60,\"items\":8,\"purchases\":701,\"reviews\":421,\"stores\":5},\"time_spellings\":{}},\"arguments\":{},\"argument_tables\":{}}}",
+       {}
+      ]
+     },
+     "warnings": [
+      {
+       "category": "sdm_client.core.warnings.SDMWarning",
+       "message": "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "host": "predict",
+   "function": "predict_run",
+   "args": [
+    "{\"request\": {\"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\", \"table_name\": null}, \"entity_table\": \"customers\", \"options\": {}}, \"schema\": {\"kind\": \"source\", \"source\": {\"namespace\": {\"schema\": \"parity_marketplace\"}, \"semantic_model\": null, \"trust_expressions\": false, \"backend\": \"postgres\"}, \"schema\": {\"tables\": [{\"name\": \"customers\", \"source_name\": \"customers\", \"columns\": [{\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"signup_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}], \"primary_key\": \"customer_id\", \"time_column\": \"signup_at\", \"duplicate_keys\": 0}, {\"name\": \"items\", \"source_name\": \"items\", \"columns\": [{\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"category\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"price\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"item_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"reviews\", \"source_name\": \"reviews\", \"columns\": [{\"name\": \"review_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"rating\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"body\", \"dtype\": \"string\", \"stype\": \"text\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"review_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"stores\", \"source_name\": \"stores\", \"columns\": [{\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"region\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"store_code\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"purchases\", \"source_name\": \"purchases\", \"columns\": [{\"name\": \"purchase_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"customer_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"item_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"amount\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"purchased_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}, {\"name\": \"store_code\", \"dtype\": \"string\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"purchase_id\", \"time_column\": \"purchased_at\", \"duplicate_keys\": 0}], \"relationships\": [[\"reviews\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"customer_id\", \"customers\", \"customer_id\"], [\"purchases\", \"item_id\", \"items\", \"item_id\"], [\"purchases\", \"store_code\", \"stores\", \"store_code\"]]}, \"engine\": []}, \"entity_table\": \"customers\", \"query\": \"PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id\", \"inference\": {\"run_mode\": \"fast\", \"use_prediction_time\": false, \"inference_config\": {\"kind\": \"regression\", \"num_estimators\": 1, \"column_shuffle\": false, \"category_shuffle\": false, \"hop_shuffle\": false, \"target_transforms\": [\"quantile\"], \"output_type\": \"median\"}}, \"requested_inference\": {\"inference_config\": {}}, \"frames\": false, \"payloads\": [{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}, \"entity_table_names\": [\"customers\"], \"anchor_time_column\": \"__kumo_anchor_time\"}, \"schema\": {\"instance_table\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"__kumo_entity_ref_0\": {\"dtype\": \"int64\", \"stype\": \"ID\"}, \"__kumo_anchor_time\": {\"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"nullable\": false}, \"TARGET\": {\"dtype\": \"float32\", \"stype\": \"numerical\"}}, \"primary_key\": \"instance_id\"}, \"related_tables\": {\"customers\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"customer_id\": {\"dtype\": \"int64\", \"nullable\": false}, \"segment\": {\"dtype\": \"string\", \"stype\": \"categorical\"}, \"signup_at\": {\"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\"}}, \"primary_key\": [\"instance_id\", \"customer_id\"]}, \"purchases\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"__node_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"amount\": {\"dtype\": \"float64\", \"stype\": \"numerical\"}, \"purchased_at\": {\"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\"}, \"customer_id\": {\"dtype\": \"int64\", \"stype\": \"ID\"}, \"item_id\": {\"dtype\": \"int64\", \"stype\": \"ID\"}, \"store_code\": {\"dtype\": \"int64\", \"stype\": \"ID\"}}, \"primary_key\": [\"instance_id\", \"__node_id\"]}, \"items\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"__node_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"category\": {\"dtype\": \"string\", \"stype\": \"categorical\"}, \"price\": {\"dtype\": \"float64\", \"stype\": \"numerical\"}}, \"primary_key\": [\"instance_id\", \"__node_id\"]}, \"stores\": {\"columns\": {\"instance_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"__node_id\": {\"dtype\": \"int64\", \"stype\": \"ID\", \"nullable\": false}, \"region\": {\"dtype\": \"string\", \"stype\": \"categorical\"}}, \"primary_key\": [\"instance_id\", \"__node_id\"]}}, \"relationships\": [{\"source_columns\": [\"__kumo_entity_ref_0\"], \"target_table\": \"customers\", \"target_columns\": [\"customer_id\"]}, {\"source_table\": \"purchases\", \"source_columns\": [\"customer_id\"], \"target_table\": \"customers\", \"target_columns\": [\"customer_id\"]}, {\"source_table\": \"purchases\", \"source_columns\": [\"item_id\"], \"target_table\": \"items\", \"target_columns\": [\"__node_id\"]}, {\"source_table\": \"purchases\", \"source_columns\": [\"store_code\"], \"target_table\": \"stores\", \"target_columns\": [\"__node_id\"]}]}, \"context\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\", \"__kumo_anchor_time\", \"TARGET\"], \"rows\": [[0, 41, \"2024-01-04T00:00:00.000000Z\", 0.0], [1, 29, \"2024-01-04T00:00:00.000000Z\", 0.0], [2, 55, \"2024-01-04T00:00:00.000000Z\", 0.0], [3, 2, \"2024-01-04T00:00:00.000000Z\", 0.0], [4, 45, \"2024-01-04T00:00:00.000000Z\", 0.0], [5, 54, \"2024-01-04T00:00:00.000000Z\", 0.0], [6, 32, \"2024-01-04T00:00:00.000000Z\", 0.0]]}, \"related_tables\": {\"customers\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"customer_id\", \"segment\", \"signup_at\"], \"rows\": [[0, 41, \"business\", \"2024-01-01T00:00:00.000000Z\"], [1, 29, \"retail\", \"2024-01-01T00:00:00.000000Z\"], [2, 55, \"business\", \"2024-01-01T00:00:00.000000Z\"], [3, 2, \"business\", \"2024-01-01T00:00:00.000000Z\"], [4, 45, \"student\", \"2024-01-01T00:00:00.000000Z\"], [5, 54, \"business\", \"2024-01-01T00:00:00.000000Z\"], [6, 32, \"student\", \"2024-01-01T00:00:00.000000Z\"]]}, \"purchases\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__node_id\", \"amount\", \"purchased_at\", \"customer_id\", \"item_id\", \"store_code\"], \"rows\": [[6, 0, 54.05, \"2024-01-02T18:00:00.000000Z\", 32, 0, 0]]}, \"items\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__node_id\", \"category\", \"price\"], \"rows\": [[6, 0, \"kitchen\", 45.92]]}, \"stores\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__node_id\", \"region\"], \"rows\": [[6, 0, \"east\"]]}}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\", \"__kumo_anchor_time\"], \"rows\": [[7, 1, \"2024-10-01T00:00:00.000000Z\"], [8, 2, \"2024-10-01T00:00:00.000000Z\"]]}, \"related_tables\": {\"customers\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"customer_id\", \"segment\", \"signup_at\"], \"rows\": [[7, 1, \"retail\", \"2024-02-05T00:00:00.000000Z\"], [8, 2, \"business\", \"2024-01-01T00:00:00.000000Z\"]]}, \"purchases\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__node_id\", \"amount\", \"purchased_at\", \"customer_id\", \"item_id\", \"store_code\"], \"rows\": [[7, 1, 36.45, \"2024-07-25T21:00:00.000000Z\", 1, 1, 1], [7, 2, 22.43, \"2024-07-25T19:00:00.000000Z\", 1, 2, 2], [7, 3, 72.97, \"2024-06-30T13:00:00.000000Z\", 1, 3, 1], [7, 4, 30.94, \"2024-06-11T09:00:00.000000Z\", 1, 2, 3], [7, 5, 12.57, \"2024-06-08T10:00:00.000000Z\", 1, 4, 1], [7, 6, 78.65, \"2024-05-15T16:00:00.000000Z\", 1, 5, 3], [7, 7, 66.66, \"2024-05-07T19:00:00.000000Z\", 1, 6, 4], [8, 8, 96.83, \"2024-09-24T12:00:00.000000Z\", 2, 7, 5], [8, 9, 4.67, \"2024-08-26T21:00:00.000000Z\", 2, 8, 6], [8, 10, 56.99, \"2024-08-26T06:00:00.000000Z\", 2, 9, 7], [8, 11, 40.17, \"2024-08-18T09:00:00.000000Z\", 2, 10, 7], [8, 12, 58.07, \"2024-07-24T12:00:00.000000Z\", 2, 8, 6], [8, 13, 23.6, \"2024-07-05T16:00:00.000000Z\", 2, 7, 7], [8, 14, 30.11, \"2024-05-08T17:00:00.000000Z\", 2, 9, 8], [8, 15, 28.21, \"2024-04-03T09:00:00.000000Z\", 2, 10, 5], [8, 16, 38.71, \"2024-03-10T16:00:00.000000Z\", 2, 8, 6], [8, 17, 99.4, \"2024-02-11T20:00:00.000000Z\", 2, 11, 9]]}, \"items\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__node_id\", \"category\", \"price\"], \"rows\": [[7, 1, \"garden\", 43.39], [7, 2, \"kitchen\", 28.69], [7, 3, \"garden\", 25.94], [7, 4, \"garden\", 46.14], [7, 5, \"kitchen\", 45.92], [7, 6, \"garden\", 1.46], [8, 7, \"garden\", 46.14], [8, 8, \"kitchen\", 45.92], [8, 9, \"garden\", 43.39], [8, 10, \"kitchen\", 14.61], [8, 11, \"kitchen\", 28.69]]}, \"stores\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__node_id\", \"region\"], \"rows\": [[7, 1, \"east\"], [7, 2, \"west\"], [7, 3, \"north\"], [7, 4, \"north\"], [8, 5, \"south\"], [8, 6, \"north\"], [8, 7, \"west\"], [8, 8, \"north\"], [8, 9, \"east\"]]}}}, \"output\": {\"fields\": [\"prediction\"]}, \"inference\": {\"run_mode\": \"fast\", \"use_prediction_time\": false, \"inference_config\": {\"kind\": \"regression\", \"num_estimators\": 1, \"column_shuffle\": false, \"category_shuffle\": false, \"hop_shuffle\": false, \"target_transforms\": [\"quantile\"], \"output_type\": \"median\"}}, \"metadata\": {\"source_query\": \"PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id\", \"num_context_examples\": 7, \"num_prediction_examples\": 2}}], \"indices\": [1, 2], \"windowed\": true, \"parts\": null, \"decomposition\": null, \"asked\": null, \"context_fingerprint\": null}, \"model\": \"kumo-relational\", \"outputs\": null, \"tags\": {}}",
+    {}
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "call_model",
+     "endpoint": "predict",
+     "session_id": null,
+     "body": {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "customers"
+       ],
+       "anchor_time_column": "__kumo_anchor_time"
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "stype": "timestamp",
+          "nullable": false
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "customers": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "customer_id": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "segment": {
+           "dtype": "string",
+           "stype": "categorical"
+          },
+          "signup_at": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "customer_id"
+         ]
+        },
+        "purchases": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "amount": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "purchased_at": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "customer_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "item_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          },
+          "store_code": {
+           "dtype": "int64",
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "items": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "category": {
+           "dtype": "string",
+           "stype": "categorical"
+          },
+          "price": {
+           "dtype": "float64",
+           "stype": "numerical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        },
+        "stores": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "region": {
+           "dtype": "string",
+           "stype": "categorical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "customers",
+         "target_columns": [
+          "customer_id"
+         ]
+        },
+        {
+         "source_table": "purchases",
+         "source_columns": [
+          "customer_id"
+         ],
+         "target_table": "customers",
+         "target_columns": [
+          "customer_id"
+         ]
+        },
+        {
+         "source_table": "purchases",
+         "source_columns": [
+          "item_id"
+         ],
+         "target_table": "items",
+         "target_columns": [
+          "__node_id"
+         ]
+        },
+        {
+         "source_table": "purchases",
+         "source_columns": [
+          "store_code"
+         ],
+         "target_table": "stores",
+         "target_columns": [
+          "__node_id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          41,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          1,
+          29,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          2,
+          55,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          3,
+          2,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          4,
+          45,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          5,
+          54,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          6,
+          32,
+          "2024-01-04T00:00:00.000000Z",
+          0.0
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "customer_id",
+          "segment",
+          "signup_at"
+         ],
+         "rows": [
+          [
+           0,
+           41,
+           "business",
+           "2024-01-01T00:00:00.000000Z"
+          ],
+          [
+           1,
+           29,
+           "retail",
+           "2024-01-01T00:00:00.000000Z"
+          ],
+          [
+           2,
+           55,
+           "business",
+           "2024-01-01T00:00:00.000000Z"
+          ],
+          [
+           3,
+           2,
+           "business",
+           "2024-01-01T00:00:00.000000Z"
+          ],
+          [
+           4,
+           45,
+           "student",
+           "2024-01-01T00:00:00.000000Z"
+          ],
+          [
+           5,
+           54,
+           "business",
+           "2024-01-01T00:00:00.000000Z"
+          ],
+          [
+           6,
+           32,
+           "student",
+           "2024-01-01T00:00:00.000000Z"
+          ]
+         ]
+        },
+        "purchases": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "amount",
+          "purchased_at",
+          "customer_id",
+          "item_id",
+          "store_code"
+         ],
+         "rows": [
+          [
+           6,
+           0,
+           54.05,
+           "2024-01-02T18:00:00.000000Z",
+           32,
+           0,
+           0
+          ]
+         ]
+        },
+        "items": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "category",
+          "price"
+         ],
+         "rows": [
+          [
+           6,
+           0,
+           "kitchen",
+           45.92
+          ]
+         ]
+        },
+        "stores": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "region"
+         ],
+         "rows": [
+          [
+           6,
+           0,
+           "east"
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "rows": [
+         [
+          7,
+          1,
+          "2024-10-01T00:00:00.000000Z"
+         ],
+         [
+          8,
+          2,
+          "2024-10-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "customers": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "customer_id",
+          "segment",
+          "signup_at"
+         ],
+         "rows": [
+          [
+           7,
+           1,
+           "retail",
+           "2024-02-05T00:00:00.000000Z"
+          ],
+          [
+           8,
+           2,
+           "business",
+           "2024-01-01T00:00:00.000000Z"
+          ]
+         ]
+        },
+        "purchases": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "amount",
+          "purchased_at",
+          "customer_id",
+          "item_id",
+          "store_code"
+         ],
+         "rows": [
+          [
+           7,
+           1,
+           36.45,
+           "2024-07-25T21:00:00.000000Z",
+           1,
+           1,
+           1
+          ],
+          [
+           7,
+           2,
+           22.43,
+           "2024-07-25T19:00:00.000000Z",
+           1,
+           2,
+           2
+          ],
+          [
+           7,
+           3,
+           72.97,
+           "2024-06-30T13:00:00.000000Z",
+           1,
+           3,
+           1
+          ],
+          [
+           7,
+           4,
+           30.94,
+           "2024-06-11T09:00:00.000000Z",
+           1,
+           2,
+           3
+          ],
+          [
+           7,
+           5,
+           12.57,
+           "2024-06-08T10:00:00.000000Z",
+           1,
+           4,
+           1
+          ],
+          [
+           7,
+           6,
+           78.65,
+           "2024-05-15T16:00:00.000000Z",
+           1,
+           5,
+           3
+          ],
+          [
+           7,
+           7,
+           66.66,
+           "2024-05-07T19:00:00.000000Z",
+           1,
+           6,
+           4
+          ],
+          [
+           8,
+           8,
+           96.83,
+           "2024-09-24T12:00:00.000000Z",
+           2,
+           7,
+           5
+          ],
+          [
+           8,
+           9,
+           4.67,
+           "2024-08-26T21:00:00.000000Z",
+           2,
+           8,
+           6
+          ],
+          [
+           8,
+           10,
+           56.99,
+           "2024-08-26T06:00:00.000000Z",
+           2,
+           9,
+           7
+          ],
+          [
+           8,
+           11,
+           40.17,
+           "2024-08-18T09:00:00.000000Z",
+           2,
+           10,
+           7
+          ],
+          [
+           8,
+           12,
+           58.07,
+           "2024-07-24T12:00:00.000000Z",
+           2,
+           8,
+           6
+          ],
+          [
+           8,
+           13,
+           23.6,
+           "2024-07-05T16:00:00.000000Z",
+           2,
+           7,
+           7
+          ],
+          [
+           8,
+           14,
+           30.11,
+           "2024-05-08T17:00:00.000000Z",
+           2,
+           9,
+           8
+          ],
+          [
+           8,
+           15,
+           28.21,
+           "2024-04-03T09:00:00.000000Z",
+           2,
+           10,
+           5
+          ],
+          [
+           8,
+           16,
+           38.71,
+           "2024-03-10T16:00:00.000000Z",
+           2,
+           8,
+           6
+          ],
+          [
+           8,
+           17,
+           99.4,
+           "2024-02-11T20:00:00.000000Z",
+           2,
+           11,
+           9
+          ]
+         ]
+        },
+        "items": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "category",
+          "price"
+         ],
+         "rows": [
+          [
+           7,
+           1,
+           "garden",
+           43.39
+          ],
+          [
+           7,
+           2,
+           "kitchen",
+           28.69
+          ],
+          [
+           7,
+           3,
+           "garden",
+           25.94
+          ],
+          [
+           7,
+           4,
+           "garden",
+           46.14
+          ],
+          [
+           7,
+           5,
+           "kitchen",
+           45.92
+          ],
+          [
+           7,
+           6,
+           "garden",
+           1.46
+          ],
+          [
+           8,
+           7,
+           "garden",
+           46.14
+          ],
+          [
+           8,
+           8,
+           "kitchen",
+           45.92
+          ],
+          [
+           8,
+           9,
+           "garden",
+           43.39
+          ],
+          [
+           8,
+           10,
+           "kitchen",
+           14.61
+          ],
+          [
+           8,
+           11,
+           "kitchen",
+           28.69
+          ]
+         ]
+        },
+        "stores": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "region"
+         ],
+         "rows": [
+          [
+           7,
+           1,
+           "east"
+          ],
+          [
+           7,
+           2,
+           "west"
+          ],
+          [
+           7,
+           3,
+           "north"
+          ],
+          [
+           7,
+           4,
+           "north"
+          ],
+          [
+           8,
+           5,
+           "south"
+          ],
+          [
+           8,
+           6,
+           "north"
+          ],
+          [
+           8,
+           7,
+           "west"
+          ],
+          [
+           8,
+           8,
+           "north"
+          ],
+          [
+           8,
+           9,
+           "east"
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id",
+       "num_context_examples": 7,
+       "num_prediction_examples": 2,
+       "request_id": "sdm-<request-id>"
+      }
+     },
+     "warnings": [
+      {
+       "category": "sdm_client.core.warnings.SDMWarning",
+       "message": "every context row has the same answer to 'PREDICT COUNT(purchases.*, 0, 7, days) FOR EACH customers.customer_id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+      }
+     ],
+     "outcome": {
+      "response": "{\"object\": \"prediction.response\", \"id\": \"synthetic-2\", \"model\": \"kumo-relational\", \"metadata\": {\"synthetic\": true}, \"predictions\": [{\"row_index\": 0, \"id\": \"7\", \"prediction\": 85.885706}, {\"row_index\": 1, \"id\": \"8\", \"prediction\": 99.094981}]}"
+     }
+    },
+    {
+     "kind": "done",
+     "value": "{\"model\":\"kumo-relational\",\"request_id\":\"synthetic-2\",\"items\":[{\"row_index\":0,\"id\":1,\"prediction\":85.885706},{\"row_index\":1,\"id\":2,\"prediction\":99.094981}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}",
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "flatten",
+   "function": "flatten",
+   "args": [
+    "{\"model\":\"kumo-relational\",\"request_id\":\"synthetic-2\",\"items\":[{\"row_index\":0,\"id\":1,\"prediction\":85.885706},{\"row_index\":1,\"id\":2,\"prediction\":99.094981}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}"
+   ],
+   "kwargs": {},
+   "returned": {
+    "$table": "f385ca3c5bec5a5337cccd27b0121853988e644c479438ac91b5249bd89893c9"
+   }
+  }
+ ]
+}

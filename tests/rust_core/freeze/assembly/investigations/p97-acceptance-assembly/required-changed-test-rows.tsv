@@ -1,0 +1,3 @@
+tests/parity/test_fixtures.py	Keep the exact governed dropped-target original oracle on the old selector and its separately frozen corrected refusal on core; require an actual exception for that case, preserving every unrelated assertion.
+tests/rust_core/request/accept_request_fixtures.py	Bind the one corrected dropped-target case to its complete unchanged original input and oracle, compare the exact corrected core error, execute the old public oracle in a fresh process, and reject a seeded wrong actual refusal.
+tests/rust_core/request/_fixture_expectations.py	New acceptance-owned exact-case loader binds the original fixture and the fixed corrected refusal, rejects duplicate or missing scope, and leaves every unrelated fixture expectation unchanged.

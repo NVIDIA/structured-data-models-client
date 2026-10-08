@@ -1,0 +1,542 @@
+{
+ "format": 1,
+ "scenario": "postgres/link-prediction#no-target-entities",
+ "transcript": "tests/parity/transcripts/postgres/link-prediction--no-target-entities",
+ "calls": [
+  {
+   "host": "schema_from_source",
+   "function": "schema_source_run",
+   "args": [
+    "postgres",
+    "{\"namespace\": {\"schema\": \"parity_shop\"}, \"semantic_model\": null, \"trust_expressions\": false}",
+    "{\"tables\": {\"users\": \"users\", \"products\": \"products\", \"orders\": \"orders\"}, \"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"check_keys\": true}"
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_shop",
+        "users"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "b1f1d0cffa47004b7c7d9801be8414ce36678fa1e90105e2db72322a125879d8"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_shop",
+        "users"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_shop\".\"users\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6ea168b7633d5d53b3c79ad6207a1e93dd8ff53637b42cf524c6da97a8f11f1f"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"user_id\", \"age\", \"country\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"user_id\", \"age\", \"country\")) AS __kumo_order_1__, \"user_id\", \"age\", \"country\" FROM \"parity_shop\".\"users\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "9cb294b6a96dc9662bee8222839c055444991424b403d37e8739f99455850624"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_shop",
+        "products"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6b69e86a92931e177bf3b81bab51d183e56e5c2f9f8592e07bc28600cee7cfb4"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_shop",
+        "products"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_shop\".\"products\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "6ea168b7633d5d53b3c79ad6207a1e93dd8ff53637b42cf524c6da97a8f11f1f"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"product_id\", \"category\", \"price\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"product_id\", \"category\", \"price\")) AS __kumo_order_1__, \"product_id\", \"category\", \"price\" FROM \"parity_shop\".\"products\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "0992d9b9925c2e6493107bee6ad630c6274989b7c3911e9185d7a2d8e032614b"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position",
+       "params": [
+        "parity_shop",
+        "orders"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "26ae8028ee97d9c9721458677b46403cc2b9f01e5806888e2b80d2f49099d5e3"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = %s AND tc.table_name = %s\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+       "params": [
+        "parity_shop",
+        "orders"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "dd4b11b3d560f8d03cd2eec05494d571e459b410143d39bc9de5659099b7a6a5"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT c.relkind,\n       CASE WHEN c.relkind = 'p'\n            THEN (SELECT COALESCE(SUM(pg_relation_size(p.relid)), 0)::bigint\n                  FROM pg_partition_tree(c.oid) AS p)\n            ELSE pg_relation_size(c.oid)\n       END / current_setting('block_size')::bigint\nFROM pg_catalog.pg_class AS c\nWHERE c.oid = to_regclass(%s)",
+       "params": [
+        "\"parity_shop\".\"orders\""
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "29151a7b3b2895cfda690bf46ff7fa102e113f9f78b22031100bf79b1c099184"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT md5(record_send(ROW(\"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\"))) COLLATE \"C\" AS __kumo_order_0__, record_send(ROW(\"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\")) AS __kumo_order_1__, \"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\" FROM \"parity_shop\".\"orders\" ORDER BY 1, 2 LIMIT 1000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "74f39f3ba6d7df98f13d231b521879c5e4e0dc81e7231675e667dc7ba7f7f2f8"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*), MIN(\"ordered_at\"), MAX(\"ordered_at\"), COUNT(\"ordered_at\")\nFROM \"parity_shop\".\"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "4284729649aba590d2b028cbec3458e788bd2c4bee93f9c7be1e4f454a240594"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_shop",
+        "users"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_shop",
+        "products"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = %s AND tc.table_name = %s\nORDER BY tc.constraint_name, kcu.ordinal_position",
+       "params": [
+        "parity_shop",
+        "orders"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "066b94a117191e3dc7887ac4417f38d6ea72a5185856faf448816c06ef9e5d7e"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_shop\".\"users\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"product_id\") AS d, COUNT(CASE WHEN \"product_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_shop\".\"products\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"parity_shop\".\"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "9124e54ad5b7e17bd4e507a7316fc67a2a4bb1db9922b9bdbb409b85af1eeb1f"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"kind\":\"source\",\"source\":{\"namespace\":{\"schema\":\"parity_shop\"},\"semantic_model\":null,\"trust_expressions\":false,\"backend\":\"postgres\"},\"schema\":{\"tables\":[{\"name\":\"users\",\"source_name\":\"users\",\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"age\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"country\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"user_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"products\",\"source_name\":\"products\",\"columns\":[{\"name\":\"product_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"price\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"product_id\",\"time_column\":null,\"duplicate_keys\":0},{\"name\":\"orders\",\"source_name\":\"orders\",\"columns\":[{\"name\":\"order_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"product_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"quantity\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"ordered_at\",\"dtype\":\"timestamp[us]\",\"stype\":\"timestamp\",\"untyped\":false,\"stype_declared\":true,\"before_key\":null}],\"primary_key\":\"order_id\",\"time_column\":\"ordered_at\",\"duplicate_keys\":0}],\"relationships\":[[\"orders\",\"user_id\",\"users\",\"user_id\"],[\"orders\",\"product_id\",\"products\",\"product_id\"]]},\"engine\":[[\"users\",{\"backend\":\"postgres\",\"name\":\"users\",\"raw_source_name\":\"users\",\"place\":{\"catalog\":null,\"schema\":\"parity_shop\",\"row_filter\":null},\"columns\":[{\"name\":\"user_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"age\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"country\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"user_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"age\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"country\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"age\":\"bigint\",\"country\":\"text\",\"user_id\":\"bigint\"},\"sample_source\":\"\\\"parity_shop\\\".\\\"users\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"products\",{\"backend\":\"postgres\",\"name\":\"products\",\"raw_source_name\":\"products\",\"place\":{\"catalog\":null,\"schema\":\"parity_shop\",\"row_filter\":null},\"columns\":[{\"name\":\"product_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"category\",\"expr\":null,\"dtype\":\"string\",\"stype\":\"categorical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"price\",\"expr\":null,\"dtype\":\"float\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false}],\"primary_key\":\"product_id\",\"time_column\":null,\"time_choice\":{\"column\":null,\"how\":null,\"among\":[],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"category\":\"text\",\"price\":\"double precision\",\"product_id\":\"bigint\"},\"sample_source\":\"\\\"parity_shop\\\".\\\"products\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}],[\"orders\",{\"backend\":\"postgres\",\"name\":\"orders\",\"raw_source_name\":\"orders\",\"place\":{\"catalog\":null,\"schema\":\"parity_shop\",\"row_filter\":null},\"columns\":[{\"name\":\"order_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":true,\"is_time\":false,\"is_end\":false},{\"name\":\"user_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"product_id\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"ID\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"quantity\",\"expr\":null,\"dtype\":\"int\",\"stype\":\"numerical\",\"is_pk\":false,\"is_time\":false,\"is_end\":false},{\"name\":\"ordered_at\",\"expr\":null,\"dtype\":\"date\",\"stype\":\"timestamp\",\"is_pk\":false,\"is_time\":true,\"is_end\":false}],\"primary_key\":\"order_id\",\"time_column\":\"ordered_at\",\"time_choice\":{\"column\":\"ordered_at\",\"how\":\"only\",\"among\":[\"ordered_at\"],\"refused\":[],\"fallback\":null,\"unconfirmed\":[]},\"time_inferred\":true,\"end_time_column\":null,\"expr_sample\":{\"index\":1000,\"columns\":[]},\"source_columns\":[{\"name\":\"order_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"quantity\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"ordered_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"source_fks\":[],\"source_sample\":null,\"unique_constraints\":[],\"spelled\":{\"order_id\":\"bigint\",\"ordered_at\":\"timestamp without time zone\",\"product_id\":\"bigint\",\"quantity\":\"bigint\",\"user_id\":\"bigint\"},\"sample_source\":\"\\\"parity_shop\\\".\\\"orders\\\"\",\"listed\":null,\"is_hybrid\":null,\"composite_key\":null}]]}",
+       "[]"
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "predictive_query",
+   "function": "query_text",
+   "args": [
+    "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id"
+   ],
+   "kwargs": {},
+   "returned": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id"
+  },
+  {
+   "host": "materialize",
+   "function": "materialize_run",
+   "args": [
+    "{\"schema\": {\"kind\": \"source\", \"source\": {\"namespace\": {\"schema\": \"parity_shop\"}, \"semantic_model\": null, \"trust_expressions\": false, \"backend\": \"postgres\"}, \"schema\": {\"tables\": [{\"name\": \"users\", \"source_name\": \"users\", \"columns\": [{\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"age\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"country\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"user_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"products\", \"source_name\": \"products\", \"columns\": [{\"name\": \"product_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"category\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"price\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"product_id\", \"time_column\": null, \"duplicate_keys\": 0}, {\"name\": \"orders\", \"source_name\": \"orders\", \"columns\": [{\"name\": \"order_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"product_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"quantity\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"ordered_at\", \"dtype\": \"timestamp[us]\", \"stype\": \"timestamp\", \"untyped\": false, \"stype_declared\": true, \"before_key\": null}], \"primary_key\": \"order_id\", \"time_column\": \"ordered_at\", \"duplicate_keys\": 0}], \"relationships\": [[\"orders\", \"user_id\", \"users\", \"user_id\"], [\"orders\", \"product_id\", \"products\", \"product_id\"]]}, \"engine\": [[\"users\", {\"backend\": \"postgres\", \"name\": \"users\", \"raw_source_name\": \"users\", \"place\": {\"catalog\": null, \"schema\": \"parity_shop\", \"row_filter\": null}, \"columns\": [{\"name\": \"user_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"age\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"country\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"user_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"user_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"age\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"country\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"age\": \"bigint\", \"country\": \"text\", \"user_id\": \"bigint\"}, \"sample_source\": \"\\\"parity_shop\\\".\\\"users\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"products\", {\"backend\": \"postgres\", \"name\": \"products\", \"raw_source_name\": \"products\", \"place\": {\"catalog\": null, \"schema\": \"parity_shop\", \"row_filter\": null}, \"columns\": [{\"name\": \"product_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"category\", \"expr\": null, \"dtype\": \"string\", \"stype\": \"categorical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"price\", \"expr\": null, \"dtype\": \"float\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}], \"primary_key\": \"product_id\", \"time_column\": null, \"time_choice\": {\"column\": null, \"how\": null, \"among\": [], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"product_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"category\", \"dtype\": \"string\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"price\", \"dtype\": \"float\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"category\": \"text\", \"price\": \"double precision\", \"product_id\": \"bigint\"}, \"sample_source\": \"\\\"parity_shop\\\".\\\"products\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}], [\"orders\", {\"backend\": \"postgres\", \"name\": \"orders\", \"raw_source_name\": \"orders\", \"place\": {\"catalog\": null, \"schema\": \"parity_shop\", \"row_filter\": null}, \"columns\": [{\"name\": \"order_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": true, \"is_time\": false, \"is_end\": false}, {\"name\": \"user_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"product_id\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"ID\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"quantity\", \"expr\": null, \"dtype\": \"int\", \"stype\": \"numerical\", \"is_pk\": false, \"is_time\": false, \"is_end\": false}, {\"name\": \"ordered_at\", \"expr\": null, \"dtype\": \"date\", \"stype\": \"timestamp\", \"is_pk\": false, \"is_time\": true, \"is_end\": false}], \"primary_key\": \"order_id\", \"time_column\": \"ordered_at\", \"time_choice\": {\"column\": \"ordered_at\", \"how\": \"only\", \"among\": [\"ordered_at\"], \"refused\": [], \"fallback\": null, \"unconfirmed\": []}, \"time_inferred\": true, \"end_time_column\": null, \"expr_sample\": {\"index\": 1000, \"columns\": []}, \"source_columns\": [{\"name\": \"order_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"user_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"product_id\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"quantity\", \"dtype\": \"int\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}, {\"name\": \"ordered_at\", \"dtype\": \"date\", \"is_primary_key\": false, \"is_unique_key\": false, \"is_nullable\": true}], \"source_fks\": [], \"source_sample\": null, \"unique_constraints\": [], \"spelled\": {\"order_id\": \"bigint\", \"ordered_at\": \"timestamp without time zone\", \"product_id\": \"bigint\", \"quantity\": \"bigint\", \"user_id\": \"bigint\"}, \"sample_source\": \"\\\"parity_shop\\\".\\\"orders\\\"\", \"listed\": null, \"is_hybrid\": null, \"composite_key\": null}]]}, \"query\": \"PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id\", \"args\": {\"indices\": [1, 2, 3], \"anchor_time\": {\"$timestamp\": \"2024-10-01T00:00:00\"}, \"num_context_samples\": 30, \"num_neighbors\": [16], \"random_seed\": 7}, \"tags\": {}, \"model\": null}",
+    {}
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_shop\".\"users\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "302c8b1b12e61e9f749979c9da04b338177c4dd97c595160b289658c05c0ff3d"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_shop\".\"products\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "d26a48fa50625a2732ddc017f91b2291720ca6a5ec89fa89d0bfb99414ea66ab"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT COUNT(*) FROM \"parity_shop\".\"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "aefb6054bffe9d58a29f84a71290cfbefb3cf91262cecb3fa090d3d9df0e0549"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT 0 AS table_index, MIN(\"ordered_at\") AS min_date, MAX(\"ordered_at\") AS max_date\nFROM \"parity_shop\".\"orders\"",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "426368b9afd217f6a3f72f7253708f264ec1faa917b7ed98f238c8a9a1127773"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT setseed(%s)",
+       "params": [
+        0.8071317425028082
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "3e3f13238c25cdf8cdfffe4075f5275fcf48a409fd537eff3dda9aa43d71f5c2"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "SELECT \"user_id\"\nFROM \"parity_shop\".\"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+       "params": null
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "0dc932ffe567d0de2ce60745f079a1aae4f37c5b883e376c5d96e4a7658b5c61"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__, (value->>'s')::timestamp without time zone AS __KUMO_START_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, \"product_id\", \"ordered_at\"\nFROM TMP\nJOIN \"parity_shop\".\"orders\"\n  ON \"user_id\" = TMP.__KUMO_ID__\n AND \"ordered_at\" <= TMP.__KUMO_END_TIME__\n AND \"ordered_at\" > TMP.__KUMO_START_TIME__\nORDER BY TMP.__KUMO_BATCH__, \"ordered_at\", \"order_id\", \"product_id\"",
+       "params": [
+        "[{\"id\":31,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-10-01T00:00:00+00:00\",\"s\":\"2024-09-01T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-09-01T00:00:00+00:00\",\"s\":\"2024-08-02T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-08-02T00:00:00+00:00\",\"s\":\"2024-07-03T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-07-03T00:00:00+00:00\",\"s\":\"2024-06-03T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-06-03T00:00:00+00:00\",\"s\":\"2024-05-04T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-05-04T00:00:00+00:00\",\"s\":\"2024-04-04T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-04-04T00:00:00+00:00\",\"s\":\"2024-03-05T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":23,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":18,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":28,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":24,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":8,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":21,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":4,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":10,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":11,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":30,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":32,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":38,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":16,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":40,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"},{\"id\":26,\"e\":\"2024-03-05T00:00:00+00:00\",\"s\":\"2024-02-04T00:00:00+00:00\"}]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "517bc949c5ad507e99d47101202aa3c5c73c0ffd2e044b3d4b1ef4df9fc6efa4"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value #>> '{}')::bigint AS __KUMO_ID__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT * FROM (\n  SELECT TMP.__KUMO_BATCH__, \"user_id\", \"age\", \"country\",\n         ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__\n           ORDER BY \"age\", CAST(\"country\" AS text), \"user_id\") AS __KUMO_ROW__,\n         COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS __KUMO_MATCHES__\n  FROM TMP\n  JOIN \"parity_shop\".\"users\"\n    ON \"user_id\" = TMP.__KUMO_ID__\n) AS sampled\nWHERE __KUMO_ROW__ = 1\nORDER BY __KUMO_BATCH__",
+       "params": [
+        "[31,20,17,15,34,29,14,9,6,33,22,37,3,7,25,2,19,35,13,27,1,39,15,1,20,14,5,36,31,12,1,2,3]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "94ba84033b6299970f3df48245609369aa97cf0af3f4b21dd6bddb772c686f63"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "run_queries",
+     "queries": [
+      {
+       "sql": "WITH TMP AS (\n  SELECT (ordinality - 1)::bigint AS __KUMO_BATCH__, (value->>'id')::bigint AS __KUMO_ID__, (value->>'e')::timestamp without time zone AS __KUMO_END_TIME__\n  FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY\n       AS input(value, ordinality)\n)\nSELECT TMP.__KUMO_BATCH__, sampled.*\nFROM TMP\nJOIN LATERAL (\n  SELECT \"order_id\", \"user_id\", \"product_id\", \"quantity\", \"ordered_at\",\n         ROW_NUMBER() OVER (ORDER BY \"ordered_at\" DESC, \"order_id\", \"product_id\", \"quantity\", \"user_id\") AS __KUMO_ROW__\n  FROM \"parity_shop\".\"orders\"\n  WHERE \"user_id\" = TMP.__KUMO_ID__\n    AND \"ordered_at\" <= TMP.__KUMO_END_TIME__\n  ORDER BY \"ordered_at\" DESC, \"order_id\", \"product_id\", \"quantity\", \"user_id\"\n  LIMIT 16\n) AS sampled ON TRUE\nORDER BY __KUMO_BATCH__, __KUMO_ROW__",
+       "params": [
+        "[{\"id\":31,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":17,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":34,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":29,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":9,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":6,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":33,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":22,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":37,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":7,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":25,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":19,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":35,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":13,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":27,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":39,\"e\":\"2024-09-01T00:00:00+00:00\"},{\"id\":15,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":20,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":14,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":5,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":36,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":31,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":12,\"e\":\"2024-08-02T00:00:00+00:00\"},{\"id\":1,\"e\":\"2024-10-01T00:00:00+00:00\"},{\"id\":2,\"e\":\"2024-10-01T00:00:00+00:00\"},{\"id\":3,\"e\":\"2024-10-01T00:00:00+00:00\"}]"
+       ]
+      }
+     ],
+     "warnings": [],
+     "outcomes": [
+      {
+       "data": {
+        "$table": "02c77a3f114ade45e7ff834f2382521e0d9cb2302cef37c10ea3db9156326d74"
+       }
+      }
+     ]
+    },
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"refused\":{\"class\":\"sdm_client.errors.StructuredDataError\",\"code\":\"INVALID_REQUEST\",\"message\":\"Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.\",\"details\":{},\"status\":null,\"chain\":[{\"class\":\"builtins.ValueError\",\"message\":\"Cannot perform link prediction on subgraphs without any historical target entities. Please increase the number of hops and try again.\"}]},\"tags\":{},\"model\":{\"backend\":\"postgres\",\"tables\":[{\"name\":\"users\",\"primary_key\":\"user_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"age\",\"dtype\":\"int\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"country\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_shop\\\".\\\"users\\\"\",\"unquoted_name\":\"parity_shop.users\",\"source_columns\":[{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"age\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"country\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"user_id\":\"bigint\",\"age\":\"bigint\",\"country\":\"text\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"products\",\"primary_key\":\"product_id\",\"time_column\":null,\"end_time_column\":null,\"columns\":[{\"name\":\"product_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"category\",\"dtype\":\"string\",\"stype\":\"categorical\",\"expr\":null,\"is_source\":true},{\"name\":\"price\",\"dtype\":\"float\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_shop\\\".\\\"products\\\"\",\"unquoted_name\":\"parity_shop.products\",\"source_columns\":[{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"category\",\"dtype\":\"string\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"price\",\"dtype\":\"float\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"product_id\":\"bigint\",\"category\":\"text\",\"price\":\"double precision\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}},{\"name\":\"orders\",\"primary_key\":\"order_id\",\"time_column\":\"ordered_at\",\"end_time_column\":null,\"columns\":[{\"name\":\"order_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"user_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"product_id\",\"dtype\":\"int\",\"stype\":\"ID\",\"expr\":null,\"is_source\":true},{\"name\":\"quantity\",\"dtype\":\"int\",\"stype\":\"numerical\",\"expr\":null,\"is_source\":true},{\"name\":\"ordered_at\",\"dtype\":\"date\",\"stype\":\"timestamp\",\"expr\":null,\"is_source\":true}],\"sql\":{\"source_name\":\"\\\"parity_shop\\\".\\\"orders\\\"\",\"unquoted_name\":\"parity_shop.orders\",\"source_columns\":[{\"name\":\"order_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"user_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"product_id\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"quantity\",\"dtype\":\"int\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true},{\"name\":\"ordered_at\",\"dtype\":\"date\",\"is_primary_key\":false,\"is_unique_key\":false,\"is_nullable\":true}],\"zoned\":[],\"postgres_types\":{\"order_id\":\"bigint\",\"user_id\":\"bigint\",\"product_id\":\"bigint\",\"quantity\":\"bigint\",\"ordered_at\":\"timestamp without time zone\"},\"snowflake_types\":{},\"zoned_expr_columns\":[],\"listed\":null,\"identity\":null}}],\"edges\":[[\"orders\",\"user_id\",\"users\"],[\"orders\",\"product_id\",\"products\"]],\"state\":{\"min_time\":{\"orders\":1704542400000000000},\"max_time\":{\"orders\":1735462800000000000},\"min_time_unit\":{\"orders\":\"us\"},\"max_time_unit\":{\"orders\":\"us\"},\"coverage_warned\":false,\"enforced_key_tables\":[],\"num_rows\":{\"orders\":1183,\"products\":12,\"users\":40},\"time_spellings\":{}},\"arguments\":{},\"argument_tables\":{}}}",
+       {}
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  }
+ ]
+}

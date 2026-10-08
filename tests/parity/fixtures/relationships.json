@@ -1,0 +1,1707 @@
+{
+ "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+ "cases": [
+  {
+   "id": "relationships/schema.from_data/shared-key-name",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "alpha": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "a": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     },
+     "beta": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         10,
+         20,
+         30
+        ]
+       },
+       "b": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "alpha": "ID",
+     "beta": "ID",
+     "child": "cid"
+    }
+   },
+   "expected": {
+    "tables": {
+     "alpha": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "a": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "beta": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "b": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "ID": {
+        "dtype": "int64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "'ID' is the primary key of 'alpha' and 'beta', so a column named 'ID' identifies a row in each of them and names a parent in none. No relationship is inferred through an ambiguous name, so nothing can point at any of those tables: none of them is gathered as another table's related rows, and a question about one of them is answered from that table alone. Say what the graph is: relationships=[Relationship(child, column, 'alpha', 'ID'), ...], or give each table a key of its own name, so that the column naming it can be matched to it."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/shared-key-name-reversed",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       }
+      }
+     },
+     "beta": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         10,
+         20,
+         30
+        ]
+       },
+       "b": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     },
+     "alpha": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "a": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "alpha": "ID",
+     "beta": "ID",
+     "child": "cid"
+    }
+   },
+   "expected": {
+    "tables": {
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "ID": {
+        "dtype": "int64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "beta": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "b": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "alpha": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "a": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "'ID' is the primary key of 'alpha' and 'beta', so a column named 'ID' identifies a row in each of them and names a parent in none. No relationship is inferred through an ambiguous name, so nothing can point at any of those tables: none of them is gathered as another table's related rows, and a question about one of them is answered from that table alone. Say what the graph is: relationships=[Relationship(child, column, 'alpha', 'ID'), ...], or give each table a key of its own name, so that the column naming it can be matched to it."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/two-parents-sharing-a-name",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "airlines": {
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "AA",
+         "DL"
+        ]
+       },
+       "name": {
+        "dtype": "str",
+        "values": [
+         "American",
+         "Delta"
+        ]
+       }
+      }
+     },
+     "airports": {
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "str",
+        "values": [
+         "ATL",
+         "ORD"
+        ]
+       },
+       "city": {
+        "dtype": "str",
+        "values": [
+         "Atlanta",
+         "Chicago"
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "airlines": "IATA_CODE",
+     "airports": "IATA_CODE"
+    }
+   },
+   "expected": {
+    "tables": {
+     "airlines": {
+      "primary_key": "IATA_CODE",
+      "time_column": null,
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "name": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "airports": {
+      "primary_key": "IATA_CODE",
+      "time_column": null,
+      "columns": {
+       "IATA_CODE": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "city": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "'IATA_CODE' is the primary key of 'airlines' and 'airports', so a column named 'IATA_CODE' identifies a row in each of them and names a parent in none. No relationship is inferred through an ambiguous name, so nothing can point at any of those tables: none of them is gathered as another table's related rows, and a question about one of them is answered from that table alone. Say what the graph is: relationships=[Relationship(child, column, 'airlines', 'IATA_CODE'), ...], or give each table a key of its own name, so that the column naming it can be matched to it."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/unambiguous-key",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "seg": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "users": "user_id",
+     "orders": "order_id"
+    }
+   },
+   "expected": {
+    "tables": {
+     "users": {
+      "primary_key": "user_id",
+      "time_column": null,
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "seg": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "orders": {
+      "primary_key": "order_id",
+      "time_column": null,
+      "columns": {
+       "order_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      }
+     }
+    },
+    "relationships": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/one-ambiguity-does-not-suppress-another",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "alpha": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "x": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     },
+     "beta": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         3,
+         4
+        ]
+       },
+       "y": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     },
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "seg": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b"
+        ]
+       }
+      }
+     },
+     "events": {
+      "columns": {
+       "ev_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "alpha": "ID",
+     "beta": "ID",
+     "users": "user_id",
+     "events": "ev_id"
+    }
+   },
+   "expected": {
+    "tables": {
+     "alpha": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "x": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "beta": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "y": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "users": {
+      "primary_key": "user_id",
+      "time_column": null,
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "seg": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "events": {
+      "primary_key": "ev_id",
+      "time_column": null,
+      "columns": {
+       "ev_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "ID": {
+        "dtype": "int64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [
+     [
+      "events",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "warnings": [
+     "'ID' is the primary key of 'alpha' and 'beta', so a column named 'ID' identifies a row in each of them and names a parent in none. No relationship is inferred through an ambiguous name, so nothing can point at any of those tables: none of them is gathered as another table's related rows, and a question about one of them is answered from that table alone. Say what the graph is: relationships=[Relationship(child, column, 'alpha', 'ID'), ...], or give each table a key of its own name, so that the column naming it can be matched to it."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/not-linked-to-itself",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "seg": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "users": "user_id"
+    }
+   },
+   "expected": {
+    "tables": {
+     "users": {
+      "primary_key": "user_id",
+      "time_column": null,
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "seg": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/composite-is-not-a-target",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "pairs": {
+      "columns": {
+       "a": {
+        "dtype": "int64",
+        "values": [
+         1,
+         1,
+         2
+        ]
+       },
+       "b": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         1
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         3
+        ]
+       },
+       "a": {
+        "dtype": "int64",
+        "values": [
+         1,
+         1,
+         2
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "pairs": [
+      "a",
+      "b"
+     ],
+     "child": "cid"
+    }
+   },
+   "expected": {
+    "tables": {
+     "pairs": {
+      "primary_key": [
+       "a",
+       "b"
+      ],
+      "time_column": null,
+      "columns": {
+       "a": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "b": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "a": {
+        "dtype": "int64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/ambiguity-scoped-to-column",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "users": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "seg": {
+        "dtype": "str",
+        "values": [
+         "a",
+         "b"
+        ]
+       }
+      }
+     },
+     "orders": {
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "account_id": {
+        "dtype": "int64",
+        "values": [
+         7,
+         8
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0
+        ]
+       }
+      }
+     },
+     "accounts": {
+      "columns": {
+       "account_id": {
+        "dtype": "int64",
+        "values": [
+         7,
+         8
+        ]
+       },
+       "tier": {
+        "dtype": "str",
+        "values": [
+         "x",
+         "y"
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "users": "ID",
+     "orders": "ID",
+     "accounts": "account_id"
+    }
+   },
+   "expected": {
+    "tables": {
+     "users": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "seg": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "orders": {
+      "primary_key": "ID",
+      "time_column": null,
+      "columns": {
+       "ID": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "account_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "accounts": {
+      "primary_key": "account_id",
+      "time_column": null,
+      "columns": {
+       "account_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "tier": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     }
+    },
+    "relationships": [
+     [
+      "orders",
+      "account_id",
+      "accounts",
+      "account_id"
+     ]
+    ],
+    "warnings": [
+     "'ID' is the primary key of 'orders' and 'users', so a column named 'ID' identifies a row in each of them and names a parent in none. No relationship is inferred through an ambiguous name, so nothing can point at any of those tables: none of them is gathered as another table's related rows, and a question about one of them is answered from that table alone. Say what the graph is: relationships=[Relationship(child, column, 'orders', 'ID'), ...], or give each table a key of its own name, so that the column naming it can be matched to it."
+    ]
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/composite-component-does-not-contest",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "pairs": {
+      "columns": {
+       "a": {
+        "dtype": "int64",
+        "values": [
+         1,
+         1,
+         2
+        ]
+       },
+       "b": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2,
+         1
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         2.0,
+         3.0
+        ]
+       }
+      }
+     },
+     "owner": {
+      "columns": {
+       "a": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "name": {
+        "dtype": "str",
+        "values": [
+         "x",
+         "y"
+        ]
+       }
+      }
+     },
+     "child": {
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       },
+       "a": {
+        "dtype": "int64",
+        "values": [
+         1,
+         2
+        ]
+       }
+      }
+     }
+    },
+    "primary_keys": {
+     "pairs": [
+      "a",
+      "b"
+     ],
+     "owner": "a",
+     "child": "cid"
+    }
+   },
+   "expected": {
+    "tables": {
+     "pairs": {
+      "primary_key": [
+       "a",
+       "b"
+      ],
+      "time_column": null,
+      "columns": {
+       "a": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "b": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     },
+     "owner": {
+      "primary_key": "a",
+      "time_column": null,
+      "columns": {
+       "a": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "name": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      }
+     },
+     "child": {
+      "primary_key": "cid",
+      "time_column": null,
+      "columns": {
+       "cid": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "a": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      }
+     }
+    },
+    "relationships": [
+     [
+      "pairs",
+      "a",
+      "owner",
+      "a"
+     ],
+     [
+      "child",
+      "a",
+      "owner",
+      "a"
+     ]
+    ],
+    "warnings": []
+   },
+   "expected_warnings": []
+  },
+  {
+   "id": "relationships/schema.from_data/repeated-key-names-composite",
+   "source": "packages/structured-data-models-client/tests/test_inferred_relationships.py",
+   "operation": "schema.from_data",
+   "input": {
+    "tables": {
+     "t": {
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "values": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         6,
+         6,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40,
+         41,
+         42,
+         43,
+         44,
+         45,
+         46,
+         47,
+         48,
+         49,
+         50,
+         51,
+         52,
+         53,
+         54,
+         55,
+         56,
+         57,
+         58,
+         59,
+         60,
+         61,
+         62,
+         63,
+         64,
+         65,
+         66,
+         67,
+         68,
+         69,
+         70,
+         71,
+         72,
+         73,
+         74,
+         75,
+         76,
+         77,
+         78,
+         79,
+         80,
+         81,
+         82,
+         83,
+         84,
+         85,
+         86,
+         87,
+         88,
+         89,
+         90,
+         91,
+         92,
+         93,
+         94,
+         95,
+         96,
+         97,
+         98,
+         99,
+         100,
+         101,
+         102,
+         103,
+         104,
+         105,
+         106,
+         107,
+         108,
+         109,
+         110,
+         111,
+         112,
+         113,
+         114,
+         115,
+         116,
+         117,
+         118,
+         119,
+         120,
+         121,
+         122,
+         123,
+         124,
+         125,
+         126,
+         127,
+         128,
+         129,
+         130,
+         131,
+         132,
+         133,
+         134,
+         135,
+         136,
+         137,
+         138,
+         139,
+         140,
+         141,
+         142,
+         143,
+         144,
+         145,
+         146,
+         147,
+         148,
+         149,
+         150,
+         151,
+         152,
+         153,
+         154,
+         155,
+         156,
+         157,
+         158,
+         159,
+         160,
+         161,
+         162,
+         163,
+         164,
+         165,
+         166,
+         167,
+         168,
+         169,
+         170,
+         171,
+         172,
+         173,
+         174,
+         175,
+         176,
+         177,
+         178,
+         179,
+         180,
+         181,
+         182,
+         183,
+         184,
+         185,
+         186,
+         187,
+         188,
+         189,
+         190,
+         191,
+         192,
+         193,
+         194,
+         195,
+         196,
+         197,
+         198,
+         199
+        ]
+       },
+       "line_no": {
+        "dtype": "int64",
+        "values": [
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         2,
+         3,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ]
+       },
+       "v": {
+        "dtype": "float64",
+        "values": [
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0,
+         1.0
+        ]
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "tables": {
+     "t": {
+      "primary_key": "user_id",
+      "time_column": null,
+      "columns": {
+       "user_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "line_no": {
+        "dtype": "int64",
+        "stype": "numerical"
+       },
+       "v": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      }
+     }
+    },
+    "relationships": [],
+    "warnings": [
+     "t.user_id identifies a row 2 time(s) it has already been used, e.g. np.int64(6). Those rows are indistinguishable to the model. 'user_id' is unique together with 'line_no', which is what a composite key looks like; pass that as the primary key if so."
+    ]
+   },
+   "expected_warnings": []
+  }
+ ]
+}

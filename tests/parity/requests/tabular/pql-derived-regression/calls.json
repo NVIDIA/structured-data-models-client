@@ -1,0 +1,254 @@
+{
+ "format": 1,
+ "scenario": "tabular/pql-derived-regression",
+ "transcript": "tests/parity/transcripts/tabular/pql-derived-regression",
+ "calls": [
+  {
+   "host": "predictive_query",
+   "function": "query_text",
+   "args": [
+    "PREDICT people.age FOR EACH people.user_id"
+   ],
+   "kwargs": {},
+   "returned": "PREDICT people.age FOR EACH people.user_id"
+  },
+  {
+   "host": "predictive_query",
+   "function": "data_schema",
+   "args": [
+    {
+     "people": {
+      "$table": "ac86e2ed7431e8e823f4c2cddf69f576b29ede205ae4d5caa9aa4708b21997bc"
+     }
+    },
+    "{\"people\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}}",
+    "{\"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"edits\": []}"
+   ],
+   "kwargs": {},
+   "returned": {
+    "$tuple": [
+     "{\"kind\":\"data\",\"tables\":[\"people\"],\"options\":{\"primary_keys\":null,\"time_columns\":null,\"relationships\":null,\"edits\":[]},\"schema\":{\"tables\":[{\"name\":\"people\",\"source_name\":null,\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":\"numerical\"},{\"name\":\"age\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"churn\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"user_id\",\"time_column\":null,\"duplicate_keys\":0}],\"relationships\":[]}}",
+     "[]"
+    ]
+   }
+  },
+  {
+   "host": "materialize",
+   "function": "materialize_run",
+   "args": [
+    "{\"schema\": {\"kind\": \"data\", \"tables\": [\"people\"], \"options\": {\"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"edits\": []}, \"schema\": {\"tables\": [{\"name\": \"people\", \"source_name\": null, \"columns\": [{\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": \"numerical\"}, {\"name\": \"age\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"churn\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"user_id\", \"time_column\": null, \"duplicate_keys\": 0}], \"relationships\": []}}, \"query\": \"PREDICT people.age FOR EACH people.user_id\", \"args\": {\"predict\": {\"$frame\": \"arg/predict\"}}, \"tags\": {\"schema/people\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}, \"arg/predict\": {\"user_id\": {\"dtype\": \"int64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}}, \"model\": null}",
+    {
+     "schema/people": {
+      "$table": "ac86e2ed7431e8e823f4c2cddf69f576b29ede205ae4d5caa9aa4708b21997bc"
+     },
+     "arg/predict": {
+      "$table": "f48b8f45ef9b8e8ef4f803baff8f551a3b9f1d9667c51d3a5df5b9a9a47135dc"
+     }
+    }
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "done",
+     "value": {
+      "$tuple": [
+       "{\"request\":{\"task\":{\"kind\":\"regression\",\"target\":{\"column_name\":\"age\",\"dtype\":\"float64\",\"table_name\":\"people\"},\"entity_table\":null,\"options\":{}},\"schema\":{\"kind\":\"data\",\"tables\":[\"people\"],\"options\":{\"primary_keys\":null,\"time_columns\":null,\"relationships\":null,\"edits\":[]},\"schema\":{\"tables\":[{\"name\":\"people\",\"source_name\":null,\"columns\":[{\"name\":\"user_id\",\"dtype\":\"int64\",\"stype\":\"ID\",\"untyped\":false,\"stype_declared\":false,\"before_key\":\"numerical\"},{\"name\":\"age\",\"dtype\":\"float64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"segment\",\"dtype\":\"string\",\"stype\":\"categorical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null},{\"name\":\"churn\",\"dtype\":\"int64\",\"stype\":\"numerical\",\"untyped\":false,\"stype_declared\":false,\"before_key\":null}],\"primary_key\":\"user_id\",\"time_column\":null,\"duplicate_keys\":0}],\"relationships\":[]}},\"entity_table\":\"people\",\"query\":\"PREDICT people.age FOR EACH people.user_id\",\"inference\":{},\"requested_inference\":{},\"frames\":true,\"payloads\":null,\"indices\":[],\"windowed\":false,\"parts\":null,\"decomposition\":null,\"asked\":null,\"context_fingerprint\":\"8744852a8b2a0513\",\"rows\":{\"context\":[3,4,5,6,7,8,9,10,11],\"predict\":null}},\"tags\":{\"context\":{\"user_id\":{\"dtype\":\"int64\"},\"age\":{\"dtype\":\"float64\"},\"segment\":{\"dtype\":\"str\"},\"churn\":{\"dtype\":\"int64\"}},\"predict\":{\"user_id\":{\"dtype\":\"int64\"},\"segment\":{\"dtype\":\"str\"},\"churn\":{\"dtype\":\"int64\"}}},\"model\":null}",
+       {
+        "context": {
+         "$table": "12a8e8dffea40d46c5b5d6a55f4fe6a1186afbe6c590c67f237d00d87b9b9afe"
+        },
+        "predict": {
+         "$table": "b5e99c149ccf8d056f1071a2fa2a79136d26e759b703e8ff5b23758d37ca7ea0"
+        }
+       }
+      ]
+     },
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "predict",
+   "function": "predict_run",
+   "args": [
+    "{\"request\": {\"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"age\", \"dtype\": \"float64\", \"table_name\": \"people\"}, \"entity_table\": null, \"options\": {}}, \"schema\": {\"kind\": \"data\", \"tables\": [\"people\"], \"options\": {\"primary_keys\": null, \"time_columns\": null, \"relationships\": null, \"edits\": []}, \"schema\": {\"tables\": [{\"name\": \"people\", \"source_name\": null, \"columns\": [{\"name\": \"user_id\", \"dtype\": \"int64\", \"stype\": \"ID\", \"untyped\": false, \"stype_declared\": false, \"before_key\": \"numerical\"}, {\"name\": \"age\", \"dtype\": \"float64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"segment\", \"dtype\": \"string\", \"stype\": \"categorical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}, {\"name\": \"churn\", \"dtype\": \"int64\", \"stype\": \"numerical\", \"untyped\": false, \"stype_declared\": false, \"before_key\": null}], \"primary_key\": \"user_id\", \"time_column\": null, \"duplicate_keys\": 0}], \"relationships\": []}}, \"entity_table\": \"people\", \"query\": \"PREDICT people.age FOR EACH people.user_id\", \"inference\": {}, \"requested_inference\": {}, \"frames\": true, \"payloads\": null, \"indices\": [], \"windowed\": false, \"parts\": null, \"decomposition\": null, \"asked\": null, \"context_fingerprint\": \"8744852a8b2a0513\", \"rows\": {\"context\": [3, 4, 5, 6, 7, 8, 9, 10, 11], \"predict\": null}}, \"model\": \"kumo-tabular\", \"outputs\": [\"prediction\"], \"tags\": {\"schema/people\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}, \"context\": {\"user_id\": {\"dtype\": \"int64\"}, \"age\": {\"dtype\": \"float64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}, \"predict\": {\"user_id\": {\"dtype\": \"int64\"}, \"segment\": {\"dtype\": \"str\"}, \"churn\": {\"dtype\": \"int64\"}}}}",
+    {
+     "schema/people": {
+      "$table": "ac86e2ed7431e8e823f4c2cddf69f576b29ede205ae4d5caa9aa4708b21997bc"
+     },
+     "context": {
+      "$table": "12a8e8dffea40d46c5b5d6a55f4fe6a1186afbe6c590c67f237d00d87b9b9afe"
+     },
+     "predict": {
+      "$table": "b5e99c149ccf8d056f1071a2fa2a79136d26e759b703e8ff5b23758d37ca7ea0"
+     }
+    }
+   ],
+   "kwargs": {},
+   "steps": [
+    {
+     "kind": "call_model",
+     "endpoint": "predict",
+     "session_id": null,
+     "body": {
+      "model": "kumo-tabular",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "age",
+        "dtype": "float64"
+       }
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "user_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "age": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "segment": {
+          "dtype": "string",
+          "stype": "categorical"
+         },
+         "churn": {
+          "dtype": "int64",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": [
+         "user_id"
+        ]
+       }
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "user_id",
+         "age",
+         "segment",
+         "churn"
+        ],
+        "rows": [
+         [
+          3,
+          23.0,
+          "south",
+          1
+         ],
+         [
+          4,
+          24.0,
+          "north",
+          0
+         ],
+         [
+          5,
+          25.0,
+          "north",
+          1
+         ],
+         [
+          6,
+          26.0,
+          "south",
+          0
+         ],
+         [
+          7,
+          27.0,
+          "north",
+          1
+         ],
+         [
+          8,
+          28.0,
+          "north",
+          0
+         ],
+         [
+          9,
+          29.0,
+          "south",
+          1
+         ],
+         [
+          10,
+          30.0,
+          "north",
+          0
+         ],
+         [
+          11,
+          31.0,
+          "north",
+          1
+         ]
+        ]
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "user_id",
+         "segment",
+         "churn"
+        ],
+        "rows": [
+         [
+          0,
+          "south",
+          0
+         ],
+         [
+          1,
+          "north",
+          1
+         ],
+         [
+          2,
+          "north",
+          0
+         ]
+        ]
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "metadata": {
+       "request_id": "sdm-<request-id>"
+      }
+     },
+     "warnings": [],
+     "outcome": {
+      "response": "{\"object\": \"prediction.response\", \"id\": \"synthetic-3\", \"model\": \"kumo-tabular\", \"metadata\": {\"synthetic\": true}, \"predictions\": [{\"row_index\": 0, \"id\": \"[0]\", \"prediction\": 50.817874}, {\"row_index\": 1, \"id\": \"[1]\", \"prediction\": 12.099198}, {\"row_index\": 2, \"id\": \"[2]\", \"prediction\": 40.169431}]}"
+     }
+    },
+    {
+     "kind": "done",
+     "value": "{\"model\":\"kumo-tabular\",\"request_id\":\"synthetic-3\",\"items\":[{\"row_index\":0,\"id\":0,\"prediction\":50.817874},{\"row_index\":1,\"id\":1,\"prediction\":12.099198},{\"row_index\":2,\"id\":2,\"prediction\":40.169431}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}",
+     "warnings": []
+    }
+   ]
+  },
+  {
+   "host": "flatten",
+   "function": "flatten",
+   "args": [
+    "{\"model\":\"kumo-tabular\",\"request_id\":\"synthetic-3\",\"items\":[{\"row_index\":0,\"id\":0,\"prediction\":50.817874},{\"row_index\":1,\"id\":1,\"prediction\":12.099198},{\"row_index\":2,\"id\":2,\"prediction\":40.169431}],\"metadata\":{\"synthetic\":true},\"explanation\":null,\"outputs\":[\"prediction\"],\"unscored_candidates\":[],\"names_its_rows\":true,\"names_its_step\":false}"
+   ],
+   "kwargs": {},
+   "returned": {
+    "$table": "cc55e5d370fd50f85d3c393def0aa32565daec0bb215783be5084eb9d54a3311"
+   }
+  }
+ ]
+}

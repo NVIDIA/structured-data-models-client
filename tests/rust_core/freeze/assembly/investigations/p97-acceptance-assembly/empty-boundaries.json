@@ -1,0 +1,38 @@
+{
+  "tests/parity/sampling/tabular/batches/boundary.json": {
+    "sha256": "3a1c8628af2daa763e13c99adac1ca94f8bb3d8b0c40154461c0c61bb34ebdd1",
+    "scenario": "tabular/batches"
+  },
+  "tests/parity/sampling/tabular/direct-classification--default-outputs/boundary.json": {
+    "sha256": "4ac687a6e404f88928308179b4987798124efcb773cf31de7d9f863ea25f66af",
+    "scenario": "tabular/direct-classification#default-outputs"
+  },
+  "tests/parity/sampling/tabular/direct-classification/boundary.json": {
+    "sha256": "e680d53b309f9f67edb33aa5655735f3980cac64d0077b6a11536dd108bbeb3c",
+    "scenario": "tabular/direct-classification"
+  },
+  "tests/parity/sampling/tabular/direct-regression/boundary.json": {
+    "sha256": "0ff47e563a95923b0d304039a4d7b6da32ece30dbfdf393711c7af35c7acf2cb",
+    "scenario": "tabular/direct-regression"
+  },
+  "tests/parity/sampling/tabular/pql-derived-classification--default-outputs/boundary.json": {
+    "sha256": "60d47c1a4f7128d245940c34d63a019f5ec03f7b7c421f7a774e196b9666708e",
+    "scenario": "tabular/pql-derived-classification#default-outputs"
+  },
+  "tests/parity/sampling/tabular/pql-derived-classification/boundary.json": {
+    "sha256": "d192fa80541b241cf044ecedccb6020e50c05083940bf3b464c6ed3e55c91e07",
+    "scenario": "tabular/pql-derived-classification"
+  },
+  "tests/parity/sampling/tabular/pql-derived-regression/boundary.json": {
+    "sha256": "35d7491b1485453a0cd70ccb44766957b6ea0f3ada9910ebdf8058840adf53f0",
+    "scenario": "tabular/pql-derived-regression"
+  },
+  "tests/parity/sampling/tabular/pql-predict-frame--default-outputs/boundary.json": {
+    "sha256": "796b722292a1294d236c618d00bf141f2f3d9761f6c8535f63f92fec0134daea",
+    "scenario": "tabular/pql-predict-frame#default-outputs"
+  },
+  "tests/parity/sampling/tabular/pql-predict-frame/boundary.json": {
+    "sha256": "38d83639483cafdb1c2ad035c1ab3eb566cdf448ac528bd308721c614118389a",
+    "scenario": "tabular/pql-predict-frame"
+  }
+}

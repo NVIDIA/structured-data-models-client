@@ -1,0 +1,166 @@
+{
+ "format_version": 1,
+ "name": "tabular/direct-classification#default-outputs",
+ "backend": "tabular",
+ "task_kind": "classification",
+ "data": {
+  "generator": "wire-snapshot",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Request",
+   "args": {
+    "context": {
+     "$frame": {
+      "table": "people"
+     }
+    },
+    "predict": {
+     "$frame": {
+      "table": "people",
+      "head": 3,
+      "drop": ["churn"]
+     }
+    },
+    "target": "churn",
+    "task": "classification"
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-tabular",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [],
+ "payloads": [
+  {
+   "model": "kumo-tabular",
+   "task": {
+    "kind": "classification",
+    "target": {
+     "column_name": "churn",
+     "dtype": "int64"
+    }
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "user_id": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "age": {
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      "segment": {
+       "dtype": "string",
+       "stype": "categorical"
+      },
+      "churn": {
+       "dtype": "int64",
+       "stype": "categorical"
+      }
+     },
+     "primary_key": ["user_id"]
+    }
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["user_id", "age", "segment", "churn"],
+     "rows": [
+      [0, 20.0, "south", 0],
+      [1, 21.0, "north", 1],
+      [2, 22.0, "north", 0],
+      [3, 23.0, "south", 1],
+      [4, 24.0, "north", 0],
+      [5, 25.0, "north", 1],
+      [6, 26.0, "south", 0],
+      [7, 27.0, "north", 1],
+      [8, 28.0, "north", 0],
+      [9, 29.0, "south", 1],
+      [10, 30.0, "north", 0],
+      [11, 31.0, "north", 1]
+     ]
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["user_id", "age", "segment"],
+     "rows": [
+      [0, 20.0, "south"],
+      [1, 21.0, "north"],
+      [2, 22.0, "north"]
+     ]
+    }
+   },
+   "output": {
+    "fields": ["prediction", "probabilities"]
+   },
+   "metadata": {
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-3",
+    "model": "kumo-tabular",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "[0]",
+      "prediction": "1",
+      "probabilities": {
+       "0": 0.400091,
+       "1": 0.599909
+      }
+     },
+     {
+      "row_index": 1,
+      "id": "[1]",
+      "prediction": "0",
+      "probabilities": {
+       "0": 0.537099,
+       "1": 0.462901
+      }
+     },
+     {
+      "row_index": 2,
+      "id": "[2]",
+      "prediction": "0",
+      "probabilities": {
+       "0": 0.525287,
+       "1": 0.474713
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "3 of the 3 rows being scored are also in context, carrying the 'churn' being asked for, so the model is being shown the answers to rows it is being asked about. Drop them from context, or gather the request with materialize(), which leaves the rows it scores out of the context it sends."
+  }
+ ]
+}

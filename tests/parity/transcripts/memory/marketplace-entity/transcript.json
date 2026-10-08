@@ -1,0 +1,278 @@
+{
+ "format_version": 1,
+ "name": "memory/marketplace-entity",
+ "backend": "memory",
+ "task_kind": "classification",
+ "data": {
+  "generator": "marketplace",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_data",
+   "args": {
+    "tables": ["customers", "items", "reviews", "stores", "purchases"],
+    "primary_keys": {
+     "stores": "store_code"
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT customers.segment FOR EACH customers.customer_id"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": [1, 2],
+    "anchor_time": "entity",
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "multiclass_classification",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "string",
+     "classes": ["student", "business", "retail"]
+    },
+    "entity_table_names": ["customers"],
+    "anchor_time_column": "__kumo_anchor_time"
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      "__kumo_anchor_time": {
+       "dtype": "timestamp[us]",
+       "stype": "timestamp",
+       "nullable": false
+      },
+      "TARGET": {
+       "dtype": "string",
+       "stype": "categorical"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "customers": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "nullable": false
+       },
+       "signup_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      },
+      "primary_key": ["instance_id", "customer_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "customers",
+      "target_columns": ["customer_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+     "rows": [
+      [0, 50, "2024-03-18T00:00:00.000000Z", "student"],
+      [1, 4, "2024-03-18T00:00:00.000000Z", "business"],
+      [2, 16, "2024-03-11T00:00:00.000000Z", "student"],
+      [3, 46, "2024-03-11T00:00:00.000000Z", "retail"],
+      [4, 44, "2024-03-04T00:00:00.000000Z", "business"],
+      [5, 7, "2024-03-04T00:00:00.000000Z", "retail"],
+      [6, 43, "2024-03-04T00:00:00.000000Z", "retail"],
+      [7, 24, "2024-03-04T00:00:00.000000Z", "retail"],
+      [8, 26, "2024-03-04T00:00:00.000000Z", "retail"],
+      [9, 21, "2024-02-26T00:00:00.000000Z", "retail"],
+      [10, 60, "2024-02-26T00:00:00.000000Z", "student"],
+      [11, 35, "2024-02-26T00:00:00.000000Z", "business"],
+      [12, 14, "2024-02-26T00:00:00.000000Z", "student"],
+      [13, 25, "2024-02-26T00:00:00.000000Z", "retail"],
+      [14, 15, "2024-02-26T00:00:00.000000Z", "retail"],
+      [15, 19, "2024-02-19T00:00:00.000000Z", "business"],
+      [16, 52, "2024-02-19T00:00:00.000000Z", "business"],
+      [17, 6, "2024-02-19T00:00:00.000000Z", "student"],
+      [18, 12, "2024-02-19T00:00:00.000000Z", "student"],
+      [19, 40, "2024-02-19T00:00:00.000000Z", "retail"],
+      [20, 20, "2024-02-19T00:00:00.000000Z", "student"],
+      [21, 48, "2024-02-19T00:00:00.000000Z", "retail"],
+      [22, 18, "2024-02-12T00:00:00.000000Z", "retail"],
+      [23, 13, "2024-02-12T00:00:00.000000Z", "student"],
+      [24, 59, "2024-02-12T00:00:00.000000Z", "student"],
+      [25, 31, "2024-02-05T00:00:00.000000Z", "retail"],
+      [26, 23, "2024-02-05T00:00:00.000000Z", "student"],
+      [27, 57, "2024-02-05T00:00:00.000000Z", "student"],
+      [29, 58, "2024-02-05T00:00:00.000000Z", "student"]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "signup_at"],
+      "rows": [
+       [0, 50, "2024-03-18T00:00:00.000000Z"],
+       [1, 4, "2024-03-18T00:00:00.000000Z"],
+       [2, 16, "2024-03-11T00:00:00.000000Z"],
+       [3, 46, "2024-03-11T00:00:00.000000Z"],
+       [4, 44, "2024-03-04T00:00:00.000000Z"],
+       [5, 7, "2024-03-04T00:00:00.000000Z"],
+       [6, 43, "2024-03-04T00:00:00.000000Z"],
+       [7, 24, "2024-03-04T00:00:00.000000Z"],
+       [8, 26, "2024-03-04T00:00:00.000000Z"],
+       [9, 21, "2024-02-26T00:00:00.000000Z"],
+       [10, 60, "2024-02-26T00:00:00.000000Z"],
+       [11, 35, "2024-02-26T00:00:00.000000Z"],
+       [12, 14, "2024-02-26T00:00:00.000000Z"],
+       [13, 25, "2024-02-26T00:00:00.000000Z"],
+       [14, 15, "2024-02-26T00:00:00.000000Z"],
+       [15, 19, "2024-02-19T00:00:00.000000Z"],
+       [16, 52, "2024-02-19T00:00:00.000000Z"],
+       [17, 6, "2024-02-19T00:00:00.000000Z"],
+       [18, 12, "2024-02-19T00:00:00.000000Z"],
+       [19, 40, "2024-02-19T00:00:00.000000Z"],
+       [20, 20, "2024-02-19T00:00:00.000000Z"],
+       [21, 48, "2024-02-19T00:00:00.000000Z"],
+       [22, 18, "2024-02-12T00:00:00.000000Z"],
+       [23, 13, "2024-02-12T00:00:00.000000Z"],
+       [24, 59, "2024-02-12T00:00:00.000000Z"],
+       [25, 31, "2024-02-05T00:00:00.000000Z"],
+       [26, 23, "2024-02-05T00:00:00.000000Z"],
+       [27, 57, "2024-02-05T00:00:00.000000Z"],
+       [29, 58, "2024-02-05T00:00:00.000000Z"]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+     "rows": [
+      [30, 1, "2024-02-05T00:00:00.000000Z"],
+      [31, 2, "2024-01-01T00:00:00.000000Z"]
+     ]
+    },
+    "related_tables": {
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "customer_id", "signup_at"],
+      "rows": [
+       [30, 1, "2024-02-05T00:00:00.000000Z"],
+       [31, 2, "2024-01-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction", "probabilities"]
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "classification",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false,
+     "class_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT customers.segment FOR EACH customers.customer_id",
+    "num_context_examples": 30,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "30",
+      "prediction": "business",
+      "probabilities": {
+       "business": 0.387362,
+       "retail": 0.32714,
+       "student": 0.285498
+      }
+     },
+     {
+      "row_index": 1,
+      "id": "31",
+      "prediction": "retail",
+      "probabilities": {
+       "business": 0.318352,
+       "retail": 0.372664,
+       "student": 0.308984
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "'items', 'purchases', 'reviews', 'stores' are linked into the schema and not in this request: the sampler reached no row of them from the entities being scored, so the model answers without them. Raise num_hops if they lie further out than the hops sampled, and check the foreign key holds values the parent key actually has if they do not."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "1 of the rows sampled as context are the rows being scored, at one moment or another, carrying the value being asked for. Rows that carry the answer to the question being asked are not sent as context, so these do not go into it."
+  }
+ ]
+}

@@ -1,0 +1,173 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Workspace root for the structured-data-models-client monorepo. This builds no package; each
+# independently released distribution lives under packages/ with its own
+# pyproject.toml:
+#
+#   packages/structured-data-models-client            - the public client SDK (pure python)
+#   packages/structured-data-models-api               - Universal TFM wire types (pure python)
+#   packages/structured-data-models-pql               - the Predictive Query Language (pure python)
+#   packages/structured-data-models-connectors        - shared data-source connectors (pure python)
+#   packages/structured-data-models-relational-engine - the relational driver (native build)
+#
+# This file carries only shared tooling configuration. Each package's
+# [tool.ruff] extends this file, so the lint baseline below applies to every
+# first-party tree and a package cannot drop rules by shadowing the block.
+
+[tool.ruff]
+line-length = 80
+target-version = "py310"
+# The generated parser is ANTLR's output and the generated bindings are the generator's output, and their bytes are
+# recorded in PROVENANCE.json. Letting the formatter rewrite them would break
+# that record on every run.
+# Prose, not source. A fenced snippet in a bug report is written to be read --
+# aligned comments comparing two behaviours, a query left on one line to show
+# its shape, and formatting it as a module rewrites the thing being
+# illustrated.
+extend-exclude = [
+    "packages/structured-data-models-pql/src/predictive_query/grammar",
+    "packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py",
+    "*.md",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Databricks injects `spark`, `dbutils` and `display` into a notebook (F821),
+# and each cell imports what it uses so it can be rerun on its own (E402).
+"examples/databricks/*.ipynb" = ["F821", "E402"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+# Static type checking. Every distribution ships `py.typed`, which is a promise
+# made to other people's type checkers, so one has to run here, or the
+# promise is only as good as the last person who happened to check.
+#
+# It is introduced the way a checker can be introduced to an existing tree
+# without rewriting it: the whole repository is checked, and the modules that
+# do not pass yet are listed below with the count they carried on the day the
+# job was added. New code is checked from the first commit; the list is a
+# backlog to retire, not a permanent exemption, and it can only shrink because
+# `warn_unused_ignores` and this file's own test will report an entry that is
+# no longer needed.
+[tool.mypy]
+# Deliberately not pinned to the 3.10 floor: numpy's bundled stubs use 3.12
+# syntax, and a pinned older version makes mypy reject them before it reads a
+# line of this repository. The interpreter CI runs on decides instead.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+exclude = [
+    # ANTLR's output, regenerated from the grammar rather than edited. Excluded
+    # from ruff for the same reason; the two lists move together.
+    "packages/structured-data-models-pql/src/predictive_query/grammar/",
+]
+
+# --- Baseline recorded 2026-09-17 -------------------------------------------
+# 37 errors across 11 hand-written modules in the four pure-python packages,
+# plus 62 across 21 in the relational engine. Retire an entry by fixing its
+# module and deleting its line.
+#
+# `ignore_errors` is blunt: it hides a *new* error in a listed module as well as
+# the recorded ones. That is the cost of adopting a checker on a tree this size
+# without rewriting it, and it is why the list is dated and counted rather than
+# open-ended. The counts are what make a growing entry visible.
+[[tool.mypy.overrides]]
+module = [
+    "sdm_client.materializers.relational",   # 12
+    "sdm_client.request",                    #  5
+    # --- arrived with the ranking/forecast decomposition, 2026-09-17 --------
+    # decompose.py's eight are all "Item None of X has no attribute Y" on
+    # `Aggregation | None` and `DateOffsetRange | None`. They may each be
+    # guarded by something mypy cannot see, but they are the shape a real
+    # AttributeError takes, and they are in new code, worth reading before
+    # this entry is retired rather than after.
+    "sdm_client.decompose",                  #  8
+    "sdm_client.query",                      #  3
+    "sdm_client.wire.keys",                  #  1
+    "sdm_client.wire.dtypes",                #  3
+    "sdm_client.core.warnings",              #  1
+    "sdm_client.adapters.relational",        #  1
+    "predictive_query.validator.join_validator",  # 4
+    "sdm_connectors.sql",                    #  1
+    "sdm_connectors.reader",                 #  1
+    # --- relational engine: 62 errors across 21 modules --------------------
+    "sdm_relational_engine.rfm.base.table",          # 12
+    "sdm_relational_engine.rfm.graph",               # 10
+    "sdm_relational_engine.rfm.rfm",                 #  9
+    "sdm_relational_engine.rfm.backend.sqlite.sampler",     # 2
+    "sdm_relational_engine.rfm.backend.snow.sampler",       # 2
+    "sdm_relational_engine.rfm.backend.duckdb.table",       # 1
+    "sdm_relational_engine.rfm.backend.duckdb.sampler",     # 2
+    "sdm_relational_engine.rfm.backend.databricks.sampler", # 2
+    "sdm_relational_engine.client.client",           #  2
+    "sdm_relational_engine.client.rfm",              #  1
+    "sdm_relational_engine.rfm.backend.sqlite.table",    # 1
+    "sdm_relational_engine.rfm.backend.snow.table",      # 1
+    "sdm_relational_engine.rfm.backend.local.table",     # 1
+    "sdm_relational_engine.rfm.backend.local.sampler",   # 1
+    "sdm_relational_engine.rfm.backend.databricks.table",# 1
+    # --- arrived with the engine cleanup on main, 2026-09-21 ----------
+    "sdm_relational_engine.client.engine_access",    #  2
+    "sdm_relational_engine.client.state",            #  1
+    "sdm_relational_engine.rfm.inference.payload",   #  1
+    "sdm_relational_engine.rfm.inference.task",      #  1
+]
+ignore_errors = true
+
+# `warn_unused_ignores` is on because a suppression that stopped being needed is
+# debt that hides the next real error. But "needed" depends on which version of
+# a dependency is installed: the ignores below cover a pydantic v1/v2 fallback
+# import and two third-party stubs, so they are unused under one resolution and
+# required under another. Silencing only `unused-ignore` here keeps every other
+# check running in these modules, rather than exempting them wholesale.
+[[tool.mypy.overrides]]
+module = [
+    "predictive_query.schema.typing",
+    "predictive_query.schema.json_serde",
+    "predictive_query.ast.date_offset_range",
+    "predictive_query.query",
+    "sdm_client.core.transport",
+]
+disable_error_code = ["unused-ignore"]
+
+# Coverage is measured to be read, not to be hit. There is no percentage gate
+# here on purpose: a number can be raised by tests that assert nothing, and the
+# useful signal is which branches no test reaches at all. Branch coverage,
+# because line coverage counts an `if` as covered when only one side ever runs.
+#
+# What it found when it was first turned on, and what the number is for:
+# `predictive_query.rewriting`: 401 statements, exported from that package's
+# `__all__`, reached by no test and imported by nothing in this repository.
+[tool.coverage.run]
+branch = true
+source_pkgs = ["sdm_api", "sdm_client", "sdm_connectors", "predictive_query"]
+omit = [
+    # ANTLR's output. Excluded from ruff and mypy for the same reason.
+    "*/predictive_query/grammar/*",
+]
+
+[tool.coverage.report]
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
+
+
+# Registered here as well as per package, so that running the whole workspace
+# from the repository root neither warns about unknown marks nor silently
+# selects a test that opens a socket.
+[tool.pytest.ini_options]
+markers = [
+    "live_nim: needs a running NIM",
+    "live_warehouse: needs a real Snowflake or Databricks warehouse",
+    "socket: binds a local socket; deselect where that is not permitted",
+    "gpu: needs a CUDA GPU",
+]

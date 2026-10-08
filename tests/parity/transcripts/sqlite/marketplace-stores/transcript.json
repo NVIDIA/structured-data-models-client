@@ -1,0 +1,3672 @@
+{
+ "format_version": 1,
+ "name": "sqlite/marketplace-stores",
+ "backend": "sqlite",
+ "task_kind": "regression",
+ "data": {
+  "generator": "marketplace",
+  "seed": 0
+ },
+ "calls": [
+  {
+   "call": "Schema.from_source",
+   "args": {
+    "tables": {
+     "customers": "customers",
+     "items": "items",
+     "reviews": "reviews",
+     "stores": "stores",
+     "purchases": "purchases"
+    },
+    "primary_keys": {
+     "stores": "store_code"
+    }
+   }
+  },
+  {
+   "call": "PredictiveQuery",
+   "args": {
+    "query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH stores.store_code"
+   }
+  },
+  {
+   "call": "PredictiveQuery.materialize",
+   "args": {
+    "indices": ["S01", "S02"],
+    "num_context_samples": 30,
+    "random_seed": 7
+   }
+  },
+  {
+   "call": "SDMClient.predict",
+   "args": {
+    "model": "kumo-relational",
+    "outputs": null
+   }
+  },
+  {
+   "call": "PredictionResult.to_pandas",
+   "args": {}
+  }
+ ],
+ "steps": [
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"customers\")",
+   "params": null,
+   "result": "step-0000.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"customers\")",
+   "params": null,
+   "result": "step-0001.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"customer_id\", \"segment\", \"signup_at\" FROM \"customers\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0002.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "segment",
+     "type_text": "string"
+    },
+    {
+     "name": "signup_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"items\")",
+   "params": null,
+   "result": "step-0003.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"items\")",
+   "params": null,
+   "result": "step-0004.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"item_id\", \"category\", \"price\" FROM \"items\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0005.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "category",
+     "type_text": "string"
+    },
+    {
+     "name": "price",
+     "type_text": "double"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"reviews\")",
+   "params": null,
+   "result": "step-0006.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"reviews\")",
+   "params": null,
+   "result": "step-0007.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"review_id\", \"item_id\", \"rating\", \"body\" FROM \"reviews\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0008.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "review_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "rating",
+     "type_text": "int64"
+    },
+    {
+     "name": "body",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"stores\")",
+   "params": null,
+   "result": "step-0009.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"stores\")",
+   "params": null,
+   "result": "step-0010.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"store_code\", \"region\" FROM \"stores\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0011.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "store_code",
+     "type_text": "string"
+    },
+    {
+     "name": "region",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA table_info(\"purchases\")",
+   "params": null,
+   "result": "step-0012.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "cid",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "string"
+    },
+    {
+     "name": "type",
+     "type_text": "string"
+    },
+    {
+     "name": "notnull",
+     "type_text": "int64"
+    },
+    {
+     "name": "dflt_value",
+     "type_text": "int64"
+    },
+    {
+     "name": "pk",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"purchases\")",
+   "params": null,
+   "result": "step-0013.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\" FROM \"purchases\" ORDER BY rowid LIMIT 1000",
+   "params": null,
+   "result": "step-0014.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "purchase_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "amount",
+     "type_text": "double"
+    },
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    },
+    {
+     "name": "store_code",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"customers\")",
+   "params": null,
+   "result": "step-0015.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"items\")",
+   "params": null,
+   "result": "step-0016.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"reviews\")",
+   "params": null,
+   "result": "step-0017.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"stores\")",
+   "params": null,
+   "result": "step-0018.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA foreign_key_list(\"purchases\")",
+   "params": null,
+   "result": "step-0019.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "id",
+     "type_text": "int64"
+    },
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "table",
+     "type_text": "int64"
+    },
+    {
+     "name": "from",
+     "type_text": "int64"
+    },
+    {
+     "name": "to",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_update",
+     "type_text": "int64"
+    },
+    {
+     "name": "on_delete",
+     "type_text": "int64"
+    },
+    {
+     "name": "match",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"customer_id\") AS d, COUNT(CASE WHEN \"customer_id\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"item_id\") AS d, COUNT(CASE WHEN \"item_id\" IS NULL THEN 1 END) AS z\nFROM \"items\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"review_id\") AS d, COUNT(CASE WHEN \"review_id\" IS NULL THEN 1 END) AS z\nFROM \"reviews\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"store_code\") AS d, COUNT(CASE WHEN \"store_code\" IS NULL THEN 1 END) AS z\nFROM \"stores\"\nUNION ALL\nSELECT 4 AS k, COUNT(*) AS n, COUNT(DISTINCT \"purchase_id\") AS d, COUNT(CASE WHEN \"purchase_id\" IS NULL THEN 1 END) AS z\nFROM \"purchases\"",
+   "params": null,
+   "result": "step-0020.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "k",
+     "type_text": "int64"
+    },
+    {
+     "name": "n",
+     "type_text": "int64"
+    },
+    {
+     "name": "d",
+     "type_text": "int64"
+    },
+    {
+     "name": "z",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"customers\")",
+   "params": null,
+   "result": "step-0021.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"items\")",
+   "params": null,
+   "result": "step-0022.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"reviews\")",
+   "params": null,
+   "result": "step-0023.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"stores\")",
+   "params": null,
+   "result": "step-0024.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "PRAGMA index_list(\"purchases\")",
+   "params": null,
+   "result": "step-0025.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "seq",
+     "type_text": "int64"
+    },
+    {
+     "name": "name",
+     "type_text": "int64"
+    },
+    {
+     "name": "unique",
+     "type_text": "int64"
+    },
+    {
+     "name": "origin",
+     "type_text": "int64"
+    },
+    {
+     "name": "partial",
+     "type_text": "int64"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT\n  0 as table_index,\n  MIN(\"purchased_at\") as min_date,\n  MAX(\"purchased_at\") as max_date\nFROM \"purchases\"",
+   "params": null,
+   "result": "step-0026.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "table_index",
+     "type_text": "int64"
+    },
+    {
+     "name": "min_date",
+     "type_text": "string"
+    },
+    {
+     "name": "max_date",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"store_code\"\nFROM \"stores\"\nWHERE \"store_code\" IS NOT NULL\nORDER BY ((((1369975286 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1202242073) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 976413892) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 327741615) % 2147483647, rowid LIMIT 10000",
+   "params": null,
+   "result": "step-0027.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "store_code",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "SELECT \"purchased_at\" FROM \"purchases\" WHERE \"purchased_at\" IS NOT NULL ORDER BY rowid LIMIT 1",
+   "params": null,
+   "result": "step-0028.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(json_extract(value, '$[0]') AS TEXT) AS __kumo_id__, CAST(json_extract(value, '$[1]') AS TEXT) AS __kumo_end__, CAST(json_extract(value, '$[2]') AS TEXT) AS __kumo_start__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"purchased_at\"\nFROM __kumo_keys__ tmp\nJOIN \"purchases\"\n  ON \"store_code\" = tmp.__kumo_id__\n AND \"purchased_at\" <= tmp.__kumo_end__\n AND \"purchased_at\" > tmp.__kumo_start__\nORDER BY __kumo_batch__, \"purchased_at\", \"purchase_id\"",
+   "params": ["[[\"S05\",\"2024-12-30T21:00:00.000000\",\"2024-11-30T21:00:00.000000\"],[\"S03\",\"2024-12-30T21:00:00.000000\",\"2024-11-30T21:00:00.000000\"],[\"S04\",\"2024-12-30T21:00:00.000000\",\"2024-11-30T21:00:00.000000\"],[\"S02\",\"2024-12-30T21:00:00.000000\",\"2024-11-30T21:00:00.000000\"],[\"S01\",\"2024-12-30T21:00:00.000000\",\"2024-11-30T21:00:00.000000\"],[\"S04\",\"2024-11-30T21:00:00.000000\",\"2024-10-31T21:00:00.000000\"],[\"S02\",\"2024-11-30T21:00:00.000000\",\"2024-10-31T21:00:00.000000\"],[\"S05\",\"2024-11-30T21:00:00.000000\",\"2024-10-31T21:00:00.000000\"],[\"S01\",\"2024-11-30T21:00:00.000000\",\"2024-10-31T21:00:00.000000\"],[\"S03\",\"2024-11-30T21:00:00.000000\",\"2024-10-31T21:00:00.000000\"],[\"S03\",\"2024-10-31T21:00:00.000000\",\"2024-10-01T21:00:00.000000\"],[\"S01\",\"2024-10-31T21:00:00.000000\",\"2024-10-01T21:00:00.000000\"],[\"S04\",\"2024-10-31T21:00:00.000000\",\"2024-10-01T21:00:00.000000\"],[\"S02\",\"2024-10-31T21:00:00.000000\",\"2024-10-01T21:00:00.000000\"],[\"S05\",\"2024-10-31T21:00:00.000000\",\"2024-10-01T21:00:00.000000\"],[\"S02\",\"2024-10-01T21:00:00.000000\",\"2024-09-01T21:00:00.000000\"],[\"S03\",\"2024-10-01T21:00:00.000000\",\"2024-09-01T21:00:00.000000\"],[\"S01\",\"2024-10-01T21:00:00.000000\",\"2024-09-01T21:00:00.000000\"],[\"S05\",\"2024-10-01T21:00:00.000000\",\"2024-09-01T21:00:00.000000\"],[\"S04\",\"2024-10-01T21:00:00.000000\",\"2024-09-01T21:00:00.000000\"],[\"S02\",\"2024-09-01T21:00:00.000000\",\"2024-08-02T21:00:00.000000\"],[\"S04\",\"2024-09-01T21:00:00.000000\",\"2024-08-02T21:00:00.000000\"],[\"S01\",\"2024-09-01T21:00:00.000000\",\"2024-08-02T21:00:00.000000\"],[\"S03\",\"2024-09-01T21:00:00.000000\",\"2024-08-02T21:00:00.000000\"],[\"S05\",\"2024-09-01T21:00:00.000000\",\"2024-08-02T21:00:00.000000\"],[\"S02\",\"2024-08-02T21:00:00.000000\",\"2024-07-03T21:00:00.000000\"],[\"S05\",\"2024-08-02T21:00:00.000000\",\"2024-07-03T21:00:00.000000\"],[\"S04\",\"2024-08-02T21:00:00.000000\",\"2024-07-03T21:00:00.000000\"],[\"S01\",\"2024-08-02T21:00:00.000000\",\"2024-07-03T21:00:00.000000\"],[\"S03\",\"2024-08-02T21:00:00.000000\",\"2024-07-03T21:00:00.000000\"],[\"S04\",\"2024-07-03T21:00:00.000000\",\"2024-06-03T21:00:00.000000\"],[\"S02\",\"2024-07-03T21:00:00.000000\",\"2024-06-03T21:00:00.000000\"],[\"S01\",\"2024-07-03T21:00:00.000000\",\"2024-06-03T21:00:00.000000\"],[\"S05\",\"2024-07-03T21:00:00.000000\",\"2024-06-03T21:00:00.000000\"],[\"S03\",\"2024-07-03T21:00:00.000000\",\"2024-06-03T21:00:00.000000\"],[\"S04\",\"2024-06-03T21:00:00.000000\",\"2024-05-04T21:00:00.000000\"],[\"S03\",\"2024-06-03T21:00:00.000000\",\"2024-05-04T21:00:00.000000\"],[\"S02\",\"2024-06-03T21:00:00.000000\",\"2024-05-04T21:00:00.000000\"],[\"S01\",\"2024-06-03T21:00:00.000000\",\"2024-05-04T21:00:00.000000\"],[\"S05\",\"2024-06-03T21:00:00.000000\",\"2024-05-04T21:00:00.000000\"],[\"S01\",\"2024-05-04T21:00:00.000000\",\"2024-04-04T21:00:00.000000\"],[\"S04\",\"2024-05-04T21:00:00.000000\",\"2024-04-04T21:00:00.000000\"],[\"S05\",\"2024-05-04T21:00:00.000000\",\"2024-04-04T21:00:00.000000\"],[\"S02\",\"2024-05-04T21:00:00.000000\",\"2024-04-04T21:00:00.000000\"],[\"S03\",\"2024-05-04T21:00:00.000000\",\"2024-04-04T21:00:00.000000\"],[\"S03\",\"2024-04-04T21:00:00.000000\",\"2024-03-05T21:00:00.000000\"],[\"S01\",\"2024-04-04T21:00:00.000000\",\"2024-03-05T21:00:00.000000\"],[\"S04\",\"2024-04-04T21:00:00.000000\",\"2024-03-05T21:00:00.000000\"],[\"S02\",\"2024-04-04T21:00:00.000000\",\"2024-03-05T21:00:00.000000\"],[\"S05\",\"2024-04-04T21:00:00.000000\",\"2024-03-05T21:00:00.000000\"],[\"S05\",\"2024-03-05T21:00:00.000000\",\"2024-02-04T21:00:00.000000\"],[\"S03\",\"2024-03-05T21:00:00.000000\",\"2024-02-04T21:00:00.000000\"],[\"S02\",\"2024-03-05T21:00:00.000000\",\"2024-02-04T21:00:00.000000\"],[\"S04\",\"2024-03-05T21:00:00.000000\",\"2024-02-04T21:00:00.000000\"],[\"S01\",\"2024-03-05T21:00:00.000000\",\"2024-02-04T21:00:00.000000\"],[\"S04\",\"2024-02-04T21:00:00.000000\",\"2024-01-05T21:00:00.000000\"],[\"S02\",\"2024-02-04T21:00:00.000000\",\"2024-01-05T21:00:00.000000\"],[\"S05\",\"2024-02-04T21:00:00.000000\",\"2024-01-05T21:00:00.000000\"],[\"S01\",\"2024-02-04T21:00:00.000000\",\"2024-01-05T21:00:00.000000\"],[\"S03\",\"2024-02-04T21:00:00.000000\",\"2024-01-05T21:00:00.000000\"]]"],
+   "result": "step-0029.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS TEXT) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, (SELECT COUNT(*) FROM \"stores\" WHERE \"store_code\" == tmp.__kumo_id__) as __kumo_matches__, \"store_code\", \"region\"\nFROM __kumo_keys__ tmp\nJOIN \"stores\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"stores\"\n    WHERE \"store_code\" == tmp.__kumo_id__\n    ORDER BY \"region\", \"store_code\", rowid\n    LIMIT 1\n)",
+   "params": ["[\"S05\",\"S03\",\"S04\",\"S02\",\"S01\",\"S04\",\"S02\",\"S05\",\"S01\",\"S03\",\"S03\",\"S01\",\"S04\",\"S02\",\"S05\",\"S02\",\"S03\",\"S01\",\"S05\",\"S04\",\"S02\",\"S04\",\"S01\",\"S03\",\"S05\",\"S02\",\"S05\",\"S04\",\"S01\",\"S03\",\"S01\",\"S02\"]"],
+   "result": "step-0030.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "__kumo_matches__",
+     "type_text": "int64"
+    },
+    {
+     "name": "store_code",
+     "type_text": "string"
+    },
+    {
+     "name": "region",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(json_extract(value, '$[0]') AS TEXT) AS __kumo_id__, CAST(json_extract(value, '$[1]') AS TEXT) AS __kumo_time__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"purchase_id\", \"customer_id\", \"item_id\", \"amount\", \"purchased_at\", \"store_code\"\nFROM __kumo_keys__ tmp\nJOIN \"purchases\" fact\nON fact.rowid IN (\n  SELECT rowid\n  FROM \"purchases\"\n  WHERE \"store_code\" = tmp.__kumo_id__\n  AND \"purchased_at\" <= tmp.__kumo_time__\n  ORDER BY \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", \"store_code\"\n  LIMIT 32\n)\nORDER BY __kumo_batch__, \"purchased_at\" DESC, \"purchase_id\", \"amount\", \"customer_id\", \"item_id\", \"store_code\"",
+   "params": ["[[\"S05\",\"2024-11-30T21:00:00.000000\"],[\"S03\",\"2024-11-30T21:00:00.000000\"],[\"S04\",\"2024-11-30T21:00:00.000000\"],[\"S02\",\"2024-11-30T21:00:00.000000\"],[\"S01\",\"2024-11-30T21:00:00.000000\"],[\"S04\",\"2024-10-31T21:00:00.000000\"],[\"S02\",\"2024-10-31T21:00:00.000000\"],[\"S05\",\"2024-10-31T21:00:00.000000\"],[\"S01\",\"2024-10-31T21:00:00.000000\"],[\"S03\",\"2024-10-31T21:00:00.000000\"],[\"S03\",\"2024-10-01T21:00:00.000000\"],[\"S01\",\"2024-10-01T21:00:00.000000\"],[\"S04\",\"2024-10-01T21:00:00.000000\"],[\"S02\",\"2024-10-01T21:00:00.000000\"],[\"S05\",\"2024-10-01T21:00:00.000000\"],[\"S02\",\"2024-09-01T21:00:00.000000\"],[\"S03\",\"2024-09-01T21:00:00.000000\"],[\"S01\",\"2024-09-01T21:00:00.000000\"],[\"S05\",\"2024-09-01T21:00:00.000000\"],[\"S04\",\"2024-09-01T21:00:00.000000\"],[\"S02\",\"2024-08-02T21:00:00.000000\"],[\"S04\",\"2024-08-02T21:00:00.000000\"],[\"S01\",\"2024-08-02T21:00:00.000000\"],[\"S03\",\"2024-08-02T21:00:00.000000\"],[\"S05\",\"2024-08-02T21:00:00.000000\"],[\"S02\",\"2024-07-03T21:00:00.000000\"],[\"S05\",\"2024-07-03T21:00:00.000000\"],[\"S04\",\"2024-07-03T21:00:00.000000\"],[\"S01\",\"2024-07-03T21:00:00.000000\"],[\"S03\",\"2024-07-03T21:00:00.000000\"],[\"S01\",\"2024-12-30T21:00:00.000000\"],[\"S02\",\"2024-12-30T21:00:00.000000\"]]"],
+   "result": "step-0031.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "purchase_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "amount",
+     "type_text": "double"
+    },
+    {
+     "name": "purchased_at",
+     "type_text": "string"
+    },
+    {
+     "name": "store_code",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"customer_id\", \"segment\", \"signup_at\"\nFROM __kumo_keys__ tmp\nJOIN \"customers\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"customer_id\" == tmp.__kumo_id__\n    ORDER BY \"customer_id\", \"segment\", \"signup_at\", rowid\n    LIMIT 1\n)",
+   "params": ["[7,36,56,58,6,57,54,38,9,32,55,1,59,18,48,29,52,27,26,51,28,50,3,13,34,30,53,37,23,46,24,20,44,5,25,15,45,47,11,41,2,40,42,33,12,16,60,4,49,31,35,8,21,43,14,22,10,19,39,17]"],
+   "result": "step-0032.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "customer_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "segment",
+     "type_text": "string"
+    },
+    {
+     "name": "signup_at",
+     "type_text": "string"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  },
+  {
+   "op": "execute",
+   "sql": "WITH __kumo_keys__ AS (\n  SELECT key AS __kumo_batch__, CAST(value AS INTEGER) AS __kumo_id__\n  FROM json_each(?)\n)\nSELECT tmp.__kumo_batch__ as __kumo_batch__, \"item_id\", \"category\", \"price\"\nFROM __kumo_keys__ tmp\nJOIN \"items\" ent\n  ON ent.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == tmp.__kumo_id__\n    ORDER BY \"category\", \"item_id\", \"price\", rowid\n    LIMIT 1\n)",
+   "params": ["[2,5,3,6,1,8,7,4]"],
+   "result": "step-0033.arrow",
+   "error": null,
+   "description": [
+    {
+     "name": "__kumo_batch__",
+     "type_text": "int64"
+    },
+    {
+     "name": "item_id",
+     "type_text": "int64"
+    },
+    {
+     "name": "category",
+     "type_text": "string"
+    },
+    {
+     "name": "price",
+     "type_text": "double"
+    }
+   ],
+   "fetch_call": {
+    "method": "fetch_arrow_table",
+    "args": [],
+    "kwargs": {}
+   },
+   "fetch": "arrow"
+  }
+ ],
+ "payloads": [
+  {
+   "model": "kumo-relational",
+   "task": {
+    "kind": "regression",
+    "target": {
+     "column_name": "TARGET",
+     "dtype": "float32"
+    },
+    "entity_table_names": ["stores"],
+    "anchor_time_column": "__kumo_anchor_time"
+   },
+   "schema": {
+    "instance_table": {
+     "columns": {
+      "instance_id": {
+       "dtype": "int64",
+       "stype": "ID",
+       "nullable": false
+      },
+      "__kumo_entity_ref_0": {
+       "dtype": "string",
+       "stype": "ID"
+      },
+      "__kumo_anchor_time": {
+       "dtype": "timestamp[us]",
+       "stype": "timestamp",
+       "nullable": false
+      },
+      "TARGET": {
+       "dtype": "float32",
+       "stype": "numerical"
+      }
+     },
+     "primary_key": "instance_id"
+    },
+    "related_tables": {
+     "stores": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "store_code": {
+        "dtype": "string",
+        "nullable": false
+       },
+       "region": {
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      },
+      "primary_key": ["instance_id", "store_code"]
+     },
+     "purchases": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "amount": {
+        "dtype": "float64",
+        "stype": "numerical"
+       },
+       "purchased_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       },
+       "store_code": {
+        "dtype": "string",
+        "stype": "ID"
+       },
+       "customer_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "item_id": {
+        "dtype": "int64",
+        "stype": "ID"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "customers": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "segment": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "signup_at": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     },
+     "items": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__node_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "category": {
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       "price": {
+        "dtype": "float64",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": ["instance_id", "__node_id"]
+     }
+    },
+    "relationships": [
+     {
+      "source_columns": ["__kumo_entity_ref_0"],
+      "target_table": "stores",
+      "target_columns": ["store_code"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["store_code"],
+      "target_table": "stores",
+      "target_columns": ["store_code"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["customer_id"],
+      "target_table": "customers",
+      "target_columns": ["__node_id"]
+     },
+     {
+      "source_table": "purchases",
+      "source_columns": ["item_id"],
+      "target_table": "items",
+      "target_columns": ["__node_id"]
+     }
+    ]
+   },
+   "context": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+     "rows": [
+      [0, "S05", "2024-11-30T21:00:00.000000Z", 18.0],
+      [1, "S03", "2024-11-30T21:00:00.000000Z", 15.0],
+      [2, "S04", "2024-11-30T21:00:00.000000Z", 9.0],
+      [3, "S02", "2024-11-30T21:00:00.000000Z", 13.0],
+      [4, "S01", "2024-11-30T21:00:00.000000Z", 12.0],
+      [5, "S04", "2024-10-31T21:00:00.000000Z", 10.0],
+      [6, "S02", "2024-10-31T21:00:00.000000Z", 14.0],
+      [7, "S05", "2024-10-31T21:00:00.000000Z", 15.0],
+      [8, "S01", "2024-10-31T21:00:00.000000Z", 11.0],
+      [9, "S03", "2024-10-31T21:00:00.000000Z", 10.0],
+      [10, "S03", "2024-10-01T21:00:00.000000Z", 15.0],
+      [11, "S01", "2024-10-01T21:00:00.000000Z", 12.0],
+      [12, "S04", "2024-10-01T21:00:00.000000Z", 10.0],
+      [13, "S02", "2024-10-01T21:00:00.000000Z", 9.0],
+      [14, "S05", "2024-10-01T21:00:00.000000Z", 10.0],
+      [15, "S02", "2024-09-01T21:00:00.000000Z", 17.0],
+      [16, "S03", "2024-09-01T21:00:00.000000Z", 10.0],
+      [17, "S01", "2024-09-01T21:00:00.000000Z", 13.0],
+      [18, "S05", "2024-09-01T21:00:00.000000Z", 12.0],
+      [19, "S04", "2024-09-01T21:00:00.000000Z", 17.0],
+      [20, "S02", "2024-08-02T21:00:00.000000Z", 17.0],
+      [21, "S04", "2024-08-02T21:00:00.000000Z", 14.0],
+      [22, "S01", "2024-08-02T21:00:00.000000Z", 17.0],
+      [23, "S03", "2024-08-02T21:00:00.000000Z", 12.0],
+      [24, "S05", "2024-08-02T21:00:00.000000Z", 9.0],
+      [25, "S02", "2024-07-03T21:00:00.000000Z", 12.0],
+      [26, "S05", "2024-07-03T21:00:00.000000Z", 15.0],
+      [27, "S04", "2024-07-03T21:00:00.000000Z", 11.0],
+      [28, "S01", "2024-07-03T21:00:00.000000Z", 15.0],
+      [29, "S03", "2024-07-03T21:00:00.000000Z", 15.0]
+     ]
+    },
+    "related_tables": {
+     "stores": {
+      "format": "arrays",
+      "columns": ["instance_id", "store_code", "region"],
+      "rows": [
+       [0, "S05", "north"],
+       [1, "S03", "east"],
+       [2, "S04", "west"],
+       [3, "S02", "south"],
+       [4, "S01", "north"],
+       [5, "S04", "west"],
+       [6, "S02", "south"],
+       [7, "S05", "north"],
+       [8, "S01", "north"],
+       [9, "S03", "east"],
+       [10, "S03", "east"],
+       [11, "S01", "north"],
+       [12, "S04", "west"],
+       [13, "S02", "south"],
+       [14, "S05", "north"],
+       [15, "S02", "south"],
+       [16, "S03", "east"],
+       [17, "S01", "north"],
+       [18, "S05", "north"],
+       [19, "S04", "west"],
+       [20, "S02", "south"],
+       [21, "S04", "west"],
+       [22, "S01", "north"],
+       [23, "S03", "east"],
+       [24, "S05", "north"],
+       [25, "S02", "south"],
+       [26, "S05", "north"],
+       [27, "S04", "west"],
+       [28, "S01", "north"],
+       [29, "S03", "east"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "store_code", "customer_id", "item_id"],
+      "rows": [
+       [0, 0, 12.87, "2024-11-30T10:00:00.000000Z", "S05", 0, 0],
+       [0, 1, 64.76, "2024-11-28T19:00:00.000000Z", "S05", 1, 1],
+       [0, 2, 87.08, "2024-11-27T06:00:00.000000Z", "S05", 2, 1],
+       [0, 3, 55.33, "2024-11-26T21:00:00.000000Z", "S05", 3, 2],
+       [0, 4, 57.2, "2024-11-25T16:00:00.000000Z", "S05", 4, 3],
+       [0, 5, 34.5, "2024-11-20T08:00:00.000000Z", "S05", 5, 4],
+       [0, 6, 52.79, "2024-11-19T11:00:00.000000Z", "S05", 6, 3],
+       [0, 7, 69.62, "2024-11-18T16:00:00.000000Z", "S05", 7, 5],
+       [0, 8, 96.45, "2024-11-18T12:00:00.000000Z", "S05", 8, 3],
+       [0, 9, 63.89, "2024-11-13T14:00:00.000000Z", "S05", 9, 2],
+       [0, 10, 37.55, "2024-11-10T15:00:00.000000Z", "S05", 10, 5],
+       [0, 11, 29.28, "2024-11-10T07:00:00.000000Z", "S05", 11, 6],
+       [0, 12, 18.73, "2024-11-09T07:00:00.000000Z", "S05", 12, 1],
+       [0, 13, 2.97, "2024-11-04T18:00:00.000000Z", "S05", 13, 0],
+       [0, 14, 24.46, "2024-11-04T06:00:00.000000Z", "S05", 14, 4],
+       [0, 15, 52.85, "2024-10-31T21:00:00.000000Z", "S05", 15, 1],
+       [0, 16, 73.85, "2024-10-31T18:00:00.000000Z", "S05", 0, 4],
+       [0, 17, 2.02, "2024-10-30T10:00:00.000000Z", "S05", 11, 5],
+       [0, 18, 81.35, "2024-10-26T13:00:00.000000Z", "S05", 16, 0],
+       [0, 19, 96.64, "2024-10-25T08:00:00.000000Z", "S05", 17, 0],
+       [0, 20, 60.07, "2024-10-17T17:00:00.000000Z", "S05", 4, 6],
+       [0, 21, 75.01, "2024-10-15T08:00:00.000000Z", "S05", 18, 1],
+       [0, 22, 4.92, "2024-10-11T06:00:00.000000Z", "S05", 19, 4],
+       [0, 23, 70.31, "2024-10-07T10:00:00.000000Z", "S05", 3, 0],
+       [0, 24, 99.09, "2024-10-02T15:00:00.000000Z", "S05", 16, 4],
+       [0, 25, 11.96, "2024-09-29T14:00:00.000000Z", "S05", 20, 1],
+       [0, 26, 94.62, "2024-09-27T09:00:00.000000Z", "S05", 21, 4],
+       [0, 27, 28.33, "2024-09-20T11:00:00.000000Z", "S05", 18, 0],
+       [0, 28, 39.8, "2024-09-18T15:00:00.000000Z", "S05", 22, 0],
+       [0, 29, 55.94, "2024-09-17T06:00:00.000000Z", "S05", 23, 6],
+       [0, 30, 24.39, "2024-09-15T12:00:00.000000Z", "S05", 24, 7],
+       [0, 31, 27.27, "2024-09-11T14:00:00.000000Z", "S05", 9, 2],
+       [1, 32, 61.91, "2024-11-30T14:00:00.000000Z", "S03", 25, 8],
+       [1, 33, 2.19, "2024-11-28T09:00:00.000000Z", "S03", 26, 9],
+       [1, 34, 20.84, "2024-11-26T10:00:00.000000Z", "S03", 27, 10],
+       [1, 35, 75.68, "2024-11-25T12:00:00.000000Z", "S03", 28, 11],
+       [1, 36, 62.02, "2024-11-24T12:00:00.000000Z", "S03", 29, 10],
+       [1, 37, 75.43, "2024-11-21T19:00:00.000000Z", "S03", 30, 11],
+       [1, 38, 59.56, "2024-11-21T13:00:00.000000Z", "S03", 31, 10],
+       [1, 39, 39.62, "2024-11-10T21:00:00.000000Z", "S03", 32, 9],
+       [1, 40, 39.62, "2024-11-10T09:00:00.000000Z", "S03", 33, 8],
+       [1, 41, 94.88, "2024-11-09T08:00:00.000000Z", "S03", 34, 12],
+       [1, 42, 14.26, "2024-10-31T07:00:00.000000Z", "S03", 33, 11],
+       [1, 43, 30.11, "2024-10-25T09:00:00.000000Z", "S03", 35, 11],
+       [1, 44, 38.17, "2024-10-21T17:00:00.000000Z", "S03", 36, 12],
+       [1, 45, 25.37, "2024-10-21T11:00:00.000000Z", "S03", 37, 13],
+       [1, 46, 29.63, "2024-10-19T18:00:00.000000Z", "S03", 38, 13],
+       [1, 47, 81.82, "2024-10-19T18:00:00.000000Z", "S03", 28, 9],
+       [1, 48, 11.62, "2024-10-19T15:00:00.000000Z", "S03", 30, 14],
+       [1, 49, 99.69, "2024-10-18T21:00:00.000000Z", "S03", 39, 15],
+       [1, 50, 44.34, "2024-10-16T18:00:00.000000Z", "S03", 40, 12],
+       [1, 51, 38.98, "2024-10-16T07:00:00.000000Z", "S03", 25, 11],
+       [1, 52, 16.59, "2024-10-15T18:00:00.000000Z", "S03", 25, 9],
+       [1, 53, 92.33, "2024-10-11T10:00:00.000000Z", "S03", 31, 11],
+       [1, 54, 62.64, "2024-10-05T08:00:00.000000Z", "S03", 26, 8],
+       [1, 55, 38.78, "2024-10-04T19:00:00.000000Z", "S03", 41, 10],
+       [1, 56, 69.23, "2024-10-02T07:00:00.000000Z", "S03", 42, 14],
+       [1, 57, 37.8, "2024-09-29T16:00:00.000000Z", "S03", 27, 9],
+       [1, 58, 49.0, "2024-09-29T12:00:00.000000Z", "S03", 43, 10],
+       [1, 59, 16.55, "2024-09-28T21:00:00.000000Z", "S03", 44, 13],
+       [1, 60, 31.8, "2024-09-28T15:00:00.000000Z", "S03", 45, 10],
+       [1, 61, 53.27, "2024-09-27T20:00:00.000000Z", "S03", 46, 11],
+       [1, 62, 66.73, "2024-09-27T08:00:00.000000Z", "S03", 47, 15],
+       [1, 63, 39.01, "2024-09-18T17:00:00.000000Z", "S03", 39, 13],
+       [2, 64, 9.47, "2024-11-27T10:00:00.000000Z", "S04", 48, 16],
+       [2, 65, 46.97, "2024-11-26T19:00:00.000000Z", "S04", 49, 17],
+       [2, 66, 92.82, "2024-11-26T15:00:00.000000Z", "S04", 50, 18],
+       [2, 67, 72.63, "2024-11-23T12:00:00.000000Z", "S04", 51, 18],
+       [2, 68, 64.7, "2024-11-21T07:00:00.000000Z", "S04", 51, 17],
+       [2, 69, 58.13, "2024-11-11T19:00:00.000000Z", "S04", 52, 18],
+       [2, 70, 23.82, "2024-11-10T17:00:00.000000Z", "S04", 53, 18],
+       [2, 71, 11.82, "2024-11-07T21:00:00.000000Z", "S04", 54, 16],
+       [2, 72, 68.61, "2024-11-07T20:00:00.000000Z", "S04", 48, 19],
+       [2, 73, 40.68, "2024-11-03T09:00:00.000000Z", "S04", 55, 20],
+       [2, 74, 0.91, "2024-10-31T21:00:00.000000Z", "S04", 56, 21],
+       [2, 75, 83.06, "2024-10-22T07:00:00.000000Z", "S04", 57, 18],
+       [2, 76, 33.42, "2024-10-21T17:00:00.000000Z", "S04", 53, 16],
+       [2, 77, 96.56, "2024-10-19T11:00:00.000000Z", "S04", 48, 20],
+       [2, 78, 23.0, "2024-10-14T21:00:00.000000Z", "S04", 58, 18],
+       [2, 79, 36.57, "2024-10-11T14:00:00.000000Z", "S04", 59, 22],
+       [2, 80, 33.57, "2024-10-08T21:00:00.000000Z", "S04", 60, 23],
+       [2, 81, 97.58, "2024-10-06T17:00:00.000000Z", "S04", 61, 17],
+       [2, 82, 82.76, "2024-10-05T14:00:00.000000Z", "S04", 55, 20],
+       [2, 83, 35.2, "2024-10-03T06:00:00.000000Z", "S04", 62, 18],
+       [2, 84, 48.93, "2024-09-30T15:00:00.000000Z", "S04", 63, 22],
+       [2, 85, 24.27, "2024-09-27T20:00:00.000000Z", "S04", 61, 16],
+       [2, 86, 96.05, "2024-09-20T11:00:00.000000Z", "S04", 48, 19],
+       [2, 87, 49.73, "2024-09-19T20:00:00.000000Z", "S04", 64, 22],
+       [2, 88, 78.14, "2024-09-18T13:00:00.000000Z", "S04", 55, 17],
+       [2, 89, 18.35, "2024-09-15T17:00:00.000000Z", "S04", 59, 17],
+       [2, 90, 97.64, "2024-09-13T18:00:00.000000Z", "S04", 65, 18],
+       [2, 91, 52.55, "2024-09-13T09:00:00.000000Z", "S04", 60, 21],
+       [2, 92, 86.92, "2024-09-12T15:00:00.000000Z", "S04", 66, 23],
+       [2, 93, 98.25, "2024-09-11T20:00:00.000000Z", "S04", 67, 20],
+       [2, 94, 50.85, "2024-09-10T10:00:00.000000Z", "S04", 68, 21],
+       [2, 95, 14.71, "2024-09-09T18:00:00.000000Z", "S04", 68, 16],
+       [3, 96, 10.04, "2024-11-30T14:00:00.000000Z", "S02", 69, 24],
+       [3, 97, 14.94, "2024-11-30T12:00:00.000000Z", "S02", 70, 25],
+       [3, 98, 85.74, "2024-11-29T08:00:00.000000Z", "S02", 69, 26],
+       [3, 99, 1.92, "2024-11-28T16:00:00.000000Z", "S02", 71, 27],
+       [3, 100, 26.89, "2024-11-24T12:00:00.000000Z", "S02", 72, 28],
+       [3, 101, 14.73, "2024-11-23T15:00:00.000000Z", "S02", 73, 28],
+       [3, 102, 90.55, "2024-11-19T21:00:00.000000Z", "S02", 74, 26],
+       [3, 103, 83.1, "2024-11-10T08:00:00.000000Z", "S02", 75, 25],
+       [3, 104, 61.54, "2024-11-06T15:00:00.000000Z", "S02", 76, 26],
+       [3, 105, 70.51, "2024-11-06T12:00:00.000000Z", "S02", 77, 26],
+       [3, 106, 85.65, "2024-11-06T09:00:00.000000Z", "S02", 70, 29],
+       [3, 107, 49.64, "2024-11-05T15:00:00.000000Z", "S02", 78, 27],
+       [3, 108, 73.72, "2024-11-02T21:00:00.000000Z", "S02", 69, 28],
+       [3, 109, 22.73, "2024-11-01T15:00:00.000000Z", "S02", 79, 28],
+       [3, 110, 34.37, "2024-10-27T19:00:00.000000Z", "S02", 80, 27],
+       [3, 111, 41.62, "2024-10-24T10:00:00.000000Z", "S02", 81, 27],
+       [3, 112, 43.46, "2024-10-21T06:00:00.000000Z", "S02", 82, 28],
+       [3, 113, 35.09, "2024-10-18T09:00:00.000000Z", "S02", 83, 27],
+       [3, 114, 81.95, "2024-10-13T10:00:00.000000Z", "S02", 77, 28],
+       [3, 115, 15.01, "2024-10-11T14:00:00.000000Z", "S02", 84, 28],
+       [3, 116, 14.98, "2024-10-11T12:00:00.000000Z", "S02", 85, 26],
+       [3, 117, 32.53, "2024-10-10T15:00:00.000000Z", "S02", 86, 26],
+       [3, 118, 69.44, "2024-10-10T11:00:00.000000Z", "S02", 87, 26],
+       [3, 119, 58.88, "2024-09-29T16:00:00.000000Z", "S02", 88, 26],
+       [3, 120, 58.72, "2024-09-28T07:00:00.000000Z", "S02", 89, 28],
+       [3, 121, 61.42, "2024-09-26T19:00:00.000000Z", "S02", 90, 27],
+       [3, 122, 96.83, "2024-09-24T12:00:00.000000Z", "S02", 91, 29],
+       [3, 123, 60.06, "2024-09-23T18:00:00.000000Z", "S02", 79, 30],
+       [3, 124, 14.57, "2024-09-23T14:00:00.000000Z", "S02", 92, 27],
+       [3, 125, 53.83, "2024-09-21T06:00:00.000000Z", "S02", 93, 30],
+       [3, 126, 99.55, "2024-09-17T20:00:00.000000Z", "S02", 94, 28],
+       [3, 127, 35.29, "2024-09-17T12:00:00.000000Z", "S02", 95, 24],
+       [4, 128, 66.78, "2024-11-30T20:00:00.000000Z", "S01", 96, 31],
+       [4, 129, 6.94, "2024-11-27T08:00:00.000000Z", "S01", 97, 31],
+       [4, 130, 95.0, "2024-11-26T06:00:00.000000Z", "S01", 96, 32],
+       [4, 131, 50.26, "2024-11-22T19:00:00.000000Z", "S01", 98, 33],
+       [4, 132, 6.42, "2024-11-21T19:00:00.000000Z", "S01", 99, 34],
+       [4, 133, 95.58, "2024-11-18T13:00:00.000000Z", "S01", 100, 34],
+       [4, 134, 75.47, "2024-11-17T18:00:00.000000Z", "S01", 101, 35],
+       [4, 135, 87.58, "2024-11-15T18:00:00.000000Z", "S01", 102, 35],
+       [4, 136, 1.26, "2024-11-12T20:00:00.000000Z", "S01", 103, 34],
+       [4, 137, 36.14, "2024-11-10T09:00:00.000000Z", "S01", 104, 32],
+       [4, 138, 30.78, "2024-11-06T13:00:00.000000Z", "S01", 105, 31],
+       [4, 139, 73.08, "2024-10-27T21:00:00.000000Z", "S01", 106, 36],
+       [4, 140, 84.44, "2024-10-24T20:00:00.000000Z", "S01", 107, 32],
+       [4, 141, 62.9, "2024-10-24T12:00:00.000000Z", "S01", 108, 35],
+       [4, 142, 37.26, "2024-10-22T19:00:00.000000Z", "S01", 109, 37],
+       [4, 143, 53.7, "2024-10-21T08:00:00.000000Z", "S01", 110, 34],
+       [4, 144, 72.72, "2024-10-20T11:00:00.000000Z", "S01", 104, 34],
+       [4, 145, 98.79, "2024-10-17T09:00:00.000000Z", "S01", 111, 36],
+       [4, 146, 96.76, "2024-10-15T21:00:00.000000Z", "S01", 112, 31],
+       [4, 147, 29.07, "2024-10-15T12:00:00.000000Z", "S01", 113, 34],
+       [4, 148, 51.16, "2024-10-06T19:00:00.000000Z", "S01", 112, 32],
+       [4, 149, 76.1, "2024-10-05T13:00:00.000000Z", "S01", 96, 38],
+       [4, 150, 15.22, "2024-10-03T12:00:00.000000Z", "S01", 114, 34],
+       [4, 151, 64.21, "2024-09-30T16:00:00.000000Z", "S01", 115, 36],
+       [4, 152, 53.31, "2024-09-30T12:00:00.000000Z", "S01", 116, 36],
+       [4, 153, 84.21, "2024-09-28T13:00:00.000000Z", "S01", 117, 34],
+       [4, 154, 18.04, "2024-09-26T21:00:00.000000Z", "S01", 113, 35],
+       [4, 155, 57.84, "2024-09-25T08:00:00.000000Z", "S01", 118, 31],
+       [4, 156, 34.69, "2024-09-24T09:00:00.000000Z", "S01", 101, 33],
+       [4, 157, 93.08, "2024-09-23T16:00:00.000000Z", "S01", 98, 34],
+       [4, 158, 66.73, "2024-09-21T17:00:00.000000Z", "S01", 119, 38],
+       [4, 159, 29.6, "2024-09-19T08:00:00.000000Z", "S01", 120, 34],
+       [5, 160, 0.91, "2024-10-31T21:00:00.000000Z", "S04", 121, 39],
+       [5, 161, 83.06, "2024-10-22T07:00:00.000000Z", "S04", 122, 40],
+       [5, 162, 33.42, "2024-10-21T17:00:00.000000Z", "S04", 123, 41],
+       [5, 163, 96.56, "2024-10-19T11:00:00.000000Z", "S04", 124, 42],
+       [5, 164, 23.0, "2024-10-14T21:00:00.000000Z", "S04", 125, 40],
+       [5, 165, 36.57, "2024-10-11T14:00:00.000000Z", "S04", 126, 43],
+       [5, 166, 33.57, "2024-10-08T21:00:00.000000Z", "S04", 127, 44],
+       [5, 167, 97.58, "2024-10-06T17:00:00.000000Z", "S04", 128, 45],
+       [5, 168, 82.76, "2024-10-05T14:00:00.000000Z", "S04", 129, 42],
+       [5, 169, 35.2, "2024-10-03T06:00:00.000000Z", "S04", 130, 40],
+       [5, 170, 48.93, "2024-09-30T15:00:00.000000Z", "S04", 131, 43],
+       [5, 171, 24.27, "2024-09-27T20:00:00.000000Z", "S04", 128, 41],
+       [5, 172, 96.05, "2024-09-20T11:00:00.000000Z", "S04", 124, 46],
+       [5, 173, 49.73, "2024-09-19T20:00:00.000000Z", "S04", 132, 43],
+       [5, 174, 78.14, "2024-09-18T13:00:00.000000Z", "S04", 129, 45],
+       [5, 175, 18.35, "2024-09-15T17:00:00.000000Z", "S04", 126, 45],
+       [5, 176, 97.64, "2024-09-13T18:00:00.000000Z", "S04", 133, 40],
+       [5, 177, 52.55, "2024-09-13T09:00:00.000000Z", "S04", 127, 39],
+       [5, 178, 86.92, "2024-09-12T15:00:00.000000Z", "S04", 134, 44],
+       [5, 179, 98.25, "2024-09-11T20:00:00.000000Z", "S04", 135, 42],
+       [5, 180, 50.85, "2024-09-10T10:00:00.000000Z", "S04", 136, 39],
+       [5, 181, 14.71, "2024-09-09T18:00:00.000000Z", "S04", 136, 41],
+       [5, 182, 57.13, "2024-09-09T13:00:00.000000Z", "S04", 128, 40],
+       [5, 183, 53.6, "2024-09-09T06:00:00.000000Z", "S04", 135, 41],
+       [5, 184, 11.91, "2024-09-06T09:00:00.000000Z", "S04", 137, 44],
+       [5, 185, 30.82, "2024-09-05T12:00:00.000000Z", "S04", 138, 43],
+       [5, 186, 36.7, "2024-09-02T11:00:00.000000Z", "S04", 139, 41],
+       [5, 187, 44.51, "2024-09-01T21:00:00.000000Z", "S04", 140, 42],
+       [5, 188, 24.34, "2024-09-01T09:00:00.000000Z", "S04", 141, 40],
+       [5, 189, 47.33, "2024-09-01T09:00:00.000000Z", "S04", 142, 43],
+       [5, 190, 14.44, "2024-08-31T16:00:00.000000Z", "S04", 141, 42],
+       [5, 191, 36.87, "2024-08-26T12:00:00.000000Z", "S04", 126, 44],
+       [6, 192, 34.37, "2024-10-27T19:00:00.000000Z", "S02", 143, 47],
+       [6, 193, 41.62, "2024-10-24T10:00:00.000000Z", "S02", 144, 47],
+       [6, 194, 43.46, "2024-10-21T06:00:00.000000Z", "S02", 145, 48],
+       [6, 195, 35.09, "2024-10-18T09:00:00.000000Z", "S02", 146, 47],
+       [6, 196, 81.95, "2024-10-13T10:00:00.000000Z", "S02", 147, 48],
+       [6, 197, 15.01, "2024-10-11T14:00:00.000000Z", "S02", 148, 48],
+       [6, 198, 14.98, "2024-10-11T12:00:00.000000Z", "S02", 149, 49],
+       [6, 199, 32.53, "2024-10-10T15:00:00.000000Z", "S02", 150, 49],
+       [6, 200, 69.44, "2024-10-10T11:00:00.000000Z", "S02", 151, 49],
+       [6, 201, 58.88, "2024-09-29T16:00:00.000000Z", "S02", 152, 49],
+       [6, 202, 58.72, "2024-09-28T07:00:00.000000Z", "S02", 153, 48],
+       [6, 203, 61.42, "2024-09-26T19:00:00.000000Z", "S02", 154, 47],
+       [6, 204, 96.83, "2024-09-24T12:00:00.000000Z", "S02", 155, 50],
+       [6, 205, 60.06, "2024-09-23T18:00:00.000000Z", "S02", 156, 51],
+       [6, 206, 14.57, "2024-09-23T14:00:00.000000Z", "S02", 157, 47],
+       [6, 207, 53.83, "2024-09-21T06:00:00.000000Z", "S02", 158, 51],
+       [6, 208, 99.55, "2024-09-17T20:00:00.000000Z", "S02", 159, 48],
+       [6, 209, 35.29, "2024-09-17T12:00:00.000000Z", "S02", 160, 52],
+       [6, 210, 34.99, "2024-09-13T09:00:00.000000Z", "S02", 161, 47],
+       [6, 211, 94.96, "2024-09-12T13:00:00.000000Z", "S02", 161, 50],
+       [6, 212, 73.15, "2024-09-11T14:00:00.000000Z", "S02", 162, 50],
+       [6, 213, 16.97, "2024-09-10T15:00:00.000000Z", "S02", 147, 50],
+       [6, 214, 45.26, "2024-09-05T12:00:00.000000Z", "S02", 153, 50],
+       [6, 215, 24.01, "2024-09-02T17:00:00.000000Z", "S02", 143, 50],
+       [6, 216, 97.34, "2024-09-02T15:00:00.000000Z", "S02", 163, 47],
+       [6, 217, 91.89, "2024-09-02T13:00:00.000000Z", "S02", 164, 53],
+       [6, 218, 58.58, "2024-08-30T15:00:00.000000Z", "S02", 165, 51],
+       [6, 219, 0.91, "2024-08-29T11:00:00.000000Z", "S02", 166, 48],
+       [6, 220, 52.18, "2024-08-27T08:00:00.000000Z", "S02", 167, 47],
+       [6, 221, 82.8, "2024-08-26T13:00:00.000000Z", "S02", 147, 52],
+       [6, 222, 15.09, "2024-08-26T10:00:00.000000Z", "S02", 167, 50],
+       [6, 223, 41.07, "2024-08-25T18:00:00.000000Z", "S02", 149, 53],
+       [7, 224, 52.85, "2024-10-31T21:00:00.000000Z", "S05", 168, 54],
+       [7, 225, 73.85, "2024-10-31T18:00:00.000000Z", "S05", 169, 55],
+       [7, 226, 2.02, "2024-10-30T10:00:00.000000Z", "S05", 170, 56],
+       [7, 227, 81.35, "2024-10-26T13:00:00.000000Z", "S05", 171, 57],
+       [7, 228, 96.64, "2024-10-25T08:00:00.000000Z", "S05", 172, 57],
+       [7, 229, 60.07, "2024-10-17T17:00:00.000000Z", "S05", 173, 58],
+       [7, 230, 75.01, "2024-10-15T08:00:00.000000Z", "S05", 174, 54],
+       [7, 231, 4.92, "2024-10-11T06:00:00.000000Z", "S05", 175, 55],
+       [7, 232, 70.31, "2024-10-07T10:00:00.000000Z", "S05", 176, 57],
+       [7, 233, 99.09, "2024-10-02T15:00:00.000000Z", "S05", 171, 55],
+       [7, 234, 11.96, "2024-09-29T14:00:00.000000Z", "S05", 177, 54],
+       [7, 235, 94.62, "2024-09-27T09:00:00.000000Z", "S05", 178, 55],
+       [7, 236, 28.33, "2024-09-20T11:00:00.000000Z", "S05", 174, 57],
+       [7, 237, 39.8, "2024-09-18T15:00:00.000000Z", "S05", 179, 57],
+       [7, 238, 55.94, "2024-09-17T06:00:00.000000Z", "S05", 180, 58],
+       [7, 239, 24.39, "2024-09-15T12:00:00.000000Z", "S05", 181, 59],
+       [7, 240, 27.27, "2024-09-11T14:00:00.000000Z", "S05", 182, 60],
+       [7, 241, 42.48, "2024-09-10T13:00:00.000000Z", "S05", 183, 58],
+       [7, 242, 65.92, "2024-09-09T09:00:00.000000Z", "S05", 184, 60],
+       [7, 243, 17.33, "2024-09-08T09:00:00.000000Z", "S05", 185, 58],
+       [7, 244, 92.95, "2024-09-07T13:00:00.000000Z", "S05", 186, 59],
+       [7, 245, 26.55, "2024-09-03T06:00:00.000000Z", "S05", 187, 55],
+       [7, 246, 21.08, "2024-09-01T10:00:00.000000Z", "S05", 188, 56],
+       [7, 247, 50.47, "2024-08-28T21:00:00.000000Z", "S05", 189, 54],
+       [7, 248, 53.28, "2024-08-28T19:00:00.000000Z", "S05", 190, 58],
+       [7, 249, 4.67, "2024-08-26T21:00:00.000000Z", "S05", 191, 59],
+       [7, 250, 96.48, "2024-08-21T11:00:00.000000Z", "S05", 169, 61],
+       [7, 251, 13.42, "2024-08-17T11:00:00.000000Z", "S05", 192, 59],
+       [7, 252, 86.84, "2024-08-17T06:00:00.000000Z", "S05", 183, 58],
+       [7, 253, 47.64, "2024-08-08T12:00:00.000000Z", "S05", 186, 56],
+       [7, 254, 91.64, "2024-08-03T10:00:00.000000Z", "S05", 193, 55],
+       [7, 255, 50.47, "2024-08-02T07:00:00.000000Z", "S05", 194, 54],
+       [8, 256, 73.08, "2024-10-27T21:00:00.000000Z", "S01", 195, 62],
+       [8, 257, 84.44, "2024-10-24T20:00:00.000000Z", "S01", 196, 63],
+       [8, 258, 62.9, "2024-10-24T12:00:00.000000Z", "S01", 197, 64],
+       [8, 259, 37.26, "2024-10-22T19:00:00.000000Z", "S01", 198, 65],
+       [8, 260, 53.7, "2024-10-21T08:00:00.000000Z", "S01", 199, 66],
+       [8, 261, 72.72, "2024-10-20T11:00:00.000000Z", "S01", 200, 66],
+       [8, 262, 98.79, "2024-10-17T09:00:00.000000Z", "S01", 201, 62],
+       [8, 263, 96.76, "2024-10-15T21:00:00.000000Z", "S01", 202, 67],
+       [8, 264, 29.07, "2024-10-15T12:00:00.000000Z", "S01", 203, 66],
+       [8, 265, 51.16, "2024-10-06T19:00:00.000000Z", "S01", 202, 63],
+       [8, 266, 76.1, "2024-10-05T13:00:00.000000Z", "S01", 204, 68],
+       [8, 267, 15.22, "2024-10-03T12:00:00.000000Z", "S01", 205, 66],
+       [8, 268, 64.21, "2024-09-30T16:00:00.000000Z", "S01", 206, 62],
+       [8, 269, 53.31, "2024-09-30T12:00:00.000000Z", "S01", 207, 62],
+       [8, 270, 84.21, "2024-09-28T13:00:00.000000Z", "S01", 208, 66],
+       [8, 271, 18.04, "2024-09-26T21:00:00.000000Z", "S01", 203, 64],
+       [8, 272, 57.84, "2024-09-25T08:00:00.000000Z", "S01", 209, 67],
+       [8, 273, 34.69, "2024-09-24T09:00:00.000000Z", "S01", 210, 69],
+       [8, 274, 93.08, "2024-09-23T16:00:00.000000Z", "S01", 211, 66],
+       [8, 275, 66.73, "2024-09-21T17:00:00.000000Z", "S01", 212, 68],
+       [8, 276, 29.6, "2024-09-19T08:00:00.000000Z", "S01", 213, 66],
+       [8, 277, 47.84, "2024-09-18T06:00:00.000000Z", "S01", 214, 68],
+       [8, 278, 64.33, "2024-09-17T19:00:00.000000Z", "S01", 215, 66],
+       [8, 279, 35.72, "2024-09-03T18:00:00.000000Z", "S01", 216, 62],
+       [8, 280, 41.74, "2024-09-03T07:00:00.000000Z", "S01", 217, 64],
+       [8, 281, 99.56, "2024-09-01T14:00:00.000000Z", "S01", 218, 62],
+       [8, 282, 35.3, "2024-08-30T17:00:00.000000Z", "S01", 219, 68],
+       [8, 283, 30.31, "2024-08-28T14:00:00.000000Z", "S01", 200, 62],
+       [8, 284, 17.72, "2024-08-28T13:00:00.000000Z", "S01", 220, 69],
+       [8, 285, 31.5, "2024-08-25T07:00:00.000000Z", "S01", 221, 68],
+       [8, 286, 66.29, "2024-08-23T21:00:00.000000Z", "S01", 215, 65],
+       [8, 287, 46.25, "2024-08-22T08:00:00.000000Z", "S01", 222, 68],
+       [9, 288, 14.26, "2024-10-31T07:00:00.000000Z", "S03", 223, 70],
+       [9, 289, 30.11, "2024-10-25T09:00:00.000000Z", "S03", 224, 70],
+       [9, 290, 38.17, "2024-10-21T17:00:00.000000Z", "S03", 225, 71],
+       [9, 291, 25.37, "2024-10-21T11:00:00.000000Z", "S03", 226, 72],
+       [9, 292, 29.63, "2024-10-19T18:00:00.000000Z", "S03", 227, 72],
+       [9, 293, 81.82, "2024-10-19T18:00:00.000000Z", "S03", 228, 73],
+       [9, 294, 11.62, "2024-10-19T15:00:00.000000Z", "S03", 229, 74],
+       [9, 295, 99.69, "2024-10-18T21:00:00.000000Z", "S03", 230, 75],
+       [9, 296, 44.34, "2024-10-16T18:00:00.000000Z", "S03", 231, 71],
+       [9, 297, 38.98, "2024-10-16T07:00:00.000000Z", "S03", 232, 70],
+       [9, 298, 16.59, "2024-10-15T18:00:00.000000Z", "S03", 232, 73],
+       [9, 299, 92.33, "2024-10-11T10:00:00.000000Z", "S03", 233, 70],
+       [9, 300, 62.64, "2024-10-05T08:00:00.000000Z", "S03", 234, 76],
+       [9, 301, 38.78, "2024-10-04T19:00:00.000000Z", "S03", 235, 77],
+       [9, 302, 69.23, "2024-10-02T07:00:00.000000Z", "S03", 236, 74],
+       [9, 303, 37.8, "2024-09-29T16:00:00.000000Z", "S03", 237, 73],
+       [9, 304, 49.0, "2024-09-29T12:00:00.000000Z", "S03", 238, 77],
+       [9, 305, 16.55, "2024-09-28T21:00:00.000000Z", "S03", 239, 72],
+       [9, 306, 31.8, "2024-09-28T15:00:00.000000Z", "S03", 240, 77],
+       [9, 307, 53.27, "2024-09-27T20:00:00.000000Z", "S03", 241, 70],
+       [9, 308, 66.73, "2024-09-27T08:00:00.000000Z", "S03", 242, 75],
+       [9, 309, 39.01, "2024-09-18T17:00:00.000000Z", "S03", 230, 72],
+       [9, 310, 40.42, "2024-09-07T19:00:00.000000Z", "S03", 241, 71],
+       [9, 311, 74.34, "2024-09-06T08:00:00.000000Z", "S03", 243, 70],
+       [9, 312, 16.61, "2024-09-04T14:00:00.000000Z", "S03", 244, 71],
+       [9, 313, 0.5, "2024-09-01T16:00:00.000000Z", "S03", 245, 73],
+       [9, 314, 21.49, "2024-08-23T14:00:00.000000Z", "S03", 246, 71],
+       [9, 315, 68.2, "2024-08-22T19:00:00.000000Z", "S03", 247, 74],
+       [9, 316, 90.6, "2024-08-22T09:00:00.000000Z", "S03", 239, 70],
+       [9, 317, 88.52, "2024-08-18T14:00:00.000000Z", "S03", 248, 71],
+       [9, 318, 40.11, "2024-08-16T18:00:00.000000Z", "S03", 247, 77],
+       [9, 319, 40.96, "2024-08-14T09:00:00.000000Z", "S03", 249, 73],
+       [10, 320, 37.8, "2024-09-29T16:00:00.000000Z", "S03", 250, 78],
+       [10, 321, 49.0, "2024-09-29T12:00:00.000000Z", "S03", 251, 79],
+       [10, 322, 16.55, "2024-09-28T21:00:00.000000Z", "S03", 252, 80],
+       [10, 323, 31.8, "2024-09-28T15:00:00.000000Z", "S03", 253, 79],
+       [10, 324, 53.27, "2024-09-27T20:00:00.000000Z", "S03", 254, 81],
+       [10, 325, 66.73, "2024-09-27T08:00:00.000000Z", "S03", 255, 82],
+       [10, 326, 39.01, "2024-09-18T17:00:00.000000Z", "S03", 256, 80],
+       [10, 327, 40.42, "2024-09-07T19:00:00.000000Z", "S03", 254, 83],
+       [10, 328, 74.34, "2024-09-06T08:00:00.000000Z", "S03", 257, 81],
+       [10, 329, 16.61, "2024-09-04T14:00:00.000000Z", "S03", 258, 83],
+       [10, 330, 0.5, "2024-09-01T16:00:00.000000Z", "S03", 259, 78],
+       [10, 331, 21.49, "2024-08-23T14:00:00.000000Z", "S03", 260, 83],
+       [10, 332, 68.2, "2024-08-22T19:00:00.000000Z", "S03", 261, 84],
+       [10, 333, 90.6, "2024-08-22T09:00:00.000000Z", "S03", 252, 81],
+       [10, 334, 88.52, "2024-08-18T14:00:00.000000Z", "S03", 262, 83],
+       [10, 335, 40.11, "2024-08-16T18:00:00.000000Z", "S03", 261, 79],
+       [10, 336, 40.96, "2024-08-14T09:00:00.000000Z", "S03", 263, 78],
+       [10, 337, 95.42, "2024-08-12T19:00:00.000000Z", "S03", 264, 84],
+       [10, 338, 89.42, "2024-08-12T16:00:00.000000Z", "S03", 265, 83],
+       [10, 339, 47.79, "2024-08-09T13:00:00.000000Z", "S03", 266, 83],
+       [10, 340, 42.99, "2024-08-06T21:00:00.000000Z", "S03", 267, 79],
+       [10, 341, 19.13, "2024-08-04T14:00:00.000000Z", "S03", 261, 82],
+       [10, 342, 73.74, "2024-08-02T21:00:00.000000Z", "S03", 268, 82],
+       [10, 343, 46.7, "2024-07-31T07:00:00.000000Z", "S03", 269, 78],
+       [10, 344, 59.01, "2024-07-30T18:00:00.000000Z", "S03", 259, 84],
+       [10, 345, 85.67, "2024-07-30T09:00:00.000000Z", "S03", 270, 84],
+       [10, 346, 92.0, "2024-07-29T08:00:00.000000Z", "S03", 271, 84],
+       [10, 347, 87.23, "2024-07-27T18:00:00.000000Z", "S03", 269, 85],
+       [10, 348, 36.45, "2024-07-25T21:00:00.000000Z", "S03", 272, 78],
+       [10, 349, 97.15, "2024-07-25T10:00:00.000000Z", "S03", 257, 82],
+       [10, 350, 18.35, "2024-07-24T07:00:00.000000Z", "S03", 273, 81],
+       [10, 351, 70.72, "2024-07-11T20:00:00.000000Z", "S03", 267, 83],
+       [11, 352, 64.21, "2024-09-30T16:00:00.000000Z", "S01", 274, 86],
+       [11, 353, 53.31, "2024-09-30T12:00:00.000000Z", "S01", 275, 86],
+       [11, 354, 84.21, "2024-09-28T13:00:00.000000Z", "S01", 276, 87],
+       [11, 355, 18.04, "2024-09-26T21:00:00.000000Z", "S01", 277, 88],
+       [11, 356, 57.84, "2024-09-25T08:00:00.000000Z", "S01", 278, 89],
+       [11, 357, 34.69, "2024-09-24T09:00:00.000000Z", "S01", 279, 90],
+       [11, 358, 93.08, "2024-09-23T16:00:00.000000Z", "S01", 280, 87],
+       [11, 359, 66.73, "2024-09-21T17:00:00.000000Z", "S01", 281, 91],
+       [11, 360, 29.6, "2024-09-19T08:00:00.000000Z", "S01", 282, 87],
+       [11, 361, 47.84, "2024-09-18T06:00:00.000000Z", "S01", 283, 91],
+       [11, 362, 64.33, "2024-09-17T19:00:00.000000Z", "S01", 284, 87],
+       [11, 363, 35.72, "2024-09-03T18:00:00.000000Z", "S01", 285, 86],
+       [11, 364, 41.74, "2024-09-03T07:00:00.000000Z", "S01", 286, 88],
+       [11, 365, 99.56, "2024-09-01T14:00:00.000000Z", "S01", 287, 86],
+       [11, 366, 35.3, "2024-08-30T17:00:00.000000Z", "S01", 288, 91],
+       [11, 367, 30.31, "2024-08-28T14:00:00.000000Z", "S01", 289, 86],
+       [11, 368, 17.72, "2024-08-28T13:00:00.000000Z", "S01", 290, 90],
+       [11, 369, 31.5, "2024-08-25T07:00:00.000000Z", "S01", 291, 91],
+       [11, 370, 66.29, "2024-08-23T21:00:00.000000Z", "S01", 284, 92],
+       [11, 371, 46.25, "2024-08-22T08:00:00.000000Z", "S01", 292, 91],
+       [11, 372, 35.36, "2024-08-21T12:00:00.000000Z", "S01", 293, 88],
+       [11, 373, 76.32, "2024-08-17T21:00:00.000000Z", "S01", 294, 91],
+       [11, 374, 98.05, "2024-08-17T10:00:00.000000Z", "S01", 295, 89],
+       [11, 375, 69.58, "2024-08-16T14:00:00.000000Z", "S01", 296, 92],
+       [11, 376, 46.93, "2024-08-14T14:00:00.000000Z", "S01", 297, 87],
+       [11, 377, 87.34, "2024-08-07T17:00:00.000000Z", "S01", 298, 92],
+       [11, 378, 66.19, "2024-08-06T21:00:00.000000Z", "S01", 274, 93],
+       [11, 379, 83.11, "2024-08-06T13:00:00.000000Z", "S01", 291, 87],
+       [11, 380, 80.53, "2024-08-04T10:00:00.000000Z", "S01", 299, 91],
+       [11, 381, 29.08, "2024-08-04T08:00:00.000000Z", "S01", 300, 93],
+       [11, 382, 32.92, "2024-08-02T18:00:00.000000Z", "S01", 301, 87],
+       [11, 383, 77.06, "2024-08-02T12:00:00.000000Z", "S01", 302, 88],
+       [12, 384, 48.93, "2024-09-30T15:00:00.000000Z", "S04", 303, 94],
+       [12, 385, 24.27, "2024-09-27T20:00:00.000000Z", "S04", 304, 95],
+       [12, 386, 96.05, "2024-09-20T11:00:00.000000Z", "S04", 305, 96],
+       [12, 387, 49.73, "2024-09-19T20:00:00.000000Z", "S04", 306, 94],
+       [12, 388, 78.14, "2024-09-18T13:00:00.000000Z", "S04", 307, 97],
+       [12, 389, 18.35, "2024-09-15T17:00:00.000000Z", "S04", 308, 97],
+       [12, 390, 97.64, "2024-09-13T18:00:00.000000Z", "S04", 309, 98],
+       [12, 391, 52.55, "2024-09-13T09:00:00.000000Z", "S04", 310, 99],
+       [12, 392, 86.92, "2024-09-12T15:00:00.000000Z", "S04", 311, 100],
+       [12, 393, 98.25, "2024-09-11T20:00:00.000000Z", "S04", 312, 101],
+       [12, 394, 50.85, "2024-09-10T10:00:00.000000Z", "S04", 313, 99],
+       [12, 395, 14.71, "2024-09-09T18:00:00.000000Z", "S04", 313, 95],
+       [12, 396, 57.13, "2024-09-09T13:00:00.000000Z", "S04", 304, 98],
+       [12, 397, 53.6, "2024-09-09T06:00:00.000000Z", "S04", 312, 95],
+       [12, 398, 11.91, "2024-09-06T09:00:00.000000Z", "S04", 314, 100],
+       [12, 399, 30.82, "2024-09-05T12:00:00.000000Z", "S04", 315, 94],
+       [12, 400, 36.7, "2024-09-02T11:00:00.000000Z", "S04", 316, 95],
+       [12, 401, 44.51, "2024-09-01T21:00:00.000000Z", "S04", 317, 101],
+       [12, 402, 24.34, "2024-09-01T09:00:00.000000Z", "S04", 318, 98],
+       [12, 403, 47.33, "2024-09-01T09:00:00.000000Z", "S04", 319, 94],
+       [12, 404, 14.44, "2024-08-31T16:00:00.000000Z", "S04", 318, 101],
+       [12, 405, 36.87, "2024-08-26T12:00:00.000000Z", "S04", 308, 100],
+       [12, 406, 56.99, "2024-08-26T06:00:00.000000Z", "S04", 320, 97],
+       [12, 407, 54.71, "2024-08-25T14:00:00.000000Z", "S04", 316, 97],
+       [12, 408, 65.54, "2024-08-24T15:00:00.000000Z", "S04", 316, 100],
+       [12, 409, 40.17, "2024-08-18T09:00:00.000000Z", "S04", 320, 99],
+       [12, 410, 61.46, "2024-08-13T08:00:00.000000Z", "S04", 317, 99],
+       [12, 411, 4.78, "2024-08-08T08:00:00.000000Z", "S04", 308, 100],
+       [12, 412, 6.94, "2024-08-06T19:00:00.000000Z", "S04", 321, 94],
+       [12, 413, 1.39, "2024-08-04T12:00:00.000000Z", "S04", 322, 99],
+       [12, 414, 59.99, "2024-08-03T17:00:00.000000Z", "S04", 303, 101],
+       [12, 415, 54.06, "2024-07-30T08:00:00.000000Z", "S04", 323, 96],
+       [13, 416, 58.88, "2024-09-29T16:00:00.000000Z", "S02", 324, 102],
+       [13, 417, 58.72, "2024-09-28T07:00:00.000000Z", "S02", 325, 103],
+       [13, 418, 61.42, "2024-09-26T19:00:00.000000Z", "S02", 326, 104],
+       [13, 419, 96.83, "2024-09-24T12:00:00.000000Z", "S02", 327, 105],
+       [13, 420, 60.06, "2024-09-23T18:00:00.000000Z", "S02", 328, 106],
+       [13, 421, 14.57, "2024-09-23T14:00:00.000000Z", "S02", 329, 104],
+       [13, 422, 53.83, "2024-09-21T06:00:00.000000Z", "S02", 330, 106],
+       [13, 423, 99.55, "2024-09-17T20:00:00.000000Z", "S02", 331, 103],
+       [13, 424, 35.29, "2024-09-17T12:00:00.000000Z", "S02", 332, 107],
+       [13, 425, 34.99, "2024-09-13T09:00:00.000000Z", "S02", 333, 104],
+       [13, 426, 94.96, "2024-09-12T13:00:00.000000Z", "S02", 333, 105],
+       [13, 427, 73.15, "2024-09-11T14:00:00.000000Z", "S02", 334, 105],
+       [13, 428, 16.97, "2024-09-10T15:00:00.000000Z", "S02", 335, 105],
+       [13, 429, 45.26, "2024-09-05T12:00:00.000000Z", "S02", 325, 105],
+       [13, 430, 24.01, "2024-09-02T17:00:00.000000Z", "S02", 336, 105],
+       [13, 431, 97.34, "2024-09-02T15:00:00.000000Z", "S02", 337, 104],
+       [13, 432, 91.89, "2024-09-02T13:00:00.000000Z", "S02", 338, 108],
+       [13, 433, 58.58, "2024-08-30T15:00:00.000000Z", "S02", 339, 106],
+       [13, 434, 0.91, "2024-08-29T11:00:00.000000Z", "S02", 340, 103],
+       [13, 435, 52.18, "2024-08-27T08:00:00.000000Z", "S02", 341, 104],
+       [13, 436, 82.8, "2024-08-26T13:00:00.000000Z", "S02", 335, 107],
+       [13, 437, 15.09, "2024-08-26T10:00:00.000000Z", "S02", 341, 105],
+       [13, 438, 41.07, "2024-08-25T18:00:00.000000Z", "S02", 342, 108],
+       [13, 439, 51.18, "2024-08-25T14:00:00.000000Z", "S02", 343, 103],
+       [13, 440, 66.88, "2024-08-18T07:00:00.000000Z", "S02", 344, 108],
+       [13, 441, 85.27, "2024-08-16T11:00:00.000000Z", "S02", 345, 106],
+       [13, 442, 34.57, "2024-08-12T10:00:00.000000Z", "S02", 341, 103],
+       [13, 443, 94.98, "2024-08-12T06:00:00.000000Z", "S02", 339, 108],
+       [13, 444, 48.59, "2024-08-11T21:00:00.000000Z", "S02", 346, 103],
+       [13, 445, 31.01, "2024-08-11T08:00:00.000000Z", "S02", 347, 106],
+       [13, 446, 54.07, "2024-08-10T19:00:00.000000Z", "S02", 334, 108],
+       [13, 447, 34.38, "2024-08-10T17:00:00.000000Z", "S02", 348, 109],
+       [14, 448, 11.96, "2024-09-29T14:00:00.000000Z", "S05", 349, 110],
+       [14, 449, 94.62, "2024-09-27T09:00:00.000000Z", "S05", 350, 111],
+       [14, 450, 28.33, "2024-09-20T11:00:00.000000Z", "S05", 351, 112],
+       [14, 451, 39.8, "2024-09-18T15:00:00.000000Z", "S05", 352, 112],
+       [14, 452, 55.94, "2024-09-17T06:00:00.000000Z", "S05", 353, 113],
+       [14, 453, 24.39, "2024-09-15T12:00:00.000000Z", "S05", 354, 114],
+       [14, 454, 27.27, "2024-09-11T14:00:00.000000Z", "S05", 355, 115],
+       [14, 455, 42.48, "2024-09-10T13:00:00.000000Z", "S05", 356, 113],
+       [14, 456, 65.92, "2024-09-09T09:00:00.000000Z", "S05", 357, 115],
+       [14, 457, 17.33, "2024-09-08T09:00:00.000000Z", "S05", 358, 113],
+       [14, 458, 92.95, "2024-09-07T13:00:00.000000Z", "S05", 359, 114],
+       [14, 459, 26.55, "2024-09-03T06:00:00.000000Z", "S05", 360, 111],
+       [14, 460, 21.08, "2024-09-01T10:00:00.000000Z", "S05", 361, 116],
+       [14, 461, 50.47, "2024-08-28T21:00:00.000000Z", "S05", 362, 110],
+       [14, 462, 53.28, "2024-08-28T19:00:00.000000Z", "S05", 363, 113],
+       [14, 463, 4.67, "2024-08-26T21:00:00.000000Z", "S05", 364, 114],
+       [14, 464, 96.48, "2024-08-21T11:00:00.000000Z", "S05", 365, 117],
+       [14, 465, 13.42, "2024-08-17T11:00:00.000000Z", "S05", 366, 114],
+       [14, 466, 86.84, "2024-08-17T06:00:00.000000Z", "S05", 356, 113],
+       [14, 467, 47.64, "2024-08-08T12:00:00.000000Z", "S05", 359, 116],
+       [14, 468, 91.64, "2024-08-03T10:00:00.000000Z", "S05", 367, 111],
+       [14, 469, 50.47, "2024-08-02T07:00:00.000000Z", "S05", 368, 110],
+       [14, 470, 69.96, "2024-07-29T18:00:00.000000Z", "S05", 369, 116],
+       [14, 471, 41.97, "2024-07-28T10:00:00.000000Z", "S05", 370, 117],
+       [14, 472, 18.21, "2024-07-27T11:00:00.000000Z", "S05", 371, 110],
+       [14, 473, 51.13, "2024-07-27T10:00:00.000000Z", "S05", 366, 110],
+       [14, 474, 75.25, "2024-07-25T16:00:00.000000Z", "S05", 365, 115],
+       [14, 475, 58.07, "2024-07-24T12:00:00.000000Z", "S05", 364, 114],
+       [14, 476, 56.89, "2024-07-23T10:00:00.000000Z", "S05", 357, 110],
+       [14, 477, 43.95, "2024-07-21T21:00:00.000000Z", "S05", 372, 116],
+       [14, 478, 46.05, "2024-07-18T18:00:00.000000Z", "S05", 373, 111],
+       [14, 479, 26.7, "2024-07-17T17:00:00.000000Z", "S05", 365, 111],
+       [15, 480, 58.58, "2024-08-30T15:00:00.000000Z", "S02", 374, 118],
+       [15, 481, 0.91, "2024-08-29T11:00:00.000000Z", "S02", 375, 119],
+       [15, 482, 52.18, "2024-08-27T08:00:00.000000Z", "S02", 376, 120],
+       [15, 483, 82.8, "2024-08-26T13:00:00.000000Z", "S02", 377, 121],
+       [15, 484, 15.09, "2024-08-26T10:00:00.000000Z", "S02", 376, 122],
+       [15, 485, 41.07, "2024-08-25T18:00:00.000000Z", "S02", 378, 123],
+       [15, 486, 51.18, "2024-08-25T14:00:00.000000Z", "S02", 379, 119],
+       [15, 487, 66.88, "2024-08-18T07:00:00.000000Z", "S02", 380, 123],
+       [15, 488, 85.27, "2024-08-16T11:00:00.000000Z", "S02", 381, 118],
+       [15, 489, 34.57, "2024-08-12T10:00:00.000000Z", "S02", 376, 119],
+       [15, 490, 94.98, "2024-08-12T06:00:00.000000Z", "S02", 374, 123],
+       [15, 491, 48.59, "2024-08-11T21:00:00.000000Z", "S02", 382, 119],
+       [15, 492, 31.01, "2024-08-11T08:00:00.000000Z", "S02", 383, 118],
+       [15, 493, 54.07, "2024-08-10T19:00:00.000000Z", "S02", 384, 123],
+       [15, 494, 34.38, "2024-08-10T17:00:00.000000Z", "S02", 385, 124],
+       [15, 495, 49.17, "2024-08-06T11:00:00.000000Z", "S02", 386, 125],
+       [15, 496, 17.8, "2024-08-06T10:00:00.000000Z", "S02", 387, 125],
+       [15, 497, 92.87, "2024-07-29T16:00:00.000000Z", "S02", 388, 122],
+       [15, 498, 22.87, "2024-07-23T09:00:00.000000Z", "S02", 389, 118],
+       [15, 499, 63.88, "2024-07-20T10:00:00.000000Z", "S02", 390, 119],
+       [15, 500, 42.18, "2024-07-18T20:00:00.000000Z", "S02", 384, 122],
+       [15, 501, 64.41, "2024-07-17T20:00:00.000000Z", "S02", 391, 118],
+       [15, 502, 12.36, "2024-07-17T18:00:00.000000Z", "S02", 392, 124],
+       [15, 503, 36.26, "2024-07-17T07:00:00.000000Z", "S02", 382, 123],
+       [15, 504, 24.53, "2024-07-14T20:00:00.000000Z", "S02", 378, 123],
+       [15, 505, 39.39, "2024-07-09T21:00:00.000000Z", "S02", 382, 120],
+       [15, 506, 74.58, "2024-07-09T09:00:00.000000Z", "S02", 375, 125],
+       [15, 507, 77.97, "2024-07-05T15:00:00.000000Z", "S02", 393, 123],
+       [15, 508, 30.0, "2024-07-04T13:00:00.000000Z", "S02", 394, 120],
+       [15, 509, 18.0, "2024-07-02T11:00:00.000000Z", "S02", 395, 119],
+       [15, 510, 76.16, "2024-06-27T18:00:00.000000Z", "S02", 396, 123],
+       [15, 511, 79.89, "2024-06-23T13:00:00.000000Z", "S02", 397, 120],
+       [16, 512, 0.5, "2024-09-01T16:00:00.000000Z", "S03", 398, 126],
+       [16, 513, 21.49, "2024-08-23T14:00:00.000000Z", "S03", 399, 127],
+       [16, 514, 68.2, "2024-08-22T19:00:00.000000Z", "S03", 400, 128],
+       [16, 515, 90.6, "2024-08-22T09:00:00.000000Z", "S03", 401, 129],
+       [16, 516, 88.52, "2024-08-18T14:00:00.000000Z", "S03", 402, 127],
+       [16, 517, 40.11, "2024-08-16T18:00:00.000000Z", "S03", 400, 130],
+       [16, 518, 40.96, "2024-08-14T09:00:00.000000Z", "S03", 403, 126],
+       [16, 519, 95.42, "2024-08-12T19:00:00.000000Z", "S03", 404, 128],
+       [16, 520, 89.42, "2024-08-12T16:00:00.000000Z", "S03", 405, 127],
+       [16, 521, 47.79, "2024-08-09T13:00:00.000000Z", "S03", 406, 127],
+       [16, 522, 42.99, "2024-08-06T21:00:00.000000Z", "S03", 407, 130],
+       [16, 523, 19.13, "2024-08-04T14:00:00.000000Z", "S03", 400, 131],
+       [16, 524, 73.74, "2024-08-02T21:00:00.000000Z", "S03", 408, 131],
+       [16, 525, 46.7, "2024-07-31T07:00:00.000000Z", "S03", 409, 126],
+       [16, 526, 59.01, "2024-07-30T18:00:00.000000Z", "S03", 398, 128],
+       [16, 527, 85.67, "2024-07-30T09:00:00.000000Z", "S03", 410, 128],
+       [16, 528, 92.0, "2024-07-29T08:00:00.000000Z", "S03", 411, 128],
+       [16, 529, 87.23, "2024-07-27T18:00:00.000000Z", "S03", 409, 132],
+       [16, 530, 36.45, "2024-07-25T21:00:00.000000Z", "S03", 412, 126],
+       [16, 531, 97.15, "2024-07-25T10:00:00.000000Z", "S03", 413, 131],
+       [16, 532, 18.35, "2024-07-24T07:00:00.000000Z", "S03", 414, 129],
+       [16, 533, 70.72, "2024-07-11T20:00:00.000000Z", "S03", 407, 127],
+       [16, 534, 95.68, "2024-07-09T15:00:00.000000Z", "S03", 408, 133],
+       [16, 535, 38.61, "2024-07-08T12:00:00.000000Z", "S03", 415, 130],
+       [16, 536, 80.74, "2024-07-07T21:00:00.000000Z", "S03", 416, 129],
+       [16, 537, 72.98, "2024-07-06T15:00:00.000000Z", "S03", 417, 129],
+       [16, 538, 65.34, "2024-07-05T20:00:00.000000Z", "S03", 418, 127],
+       [16, 539, 68.33, "2024-07-02T12:00:00.000000Z", "S03", 419, 133],
+       [16, 540, 11.01, "2024-07-02T11:00:00.000000Z", "S03", 420, 131],
+       [16, 541, 54.39, "2024-07-02T07:00:00.000000Z", "S03", 420, 132],
+       [16, 542, 72.97, "2024-06-30T13:00:00.000000Z", "S03", 412, 129],
+       [16, 543, 27.97, "2024-06-29T20:00:00.000000Z", "S03", 421, 132],
+       [17, 544, 99.56, "2024-09-01T14:00:00.000000Z", "S01", 422, 134],
+       [17, 545, 35.3, "2024-08-30T17:00:00.000000Z", "S01", 423, 135],
+       [17, 546, 30.31, "2024-08-28T14:00:00.000000Z", "S01", 424, 134],
+       [17, 547, 17.72, "2024-08-28T13:00:00.000000Z", "S01", 425, 136],
+       [17, 548, 31.5, "2024-08-25T07:00:00.000000Z", "S01", 426, 135],
+       [17, 549, 66.29, "2024-08-23T21:00:00.000000Z", "S01", 427, 137],
+       [17, 550, 46.25, "2024-08-22T08:00:00.000000Z", "S01", 428, 135],
+       [17, 551, 35.36, "2024-08-21T12:00:00.000000Z", "S01", 429, 138],
+       [17, 552, 76.32, "2024-08-17T21:00:00.000000Z", "S01", 430, 135],
+       [17, 553, 98.05, "2024-08-17T10:00:00.000000Z", "S01", 431, 139],
+       [17, 554, 69.58, "2024-08-16T14:00:00.000000Z", "S01", 432, 137],
+       [17, 555, 46.93, "2024-08-14T14:00:00.000000Z", "S01", 433, 140],
+       [17, 556, 87.34, "2024-08-07T17:00:00.000000Z", "S01", 434, 137],
+       [17, 557, 66.19, "2024-08-06T21:00:00.000000Z", "S01", 435, 141],
+       [17, 558, 83.11, "2024-08-06T13:00:00.000000Z", "S01", 426, 140],
+       [17, 559, 80.53, "2024-08-04T10:00:00.000000Z", "S01", 436, 135],
+       [17, 560, 29.08, "2024-08-04T08:00:00.000000Z", "S01", 437, 141],
+       [17, 561, 32.92, "2024-08-02T18:00:00.000000Z", "S01", 438, 140],
+       [17, 562, 77.06, "2024-08-02T12:00:00.000000Z", "S01", 439, 138],
+       [17, 563, 27.9, "2024-07-31T20:00:00.000000Z", "S01", 440, 135],
+       [17, 564, 36.0, "2024-07-23T20:00:00.000000Z", "S01", 441, 135],
+       [17, 565, 86.94, "2024-07-20T15:00:00.000000Z", "S01", 439, 134],
+       [17, 566, 34.28, "2024-07-20T15:00:00.000000Z", "S01", 442, 137],
+       [17, 567, 37.0, "2024-07-18T10:00:00.000000Z", "S01", 443, 136],
+       [17, 568, 86.6, "2024-07-17T06:00:00.000000Z", "S01", 444, 140],
+       [17, 569, 73.42, "2024-07-14T16:00:00.000000Z", "S01", 445, 140],
+       [17, 570, 6.56, "2024-07-12T19:00:00.000000Z", "S01", 446, 139],
+       [17, 571, 72.45, "2024-07-11T16:00:00.000000Z", "S01", 447, 136],
+       [17, 572, 44.2, "2024-07-09T07:00:00.000000Z", "S01", 448, 136],
+       [17, 573, 64.06, "2024-07-05T14:00:00.000000Z", "S01", 430, 140],
+       [17, 574, 76.53, "2024-07-04T20:00:00.000000Z", "S01", 449, 138],
+       [17, 575, 12.21, "2024-07-04T10:00:00.000000Z", "S01", 450, 134],
+       [18, 576, 21.08, "2024-09-01T10:00:00.000000Z", "S05", 451, 142],
+       [18, 577, 50.47, "2024-08-28T21:00:00.000000Z", "S05", 452, 143],
+       [18, 578, 53.28, "2024-08-28T19:00:00.000000Z", "S05", 453, 144],
+       [18, 579, 4.67, "2024-08-26T21:00:00.000000Z", "S05", 454, 145],
+       [18, 580, 96.48, "2024-08-21T11:00:00.000000Z", "S05", 455, 146],
+       [18, 581, 13.42, "2024-08-17T11:00:00.000000Z", "S05", 456, 145],
+       [18, 582, 86.84, "2024-08-17T06:00:00.000000Z", "S05", 457, 144],
+       [18, 583, 47.64, "2024-08-08T12:00:00.000000Z", "S05", 458, 142],
+       [18, 584, 91.64, "2024-08-03T10:00:00.000000Z", "S05", 459, 147],
+       [18, 585, 50.47, "2024-08-02T07:00:00.000000Z", "S05", 460, 143],
+       [18, 586, 69.96, "2024-07-29T18:00:00.000000Z", "S05", 461, 142],
+       [18, 587, 41.97, "2024-07-28T10:00:00.000000Z", "S05", 462, 146],
+       [18, 588, 18.21, "2024-07-27T11:00:00.000000Z", "S05", 463, 143],
+       [18, 589, 51.13, "2024-07-27T10:00:00.000000Z", "S05", 456, 143],
+       [18, 590, 75.25, "2024-07-25T16:00:00.000000Z", "S05", 455, 148],
+       [18, 591, 58.07, "2024-07-24T12:00:00.000000Z", "S05", 454, 145],
+       [18, 592, 56.89, "2024-07-23T10:00:00.000000Z", "S05", 464, 143],
+       [18, 593, 43.95, "2024-07-21T21:00:00.000000Z", "S05", 465, 142],
+       [18, 594, 46.05, "2024-07-18T18:00:00.000000Z", "S05", 466, 147],
+       [18, 595, 26.7, "2024-07-17T17:00:00.000000Z", "S05", 455, 147],
+       [18, 596, 11.81, "2024-07-17T14:00:00.000000Z", "S05", 453, 148],
+       [18, 597, 23.58, "2024-07-16T18:00:00.000000Z", "S05", 467, 145],
+       [18, 598, 29.69, "2024-07-14T13:00:00.000000Z", "S05", 465, 146],
+       [18, 599, 44.19, "2024-07-14T08:00:00.000000Z", "S05", 468, 148],
+       [18, 600, 10.83, "2024-07-01T15:00:00.000000Z", "S05", 469, 143],
+       [18, 601, 9.74, "2024-06-28T17:00:00.000000Z", "S05", 470, 146],
+       [18, 602, 92.8, "2024-06-25T11:00:00.000000Z", "S05", 471, 143],
+       [18, 603, 92.7, "2024-06-21T20:00:00.000000Z", "S05", 472, 145],
+       [18, 604, 41.44, "2024-06-21T16:00:00.000000Z", "S05", 473, 142],
+       [18, 605, 83.38, "2024-06-20T16:00:00.000000Z", "S05", 457, 143],
+       [18, 606, 37.54, "2024-06-10T07:00:00.000000Z", "S05", 474, 142],
+       [18, 607, 76.99, "2024-06-07T08:00:00.000000Z", "S05", 475, 148],
+       [19, 608, 44.51, "2024-09-01T21:00:00.000000Z", "S04", 476, 149],
+       [19, 609, 24.34, "2024-09-01T09:00:00.000000Z", "S04", 477, 150],
+       [19, 610, 47.33, "2024-09-01T09:00:00.000000Z", "S04", 478, 151],
+       [19, 611, 14.44, "2024-08-31T16:00:00.000000Z", "S04", 477, 149],
+       [19, 612, 36.87, "2024-08-26T12:00:00.000000Z", "S04", 479, 152],
+       [19, 613, 56.99, "2024-08-26T06:00:00.000000Z", "S04", 480, 153],
+       [19, 614, 54.71, "2024-08-25T14:00:00.000000Z", "S04", 481, 153],
+       [19, 615, 65.54, "2024-08-24T15:00:00.000000Z", "S04", 481, 152],
+       [19, 616, 40.17, "2024-08-18T09:00:00.000000Z", "S04", 480, 154],
+       [19, 617, 61.46, "2024-08-13T08:00:00.000000Z", "S04", 476, 154],
+       [19, 618, 4.78, "2024-08-08T08:00:00.000000Z", "S04", 479, 152],
+       [19, 619, 6.94, "2024-08-06T19:00:00.000000Z", "S04", 482, 151],
+       [19, 620, 1.39, "2024-08-04T12:00:00.000000Z", "S04", 483, 154],
+       [19, 621, 59.99, "2024-08-03T17:00:00.000000Z", "S04", 484, 149],
+       [19, 622, 54.06, "2024-07-30T08:00:00.000000Z", "S04", 485, 155],
+       [19, 623, 65.07, "2024-07-28T13:00:00.000000Z", "S04", 486, 154],
+       [19, 624, 67.97, "2024-07-27T11:00:00.000000Z", "S04", 487, 154],
+       [19, 625, 96.21, "2024-07-26T09:00:00.000000Z", "S04", 488, 150],
+       [19, 626, 22.43, "2024-07-25T19:00:00.000000Z", "S04", 489, 150],
+       [19, 627, 70.98, "2024-07-15T09:00:00.000000Z", "S04", 490, 150],
+       [19, 628, 89.39, "2024-07-11T21:00:00.000000Z", "S04", 487, 153],
+       [19, 629, 63.76, "2024-07-11T13:00:00.000000Z", "S04", 491, 152],
+       [19, 630, 59.72, "2024-07-10T07:00:00.000000Z", "S04", 492, 151],
+       [19, 631, 23.6, "2024-07-05T16:00:00.000000Z", "S04", 480, 151],
+       [19, 632, 84.22, "2024-07-05T15:00:00.000000Z", "S04", 493, 155],
+       [19, 633, 3.06, "2024-07-03T21:00:00.000000Z", "S04", 494, 149],
+       [19, 634, 34.19, "2024-06-30T06:00:00.000000Z", "S04", 495, 153],
+       [19, 635, 81.39, "2024-06-28T20:00:00.000000Z", "S04", 496, 151],
+       [19, 636, 81.11, "2024-06-28T09:00:00.000000Z", "S04", 497, 150],
+       [19, 637, 77.54, "2024-06-26T06:00:00.000000Z", "S04", 498, 149],
+       [19, 638, 7.56, "2024-06-22T18:00:00.000000Z", "S04", 499, 150],
+       [19, 639, 12.25, "2024-06-22T08:00:00.000000Z", "S04", 500, 150],
+       [20, 640, 92.87, "2024-07-29T16:00:00.000000Z", "S02", 501, 156],
+       [20, 641, 22.87, "2024-07-23T09:00:00.000000Z", "S02", 502, 157],
+       [20, 642, 63.88, "2024-07-20T10:00:00.000000Z", "S02", 503, 158],
+       [20, 643, 42.18, "2024-07-18T20:00:00.000000Z", "S02", 504, 156],
+       [20, 644, 64.41, "2024-07-17T20:00:00.000000Z", "S02", 505, 157],
+       [20, 645, 12.36, "2024-07-17T18:00:00.000000Z", "S02", 506, 159],
+       [20, 646, 36.26, "2024-07-17T07:00:00.000000Z", "S02", 507, 160],
+       [20, 647, 24.53, "2024-07-14T20:00:00.000000Z", "S02", 508, 160],
+       [20, 648, 39.39, "2024-07-09T21:00:00.000000Z", "S02", 507, 161],
+       [20, 649, 74.58, "2024-07-09T09:00:00.000000Z", "S02", 509, 162],
+       [20, 650, 77.97, "2024-07-05T15:00:00.000000Z", "S02", 510, 160],
+       [20, 651, 30.0, "2024-07-04T13:00:00.000000Z", "S02", 511, 161],
+       [20, 652, 18.0, "2024-07-02T11:00:00.000000Z", "S02", 512, 158],
+       [20, 653, 76.16, "2024-06-27T18:00:00.000000Z", "S02", 513, 160],
+       [20, 654, 79.89, "2024-06-23T13:00:00.000000Z", "S02", 514, 161],
+       [20, 655, 86.83, "2024-06-20T20:00:00.000000Z", "S02", 515, 156],
+       [20, 656, 30.23, "2024-06-15T21:00:00.000000Z", "S02", 516, 162],
+       [20, 657, 66.35, "2024-06-15T19:00:00.000000Z", "S02", 517, 156],
+       [20, 658, 42.49, "2024-06-07T12:00:00.000000Z", "S02", 518, 157],
+       [20, 659, 97.84, "2024-06-07T11:00:00.000000Z", "S02", 512, 157],
+       [20, 660, 22.58, "2024-06-06T15:00:00.000000Z", "S02", 512, 159],
+       [20, 661, 74.99, "2024-06-03T15:00:00.000000Z", "S02", 506, 156],
+       [20, 662, 67.19, "2024-06-01T17:00:00.000000Z", "S02", 519, 161],
+       [20, 663, 45.0, "2024-06-01T09:00:00.000000Z", "S02", 509, 161],
+       [20, 664, 70.34, "2024-05-31T19:00:00.000000Z", "S02", 520, 159],
+       [20, 665, 9.8, "2024-05-30T20:00:00.000000Z", "S02", 508, 162],
+       [20, 666, 79.99, "2024-05-30T14:00:00.000000Z", "S02", 521, 163],
+       [20, 667, 68.58, "2024-05-30T08:00:00.000000Z", "S02", 522, 163],
+       [20, 668, 18.33, "2024-05-29T17:00:00.000000Z", "S02", 523, 162],
+       [20, 669, 3.12, "2024-05-29T13:00:00.000000Z", "S02", 524, 160],
+       [20, 670, 4.51, "2024-05-28T14:00:00.000000Z", "S02", 525, 158],
+       [20, 671, 36.24, "2024-05-26T13:00:00.000000Z", "S02", 526, 163],
+       [21, 672, 54.06, "2024-07-30T08:00:00.000000Z", "S04", 527, 164],
+       [21, 673, 65.07, "2024-07-28T13:00:00.000000Z", "S04", 528, 165],
+       [21, 674, 67.97, "2024-07-27T11:00:00.000000Z", "S04", 529, 165],
+       [21, 675, 96.21, "2024-07-26T09:00:00.000000Z", "S04", 530, 166],
+       [21, 676, 22.43, "2024-07-25T19:00:00.000000Z", "S04", 531, 166],
+       [21, 677, 70.98, "2024-07-15T09:00:00.000000Z", "S04", 532, 166],
+       [21, 678, 89.39, "2024-07-11T21:00:00.000000Z", "S04", 529, 167],
+       [21, 679, 63.76, "2024-07-11T13:00:00.000000Z", "S04", 533, 168],
+       [21, 680, 59.72, "2024-07-10T07:00:00.000000Z", "S04", 534, 169],
+       [21, 681, 23.6, "2024-07-05T16:00:00.000000Z", "S04", 535, 169],
+       [21, 682, 84.22, "2024-07-05T15:00:00.000000Z", "S04", 536, 164],
+       [21, 683, 3.06, "2024-07-03T21:00:00.000000Z", "S04", 537, 170],
+       [21, 684, 34.19, "2024-06-30T06:00:00.000000Z", "S04", 538, 167],
+       [21, 685, 81.39, "2024-06-28T20:00:00.000000Z", "S04", 539, 169],
+       [21, 686, 81.11, "2024-06-28T09:00:00.000000Z", "S04", 540, 166],
+       [21, 687, 77.54, "2024-06-26T06:00:00.000000Z", "S04", 541, 170],
+       [21, 688, 7.56, "2024-06-22T18:00:00.000000Z", "S04", 542, 166],
+       [21, 689, 12.25, "2024-06-22T08:00:00.000000Z", "S04", 543, 166],
+       [21, 690, 99.05, "2024-06-20T20:00:00.000000Z", "S04", 544, 168],
+       [21, 691, 57.73, "2024-06-19T15:00:00.000000Z", "S04", 545, 170],
+       [21, 692, 68.95, "2024-06-18T19:00:00.000000Z", "S04", 546, 169],
+       [21, 693, 53.54, "2024-06-15T15:00:00.000000Z", "S04", 547, 169],
+       [21, 694, 22.79, "2024-06-15T15:00:00.000000Z", "S04", 536, 167],
+       [21, 695, 61.52, "2024-06-13T15:00:00.000000Z", "S04", 548, 168],
+       [21, 696, 94.38, "2024-06-11T08:00:00.000000Z", "S04", 549, 165],
+       [21, 697, 89.5, "2024-06-09T15:00:00.000000Z", "S04", 550, 167],
+       [21, 698, 35.35, "2024-06-07T14:00:00.000000Z", "S04", 549, 167],
+       [21, 699, 38.2, "2024-06-03T15:00:00.000000Z", "S04", 551, 165],
+       [21, 700, 89.82, "2024-06-03T07:00:00.000000Z", "S04", 529, 171],
+       [21, 701, 15.74, "2024-05-22T12:00:00.000000Z", "S04", 538, 169],
+       [21, 702, 16.89, "2024-05-17T17:00:00.000000Z", "S04", 552, 169],
+       [21, 703, 37.97, "2024-05-12T14:00:00.000000Z", "S04", 553, 166],
+       [22, 704, 32.92, "2024-08-02T18:00:00.000000Z", "S01", 554, 172],
+       [22, 705, 77.06, "2024-08-02T12:00:00.000000Z", "S01", 555, 173],
+       [22, 706, 27.9, "2024-07-31T20:00:00.000000Z", "S01", 556, 174],
+       [22, 707, 36.0, "2024-07-23T20:00:00.000000Z", "S01", 557, 174],
+       [22, 708, 86.94, "2024-07-20T15:00:00.000000Z", "S01", 555, 175],
+       [22, 709, 34.28, "2024-07-20T15:00:00.000000Z", "S01", 558, 176],
+       [22, 710, 37.0, "2024-07-18T10:00:00.000000Z", "S01", 559, 177],
+       [22, 711, 86.6, "2024-07-17T06:00:00.000000Z", "S01", 560, 172],
+       [22, 712, 73.42, "2024-07-14T16:00:00.000000Z", "S01", 561, 172],
+       [22, 713, 6.56, "2024-07-12T19:00:00.000000Z", "S01", 562, 178],
+       [22, 714, 72.45, "2024-07-11T16:00:00.000000Z", "S01", 563, 177],
+       [22, 715, 44.2, "2024-07-09T07:00:00.000000Z", "S01", 564, 177],
+       [22, 716, 64.06, "2024-07-05T14:00:00.000000Z", "S01", 565, 172],
+       [22, 717, 76.53, "2024-07-04T20:00:00.000000Z", "S01", 566, 173],
+       [22, 718, 12.21, "2024-07-04T10:00:00.000000Z", "S01", 567, 175],
+       [22, 719, 74.9, "2024-06-19T14:00:00.000000Z", "S01", 568, 179],
+       [22, 720, 22.43, "2024-06-18T11:00:00.000000Z", "S01", 562, 177],
+       [22, 721, 3.5, "2024-06-17T11:00:00.000000Z", "S01", 569, 179],
+       [22, 722, 30.94, "2024-06-11T09:00:00.000000Z", "S01", 570, 178],
+       [22, 723, 52.72, "2024-06-11T09:00:00.000000Z", "S01", 559, 176],
+       [22, 724, 88.78, "2024-06-09T20:00:00.000000Z", "S01", 565, 179],
+       [22, 725, 98.84, "2024-06-05T13:00:00.000000Z", "S01", 559, 174],
+       [22, 726, 50.98, "2024-06-04T07:00:00.000000Z", "S01", 571, 177],
+       [22, 727, 46.19, "2024-05-31T17:00:00.000000Z", "S01", 558, 172],
+       [22, 728, 0.65, "2024-05-29T07:00:00.000000Z", "S01", 560, 175],
+       [22, 729, 48.69, "2024-05-25T20:00:00.000000Z", "S01", 560, 178],
+       [22, 730, 31.28, "2024-05-24T10:00:00.000000Z", "S01", 568, 177],
+       [22, 731, 28.93, "2024-05-22T13:00:00.000000Z", "S01", 572, 173],
+       [22, 732, 2.42, "2024-05-21T10:00:00.000000Z", "S01", 567, 178],
+       [22, 733, 8.18, "2024-05-21T09:00:00.000000Z", "S01", 573, 175],
+       [22, 734, 78.65, "2024-05-15T16:00:00.000000Z", "S01", 570, 179],
+       [22, 735, 46.73, "2024-05-15T14:00:00.000000Z", "S01", 565, 175],
+       [23, 736, 73.74, "2024-08-02T21:00:00.000000Z", "S03", 574, 180],
+       [23, 737, 46.7, "2024-07-31T07:00:00.000000Z", "S03", 575, 181],
+       [23, 738, 59.01, "2024-07-30T18:00:00.000000Z", "S03", 576, 182],
+       [23, 739, 85.67, "2024-07-30T09:00:00.000000Z", "S03", 577, 182],
+       [23, 740, 92.0, "2024-07-29T08:00:00.000000Z", "S03", 578, 182],
+       [23, 741, 87.23, "2024-07-27T18:00:00.000000Z", "S03", 575, 183],
+       [23, 742, 36.45, "2024-07-25T21:00:00.000000Z", "S03", 579, 181],
+       [23, 743, 97.15, "2024-07-25T10:00:00.000000Z", "S03", 580, 180],
+       [23, 744, 18.35, "2024-07-24T07:00:00.000000Z", "S03", 581, 184],
+       [23, 745, 70.72, "2024-07-11T20:00:00.000000Z", "S03", 582, 185],
+       [23, 746, 95.68, "2024-07-09T15:00:00.000000Z", "S03", 574, 186],
+       [23, 747, 38.61, "2024-07-08T12:00:00.000000Z", "S03", 583, 187],
+       [23, 748, 80.74, "2024-07-07T21:00:00.000000Z", "S03", 584, 184],
+       [23, 749, 72.98, "2024-07-06T15:00:00.000000Z", "S03", 585, 184],
+       [23, 750, 65.34, "2024-07-05T20:00:00.000000Z", "S03", 586, 185],
+       [23, 751, 68.33, "2024-07-02T12:00:00.000000Z", "S03", 587, 186],
+       [23, 752, 11.01, "2024-07-02T11:00:00.000000Z", "S03", 588, 180],
+       [23, 753, 54.39, "2024-07-02T07:00:00.000000Z", "S03", 588, 183],
+       [23, 754, 72.97, "2024-06-30T13:00:00.000000Z", "S03", 579, 184],
+       [23, 755, 27.97, "2024-06-29T20:00:00.000000Z", "S03", 589, 183],
+       [23, 756, 29.24, "2024-06-26T12:00:00.000000Z", "S03", 590, 183],
+       [23, 757, 36.22, "2024-06-25T18:00:00.000000Z", "S03", 577, 184],
+       [23, 758, 47.73, "2024-06-24T19:00:00.000000Z", "S03", 591, 187],
+       [23, 759, 8.05, "2024-06-22T19:00:00.000000Z", "S03", 578, 180],
+       [23, 760, 51.35, "2024-06-21T14:00:00.000000Z", "S03", 592, 184],
+       [23, 761, 72.02, "2024-06-20T15:00:00.000000Z", "S03", 593, 181],
+       [23, 762, 74.83, "2024-06-18T07:00:00.000000Z", "S03", 594, 180],
+       [23, 763, 85.49, "2024-06-17T19:00:00.000000Z", "S03", 595, 186],
+       [23, 764, 65.91, "2024-06-13T14:00:00.000000Z", "S03", 591, 186],
+       [23, 765, 12.57, "2024-06-08T10:00:00.000000Z", "S03", 579, 182],
+       [23, 766, 71.35, "2024-06-04T14:00:00.000000Z", "S03", 596, 187],
+       [23, 767, 92.46, "2024-06-04T09:00:00.000000Z", "S03", 597, 181],
+       [24, 768, 50.47, "2024-08-02T07:00:00.000000Z", "S05", 598, 188],
+       [24, 769, 69.96, "2024-07-29T18:00:00.000000Z", "S05", 599, 189],
+       [24, 770, 41.97, "2024-07-28T10:00:00.000000Z", "S05", 600, 190],
+       [24, 771, 18.21, "2024-07-27T11:00:00.000000Z", "S05", 601, 188],
+       [24, 772, 51.13, "2024-07-27T10:00:00.000000Z", "S05", 602, 188],
+       [24, 773, 75.25, "2024-07-25T16:00:00.000000Z", "S05", 603, 191],
+       [24, 774, 58.07, "2024-07-24T12:00:00.000000Z", "S05", 604, 192],
+       [24, 775, 56.89, "2024-07-23T10:00:00.000000Z", "S05", 605, 188],
+       [24, 776, 43.95, "2024-07-21T21:00:00.000000Z", "S05", 606, 189],
+       [24, 777, 46.05, "2024-07-18T18:00:00.000000Z", "S05", 607, 193],
+       [24, 778, 26.7, "2024-07-17T17:00:00.000000Z", "S05", 603, 193],
+       [24, 779, 11.81, "2024-07-17T14:00:00.000000Z", "S05", 608, 191],
+       [24, 780, 23.58, "2024-07-16T18:00:00.000000Z", "S05", 609, 192],
+       [24, 781, 29.69, "2024-07-14T13:00:00.000000Z", "S05", 606, 190],
+       [24, 782, 44.19, "2024-07-14T08:00:00.000000Z", "S05", 610, 191],
+       [24, 783, 10.83, "2024-07-01T15:00:00.000000Z", "S05", 611, 188],
+       [24, 784, 9.74, "2024-06-28T17:00:00.000000Z", "S05", 612, 190],
+       [24, 785, 92.8, "2024-06-25T11:00:00.000000Z", "S05", 613, 188],
+       [24, 786, 92.7, "2024-06-21T20:00:00.000000Z", "S05", 614, 192],
+       [24, 787, 41.44, "2024-06-21T16:00:00.000000Z", "S05", 615, 189],
+       [24, 788, 83.38, "2024-06-20T16:00:00.000000Z", "S05", 616, 188],
+       [24, 789, 37.54, "2024-06-10T07:00:00.000000Z", "S05", 617, 189],
+       [24, 790, 76.99, "2024-06-07T08:00:00.000000Z", "S05", 618, 191],
+       [24, 791, 90.79, "2024-06-06T21:00:00.000000Z", "S05", 619, 189],
+       [24, 792, 70.46, "2024-06-06T17:00:00.000000Z", "S05", 620, 192],
+       [24, 793, 38.71, "2024-06-03T19:00:00.000000Z", "S05", 621, 194],
+       [24, 794, 4.0, "2024-05-27T07:00:00.000000Z", "S05", 622, 192],
+       [24, 795, 93.0, "2024-05-27T06:00:00.000000Z", "S05", 613, 194],
+       [24, 796, 61.37, "2024-05-26T11:00:00.000000Z", "S05", 623, 193],
+       [24, 797, 73.51, "2024-05-22T11:00:00.000000Z", "S05", 624, 194],
+       [24, 798, 75.72, "2024-05-15T09:00:00.000000Z", "S05", 625, 190],
+       [24, 799, 86.18, "2024-05-14T08:00:00.000000Z", "S05", 626, 188],
+       [25, 800, 18.0, "2024-07-02T11:00:00.000000Z", "S02", 627, 195],
+       [25, 801, 76.16, "2024-06-27T18:00:00.000000Z", "S02", 628, 196],
+       [25, 802, 79.89, "2024-06-23T13:00:00.000000Z", "S02", 629, 197],
+       [25, 803, 86.83, "2024-06-20T20:00:00.000000Z", "S02", 630, 198],
+       [25, 804, 30.23, "2024-06-15T21:00:00.000000Z", "S02", 631, 199],
+       [25, 805, 66.35, "2024-06-15T19:00:00.000000Z", "S02", 632, 198],
+       [25, 806, 42.49, "2024-06-07T12:00:00.000000Z", "S02", 633, 200],
+       [25, 807, 97.84, "2024-06-07T11:00:00.000000Z", "S02", 627, 200],
+       [25, 808, 22.58, "2024-06-06T15:00:00.000000Z", "S02", 627, 201],
+       [25, 809, 74.99, "2024-06-03T15:00:00.000000Z", "S02", 634, 198],
+       [25, 810, 67.19, "2024-06-01T17:00:00.000000Z", "S02", 635, 197],
+       [25, 811, 45.0, "2024-06-01T09:00:00.000000Z", "S02", 636, 197],
+       [25, 812, 70.34, "2024-05-31T19:00:00.000000Z", "S02", 637, 201],
+       [25, 813, 9.8, "2024-05-30T20:00:00.000000Z", "S02", 638, 199],
+       [25, 814, 79.99, "2024-05-30T14:00:00.000000Z", "S02", 639, 202],
+       [25, 815, 68.58, "2024-05-30T08:00:00.000000Z", "S02", 640, 202],
+       [25, 816, 18.33, "2024-05-29T17:00:00.000000Z", "S02", 641, 199],
+       [25, 817, 3.12, "2024-05-29T13:00:00.000000Z", "S02", 642, 196],
+       [25, 818, 4.51, "2024-05-28T14:00:00.000000Z", "S02", 643, 195],
+       [25, 819, 36.24, "2024-05-26T13:00:00.000000Z", "S02", 644, 202],
+       [25, 820, 19.51, "2024-05-25T18:00:00.000000Z", "S02", 643, 196],
+       [25, 821, 78.7, "2024-05-24T11:00:00.000000Z", "S02", 645, 200],
+       [25, 822, 89.45, "2024-05-20T15:00:00.000000Z", "S02", 630, 201],
+       [25, 823, 40.63, "2024-05-20T07:00:00.000000Z", "S02", 643, 198],
+       [25, 824, 19.0, "2024-05-19T16:00:00.000000Z", "S02", 646, 200],
+       [25, 825, 4.77, "2024-05-19T07:00:00.000000Z", "S02", 647, 199],
+       [25, 826, 78.51, "2024-05-09T12:00:00.000000Z", "S02", 648, 196],
+       [25, 827, 82.45, "2024-05-09T09:00:00.000000Z", "S02", 649, 202],
+       [25, 828, 8.24, "2024-05-07T09:00:00.000000Z", "S02", 650, 202],
+       [25, 829, 88.76, "2024-05-05T18:00:00.000000Z", "S02", 651, 197],
+       [25, 830, 35.28, "2024-04-30T16:00:00.000000Z", "S02", 652, 198],
+       [25, 831, 18.16, "2024-04-27T14:00:00.000000Z", "S02", 653, 196],
+       [26, 832, 10.83, "2024-07-01T15:00:00.000000Z", "S05", 654, 203],
+       [26, 833, 9.74, "2024-06-28T17:00:00.000000Z", "S05", 655, 204],
+       [26, 834, 92.8, "2024-06-25T11:00:00.000000Z", "S05", 656, 203],
+       [26, 835, 92.7, "2024-06-21T20:00:00.000000Z", "S05", 657, 205],
+       [26, 836, 41.44, "2024-06-21T16:00:00.000000Z", "S05", 658, 206],
+       [26, 837, 83.38, "2024-06-20T16:00:00.000000Z", "S05", 659, 203],
+       [26, 838, 37.54, "2024-06-10T07:00:00.000000Z", "S05", 660, 206],
+       [26, 839, 76.99, "2024-06-07T08:00:00.000000Z", "S05", 661, 207],
+       [26, 840, 90.79, "2024-06-06T21:00:00.000000Z", "S05", 662, 206],
+       [26, 841, 70.46, "2024-06-06T17:00:00.000000Z", "S05", 663, 205],
+       [26, 842, 38.71, "2024-06-03T19:00:00.000000Z", "S05", 664, 208],
+       [26, 843, 4.0, "2024-05-27T07:00:00.000000Z", "S05", 665, 205],
+       [26, 844, 93.0, "2024-05-27T06:00:00.000000Z", "S05", 656, 208],
+       [26, 845, 61.37, "2024-05-26T11:00:00.000000Z", "S05", 666, 209],
+       [26, 846, 73.51, "2024-05-22T11:00:00.000000Z", "S05", 667, 208],
+       [26, 847, 75.72, "2024-05-15T09:00:00.000000Z", "S05", 668, 204],
+       [26, 848, 86.18, "2024-05-14T08:00:00.000000Z", "S05", 669, 203],
+       [26, 849, 7.83, "2024-05-08T14:00:00.000000Z", "S05", 670, 206],
+       [26, 850, 66.66, "2024-05-07T19:00:00.000000Z", "S05", 671, 206],
+       [26, 851, 50.76, "2024-05-04T20:00:00.000000Z", "S05", 672, 203],
+       [26, 852, 40.75, "2024-04-30T16:00:00.000000Z", "S05", 673, 210],
+       [26, 853, 70.06, "2024-04-29T12:00:00.000000Z", "S05", 674, 210],
+       [26, 854, 83.12, "2024-04-26T17:00:00.000000Z", "S05", 675, 203],
+       [26, 855, 24.35, "2024-04-25T18:00:00.000000Z", "S05", 676, 205],
+       [26, 856, 9.56, "2024-04-25T14:00:00.000000Z", "S05", 672, 208],
+       [26, 857, 47.48, "2024-04-20T18:00:00.000000Z", "S05", 677, 208],
+       [26, 858, 83.45, "2024-04-20T15:00:00.000000Z", "S05", 678, 206],
+       [26, 859, 53.71, "2024-04-19T17:00:00.000000Z", "S05", 672, 210],
+       [26, 860, 90.55, "2024-04-16T09:00:00.000000Z", "S05", 679, 209],
+       [26, 861, 26.71, "2024-04-14T20:00:00.000000Z", "S05", 676, 207],
+       [26, 862, 21.18, "2024-04-14T19:00:00.000000Z", "S05", 680, 203],
+       [26, 863, 98.22, "2024-04-12T21:00:00.000000Z", "S05", 681, 204],
+       [27, 864, 3.06, "2024-07-03T21:00:00.000000Z", "S04", 682, 211],
+       [27, 865, 34.19, "2024-06-30T06:00:00.000000Z", "S04", 683, 212],
+       [27, 866, 81.39, "2024-06-28T20:00:00.000000Z", "S04", 684, 213],
+       [27, 867, 81.11, "2024-06-28T09:00:00.000000Z", "S04", 685, 214],
+       [27, 868, 77.54, "2024-06-26T06:00:00.000000Z", "S04", 686, 211],
+       [27, 869, 7.56, "2024-06-22T18:00:00.000000Z", "S04", 687, 214],
+       [27, 870, 12.25, "2024-06-22T08:00:00.000000Z", "S04", 688, 214],
+       [27, 871, 99.05, "2024-06-20T20:00:00.000000Z", "S04", 689, 215],
+       [27, 872, 57.73, "2024-06-19T15:00:00.000000Z", "S04", 690, 211],
+       [27, 873, 68.95, "2024-06-18T19:00:00.000000Z", "S04", 691, 213],
+       [27, 874, 53.54, "2024-06-15T15:00:00.000000Z", "S04", 692, 213],
+       [27, 875, 22.79, "2024-06-15T15:00:00.000000Z", "S04", 693, 212],
+       [27, 876, 61.52, "2024-06-13T15:00:00.000000Z", "S04", 694, 215],
+       [27, 877, 94.38, "2024-06-11T08:00:00.000000Z", "S04", 695, 216],
+       [27, 878, 89.5, "2024-06-09T15:00:00.000000Z", "S04", 696, 212],
+       [27, 879, 35.35, "2024-06-07T14:00:00.000000Z", "S04", 695, 212],
+       [27, 880, 38.2, "2024-06-03T15:00:00.000000Z", "S04", 697, 216],
+       [27, 881, 89.82, "2024-06-03T07:00:00.000000Z", "S04", 698, 217],
+       [27, 882, 15.74, "2024-05-22T12:00:00.000000Z", "S04", 683, 213],
+       [27, 883, 16.89, "2024-05-17T17:00:00.000000Z", "S04", 699, 213],
+       [27, 884, 37.97, "2024-05-12T14:00:00.000000Z", "S04", 700, 214],
+       [27, 885, 37.15, "2024-05-11T07:00:00.000000Z", "S04", 696, 218],
+       [27, 886, 3.77, "2024-05-08T16:00:00.000000Z", "S04", 701, 212],
+       [27, 887, 33.37, "2024-05-05T10:00:00.000000Z", "S04", 694, 216],
+       [27, 888, 78.36, "2024-05-04T14:00:00.000000Z", "S04", 702, 214],
+       [27, 889, 71.11, "2024-05-04T07:00:00.000000Z", "S04", 703, 212],
+       [27, 890, 94.14, "2024-04-30T10:00:00.000000Z", "S04", 688, 216],
+       [27, 891, 35.26, "2024-04-27T16:00:00.000000Z", "S04", 704, 216],
+       [27, 892, 31.86, "2024-04-26T20:00:00.000000Z", "S04", 699, 211],
+       [27, 893, 66.69, "2024-04-25T17:00:00.000000Z", "S04", 699, 212],
+       [27, 894, 66.58, "2024-04-24T17:00:00.000000Z", "S04", 705, 211],
+       [27, 895, 77.21, "2024-04-19T15:00:00.000000Z", "S04", 706, 215],
+       [28, 896, 74.9, "2024-06-19T14:00:00.000000Z", "S01", 707, 219],
+       [28, 897, 22.43, "2024-06-18T11:00:00.000000Z", "S01", 708, 220],
+       [28, 898, 3.5, "2024-06-17T11:00:00.000000Z", "S01", 709, 219],
+       [28, 899, 30.94, "2024-06-11T09:00:00.000000Z", "S01", 710, 221],
+       [28, 900, 52.72, "2024-06-11T09:00:00.000000Z", "S01", 711, 222],
+       [28, 901, 88.78, "2024-06-09T20:00:00.000000Z", "S01", 712, 219],
+       [28, 902, 98.84, "2024-06-05T13:00:00.000000Z", "S01", 711, 223],
+       [28, 903, 50.98, "2024-06-04T07:00:00.000000Z", "S01", 713, 220],
+       [28, 904, 46.19, "2024-05-31T17:00:00.000000Z", "S01", 714, 224],
+       [28, 905, 0.65, "2024-05-29T07:00:00.000000Z", "S01", 715, 225],
+       [28, 906, 48.69, "2024-05-25T20:00:00.000000Z", "S01", 715, 221],
+       [28, 907, 31.28, "2024-05-24T10:00:00.000000Z", "S01", 707, 220],
+       [28, 908, 28.93, "2024-05-22T13:00:00.000000Z", "S01", 716, 226],
+       [28, 909, 2.42, "2024-05-21T10:00:00.000000Z", "S01", 717, 221],
+       [28, 910, 8.18, "2024-05-21T09:00:00.000000Z", "S01", 718, 225],
+       [28, 911, 78.65, "2024-05-15T16:00:00.000000Z", "S01", 710, 219],
+       [28, 912, 46.73, "2024-05-15T14:00:00.000000Z", "S01", 712, 225],
+       [28, 913, 77.44, "2024-05-15T09:00:00.000000Z", "S01", 719, 223],
+       [28, 914, 30.11, "2024-05-08T17:00:00.000000Z", "S01", 720, 220],
+       [28, 915, 12.41, "2024-05-07T20:00:00.000000Z", "S01", 721, 226],
+       [28, 916, 21.88, "2024-05-05T20:00:00.000000Z", "S01", 712, 219],
+       [28, 917, 79.33, "2024-05-02T21:00:00.000000Z", "S01", 722, 222],
+       [28, 918, 22.53, "2024-05-02T14:00:00.000000Z", "S01", 716, 221],
+       [28, 919, 16.67, "2024-04-30T06:00:00.000000Z", "S01", 708, 221],
+       [28, 920, 63.88, "2024-04-27T17:00:00.000000Z", "S01", 723, 219],
+       [28, 921, 59.27, "2024-04-25T19:00:00.000000Z", "S01", 724, 226],
+       [28, 922, 96.94, "2024-04-24T10:00:00.000000Z", "S01", 725, 220],
+       [28, 923, 70.56, "2024-04-21T21:00:00.000000Z", "S01", 726, 222],
+       [28, 924, 12.89, "2024-04-13T20:00:00.000000Z", "S01", 725, 225],
+       [28, 925, 49.5, "2024-04-13T17:00:00.000000Z", "S01", 727, 222],
+       [28, 926, 59.44, "2024-04-12T16:00:00.000000Z", "S01", 726, 224],
+       [28, 927, 43.54, "2024-04-12T14:00:00.000000Z", "S01", 728, 223],
+       [29, 928, 68.33, "2024-07-02T12:00:00.000000Z", "S03", 729, 227],
+       [29, 929, 11.01, "2024-07-02T11:00:00.000000Z", "S03", 730, 228],
+       [29, 930, 54.39, "2024-07-02T07:00:00.000000Z", "S03", 730, 229],
+       [29, 931, 72.97, "2024-06-30T13:00:00.000000Z", "S03", 731, 230],
+       [29, 932, 27.97, "2024-06-29T20:00:00.000000Z", "S03", 732, 229],
+       [29, 933, 29.24, "2024-06-26T12:00:00.000000Z", "S03", 733, 229],
+       [29, 934, 36.22, "2024-06-25T18:00:00.000000Z", "S03", 734, 230],
+       [29, 935, 47.73, "2024-06-24T19:00:00.000000Z", "S03", 735, 231],
+       [29, 936, 8.05, "2024-06-22T19:00:00.000000Z", "S03", 736, 228],
+       [29, 937, 51.35, "2024-06-21T14:00:00.000000Z", "S03", 737, 230],
+       [29, 938, 72.02, "2024-06-20T15:00:00.000000Z", "S03", 738, 232],
+       [29, 939, 74.83, "2024-06-18T07:00:00.000000Z", "S03", 739, 228],
+       [29, 940, 85.49, "2024-06-17T19:00:00.000000Z", "S03", 740, 227],
+       [29, 941, 65.91, "2024-06-13T14:00:00.000000Z", "S03", 735, 227],
+       [29, 942, 12.57, "2024-06-08T10:00:00.000000Z", "S03", 731, 233],
+       [29, 943, 71.35, "2024-06-04T14:00:00.000000Z", "S03", 741, 231],
+       [29, 944, 92.46, "2024-06-04T09:00:00.000000Z", "S03", 742, 232],
+       [29, 945, 3.55, "2024-05-31T11:00:00.000000Z", "S03", 743, 234],
+       [29, 946, 34.18, "2024-05-31T06:00:00.000000Z", "S03", 744, 230],
+       [29, 947, 24.96, "2024-05-30T07:00:00.000000Z", "S03", 745, 228],
+       [29, 948, 3.93, "2024-05-28T16:00:00.000000Z", "S03", 746, 228],
+       [29, 949, 77.14, "2024-05-28T16:00:00.000000Z", "S03", 747, 233],
+       [29, 950, 17.0, "2024-05-27T07:00:00.000000Z", "S03", 744, 227],
+       [29, 951, 44.9, "2024-05-26T16:00:00.000000Z", "S03", 738, 233],
+       [29, 952, 36.57, "2024-05-20T10:00:00.000000Z", "S03", 748, 227],
+       [29, 953, 18.12, "2024-05-19T15:00:00.000000Z", "S03", 733, 234],
+       [29, 954, 24.15, "2024-05-19T12:00:00.000000Z", "S03", 741, 233],
+       [29, 955, 26.33, "2024-05-11T18:00:00.000000Z", "S03", 749, 227],
+       [29, 956, 18.94, "2024-05-10T13:00:00.000000Z", "S03", 750, 229],
+       [29, 957, 80.96, "2024-05-09T21:00:00.000000Z", "S03", 751, 227],
+       [29, 958, 68.04, "2024-05-01T18:00:00.000000Z", "S03", 752, 232],
+       [29, 959, 71.47, "2024-04-29T19:00:00.000000Z", "S03", 753, 231]
+      ]
+     },
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "segment", "signup_at"],
+      "rows": [
+       [0, 0, "retail", "2024-03-04T00:00:00.000000Z"],
+       [0, 1, "retail", "2024-01-08T00:00:00.000000Z"],
+       [0, 2, "retail", "2024-01-29T00:00:00.000000Z"],
+       [0, 3, "student", "2024-02-05T00:00:00.000000Z"],
+       [0, 4, "student", "2024-02-19T00:00:00.000000Z"],
+       [0, 5, "student", "2024-02-05T00:00:00.000000Z"],
+       [0, 6, "business", "2024-01-01T00:00:00.000000Z"],
+       [0, 7, "business", "2024-01-22T00:00:00.000000Z"],
+       [0, 8, "business", "2024-02-05T00:00:00.000000Z"],
+       [0, 9, "student", "2024-01-01T00:00:00.000000Z"],
+       [0, 10, "business", "2024-01-01T00:00:00.000000Z"],
+       [0, 11, "retail", "2024-02-05T00:00:00.000000Z"],
+       [0, 12, "student", "2024-02-12T00:00:00.000000Z"],
+       [0, 13, "retail", "2024-02-12T00:00:00.000000Z"],
+       [0, 14, "retail", "2024-02-19T00:00:00.000000Z"],
+       [0, 15, "retail", "2024-01-01T00:00:00.000000Z"],
+       [0, 16, "business", "2024-02-19T00:00:00.000000Z"],
+       [0, 17, "retail", "2024-01-29T00:00:00.000000Z"],
+       [0, 18, "retail", "2024-03-04T00:00:00.000000Z"],
+       [0, 19, "student", "2024-01-15T00:00:00.000000Z"],
+       [0, 20, "retail", "2024-01-22T00:00:00.000000Z"],
+       [0, 21, "student", "2024-03-18T00:00:00.000000Z"],
+       [0, 22, "retail", "2024-01-22T00:00:00.000000Z"],
+       [0, 23, "student", "2024-02-12T00:00:00.000000Z"],
+       [0, 24, "business", "2024-01-22T00:00:00.000000Z"],
+       [1, 25, "student", "2024-01-22T00:00:00.000000Z"],
+       [1, 26, "retail", "2024-01-15T00:00:00.000000Z"],
+       [1, 27, "retail", "2024-01-22T00:00:00.000000Z"],
+       [1, 28, "business", "2024-01-22T00:00:00.000000Z"],
+       [1, 29, "student", "2024-02-05T00:00:00.000000Z"],
+       [1, 30, "retail", "2024-03-11T00:00:00.000000Z"],
+       [1, 31, "business", "2024-01-01T00:00:00.000000Z"],
+       [1, 32, "retail", "2024-03-04T00:00:00.000000Z"],
+       [1, 33, "student", "2024-02-19T00:00:00.000000Z"],
+       [1, 34, "retail", "2024-02-05T00:00:00.000000Z"],
+       [1, 35, "business", "2024-03-04T00:00:00.000000Z"],
+       [1, 36, "business", "2024-01-22T00:00:00.000000Z"],
+       [1, 37, "student", "2024-01-22T00:00:00.000000Z"],
+       [1, 38, "retail", "2024-02-26T00:00:00.000000Z"],
+       [1, 39, "business", "2024-01-01T00:00:00.000000Z"],
+       [1, 40, "business", "2024-02-05T00:00:00.000000Z"],
+       [1, 41, "retail", "2024-02-12T00:00:00.000000Z"],
+       [1, 42, "student", "2024-02-19T00:00:00.000000Z"],
+       [1, 43, "retail", "2024-02-26T00:00:00.000000Z"],
+       [1, 44, "student", "2024-01-01T00:00:00.000000Z"],
+       [1, 45, "student", "2024-02-05T00:00:00.000000Z"],
+       [1, 46, "student", "2024-01-29T00:00:00.000000Z"],
+       [1, 47, "business", "2024-01-29T00:00:00.000000Z"],
+       [2, 48, "student", "2024-01-22T00:00:00.000000Z"],
+       [2, 49, "business", "2024-01-01T00:00:00.000000Z"],
+       [2, 50, "student", "2024-02-12T00:00:00.000000Z"],
+       [2, 51, "retail", "2024-01-29T00:00:00.000000Z"],
+       [2, 52, "business", "2024-01-01T00:00:00.000000Z"],
+       [2, 53, "retail", "2024-02-26T00:00:00.000000Z"],
+       [2, 54, "student", "2024-01-01T00:00:00.000000Z"],
+       [2, 55, "business", "2024-01-01T00:00:00.000000Z"],
+       [2, 56, "retail", "2024-03-04T00:00:00.000000Z"],
+       [2, 57, "retail", "2024-02-19T00:00:00.000000Z"],
+       [2, 58, "student", "2024-02-05T00:00:00.000000Z"],
+       [2, 59, "student", "2024-01-08T00:00:00.000000Z"],
+       [2, 60, "student", "2024-03-18T00:00:00.000000Z"],
+       [2, 61, "student", "2024-01-22T00:00:00.000000Z"],
+       [2, 62, "business", "2024-01-15T00:00:00.000000Z"],
+       [2, 63, "student", "2024-02-19T00:00:00.000000Z"],
+       [2, 64, "retail", "2024-03-04T00:00:00.000000Z"],
+       [2, 65, "student", "2024-03-11T00:00:00.000000Z"],
+       [2, 66, "student", "2024-02-05T00:00:00.000000Z"],
+       [2, 67, "student", "2024-02-26T00:00:00.000000Z"],
+       [2, 68, "business", "2024-02-05T00:00:00.000000Z"],
+       [3, 69, "retail", "2024-01-29T00:00:00.000000Z"],
+       [3, 70, "retail", "2024-02-26T00:00:00.000000Z"],
+       [3, 71, "retail", "2024-02-19T00:00:00.000000Z"],
+       [3, 72, "student", "2024-01-22T00:00:00.000000Z"],
+       [3, 73, "retail", "2024-01-01T00:00:00.000000Z"],
+       [3, 74, "student", "2024-01-01T00:00:00.000000Z"],
+       [3, 75, "retail", "2024-03-11T00:00:00.000000Z"],
+       [3, 76, "retail", "2024-02-12T00:00:00.000000Z"],
+       [3, 77, "business", "2024-03-18T00:00:00.000000Z"],
+       [3, 78, "student", "2024-03-18T00:00:00.000000Z"],
+       [3, 79, "retail", "2024-01-15T00:00:00.000000Z"],
+       [3, 80, "business", "2024-01-22T00:00:00.000000Z"],
+       [3, 81, "student", "2024-02-05T00:00:00.000000Z"],
+       [3, 82, "business", "2024-03-04T00:00:00.000000Z"],
+       [3, 83, "retail", "2024-02-05T00:00:00.000000Z"],
+       [3, 84, "student", "2024-01-15T00:00:00.000000Z"],
+       [3, 85, "student", "2024-02-19T00:00:00.000000Z"],
+       [3, 86, "retail", "2024-02-05T00:00:00.000000Z"],
+       [3, 87, "business", "2024-01-22T00:00:00.000000Z"],
+       [3, 88, "business", "2024-02-26T00:00:00.000000Z"],
+       [3, 89, "student", "2024-01-08T00:00:00.000000Z"],
+       [3, 90, "student", "2024-02-05T00:00:00.000000Z"],
+       [3, 91, "business", "2024-01-01T00:00:00.000000Z"],
+       [3, 92, "student", "2024-02-05T00:00:00.000000Z"],
+       [3, 93, "student", "2024-01-01T00:00:00.000000Z"],
+       [3, 94, "business", "2024-02-19T00:00:00.000000Z"],
+       [3, 95, "retail", "2024-01-22T00:00:00.000000Z"],
+       [4, 96, "business", "2024-01-01T00:00:00.000000Z"],
+       [4, 97, "retail", "2024-02-26T00:00:00.000000Z"],
+       [4, 98, "retail", "2024-03-04T00:00:00.000000Z"],
+       [4, 99, "retail", "2024-02-12T00:00:00.000000Z"],
+       [4, 100, "business", "2024-01-22T00:00:00.000000Z"],
+       [4, 101, "business", "2024-03-18T00:00:00.000000Z"],
+       [4, 102, "retail", "2024-01-22T00:00:00.000000Z"],
+       [4, 103, "retail", "2024-02-05T00:00:00.000000Z"],
+       [4, 104, "student", "2024-02-05T00:00:00.000000Z"],
+       [4, 105, "retail", "2024-01-01T00:00:00.000000Z"],
+       [4, 106, "student", "2024-01-22T00:00:00.000000Z"],
+       [4, 107, "retail", "2024-02-19T00:00:00.000000Z"],
+       [4, 108, "student", "2024-02-26T00:00:00.000000Z"],
+       [4, 109, "retail", "2024-01-15T00:00:00.000000Z"],
+       [4, 110, "business", "2024-01-22T00:00:00.000000Z"],
+       [4, 111, "student", "2024-02-19T00:00:00.000000Z"],
+       [4, 112, "student", "2024-01-15T00:00:00.000000Z"],
+       [4, 113, "retail", "2024-01-22T00:00:00.000000Z"],
+       [4, 114, "business", "2024-01-22T00:00:00.000000Z"],
+       [4, 115, "retail", "2024-01-29T00:00:00.000000Z"],
+       [4, 116, "business", "2024-01-15T00:00:00.000000Z"],
+       [4, 117, "retail", "2024-02-26T00:00:00.000000Z"],
+       [4, 118, "business", "2024-02-26T00:00:00.000000Z"],
+       [4, 119, "retail", "2024-03-04T00:00:00.000000Z"],
+       [4, 120, "retail", "2024-03-04T00:00:00.000000Z"],
+       [5, 121, "retail", "2024-03-04T00:00:00.000000Z"],
+       [5, 122, "retail", "2024-02-19T00:00:00.000000Z"],
+       [5, 123, "retail", "2024-02-26T00:00:00.000000Z"],
+       [5, 124, "student", "2024-01-22T00:00:00.000000Z"],
+       [5, 125, "student", "2024-02-05T00:00:00.000000Z"],
+       [5, 126, "student", "2024-01-08T00:00:00.000000Z"],
+       [5, 127, "student", "2024-03-18T00:00:00.000000Z"],
+       [5, 128, "student", "2024-01-22T00:00:00.000000Z"],
+       [5, 129, "business", "2024-01-01T00:00:00.000000Z"],
+       [5, 130, "business", "2024-01-15T00:00:00.000000Z"],
+       [5, 131, "student", "2024-02-19T00:00:00.000000Z"],
+       [5, 132, "retail", "2024-03-04T00:00:00.000000Z"],
+       [5, 133, "student", "2024-03-11T00:00:00.000000Z"],
+       [5, 134, "student", "2024-02-05T00:00:00.000000Z"],
+       [5, 135, "student", "2024-02-26T00:00:00.000000Z"],
+       [5, 136, "business", "2024-02-05T00:00:00.000000Z"],
+       [5, 137, "retail", "2024-03-11T00:00:00.000000Z"],
+       [5, 138, "student", "2024-02-12T00:00:00.000000Z"],
+       [5, 139, "retail", "2024-02-12T00:00:00.000000Z"],
+       [5, 140, "business", "2024-03-04T00:00:00.000000Z"],
+       [5, 141, "student", "2024-02-26T00:00:00.000000Z"],
+       [5, 142, "student", "2024-01-29T00:00:00.000000Z"],
+       [6, 143, "business", "2024-01-22T00:00:00.000000Z"],
+       [6, 144, "student", "2024-02-05T00:00:00.000000Z"],
+       [6, 145, "business", "2024-03-04T00:00:00.000000Z"],
+       [6, 146, "retail", "2024-02-05T00:00:00.000000Z"],
+       [6, 147, "business", "2024-03-18T00:00:00.000000Z"],
+       [6, 148, "student", "2024-01-15T00:00:00.000000Z"],
+       [6, 149, "student", "2024-02-19T00:00:00.000000Z"],
+       [6, 150, "retail", "2024-02-05T00:00:00.000000Z"],
+       [6, 151, "business", "2024-01-22T00:00:00.000000Z"],
+       [6, 152, "business", "2024-02-26T00:00:00.000000Z"],
+       [6, 153, "student", "2024-01-08T00:00:00.000000Z"],
+       [6, 154, "student", "2024-02-05T00:00:00.000000Z"],
+       [6, 155, "business", "2024-01-01T00:00:00.000000Z"],
+       [6, 156, "retail", "2024-01-15T00:00:00.000000Z"],
+       [6, 157, "student", "2024-02-05T00:00:00.000000Z"],
+       [6, 158, "student", "2024-01-01T00:00:00.000000Z"],
+       [6, 159, "business", "2024-02-19T00:00:00.000000Z"],
+       [6, 160, "retail", "2024-01-22T00:00:00.000000Z"],
+       [6, 161, "business", "2024-01-29T00:00:00.000000Z"],
+       [6, 162, "retail", "2024-03-04T00:00:00.000000Z"],
+       [6, 163, "retail", "2024-03-04T00:00:00.000000Z"],
+       [6, 164, "retail", "2024-02-26T00:00:00.000000Z"],
+       [6, 165, "student", "2024-01-01T00:00:00.000000Z"],
+       [6, 166, "retail", "2024-03-11T00:00:00.000000Z"],
+       [6, 167, "retail", "2024-01-01T00:00:00.000000Z"],
+       [7, 168, "retail", "2024-01-01T00:00:00.000000Z"],
+       [7, 169, "retail", "2024-03-04T00:00:00.000000Z"],
+       [7, 170, "retail", "2024-02-05T00:00:00.000000Z"],
+       [7, 171, "business", "2024-02-19T00:00:00.000000Z"],
+       [7, 172, "retail", "2024-01-29T00:00:00.000000Z"],
+       [7, 173, "student", "2024-02-19T00:00:00.000000Z"],
+       [7, 174, "retail", "2024-03-04T00:00:00.000000Z"],
+       [7, 175, "student", "2024-01-15T00:00:00.000000Z"],
+       [7, 176, "student", "2024-02-05T00:00:00.000000Z"],
+       [7, 177, "retail", "2024-01-22T00:00:00.000000Z"],
+       [7, 178, "student", "2024-03-18T00:00:00.000000Z"],
+       [7, 179, "retail", "2024-01-22T00:00:00.000000Z"],
+       [7, 180, "student", "2024-02-12T00:00:00.000000Z"],
+       [7, 181, "business", "2024-01-22T00:00:00.000000Z"],
+       [7, 182, "student", "2024-01-01T00:00:00.000000Z"],
+       [7, 183, "student", "2024-02-26T00:00:00.000000Z"],
+       [7, 184, "business", "2024-03-18T00:00:00.000000Z"],
+       [7, 185, "student", "2024-02-19T00:00:00.000000Z"],
+       [7, 186, "retail", "2024-01-08T00:00:00.000000Z"],
+       [7, 187, "business", "2024-01-15T00:00:00.000000Z"],
+       [7, 188, "retail", "2024-01-15T00:00:00.000000Z"],
+       [7, 189, "student", "2024-03-11T00:00:00.000000Z"],
+       [7, 190, "business", "2024-01-01T00:00:00.000000Z"],
+       [7, 191, "business", "2024-01-01T00:00:00.000000Z"],
+       [7, 192, "student", "2024-01-29T00:00:00.000000Z"],
+       [7, 193, "business", "2024-01-15T00:00:00.000000Z"],
+       [7, 194, "retail", "2024-03-04T00:00:00.000000Z"],
+       [8, 195, "student", "2024-01-22T00:00:00.000000Z"],
+       [8, 196, "retail", "2024-02-19T00:00:00.000000Z"],
+       [8, 197, "student", "2024-02-26T00:00:00.000000Z"],
+       [8, 198, "retail", "2024-01-15T00:00:00.000000Z"],
+       [8, 199, "business", "2024-01-22T00:00:00.000000Z"],
+       [8, 200, "student", "2024-02-05T00:00:00.000000Z"],
+       [8, 201, "student", "2024-02-19T00:00:00.000000Z"],
+       [8, 202, "student", "2024-01-15T00:00:00.000000Z"],
+       [8, 203, "retail", "2024-01-22T00:00:00.000000Z"],
+       [8, 204, "business", "2024-01-01T00:00:00.000000Z"],
+       [8, 205, "business", "2024-01-22T00:00:00.000000Z"],
+       [8, 206, "retail", "2024-01-29T00:00:00.000000Z"],
+       [8, 207, "business", "2024-01-15T00:00:00.000000Z"],
+       [8, 208, "retail", "2024-02-26T00:00:00.000000Z"],
+       [8, 209, "business", "2024-02-26T00:00:00.000000Z"],
+       [8, 210, "business", "2024-03-18T00:00:00.000000Z"],
+       [8, 211, "retail", "2024-03-04T00:00:00.000000Z"],
+       [8, 212, "retail", "2024-03-04T00:00:00.000000Z"],
+       [8, 213, "retail", "2024-03-04T00:00:00.000000Z"],
+       [8, 214, "retail", "2024-01-22T00:00:00.000000Z"],
+       [8, 215, "business", "2024-01-01T00:00:00.000000Z"],
+       [8, 216, "business", "2024-01-29T00:00:00.000000Z"],
+       [8, 217, "retail", "2024-03-04T00:00:00.000000Z"],
+       [8, 218, "business", "2024-03-04T00:00:00.000000Z"],
+       [8, 219, "retail", "2024-02-05T00:00:00.000000Z"],
+       [8, 220, "retail", "2024-01-29T00:00:00.000000Z"],
+       [8, 221, "student", "2024-02-05T00:00:00.000000Z"],
+       [8, 222, "student", "2024-01-08T00:00:00.000000Z"],
+       [9, 223, "student", "2024-02-19T00:00:00.000000Z"],
+       [9, 224, "business", "2024-03-04T00:00:00.000000Z"],
+       [9, 225, "business", "2024-01-22T00:00:00.000000Z"],
+       [9, 226, "student", "2024-01-22T00:00:00.000000Z"],
+       [9, 227, "retail", "2024-02-26T00:00:00.000000Z"],
+       [9, 228, "business", "2024-01-22T00:00:00.000000Z"],
+       [9, 229, "retail", "2024-03-11T00:00:00.000000Z"],
+       [9, 230, "business", "2024-01-01T00:00:00.000000Z"],
+       [9, 231, "business", "2024-02-05T00:00:00.000000Z"],
+       [9, 232, "student", "2024-01-22T00:00:00.000000Z"],
+       [9, 233, "business", "2024-01-01T00:00:00.000000Z"],
+       [9, 234, "retail", "2024-01-15T00:00:00.000000Z"],
+       [9, 235, "retail", "2024-02-12T00:00:00.000000Z"],
+       [9, 236, "student", "2024-02-19T00:00:00.000000Z"],
+       [9, 237, "retail", "2024-01-22T00:00:00.000000Z"],
+       [9, 238, "retail", "2024-02-26T00:00:00.000000Z"],
+       [9, 239, "student", "2024-01-01T00:00:00.000000Z"],
+       [9, 240, "student", "2024-02-05T00:00:00.000000Z"],
+       [9, 241, "student", "2024-01-29T00:00:00.000000Z"],
+       [9, 242, "business", "2024-01-29T00:00:00.000000Z"],
+       [9, 243, "student", "2024-02-26T00:00:00.000000Z"],
+       [9, 244, "student", "2024-01-08T00:00:00.000000Z"],
+       [9, 245, "student", "2024-02-12T00:00:00.000000Z"],
+       [9, 246, "retail", "2024-01-29T00:00:00.000000Z"],
+       [9, 247, "business", "2024-02-19T00:00:00.000000Z"],
+       [9, 248, "student", "2024-01-15T00:00:00.000000Z"],
+       [9, 249, "retail", "2024-01-08T00:00:00.000000Z"],
+       [10, 250, "retail", "2024-01-22T00:00:00.000000Z"],
+       [10, 251, "retail", "2024-02-26T00:00:00.000000Z"],
+       [10, 252, "student", "2024-01-01T00:00:00.000000Z"],
+       [10, 253, "student", "2024-02-05T00:00:00.000000Z"],
+       [10, 254, "student", "2024-01-29T00:00:00.000000Z"],
+       [10, 255, "business", "2024-01-29T00:00:00.000000Z"],
+       [10, 256, "business", "2024-01-01T00:00:00.000000Z"],
+       [10, 257, "student", "2024-02-26T00:00:00.000000Z"],
+       [10, 258, "student", "2024-01-08T00:00:00.000000Z"],
+       [10, 259, "student", "2024-02-12T00:00:00.000000Z"],
+       [10, 260, "retail", "2024-01-29T00:00:00.000000Z"],
+       [10, 261, "business", "2024-02-19T00:00:00.000000Z"],
+       [10, 262, "student", "2024-01-15T00:00:00.000000Z"],
+       [10, 263, "retail", "2024-01-08T00:00:00.000000Z"],
+       [10, 264, "student", "2024-02-19T00:00:00.000000Z"],
+       [10, 265, "business", "2024-02-19T00:00:00.000000Z"],
+       [10, 266, "student", "2024-01-22T00:00:00.000000Z"],
+       [10, 267, "retail", "2024-01-15T00:00:00.000000Z"],
+       [10, 268, "retail", "2024-03-04T00:00:00.000000Z"],
+       [10, 269, "business", "2024-02-05T00:00:00.000000Z"],
+       [10, 270, "retail", "2024-02-26T00:00:00.000000Z"],
+       [10, 271, "retail", "2024-03-04T00:00:00.000000Z"],
+       [10, 272, "retail", "2024-02-05T00:00:00.000000Z"],
+       [10, 273, "business", "2024-01-22T00:00:00.000000Z"],
+       [11, 274, "retail", "2024-01-29T00:00:00.000000Z"],
+       [11, 275, "business", "2024-01-15T00:00:00.000000Z"],
+       [11, 276, "retail", "2024-02-26T00:00:00.000000Z"],
+       [11, 277, "retail", "2024-01-22T00:00:00.000000Z"],
+       [11, 278, "business", "2024-02-26T00:00:00.000000Z"],
+       [11, 279, "business", "2024-03-18T00:00:00.000000Z"],
+       [11, 280, "retail", "2024-03-04T00:00:00.000000Z"],
+       [11, 281, "retail", "2024-03-04T00:00:00.000000Z"],
+       [11, 282, "retail", "2024-03-04T00:00:00.000000Z"],
+       [11, 283, "retail", "2024-01-22T00:00:00.000000Z"],
+       [11, 284, "business", "2024-01-01T00:00:00.000000Z"],
+       [11, 285, "business", "2024-01-29T00:00:00.000000Z"],
+       [11, 286, "retail", "2024-03-04T00:00:00.000000Z"],
+       [11, 287, "business", "2024-03-04T00:00:00.000000Z"],
+       [11, 288, "retail", "2024-02-05T00:00:00.000000Z"],
+       [11, 289, "student", "2024-02-05T00:00:00.000000Z"],
+       [11, 290, "retail", "2024-01-29T00:00:00.000000Z"],
+       [11, 291, "student", "2024-02-05T00:00:00.000000Z"],
+       [11, 292, "student", "2024-01-08T00:00:00.000000Z"],
+       [11, 293, "business", "2024-01-08T00:00:00.000000Z"],
+       [11, 294, "student", "2024-01-01T00:00:00.000000Z"],
+       [11, 295, "student", "2024-02-12T00:00:00.000000Z"],
+       [11, 296, "business", "2024-01-22T00:00:00.000000Z"],
+       [11, 297, "student", "2024-01-15T00:00:00.000000Z"],
+       [11, 298, "retail", "2024-01-01T00:00:00.000000Z"],
+       [11, 299, "business", "2024-01-01T00:00:00.000000Z"],
+       [11, 300, "business", "2024-01-22T00:00:00.000000Z"],
+       [11, 301, "business", "2024-01-22T00:00:00.000000Z"],
+       [11, 302, "retail", "2024-02-26T00:00:00.000000Z"],
+       [12, 303, "student", "2024-02-19T00:00:00.000000Z"],
+       [12, 304, "student", "2024-01-22T00:00:00.000000Z"],
+       [12, 305, "student", "2024-01-22T00:00:00.000000Z"],
+       [12, 306, "retail", "2024-03-04T00:00:00.000000Z"],
+       [12, 307, "business", "2024-01-01T00:00:00.000000Z"],
+       [12, 308, "student", "2024-01-08T00:00:00.000000Z"],
+       [12, 309, "student", "2024-03-11T00:00:00.000000Z"],
+       [12, 310, "student", "2024-03-18T00:00:00.000000Z"],
+       [12, 311, "student", "2024-02-05T00:00:00.000000Z"],
+       [12, 312, "student", "2024-02-26T00:00:00.000000Z"],
+       [12, 313, "business", "2024-02-05T00:00:00.000000Z"],
+       [12, 314, "retail", "2024-03-11T00:00:00.000000Z"],
+       [12, 315, "student", "2024-02-12T00:00:00.000000Z"],
+       [12, 316, "retail", "2024-02-12T00:00:00.000000Z"],
+       [12, 317, "business", "2024-03-04T00:00:00.000000Z"],
+       [12, 318, "student", "2024-02-26T00:00:00.000000Z"],
+       [12, 319, "student", "2024-01-29T00:00:00.000000Z"],
+       [12, 320, "business", "2024-01-01T00:00:00.000000Z"],
+       [12, 321, "business", "2024-01-01T00:00:00.000000Z"],
+       [12, 322, "business", "2024-03-18T00:00:00.000000Z"],
+       [12, 323, "retail", "2024-02-26T00:00:00.000000Z"],
+       [13, 324, "business", "2024-02-26T00:00:00.000000Z"],
+       [13, 325, "student", "2024-01-08T00:00:00.000000Z"],
+       [13, 326, "student", "2024-02-05T00:00:00.000000Z"],
+       [13, 327, "business", "2024-01-01T00:00:00.000000Z"],
+       [13, 328, "retail", "2024-01-15T00:00:00.000000Z"],
+       [13, 329, "student", "2024-02-05T00:00:00.000000Z"],
+       [13, 330, "student", "2024-01-01T00:00:00.000000Z"],
+       [13, 331, "business", "2024-02-19T00:00:00.000000Z"],
+       [13, 332, "retail", "2024-01-22T00:00:00.000000Z"],
+       [13, 333, "business", "2024-01-29T00:00:00.000000Z"],
+       [13, 334, "retail", "2024-03-04T00:00:00.000000Z"],
+       [13, 335, "business", "2024-03-18T00:00:00.000000Z"],
+       [13, 336, "business", "2024-01-22T00:00:00.000000Z"],
+       [13, 337, "retail", "2024-03-04T00:00:00.000000Z"],
+       [13, 338, "retail", "2024-02-26T00:00:00.000000Z"],
+       [13, 339, "student", "2024-01-01T00:00:00.000000Z"],
+       [13, 340, "retail", "2024-03-11T00:00:00.000000Z"],
+       [13, 341, "retail", "2024-01-01T00:00:00.000000Z"],
+       [13, 342, "student", "2024-02-19T00:00:00.000000Z"],
+       [13, 343, "business", "2024-01-15T00:00:00.000000Z"],
+       [13, 344, "student", "2024-01-15T00:00:00.000000Z"],
+       [13, 345, "student", "2024-02-12T00:00:00.000000Z"],
+       [13, 346, "retail", "2024-02-05T00:00:00.000000Z"],
+       [13, 347, "retail", "2024-01-22T00:00:00.000000Z"],
+       [13, 348, "student", "2024-02-26T00:00:00.000000Z"],
+       [14, 349, "retail", "2024-01-22T00:00:00.000000Z"],
+       [14, 350, "student", "2024-03-18T00:00:00.000000Z"],
+       [14, 351, "retail", "2024-03-04T00:00:00.000000Z"],
+       [14, 352, "retail", "2024-01-22T00:00:00.000000Z"],
+       [14, 353, "student", "2024-02-12T00:00:00.000000Z"],
+       [14, 354, "business", "2024-01-22T00:00:00.000000Z"],
+       [14, 355, "student", "2024-01-01T00:00:00.000000Z"],
+       [14, 356, "student", "2024-02-26T00:00:00.000000Z"],
+       [14, 357, "business", "2024-03-18T00:00:00.000000Z"],
+       [14, 358, "student", "2024-02-19T00:00:00.000000Z"],
+       [14, 359, "retail", "2024-01-08T00:00:00.000000Z"],
+       [14, 360, "business", "2024-01-15T00:00:00.000000Z"],
+       [14, 361, "retail", "2024-01-15T00:00:00.000000Z"],
+       [14, 362, "student", "2024-03-11T00:00:00.000000Z"],
+       [14, 363, "business", "2024-01-01T00:00:00.000000Z"],
+       [14, 364, "business", "2024-01-01T00:00:00.000000Z"],
+       [14, 365, "retail", "2024-03-04T00:00:00.000000Z"],
+       [14, 366, "student", "2024-01-29T00:00:00.000000Z"],
+       [14, 367, "business", "2024-01-15T00:00:00.000000Z"],
+       [14, 368, "retail", "2024-03-04T00:00:00.000000Z"],
+       [14, 369, "business", "2024-01-01T00:00:00.000000Z"],
+       [14, 370, "business", "2024-02-05T00:00:00.000000Z"],
+       [14, 371, "retail", "2024-03-11T00:00:00.000000Z"],
+       [14, 372, "business", "2024-02-26T00:00:00.000000Z"],
+       [14, 373, "business", "2024-02-19T00:00:00.000000Z"],
+       [15, 374, "student", "2024-01-01T00:00:00.000000Z"],
+       [15, 375, "retail", "2024-03-11T00:00:00.000000Z"],
+       [15, 376, "retail", "2024-01-01T00:00:00.000000Z"],
+       [15, 377, "business", "2024-03-18T00:00:00.000000Z"],
+       [15, 378, "student", "2024-02-19T00:00:00.000000Z"],
+       [15, 379, "business", "2024-01-15T00:00:00.000000Z"],
+       [15, 380, "student", "2024-01-15T00:00:00.000000Z"],
+       [15, 381, "student", "2024-02-12T00:00:00.000000Z"],
+       [15, 382, "retail", "2024-02-05T00:00:00.000000Z"],
+       [15, 383, "retail", "2024-01-22T00:00:00.000000Z"],
+       [15, 384, "retail", "2024-03-04T00:00:00.000000Z"],
+       [15, 385, "student", "2024-02-26T00:00:00.000000Z"],
+       [15, 386, "student", "2024-02-26T00:00:00.000000Z"],
+       [15, 387, "student", "2024-01-08T00:00:00.000000Z"],
+       [15, 388, "student", "2024-01-01T00:00:00.000000Z"],
+       [15, 389, "retail", "2024-01-22T00:00:00.000000Z"],
+       [15, 390, "business", "2024-01-01T00:00:00.000000Z"],
+       [15, 391, "retail", "2024-02-12T00:00:00.000000Z"],
+       [15, 392, "student", "2024-03-18T00:00:00.000000Z"],
+       [15, 393, "business", "2024-01-22T00:00:00.000000Z"],
+       [15, 394, "retail", "2024-03-04T00:00:00.000000Z"],
+       [15, 395, "student", "2024-02-12T00:00:00.000000Z"],
+       [15, 396, "business", "2024-01-22T00:00:00.000000Z"],
+       [15, 397, "business", "2024-02-26T00:00:00.000000Z"],
+       [16, 398, "student", "2024-02-12T00:00:00.000000Z"],
+       [16, 399, "retail", "2024-01-29T00:00:00.000000Z"],
+       [16, 400, "business", "2024-02-19T00:00:00.000000Z"],
+       [16, 401, "student", "2024-01-01T00:00:00.000000Z"],
+       [16, 402, "student", "2024-01-15T00:00:00.000000Z"],
+       [16, 403, "retail", "2024-01-08T00:00:00.000000Z"],
+       [16, 404, "student", "2024-02-19T00:00:00.000000Z"],
+       [16, 405, "business", "2024-02-19T00:00:00.000000Z"],
+       [16, 406, "student", "2024-01-22T00:00:00.000000Z"],
+       [16, 407, "retail", "2024-01-15T00:00:00.000000Z"],
+       [16, 408, "retail", "2024-03-04T00:00:00.000000Z"],
+       [16, 409, "business", "2024-02-05T00:00:00.000000Z"],
+       [16, 410, "retail", "2024-02-26T00:00:00.000000Z"],
+       [16, 411, "retail", "2024-03-04T00:00:00.000000Z"],
+       [16, 412, "retail", "2024-02-05T00:00:00.000000Z"],
+       [16, 413, "student", "2024-02-26T00:00:00.000000Z"],
+       [16, 414, "business", "2024-01-22T00:00:00.000000Z"],
+       [16, 415, "retail", "2024-03-11T00:00:00.000000Z"],
+       [16, 416, "business", "2024-01-22T00:00:00.000000Z"],
+       [16, 417, "retail", "2024-02-26T00:00:00.000000Z"],
+       [16, 418, "student", "2024-02-19T00:00:00.000000Z"],
+       [16, 419, "business", "2024-01-15T00:00:00.000000Z"],
+       [16, 420, "retail", "2024-01-22T00:00:00.000000Z"],
+       [16, 421, "student", "2024-03-18T00:00:00.000000Z"],
+       [17, 422, "business", "2024-03-04T00:00:00.000000Z"],
+       [17, 423, "retail", "2024-02-05T00:00:00.000000Z"],
+       [17, 424, "student", "2024-02-05T00:00:00.000000Z"],
+       [17, 425, "retail", "2024-01-29T00:00:00.000000Z"],
+       [17, 426, "student", "2024-02-05T00:00:00.000000Z"],
+       [17, 427, "business", "2024-01-01T00:00:00.000000Z"],
+       [17, 428, "student", "2024-01-08T00:00:00.000000Z"],
+       [17, 429, "business", "2024-01-08T00:00:00.000000Z"],
+       [17, 430, "student", "2024-01-01T00:00:00.000000Z"],
+       [17, 431, "student", "2024-02-12T00:00:00.000000Z"],
+       [17, 432, "business", "2024-01-22T00:00:00.000000Z"],
+       [17, 433, "student", "2024-01-15T00:00:00.000000Z"],
+       [17, 434, "retail", "2024-01-01T00:00:00.000000Z"],
+       [17, 435, "retail", "2024-01-29T00:00:00.000000Z"],
+       [17, 436, "business", "2024-01-01T00:00:00.000000Z"],
+       [17, 437, "business", "2024-01-22T00:00:00.000000Z"],
+       [17, 438, "business", "2024-01-22T00:00:00.000000Z"],
+       [17, 439, "retail", "2024-02-26T00:00:00.000000Z"],
+       [17, 440, "business", "2024-02-26T00:00:00.000000Z"],
+       [17, 441, "student", "2024-02-19T00:00:00.000000Z"],
+       [17, 442, "retail", "2024-03-04T00:00:00.000000Z"],
+       [17, 443, "retail", "2024-03-04T00:00:00.000000Z"],
+       [17, 444, "student", "2024-01-22T00:00:00.000000Z"],
+       [17, 445, "retail", "2024-02-26T00:00:00.000000Z"],
+       [17, 446, "retail", "2024-03-11T00:00:00.000000Z"],
+       [17, 447, "student", "2024-01-29T00:00:00.000000Z"],
+       [17, 448, "student", "2024-02-12T00:00:00.000000Z"],
+       [17, 449, "student", "2024-03-11T00:00:00.000000Z"],
+       [17, 450, "retail", "2024-01-08T00:00:00.000000Z"],
+       [18, 451, "retail", "2024-01-15T00:00:00.000000Z"],
+       [18, 452, "student", "2024-03-11T00:00:00.000000Z"],
+       [18, 453, "business", "2024-01-01T00:00:00.000000Z"],
+       [18, 454, "business", "2024-01-01T00:00:00.000000Z"],
+       [18, 455, "retail", "2024-03-04T00:00:00.000000Z"],
+       [18, 456, "student", "2024-01-29T00:00:00.000000Z"],
+       [18, 457, "student", "2024-02-26T00:00:00.000000Z"],
+       [18, 458, "retail", "2024-01-08T00:00:00.000000Z"],
+       [18, 459, "business", "2024-01-15T00:00:00.000000Z"],
+       [18, 460, "retail", "2024-03-04T00:00:00.000000Z"],
+       [18, 461, "business", "2024-01-01T00:00:00.000000Z"],
+       [18, 462, "business", "2024-02-05T00:00:00.000000Z"],
+       [18, 463, "retail", "2024-03-11T00:00:00.000000Z"],
+       [18, 464, "business", "2024-03-18T00:00:00.000000Z"],
+       [18, 465, "business", "2024-02-26T00:00:00.000000Z"],
+       [18, 466, "business", "2024-02-19T00:00:00.000000Z"],
+       [18, 467, "retail", "2024-02-26T00:00:00.000000Z"],
+       [18, 468, "student", "2024-01-22T00:00:00.000000Z"],
+       [18, 469, "retail", "2024-03-04T00:00:00.000000Z"],
+       [18, 470, "retail", "2024-02-19T00:00:00.000000Z"],
+       [18, 471, "retail", "2024-02-05T00:00:00.000000Z"],
+       [18, 472, "retail", "2024-02-26T00:00:00.000000Z"],
+       [18, 473, "student", "2024-02-12T00:00:00.000000Z"],
+       [18, 474, "business", "2024-03-04T00:00:00.000000Z"],
+       [18, 475, "business", "2024-01-08T00:00:00.000000Z"],
+       [19, 476, "business", "2024-03-04T00:00:00.000000Z"],
+       [19, 477, "student", "2024-02-26T00:00:00.000000Z"],
+       [19, 478, "student", "2024-01-29T00:00:00.000000Z"],
+       [19, 479, "student", "2024-01-08T00:00:00.000000Z"],
+       [19, 480, "business", "2024-01-01T00:00:00.000000Z"],
+       [19, 481, "retail", "2024-02-12T00:00:00.000000Z"],
+       [19, 482, "business", "2024-01-01T00:00:00.000000Z"],
+       [19, 483, "business", "2024-03-18T00:00:00.000000Z"],
+       [19, 484, "student", "2024-02-19T00:00:00.000000Z"],
+       [19, 485, "retail", "2024-02-26T00:00:00.000000Z"],
+       [19, 486, "retail", "2024-03-04T00:00:00.000000Z"],
+       [19, 487, "student", "2024-02-12T00:00:00.000000Z"],
+       [19, 488, "business", "2024-01-22T00:00:00.000000Z"],
+       [19, 489, "retail", "2024-02-05T00:00:00.000000Z"],
+       [19, 490, "retail", "2024-02-19T00:00:00.000000Z"],
+       [19, 491, "retail", "2024-02-26T00:00:00.000000Z"],
+       [19, 492, "student", "2024-01-22T00:00:00.000000Z"],
+       [19, 493, "business", "2024-02-19T00:00:00.000000Z"],
+       [19, 494, "business", "2024-02-05T00:00:00.000000Z"],
+       [19, 495, "student", "2024-01-01T00:00:00.000000Z"],
+       [19, 496, "retail", "2024-01-22T00:00:00.000000Z"],
+       [19, 497, "student", "2024-01-22T00:00:00.000000Z"],
+       [19, 498, "retail", "2024-03-04T00:00:00.000000Z"],
+       [19, 499, "retail", "2024-03-04T00:00:00.000000Z"],
+       [19, 500, "retail", "2024-02-26T00:00:00.000000Z"],
+       [20, 501, "student", "2024-01-01T00:00:00.000000Z"],
+       [20, 502, "retail", "2024-01-22T00:00:00.000000Z"],
+       [20, 503, "business", "2024-01-01T00:00:00.000000Z"],
+       [20, 504, "retail", "2024-03-04T00:00:00.000000Z"],
+       [20, 505, "retail", "2024-02-12T00:00:00.000000Z"],
+       [20, 506, "student", "2024-03-18T00:00:00.000000Z"],
+       [20, 507, "retail", "2024-02-05T00:00:00.000000Z"],
+       [20, 508, "student", "2024-02-19T00:00:00.000000Z"],
+       [20, 509, "retail", "2024-03-11T00:00:00.000000Z"],
+       [20, 510, "business", "2024-01-22T00:00:00.000000Z"],
+       [20, 511, "retail", "2024-03-04T00:00:00.000000Z"],
+       [20, 512, "student", "2024-02-12T00:00:00.000000Z"],
+       [20, 513, "business", "2024-01-22T00:00:00.000000Z"],
+       [20, 514, "business", "2024-02-26T00:00:00.000000Z"],
+       [20, 515, "retail", "2024-01-22T00:00:00.000000Z"],
+       [20, 516, "business", "2024-01-08T00:00:00.000000Z"],
+       [20, 517, "retail", "2024-02-26T00:00:00.000000Z"],
+       [20, 518, "business", "2024-01-15T00:00:00.000000Z"],
+       [20, 519, "student", "2024-02-05T00:00:00.000000Z"],
+       [20, 520, "business", "2024-01-29T00:00:00.000000Z"],
+       [20, 521, "retail", "2024-01-29T00:00:00.000000Z"],
+       [20, 522, "business", "2024-01-22T00:00:00.000000Z"],
+       [20, 523, "student", "2024-01-22T00:00:00.000000Z"],
+       [20, 524, "retail", "2024-01-15T00:00:00.000000Z"],
+       [20, 525, "business", "2024-01-22T00:00:00.000000Z"],
+       [20, 526, "student", "2024-02-26T00:00:00.000000Z"],
+       [21, 527, "retail", "2024-02-26T00:00:00.000000Z"],
+       [21, 528, "retail", "2024-03-04T00:00:00.000000Z"],
+       [21, 529, "student", "2024-02-12T00:00:00.000000Z"],
+       [21, 530, "business", "2024-01-22T00:00:00.000000Z"],
+       [21, 531, "retail", "2024-02-05T00:00:00.000000Z"],
+       [21, 532, "retail", "2024-02-19T00:00:00.000000Z"],
+       [21, 533, "retail", "2024-02-26T00:00:00.000000Z"],
+       [21, 534, "student", "2024-01-22T00:00:00.000000Z"],
+       [21, 535, "business", "2024-01-01T00:00:00.000000Z"],
+       [21, 536, "business", "2024-02-19T00:00:00.000000Z"],
+       [21, 537, "business", "2024-02-05T00:00:00.000000Z"],
+       [21, 538, "student", "2024-01-01T00:00:00.000000Z"],
+       [21, 539, "retail", "2024-01-22T00:00:00.000000Z"],
+       [21, 540, "student", "2024-01-22T00:00:00.000000Z"],
+       [21, 541, "retail", "2024-03-04T00:00:00.000000Z"],
+       [21, 542, "retail", "2024-03-04T00:00:00.000000Z"],
+       [21, 543, "retail", "2024-02-26T00:00:00.000000Z"],
+       [21, 544, "business", "2024-01-29T00:00:00.000000Z"],
+       [21, 545, "business", "2024-01-01T00:00:00.000000Z"],
+       [21, 546, "business", "2024-01-22T00:00:00.000000Z"],
+       [21, 547, "business", "2024-01-08T00:00:00.000000Z"],
+       [21, 548, "retail", "2024-01-15T00:00:00.000000Z"],
+       [21, 549, "business", "2024-02-19T00:00:00.000000Z"],
+       [21, 550, "student", "2024-03-18T00:00:00.000000Z"],
+       [21, 551, "student", "2024-02-05T00:00:00.000000Z"],
+       [21, 552, "student", "2024-02-05T00:00:00.000000Z"],
+       [21, 553, "retail", "2024-01-08T00:00:00.000000Z"],
+       [22, 554, "business", "2024-01-22T00:00:00.000000Z"],
+       [22, 555, "retail", "2024-02-26T00:00:00.000000Z"],
+       [22, 556, "business", "2024-02-26T00:00:00.000000Z"],
+       [22, 557, "student", "2024-02-19T00:00:00.000000Z"],
+       [22, 558, "retail", "2024-03-04T00:00:00.000000Z"],
+       [22, 559, "retail", "2024-03-04T00:00:00.000000Z"],
+       [22, 560, "student", "2024-01-22T00:00:00.000000Z"],
+       [22, 561, "retail", "2024-02-26T00:00:00.000000Z"],
+       [22, 562, "retail", "2024-03-11T00:00:00.000000Z"],
+       [22, 563, "student", "2024-01-29T00:00:00.000000Z"],
+       [22, 564, "student", "2024-02-12T00:00:00.000000Z"],
+       [22, 565, "student", "2024-01-01T00:00:00.000000Z"],
+       [22, 566, "student", "2024-03-11T00:00:00.000000Z"],
+       [22, 567, "retail", "2024-01-08T00:00:00.000000Z"],
+       [22, 568, "business", "2024-03-18T00:00:00.000000Z"],
+       [22, 569, "student", "2024-02-12T00:00:00.000000Z"],
+       [22, 570, "retail", "2024-02-05T00:00:00.000000Z"],
+       [22, 571, "retail", "2024-02-05T00:00:00.000000Z"],
+       [22, 572, "business", "2024-01-22T00:00:00.000000Z"],
+       [22, 573, "retail", "2024-01-01T00:00:00.000000Z"],
+       [23, 574, "retail", "2024-03-04T00:00:00.000000Z"],
+       [23, 575, "business", "2024-02-05T00:00:00.000000Z"],
+       [23, 576, "student", "2024-02-12T00:00:00.000000Z"],
+       [23, 577, "retail", "2024-02-26T00:00:00.000000Z"],
+       [23, 578, "retail", "2024-03-04T00:00:00.000000Z"],
+       [23, 579, "retail", "2024-02-05T00:00:00.000000Z"],
+       [23, 580, "student", "2024-02-26T00:00:00.000000Z"],
+       [23, 581, "business", "2024-01-22T00:00:00.000000Z"],
+       [23, 582, "retail", "2024-01-15T00:00:00.000000Z"],
+       [23, 583, "retail", "2024-03-11T00:00:00.000000Z"],
+       [23, 584, "business", "2024-01-22T00:00:00.000000Z"],
+       [23, 585, "retail", "2024-02-26T00:00:00.000000Z"],
+       [23, 586, "student", "2024-02-19T00:00:00.000000Z"],
+       [23, 587, "business", "2024-01-15T00:00:00.000000Z"],
+       [23, 588, "retail", "2024-01-22T00:00:00.000000Z"],
+       [23, 589, "student", "2024-03-18T00:00:00.000000Z"],
+       [23, 590, "retail", "2024-02-05T00:00:00.000000Z"],
+       [23, 591, "business", "2024-02-26T00:00:00.000000Z"],
+       [23, 592, "retail", "2024-01-29T00:00:00.000000Z"],
+       [23, 593, "business", "2024-01-22T00:00:00.000000Z"],
+       [23, 594, "student", "2024-01-01T00:00:00.000000Z"],
+       [23, 595, "student", "2024-02-26T00:00:00.000000Z"],
+       [23, 596, "business", "2024-01-01T00:00:00.000000Z"],
+       [23, 597, "retail", "2024-01-08T00:00:00.000000Z"],
+       [24, 598, "retail", "2024-03-04T00:00:00.000000Z"],
+       [24, 599, "business", "2024-01-01T00:00:00.000000Z"],
+       [24, 600, "business", "2024-02-05T00:00:00.000000Z"],
+       [24, 601, "retail", "2024-03-11T00:00:00.000000Z"],
+       [24, 602, "student", "2024-01-29T00:00:00.000000Z"],
+       [24, 603, "retail", "2024-03-04T00:00:00.000000Z"],
+       [24, 604, "business", "2024-01-01T00:00:00.000000Z"],
+       [24, 605, "business", "2024-03-18T00:00:00.000000Z"],
+       [24, 606, "business", "2024-02-26T00:00:00.000000Z"],
+       [24, 607, "business", "2024-02-19T00:00:00.000000Z"],
+       [24, 608, "business", "2024-01-01T00:00:00.000000Z"],
+       [24, 609, "retail", "2024-02-26T00:00:00.000000Z"],
+       [24, 610, "student", "2024-01-22T00:00:00.000000Z"],
+       [24, 611, "retail", "2024-03-04T00:00:00.000000Z"],
+       [24, 612, "retail", "2024-02-19T00:00:00.000000Z"],
+       [24, 613, "retail", "2024-02-05T00:00:00.000000Z"],
+       [24, 614, "retail", "2024-02-26T00:00:00.000000Z"],
+       [24, 615, "student", "2024-02-12T00:00:00.000000Z"],
+       [24, 616, "student", "2024-02-26T00:00:00.000000Z"],
+       [24, 617, "business", "2024-03-04T00:00:00.000000Z"],
+       [24, 618, "business", "2024-01-08T00:00:00.000000Z"],
+       [24, 619, "retail", "2024-01-22T00:00:00.000000Z"],
+       [24, 620, "student", "2024-01-08T00:00:00.000000Z"],
+       [24, 621, "student", "2024-02-05T00:00:00.000000Z"],
+       [24, 622, "student", "2024-02-19T00:00:00.000000Z"],
+       [24, 623, "business", "2024-01-22T00:00:00.000000Z"],
+       [24, 624, "retail", "2024-01-01T00:00:00.000000Z"],
+       [24, 625, "student", "2024-02-26T00:00:00.000000Z"],
+       [24, 626, "student", "2024-02-19T00:00:00.000000Z"],
+       [25, 627, "student", "2024-02-12T00:00:00.000000Z"],
+       [25, 628, "business", "2024-01-22T00:00:00.000000Z"],
+       [25, 629, "business", "2024-02-26T00:00:00.000000Z"],
+       [25, 630, "retail", "2024-01-22T00:00:00.000000Z"],
+       [25, 631, "business", "2024-01-08T00:00:00.000000Z"],
+       [25, 632, "retail", "2024-02-26T00:00:00.000000Z"],
+       [25, 633, "business", "2024-01-15T00:00:00.000000Z"],
+       [25, 634, "student", "2024-03-18T00:00:00.000000Z"],
+       [25, 635, "student", "2024-02-05T00:00:00.000000Z"],
+       [25, 636, "retail", "2024-03-11T00:00:00.000000Z"],
+       [25, 637, "business", "2024-01-29T00:00:00.000000Z"],
+       [25, 638, "student", "2024-02-19T00:00:00.000000Z"],
+       [25, 639, "retail", "2024-01-29T00:00:00.000000Z"],
+       [25, 640, "business", "2024-01-22T00:00:00.000000Z"],
+       [25, 641, "student", "2024-01-22T00:00:00.000000Z"],
+       [25, 642, "retail", "2024-01-15T00:00:00.000000Z"],
+       [25, 643, "business", "2024-01-22T00:00:00.000000Z"],
+       [25, 644, "student", "2024-02-26T00:00:00.000000Z"],
+       [25, 645, "retail", "2024-03-04T00:00:00.000000Z"],
+       [25, 646, "retail", "2024-01-01T00:00:00.000000Z"],
+       [25, 647, "business", "2024-03-04T00:00:00.000000Z"],
+       [25, 648, "retail", "2024-02-26T00:00:00.000000Z"],
+       [25, 649, "retail", "2024-02-19T00:00:00.000000Z"],
+       [25, 650, "retail", "2024-02-05T00:00:00.000000Z"],
+       [25, 651, "retail", "2024-02-19T00:00:00.000000Z"],
+       [25, 652, "retail", "2024-03-04T00:00:00.000000Z"],
+       [25, 653, "student", "2024-02-05T00:00:00.000000Z"],
+       [26, 654, "retail", "2024-03-04T00:00:00.000000Z"],
+       [26, 655, "retail", "2024-02-19T00:00:00.000000Z"],
+       [26, 656, "retail", "2024-02-05T00:00:00.000000Z"],
+       [26, 657, "retail", "2024-02-26T00:00:00.000000Z"],
+       [26, 658, "student", "2024-02-12T00:00:00.000000Z"],
+       [26, 659, "student", "2024-02-26T00:00:00.000000Z"],
+       [26, 660, "business", "2024-03-04T00:00:00.000000Z"],
+       [26, 661, "business", "2024-01-08T00:00:00.000000Z"],
+       [26, 662, "retail", "2024-01-22T00:00:00.000000Z"],
+       [26, 663, "student", "2024-01-08T00:00:00.000000Z"],
+       [26, 664, "student", "2024-02-05T00:00:00.000000Z"],
+       [26, 665, "student", "2024-02-19T00:00:00.000000Z"],
+       [26, 666, "business", "2024-01-22T00:00:00.000000Z"],
+       [26, 667, "retail", "2024-01-01T00:00:00.000000Z"],
+       [26, 668, "student", "2024-02-26T00:00:00.000000Z"],
+       [26, 669, "student", "2024-02-19T00:00:00.000000Z"],
+       [26, 670, "student", "2024-02-19T00:00:00.000000Z"],
+       [26, 671, "retail", "2024-02-05T00:00:00.000000Z"],
+       [26, 672, "student", "2024-01-01T00:00:00.000000Z"],
+       [26, 673, "student", "2024-01-22T00:00:00.000000Z"],
+       [26, 674, "business", "2024-01-22T00:00:00.000000Z"],
+       [26, 675, "retail", "2024-01-08T00:00:00.000000Z"],
+       [26, 676, "student", "2024-02-12T00:00:00.000000Z"],
+       [26, 677, "business", "2024-01-01T00:00:00.000000Z"],
+       [26, 678, "business", "2024-01-01T00:00:00.000000Z"],
+       [26, 679, "retail", "2024-01-29T00:00:00.000000Z"],
+       [26, 680, "retail", "2024-03-04T00:00:00.000000Z"],
+       [26, 681, "student", "2024-01-22T00:00:00.000000Z"],
+       [27, 682, "business", "2024-02-05T00:00:00.000000Z"],
+       [27, 683, "student", "2024-01-01T00:00:00.000000Z"],
+       [27, 684, "retail", "2024-01-22T00:00:00.000000Z"],
+       [27, 685, "student", "2024-01-22T00:00:00.000000Z"],
+       [27, 686, "retail", "2024-03-04T00:00:00.000000Z"],
+       [27, 687, "retail", "2024-03-04T00:00:00.000000Z"],
+       [27, 688, "retail", "2024-02-26T00:00:00.000000Z"],
+       [27, 689, "business", "2024-01-29T00:00:00.000000Z"],
+       [27, 690, "business", "2024-01-01T00:00:00.000000Z"],
+       [27, 691, "business", "2024-01-22T00:00:00.000000Z"],
+       [27, 692, "business", "2024-01-08T00:00:00.000000Z"],
+       [27, 693, "business", "2024-02-19T00:00:00.000000Z"],
+       [27, 694, "retail", "2024-01-15T00:00:00.000000Z"],
+       [27, 695, "business", "2024-02-19T00:00:00.000000Z"],
+       [27, 696, "student", "2024-03-18T00:00:00.000000Z"],
+       [27, 697, "student", "2024-02-05T00:00:00.000000Z"],
+       [27, 698, "student", "2024-02-12T00:00:00.000000Z"],
+       [27, 699, "student", "2024-02-05T00:00:00.000000Z"],
+       [27, 700, "retail", "2024-01-08T00:00:00.000000Z"],
+       [27, 701, "student", "2024-02-26T00:00:00.000000Z"],
+       [27, 702, "student", "2024-02-26T00:00:00.000000Z"],
+       [27, 703, "student", "2024-02-05T00:00:00.000000Z"],
+       [27, 704, "student", "2024-03-11T00:00:00.000000Z"],
+       [27, 705, "business", "2024-01-22T00:00:00.000000Z"],
+       [27, 706, "business", "2024-01-22T00:00:00.000000Z"],
+       [28, 707, "business", "2024-03-18T00:00:00.000000Z"],
+       [28, 708, "retail", "2024-03-11T00:00:00.000000Z"],
+       [28, 709, "student", "2024-02-12T00:00:00.000000Z"],
+       [28, 710, "retail", "2024-02-05T00:00:00.000000Z"],
+       [28, 711, "retail", "2024-03-04T00:00:00.000000Z"],
+       [28, 712, "student", "2024-01-01T00:00:00.000000Z"],
+       [28, 713, "retail", "2024-02-05T00:00:00.000000Z"],
+       [28, 714, "retail", "2024-03-04T00:00:00.000000Z"],
+       [28, 715, "student", "2024-01-22T00:00:00.000000Z"],
+       [28, 716, "business", "2024-01-22T00:00:00.000000Z"],
+       [28, 717, "retail", "2024-01-08T00:00:00.000000Z"],
+       [28, 718, "retail", "2024-01-01T00:00:00.000000Z"],
+       [28, 719, "retail", "2024-01-22T00:00:00.000000Z"],
+       [28, 720, "business", "2024-01-01T00:00:00.000000Z"],
+       [28, 721, "student", "2024-02-19T00:00:00.000000Z"],
+       [28, 722, "student", "2024-02-05T00:00:00.000000Z"],
+       [28, 723, "student", "2024-03-18T00:00:00.000000Z"],
+       [28, 724, "student", "2024-01-22T00:00:00.000000Z"],
+       [28, 725, "student", "2024-02-26T00:00:00.000000Z"],
+       [28, 726, "student", "2024-02-05T00:00:00.000000Z"],
+       [28, 727, "business", "2024-02-05T00:00:00.000000Z"],
+       [28, 728, "retail", "2024-01-15T00:00:00.000000Z"],
+       [29, 729, "business", "2024-01-15T00:00:00.000000Z"],
+       [29, 730, "retail", "2024-01-22T00:00:00.000000Z"],
+       [29, 731, "retail", "2024-02-05T00:00:00.000000Z"],
+       [29, 732, "student", "2024-03-18T00:00:00.000000Z"],
+       [29, 733, "retail", "2024-02-05T00:00:00.000000Z"],
+       [29, 734, "retail", "2024-02-26T00:00:00.000000Z"],
+       [29, 735, "business", "2024-02-26T00:00:00.000000Z"],
+       [29, 736, "retail", "2024-03-04T00:00:00.000000Z"],
+       [29, 737, "retail", "2024-01-29T00:00:00.000000Z"],
+       [29, 738, "business", "2024-01-22T00:00:00.000000Z"],
+       [29, 739, "student", "2024-01-01T00:00:00.000000Z"],
+       [29, 740, "student", "2024-02-26T00:00:00.000000Z"],
+       [29, 741, "business", "2024-01-01T00:00:00.000000Z"],
+       [29, 742, "retail", "2024-01-08T00:00:00.000000Z"],
+       [29, 743, "retail", "2024-01-08T00:00:00.000000Z"],
+       [29, 744, "retail", "2024-03-04T00:00:00.000000Z"],
+       [29, 745, "student", "2024-01-15T00:00:00.000000Z"],
+       [29, 746, "student", "2024-01-22T00:00:00.000000Z"],
+       [29, 747, "retail", "2024-01-15T00:00:00.000000Z"],
+       [29, 748, "student", "2024-02-05T00:00:00.000000Z"],
+       [29, 749, "business", "2024-02-05T00:00:00.000000Z"],
+       [29, 750, "business", "2024-02-19T00:00:00.000000Z"],
+       [29, 751, "business", "2024-01-29T00:00:00.000000Z"],
+       [29, 752, "student", "2024-01-01T00:00:00.000000Z"],
+       [29, 753, "student", "2024-02-26T00:00:00.000000Z"]
+      ]
+     },
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "category", "price"],
+      "rows": [
+       [0, 0, "garden", 43.39],
+       [0, 1, "garden", 46.14],
+       [0, 2, "garden", 25.94],
+       [0, 3, "kitchen", 5.07],
+       [0, 4, "kitchen", 28.69],
+       [0, 5, "garden", 1.46],
+       [0, 6, "kitchen", 14.61],
+       [0, 7, "kitchen", 45.92],
+       [1, 8, "kitchen", 28.69],
+       [1, 9, "garden", 43.39],
+       [1, 10, "kitchen", 5.07],
+       [1, 11, "garden", 25.94],
+       [1, 12, "garden", 1.46],
+       [1, 13, "kitchen", 45.92],
+       [1, 14, "garden", 46.14],
+       [1, 15, "kitchen", 14.61],
+       [2, 16, "kitchen", 45.92],
+       [2, 17, "garden", 43.39],
+       [2, 18, "kitchen", 28.69],
+       [2, 19, "kitchen", 5.07],
+       [2, 20, "garden", 25.94],
+       [2, 21, "kitchen", 14.61],
+       [2, 22, "garden", 46.14],
+       [2, 23, "garden", 1.46],
+       [3, 24, "kitchen", 5.07],
+       [3, 25, "kitchen", 14.61],
+       [3, 26, "kitchen", 45.92],
+       [3, 27, "garden", 25.94],
+       [3, 28, "kitchen", 28.69],
+       [3, 29, "garden", 46.14],
+       [3, 30, "garden", 43.39],
+       [4, 31, "kitchen", 28.69],
+       [4, 32, "kitchen", 45.92],
+       [4, 33, "garden", 43.39],
+       [4, 34, "garden", 1.46],
+       [4, 35, "kitchen", 5.07],
+       [4, 36, "garden", 25.94],
+       [4, 37, "kitchen", 14.61],
+       [4, 38, "garden", 46.14],
+       [5, 39, "kitchen", 14.61],
+       [5, 40, "kitchen", 28.69],
+       [5, 41, "kitchen", 45.92],
+       [5, 42, "garden", 25.94],
+       [5, 43, "garden", 46.14],
+       [5, 44, "garden", 1.46],
+       [5, 45, "garden", 43.39],
+       [5, 46, "kitchen", 5.07],
+       [6, 47, "garden", 25.94],
+       [6, 48, "kitchen", 28.69],
+       [6, 49, "kitchen", 45.92],
+       [6, 50, "garden", 46.14],
+       [6, 51, "garden", 43.39],
+       [6, 52, "kitchen", 5.07],
+       [6, 53, "garden", 1.46],
+       [7, 54, "garden", 46.14],
+       [7, 55, "kitchen", 28.69],
+       [7, 56, "garden", 1.46],
+       [7, 57, "garden", 43.39],
+       [7, 58, "kitchen", 14.61],
+       [7, 59, "kitchen", 45.92],
+       [7, 60, "garden", 25.94],
+       [7, 61, "kitchen", 5.07],
+       [8, 62, "garden", 25.94],
+       [8, 63, "kitchen", 45.92],
+       [8, 64, "kitchen", 5.07],
+       [8, 65, "kitchen", 14.61],
+       [8, 66, "garden", 1.46],
+       [8, 67, "kitchen", 28.69],
+       [8, 68, "garden", 46.14],
+       [8, 69, "garden", 43.39],
+       [9, 70, "garden", 25.94],
+       [9, 71, "garden", 1.46],
+       [9, 72, "kitchen", 45.92],
+       [9, 73, "garden", 43.39],
+       [9, 74, "garden", 46.14],
+       [9, 75, "kitchen", 14.61],
+       [9, 76, "kitchen", 28.69],
+       [9, 77, "kitchen", 5.07],
+       [10, 78, "garden", 43.39],
+       [10, 79, "kitchen", 5.07],
+       [10, 80, "kitchen", 45.92],
+       [10, 81, "garden", 25.94],
+       [10, 82, "kitchen", 14.61],
+       [10, 83, "garden", 1.46],
+       [10, 84, "garden", 46.14],
+       [10, 85, "kitchen", 28.69],
+       [11, 86, "garden", 25.94],
+       [11, 87, "garden", 1.46],
+       [11, 88, "kitchen", 5.07],
+       [11, 89, "kitchen", 28.69],
+       [11, 90, "garden", 43.39],
+       [11, 91, "garden", 46.14],
+       [11, 92, "kitchen", 14.61],
+       [11, 93, "kitchen", 45.92],
+       [12, 94, "garden", 46.14],
+       [12, 95, "kitchen", 45.92],
+       [12, 96, "kitchen", 5.07],
+       [12, 97, "garden", 43.39],
+       [12, 98, "kitchen", 28.69],
+       [12, 99, "kitchen", 14.61],
+       [12, 100, "garden", 1.46],
+       [12, 101, "garden", 25.94],
+       [13, 102, "kitchen", 45.92],
+       [13, 103, "kitchen", 28.69],
+       [13, 104, "garden", 25.94],
+       [13, 105, "garden", 46.14],
+       [13, 106, "garden", 43.39],
+       [13, 107, "kitchen", 5.07],
+       [13, 108, "garden", 1.46],
+       [13, 109, "kitchen", 14.61],
+       [14, 110, "garden", 46.14],
+       [14, 111, "kitchen", 28.69],
+       [14, 112, "garden", 43.39],
+       [14, 113, "kitchen", 14.61],
+       [14, 114, "kitchen", 45.92],
+       [14, 115, "garden", 25.94],
+       [14, 116, "garden", 1.46],
+       [14, 117, "kitchen", 5.07],
+       [15, 118, "garden", 43.39],
+       [15, 119, "kitchen", 28.69],
+       [15, 120, "garden", 25.94],
+       [15, 121, "kitchen", 5.07],
+       [15, 122, "garden", 46.14],
+       [15, 123, "garden", 1.46],
+       [15, 124, "kitchen", 14.61],
+       [15, 125, "kitchen", 45.92],
+       [16, 126, "garden", 43.39],
+       [16, 127, "garden", 1.46],
+       [16, 128, "garden", 46.14],
+       [16, 129, "garden", 25.94],
+       [16, 130, "kitchen", 5.07],
+       [16, 131, "kitchen", 14.61],
+       [16, 132, "kitchen", 28.69],
+       [16, 133, "kitchen", 45.92],
+       [17, 134, "garden", 25.94],
+       [17, 135, "garden", 46.14],
+       [17, 136, "garden", 43.39],
+       [17, 137, "kitchen", 14.61],
+       [17, 138, "kitchen", 5.07],
+       [17, 139, "kitchen", 28.69],
+       [17, 140, "garden", 1.46],
+       [17, 141, "kitchen", 45.92],
+       [18, 142, "garden", 1.46],
+       [18, 143, "garden", 46.14],
+       [18, 144, "kitchen", 14.61],
+       [18, 145, "kitchen", 45.92],
+       [18, 146, "kitchen", 5.07],
+       [18, 147, "kitchen", 28.69],
+       [18, 148, "garden", 25.94],
+       [19, 149, "garden", 25.94],
+       [19, 150, "kitchen", 28.69],
+       [19, 151, "garden", 46.14],
+       [19, 152, "garden", 1.46],
+       [19, 153, "garden", 43.39],
+       [19, 154, "kitchen", 14.61],
+       [19, 155, "kitchen", 5.07],
+       [20, 156, "garden", 46.14],
+       [20, 157, "garden", 43.39],
+       [20, 158, "kitchen", 28.69],
+       [20, 159, "kitchen", 14.61],
+       [20, 160, "garden", 1.46],
+       [20, 161, "garden", 25.94],
+       [20, 162, "kitchen", 45.92],
+       [20, 163, "kitchen", 5.07],
+       [21, 164, "kitchen", 5.07],
+       [21, 165, "kitchen", 14.61],
+       [21, 166, "kitchen", 28.69],
+       [21, 167, "garden", 43.39],
+       [21, 168, "garden", 1.46],
+       [21, 169, "garden", 46.14],
+       [21, 170, "garden", 25.94],
+       [21, 171, "kitchen", 45.92],
+       [22, 172, "garden", 1.46],
+       [22, 173, "kitchen", 5.07],
+       [22, 174, "garden", 46.14],
+       [22, 175, "garden", 25.94],
+       [22, 176, "kitchen", 14.61],
+       [22, 177, "garden", 43.39],
+       [22, 178, "kitchen", 28.69],
+       [22, 179, "kitchen", 45.92],
+       [23, 180, "kitchen", 14.61],
+       [23, 181, "garden", 43.39],
+       [23, 182, "garden", 46.14],
+       [23, 183, "kitchen", 28.69],
+       [23, 184, "garden", 25.94],
+       [23, 185, "garden", 1.46],
+       [23, 186, "kitchen", 45.92],
+       [23, 187, "kitchen", 5.07],
+       [24, 188, "garden", 46.14],
+       [24, 189, "garden", 1.46],
+       [24, 190, "kitchen", 5.07],
+       [24, 191, "garden", 25.94],
+       [24, 192, "kitchen", 45.92],
+       [24, 193, "kitchen", 28.69],
+       [24, 194, "garden", 43.39],
+       [25, 195, "kitchen", 28.69],
+       [25, 196, "garden", 1.46],
+       [25, 197, "garden", 25.94],
+       [25, 198, "garden", 46.14],
+       [25, 199, "kitchen", 45.92],
+       [25, 200, "garden", 43.39],
+       [25, 201, "kitchen", 14.61],
+       [25, 202, "kitchen", 5.07],
+       [26, 203, "garden", 46.14],
+       [26, 204, "kitchen", 5.07],
+       [26, 205, "kitchen", 45.92],
+       [26, 206, "garden", 1.46],
+       [26, 207, "garden", 25.94],
+       [26, 208, "garden", 43.39],
+       [26, 209, "kitchen", 28.69],
+       [26, 210, "kitchen", 14.61],
+       [27, 211, "garden", 25.94],
+       [27, 212, "garden", 43.39],
+       [27, 213, "garden", 46.14],
+       [27, 214, "kitchen", 28.69],
+       [27, 215, "garden", 1.46],
+       [27, 216, "kitchen", 14.61],
+       [27, 217, "kitchen", 45.92],
+       [27, 218, "kitchen", 5.07],
+       [28, 219, "kitchen", 45.92],
+       [28, 220, "garden", 43.39],
+       [28, 221, "kitchen", 28.69],
+       [28, 222, "kitchen", 14.61],
+       [28, 223, "garden", 46.14],
+       [28, 224, "garden", 1.46],
+       [28, 225, "garden", 25.94],
+       [28, 226, "kitchen", 5.07],
+       [29, 227, "kitchen", 45.92],
+       [29, 228, "kitchen", 14.61],
+       [29, 229, "kitchen", 28.69],
+       [29, 230, "garden", 25.94],
+       [29, 231, "kitchen", 5.07],
+       [29, 232, "garden", 43.39],
+       [29, 233, "garden", 46.14],
+       [29, 234, "garden", 1.46]
+      ]
+     }
+    }
+   },
+   "predict": {
+    "instance_table": {
+     "format": "arrays",
+     "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+     "rows": [
+      [30, "S01", "2024-12-30T21:00:00.000000Z"],
+      [31, "S02", "2024-12-30T21:00:00.000000Z"]
+     ]
+    },
+    "related_tables": {
+     "stores": {
+      "format": "arrays",
+      "columns": ["instance_id", "store_code", "region"],
+      "rows": [
+       [30, "S01", "north"],
+       [31, "S02", "south"]
+      ]
+     },
+     "purchases": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "amount", "purchased_at", "store_code", "customer_id", "item_id"],
+      "rows": [
+       [30, 960, 98.71, "2024-12-30T14:00:00.000000Z", "S01", 754, 235],
+       [30, 961, 89.72, "2024-12-26T21:00:00.000000Z", "S01", 755, 236],
+       [30, 962, 62.61, "2024-12-25T08:00:00.000000Z", "S01", 756, 237],
+       [30, 963, 64.06, "2024-12-24T17:00:00.000000Z", "S01", 757, 235],
+       [30, 964, 78.95, "2024-12-16T15:00:00.000000Z", "S01", 758, 235],
+       [30, 965, 20.28, "2024-12-16T15:00:00.000000Z", "S01", 759, 237],
+       [30, 966, 59.61, "2024-12-16T11:00:00.000000Z", "S01", 760, 238],
+       [30, 967, 90.59, "2024-12-12T18:00:00.000000Z", "S01", 761, 236],
+       [30, 968, 66.41, "2024-12-12T16:00:00.000000Z", "S01", 762, 236],
+       [30, 969, 59.44, "2024-12-04T11:00:00.000000Z", "S01", 763, 236],
+       [30, 970, 59.48, "2024-12-02T21:00:00.000000Z", "S01", 764, 239],
+       [30, 971, 60.35, "2024-12-02T08:00:00.000000Z", "S01", 765, 239],
+       [30, 972, 66.78, "2024-11-30T20:00:00.000000Z", "S01", 766, 236],
+       [30, 973, 6.94, "2024-11-27T08:00:00.000000Z", "S01", 767, 236],
+       [30, 974, 95.0, "2024-11-26T06:00:00.000000Z", "S01", 766, 240],
+       [30, 975, 50.26, "2024-11-22T19:00:00.000000Z", "S01", 768, 238],
+       [30, 976, 6.42, "2024-11-21T19:00:00.000000Z", "S01", 762, 241],
+       [30, 977, 95.58, "2024-11-18T13:00:00.000000Z", "S01", 769, 241],
+       [30, 978, 75.47, "2024-11-17T18:00:00.000000Z", "S01", 770, 237],
+       [30, 979, 87.58, "2024-11-15T18:00:00.000000Z", "S01", 771, 237],
+       [30, 980, 1.26, "2024-11-12T20:00:00.000000Z", "S01", 772, 241],
+       [30, 981, 36.14, "2024-11-10T09:00:00.000000Z", "S01", 773, 240],
+       [30, 982, 30.78, "2024-11-06T13:00:00.000000Z", "S01", 759, 236],
+       [30, 983, 73.08, "2024-10-27T21:00:00.000000Z", "S01", 774, 235],
+       [30, 984, 84.44, "2024-10-24T20:00:00.000000Z", "S01", 775, 240],
+       [30, 985, 62.9, "2024-10-24T12:00:00.000000Z", "S01", 776, 237],
+       [30, 986, 37.26, "2024-10-22T19:00:00.000000Z", "S01", 777, 242],
+       [30, 987, 53.7, "2024-10-21T08:00:00.000000Z", "S01", 778, 241],
+       [30, 988, 72.72, "2024-10-20T11:00:00.000000Z", "S01", 773, 241],
+       [30, 989, 98.79, "2024-10-17T09:00:00.000000Z", "S01", 779, 235],
+       [30, 990, 96.76, "2024-10-15T21:00:00.000000Z", "S01", 780, 236],
+       [30, 991, 29.07, "2024-10-15T12:00:00.000000Z", "S01", 758, 241],
+       [31, 992, 93.11, "2024-12-30T13:00:00.000000Z", "S02", 781, 243],
+       [31, 993, 23.63, "2024-12-30T13:00:00.000000Z", "S02", 782, 244],
+       [31, 994, 24.37, "2024-12-26T10:00:00.000000Z", "S02", 783, 245],
+       [31, 995, 8.48, "2024-12-26T09:00:00.000000Z", "S02", 784, 246],
+       [31, 996, 91.5, "2024-12-19T18:00:00.000000Z", "S02", 785, 243],
+       [31, 997, 13.55, "2024-12-18T10:00:00.000000Z", "S02", 786, 246],
+       [31, 998, 73.85, "2024-12-12T16:00:00.000000Z", "S02", 782, 244],
+       [31, 999, 58.81, "2024-12-12T16:00:00.000000Z", "S02", 787, 243],
+       [31, 1000, 92.54, "2024-12-12T12:00:00.000000Z", "S02", 788, 245],
+       [31, 1001, 78.88, "2024-12-09T11:00:00.000000Z", "S02", 789, 244],
+       [31, 1002, 8.92, "2024-12-07T15:00:00.000000Z", "S02", 790, 244],
+       [31, 1003, 51.52, "2024-12-05T09:00:00.000000Z", "S02", 791, 243],
+       [31, 1004, 13.59, "2024-12-04T07:00:00.000000Z", "S02", 792, 244],
+       [31, 1005, 10.04, "2024-11-30T14:00:00.000000Z", "S02", 793, 243],
+       [31, 1006, 14.94, "2024-11-30T12:00:00.000000Z", "S02", 794, 245],
+       [31, 1007, 85.74, "2024-11-29T08:00:00.000000Z", "S02", 793, 244],
+       [31, 1008, 1.92, "2024-11-28T16:00:00.000000Z", "S02", 795, 247],
+       [31, 1009, 26.89, "2024-11-24T12:00:00.000000Z", "S02", 796, 248],
+       [31, 1010, 14.73, "2024-11-23T15:00:00.000000Z", "S02", 797, 248],
+       [31, 1011, 90.55, "2024-11-19T21:00:00.000000Z", "S02", 798, 244],
+       [31, 1012, 83.1, "2024-11-10T08:00:00.000000Z", "S02", 799, 245],
+       [31, 1013, 61.54, "2024-11-06T15:00:00.000000Z", "S02", 800, 244],
+       [31, 1014, 70.51, "2024-11-06T12:00:00.000000Z", "S02", 801, 244],
+       [31, 1015, 85.65, "2024-11-06T09:00:00.000000Z", "S02", 794, 249],
+       [31, 1016, 49.64, "2024-11-05T15:00:00.000000Z", "S02", 788, 247],
+       [31, 1017, 73.72, "2024-11-02T21:00:00.000000Z", "S02", 793, 248],
+       [31, 1018, 22.73, "2024-11-01T15:00:00.000000Z", "S02", 786, 248],
+       [31, 1019, 34.37, "2024-10-27T19:00:00.000000Z", "S02", 802, 247],
+       [31, 1020, 41.62, "2024-10-24T10:00:00.000000Z", "S02", 803, 247],
+       [31, 1021, 43.46, "2024-10-21T06:00:00.000000Z", "S02", 804, 248],
+       [31, 1022, 35.09, "2024-10-18T09:00:00.000000Z", "S02", 805, 247],
+       [31, 1023, 81.95, "2024-10-13T10:00:00.000000Z", "S02", 801, 248]
+      ]
+     },
+     "customers": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "segment", "signup_at"],
+      "rows": [
+       [30, 754, "student", "2024-02-19T00:00:00.000000Z"],
+       [30, 755, "business", "2024-01-01T00:00:00.000000Z"],
+       [30, 756, "business", "2024-01-22T00:00:00.000000Z"],
+       [30, 757, "retail", "2024-03-04T00:00:00.000000Z"],
+       [30, 758, "retail", "2024-01-22T00:00:00.000000Z"],
+       [30, 759, "retail", "2024-01-01T00:00:00.000000Z"],
+       [30, 760, "student", "2024-02-19T00:00:00.000000Z"],
+       [30, 761, "retail", "2024-03-11T00:00:00.000000Z"],
+       [30, 762, "retail", "2024-02-12T00:00:00.000000Z"],
+       [30, 763, "student", "2024-01-08T00:00:00.000000Z"],
+       [30, 764, "student", "2024-02-12T00:00:00.000000Z"],
+       [30, 765, "retail", "2024-02-19T00:00:00.000000Z"],
+       [30, 766, "business", "2024-01-01T00:00:00.000000Z"],
+       [30, 767, "retail", "2024-02-26T00:00:00.000000Z"],
+       [30, 768, "retail", "2024-03-04T00:00:00.000000Z"],
+       [30, 769, "business", "2024-01-22T00:00:00.000000Z"],
+       [30, 770, "business", "2024-03-18T00:00:00.000000Z"],
+       [30, 771, "retail", "2024-01-22T00:00:00.000000Z"],
+       [30, 772, "retail", "2024-02-05T00:00:00.000000Z"],
+       [30, 773, "student", "2024-02-05T00:00:00.000000Z"],
+       [30, 774, "student", "2024-01-22T00:00:00.000000Z"],
+       [30, 775, "retail", "2024-02-19T00:00:00.000000Z"],
+       [30, 776, "student", "2024-02-26T00:00:00.000000Z"],
+       [30, 777, "retail", "2024-01-15T00:00:00.000000Z"],
+       [30, 778, "business", "2024-01-22T00:00:00.000000Z"],
+       [30, 779, "student", "2024-02-19T00:00:00.000000Z"],
+       [30, 780, "student", "2024-01-15T00:00:00.000000Z"],
+       [31, 781, "retail", "2024-03-04T00:00:00.000000Z"],
+       [31, 782, "student", "2024-03-11T00:00:00.000000Z"],
+       [31, 783, "business", "2024-02-19T00:00:00.000000Z"],
+       [31, 784, "student", "2024-02-12T00:00:00.000000Z"],
+       [31, 785, "retail", "2024-02-26T00:00:00.000000Z"],
+       [31, 786, "retail", "2024-01-15T00:00:00.000000Z"],
+       [31, 787, "student", "2024-02-05T00:00:00.000000Z"],
+       [31, 788, "student", "2024-03-18T00:00:00.000000Z"],
+       [31, 789, "business", "2024-01-01T00:00:00.000000Z"],
+       [31, 790, "student", "2024-02-19T00:00:00.000000Z"],
+       [31, 791, "retail", "2024-02-26T00:00:00.000000Z"],
+       [31, 792, "retail", "2024-01-22T00:00:00.000000Z"],
+       [31, 793, "retail", "2024-01-29T00:00:00.000000Z"],
+       [31, 794, "retail", "2024-02-26T00:00:00.000000Z"],
+       [31, 795, "retail", "2024-02-19T00:00:00.000000Z"],
+       [31, 796, "student", "2024-01-22T00:00:00.000000Z"],
+       [31, 797, "retail", "2024-01-01T00:00:00.000000Z"],
+       [31, 798, "student", "2024-01-01T00:00:00.000000Z"],
+       [31, 799, "retail", "2024-03-11T00:00:00.000000Z"],
+       [31, 800, "retail", "2024-02-12T00:00:00.000000Z"],
+       [31, 801, "business", "2024-03-18T00:00:00.000000Z"],
+       [31, 802, "business", "2024-01-22T00:00:00.000000Z"],
+       [31, 803, "student", "2024-02-05T00:00:00.000000Z"],
+       [31, 804, "business", "2024-03-04T00:00:00.000000Z"],
+       [31, 805, "retail", "2024-02-05T00:00:00.000000Z"]
+      ]
+     },
+     "items": {
+      "format": "arrays",
+      "columns": ["instance_id", "__node_id", "category", "price"],
+      "rows": [
+       [30, 235, "garden", 25.94],
+       [30, 236, "kitchen", 28.69],
+       [30, 237, "kitchen", 5.07],
+       [30, 238, "garden", 43.39],
+       [30, 239, "garden", 46.14],
+       [30, 240, "kitchen", 45.92],
+       [30, 241, "garden", 1.46],
+       [30, 242, "kitchen", 14.61],
+       [31, 243, "kitchen", 5.07],
+       [31, 244, "kitchen", 45.92],
+       [31, 245, "kitchen", 14.61],
+       [31, 246, "garden", 1.46],
+       [31, 247, "garden", 25.94],
+       [31, 248, "kitchen", 28.69],
+       [31, 249, "garden", 46.14]
+      ]
+     }
+    }
+   },
+   "output": {
+    "fields": ["prediction"],
+    "prediction_statistic": "median"
+   },
+   "inference": {
+    "run_mode": "fast",
+    "use_prediction_time": false,
+    "inference_config": {
+     "kind": "regression",
+     "num_estimators": 1,
+     "column_shuffle": false,
+     "category_shuffle": false,
+     "hop_shuffle": false
+    }
+   },
+   "metadata": {
+    "source_query": "PREDICT COUNT(purchases.*, 0, 30, days) FOR EACH stores.store_code",
+    "num_context_examples": 30,
+    "num_prediction_examples": 2,
+    "request_id": "<request-id>"
+   }
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "path": "/v1/predictions",
+   "status": 200,
+   "body": {
+    "object": "prediction.response",
+    "id": "synthetic-2",
+    "model": "kumo-relational",
+    "metadata": {
+     "synthetic": true
+    },
+    "predictions": [
+     {
+      "row_index": 0,
+      "id": "30",
+      "prediction": 86.014539
+     },
+     {
+      "row_index": 1,
+      "id": "31",
+      "prediction": 98.02778
+     }
+    ]
+   }
+  }
+ ],
+ "result": "result.arrow",
+ "warnings": [
+  {
+   "category": "builtins.UserWarning",
+   "message": "Missing 9 indices in 5 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+  },
+  {
+   "category": "sdm_client.core.warnings.SDMWarning",
+   "message": "'reviews' is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."
+  }
+ ]
+}

@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-core-python"
+description = "The Python binding of the core, the module sdm_core._native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# An extension module leaves Python's symbols for the interpreter that loads
+# it to provide, so it cannot link into a test binary; the Python tests in
+# tests/rust_core/ test it as it ships.
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+arrow-array.workspace = true
+arrow-data.workspace = true
+arrow-pyarrow.workspace = true
+arrow-schema.workspace = true
+arrow-select.workspace = true
+pyo3.workspace = true
+sdm-core = { path = "../../crates/core" }
+sdm-dialects = { path = "../../crates/dialects" }
+sdm-labels = { path = "../../crates/labels" }
+sdm-pql = { path = "../../crates/pql" }
+sdm-random = { path = "../../crates/random" }
+sdm-sampling = { path = "../../crates/sampling" }
+sdm-schema = { path = "../../crates/schema" }
+sdm-wire = { path = "../../crates/wire" }
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,10 @@
+{
+  "generated_file": "generated.rs",
+  "generated_sha256": "570c736b46fcc054a6de9e29f8d8276c919595512e59c40f2f16461ba4664179",
+  "generator": "scripts/generate_wire_rs.py",
+  "generator_sha256": "493c45423e7d37bc63fb7da85d24ab85dd14ee52ff8a38fb1f9aaf068b16ee83",
+  "source_path": "nim-sd.openapi.yaml",
+  "source_repository": "structured-data-api",
+  "source_revision": "d4b6936ec5315c9b0694fbe9723ebefc36307a33",
+  "source_sha256": "5f0c1cf46aab66fae775815fd9292f2bccff16815ba4faae80701be165f71a9c"
+}

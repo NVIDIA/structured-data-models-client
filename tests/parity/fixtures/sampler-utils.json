@@ -1,0 +1,183 @@
+{
+ "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+ "cases": [
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-0",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 0,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    209652396,
+    398764591,
+    924231285,
+    1478610112,
+    441365315,
+    1537364731,
+    192771779,
+    1491434855
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-1",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 1,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    1791095845,
+    2135392491,
+    946286476,
+    1857819720,
+    491263,
+    550290313,
+    1298508491,
+    2143362693
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-42",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 42,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    1608637542,
+    1273642419,
+    1935803228,
+    787846414,
+    996406378,
+    1201263687,
+    423734972,
+    415968276
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-2147483648",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 2147483648,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    652847386,
+    1439962116,
+    1376720657,
+    1548966947,
+    1183256133,
+    696863241,
+    176403636,
+    1716297117
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-4294967295",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 4294967295,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    419326371,
+    479346978,
+    1771170828,
+    269265991,
+    1241397172,
+    113049152,
+    1202606294,
+    1162281466
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-55340232225423622151",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": {
+     "$int": "55340232225423622151"
+    },
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    341544878,
+    270561019,
+    1984053149,
+    323697148,
+    782385799,
+    1468385915,
+    827543401,
+    106156515
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-4294967296",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 4294967296,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    485306839,
+    1508871100,
+    1794561286,
+    1867113682,
+    71624475,
+    98019085,
+    479840009,
+    1615307667
+   ],
+   "expected_warnings": []
+  },
+  {
+   "id": "sampler-utils/sampling.random_state/random-state-8589934592",
+   "source": "packages/structured-data-models-relational-engine/tests/base/test_utils.py",
+   "operation": "sampling.random_state",
+   "input": {
+    "seed": 8589934592,
+    "low": 0,
+    "high": 2147483648,
+    "size": 8
+   },
+   "expected": [
+    49182197,
+    2090552240,
+    797359142,
+    1409838867,
+    14123835,
+    993506437,
+    1902891789,
+    765632184
+   ],
+   "expected_warnings": []
+  }
+ ]
+}

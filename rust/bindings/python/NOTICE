@@ -1,0 +1,16 @@
+sdm-core
+Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This distribution is the Python binding of the Rust core of sdm-client: one
+native extension module, sdm_core._native, built from first-party source in
+the repository's rust/ directory. It has no runtime dependencies.
+
+The module links statically, at the versions rust/Cargo.lock pins, the
+third-party Rust crates that source depends on, among them arrow-rs, PyO3,
+serde and serde_json. Their licences are limited by rust/deny.toml to ones
+compatible with Apache-2.0: today Apache-2.0, MIT, BSD-2-Clause and the
+Unlicense, most crates offering a choice of them. This distribution is
+internal and unpublished; their licence texts are to be bundled here before
+it is published.
