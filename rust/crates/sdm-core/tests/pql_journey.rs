@@ -40,6 +40,26 @@ fn every_journey_query_gives_the_reference_answer() {
     let journey: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let cases = journey["cases"].as_array().unwrap();
     let ids: Vec<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
+    // Of the inventory's 40 cases, 34 reach PQL; the six the reference's
+    // `Schema.from_source` refuses never do, and are recorded by name.
+    assert_eq!(cases.len(), 34, "{ids:?}");
+    let skipped: Vec<&str> = journey["skipped"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        skipped,
+        [
+            "nested.fixed-array",
+            "nested.struct",
+            "nested.map",
+            "nested.union",
+            "empty.fact-table",
+            "time.feature-interval",
+        ]
+    );
     for id in ["base.regression", "refuse.unknown-column"] {
         assert!(ids.contains(&id), "the journey has no {id}");
     }

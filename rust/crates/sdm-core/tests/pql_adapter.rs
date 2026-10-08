@@ -280,3 +280,79 @@ fn a_long_and_or_or_chain_is_refused_at_the_depth_limit_in_bounded_time() {
         .join()
         .expect("answered");
 }
+
+#[test]
+fn resolution_s_capability_diagnostics_come_in_the_reference_s_order() {
+    // E11: the two filter capabilities are consulted during resolution, as
+    // the reference consults them, so which diagnostic comes first follows
+    // the filter's order, and a type error refuses before either is asked.
+    // Each answer is the reference's (rust-core-reference b413e9a).
+    let neither = profile(
+        ProfileName::Relational,
+        &[
+            (Capability::KeyColumnsInFilters, false),
+            (Capability::TimestampColumnsInFilters, false),
+        ],
+    );
+    let no_keys = profile(
+        ProfileName::Relational,
+        &[(Capability::KeyColumnsInFilters, false)],
+    );
+    let cases: [(&str, &Profile, &[&str]); 3] = [
+        (
+            "PREDICT COUNT(orders.* WHERE orders.ts > 2024-01-01 AND orders.user_id = 3, 0, 30, \
+             days) FOR EACH users.user_id",
+            &neither,
+            &[
+                "PQL_MODEL_UNSUPPORTED_COLUMN_OPERATION",
+                "PQL_MODEL_NO_KEY_COLUMN_FILTER",
+                "PQL_MODEL_NO_KEY_COLUMN_REFERENCE",
+            ],
+        ),
+        (
+            "PREDICT COUNT(orders.* WHERE orders.user_id = 3 AND orders.ts > 2024-01-01, 0, 30, \
+             days) FOR EACH users.user_id",
+            &neither,
+            &[
+                "PQL_MODEL_NO_KEY_COLUMN_FILTER",
+                "PQL_MODEL_UNSUPPORTED_COLUMN_OPERATION",
+                "PQL_MODEL_NO_KEY_COLUMN_REFERENCE",
+            ],
+        ),
+        (
+            "PREDICT COUNT(orders.* WHERE orders.user_id = 3 AND orders.price > 'x', 0, 30, \
+             days) FOR EACH users.user_id",
+            &no_keys,
+            &["PQL_TYPE_CONSTANT_MISMATCH"],
+        ),
+    ];
+    for (query, profile, want) in cases {
+        assert_eq!(codes_of(query, profile), want, "{query}");
+    }
+}
+
+#[test]
+fn a_date_the_reference_reads_and_the_interim_reader_does_not_is_pinned_as_refused() {
+    // Register DT-9: the reference accepts both (b413e9a); the interim
+    // reader (E10) answers a field of five digits or more with
+    // UNSUPPORTED_REQUEST. T1.6b completes the reader and flips this test
+    // to accepted.
+    for literal in ["20240101-01-01", "2024-01-01 00000:00:00"] {
+        let query = format!(
+            "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH \
+             users.user_id"
+        );
+        let err = validate(
+            &query,
+            &shop(),
+            &profile(ProfileName::Relational, &[]),
+            &facts(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            (err.kind, err.code),
+            (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest),
+            "{literal}"
+        );
+    }
+}

@@ -1,5 +1,5 @@
 {
- "format": "sdm-pql-journey/1",
+ "format": "sdm-pql-journey/2",
  "source": "rust-core-reference at b413e9ad6c613e82e5f1fc2ad0bc152870f59e74: PQL validation of each Phase 1b inventory query against its Schema.from_source schema, recorded by record_journey.py beside this file",
  "cases": [
   {
@@ -2563,5 +2563,13 @@
     }
    ]
   }
+ ],
+ "skipped": [
+  "nested.fixed-array",
+  "nested.struct",
+  "nested.map",
+  "nested.union",
+  "empty.fact-table",
+  "time.feature-interval"
  ]
 }

@@ -10,8 +10,8 @@ and validates the case's query against that schema with the relational
 profile, as ``materialize`` does (``PredictiveQuery._resolve``). Writes
 ``journey.json`` beside this file: per case, the schema in the contract's
 form and whether the reference accepted the query, with each error's code
-and span. A case whose ``from_source`` fails never reaches PQL and is left
-out.
+and span. A case whose ``from_source`` fails never reaches PQL: its id is
+listed under ``skipped``, so the test can hold the count and the list.
 
 Run it with the reference's interpreter, isolated, from the repository root:
 
@@ -93,6 +93,7 @@ def main(reference: Path) -> int:
 
     inventory = yaml.safe_load(INVENTORY.read_text(encoding='utf-8'))
     cases = []
+    skipped = []
     for case in inventory['cases']:
         connection = duckdb.connect()
         for statement in inventory['bases'][case['base']]:
@@ -103,6 +104,7 @@ def main(reference: Path) -> int:
         try:
             schema = Schema.from_source(DuckDBSource(connection), **how)
         except Exception:  # noqa: BLE001 - such a case never reaches PQL
+            skipped.append(case['id'])
             continue
         query = case.get('pql', inventory['defaults']['pql'])
         definition = to_schema_definition(schema)
@@ -129,19 +131,22 @@ def main(reference: Path) -> int:
         text=True,
     ).stdout.strip()
     document = {
-        'format': 'sdm-pql-journey/1',
+        'format': 'sdm-pql-journey/2',
         'source': (
             f'rust-core-reference at {commit}: PQL validation of each '
             f'Phase 1b inventory query against its Schema.from_source '
             f'schema, recorded by record_journey.py beside this file'
         ),
         'cases': cases,
+        'skipped': skipped,
     }
     (HERE / 'journey.json').write_text(
         json.dumps(document, indent=1, ensure_ascii=False) + '\n',
         encoding='utf-8',
     )
-    print(f'{len(cases)} cases recorded at {commit[:12]}')
+    print(
+        f'{len(cases)} cases recorded, {len(skipped)} skipped, at {commit[:12]}'
+    )
     return 0
 
 
