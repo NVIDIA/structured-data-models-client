@@ -10,6 +10,9 @@
 # feeding it a URL with a password in it. The scanner cannot tell that apart
 # from a real one, and verified none of them against a live service.
 #
+# Each value is listed in both maskings a report may use, since a value that
+# does not match the one the scanner prints suppresses nothing.
+#
 # Regenerate after a scan rather than editing by hand, and never add an entry
 # for a credential that is real. A real one is rotated and removed.
 
@@ -17,56 +20,66 @@ version = "1.0.0"
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-client/src/sdm_client/core/transport.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "http://user:********@host", "https://user:********@host/path" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt****************host",
+           "http://user:********@host",
+           "https://user:********@host/path"]
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-client/tests/test_credential_redaction.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "https://user:********@host/v1", "https://user:********@host:8443/v1" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt*******************8443",
+           "htt**************host",
+           "https://user:********@host/v1",
+           "https://user:********@host:8443/v1"]
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-client/tests/test_transport_hardening.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "http://user:********@127.0.0.1:8000", "http://user:********@localhost:8000", "https://user:********@nim.example" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt**************************8000",
+           "htt************************mple",
+           "http://user:********@127.0.0.1:8000",
+           "http://user:********@localhost:8000",
+           "https://user:********@nim.example"]
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-relational-engine/src/sdm_relational_engine/client/client.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "http://user:********@host", "https://user:********@host/path" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt****************host",
+           "http://user:********@host",
+           "https://user:********@host/path"]
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-relational-engine/tests/client/test_credential_redaction.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "https://user:********@host/v1", "https://user:********@host:8443/v1" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt*******************8443",
+           "htt**************host",
+           "https://user:********@host/v1",
+           "https://user:********@host:8443/v1"]
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-relational-engine/tests/client/test_rfm_nim_live_harness.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "https://user:********@example.test/rfm" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt************************************test",
+           "htt***************************test",
+           "https://user:********@example.test/rfm"]
 
 [[pulse-trufflehog.files]]
 file = "packages/structured-data-models-relational-engine/tests/client/test_snowflake_serving.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "https://user:********@acct.snowflakecomputing.com" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt***************************************.com",
+           "https://user:********@acct.snowflakecomputing.com"]
 
 [[pulse-trufflehog.files]]
 file = "qa/probe_edges.py"
-
-[[pulse-trufflehog.files.secrets]]
-type = "URI"
-values = [ "http://user:********@example.com" ]
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = ["htt***********************.com",
+           "http://user:********@example.com"]
