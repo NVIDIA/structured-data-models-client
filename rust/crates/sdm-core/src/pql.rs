@@ -62,13 +62,18 @@ impl Validation {
 }
 
 /// Validates `query` against `schema` for `profile`.
+///
+/// Everything runs on the adapter's stack ([`on_adapter_stack`]): parsing,
+/// resolving, building the answer and dropping the trees, so a query as
+/// deep as the parser takes is answered and freed on a caller's thread of
+/// any size.
 pub fn validate(
     query: &str,
     schema: &QuerySchema,
     profile: &Profile,
     facts: &HostFacts,
 ) -> Result<QueryValidation, CoreError> {
-    resolve(query, schema, profile, facts).map(|v| v.to_result())
+    on_adapter_stack(|| resolve_here(query, schema, profile, facts).map(|v| v.to_result()))
 }
 
 /// The stack a validation runs on, as deep as the deepest query the parser
@@ -76,7 +81,9 @@ pub fn validate(
 /// query touches is used.
 const STACK_BYTES: usize = 256 << 20;
 
-/// Runs `f` on the grown stack the adapter parses on.
+/// Runs `f` on the stack the adapter validates on: grown once per adapter
+/// call, here and nowhere else (the interim parser grows none of its own),
+/// so parsing, resolving, reading the tree and dropping it all fit in it.
 pub fn on_adapter_stack<R>(f: impl FnOnce() -> R) -> R {
     stacker::grow(STACK_BYTES, f)
 }
@@ -84,16 +91,17 @@ pub fn on_adapter_stack<R>(f: impl FnOnce() -> R) -> R {
 /// Validates `query` against `schema` for `profile`, and gives the
 /// validated query when it is accepted.
 ///
-/// Parsing, resolving and reading the tree recurse as deep as the query
-/// nests, so they run on a stack of their own: a caller on any thread,
-/// however small its stack, is answered.
+/// Parsing and resolving run on the adapter's stack ([`on_adapter_stack`]);
+/// the validated query comes back to the caller, which drops it where it
+/// drops it: a caller holding a deep one drops it on the adapter's stack
+/// too, as [`validate`] does.
 pub fn resolve(
     query: &str,
     schema: &QuerySchema,
     profile: &Profile,
     facts: &HostFacts,
 ) -> Result<Validation, CoreError> {
-    stacker::grow(STACK_BYTES, || resolve_here(query, schema, profile, facts))
+    on_adapter_stack(|| resolve_here(query, schema, profile, facts))
 }
 
 fn resolve_here(

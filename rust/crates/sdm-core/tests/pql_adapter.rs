@@ -176,22 +176,44 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
     assert_eq!(time_column.as_ref().unwrap().column, "ts");
 }
 
-/// The deepest queries the parser takes, and one level past them.
+/// The interim parser's nesting limit (`parser::MAX_DEPTH`).
+const MAX_DEPTH: usize = 1000;
+
+fn nots(depth: usize) -> String {
+    format!(
+        "PREDICT {}COUNT(orders.*, 0, 30, days) > 1 FOR EACH users.user_id",
+        "NOT ".repeat(depth)
+    )
+}
+
+fn parentheses(depth: usize) -> String {
+    format!(
+        "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE {}users.age > 3{}",
+        "(".repeat(depth),
+        ")".repeat(depth)
+    )
+}
+
+/// A filter of `links` + 1 conditions joined by `op`.
+fn chain(op: &str, links: usize) -> String {
+    format!(
+        "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE users.age > 3{}",
+        format!(" {op} users.age > 3").repeat(links)
+    )
+}
+
+/// The deepest queries the parser takes, then the same one level past
+/// them: 999 `NOT`s or parentheses are accepted and 1,000 refused; a chain
+/// of 998 `AND` or `OR` links is accepted and 999 refused, each link a
+/// level below the first condition's.
 fn deepest() -> Vec<String> {
-    // The interim parser's nesting limit (`parser::MAX_DEPTH`).
-    const MAX_DEPTH: usize = 1000;
+    let deepest = MAX_DEPTH - 1;
     let mut out = Vec::new();
-    for depth in [MAX_DEPTH - 2, MAX_DEPTH + 1] {
-        out.push(format!(
-            "PREDICT {}COUNT(orders.*, 0, 30, days) > 1 FOR EACH users.user_id",
-            "NOT ".repeat(depth)
-        ));
-        out.push(format!(
-            "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE {}users.age > \
-             3{}",
-            "(".repeat(depth),
-            ")".repeat(depth)
-        ));
+    for past in [0, 1] {
+        out.push(nots(deepest + past));
+        out.push(parentheses(deepest + past));
+        out.push(chain("AND", deepest - 1 + past));
+        out.push(chain("OR", deepest - 1 + past));
     }
     out
 }
@@ -204,14 +226,16 @@ fn on_a_stack_of(bytes: usize) {
             let answers: Vec<bool> = deepest()
                 .iter()
                 .map(|query| {
-                    resolve(query, &shop(), &relational, &facts())
+                    validate(query, &shop(), &relational, &facts())
                         .unwrap()
-                        .query
-                        .is_some()
+                        .accepted
                 })
                 .collect();
             // The deepest are answered, accepted; one level deeper, refused.
-            assert_eq!(answers, [true, true, false, false]);
+            assert_eq!(
+                answers,
+                [true, true, true, true, false, false, false, false]
+            );
         })
         .unwrap()
         .join()
@@ -226,4 +250,33 @@ fn the_deepest_queries_validate_on_a_spawned_threads_default_stack() {
 #[test]
 fn the_deepest_queries_validate_on_a_small_thread_stack() {
     on_a_stack_of(512 << 10);
+}
+
+#[test]
+fn a_long_and_or_or_chain_is_refused_at_the_depth_limit_in_bounded_time() {
+    // Each link counts against MAX_DEPTH, so a chain of 10,000 is refused
+    // where the limit falls, as a syntax error, before any later pass
+    // recurses through it: on a small stack, without overflowing, and
+    // quickly (it once took seconds and aborted the process).
+    std::thread::Builder::new()
+        .stack_size(256 << 10)
+        .spawn(|| {
+            let relational = profile(ProfileName::Relational, &[]);
+            for op in ["AND", "OR"] {
+                let started = std::time::Instant::now();
+                let validation =
+                    validate(&chain(op, 10_000), &shop(), &relational, &facts()).unwrap();
+                assert!(!validation.accepted, "{op}");
+                assert_eq!(validation.diagnostics.len(), 1, "{op}");
+                assert_eq!(validation.diagnostics[0].code, "PQL_PARSE_SYNTAX", "{op}");
+                assert!(
+                    started.elapsed() < std::time::Duration::from_secs(30),
+                    "{op}: {:?}",
+                    started.elapsed()
+                );
+            }
+        })
+        .unwrap()
+        .join()
+        .expect("answered");
 }

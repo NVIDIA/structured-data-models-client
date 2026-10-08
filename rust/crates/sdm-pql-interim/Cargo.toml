@@ -14,7 +14,6 @@ publish.workspace = true
 
 [dependencies]
 jiff.workspace = true
-stacker.workspace = true
 
 [lints]
 workspace = true

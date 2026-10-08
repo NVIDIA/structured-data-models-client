@@ -44,6 +44,7 @@ pyo3 = { version = "0.28", features = ["abi3-py310"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+serde_stacker = "0.1"
 regex = "1"
 sha2 = "0.10"
 stacker = "0.1"

@@ -243,6 +243,82 @@ pub enum QueryMode {
     Inference,
 }
 
+/// The deepest nesting of JSON objects and arrays a validated query's text
+/// holds: the text of the deepest tree the parser accepts (its limit is
+/// 1,000 levels; each tree level is two JSON levels, the node and its
+/// kind). A test pins it to that tree.
+pub const MAX_JSON_DEPTH: usize = 2_008;
+
+/// Why a validated query's text was not read.
+#[derive(Debug)]
+pub enum ReadError {
+    /// The text nests deeper than [`MAX_JSON_DEPTH`]: a tree deeper than
+    /// any the parser accepts.
+    TooDeep { depth: usize },
+    /// The text is not a validated query of this format.
+    Json(serde_json::Error),
+}
+
+impl std::fmt::Display for ReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadError::TooDeep { depth } => write!(
+                f,
+                "the validated query nests {depth} levels deep, past the format's \
+                 {MAX_JSON_DEPTH}"
+            ),
+            ReadError::Json(e) => write!(f, "not a validated query: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for ReadError {}
+
+/// The deepest nesting of objects and arrays in JSON `text`, strings
+/// skipped.
+fn json_depth(text: &str) -> usize {
+    let (mut depth, mut deepest) = (0_usize, 0_usize);
+    let (mut in_string, mut escaped) = (false, false);
+    for byte in text.bytes() {
+        if in_string {
+            match (escaped, byte) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'{' | b'[' => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            b'}' | b']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
+
+/// Reads a validated query from its JSON text, as deep as the parser
+/// accepts: past `serde_json`'s recursion limit, on a stack that grows as
+/// the tree nests; text deeper than any accepted tree is refused before
+/// anything is built. The tree is as deep as the text, so a caller drops
+/// it on a stack deep enough, as the core's adapter does.
+pub fn read_validated_query(text: &str) -> Result<ValidatedQuery, ReadError> {
+    let depth = json_depth(text);
+    if depth > MAX_JSON_DEPTH {
+        return Err(ReadError::TooDeep { depth });
+    }
+    let mut deserializer = serde_json::Deserializer::from_str(text);
+    deserializer.disable_recursion_limit();
+    let deserializer = serde_stacker::Deserializer::new(&mut deserializer);
+    let query = ValidatedQuery::deserialize(deserializer).map_err(ReadError::Json)?;
+    Ok(query)
+}
+
 /// The JSON Schema of [`ValidatedQuery`], as committed: pretty-printed, with
 /// a trailing newline.
 pub fn validated_query_schema_json() -> String {

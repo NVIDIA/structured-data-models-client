@@ -12,8 +12,9 @@
 
 use crate::lexer::{Kind, Token};
 
-/// Nesting deeper than this is refused rather than followed. Today's
-/// Python gives up at about 400 levels, on its own recursion limit.
+/// Nesting deeper than this is refused rather than followed: parentheses,
+/// `NOT`, arrays and each `AND` or `OR` link count. Today's Python gives up
+/// at about 400 levels, on its own recursion limit.
 pub const MAX_DEPTH: usize = 1000;
 
 /// A rule's first and last token, which give its location.
@@ -215,7 +216,7 @@ impl Parser<'_> {
         if self.depth > MAX_DEPTH {
             let row = self.tokens.get(self.pos).map_or(0, |t| t.line);
             return Err(SyntaxError(format!(
-                "The query nests parentheses, NOT or arrays more than {MAX_DEPTH} levels \
+                "The query nests parentheses, NOT, arrays, AND or OR more than {MAX_DEPTH} levels \
                  deep near row {row}; simplify it."
             )));
         }
@@ -490,7 +491,19 @@ impl Parser<'_> {
     }
 
     /// `AND` and `OR` after a condition, as far as `precedence` allows.
+    ///
+    /// The links group to the left, so each one is a level of the tree
+    /// below it, and each counts against [`MAX_DEPTH`] like a parenthesis:
+    /// a long chain is refused at the limit, never built past it for later
+    /// passes to recurse through.
     fn condition_loop_from(&mut self, first: Cond, precedence: u8) -> Parsed<Cond> {
+        let mut links = 0;
+        let result = self.links_from(first, precedence, &mut links);
+        self.depth -= links;
+        result
+    }
+
+    fn links_from(&mut self, first: Cond, precedence: u8, links: &mut usize) -> Parsed<Cond> {
         let mut left = first;
         let mut left_start = left.span().start;
         loop {
@@ -502,6 +515,8 @@ impl Parser<'_> {
             if !allowed {
                 break;
             }
+            *links += 1;
+            self.descend()?;
             let op = self.pos;
             self.pos += 1;
             let right = self.condition(rhs_precedence)?;

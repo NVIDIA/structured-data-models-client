@@ -5,6 +5,11 @@
 //! The two calls the adapter makes: text to a parsed query, and a parsed
 //! query resolved against a schema (`predictive_query.api.validate`, less
 //! the capability checks, which the core asks).
+//!
+//! Both recurse as deep as the query nests ([`crate::parser::MAX_DEPTH`]
+//! levels) and run on the caller's stack: the core's adapter grows one
+//! stack for a whole call (`sdm_core::pql::on_adapter_stack`), and this
+//! crate grows none of its own.
 
 use crate::ast;
 use crate::codes;
@@ -15,11 +20,6 @@ use crate::response::{ValidationError, ValidationResponse};
 use crate::schema::SchemaDefinition;
 use crate::validator::predictive_query::PredictiveQueryValidator;
 use crate::visitor::{ParseError, parse_query};
-
-/// The stack parsing and resolving run on: deep enough for the deepest
-/// query the parser takes ([`crate::parser::MAX_DEPTH`] levels), in debug
-/// builds too. Reserved, not committed: only what a query touches is.
-const STACK_BYTES: usize = 256 << 20;
 
 /// Why a call gave no answer: the query uses something the interim parser
 /// cannot read yet. This is never a diagnostic about the query.
@@ -56,13 +56,13 @@ pub fn parse(
     mode: Mode,
     reader: Reader,
 ) -> Result<Result<Parsed, ValidationResponse>, Interrupted> {
-    stacker::grow(STACK_BYTES, || match parse_query(text, mode, reader) {
+    match parse_query(text, mode, reader) {
         Ok(query) => Ok(Ok(Parsed { query })),
         Err(ParseError::Failure(failure)) => Ok(Err(ValidationResponse::error(
             ValidationError::new(failure.title, failure.message, failure.code, None),
         ))),
         Err(ParseError::Deferred(reason)) => Err(Interrupted(reason)),
-    })
+    }
 }
 
 /// `parsed` resolved against `schema` for `mode`, with the filter
@@ -75,17 +75,15 @@ pub fn resolve(
     mode: Mode,
     filters: Filters,
 ) -> Resolved {
-    stacker::grow(STACK_BYTES, || {
-        let validator = PredictiveQueryValidator::new(schema, mode, filters);
-        match validator.validate_predictive_query(parsed.query) {
-            Err(raised) => Resolved::Refused(ValidationResponse::error(ValidationError::new(
-                "Unsupported constant",
-                raised.0,
-                codes::VALUE_INT_OUT_OF_RANGE,
-                None,
-            ))),
-            Ok((Some(resolved), response)) if response.ok() => Resolved::Accepted(resolved),
-            Ok((_, response)) => Resolved::Refused(response),
-        }
-    })
+    let validator = PredictiveQueryValidator::new(schema, mode, filters);
+    match validator.validate_predictive_query(parsed.query) {
+        Err(raised) => Resolved::Refused(ValidationResponse::error(ValidationError::new(
+            "Unsupported constant",
+            raised.0,
+            codes::VALUE_INT_OUT_OF_RANGE,
+            None,
+        ))),
+        Ok((Some(resolved), response)) if response.ok() => Resolved::Accepted(resolved),
+        Ok((_, response)) => Resolved::Refused(response),
+    }
 }
