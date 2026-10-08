@@ -66,9 +66,9 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The contract schema: regenerated from the types and compared with the
-      # committed file, locked to the current version; and no version entry
-      # rewritten across the lock's history, which is why this job checks
-      # out every commit of every branch (the merge base with rust-core too).
+      # committed file, locked to the current version; no entry merged into
+      # rust-core rewritten, and at most one working entry, which is why this
+      # job checks out every branch (for the merge base with rust-core).
       - run: cargo test -p sdm-contract --locked --test schema_lock
       - run: python3 scripts/rust_core/contract_lock.py
         working-directory: .

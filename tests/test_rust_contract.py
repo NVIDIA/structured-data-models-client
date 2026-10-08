@@ -6,12 +6,12 @@
 
 The scalar edge values the contract encodes decode exactly with only ``json``
 and ``decimal``: nothing passes through a double. And the contract lock check
-fails a rewritten or removed version entry and a changed schema.
+fails a rewritten or removed merged entry, a second working entry and a
+changed schema, and its hash ignores doc comments but not shape.
 """
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 from decimal import Decimal
@@ -125,7 +125,7 @@ def _lock_module() -> ModuleType:
 
 
 def _digest(body: bytes) -> str:
-    return hashlib.sha256(body).hexdigest()
+    return _lock_module().digest(body)
 
 
 def test_the_lock_check_holds_on_the_committed_lock() -> None:
@@ -137,7 +137,7 @@ def test_the_lock_check_fails_without_its_base() -> None:
     assert _lock_module().main(['--base', 'no-such-branch-for-the-lock']) == 1
 
 
-def test_the_lock_check_fails_an_unreadable_earlier_lock() -> None:
+def test_the_lock_check_fails_an_unreadable_base_lock() -> None:
     lock = _lock_module()
     one = b'{"v": 1}\n'
     entry = f'1 sha256:{_digest(one)} sdm-contract-1.json\n'
@@ -149,13 +149,14 @@ def test_the_lock_check_fails_an_unreadable_earlier_lock() -> None:
     assert any('cannot be read' in p for p in problems), problems
 
 
-def test_the_lock_check_fails_a_rewritten_or_removed_entry() -> None:
+def test_a_merged_entry_is_never_rewritten_or_removed() -> None:
     lock = _lock_module()
     one, two = b'{"v": 1}\n', b'{"v": 2}\n'
     schemas = {'sdm-contract-1.json': one, 'sdm-contract-2.json': two}
     first = f'1 sha256:{_digest(one)} sdm-contract-1.json\n'
     both = first + f'2 sha256:{_digest(two)} sdm-contract-2.json\n'
 
+    # Version 1 is merged; version 2 is the phase's one working entry.
     assert lock.check(both, [('a' * 40, first)], schemas.get) == []
 
     # Version 1's schema changed in place, its entry rewritten to match.
@@ -166,13 +167,37 @@ def test_the_lock_check_fails_a_rewritten_or_removed_entry() -> None:
     )
     assert any('was rewritten' in p for p in problems), problems
 
-    # An entry an earlier commit held is gone.
+    # A merged entry is gone.
     problems = lock.check(
         f'2 sha256:{_digest(two)} sdm-contract-2.json\n',
-        [('c' * 40, both)],
+        [('c' * 40, first)],
         schemas.get,
     )
     assert any('was removed' in p for p in problems), problems
+
+
+def test_a_working_entry_is_rewritten_and_a_lock_holds_only_one() -> None:
+    lock = _lock_module()
+    one, two = b'{"v": 1}\n', b'{"v": 2}\n'
+    # No entry at the base: the one entry is working, and may be rewritten
+    # at each bump within the phase.
+    assert (
+        lock.check(
+            f'3 sha256:{_digest(two)} sdm-contract-3.json\n',
+            [],
+            {'sdm-contract-3.json': two}.get,
+        )
+        == []
+    )
+    # Two entries the base does not hold: one too many.
+    both = (
+        f'1 sha256:{_digest(one)} sdm-contract-1.json\n'
+        f'2 sha256:{_digest(two)} sdm-contract-2.json\n'
+    )
+    problems = lock.check(
+        both, [], {'sdm-contract-1.json': one, 'sdm-contract-2.json': two}.get
+    )
+    assert any('one working entry' in p for p in problems), problems
 
 
 def test_the_lock_check_fails_a_schema_changed_without_a_bump() -> None:
@@ -186,3 +211,40 @@ def test_the_lock_check_fails_a_schema_changed_without_a_bump() -> None:
     assert lock.check(entry, [], {}.get) == [
         'version 1: sdm-contract-1.json is missing'
     ]
+
+
+def test_the_hash_ignores_doc_comments_and_keeps_a_property_named_description() -> (
+    None
+):
+    schema = {
+        '$defs': {
+            'Note': {
+                'description': 'A note.',
+                'type': 'object',
+                'properties': {
+                    'description': {'type': 'string', 'title': 'Description'},
+                },
+                'required': ['description'],
+                'examples': [{'description': 'x'}],
+            }
+        },
+        'enum': [{'description': 'data'}],
+    }
+
+    def digest(value: object) -> str:
+        return _digest(json.dumps(value).encode())
+
+    locked = digest(schema)
+    reworded = json.loads(json.dumps(schema))
+    reworded['$defs']['Note']['description'] = 'Reworded.'
+    reworded['$defs']['Note']['properties']['description']['title'] = 'Renamed'
+    del reworded['$defs']['Note']['examples']
+    assert digest(reworded) == locked
+
+    renamed = json.loads(json.dumps(schema))
+    props = renamed['$defs']['Note']['properties']
+    props['summary'] = props.pop('description')
+    assert digest(renamed) != locked
+    data = json.loads(json.dumps(schema))
+    data['enum'] = [{'description': 'other'}]
+    assert digest(data) != locked

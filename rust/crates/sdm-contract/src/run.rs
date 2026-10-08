@@ -24,6 +24,9 @@
 //!   (`start`, `fetch_reply`, `model_reply`) with ids of its choosing,
 //!   scoped to that one message; the core takes them when it reads the
 //!   message, and the ids mean nothing afterwards.
+//! - A message the core writes whose encoding would pass the control cap
+//!   travels whole as an attachment, named by an `attached` message; its id
+//!   comes from the run's numbering, and it travels with that message.
 //! - Across runs: no id carries over. State that outlives a run, such as
 //!   `RequestState.payload` from `materialize`, leaves as bytes the host
 //!   takes when that run finishes, and comes back attached to the `start`
@@ -126,12 +129,9 @@ pub enum ModelOutcome {
         content_type: String,
         body: AttachmentId,
     },
-    /// The transport failed before an answer.
-    TransportError {
-        kind: ErrorKind,
-        retryable: bool,
-        message: String,
-    },
+    /// The transport failed before an answer: its kind and whether trying
+    /// again may succeed; the transport's message stays in the host.
+    TransportError { kind: ErrorKind, retryable: bool },
 }
 
 /// Starts a run.
@@ -155,6 +155,17 @@ pub enum ControlMessage {
     Cancel {},
     // Core to host.
     Step(Step),
-    Error { error: CoreError },
-    Warnings { warnings: Vec<CoreWarning> },
+    Error {
+        error: CoreError,
+    },
+    Warnings {
+        warnings: Vec<CoreWarning>,
+    },
+    /// A message the core wrote whose encoding would pass the control cap:
+    /// it travels whole as a bytes attachment of its UTF-8 JSON, named here
+    /// (decision H7). Nothing the core writes is truncated, refused or
+    /// dropped for size.
+    Attached {
+        attachment: AttachmentId,
+    },
 }

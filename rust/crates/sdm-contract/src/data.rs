@@ -196,15 +196,14 @@ pub enum ExpectedSchema {
     Schema { fields: Vec<Field> },
 }
 
-/// A provider's failure, with the driver's own codes; nothing is matched on
-/// message text.
+/// A provider's failure: its kind, whether trying again may succeed, and
+/// the driver's own SQLSTATE and vendor code. The driver's message and
+/// free-text codes stay in the host, since drivers quote values there;
+/// nothing is matched on text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderError {
     pub kind: ErrorKind,
-    #[schemars(regex(pattern = r"^[A-Z][A-Z0-9_]*$"))]
-    pub code: String,
-    pub message: String,
     pub retryable: bool,
     pub sqlstate: Option<String>,
     pub vendor_code: Option<String>,

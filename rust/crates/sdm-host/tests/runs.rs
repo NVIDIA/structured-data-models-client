@@ -26,13 +26,15 @@ use sdm_contract::run::{
     Endpoint, FetchOutcome, FetchReply, ModelOutcome, ModelReply, ReplyId, StartRun,
 };
 use sdm_contract::{
-    CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorKind, HostFacts, Scalar,
-    Step, Unit, codes,
+    CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind,
+    HostFacts, Scalar, Step, Unit,
 };
 use sdm_core::{
     ArrowData, Attachment, CompositionRoot, FetchResult, ModelResult, Reply, Run, RunState,
 };
-use sdm_host::{Attachments, HostRun, ZoneResolver, ZoneSource, contain, decode, encode};
+use sdm_host::{
+    Attachments, HostRun, Outgoing, ZoneResolver, ZoneSource, contain, decode, encode, read,
+};
 
 fn facts(zone_roots: Vec<ZoneRootFact>) -> HostFacts {
     HostFacts {
@@ -83,10 +85,15 @@ fn users() -> QuerySchema {
     }
 }
 
-fn validate(query: &str) -> Operation {
+/// A bytes attachment of `value` as JSON.
+fn json(value: &impl serde::Serialize) -> Attachment {
+    Attachment::Bytes(serde_json::to_vec(value).unwrap())
+}
+
+fn validate_op() -> Operation {
     Operation::ValidateQuery(ValidateQuery {
-        query: query.into(),
-        schema: users(),
+        query: AttachmentId(1),
+        schema: AttachmentId(2),
         profile: ProfileSpec {
             name: ProfileName::Relational,
             model: None,
@@ -95,12 +102,60 @@ fn validate(query: &str) -> Operation {
     })
 }
 
+/// The attachments of a `validate_query` start for `query` over `schema`.
+fn validate_attachments(query: &str, schema: &QuerySchema) -> Attachments {
+    BTreeMap::from([
+        (AttachmentId(1), json(&query)),
+        (AttachmentId(2), json(schema)),
+    ])
+}
+
+/// Starts a `validate_query` run for `query` over the users table.
+fn start_validate(query: &str, zone_roots: Vec<ZoneRootFact>) -> Result<HostRun, Outgoing> {
+    HostRun::start(
+        &CompositionRoot::default(),
+        &start_message(validate_op(), zone_roots),
+        validate_attachments(query, &users()),
+    )
+}
+
+/// What a test reads a host call's error as: the core error its `error`
+/// control message carries.
+trait Core<T> {
+    fn core(self) -> Result<T, CoreError>;
+}
+
+trait IntoCore {
+    fn into_core(self) -> CoreError;
+}
+
+impl IntoCore for CoreError {
+    fn into_core(self) -> CoreError {
+        self
+    }
+}
+
+impl IntoCore for Outgoing {
+    fn into_core(self) -> CoreError {
+        match read(&self).unwrap() {
+            ControlMessage::Error { error } => error,
+            other => panic!("not an error message: {other:?}"),
+        }
+    }
+}
+
+impl<T, E: IntoCore> Core<T> for Result<T, E> {
+    fn core(self) -> Result<T, CoreError> {
+        self.map_err(IntoCore::into_core)
+    }
+}
+
 fn no_attachments() -> Attachments {
     BTreeMap::new()
 }
 
-fn step(bytes: &[u8]) -> Step {
-    match decode(bytes).unwrap() {
+fn step(out: &Outgoing) -> Step {
+    match read(out).unwrap() {
         ControlMessage::Step(step) => step,
         other => panic!("not a step: {other:?}"),
     }
@@ -116,17 +171,11 @@ fn is_panic(error: &CoreError) -> bool {
 
 #[test]
 fn a_query_validates_from_bytes_to_bytes() {
-    let root = CompositionRoot::default();
     for (query, accepted) in [
         ("PREDICT users.age FOR EACH users.user_id", true),
         ("PREDICT users.height FOR EACH users.user_id", false),
     ] {
-        let run = HostRun::start(
-            &root,
-            &start_message(validate(query), vec![]),
-            no_attachments(),
-        )
-        .unwrap();
+        let run = start_validate(query, vec![]).unwrap();
         let Step::Done {
             result: OperationResult::ValidateQuery(validation),
         } = step(&run.next().unwrap())
@@ -135,7 +184,7 @@ fn a_query_validates_from_bytes_to_bytes() {
         };
         assert_eq!(validation.accepted, accepted, "{query}");
         assert_eq!(run.state().unwrap(), RunState::Finished);
-        assert_eq!(run.next().unwrap_err().code, codes::RUN_FINISHED);
+        assert_eq!(run.next().core().unwrap_err().code, ErrorCode::RunFinished);
     }
 }
 
@@ -144,46 +193,56 @@ fn a_run_starts_only_from_a_start_message_the_core_takes() {
     let root = CompositionRoot::default();
     let cancel = encode(&ControlMessage::Cancel {}).unwrap();
     let err = HostRun::start(&root, &cancel, no_attachments())
+        .core()
         .err()
         .unwrap();
-    assert_eq!(err.code, codes::INVALID_MESSAGE);
-    let err = HostRun::start(&root, b"{", no_attachments()).err().unwrap();
-    assert_eq!(err.code, codes::INVALID_MESSAGE);
-    let mut other = decode(&start_message(
-        validate("PREDICT users.age FOR EACH users.user_id"),
-        vec![],
-    ))
-    .unwrap();
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    let err = HostRun::start(&root, b"{", no_attachments())
+        .core()
+        .err()
+        .unwrap();
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    let mut other = decode(&start_message(validate_op(), vec![])).unwrap();
     let ControlMessage::Start(start) = &mut other else {
         unreachable!()
     };
     start.contract = CONTRACT_VERSION + 1;
-    let err = HostRun::start(&root, &encode(&other).unwrap(), no_attachments())
-        .err()
-        .unwrap();
+    let err = HostRun::start(
+        &root,
+        &encode(&other).unwrap(),
+        validate_attachments("PREDICT users.age FOR EACH users.user_id", &users()),
+    )
+    .core()
+    .err()
+    .unwrap();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Protocol, codes::INVALID_MESSAGE)
+        (err.kind, err.code),
+        (ErrorKind::Protocol, ErrorCode::InvalidMessage)
     );
 }
 
 #[test]
 fn a_panic_is_contained_and_poisons_the_run() {
     let run = host_run(Run::new(|_| async { panic!("boom in the body") }));
-    let err = run.next().unwrap_err();
+    let err = run.next().core().unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Internal, codes::INTERNAL_ERROR)
+        (err.kind, err.code),
+        (ErrorKind::Internal, ErrorCode::InternalError)
     );
     assert!(is_panic(&err));
     assert!(err.message.contains("boom in the body"));
     assert_eq!(run.state().unwrap(), RunState::Poisoned);
-    for err in [run.next().unwrap_err(), run.cancel().unwrap_err()] {
-        assert_eq!(err.code, codes::RUN_POISONED);
+    for err in [
+        run.next().core().unwrap_err(),
+        run.cancel().core().unwrap_err(),
+    ] {
+        assert_eq!(err.code, ErrorCode::RunPoisoned);
     }
 
     // Outside any run, too.
-    let err = contain::<()>(|| panic!("{}", String::from("boom in the host"))).unwrap_err();
+    let err = contain::<()>(|| panic!("{}", String::from("boom in the host")))
+        .core()
+        .unwrap_err();
     assert!(is_panic(&err));
     assert!(err.message.contains("boom in the host"));
 }
@@ -207,13 +266,13 @@ fn a_second_call_while_one_is_in_the_run_is_busy() {
     };
     inside.wait();
     for err in [
-        run.next().unwrap_err(),
-        run.cancel().unwrap_err(),
-        run.take_attachment(AttachmentId(1)).unwrap_err(),
+        run.next().core().unwrap_err(),
+        run.cancel().core().unwrap_err(),
+        run.take_attachment(AttachmentId(1)).core().unwrap_err(),
     ] {
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Protocol, codes::RUN_BUSY)
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::RunBusy)
         );
     }
     release.send(()).unwrap();
@@ -248,7 +307,9 @@ fn fetching_run() -> Run {
                 Reply::Fetch(FetchResult::Data(data)) => {
                     data.schema.field(0).data_type().to_string()
                 }
-                Reply::Fetch(FetchResult::Error(error)) => error.code,
+                Reply::Fetch(FetchResult::Error(error)) => {
+                    CoreError::provider(&error).code.as_str().to_owned()
+                }
                 Reply::Model(_) => "model".into(),
             });
         }
@@ -271,8 +332,8 @@ fn fetch_reply(id: ReplyId, outcome: FetchOutcome) -> Vec<u8> {
     encode(&ControlMessage::FetchReply(FetchReply { id, outcome })).unwrap()
 }
 
-fn fetch_id(bytes: &[u8]) -> ReplyId {
-    match step(bytes) {
+fn fetch_id(out: &Outgoing) -> ReplyId {
+    match step(out) {
         Step::Fetch { requests } => requests[0].id,
         other => panic!("not a fetch: {other:?}"),
     }
@@ -300,8 +361,6 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
     // now.
     let error = ProviderError {
         kind: ErrorKind::DataSource,
-        code: codes::PROVIDER_ERROR.into(),
-        message: "gone".into(),
         retryable: false,
         sqlstate: None,
         vendor_code: None,
@@ -324,7 +383,10 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
         .collect();
     assert_eq!(
         seen,
-        [DataType::Utf8.to_string().as_str(), codes::PROVIDER_ERROR]
+        [
+            DataType::Utf8.to_string().as_str(),
+            ErrorCode::ProviderError.as_str()
+        ]
     );
 }
 
@@ -351,10 +413,10 @@ fn a_reply_must_attach_exactly_what_it_names() {
             "bytes, not Arrow",
         ),
     ] {
-        let err = run.reply(&named_one, attachments).unwrap_err();
+        let err = run.reply(&named_one, attachments).core().unwrap_err();
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Protocol, codes::INVALID_MESSAGE),
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::InvalidMessage),
             "{why}"
         );
         assert!(err.fields.contains_key("attachment"), "{why}");
@@ -367,8 +429,9 @@ fn a_reply_must_attach_exactly_what_it_names() {
             &encode(&ControlMessage::Cancel {}).unwrap(),
             no_attachments(),
         )
+        .core()
         .unwrap_err();
-    assert_eq!(err.code, codes::INVALID_MESSAGE);
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
 }
 
 #[test]
@@ -386,13 +449,14 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
             ),
             BTreeMap::from([(AttachmentId(9), Attachment::Arrow(table(half)))]),
         )
+        .core()
         .unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::UNSUPPORTED_TYPE)
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedType)
     );
     assert_eq!(run.state().unwrap(), RunState::Finished);
-    assert_eq!(run.next().unwrap_err().code, codes::RUN_FINISHED);
+    assert_eq!(run.next().core().unwrap_err().code, ErrorCode::RunFinished);
 
     // A reply the run does not await gets the run's own answer, before any
     // data is read.
@@ -409,8 +473,9 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
             ),
             BTreeMap::from([(AttachmentId(1), Attachment::Arrow(table(half)))]),
         )
+        .core()
         .unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY);
+    assert_eq!(err.code, ErrorCode::UnknownReply);
 }
 
 fn model_run() -> Run {
@@ -435,7 +500,7 @@ fn model_run() -> Run {
         let Reply::Model(ModelResult::Response { body, .. }) = reply else {
             return Err(CoreError::new(
                 ErrorKind::ModelEndpoint,
-                codes::TRANSPORT_ERROR,
+                ErrorCode::TransportError,
                 "no",
             ));
         };
@@ -476,8 +541,9 @@ fn a_model_call_s_body_is_the_run_s_attachment_1_and_its_answer_the_host_s() {
     let arrow = Attachment::Arrow(table(Arc::new(LargeStringArray::from(vec!["a"]))));
     let err = run
         .reply(&reply, BTreeMap::from([(AttachmentId(1), arrow)]))
+        .core()
         .unwrap_err();
-    assert_eq!(err.code, codes::INVALID_MESSAGE);
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
     run.reply(
         &reply,
         BTreeMap::from([(AttachmentId(1), Attachment::Bytes(b"answer".to_vec()))]),
@@ -491,14 +557,13 @@ fn a_model_call_s_body_is_the_run_s_attachment_1_and_its_answer_the_host_s() {
     };
     assert!(validation.accepted);
     // Both warnings, in order, in one message.
-    let messages = run.take_warnings().unwrap();
-    assert_eq!(messages.len(), 1);
-    let ControlMessage::Warnings { warnings } = decode(&messages[0]).unwrap() else {
+    let message = run.take_warnings().unwrap().expect("warnings");
+    let ControlMessage::Warnings { warnings } = read(&message).unwrap() else {
         panic!("a warnings message");
     };
     let codes: Vec<&str> = warnings.iter().map(|w| w.code.as_str()).collect();
     assert_eq!(codes, ["FIRST", "SECOND"]);
-    assert!(run.take_warnings().unwrap().is_empty());
+    assert!(run.take_warnings().unwrap().is_none());
 }
 
 #[test]
@@ -509,19 +574,20 @@ fn cancelling_releases_the_run_s_attachments() {
     };
     run.cancel().unwrap();
     assert!(run.take_attachment(call.body).unwrap().is_none());
-    assert_eq!(run.next().unwrap_err().code, codes::RUN_CANCELLED);
+    assert_eq!(run.next().core().unwrap_err().code, ErrorCode::RunCancelled);
 }
 
 #[test]
 fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
-    // A run finishes with request state whose payload it attached.
+    // A run finishes with request state whose payload and query it attached.
     let run = host_run(Run::new(|asker| async move {
         let payload = asker.attach(Attachment::Bytes(b"payload".to_vec()))?;
+        let query = asker.attach(json(&"PREDICT users.age FOR EACH users.user_id"))?;
         Ok(OperationResult::Materialize(Materialized {
             state: RequestState {
                 version: 1,
                 payload,
-                query: "PREDICT users.age FOR EACH users.user_id".into(),
+                query,
             },
         }))
     }));
@@ -531,15 +597,17 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     else {
         panic!("materialize ends with its state");
     };
-    // The host takes the payload after the run finished.
+    // The host takes the payload and query after the run finished.
     let payload = run.take_attachment(materialized.state.payload).unwrap();
     assert!(matches!(payload, Some(Attachment::Bytes(ref b)) if b == b"payload"));
+    let query = run.take_attachment(materialized.state.query).unwrap();
     drop(run);
 
-    // It comes back with the predict run's start, under an id the host picks
+    // They come back with the predict run's start, under ids the host picks
     // for that message; the start must attach exactly what it names.
     let mut state = materialized.state;
     state.payload = AttachmentId(7);
+    state.query = AttachmentId(1);
     let predict = start_message(
         Operation::Predict(Predict {
             state,
@@ -551,22 +619,30 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     let err = HostRun::start(
         &root,
         &predict,
-        BTreeMap::from([(AttachmentId(8), payload.clone().unwrap())]),
+        BTreeMap::from([
+            (AttachmentId(8), payload.clone().unwrap()),
+            (AttachmentId(1), query.clone().unwrap()),
+        ]),
     )
+    .core()
     .err()
     .unwrap();
-    assert_eq!(err.code, codes::INVALID_MESSAGE);
-    // Named and attached; the core takes start attachments from T1.11.
-    let err = HostRun::start(
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    // Named and attached, the run starts; predict itself comes with T1.11d.
+    let run = HostRun::start(
         &root,
         &predict,
-        BTreeMap::from([(AttachmentId(7), payload.unwrap())]),
+        BTreeMap::from([
+            (AttachmentId(7), payload.unwrap()),
+            (AttachmentId(1), query.unwrap()),
+        ]),
     )
-    .err()
+    .core()
     .unwrap();
+    let err = run.next().core().unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::UNSUPPORTED_REQUEST)
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
     // An index set a materialize names is checked the same way.
     let materialize = start_message(
@@ -574,38 +650,46 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             provider: ProviderChoice::Sql {
                 dialect: Dialect::Duckdb,
             },
-            schema: SourceDescription {
-                tables: vec![],
-                links: vec![],
-            },
-            query: String::new(),
+            schema: AttachmentId(1),
+            query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time: None,
             seed: None,
         }),
         vec![],
     );
-    let err = HostRun::start(&root, &materialize, no_attachments())
-        .err()
-        .unwrap();
-    assert_eq!(err.code, codes::INVALID_MESSAGE);
+    let err = HostRun::start(
+        &root,
+        &materialize,
+        BTreeMap::from([
+            (
+                AttachmentId(1),
+                json(&SourceDescription {
+                    tables: vec![],
+                    links: vec![],
+                }),
+            ),
+            (AttachmentId(2), json(&"")),
+        ]),
+    )
+    .core()
+    .err()
+    .unwrap();
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    assert_eq!(err.fields["attachment"], Detail::Scalar(Scalar::UInt32(3)));
 }
 
 #[test]
 fn a_run_resolves_zones_through_its_host_s_roots() {
     let vendored = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/tzdata-2026c");
-    let root = CompositionRoot::default();
-    let run = HostRun::start(
-        &root,
-        &start_message(
-            validate("PREDICT users.age FOR EACH users.user_id"),
-            vec![ZoneRootFact {
-                path: vendored.to_string_lossy().into_owned(),
-                version: Some("2026c".into()),
-            }],
-        ),
-        no_attachments(),
+    let run = start_validate(
+        "PREDICT users.age FOR EACH users.user_id",
+        vec![ZoneRootFact {
+            path: vendored.to_string_lossy().into_owned(),
+            version: Some("2026c".into()),
+        }],
     )
+    .core()
     .unwrap();
     run.zones().resolve("europe/berlin").unwrap();
     run.zones().resolve("UTC").unwrap();

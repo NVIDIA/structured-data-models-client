@@ -12,6 +12,10 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+# Operations only tests reach; a shipped build leaves it off.
+test-ops = ["sdm-core/test-ops"]
+
 [dependencies]
 arrow-array.workspace = true
 arrow-buffer.workspace = true
@@ -24,7 +28,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+sdm-core = { path = "../sdm-core", features = ["test-ops"] }
 regex.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [lints]

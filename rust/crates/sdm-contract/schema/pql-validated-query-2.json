@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-pql-validated-query/1",
+  "$id": "sdm-pql-validated-query/2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ValidatedQuery",
   "description": "A query PQL accepted.",
@@ -261,7 +261,7 @@
         "start_row": {
           "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "minimum": 1
         },
         "start_col": {
           "type": "integer",
@@ -271,7 +271,7 @@
         "end_row": {
           "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "minimum": 1
         },
         "end_col": {
           "type": "integer",

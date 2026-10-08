@@ -2,25 +2,30 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The control codecs: a message round-trips, one past the 64 KB cap or not
-//! of the contract is refused before it is read, and the core never writes
-//! one past the cap.
+//! The control codecs: a message round-trips; one from the host past the
+//! 64 KB cap, or not of the contract, is refused before it is read; one the
+//! core writes past the cap travels whole as an attachment (decision H7).
 
 use std::collections::BTreeMap;
 
-use sdm_contract::facts::{PlatformFacts, ZoneRootFact};
+use sdm_contract::data::AttachmentId;
+use sdm_contract::facts::{LocalZone, PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::{
-    Operation, OperationResult, PqlDiagnostic, ProfileName, ProfileSpec, QuerySchema,
-    QueryValidation, Severity, ValidateQuery,
+    ColumnRef, DescribedColumn, DescribedSource, DescribedTable, Dtype, Operation, OperationResult,
+    PqlDiagnostic, ProfileName, ProfileSpec, QueryValidation, Severity, SourceDescription, Stype,
+    ValidateQuery,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
-    CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorKind, HostFacts, Scalar,
-    Step, Unit, codes,
+    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
+    ErrorKind, HostFacts, Scalar, Step, Unit,
 };
-use sdm_host::{CONTROL_CAP, decode, encode, encode_error, encode_warnings};
+use sdm_core::Attachment;
+use sdm_host::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
 
-fn start(query: String) -> ControlMessage {
+/// A start whose profile names `model`, the one free-text field of its
+/// envelope.
+fn start(model: String) -> ControlMessage {
     ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: HostFacts {
@@ -29,7 +34,7 @@ fn start(query: String) -> ControlMessage {
                 zone: Some("UTC".into()),
                 value: 0,
             },
-            local_zone: Some("Europe/Berlin".into()),
+            local_zone: Some(LocalZone::Iana("Europe/Berlin".into())),
             zone_roots: vec![ZoneRootFact {
                 path: "/usr/share/zoneinfo".into(),
                 version: Some("2026c".into()),
@@ -40,14 +45,11 @@ fn start(query: String) -> ControlMessage {
             },
         },
         operation: Operation::ValidateQuery(ValidateQuery {
-            query,
-            schema: QuerySchema {
-                tables: vec![],
-                links: vec![],
-            },
+            query: AttachmentId(1),
+            schema: AttachmentId(2),
             profile: ProfileSpec {
                 name: ProfileName::Relational,
-                model: None,
+                model: Some(model),
                 capabilities: BTreeMap::new(),
             },
         }),
@@ -63,13 +65,13 @@ fn count(error: &CoreError, field: &str) -> u64 {
 
 #[test]
 fn a_message_round_trips() {
-    let message = start("PREDICT users.age FOR EACH users.user_id".into());
+    let message = start("rfm".into());
     assert_eq!(decode(&encode(&message).unwrap()).unwrap(), message);
 }
 
 /// A start message of exactly `size` bytes, as a host might write one.
 fn start_of(size: usize) -> Vec<u8> {
-    let written = |query: String| serde_json::to_vec(&start(query)).unwrap();
+    let written = |model: String| serde_json::to_vec(&start(model)).unwrap();
     let empty = written(String::new()).len();
     let bytes = written("x".repeat(size - empty));
     assert_eq!(bytes.len(), size);
@@ -81,8 +83,8 @@ fn a_message_up_to_the_cap_is_read_and_one_past_it_is_refused() {
     assert!(decode(&start_of(CONTROL_CAP)).is_ok());
     let err = decode(&start_of(CONTROL_CAP + 1)).unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Protocol, codes::INVALID_MESSAGE)
+        (err.kind, err.code),
+        (ErrorKind::Protocol, ErrorCode::InvalidMessage)
     );
     assert_eq!(count(&err, "bytes"), (CONTROL_CAP + 1) as u64);
     assert_eq!(count(&err, "cap"), CONTROL_CAP as u64);
@@ -99,8 +101,8 @@ fn a_message_not_of_the_contract_is_refused() {
     ] {
         let err = decode(text).unwrap_err();
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Protocol, codes::INVALID_MESSAGE),
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::InvalidMessage),
             "{}",
             String::from_utf8_lossy(text)
         );
@@ -121,15 +123,107 @@ fn done_with_message_of(size: usize) -> ControlMessage {
     })
 }
 
+/// The message `make` builds, padded so its JSON is exactly `size` bytes.
+fn exactly(size: usize, make: impl Fn(usize) -> ControlMessage) -> ControlMessage {
+    let base = serde_json::to_vec(&make(0)).unwrap().len();
+    let message = make(size - base);
+    assert_eq!(serde_json::to_vec(&message).unwrap().len(), size);
+    message
+}
+
+fn no_id() -> Result<AttachmentId, CoreError> {
+    panic!("a message within the cap needs no attachment")
+}
+
+/// Writes `message` as the core does and reads it back as a host does,
+/// checking whether it travelled in the control message or as an
+/// attachment.
+fn written_whole(message: &ControlMessage, attached: bool) -> Outgoing {
+    let out = if attached {
+        write(message, || Ok(AttachmentId(5))).unwrap()
+    } else {
+        write(message, no_id).unwrap()
+    };
+    assert!(out.control.len() <= CONTROL_CAP);
+    assert_eq!(out.attachments.is_empty(), !attached);
+    if attached {
+        assert_eq!(
+            decode(&out.control).unwrap(),
+            ControlMessage::Attached {
+                attachment: AttachmentId(5)
+            }
+        );
+    }
+    assert_eq!(&read(&out).unwrap(), message);
+    out
+}
+
 #[test]
-fn the_core_never_writes_past_the_cap() {
-    assert!(encode(&done_with_message_of(1_000)).is_ok());
-    let err = encode(&done_with_message_of(CONTROL_CAP)).unwrap_err();
-    assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Internal, codes::INTERNAL_ERROR)
-    );
-    assert!(count(&err, "bytes") > CONTROL_CAP as u64);
+fn the_core_writes_a_message_whole_within_the_cap_or_as_an_attachment() {
+    let at_cap = exactly(CONTROL_CAP, done_with_message_of);
+    written_whole(&at_cap, false);
+    let past_cap = exactly(CONTROL_CAP + 1, done_with_message_of);
+    written_whole(&past_cap, true);
+    written_whole(&done_with_message_of(4 * CONTROL_CAP), true);
+}
+
+/// A source description whose JSON is exactly `size` bytes.
+fn description_of(size: usize) -> Vec<u8> {
+    let make = |pad: usize| SourceDescription {
+        tables: vec![DescribedTable {
+            name: "t".repeat(pad + 1),
+            columns: vec![DescribedColumn {
+                name: "c".into(),
+                received: ColumnType::Int64,
+                dtype: Dtype::Int,
+                stype: Stype::Numerical,
+            }],
+            primary_key: vec![],
+            time_column: None,
+            duplicate_keys: None,
+        }],
+        links: vec![vec![ColumnRef {
+            table: "t".into(),
+            column: "c".into(),
+        }]],
+    };
+    let base = serde_json::to_vec(&make(0)).unwrap().len();
+    let bytes = serde_json::to_vec(&make(size - base)).unwrap();
+    assert_eq!(bytes.len(), size);
+    bytes
+}
+
+#[test]
+fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
+    // The description is input-sized, so it is an attachment of its JSON
+    // beside a Done that names it (decision H5); the Done stays small.
+    for size in [
+        CONTROL_CAP - 1,
+        CONTROL_CAP,
+        CONTROL_CAP + 1,
+        3 * CONTROL_CAP,
+    ] {
+        let description = description_of(size);
+        let done = ControlMessage::Step(Step::Done {
+            result: OperationResult::DescribeSource(DescribedSource {
+                description: AttachmentId(4),
+            }),
+        });
+        let mut out = written_whole(&done, false);
+        out.attachments
+            .insert(AttachmentId(4), Attachment::Bytes(description.clone()));
+        let ControlMessage::Step(Step::Done {
+            result: OperationResult::DescribeSource(described),
+        }) = read(&out).unwrap()
+        else {
+            panic!("a done")
+        };
+        let Attachment::Bytes(bytes) = &out.attachments[&described.description] else {
+            panic!("bytes")
+        };
+        let back: SourceDescription = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(serde_json::to_vec(&back).unwrap(), description);
+    }
 }
 
 #[test]
@@ -147,37 +241,78 @@ fn the_core_never_writes_what_its_contract_refuses() {
             }),
         )]),
     };
-    let err = encode(&ControlMessage::Warnings {
-        warnings: vec![warning],
-    })
+    let err = write(
+        &ControlMessage::Warnings {
+            warnings: vec![warning],
+        },
+        no_id,
+    )
     .unwrap_err();
-    assert_eq!(err.code, codes::INTERNAL_ERROR);
+    assert_eq!(err.code, ErrorCode::InternalError);
+}
+
+fn error_of(size: usize) -> ControlMessage {
+    exactly(size, |pad| ControlMessage::Error {
+        error: CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "small")
+            .with_field("table", Detail::text("x".repeat(pad)))
+            .caused_by(CoreError::new(
+                ErrorKind::DataSource,
+                ErrorCode::ProviderError,
+                "cause",
+            )),
+    })
 }
 
 #[test]
-fn an_error_is_always_written_within_the_cap() {
-    let big = CoreError::new(
-        ErrorKind::DataSource,
-        "PROVIDER_ERROR",
-        "x".repeat(CONTROL_CAP),
-    )
-    .with_field("table", Detail::text("orders"));
-    let caused =
-        CoreError::new(ErrorKind::Internal, codes::INTERNAL_ERROR, "small").caused_by(big.clone());
-    for (error, keeps_fields) in [(caused, true), (big, false)] {
-        let bytes = encode_error(&error);
-        assert!(bytes.len() <= CONTROL_CAP);
-        let ControlMessage::Error { error: written } = decode(&bytes).unwrap() else {
-            panic!("not an error message");
+fn an_error_is_written_whole_with_its_fields_and_cause_either_side_of_the_cap() {
+    for (size, attached) in [(CONTROL_CAP, false), (CONTROL_CAP + 1, true)] {
+        let ControlMessage::Error { error } = error_of(size) else {
+            unreachable!()
         };
-        assert_eq!((written.kind, &written.code), (error.kind, &error.code));
-        assert_eq!(written.fields == error.fields, keeps_fields);
+        let out = write_error(&error, || Ok(AttachmentId(2)));
+        assert!(out.control.len() <= CONTROL_CAP);
+        assert_eq!(out.attachments.is_empty(), !attached);
+        assert_eq!(read(&out).unwrap(), ControlMessage::Error { error });
     }
 }
 
 #[test]
-fn warnings_are_written_in_order_within_the_cap() {
-    assert!(encode_warnings(vec![]).unwrap().is_empty());
+fn an_error_the_encoder_refuses_becomes_an_internal_error() {
+    let bad = CoreError::new(ErrorKind::DataSource, ErrorCode::ProviderError, "bad").with_field(
+        "d",
+        Detail::Scalar(Scalar::Decimal128 {
+            precision: 0,
+            scale: 0,
+            value: 1,
+        }),
+    );
+    let out = write_error(&bad, no_id);
+    let ControlMessage::Error { error } = read(&out).unwrap() else {
+        panic!("an error message")
+    };
+    assert_eq!(error.code, ErrorCode::InternalError);
+    // And a run out of ids cannot attach: that is said, within the cap.
+    let ControlMessage::Error { error: big } = error_of(CONTROL_CAP + 1) else {
+        unreachable!()
+    };
+    let out = write_error(&big, || {
+        Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "out of ids",
+        ))
+    });
+    let ControlMessage::Error { error } = read(&out).unwrap() else {
+        panic!("an error message")
+    };
+    assert_eq!(
+        (error.code, error.message.as_str()),
+        (ErrorCode::InternalError, "out of ids")
+    );
+}
+
+#[test]
+fn warnings_are_written_in_order_in_one_message_of_any_size() {
     let warnings: Vec<CoreWarning> = (0..40)
         .map(|i| CoreWarning {
             code: "LONG".into(),
@@ -185,25 +320,5 @@ fn warnings_are_written_in_order_within_the_cap() {
             fields: BTreeMap::new(),
         })
         .collect();
-    let messages = encode_warnings(warnings.clone()).unwrap();
-    assert!(messages.len() > 1);
-    let mut read = Vec::new();
-    for bytes in messages {
-        assert!(bytes.len() <= CONTROL_CAP);
-        let ControlMessage::Warnings { warnings } = decode(&bytes).unwrap() else {
-            panic!("not a warnings message");
-        };
-        read.extend(warnings);
-    }
-    assert_eq!(read, warnings);
-    // One warning alone past the cap is the core's defect.
-    let huge = CoreWarning {
-        code: "HUGE".into(),
-        message: "w".repeat(CONTROL_CAP),
-        fields: BTreeMap::new(),
-    };
-    assert_eq!(
-        encode_warnings(vec![huge]).unwrap_err().code,
-        codes::INTERNAL_ERROR
-    );
+    written_whole(&ControlMessage::Warnings { warnings }, true);
 }

@@ -15,7 +15,7 @@ use arrow_schema::Schema;
 use sdm_contract::data::{DataRequest, ExpectedSchema, ProviderError};
 use sdm_contract::ops::{OperationResult, Predicted, QueryValidation};
 use sdm_contract::run::{Endpoint, ReplyId};
-use sdm_contract::{CoreError, CoreWarning, ErrorKind, Step, codes};
+use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
 use sdm_core::{ArrowData, Asker, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
 
 fn describe(table: &str) -> DataRequest {
@@ -41,8 +41,6 @@ fn rows(n: usize) -> FetchResult {
 fn failed() -> FetchResult {
     FetchResult::Error(ProviderError {
         kind: ErrorKind::DataSource,
-        code: codes::PROVIDER_ERROR.into(),
-        message: "no such table".into(),
         retryable: false,
         sqlstate: Some("42P01".into()),
         vendor_code: None,
@@ -98,7 +96,7 @@ fn scripted() -> Run {
         let Reply::Model(ModelResult::Response { status, body, .. }) = answer else {
             return Err(CoreError::new(
                 ErrorKind::ModelEndpoint,
-                codes::TRANSPORT_ERROR,
+                ErrorCode::TransportError,
                 "no answer",
             ));
         };
@@ -198,8 +196,8 @@ fn a_finished_run_refuses_every_call() {
         run.cancel().unwrap_err(),
     ] {
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Protocol, codes::RUN_FINISHED)
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::RunFinished)
         );
     }
     assert_eq!(run.state(), RunState::Finished);
@@ -209,11 +207,11 @@ fn a_finished_run_refuses_every_call() {
 fn a_ready_run_refuses_replies() {
     let mut run = scripted();
     let err = run.submit_fetch(ReplyId(1), rows(0)).unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY);
+    assert_eq!(err.code, ErrorCode::UnknownReply);
     let err = run
         .submit_model(ReplyId(1), answered(200, b""))
         .unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY);
+    assert_eq!(err.code, ErrorCode::UnknownReply);
     assert_eq!(run.state(), RunState::Ready);
     // And it still runs.
     fetch_ids(&run.next().unwrap());
@@ -226,22 +224,26 @@ fn awaiting_a_fetch_refuses_next_and_stray_replies() {
 
     let err = run.next().unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Protocol, codes::REPLY_MISSING)
+        (err.kind, err.code),
+        (ErrorKind::Protocol, ErrorCode::ReplyMissing)
     );
 
     let err = run.submit_fetch(ReplyId(99), rows(0)).unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY, "an unknown id");
+    assert_eq!(err.code, ErrorCode::UnknownReply, "an unknown id");
 
     let err = run.submit_model(ids[0], answered(200, b"")).unwrap_err();
-    assert_eq!(err.code, codes::WRONG_REPLY, "a model reply to a fetch");
+    assert_eq!(err.code, ErrorCode::WrongReply, "a model reply to a fetch");
 
     run.submit_fetch(ids[0], rows(1)).unwrap();
     let err = run.submit_fetch(ids[0], rows(1)).unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY, "a duplicate reply");
+    assert_eq!(err.code, ErrorCode::UnknownReply, "a duplicate reply");
 
     let err = run.next().unwrap_err();
-    assert_eq!(err.code, codes::REPLY_MISSING, "one fetch still unanswered");
+    assert_eq!(
+        err.code,
+        ErrorCode::ReplyMissing,
+        "one fetch still unanswered"
+    );
     assert_eq!(run.state(), RunState::AwaitingFetch(vec![ids[1]]));
 }
 
@@ -257,19 +259,19 @@ fn awaiting_a_model_call_refuses_stale_and_wrong_replies() {
     };
 
     let err = run.submit_fetch(ids[0], rows(0)).unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY, "a stale fetch id");
+    assert_eq!(err.code, ErrorCode::UnknownReply, "a stale fetch id");
     let err = run.submit_fetch(call.id, rows(0)).unwrap_err();
     assert_eq!(
         err.code,
-        codes::WRONG_REPLY,
+        ErrorCode::WrongReply,
         "a fetch reply to a model call"
     );
     let err = run.next().unwrap_err();
-    assert_eq!(err.code, codes::REPLY_MISSING);
+    assert_eq!(err.code, ErrorCode::ReplyMissing);
 
     run.submit_model(call.id, answered(500, b"down")).unwrap();
     let err = run.submit_model(call.id, answered(200, b"")).unwrap_err();
-    assert_eq!(err.code, codes::UNKNOWN_REPLY, "a duplicate model reply");
+    assert_eq!(err.code, ErrorCode::UnknownReply, "a duplicate model reply");
     assert!(matches!(run.next().unwrap(), Step::Done { .. }));
 }
 
@@ -305,8 +307,8 @@ fn cancelling_while_awaiting_a_fetch_drops_the_body() {
         run.cancel().unwrap_err(),
     ] {
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Cancelled, codes::RUN_CANCELLED)
+            (err.kind, err.code),
+            (ErrorKind::Cancelled, ErrorCode::RunCancelled)
         );
     }
 }
@@ -315,7 +317,7 @@ fn cancelling_while_awaiting_a_fetch_drops_the_body() {
 fn cancelling_before_the_first_step_or_while_awaiting_a_model_call() {
     let mut run = scripted();
     run.cancel().unwrap();
-    assert_eq!(run.next().unwrap_err().code, codes::RUN_CANCELLED);
+    assert_eq!(run.next().unwrap_err().code, ErrorCode::RunCancelled);
 
     let mut run = scripted();
     for id in fetch_ids(&run.next().unwrap()) {
@@ -333,7 +335,7 @@ fn cancelling_before_the_first_step_or_while_awaiting_a_model_call() {
         run.submit_model(call.id, answered(200, b""))
             .unwrap_err()
             .code,
-        codes::RUN_CANCELLED
+        ErrorCode::RunCancelled
     );
 }
 
@@ -351,8 +353,8 @@ fn the_host_can_end_a_run_it_cannot_answer() {
         run.end().unwrap_err(),
     ] {
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Protocol, codes::RUN_FINISHED)
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::RunFinished)
         );
     }
     // The attachments the run made stay until the host takes them.
@@ -374,7 +376,7 @@ fn an_operation_error_finishes_the_run() {
             .fetch(describe("a"), None, ExpectedSchema::Discover {})
             .await;
         match reply {
-            Reply::Fetch(FetchResult::Error(e)) => Err(CoreError::new(e.kind, &e.code, e.message)),
+            Reply::Fetch(FetchResult::Error(e)) => Err(CoreError::provider(&e)),
             _ => Ok(done(vec![])),
         }
     });
@@ -382,11 +384,11 @@ fn an_operation_error_finishes_the_run() {
     run.submit_fetch(ids[0], failed()).unwrap();
     let err = run.next().unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::DataSource, codes::PROVIDER_ERROR)
+        (err.kind, err.code),
+        (ErrorKind::DataSource, ErrorCode::ProviderError)
     );
     assert_eq!(run.state(), RunState::Finished);
-    assert_eq!(run.next().unwrap_err().code, codes::RUN_FINISHED);
+    assert_eq!(run.next().unwrap_err().code, ErrorCode::RunFinished);
 }
 
 #[test]
@@ -409,8 +411,8 @@ fn a_panicking_body_poisons_the_run() {
         run.cancel().unwrap_err(),
     ] {
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Protocol, codes::RUN_POISONED)
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::RunPoisoned)
         );
     }
 }
@@ -421,7 +423,7 @@ fn the_host_can_poison_a_run() {
     fetch_ids(&run.next().unwrap());
     run.poison();
     assert_eq!(run.state(), RunState::Poisoned);
-    assert_eq!(run.next().unwrap_err().code, codes::RUN_POISONED);
+    assert_eq!(run.next().unwrap_err().code, ErrorCode::RunPoisoned);
 }
 
 #[test]
@@ -432,8 +434,8 @@ fn a_body_that_waits_on_nothing_or_on_too_much_is_an_internal_error() {
     });
     let err = run.next().unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Internal, codes::INTERNAL_ERROR)
+        (err.kind, err.code),
+        (ErrorKind::Internal, ErrorCode::InternalError)
     );
     assert_eq!(run.state(), RunState::Finished);
 
@@ -505,7 +507,6 @@ fn a_transport_error_reaches_the_body() {
         ModelResult::TransportError {
             kind: ErrorKind::ModelEndpoint,
             retryable: true,
-            message: "timed out".into(),
         },
     )
     .unwrap();

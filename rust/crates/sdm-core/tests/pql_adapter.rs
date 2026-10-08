@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Capability, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::pql::{Aggregation, EntityClause, NodeKind, QueryMode};
-use sdm_contract::{ErrorKind, HostFacts, Scalar, Unit, codes};
+use sdm_contract::{ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_core::pql::{resolve, validate};
 use sdm_core::profiles::Profile;
 use serde_json::json;
@@ -135,8 +135,8 @@ fn a_literal_the_interim_parser_cannot_read_is_no_answer() {
     )
     .unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::UNSUPPORTED_REQUEST)
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
 }
 

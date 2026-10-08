@@ -7,12 +7,18 @@
 
 #![forbid(unsafe_code)]
 
+pub mod attached;
 pub mod compose;
 pub mod dispatch;
 pub mod pql;
 pub mod profiles;
 pub mod run;
+#[cfg(feature = "test-ops")]
+mod test_ops;
 
 pub use compose::CompositionRoot;
 pub use dispatch::start;
-pub use run::{ArrowData, Ask, Asker, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
+pub use run::{
+    ArrowData, Ask, Asker, Attachment, AttachmentIds, Attachments, FetchResult, ModelResult, Reply,
+    Run, RunState,
+};

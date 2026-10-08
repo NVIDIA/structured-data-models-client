@@ -17,7 +17,7 @@ use arrow_schema::{DataType, Field as ArrowField, Fields, TimeUnit};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{CoreError, Detail, ErrorKind, codes};
+use crate::error::{CoreError, Detail, ErrorCode, ErrorKind};
 use crate::scalar::{
     DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION, decimal_type_rule, zone_rule,
 };
@@ -521,7 +521,7 @@ pub(crate) fn checked_column_type<S: serde::Serializer>(
 pub fn unsupported_type(column: &str, data_type: &DataType) -> CoreError {
     CoreError::new(
         ErrorKind::Unsupported,
-        codes::UNSUPPORTED_TYPE,
+        ErrorCode::UnsupportedType,
         format!("column {column:?} has the Arrow type {data_type}, which the core does not take"),
     )
     .with_field("column", Detail::text(column))

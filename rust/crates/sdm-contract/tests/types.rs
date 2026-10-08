@@ -13,7 +13,7 @@ use arrow_schema::{
     DataType, Field as ArrowField, Fields, IntervalUnit, TimeUnit, UnionFields, UnionMode,
 };
 use sdm_contract::types::cell_types;
-use sdm_contract::{ColumnType, ErrorKind, Field, codes};
+use sdm_contract::{ColumnType, ErrorCode, ErrorKind, Field};
 
 fn field(name: &str, data_type: DataType) -> ArrowField {
     ArrowField::new(name, data_type, true)
@@ -130,7 +130,7 @@ fn a_type_outside_the_set_is_refused_by_name() {
     for data_type in refused() {
         let err = ColumnType::from_arrow("c", &data_type).unwrap_err();
         assert_eq!(err.kind, ErrorKind::Unsupported);
-        assert_eq!(err.code, codes::UNSUPPORTED_TYPE);
+        assert_eq!(err.code, ErrorCode::UnsupportedType);
         let fields = serde_json::to_value(&err.fields).unwrap();
         assert_eq!(fields["column"]["v"], "c");
         assert_eq!(fields["arrow_type"]["v"], data_type.to_string());
@@ -255,7 +255,7 @@ fn arrow_decimals_outside_the_limits_are_refused_and_an_empty_zone_is_none() {
         DataType::Decimal256(77, 0),
     ] {
         let err = ColumnType::from_arrow("d", &data_type).unwrap_err();
-        assert_eq!(err.code, codes::UNSUPPORTED_TYPE, "{data_type}");
+        assert_eq!(err.code, ErrorCode::UnsupportedType, "{data_type}");
     }
     let empty = DataType::Timestamp(TimeUnit::Microsecond, Some("".into()));
     assert_eq!(

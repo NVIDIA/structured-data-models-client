@@ -1390,6 +1390,7 @@ dependencies = [
  "arrow-schema",
  "sdm-contract",
  "sdm-pql-interim",
+ "serde",
  "serde_json",
  "stacker",
 ]
@@ -1406,6 +1407,7 @@ dependencies = [
  "regex",
  "sdm-contract",
  "sdm-core",
+ "serde",
  "serde_json",
  "thiserror",
 ]

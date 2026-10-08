@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use crate::ops::{ColumnRef, Dtype, Span, Stype};
 
 /// The version of the validated-query format this build writes.
-pub const VALIDATED_QUERY_VERSION: u32 = 1;
+pub const VALIDATED_QUERY_VERSION: u32 = 2;
 
 /// A query PQL accepted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

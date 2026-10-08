@@ -21,7 +21,7 @@ use arrow_buffer::{OffsetBuffer, ScalarBuffer};
 use arrow_schema::{
     DataType, Field, Fields, IntervalUnit, Schema, TimeUnit, UnionFields, UnionMode,
 };
-use sdm_contract::{CoreError, Detail, ErrorKind, Scalar, codes};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_core::ArrowData;
 use sdm_host::{admit, admitted_type};
 
@@ -238,8 +238,8 @@ fn field_and_schema_metadata_and_admitted_types_are_kept() {
 fn assert_out_of_range(result: Result<ArrowData, CoreError>, column: &str) {
     let err = result.unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::VALUE_OUT_OF_RANGE),
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::ValueOutOfRange),
         "{err:?}"
     );
     assert_eq!(text(&err, "column"), column);
@@ -466,8 +466,8 @@ fn assert_refused(data_type: &DataType) {
     for result in results {
         let err = result.unwrap_err();
         assert_eq!(
-            (err.kind, err.code.as_str()),
-            (ErrorKind::Unsupported, codes::UNSUPPORTED_TYPE),
+            (err.kind, err.code),
+            (ErrorKind::Unsupported, ErrorCode::UnsupportedType),
             "{data_type}"
         );
         assert_eq!(text(&err, "column"), "col", "{data_type}");
@@ -501,7 +501,7 @@ fn a_refused_child_is_named_by_its_path() {
         true,
     )));
     let err = admitted_type("col", &nested).unwrap_err();
-    assert_eq!(err.code, codes::UNSUPPORTED_TYPE);
+    assert_eq!(err.code, ErrorCode::UnsupportedType);
     assert_eq!(text(&err, "column"), "col.item.f");
     assert_eq!(text(&err, "arrow_type"), "Float16");
 }

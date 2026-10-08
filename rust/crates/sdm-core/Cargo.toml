@@ -12,11 +12,16 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+# Operations only tests reach; a shipped build leaves it off.
+test-ops = ["sdm-contract/test-ops"]
+
 [dependencies]
 arrow-array.workspace = true
 arrow-schema.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-pql-interim = { path = "../sdm-pql-interim" }
+serde.workspace = true
 serde_json.workspace = true
 stacker.workspace = true
 

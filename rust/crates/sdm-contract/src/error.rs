@@ -4,10 +4,11 @@
 
 //! Errors and warnings.
 //!
-//! An error is `{kind, code, message, fields, cause}` with a closed list of
-//! kinds; a warning travels on its own channel, in order. No string here
-//! names a Python or Java class: each host maps kinds and codes to its own
-//! classes through one reviewed table. Codes are promised, message text is
+//! An error is `{kind, code, message, fields, cause, retryable}` with a
+//! closed list of kinds and a closed list of codes; a warning travels on its
+//! own channel, in order. No string here names a Python or Java class: each
+//! host maps every `(kind, code)` to its own classes through one reviewed
+//! table, never reading message text. Codes are promised, message text is
 //! not.
 
 use std::collections::BTreeMap;
@@ -16,6 +17,7 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::data::ProviderError;
 use crate::scalar::Scalar;
 
 /// What kind of problem an error is.
@@ -44,51 +46,122 @@ pub enum ErrorKind {
     Internal,
 }
 
-/// The codes the core gives. Today's public codes keep their names; a new
-/// code arrives with a register entry.
-pub mod codes {
-    pub const INVALID_REQUEST: &str = "INVALID_REQUEST";
-    pub const UNSUPPORTED_REQUEST: &str = "UNSUPPORTED_REQUEST";
-    pub const INVALID_RESPONSE: &str = "INVALID_RESPONSE";
-    pub const INVALID_CONFIGURATION: &str = "INVALID_CONFIGURATION";
-    pub const TRANSPORT_ERROR: &str = "TRANSPORT_ERROR";
-    pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
-    pub const UNKNOWN_MODEL: &str = "UNKNOWN_MODEL";
-    pub const MISSING_EXTRA: &str = "MISSING_EXTRA";
-    pub const INVALID_SCHEMA: &str = "INVALID_SCHEMA";
-    pub const SESSIONS_UNSUPPORTED: &str = "SESSIONS_UNSUPPORTED";
-
+/// The codes the core gives: one closed list, so each host's mapping
+/// matches every code with no catch-all arm (decision H6). Host and core
+/// ship together, so the list is exhaustive; a new code is a contract
+/// version bump. PQL's own diagnostic codes stay strings inside
+/// `PqlDiagnostic`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ErrorCode {
+    /// The caller's request is not one the core accepts.
+    InvalidRequest,
+    /// A valid request this core does not support.
+    UnsupportedRequest,
+    /// The model endpoint answered with something the core cannot read.
+    InvalidResponse,
+    /// The host's configuration of a run is not one the core accepts.
+    InvalidConfiguration,
+    /// The model endpoint could not be reached.
+    TransportError,
+    /// A defect in the core, a contained panic included.
+    InternalError,
+    /// The model a request names does not exist.
+    UnknownModel,
+    /// An optional dependency of the host is not installed.
+    MissingExtra,
+    /// A schema the core cannot work with.
+    InvalidSchema,
+    /// The endpoint does not support sessions.
+    SessionsUnsupported,
     /// An Arrow type outside the closed set.
-    pub const UNSUPPORTED_TYPE: &str = "UNSUPPORTED_TYPE";
-    /// A value the admitted type of its column cannot hold, such as a
-    /// `timestamp[s]` past the microseconds an int64 counts.
-    pub const VALUE_OUT_OF_RANGE: &str = "VALUE_OUT_OF_RANGE";
+    UnsupportedType,
+    /// A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.
+    ValueOutOfRange,
     /// A provider answered with a schema other than the one asked for.
-    pub const PROVIDER_SCHEMA_MISMATCH: &str = "PROVIDER_SCHEMA_MISMATCH";
+    ProviderSchemaMismatch,
     /// A provider's query failed.
-    pub const PROVIDER_ERROR: &str = "PROVIDER_ERROR";
-
-    // The run protocol's own codes.
-    /// A reply for an id the run is not waiting on: unknown, stale or
-    /// already answered.
-    pub const UNKNOWN_REPLY: &str = "UNKNOWN_REPLY";
+    ProviderError,
+    /// A reply for an id the run is not waiting on: unknown, stale or already answered.
+    UnknownReply,
     /// `next` was called before every reply the run asked for arrived.
-    pub const REPLY_MISSING: &str = "REPLY_MISSING";
-    /// A reply of the wrong kind: a model answer for a fetch, or the other
-    /// way round.
-    pub const WRONG_REPLY: &str = "WRONG_REPLY";
+    ReplyMissing,
+    /// A reply of the wrong kind: a model answer for a fetch, or the other way round.
+    WrongReply,
     /// The run was used after it finished.
-    pub const RUN_FINISHED: &str = "RUN_FINISHED";
+    RunFinished,
     /// The run was used after it was cancelled.
-    pub const RUN_CANCELLED: &str = "RUN_CANCELLED";
+    RunCancelled,
     /// The run was used after a panic poisoned it.
-    pub const RUN_POISONED: &str = "RUN_POISONED";
+    RunPoisoned,
     /// A second call reached a run while one was in progress.
-    pub const RUN_BUSY: &str = "RUN_BUSY";
-    /// A control message the contract cannot read, larger than the control
-    /// cap, of the wrong direction, or whose attachments do not match the
-    /// ids it names.
-    pub const INVALID_MESSAGE: &str = "INVALID_MESSAGE";
+    RunBusy,
+    /// A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.
+    InvalidMessage,
+}
+
+impl ErrorCode {
+    /// Every code, in the order the contract lists them.
+    pub const ALL: [ErrorCode; 22] = [
+        ErrorCode::InvalidRequest,
+        ErrorCode::UnsupportedRequest,
+        ErrorCode::InvalidResponse,
+        ErrorCode::InvalidConfiguration,
+        ErrorCode::TransportError,
+        ErrorCode::InternalError,
+        ErrorCode::UnknownModel,
+        ErrorCode::MissingExtra,
+        ErrorCode::InvalidSchema,
+        ErrorCode::SessionsUnsupported,
+        ErrorCode::UnsupportedType,
+        ErrorCode::ValueOutOfRange,
+        ErrorCode::ProviderSchemaMismatch,
+        ErrorCode::ProviderError,
+        ErrorCode::UnknownReply,
+        ErrorCode::ReplyMissing,
+        ErrorCode::WrongReply,
+        ErrorCode::RunFinished,
+        ErrorCode::RunCancelled,
+        ErrorCode::RunPoisoned,
+        ErrorCode::RunBusy,
+        ErrorCode::InvalidMessage,
+    ];
+
+    /// The code's name, as the contract spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ErrorCode::InvalidRequest => "INVALID_REQUEST",
+            ErrorCode::UnsupportedRequest => "UNSUPPORTED_REQUEST",
+            ErrorCode::InvalidResponse => "INVALID_RESPONSE",
+            ErrorCode::InvalidConfiguration => "INVALID_CONFIGURATION",
+            ErrorCode::TransportError => "TRANSPORT_ERROR",
+            ErrorCode::InternalError => "INTERNAL_ERROR",
+            ErrorCode::UnknownModel => "UNKNOWN_MODEL",
+            ErrorCode::MissingExtra => "MISSING_EXTRA",
+            ErrorCode::InvalidSchema => "INVALID_SCHEMA",
+            ErrorCode::SessionsUnsupported => "SESSIONS_UNSUPPORTED",
+            ErrorCode::UnsupportedType => "UNSUPPORTED_TYPE",
+            ErrorCode::ValueOutOfRange => "VALUE_OUT_OF_RANGE",
+            ErrorCode::ProviderSchemaMismatch => "PROVIDER_SCHEMA_MISMATCH",
+            ErrorCode::ProviderError => "PROVIDER_ERROR",
+            ErrorCode::UnknownReply => "UNKNOWN_REPLY",
+            ErrorCode::ReplyMissing => "REPLY_MISSING",
+            ErrorCode::WrongReply => "WRONG_REPLY",
+            ErrorCode::RunFinished => "RUN_FINISHED",
+            ErrorCode::RunCancelled => "RUN_CANCELLED",
+            ErrorCode::RunPoisoned => "RUN_POISONED",
+            ErrorCode::RunBusy => "RUN_BUSY",
+            ErrorCode::InvalidMessage => "INVALID_MESSAGE",
+        }
+    }
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// A value under an error's or a warning's `fields`.
@@ -110,10 +183,9 @@ impl Detail {
 #[serde(deny_unknown_fields)]
 pub struct CoreError {
     pub kind: ErrorKind,
-    /// Stable across releases and languages; see [`codes`].
-    #[schemars(regex(pattern = r"^[A-Z][A-Z0-9_]*$"))]
-    pub code: String,
-    /// For a person to read; not promised.
+    /// Stable across releases and languages.
+    pub code: ErrorCode,
+    /// For a person to read; not promised, and never holding an input value.
     pub message: String,
     /// What callers branch on, by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -121,22 +193,59 @@ pub struct CoreError {
     /// The error this one was raised from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Box<CoreError>>,
+    /// Whether the same call may succeed if tried again; carried from
+    /// provider and transport errors, false otherwise.
+    #[serde(default)]
+    pub retryable: bool,
 }
 
 impl CoreError {
-    pub fn new(kind: ErrorKind, code: &str, message: impl Into<String>) -> Self {
+    pub fn new(kind: ErrorKind, code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             kind,
-            code: code.to_owned(),
+            code,
             message: message.into(),
             fields: BTreeMap::new(),
             cause: None,
+            retryable: false,
         }
     }
 
     /// A protocol error: the host broke the run protocol.
-    pub fn protocol(code: &str, message: impl Into<String>) -> Self {
+    pub fn protocol(code: ErrorCode, message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Protocol, code, message)
+    }
+
+    /// The error a provider's failure becomes: its kind and retryability,
+    /// with the driver's SQLSTATE and vendor code as fields. The driver's
+    /// message is not part of the contract, since drivers quote values in
+    /// it.
+    pub fn provider(error: &ProviderError) -> Self {
+        let mut out = Self::new(
+            error.kind,
+            ErrorCode::ProviderError,
+            "the data provider failed",
+        );
+        out.retryable = error.retryable;
+        if let Some(sqlstate) = &error.sqlstate {
+            out = out.with_field("sqlstate", Detail::text(sqlstate.clone()));
+        }
+        if let Some(vendor_code) = &error.vendor_code {
+            out = out.with_field("vendor_code", Detail::text(vendor_code.clone()));
+        }
+        out
+    }
+
+    /// The error a model transport's failure becomes: its kind and
+    /// retryability.
+    pub fn transport(kind: ErrorKind, retryable: bool) -> Self {
+        let mut out = Self::new(
+            kind,
+            ErrorCode::TransportError,
+            "the model endpoint could not be reached",
+        );
+        out.retryable = retryable;
+        out
     }
 
     #[must_use]

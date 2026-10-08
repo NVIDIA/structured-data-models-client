@@ -25,7 +25,7 @@ use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
     ProblemType, QueryMode, TimeUnit, ValidatedQuery, Window,
 };
-use sdm_contract::{CoreError, Detail, ErrorKind, HostFacts, Scalar, Unit, codes};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_pql_interim as interim;
 use sdm_pql_interim::ast::{self, ConstValue, Kind, NodeRef};
 use sdm_pql_interim::literal::Literal;
@@ -144,7 +144,7 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 fn unsupported(interrupted: interim::Interrupted) -> CoreError {
     CoreError::new(
         ErrorKind::Unsupported,
-        codes::UNSUPPORTED_REQUEST,
+        ErrorCode::UnsupportedRequest,
         format!(
             "{}; the interim PQL parser cannot validate this query",
             interrupted.0
@@ -153,7 +153,7 @@ fn unsupported(interrupted: interim::Interrupted) -> CoreError {
 }
 
 fn internal(message: impl Into<String>) -> CoreError {
-    CoreError::new(ErrorKind::Internal, codes::INTERNAL_ERROR, message)
+    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
 }
 
 // --- Host facts --------------------------------------------------------------
@@ -174,7 +174,7 @@ fn clock_year(now: &Scalar) -> Result<i16, CoreError> {
     i16::try_from(year).map_err(|_| {
         CoreError::new(
             ErrorKind::InvalidRequest,
-            codes::INVALID_REQUEST,
+            ErrorCode::InvalidRequest,
             "the host's clock is past the years a date literal can be read in",
         )
         .with_field("field", Detail::text("facts.now"))

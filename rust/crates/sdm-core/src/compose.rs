@@ -15,7 +15,7 @@ use std::sync::Arc;
 use sdm_contract::data::{
     DataRequest, Dialect, OptionalRequest, ProviderCapabilities, ProviderChoice, SqlStatement,
 };
-use sdm_contract::{CoreError, Detail, ErrorKind, codes};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
 /// Compiles data requests to one dialect's SQL.
 pub trait SqlCompiler: Send + Sync {
@@ -63,7 +63,7 @@ impl CompositionRoot {
                 Some(compiler) => Ok(DataAccess::Sql(Arc::clone(compiler))),
                 None => Err(CoreError::new(
                     ErrorKind::Unsupported,
-                    codes::UNSUPPORTED_REQUEST,
+                    ErrorCode::UnsupportedRequest,
                     "this build has no built-in SQL provider for the dialect asked for",
                 )
                 .with_field(
@@ -90,7 +90,7 @@ impl DataAccess {
                 Some(optional) if !capabilities.optional.contains(&optional) => {
                     Err(CoreError::new(
                         ErrorKind::Unsupported,
-                        codes::UNSUPPORTED_REQUEST,
+                        ErrorCode::UnsupportedRequest,
                         "the host provider did not declare this request",
                     )
                     .with_field(

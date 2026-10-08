@@ -4,21 +4,28 @@
 
 //! Operation dispatch: a typed operation to the body of its run.
 
-use sdm_contract::ops::{Operation, OperationResult};
+use sdm_contract::ops::{Operation, OperationResult, QuerySchema, SourceDescription, SourceSpec};
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorKind, Scalar, codes};
+use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
+use crate::attached::{check_attachments, take_json};
 use crate::compose::CompositionRoot;
 use crate::profiles::Profile;
-use crate::run::Run;
+use crate::run::{Attachments, Run};
 
-/// The run of `start`'s operation. A contract version other than this
-/// build's, or host facts the contract does not allow, are refused before
-/// any run exists.
-pub fn start(root: &CompositionRoot, start: StartRun) -> Result<Run, CoreError> {
+/// The run of `start`'s operation, with the attachments the start names.
+/// A contract version other than this build's, host facts the contract
+/// does not allow, or attachments other than the ones the operation names,
+/// are refused before any run exists. Input-sized fields are read from their
+/// attachments here (decision H5).
+pub fn start(
+    root: &CompositionRoot,
+    start: StartRun,
+    attachments: Attachments,
+) -> Result<Run, CoreError> {
     if start.contract != CONTRACT_VERSION {
         return Err(CoreError::protocol(
-            codes::INVALID_MESSAGE,
+            ErrorCode::InvalidMessage,
             format!(
                 "the host speaks contract version {}, and this core version {CONTRACT_VERSION}",
                 start.contract
@@ -30,27 +37,52 @@ pub fn start(root: &CompositionRoot, start: StartRun) -> Result<Run, CoreError> 
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
-            codes::INVALID_REQUEST,
+            ErrorCode::InvalidRequest,
             "the host's clock must be a ts scalar in UTC",
         )
         .with_field("field", Detail::text("facts.now")));
     }
+    check_attachments(&start.operation.attachments(), &attachments)?;
+    let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
-        Operation::ValidateQuery(request) => Run::new(move |_asker| async move {
-            let profile = Profile::resolve(&request.profile);
-            crate::pql::validate(&request.query, &request.schema, &profile, &facts)
-                .map(OperationResult::ValidateQuery)
-        }),
+        Operation::ValidateQuery(request) => {
+            let query: String = take_json(&mut attachments, request.query)?;
+            let schema: QuerySchema = take_json(&mut attachments, request.schema)?;
+            Run::new(move |_asker| async move {
+                let profile = Profile::resolve(&request.profile);
+                crate::pql::validate(&query, &schema, &profile, &facts)
+                    .map(OperationResult::ValidateQuery)
+            })
+        }
         Operation::DescribeSource(request) => {
+            let _source: SourceSpec = take_json(&mut attachments, request.source)?;
             let _access = root.data_access(&request.provider)?;
             Run::new(|_| async { Err(not_yet("describe_source")) })
         }
         Operation::Materialize(request) => {
+            let _schema: SourceDescription = take_json(&mut attachments, request.schema)?;
+            let _query: String = take_json(&mut attachments, request.query)?;
+            // The decoder takes a seed of any size and sign; which seeds a
+            // run takes is the core's rule (decision H7). Per-backend
+            // ranges (RS-7) come with the random streams (T1.22).
+            if request.seed.as_ref().is_some_and(|seed| seed.is_negative()) {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidRequest,
+                    ErrorCode::InvalidRequest,
+                    "a sampling seed cannot be negative",
+                )
+                .with_field("field", Detail::text("seed")));
+            }
             let _access = root.data_access(&request.provider)?;
             Run::new(|_| async { Err(not_yet("materialize")) })
         }
-        Operation::Predict(_) => Run::new(|_| async { Err(not_yet("predict")) }),
+        Operation::Predict(request) => {
+            let _query: String = take_json(&mut attachments, request.state.query)?;
+            Run::new(|_| async { Err(not_yet("predict")) })
+        }
+        #[cfg(feature = "test-ops")]
+        Operation::Test(operation) => crate::test_ops::run(operation, &mut attachments)?,
     })
 }
 
@@ -58,7 +90,7 @@ pub fn start(root: &CompositionRoot, start: StartRun) -> Result<Run, CoreError> 
 fn not_yet(operation: &str) -> CoreError {
     CoreError::new(
         ErrorKind::Unsupported,
-        codes::UNSUPPORTED_REQUEST,
+        ErrorCode::UnsupportedRequest,
         format!("{operation} is not built into this core yet"),
     )
     .with_field("operation", Detail::text(operation))

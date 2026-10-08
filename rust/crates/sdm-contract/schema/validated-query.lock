@@ -1,2 +1,2 @@
-# The pql-validated-query schema lock: one line per version, never rewritten.
-1 sha256:d399267385b5c11be9761c5a19d9546a5f30d016173ef0836266277c50c2f11f pql-validated-query-1.json
+# The pql-validated-query schema lock: one line per version; see scripts/rust_core/contract_lock.py.
+2 sha256:408adc4c7c6dbb43f42619e335060ba84bbbceba255721dbefc31f79c9c05e79 pql-validated-query-2.json

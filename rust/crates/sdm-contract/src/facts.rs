@@ -17,11 +17,22 @@ pub struct HostFacts {
     /// The clock: a `ts` scalar in UTC. Two-digit years and "now" read it.
     pub now: Scalar,
     /// The host's local zone, if it knows one.
-    pub local_zone: Option<String>,
+    pub local_zone: Option<LocalZone>,
     /// The zone lookup roots, in the order the host's own zone library
     /// searches them; the core falls back to its bundled database.
     pub zone_roots: Vec<ZoneRootFact>,
     pub platform: PlatformFacts,
+}
+
+/// The host's local zone, as the host's own platform names it: an IANA
+/// name, or a POSIX `TZ` string where the platform has no IANA name for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum LocalZone {
+    /// An IANA zone name, such as `Europe/Berlin`.
+    Iana(String),
+    /// A POSIX `TZ` string, such as `EST5EDT,M3.2.0,M11.1.0`.
+    Posix(String),
 }
 
 /// One zone lookup root, with the database version the host read there.

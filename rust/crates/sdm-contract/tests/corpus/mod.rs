@@ -11,19 +11,19 @@ use sdm_contract::data::{
     AttachmentId, Bound, DataRequest, Dialect, ExpectedSchema, Filter, KeySet, ProviderError,
     SqlParam, SqlStatement,
 };
-use sdm_contract::facts::{PlatformFacts, ZoneRootFact};
+use sdm_contract::facts::{LocalZone, PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::{
-    Capability, ColumnRef, Dtype, Operation, OperationResult, PqlDiagnostic, ProfileName,
-    ProfileSpec, QueryColumn, QuerySchema, QueryTable, QueryValidation, Severity, Span, Stype,
-    ValidateQuery,
+    Capability, DescribeSource, DescribedSource, Materialize, Materialized, Operation,
+    OperationResult, PqlDiagnostic, Predict, Predicted, ProfileName, ProfileSpec, QueryValidation,
+    RequestState, Seed, Severity, Span, ValidateQuery,
 };
 use sdm_contract::run::{
     Endpoint, FetchOutcome, FetchReply, FetchStep, ModelCall, ModelOutcome, ModelReply, ReplyId,
     StartRun,
 };
 use sdm_contract::{
-    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorKind, Field,
-    HostFacts, Scalar, Step, Unit, codes,
+    CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
+    ErrorKind, Field, HostFacts, Scalar, Step, Unit,
 };
 
 pub fn facts() -> HostFacts {
@@ -33,7 +33,7 @@ pub fn facts() -> HostFacts {
             zone: Some("UTC".into()),
             value: 1_790_000_000_000_000,
         },
-        local_zone: Some("Europe/Berlin".into()),
+        local_zone: Some(LocalZone::Iana("Europe/Berlin".into())),
         zone_roots: vec![ZoneRootFact {
             path: "/usr/share/zoneinfo".into(),
             version: Some("2026c".into()),
@@ -60,35 +60,52 @@ pub fn keys() -> KeySet {
 /// One message of every kind, each shape the contract has.
 pub fn messages() -> Vec<ControlMessage> {
     let validate = ValidateQuery {
-        query: "PREDICT users.age FOR EACH users.id".into(),
-        schema: QuerySchema {
-            tables: vec![QueryTable {
-                name: "users".into(),
-                columns: vec![QueryColumn {
-                    name: "id".into(),
-                    dtype: Dtype::Int,
-                    stype: Stype::Id,
-                }],
-                primary_key: Some("id".into()),
-                time_column: None,
-                end_time_column: None,
-            }],
-            links: vec![vec![ColumnRef {
-                table: "users".into(),
-                column: "id".into(),
-            }]],
-        },
+        query: AttachmentId(1),
+        schema: AttachmentId(2),
         profile: ProfileSpec {
             name: ProfileName::Relational,
             model: Some("rfm".into()),
             capabilities: BTreeMap::from([(Capability::Temporal, false)]),
         },
     };
-    vec![
+    let start = |operation| {
+        let mut facts = facts();
+        if matches!(operation, Operation::Materialize(_)) {
+            facts.local_zone = Some(LocalZone::Posix("EST5EDT,M3.2.0,M11.1.0".into()));
+        }
         ControlMessage::Start(Box::new(StartRun {
             contract: CONTRACT_VERSION,
-            facts: facts(),
-            operation: Operation::ValidateQuery(validate),
+            facts,
+            operation,
+        }))
+    };
+    let state = RequestState {
+        version: 1,
+        payload: AttachmentId(1),
+        query: AttachmentId(2),
+    };
+    vec![
+        start(Operation::ValidateQuery(validate)),
+        start(Operation::DescribeSource(DescribeSource {
+            provider: sdm_contract::data::ProviderChoice::Sql {
+                dialect: Dialect::Duckdb,
+            },
+            source: AttachmentId(1),
+            check_keys: true,
+        })),
+        start(Operation::Materialize(Materialize {
+            provider: sdm_contract::data::ProviderChoice::Sql {
+                dialect: Dialect::Duckdb,
+            },
+            schema: AttachmentId(1),
+            query: AttachmentId(2),
+            indices: Some(AttachmentId(3)),
+            anchor_time: None,
+            seed: Some(Seed::from(1_u128 << 70)),
+        })),
+        start(Operation::Predict(Predict {
+            state: state.clone(),
+            model: "rfm".into(),
         })),
         ControlMessage::Step(Step::Fetch {
             requests: vec![FetchStep {
@@ -140,9 +157,7 @@ pub fn messages() -> Vec<ControlMessage> {
             outcome: FetchOutcome::Error {
                 error: ProviderError {
                     kind: ErrorKind::DataSource,
-                    code: codes::PROVIDER_ERROR.into(),
-                    message: "Catalog Error".into(),
-                    retryable: false,
+                    retryable: true,
                     sqlstate: Some("42P01".into()),
                     vendor_code: None,
                 },
@@ -167,7 +182,6 @@ pub fn messages() -> Vec<ControlMessage> {
             outcome: ModelOutcome::TransportError {
                 kind: ErrorKind::ModelEndpoint,
                 retryable: true,
-                message: "timed out".into(),
             },
         }),
         ControlMessage::Step(Step::Done {
@@ -186,11 +200,33 @@ pub fn messages() -> Vec<ControlMessage> {
                 }],
             }),
         }),
+        ControlMessage::Step(Step::Done {
+            result: OperationResult::DescribeSource(DescribedSource {
+                description: AttachmentId(9),
+            }),
+        }),
+        ControlMessage::Step(Step::Done {
+            result: OperationResult::Materialize(Materialized { state }),
+        }),
+        ControlMessage::Step(Step::Done {
+            result: OperationResult::Predict(Predicted {
+                result: AttachmentId(10),
+                columns: vec!["ENTITY".into(), "TARGET_PRED".into()],
+            }),
+        }),
+        ControlMessage::Attached {
+            attachment: AttachmentId(11),
+        },
         ControlMessage::Cancel {},
         ControlMessage::Error {
-            error: CoreError::new(ErrorKind::Internal, codes::INTERNAL_ERROR, "panicked")
+            error: CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, "panicked")
                 .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
-                .caused_by(CoreError::protocol(codes::RUN_BUSY, "busy")),
+                .caused_by(CoreError::provider(&ProviderError {
+                    kind: ErrorKind::DataSource,
+                    retryable: true,
+                    sqlstate: Some("08006".into()),
+                    vendor_code: Some("57P01".into()),
+                })),
         },
         ControlMessage::Warnings {
             warnings: vec![CoreWarning {

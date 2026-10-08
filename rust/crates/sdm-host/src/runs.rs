@@ -7,45 +7,51 @@
 //!
 //! A [`HostRun`] owns one core run. A binding hands it control messages as
 //! bytes, with the attachments each names, and takes control messages back
-//! as bytes; it may share the run between threads. Every call:
+//! as bytes ([`Outgoing`]), errors included; it may share the run between
+//! threads. Every call:
 //!
 //! - is contained: a panic anywhere below it poisons the run and comes back
 //!   as `INTERNAL_ERROR` with `fields.panic = true`, never as an unwind
 //!   through the binding;
 //! - is refused with `RUN_BUSY` (kind `protocol`) while another call is in
 //!   the run, rather than waiting;
-//! - reads and writes control messages through the codecs, under the
-//!   control cap.
+//! - reads control messages through the codecs, under the control cap, and
+//!   writes them whole: one whose encoding would pass the cap travels as an
+//!   attachment numbered in the run's sequence (decision H7).
 //!
 //! Attachments follow decision E2. The core numbers its own from 1 in each
-//! run, and the host takes them by id ([`HostRun::take_attachment`]). The
-//! host names the attachments of each message it sends with ids of its
+//! run, and the host takes them by id ([`HostRun::take_attachment`]); an
+//! attachment carrying a message whole travels with that message instead.
+//! The host names the attachments of each message it sends with ids of its
 //! choosing, scoped to that message: every id the message names must be
-//! attached and every attachment named, and the ids mean nothing once the
-//! message is read. Fetched Arrow data passes through admission on the way
+//! attached, as the kind it names, and every attachment named, and the ids
+//! mean nothing once the message is read. A `start` carries the
+//! operation's input-sized fields this way (decision H5). Fetched Arrow data passes through admission on the way
 //! in; data admission refuses ends the run with that refusal.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 
 use sdm_contract::data::AttachmentId;
-use sdm_contract::ops::Operation;
-use sdm_contract::run::{FetchOutcome, ModelOutcome, StartRun};
-use sdm_contract::{ControlMessage, CoreError, Detail, ErrorKind, Scalar, codes};
-use sdm_core::{Attachment, CompositionRoot, FetchResult, ModelResult, Run, RunState};
+use sdm_contract::facts::LocalZone;
+use sdm_contract::ops::AttachmentKind;
+use sdm_contract::run::{FetchOutcome, ModelOutcome};
+use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_core::attached::check_attachments;
+use sdm_core::{
+    Attachment, AttachmentIds, Attachments, CompositionRoot, FetchResult, ModelResult, Run,
+    RunState,
+};
 
 use crate::admission::admit;
-use crate::codec::{decode, encode, encode_warnings};
+use crate::codec::{Outgoing, decode, write, write_error};
 use crate::zones::{ZoneResolver, ZoneRoot, ZoneSource};
-
-/// The attachments a host sends with one control message, by the ids that
-/// message names them with.
-pub type Attachments = BTreeMap<AttachmentId, Attachment>;
 
 /// One core run, owned by the host layer; see the module documentation.
 pub struct HostRun {
     run: Mutex<Run>,
+    ids: AttachmentIds,
     zones: ZoneResolver,
 }
 
@@ -60,7 +66,7 @@ pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, Core
             .unwrap_or_else(|| "a panic without a message".to_owned());
         Err(CoreError::new(
             ErrorKind::Internal,
-            codes::INTERNAL_ERROR,
+            ErrorCode::InternalError,
             format!("the core panicked: {what}"),
         )
         .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
@@ -68,98 +74,82 @@ pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, Core
 }
 
 fn invalid(message: impl Into<String>) -> CoreError {
-    CoreError::protocol(codes::INVALID_MESSAGE, message)
+    CoreError::protocol(ErrorCode::InvalidMessage, message)
 }
 
-fn attachment_field(error: CoreError, id: AttachmentId) -> CoreError {
-    error.with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0)))
+/// The error of a `start` that made no run, as a control message; there is
+/// no run to number its attachment, so it is the message's own first.
+fn start_error(error: &CoreError) -> Outgoing {
+    write_error(error, || Ok(AttachmentId(1)))
 }
 
-/// Checks that `attachments` holds exactly the ids `named`.
-fn check_named(named: &BTreeSet<AttachmentId>, attachments: &Attachments) -> Result<(), CoreError> {
-    if let Some(id) = named.iter().find(|id| !attachments.contains_key(id)) {
-        return Err(attachment_field(
-            invalid(format!(
-                "the message names attachment {} and does not attach it",
-                id.0
-            )),
-            *id,
-        ));
-    }
-    if let Some(id) = attachments.keys().find(|id| !named.contains(id)) {
-        return Err(attachment_field(
-            invalid(format!("attachment {} is not named by its message", id.0)),
-            *id,
-        ));
+/// Refuses a local zone the host's facts name that cannot be read: a POSIX
+/// `TZ` string must parse. An IANA name is resolved when a run first needs
+/// it.
+fn check_local_zone(zone: Option<&LocalZone>) -> Result<(), CoreError> {
+    if let Some(LocalZone::Posix(text)) = zone
+        && jiff::tz::TimeZone::posix(text).is_err()
+    {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "the host's local zone is not a POSIX TZ string",
+        )
+        .with_field("field", Detail::text("facts.local_zone")));
     }
     Ok(())
 }
 
-/// The attachment ids a `start` names.
-fn named_by_start(start: &StartRun) -> BTreeSet<AttachmentId> {
-    match &start.operation {
-        Operation::Materialize(m) => m.indices.into_iter().collect(),
-        Operation::Predict(p) => BTreeSet::from([p.state.payload]),
-        Operation::ValidateQuery(_) | Operation::DescribeSource(_) => BTreeSet::new(),
-    }
-}
-
 impl HostRun {
     /// Starts the run a `start` message asks for, with the attachments it
-    /// names.
+    /// names; a refusal is an `error` control message.
     pub fn start(
         root: &CompositionRoot,
         message: &[u8],
         attachments: Attachments,
-    ) -> Result<HostRun, CoreError> {
+    ) -> Result<HostRun, Outgoing> {
         contain(|| {
             let ControlMessage::Start(start) = decode(message)? else {
                 return Err(invalid("a run starts with a start message"));
             };
-            check_named(&named_by_start(&start), &attachments)?;
-            if let Some(id) = attachments.keys().next() {
-                // The predict route (T1.11) is the first to take state from
-                // the host; until then no operation takes an attachment.
-                return Err(attachment_field(
-                    CoreError::new(
-                        ErrorKind::Unsupported,
-                        codes::UNSUPPORTED_REQUEST,
-                        "this core takes no attachments with a start message yet",
-                    ),
-                    *id,
-                ));
-            }
+            check_attachments(&start.operation.attachments(), &attachments)?;
+            check_local_zone(start.facts.local_zone.as_ref())?;
             let zones = ZoneResolver::new(start.facts.zone_roots.iter().map(|root| ZoneRoot {
                 path: root.path.clone().into(),
                 version: root.version.clone(),
             }));
-            let run = sdm_core::start(root, *start)?;
+            let run = sdm_core::start(root, *start, attachments)?;
             Ok(HostRun::with(run, zones))
         })
+        .map_err(|e| start_error(&e))
     }
 
     /// The host run of a core run built directly, as tests and the
     /// pure-Rust test host build one.
     pub fn with(run: Run, zones: ZoneResolver) -> HostRun {
         HostRun {
+            ids: run.attachment_ids(),
             run: Mutex::new(run),
             zones,
         }
     }
 
+    /// `error` as an `error` control message, whole.
+    fn error(&self, error: &CoreError) -> Outgoing {
+        write_error(error, || self.ids.reserve())
+    }
+
     /// Runs `call` on the run: refused with `RUN_BUSY` while another call is
-    /// in it, and contained, a panic poisoning the run.
-    fn enter<T>(
-        &self,
-        call: impl FnOnce(&mut Run) -> Result<T, CoreError>,
-    ) -> Result<T, CoreError> {
+    /// in it, and contained, a panic poisoning the run; an error comes back
+    /// as an `error` control message.
+    fn enter<T>(&self, call: impl FnOnce(&mut Run) -> Result<T, CoreError>) -> Result<T, Outgoing> {
         let mut guard: MutexGuard<'_, Run> = match self.run.try_lock() {
             Ok(guard) => guard,
             Err(TryLockError::WouldBlock) => {
-                return Err(CoreError::protocol(
-                    codes::RUN_BUSY,
+                return Err(self.error(&CoreError::protocol(
+                    ErrorCode::RunBusy,
                     "another call is in this run; a run takes one call at a time",
-                ));
+                )));
             }
             // Only a contained panic leaves the lock poisoned, and the run
             // was poisoned with it.
@@ -172,30 +162,31 @@ impl HostRun {
         {
             guard.poison();
         }
-        result
+        drop(guard);
+        result.map_err(|e| self.error(&e))
     }
 
-    /// The run's next step, as a `step` control message.
-    pub fn next(&self) -> Result<Vec<u8>, CoreError> {
-        self.enter(|run| encode(&ControlMessage::Step(run.next()?)))
+    /// The run's next step, as a `step` control message, whole.
+    pub fn next(&self) -> Result<Outgoing, Outgoing> {
+        self.enter(|run| {
+            let step = run.next()?;
+            write(&ControlMessage::Step(step), || self.ids.reserve())
+        })
     }
 
     /// Hands the run a `fetch_reply` or `model_reply`, with the attachments
     /// it names. Fetched data is admitted first; data admission refuses ends
     /// the run with that refusal.
-    pub fn reply(&self, message: &[u8], attachments: Attachments) -> Result<(), CoreError> {
+    pub fn reply(&self, message: &[u8], attachments: Attachments) -> Result<(), Outgoing> {
         self.enter(|run| {
             let mut attachments = attachments;
             match decode(message)? {
                 ControlMessage::FetchReply(reply) => {
                     let result = match reply.outcome {
                         FetchOutcome::Data { data } => {
-                            check_named(&BTreeSet::from([data]), &attachments)?;
+                            check_attachments(&[(data, AttachmentKind::Arrow)], &attachments)?;
                             let Some(Attachment::Arrow(arrow)) = attachments.remove(&data) else {
-                                return Err(attachment_field(
-                                    invalid("fetched data is an Arrow attachment, not bytes"),
-                                    data,
-                                ));
+                                return Err(invalid("fetched data is an Arrow attachment"));
                             };
                             if !awaits(run, reply.id) {
                                 // The run's own refusal of a reply it does not
@@ -211,7 +202,7 @@ impl HostRun {
                             }
                         }
                         FetchOutcome::Error { error } => {
-                            check_named(&BTreeSet::new(), &attachments)?;
+                            check_attachments(&[], &attachments)?;
                             FetchResult::Error(error)
                         }
                     };
@@ -224,13 +215,10 @@ impl HostRun {
                             content_type,
                             body,
                         } => {
-                            check_named(&BTreeSet::from([body]), &attachments)?;
+                            check_attachments(&[(body, AttachmentKind::Bytes)], &attachments)?;
                             let Some(Attachment::Bytes(body_bytes)) = attachments.remove(&body)
                             else {
-                                return Err(attachment_field(
-                                    invalid("a model response's body is bytes, not Arrow data"),
-                                    body,
-                                ));
+                                return Err(invalid("a model response's body is bytes"));
                             };
                             ModelResult::Response {
                                 status,
@@ -238,17 +226,9 @@ impl HostRun {
                                 body: body_bytes,
                             }
                         }
-                        ModelOutcome::TransportError {
-                            kind,
-                            retryable,
-                            message,
-                        } => {
-                            check_named(&BTreeSet::new(), &attachments)?;
-                            ModelResult::TransportError {
-                                kind,
-                                retryable,
-                                message,
-                            }
+                        ModelOutcome::TransportError { kind, retryable } => {
+                            check_attachments(&[], &attachments)?;
+                            ModelResult::TransportError { kind, retryable }
                         }
                     };
                     run.submit_model(reply.id, result)
@@ -261,23 +241,32 @@ impl HostRun {
     }
 
     /// Cancels the run; its attachments are released.
-    pub fn cancel(&self) -> Result<(), CoreError> {
+    pub fn cancel(&self) -> Result<(), Outgoing> {
         self.enter(Run::cancel)
     }
 
     /// Takes an attachment the run made and a step named.
-    pub fn take_attachment(&self, id: AttachmentId) -> Result<Option<Attachment>, CoreError> {
+    pub fn take_attachment(&self, id: AttachmentId) -> Result<Option<Attachment>, Outgoing> {
         self.enter(|run| Ok(run.take_attachment(id)))
     }
 
-    /// The warnings given since the last call, as `warnings` control
-    /// messages, in order.
-    pub fn take_warnings(&self) -> Result<Vec<Vec<u8>>, CoreError> {
-        self.enter(|run| encode_warnings(run.take_warnings()))
+    /// The warnings given since the last call, in order, as one `warnings`
+    /// control message, whole; none when there are none.
+    pub fn take_warnings(&self) -> Result<Option<Outgoing>, Outgoing> {
+        self.enter(|run| {
+            let warnings = run.take_warnings();
+            if warnings.is_empty() {
+                return Ok(None);
+            }
+            write(&ControlMessage::Warnings { warnings }, || {
+                self.ids.reserve()
+            })
+            .map(Some)
+        })
     }
 
     /// Where the run is.
-    pub fn state(&self) -> Result<RunState, CoreError> {
+    pub fn state(&self) -> Result<RunState, Outgoing> {
         self.enter(|run| Ok(run.state()))
     }
 

@@ -6,16 +6,24 @@
 //! contract's (`contract.lock`) and the PQL validated-query format's
 //! (`validated-query.lock`).
 //!
+//! A lock entry holds the SHA-256 of a projection of the schema that strips
+//! only the annotation keywords (`description`, `title`, `examples`), as
+//! compact JSON with sorted keys, so a doc comment needs no new version
+//! while a change of shape does (decision H7); `contract_lock.py` computes
+//! the same.
+//!
 //! `SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock -- generated`
-//! writes the schema of each current version and adds its lock entry; it
-//! refuses to rewrite an entry that exists. That entries never change across
-//! history is checked by `scripts/rust_core/contract_lock.py`.
+//! writes the schema of each current version and sets its lock entry: the
+//! working entry of a phase is rewritten at each bump (decision H4). That
+//! no entry merged into `rust-core` changes, and that a lock holds at most
+//! one working entry, is checked by `scripts/rust_core/contract_lock.py`.
 
 use std::path::{Path, PathBuf};
 
 use sdm_contract::{
     CONTRACT_VERSION, VALIDATED_QUERY_VERSION, schema_json, validated_query_schema_json,
 };
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 /// One versioned schema and its lock.
@@ -53,8 +61,66 @@ impl Format {
     }
 }
 
+/// Keywords whose value is documentation only.
+const ANNOTATIONS: [&str; 3] = ["description", "title", "examples"];
+/// Keywords whose value maps names to schemas: the names are not keywords.
+const NAMED: [&str; 5] = [
+    "properties",
+    "patternProperties",
+    "$defs",
+    "definitions",
+    "dependentSchemas",
+];
+/// Keywords whose value is data, not a schema.
+const DATA: [&str; 3] = ["enum", "const", "default"];
+
+/// The schema `node` without its annotation keywords.
+fn project(node: Value) -> Value {
+    match node {
+        Value::Object(map) => {
+            let mut out = Map::new();
+            for (key, value) in map {
+                if ANNOTATIONS.contains(&key.as_str()) {
+                    continue;
+                }
+                let value = match value {
+                    Value::Object(named) if NAMED.contains(&key.as_str()) => Value::Object(
+                        named
+                            .into_iter()
+                            .map(|(name, schema)| (name, project(schema)))
+                            .collect(),
+                    ),
+                    value if DATA.contains(&key.as_str()) => value,
+                    value => project(value),
+                };
+                out.insert(key, value);
+            }
+            Value::Object(out)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(project).collect()),
+        other => other,
+    }
+}
+
+/// Sorts every object's keys, as Python's `sort_keys` does.
+fn sorted(node: Value) -> Value {
+    match node {
+        Value::Object(map) => {
+            let mut map: Map<String, Value> =
+                map.into_iter().map(|(k, v)| (k, sorted(v))).collect();
+            map.sort_keys();
+            Value::Object(map)
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(sorted).collect()),
+        other => other,
+    }
+}
+
+/// The lock hash of a schema's text.
 fn sha256(text: &str) -> String {
-    let digest = Sha256::digest(text.as_bytes());
+    let schema: Value = serde_json::from_str(text).expect("a schema is JSON");
+    let canonical = serde_json::to_string(&sorted(project(schema))).expect("JSON serializes");
+    let digest = Sha256::digest(canonical.as_bytes());
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -110,37 +176,31 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-/// Writes the schema of `format`'s current version and adds its lock
-/// entry, refusing to rewrite one that exists.
+/// Writes the schema of `format`'s current version and sets its lock
+/// entry, the phase's working entry (decision H4).
 fn write(format: &Format, generated: &str) {
     let lock_path = schema_dir().join(format.lock);
     let lock = std::fs::read_to_string(&lock_path).unwrap_or_default();
-    let entries = parse_lock(&lock).unwrap();
-    if let Some((_, hash, _)) = entries.iter().find(|(v, _, _)| *v == format.version) {
-        assert_eq!(
-            *hash,
-            sha256(generated),
-            "{} version {} is locked; bump the version instead",
-            format.prefix,
-            format.version
-        );
-    } else {
-        let mut lock = if lock.is_empty() {
-            format!(
-                "# The {} schema lock: one line per version, never rewritten.\n",
-                format.prefix
-            )
-        } else {
-            lock
-        };
-        lock.push_str(&format!(
-            "{} sha256:{} {}\n",
-            format.version,
-            sha256(generated),
-            format.schema_file(format.version)
+    parse_lock(&lock).unwrap();
+    let entry = format!(
+        "{} sha256:{} {}",
+        format.version,
+        sha256(generated),
+        format.schema_file(format.version)
+    );
+    let mut lines: Vec<String> = lock
+        .lines()
+        .filter(|line| line.split_whitespace().next() != Some(format.version.to_string().as_str()))
+        .map(str::to_owned)
+        .collect();
+    if lines.is_empty() {
+        lines.push(format!(
+            "# The {} schema lock: one line per version; see contract_lock.py.",
+            format.prefix
         ));
-        std::fs::write(&lock_path, lock).unwrap();
     }
+    lines.push(entry);
+    std::fs::write(&lock_path, lines.join("\n") + "\n").unwrap();
     std::fs::write(
         schema_dir().join(format.schema_file(format.version)),
         generated,
@@ -200,4 +260,60 @@ fn a_malformed_or_doubled_lock_fails() {
         parse_lock("1 sha256:ab sdm-contract-1.json\n1 sha256:cd sdm-contract-1.json").is_err()
     );
     assert!(parse_lock("one sha256:ab sdm-contract-1.json").is_err());
+}
+
+#[test]
+fn a_doc_comment_change_keeps_the_hash_and_a_property_named_description_does_not() {
+    let schema = r##"{
+        "$defs": {
+            "Note": {
+                "description": "A note, as a doc comment describes it.",
+                "type": "object",
+                "properties": {
+                    "description": {"type": "string", "title": "Description"},
+                    "title": {"type": "string"}
+                },
+                "required": ["description", "title"],
+                "examples": [{"description": "x", "title": "y"}]
+            }
+        },
+        "oneOf": [{"$ref": "#/$defs/Note", "description": "one"}],
+        "enum": [{"description": "data, not an annotation"}]
+    }"##;
+    let locked = sha256(schema);
+    // Doc comments, titles and examples: the same hash.
+    for edited in [
+        schema.replace("A note, as a doc comment describes it.", "Reworded."),
+        schema.replace(r#""title": "Description""#, r#""title": "Renamed""#),
+        schema.replace(r#""description": "one""#, r#""description": "two""#),
+        schema.replace(
+            r#""examples": [{"description": "x", "title": "y"}]"#,
+            r#""examples": []"#,
+        ),
+    ] {
+        assert_ne!(edited, schema);
+        assert_eq!(sha256(&edited), locked, "{edited}");
+    }
+    // A property called `description` or `title`, and data in `enum`, are
+    // shape: a new hash.
+    for edited in [
+        schema.replace(
+            r#""description": {"type": "string""#,
+            r#""summary": {"type": "string""#,
+        ),
+        schema.replace(
+            r#""title": {"type": "string"}"#,
+            r#""label": {"type": "string"}"#,
+        ),
+        schema.replace(r#""required": ["description""#, r#""required": ["summary""#),
+        schema.replace("data, not an annotation", "other data"),
+    ] {
+        assert_ne!(edited, schema);
+        assert_ne!(sha256(&edited), locked, "{edited}");
+    }
+    // And on the real schema: a doc comment's text is not hashed.
+    let generated = schema_json();
+    let reworded = generated.replacen("\"description\": \"", "\"description\": \"Reworded. ", 1);
+    assert_ne!(reworded, generated);
+    assert_eq!(sha256(&reworded), sha256(&generated));
 }

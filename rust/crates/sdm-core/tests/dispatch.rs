@@ -8,19 +8,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use sdm_contract::data::{
-    DataRequest, Determinism, Dialect, OptionalRequest, ProviderCapabilities, ProviderChoice,
-    SqlStatement,
+    AttachmentId, DataRequest, Determinism, Dialect, OptionalRequest, ProviderCapabilities,
+    ProviderChoice, SqlStatement,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    Capability, DescribeSource, Operation, OperationResult, ProfileName, ProfileSpec, QuerySchema,
-    Span, ValidateQuery,
+    Capability, DescribeSource, Materialize, Operation, OperationResult, ProfileName, ProfileSpec,
+    QuerySchema, Seed, SourceDescription, SourceSpec, Span, ValidateQuery,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, CoreError, ErrorKind, HostFacts, Scalar, Step, Unit, codes};
+use sdm_contract::{
+    CONTRACT_VERSION, CoreError, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
+};
 use sdm_core::compose::{DataAccess, SqlCompiler};
 use sdm_core::profiles::{Mode, Profile, QueryFeatures, check_capabilities, codes as model};
-use sdm_core::{CompositionRoot, RunState, start};
+use sdm_core::{Attachment, Attachments, CompositionRoot, RunState, start};
 
 fn facts() -> HostFacts {
     HostFacts {
@@ -38,13 +40,50 @@ fn facts() -> HostFacts {
     }
 }
 
+/// A bytes attachment of `value` as JSON.
+fn json(value: &impl serde::Serialize) -> Attachment {
+    Attachment::Bytes(serde_json::to_vec(value).unwrap())
+}
+
+/// The attachments the operations below name.
+fn attachments_of(operation: &Operation) -> Attachments {
+    match operation {
+        Operation::ValidateQuery(v) => Attachments::from([
+            (v.query, json(&"PREDICT t.c FOR EACH t.id")),
+            (
+                v.schema,
+                json(&QuerySchema {
+                    tables: vec![],
+                    links: vec![],
+                }),
+            ),
+        ]),
+        Operation::DescribeSource(d) => Attachments::from([(
+            d.source,
+            json(&SourceSpec {
+                tables: vec!["t".into()],
+                primary_keys: BTreeMap::new(),
+                time_columns: BTreeMap::new(),
+            }),
+        )]),
+        Operation::Materialize(m) => Attachments::from([
+            (
+                m.schema,
+                json(&SourceDescription {
+                    tables: vec![],
+                    links: vec![],
+                }),
+            ),
+            (m.query, json(&"PREDICT t.c FOR EACH t.id")),
+        ]),
+        other => panic!("no attachments for {}", other.name()),
+    }
+}
+
 fn validate() -> Operation {
     Operation::ValidateQuery(ValidateQuery {
-        query: "PREDICT t.c FOR EACH t.id".into(),
-        schema: QuerySchema {
-            tables: vec![],
-            links: vec![],
-        },
+        query: AttachmentId(1),
+        schema: AttachmentId(2),
         profile: ProfileSpec {
             name: ProfileName::Relational,
             model: None,
@@ -56,14 +95,13 @@ fn validate() -> Operation {
 fn describe(provider: ProviderChoice) -> Operation {
     Operation::DescribeSource(DescribeSource {
         provider,
-        tables: vec!["t".into()],
-        primary_keys: BTreeMap::new(),
-        time_columns: BTreeMap::new(),
+        source: AttachmentId(7),
         check_keys: false,
     })
 }
 
 fn run_of(root: &CompositionRoot, operation: Operation) -> Result<sdm_core::Run, CoreError> {
+    let attachments = attachments_of(&operation);
     start(
         root,
         StartRun {
@@ -71,6 +109,7 @@ fn run_of(root: &CompositionRoot, operation: Operation) -> Result<sdm_core::Run,
             facts: facts(),
             operation,
         },
+        attachments,
     )
 }
 
@@ -83,12 +122,13 @@ fn another_contract_version_is_refused_before_a_run_exists() {
             facts: facts(),
             operation: validate(),
         },
+        attachments_of(&validate()),
     )
     .err()
     .unwrap();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Protocol, codes::INVALID_MESSAGE)
+        (err.kind, err.code),
+        (ErrorKind::Protocol, ErrorCode::InvalidMessage)
     );
 }
 
@@ -115,10 +155,11 @@ fn a_clock_that_is_not_a_timestamp_in_utc_is_refused() {
                 facts: bad,
                 operation: validate(),
             },
+            attachments_of(&validate()),
         )
         .err()
         .unwrap();
-        assert_eq!(err.code, codes::INVALID_REQUEST, "{now:?}");
+        assert_eq!(err.code, ErrorCode::InvalidRequest, "{now:?}");
     }
 }
 
@@ -146,7 +187,7 @@ fn every_operation_dispatches_to_a_run() {
         },
     };
     let err = run_of(&root, describe(host)).unwrap().next().unwrap_err();
-    assert_eq!(err.code, codes::UNSUPPORTED_REQUEST);
+    assert_eq!(err.code, ErrorCode::UnsupportedRequest);
 }
 
 struct Fake;
@@ -169,8 +210,8 @@ fn the_composition_root_picks_a_built_in_dialect_or_a_host_provider() {
     };
     let err = empty.data_access(&duckdb).err().unwrap();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::UNSUPPORTED_REQUEST)
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
     assert!(run_of(&empty, describe(duckdb.clone())).is_err());
 
@@ -221,8 +262,8 @@ fn a_host_provider_is_asked_only_for_what_it_declared() {
     };
     let err = access.prepare(&count).unwrap_err();
     assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::UNSUPPORTED_REQUEST)
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
 }
 
@@ -333,4 +374,116 @@ fn each_missing_capability_gives_its_code_in_order() {
         })
     );
     assert!(diagnostics[0].message.contains("a time-series model"));
+}
+
+fn start_with(operation: Operation, attachments: Attachments) -> Result<sdm_core::Run, CoreError> {
+    start(
+        &CompositionRoot::default(),
+        StartRun {
+            contract: CONTRACT_VERSION,
+            facts: facts(),
+            operation,
+        },
+        attachments,
+    )
+}
+
+fn attachment_named(err: &CoreError) -> u32 {
+    match err.fields.get("attachment") {
+        Some(sdm_contract::Detail::Scalar(Scalar::UInt32(id))) => *id,
+        other => panic!("no attachment named: {other:?} in {err:?}"),
+    }
+}
+
+#[test]
+fn a_start_attaches_exactly_what_it_names_as_the_kind_it_names() {
+    let full = attachments_of(&validate());
+    let mut missing = full.clone();
+    missing.remove(&AttachmentId(2));
+    let mut extra = full.clone();
+    extra.insert(AttachmentId(9), Attachment::Bytes(vec![]));
+    let mut arrow = full.clone();
+    arrow.insert(
+        AttachmentId(1),
+        Attachment::Arrow(sdm_core::ArrowData {
+            schema: Arc::new(arrow_schema::Schema::empty()),
+            batches: vec![],
+        }),
+    );
+    for (attachments, named) in [(missing, 2), (extra, 9), (arrow, 1)] {
+        let err = start_with(validate(), attachments).err().unwrap();
+        assert_eq!(
+            (err.kind, err.code),
+            (ErrorKind::Protocol, ErrorCode::InvalidMessage)
+        );
+        assert_eq!(attachment_named(&err), named);
+    }
+    // One attachment named for two fields.
+    let Operation::ValidateQuery(mut twice) = validate() else {
+        unreachable!()
+    };
+    twice.schema = twice.query;
+    let err = start_with(
+        Operation::ValidateQuery(twice),
+        Attachments::from([(AttachmentId(1), json(&"q"))]),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    assert_eq!(attachment_named(&err), 1);
+}
+
+#[test]
+fn an_attachment_that_is_not_its_json_is_refused_without_its_text() {
+    let mut attachments = attachments_of(&validate());
+    attachments.insert(
+        AttachmentId(2),
+        Attachment::Bytes(br#"{"tables": "CANARY-not-a-list", "links": []}"#.to_vec()),
+    );
+    let err = start_with(validate(), attachments).err().unwrap();
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    assert_eq!(attachment_named(&err), 2);
+    let written = serde_json::to_string(&err).unwrap();
+    assert!(!written.contains("CANARY"), "{written}");
+    assert_eq!(err.fields["category"], sdm_contract::Detail::text("data"));
+}
+
+fn materialize(seed: Option<Seed>) -> Operation {
+    Operation::Materialize(Materialize {
+        provider: ProviderChoice::Host {
+            capabilities: ProviderCapabilities {
+                optional: BTreeSet::new(),
+                max_keys_per_request: None,
+                sampling: Determinism::SeededStable,
+            },
+        },
+        schema: AttachmentId(1),
+        query: AttachmentId(2),
+        indices: None,
+        anchor_time: None,
+        seed,
+    })
+}
+
+#[test]
+fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
+    let negative = materialize(Some(Seed::from(-1_i128)));
+    let err = start_with(negative.clone(), attachments_of(&negative))
+        .err()
+        .unwrap();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest)
+    );
+    assert_eq!(err.fields["field"], sdm_contract::Detail::text("seed"));
+    // 2**70 passes the core's entry; materialize itself comes with T1.11c.
+    for seed in [
+        Some(Seed::from(1_u128 << 70)),
+        Some(Seed::from(0_u128)),
+        None,
+    ] {
+        let operation = materialize(seed);
+        let mut run = start_with(operation.clone(), attachments_of(&operation)).unwrap();
+        assert_eq!(run.next().unwrap_err().code, ErrorCode::UnsupportedRequest);
+    }
 }

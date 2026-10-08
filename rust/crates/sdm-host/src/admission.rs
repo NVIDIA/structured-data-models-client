@@ -34,7 +34,7 @@ use arrow_array::{
 };
 use arrow_buffer::{OffsetBuffer, ScalarBuffer};
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorKind, codes};
+use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
 use sdm_core::ArrowData;
 
 /// The closed-set type `received` is admitted as, or its refusal by name.
@@ -86,7 +86,7 @@ fn convert_type(column: &str, received: &DataType) -> DataType {
 fn out_of_range(column: &str, received: &DataType, admitted: &DataType) -> CoreError {
     CoreError::new(
         ErrorKind::Unsupported,
-        codes::VALUE_OUT_OF_RANGE,
+        ErrorCode::ValueOutOfRange,
         format!(
             "column {column:?} holds a value of Arrow type {received} that {admitted} cannot \
              hold"
@@ -137,7 +137,7 @@ pub fn admit(data: &ArrowData) -> Result<ArrowData, CoreError> {
 }
 
 fn invalid_data(message: &str) -> CoreError {
-    CoreError::protocol(codes::INVALID_MESSAGE, message)
+    CoreError::protocol(ErrorCode::InvalidMessage, message)
 }
 
 /// `array`, of a type [`admitted_type`] took, as `admitted`.
@@ -154,7 +154,7 @@ fn convert_array(
     let rebuilt = |e: arrow_schema::ArrowError| {
         CoreError::new(
             ErrorKind::Internal,
-            codes::INTERNAL_ERROR,
+            ErrorCode::InternalError,
             format!("admitting column {column:?}: {e}"),
         )
     };
@@ -300,7 +300,7 @@ fn convert_struct(
     StructArray::try_new(fields.clone(), columns, array.nulls().cloned()).map_err(|e| {
         CoreError::new(
             ErrorKind::Internal,
-            codes::INTERNAL_ERROR,
+            ErrorCode::InternalError,
             format!("admitting column {column:?}: {e}"),
         )
     })

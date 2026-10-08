@@ -7,11 +7,16 @@
 //!
 //! The JSON Schema of every control message is generated from these types
 //! by [`schema_json`], committed as `schema/sdm-contract-<version>.json`,
-//! and locked by its SHA-256 in `schema/contract.lock`. A change to the
-//! types changes the schema, which fails the lock check until
-//! [`CONTRACT_VERSION`] is bumped and a new lock entry added; an existing
-//! entry is never rewritten. The contract version is independent of the
-//! package version.
+//! and locked in `schema/contract.lock` by the SHA-256 of a projection that
+//! strips only the annotation keywords (`description`, `title`,
+//! `examples`), so a doc comment needs no bump while a change of shape does
+//! (decision H7). A change of shape, or of behavior (validation, units,
+//! ownership, defaults or error meaning), bumps [`CONTRACT_VERSION`]
+//! (decision H25). Entries not yet merged into `rust-core` are working
+//! versions: the lock holds at most one, rewritten at each bump within a
+//! phase, and the entries present at the merge base with `rust-core` are
+//! never rewritten (decision H4). The contract version is independent of
+//! the package version.
 
 #![forbid(unsafe_code)]
 
@@ -22,9 +27,11 @@ pub mod ops;
 pub mod pql;
 pub mod run;
 pub mod scalar;
+#[cfg(feature = "test-ops")]
+pub mod test_ops;
 pub mod types;
 
-pub use error::{CoreError, CoreWarning, Detail, ErrorKind, codes};
+pub use error::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind};
 pub use facts::HostFacts;
 pub use pql::{VALIDATED_QUERY_VERSION, ValidatedQuery, validated_query_schema_json};
 pub use run::{ControlMessage, Step};
@@ -32,7 +39,7 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 2;
+pub const CONTRACT_VERSION: u32 = 3;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline.

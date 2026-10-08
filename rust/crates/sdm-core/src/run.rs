@@ -30,7 +30,7 @@ use arrow_schema::SchemaRef;
 use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError, SqlStatement};
 use sdm_contract::ops::OperationResult;
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
-use sdm_contract::{CoreError, CoreWarning, ErrorKind, Step, codes};
+use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
 
 /// Data that travels beside a control message.
 #[derive(Debug, Clone)]
@@ -38,6 +38,9 @@ pub enum Attachment {
     Bytes(Vec<u8>),
     Arrow(ArrowData),
 }
+
+/// The attachments one message carries, by the ids it names them with.
+pub type Attachments = BTreeMap<AttachmentId, Attachment>;
 
 /// Arrow record batches of one schema.
 #[derive(Debug, Clone)]
@@ -61,11 +64,9 @@ pub enum ModelResult {
         content_type: String,
         body: Vec<u8>,
     },
-    TransportError {
-        kind: ErrorKind,
-        retryable: bool,
-        message: String,
-    },
+    /// The transport failed before an answer; its message stays in the
+    /// host.
+    TransportError { kind: ErrorKind, retryable: bool },
 }
 
 /// What an awaited request resolves to.
@@ -174,13 +175,35 @@ impl Asker {
 }
 
 fn attach(shared: &mut Shared, attachment: Attachment) -> Result<AttachmentId, CoreError> {
+    let id = reserve(shared)?;
+    shared.attachments.insert(id, attachment);
+    Ok(id)
+}
+
+/// The run's next attachment id, or `INTERNAL_ERROR` once they are used up.
+fn reserve(shared: &mut Shared) -> Result<AttachmentId, CoreError> {
     let Some(next) = shared.next_attachment.checked_add(1) else {
         return Err(exhausted(&mut *shared, "attachment"));
     };
     shared.next_attachment = next;
-    let id = AttachmentId(next);
-    shared.attachments.insert(id, attachment);
-    Ok(id)
+    Ok(AttachmentId(next))
+}
+
+/// A run's attachment numbering, shared with its host: the host layer
+/// numbers what it sends on the run's behalf (a message carried whole as an
+/// attachment) from the same sequence, so ids stay unique within the run.
+/// It can be used while another call holds the run.
+#[derive(Clone)]
+pub struct AttachmentIds {
+    shared: Arc<Mutex<Shared>>,
+}
+
+impl AttachmentIds {
+    /// The run's next attachment id, or `INTERNAL_ERROR` once they are
+    /// used up, which also ends the run at its next step.
+    pub fn reserve(&self) -> Result<AttachmentId, CoreError> {
+        reserve(&mut lock(&self.shared))
+    }
 }
 
 /// Records that the run's ids of one kind are used up, and the error.
@@ -284,7 +307,7 @@ pub struct Run {
     shared: Arc<Mutex<Shared>>,
 }
 
-fn protocol(code: &str, message: impl Into<String>) -> CoreError {
+fn protocol(code: ErrorCode, message: impl Into<String>) -> CoreError {
     CoreError::protocol(code, message)
 }
 
@@ -306,6 +329,13 @@ impl Run {
         }
     }
 
+    /// The run's attachment numbering; see [`AttachmentIds`].
+    pub fn attachment_ids(&self) -> AttachmentIds {
+        AttachmentIds {
+            shared: Arc::clone(&self.shared),
+        }
+    }
+
     pub fn state(&self) -> RunState {
         match &self.state {
             State::Ready => RunState::Ready,
@@ -320,14 +350,14 @@ impl Run {
     /// The error a run in a terminal state answers every call with.
     fn terminal(&self) -> Option<CoreError> {
         match self.state {
-            State::Finished => Some(protocol(codes::RUN_FINISHED, "the run has finished")),
+            State::Finished => Some(protocol(ErrorCode::RunFinished, "the run has finished")),
             State::Cancelled => Some(CoreError::new(
                 ErrorKind::Cancelled,
-                codes::RUN_CANCELLED,
+                ErrorCode::RunCancelled,
                 "the run was cancelled",
             )),
             State::Poisoned => Some(protocol(
-                codes::RUN_POISONED,
+                ErrorCode::RunPoisoned,
                 "the run panicked and can no longer be used",
             )),
             _ => None,
@@ -345,13 +375,13 @@ impl Run {
         match &self.state {
             State::AwaitingFetch(ids) => {
                 return Err(protocol(
-                    codes::REPLY_MISSING,
+                    ErrorCode::ReplyMissing,
                     format!("{} fetches have no reply yet", ids.len()),
                 ));
             }
             State::AwaitingModel(id) => {
                 return Err(protocol(
-                    codes::REPLY_MISSING,
+                    ErrorCode::ReplyMissing,
                     format!("model call {} has no reply yet", id.0),
                 ));
             }
@@ -425,7 +455,7 @@ impl Run {
                 Ok(())
             }
             State::AwaitingModel(call) if *call == id => Err(protocol(
-                codes::WRONG_REPLY,
+                ErrorCode::WrongReply,
                 format!("{} is a model call, not a fetch", id.0),
             )),
             _ => Err(unknown(id)),
@@ -444,7 +474,7 @@ impl Run {
                 Ok(())
             }
             State::AwaitingFetch(pending) if pending.contains(&id) => Err(protocol(
-                codes::WRONG_REPLY,
+                ErrorCode::WrongReply,
                 format!("{} is a fetch, not a model call", id.0),
             )),
             _ => Err(unknown(id)),
@@ -499,7 +529,7 @@ impl Run {
 
 fn unknown(id: ReplyId) -> CoreError {
     protocol(
-        codes::UNKNOWN_REPLY,
+        ErrorCode::UnknownReply,
         format!(
             "the run is not waiting on {}: it is unknown, stale or already answered",
             id.0
@@ -508,12 +538,12 @@ fn unknown(id: ReplyId) -> CoreError {
 }
 
 pub(crate) fn internal(message: &str) -> CoreError {
-    CoreError::new(ErrorKind::Internal, codes::INTERNAL_ERROR, message)
+    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
 }
 
 #[cfg(test)]
 mod tests {
-    use sdm_contract::codes;
+    use sdm_contract::ErrorCode;
     use sdm_contract::data::{DataRequest, ExpectedSchema};
     use sdm_contract::run::Endpoint;
 
@@ -533,7 +563,7 @@ mod tests {
         });
         lock(&run.shared).next_reply = u32::MAX;
         let err = run.next().unwrap_err();
-        assert_eq!(err.code, codes::INTERNAL_ERROR);
+        assert_eq!(err.code, ErrorCode::InternalError);
         assert_eq!(run.state(), RunState::Finished);
     }
 
@@ -547,7 +577,7 @@ mod tests {
         });
         lock(&run.shared).next_attachment = u32::MAX;
         let err = run.next().unwrap_err();
-        assert_eq!(err.code, codes::INTERNAL_ERROR);
+        assert_eq!(err.code, ErrorCode::InternalError);
         assert_eq!(run.state(), RunState::Finished);
 
         // Through attach, the body sees the error itself.
@@ -557,7 +587,7 @@ mod tests {
         });
         lock(&run.shared).next_attachment = u32::MAX;
         let err = run.next().unwrap_err();
-        assert_eq!(err.code, codes::INTERNAL_ERROR);
+        assert_eq!(err.code, ErrorCode::InternalError);
         assert_eq!(run.state(), RunState::Finished);
     }
 }
