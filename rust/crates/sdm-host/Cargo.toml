@@ -17,6 +17,7 @@ sdm-contract = { path = "../sdm-contract" }
 sdm-core = { path = "../sdm-core" }
 jiff.workspace = true
 jiff-tzdb.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

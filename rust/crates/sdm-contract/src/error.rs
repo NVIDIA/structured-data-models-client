@@ -82,7 +82,9 @@ pub mod codes {
     pub const RUN_POISONED: &str = "RUN_POISONED";
     /// A second call reached a run while one was in progress.
     pub const RUN_BUSY: &str = "RUN_BUSY";
-    /// A control message the contract cannot read.
+    /// A control message the contract cannot read, larger than the control
+    /// cap, of the wrong direction, or whose attachments do not match the
+    /// ids it names.
     pub const INVALID_MESSAGE: &str = "INVALID_MESSAGE";
 }
 
