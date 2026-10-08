@@ -1,6 +1,7 @@
 # Phase 1 dependencies
 
-One row per dependency of the Rust workspace in `rust/`: whether the core uses a library, ports a defined algorithm, or keeps the concern in the host, and the measured reason.
+One row per dependency of the Rust workspace in `rust/`, and per algorithm the core ports or concern it leaves in the host: whether the core uses a library, ports a defined algorithm, or keeps the concern in the host, and the measured reason.
+Rows marked "planned" name the task that adds them.
 Versions are pinned by `rust/Cargo.lock`; `rust/deny.toml` holds the licence, advisory, source and ban rules.
 A row changes with the dependency, in the same commit.
 
@@ -19,11 +20,27 @@ A row changes with the dependency, in the same commit.
 | `schemars` | 1 | contract | Use a library | Generates the committed JSON Schema from the serde types, so the schema cannot drift from the code |
 | `thiserror` | 2 | first-party crates | Use a library | Typed errors; `anyhow` stays out of first-party crates other than `sdm-testkit` |
 | `indexmap` | 2 | where output order matters | Use a library | Insertion order for anything that reaches an output; `HashMap` iteration is banned there |
-| `stacker` | 0.1 | interim parser | Use a library | Deep queries, as the archive's parser handles them |
+| `stacker` | 0.1 | interim parser, `sdm-core` | Use a library | Deep queries, as the archive's parser handles them; `sdm-core`'s adapter also grows the stack around parsing and the returned tree, so T1.6b tests traversal and destruction of a deep tree in a subprocess |
 | `anyhow` | 1 | `sdm-testkit` only | Use a library | Test-host plumbing only; `cargo-deny` refuses it elsewhere |
 | `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
 | `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
+| `tracing` | planned (T1.8) | first-party crates | Use a library | Logging in Rust (decision H8) |
+| `pyo3-log` | planned (T1.8) | `sdm-py` only | Use a library | Bridges Rust log records to Python `logging`; its level cache is reset at each run start (H8) |
+
+## Ported algorithms and host concerns
+
+| Concern | Choice | Where | Reason |
+|---|---|---|---|
+| `SeedSequence`, PCG64, bounded draws and the shuffle (RS-1) | Port a defined algorithm | `sdm-engine`, T1.22 | A promised stream (PK-1); no Rust crate reproduces numpy's draws; vectors from numpy pin it (F4) |
+| float32 Kahan sums in row order (PK-2) | Port a defined algorithm | `sdm-engine`, T1.27 | Promised label arithmetic |
+| `DateOffset` month rules (PK-3) | Port a defined algorithm over `jiff` | `sdm-engine`, T1.27 | Promised; `jiff`'s civil arithmetic gives the dates, the rules come from pandas' definition, checked by the 208 T0.6 answers |
+| PQL date literals D1 to D9 | Port a defined algorithm over `jiff` | `sdm-pql-interim`, T1.6a and T1.6b | Written rules from `date-rules.md`, replacing the archive's 1,695-line clone |
+| `pyint`'s digit limit, `float_repr`, `escapes` | Emulate, allowlisted | `sdm-pql-interim` | They decide validity (A4, E9); the allowlist expires with the crate |
+| Arrow-to-Arrow admission casts | Hand-written over `arrow-cast` | `sdm-host`, T1.7 and T1.7c | `arrow-cast` casts silently where admission must refuse by name (`VALUE_OUT_OF_RANGE`) and check schemas first (H16); the kernels are used where their semantics fit |
+| Text-date shapes (DT-7) | Port a defined algorithm | `sdm-engine::time::text_shapes`, T1.25 | Only the shapes of `date-rules.md`, by owner row (H21) |
+| pandas and NumPy conversion and presentation | Keep in the host | `_rust/`, the reviewed table | The core never sees a dtype (plan section 3) |
+| HTTP, authentication and the model call | Keep in the host | Client transport | The core passes model bodies as bytes |
 
 ## Zone and calendar vectors (T1.3)
 
@@ -50,5 +67,6 @@ The probe used `chrono` to build and check civil dates and times (`NaiveDate::fr
 - With `jiff`'s civil types (`Date::new`, `Time::new`, `DateTime` arithmetic and `duration_since` from the epoch) the answers equal `chrono`'s on every vector: there is no parsing difference on the corpus.
 - One limit differs and changes how the core must count instants: `jiff::Timestamp` spans -9999-01-02T01:59:59Z to 9999-12-30T22:00:00.999999999Z, so that every instant has a civil time in every offset, while pandas and `chrono` read `9999-12-31` and the millisecond count `253402300799999`.
   Going through `Timestamp`, those three corpus answers are refused (the test `jiff_timestamps_stop_before_pandas_does` holds this); counting from the epoch with civil arithmetic gives them exactly.
-  So the core keeps instants as Arrow's integer counts, converts between counts and UTC civil time with civil arithmetic, and uses `Timestamp` and `Zoned` only for zone conversions, which therefore refuse instants after 9999-12-30T22:00:00Z.
+  So the core keeps instants as Arrow's integer counts in columns and as `Instant(i128)` nanoseconds in scalars (decision F3), converts between counts and UTC civil time with civil arithmetic, and uses `Timestamp` and `Zoned` only inside zone conversions; past `Timestamp::MAX` a zone conversion is computed with civil arithmetic and the zone's offsets, never refused because `jiff` cannot hold the instant (decision E6).
+  That path is not yet proven: T1.25 adds vectors at 9999-12-31 in every vendored zone, and any refusal it cannot avoid needs a case and a register entry first.
 - `jiff`'s civil years run from -9999 to 9999, against `chrono`'s ±262,142; pandas never reads a year outside 1 to 9999, so the corpus cannot tell them apart.
