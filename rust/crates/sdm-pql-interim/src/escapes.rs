@@ -8,11 +8,12 @@
 //! one of the modules allowed to emulate Python
 //! (`scripts/rust_core/emulation-allowlist.txt`, Phase 1 decisions, E9).
 
-/// The text a string literal stands for, its escapes read: the grammar's
-/// (`\\ \" \' \/ \b \f \n \r \t \uXXXX`) and the octal, `\xXX`,
-/// `\UXXXXXXXX`, `\a`, `\v` and line-continuation escapes the reference
-/// also reads. An escape it cannot finish, such as `\u00`, makes the literal
-/// unreadable; an unknown one, such as `\/`, stands for itself.
+/// The text a string literal stands for, its escapes read. Only the
+/// grammar's escapes reach it (`\\ \" \' \/ \b \f \n \r \t \uXXXX`): the
+/// visitor refuses every other before a literal is read, so the codec's
+/// octal, `\x`, `\U`, `\N`, `\a`, `\v` and line-continuation escapes are not
+/// ported. An escape it cannot finish, such as `\u00`, makes the literal
+/// unreadable; `\/`, which the codec does not know, stands for itself.
 ///
 /// A `\u` escape of a surrogate stands for half a character: a pair is
 /// joined into the character it encodes, and a lone one becomes U+FFFD.
@@ -39,58 +40,17 @@ pub fn unescape(text: &str) -> Result<String, String> {
         };
         i += 2;
         match next {
-            '\n' => {}
             '\\' | '\'' | '"' => units.push(next as u32),
             'b' => units.push(0x08),
             'f' => units.push(0x0c),
             't' => units.push(0x09),
             'n' => units.push(0x0a),
             'r' => units.push(0x0d),
-            'v' => units.push(0x0b),
-            'a' => units.push(0x07),
-            '0'..='7' => {
-                let mut value = next as u32 - '0' as u32;
-                for _ in 0..2 {
-                    match chars.get(i) {
-                        Some(&d @ '0'..='7') => {
-                            value = value * 8 + (d as u32 - '0' as u32);
-                            i += 1;
-                        }
-                        _ => break,
-                    }
-                }
-                units.push(value);
-            }
-            'x' => {
-                units.push(hex(&chars[i..], 2, "\\xXX")?);
-                i += 2;
-            }
             'u' => {
                 units.push(hex(&chars[i..], 4, "\\uXXXX")?);
                 i += 4;
             }
-            'U' => {
-                let value = hex(&chars[i..], 8, "\\UXXXXXXXX")?;
-                if value > 0x10FFFF {
-                    return Err("illegal Unicode character".to_string());
-                }
-                units.push(value);
-                i += 8;
-            }
-            'N' => return Err("malformed \\N character escape".to_string()),
-            other if (other as u32) > 0xFF => {
-                // The character after the backslash was itself written as an
-                // escape by `backslashreplace`, whose backslash this one
-                // escapes.
-                units.push('\\' as u32);
-                let code = other as u32;
-                let written = if code > 0xFFFF {
-                    format!("U{code:08x}")
-                } else {
-                    format!("u{code:04x}")
-                };
-                units.extend(written.chars().map(|c| c as u32));
-            }
+            // `\/`, which the codec does not know, stands for itself.
             other => {
                 units.push('\\' as u32);
                 units.push(other as u32);
@@ -126,8 +86,45 @@ mod tests {
         assert_eq!(unescape("x\\u0041").unwrap(), "xA");
         assert_eq!(unescape("\\/").unwrap(), "\\/");
         assert_eq!(unescape("é\\u00e9").unwrap(), "éé");
-        assert_eq!(unescape("\\€").unwrap(), "\\u20ac");
+        assert_eq!(unescape("\\ud83d\\ude00\\ud83d").unwrap(), "😀\u{fffd}");
+        assert_eq!(
+            unescape("\\\"\\'\\b\\f\\n\\r\\t").unwrap(),
+            "\"'\u{8}\u{c}\n\r\t"
+        );
         assert!(unescape("a\\").is_err());
         assert!(unescape("\\u00").is_err());
+    }
+
+    #[test]
+    fn no_other_escape_reaches_the_reader() {
+        // The codec's other escapes are refused by the visitor before a
+        // literal is read, which is why they are not ported.
+        for escape in [
+            "\\x41",
+            "\\101",
+            "\\a",
+            "\\v",
+            "\\U0001F600",
+            "\\N{BULLET}",
+            "\\€",
+            "\\\n",
+        ] {
+            let query =
+                format!("PREDICT COUNT(t.* WHERE t.s = 'a{escape}', 0, 3, days) FOR EACH u.id");
+            let parsed = crate::parse(
+                &query,
+                crate::Mode::Inference,
+                crate::dates::Reader { year: 2026 },
+            )
+            .unwrap();
+            let Err(refused) = parsed else {
+                panic!("{escape:?} reached the reader");
+            };
+            assert_eq!(
+                refused.errors[0].code,
+                crate::codes::PARSE_SYNTAX,
+                "{escape:?}"
+            );
+        }
     }
 }
