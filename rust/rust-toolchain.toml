@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# One compiler for every build of the core, here and in CI, so a lint or a
+# formatting rule never changes under a commit that did not ask for it. The
+# pinned toolchain is the minimum supported Rust version.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

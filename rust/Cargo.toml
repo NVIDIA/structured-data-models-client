@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The Rust core of sdm-client: the contract, the core and the host layer, the
+# dev-only test host, and the Python binding over them. The layout and rules
+# are in docs/design/rust-core/phase-1/design.md.
+[workspace]
+resolver = "2"
+members = ["crates/*", "bindings/sdm-py"]
+
+[workspace.package]
+# Released with the client at its version; a guard holds sdm-py's version
+# equal to the other four distributions.
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/NVIDIA/structured-data-models-client"
+publish = false
+
+# One Arrow major across the workspace: duckdb =1.10506.0 (DuckDB 1.5.6, the
+# reference's version) uses Arrow 58, and arrow-pyarrow 58 needs pyo3 0.28.
+# The three move together, only at slice gates (decision B-D2).
+[workspace.dependencies]
+arrow-array = { version = "58", default-features = false }
+arrow-buffer = "58"
+arrow-data = "58"
+arrow-ipc = { version = "58", default-features = false }
+arrow-pyarrow = "58"
+arrow-schema = { version = "58", features = ["serde"] }
+duckdb = { version = "=1.10506.0", features = ["bundled"] }
+indexmap = { version = "2", features = ["serde"] }
+# The one calendar and zone library (decision A7). Zones come from the host's
+# lookup roots, passed in, then the bundled copy; never from the environment,
+# so `tz-system` stays off.
+jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-zoneinfo", "tzdb-bundle-always"] }
+jiff-tzdb = "0.1.9"
+pyo3 = { version = "0.28", features = ["abi3-py310"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+stacker = "0.1"
+thiserror = "2"
+anyhow = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.dev]
+# Stated, not assumed: sdm-host contains panics with catch_unwind.
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
+lto = "thin"
+codegen-units = 1

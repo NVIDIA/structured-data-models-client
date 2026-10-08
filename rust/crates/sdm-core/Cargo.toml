@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-core"
+description = "The single Run state machine, operation dispatch, capability checks and the PQL adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+sdm-contract = { path = "../sdm-contract" }
+sdm-pql-interim = { path = "../sdm-pql-interim" }
+
+[lints]
+workspace = true

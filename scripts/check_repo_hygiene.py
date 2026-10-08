@@ -43,6 +43,7 @@ SPDX_SUFFIXES = {
     '.in',
     '.py',
     '.pyi',
+    '.rs',
     '.sh',
     '.toml',
     '.yaml',
@@ -111,6 +112,9 @@ INTERNAL_ALLOWLIST = {
 
 SHIPPED_SUFFIXES = {
     '.py',
+    # The Rust core ships inside the client wheel, so its sources are read
+    # like any other.
+    '.rs',
     '.md',
     '.toml',
     '.cfg',

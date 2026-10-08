@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-py"
+description = "The Python binding over sdm-host, the module sdm_client._native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# An extension module leaves Python's symbols for the interpreter that loads
+# it to provide, so it cannot link into a test binary; it is tested as it
+# ships, from the installed wheel.
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[dependencies]
+arrow-pyarrow.workspace = true
+pyo3.workspace = true
+sdm-host = { path = "../../crates/sdm-host" }
+
+# Not the workspace lints: unsafe code is denied rather than forbidden, so the
+# Arrow FFI sites can allow it locally.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

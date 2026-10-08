@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Clippy's configuration for every crate in the workspace. The disallowed
+# types and methods (HashMap and HashSet in domain crates, clocks, the
+# environment, the file system, jiff::tz::db) arrive with the L0 guards.
+msrv = "1.97"

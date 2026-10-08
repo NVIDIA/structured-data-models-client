@@ -11,3 +11,5 @@ _sibling_wheels/
 .coverage
 htmlcov/
 *.so
+target/
+/uv.lock
