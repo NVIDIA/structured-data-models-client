@@ -7,26 +7,27 @@ A row changes with the dependency, in the same commit.
 
 | Dependency | Version | Crates | Choice | Reason |
 |---|---|---|---|---|
-| `arrow-*` (`arrow-schema`, `arrow-buffer`, `arrow-array`, `arrow-data`, `arrow-ipc`) | 58 | contract, host, later domain crates | Use a library | The closed type set is Arrow's (plan section 3); one major across the workspace, because `duckdb =1.10506.0` and `arrow-pyarrow` 58 both need 58 and two majors in one process need FFI glue between them (decision B-D2); `cargo-deny` refuses a second version of any `arrow-*` crate |
+| `arrow-*` (`arrow-schema`, `arrow-buffer`, `arrow-array`, `arrow-data`, `arrow-ipc`, `arrow-select`) | 58 | contract, host, later domain crates | Use a library | The closed type set is Arrow's (plan section 3); one major across the workspace, because `duckdb =1.10506.0` and `arrow-pyarrow` 58 both need 58 and two majors in one process need FFI glue between them (decision B-D2); `cargo-deny` refuses a second version of any `arrow-*` crate |
 | `pyo3` | 0.28 (`abi3-py310`) | `sdm-py` only | Use a library | The binding tool the plan names; 0.28 because `arrow-pyarrow` 58 needs it (B-D2); RUSTSEC-2026-0176 and RUSTSEC-2026-0177 are ignored with reasons until the next Arrow bump brings 0.29 (decision E1) |
 | `arrow-pyarrow` | 58 | `sdm-py` only | Use a library | PyCapsule from pyarrow 14 and `_export_to_c` below it, without our own FFI code |
 | `duckdb` (duckdb-rs, `bundled`; `icu` planned at T1.11b) | `=1.10506.0` (DuckDB 1.5.6) | `sdm-testkit` only | Use a library | The pure-Rust test host runs the core's DuckDB SQL at the reference's DuckDB version; `cargo-deny` refuses it anywhere else; `icu`, with extension autoload off, lets the host set a session `TimeZone` so `CAST(TIMESTAMPTZ AS TIMESTAMP)` matches the Python host (`time.timestamptz`) |
 | `jiff` (`std`, `tzdb-zoneinfo`, `tzdb-bundle-always`; no `tz-system`) | 0.2.38 | host, later engine and the interim parser | Use a library | The one calendar and zone library (decision A7): it meets DT-1 and DT-2 on all 2,808 zone answers and all 208 `DateOffset` answers of the T0.6 corpus, with a host directory and with its bundled copy; `tz-system` stays off so nothing reads the environment |
 | `jiff-tzdb` | 0.1.9 (tzdata 2026e) | host | Use a library | The bundled zone database behind `jiff`, the DT-2 fallback; its version (`jiff_tzdb::VERSION`) is recorded as the bundled source's version, and the zone vectors are checked against it |
 | `regex` | 1 | `sdm-host` tests only | Use a library | Repeats the T0.6 probe's reading of the accepted shapes in the zone and calendar vectors |
+| `half` | 2 | `sdm-host` tests only | Use a library | Builds the `float16` values the widening tests admit; Arrow's own `f16` type |
 | `chrono` | 0.4 (transitive) | none directly | Not used | Only Arrow's own dependency; first-party code uses `jiff` (A7) |
 | `chrono-tz` | none | none | Banned | Expands rules only to 2099 and embeds its database at build time, so it fails DT-1 and DT-2 (T0.6); `cargo-deny` refuses it |
 | `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | 1 | contract, host, later all | Use a library | Control messages are versioned JSON (plan section 3) |
 | `schemars` | 1 | contract | Use a library | Generates the committed JSON Schema from the serde types, so the schema cannot drift from the code |
 | `thiserror` | 2 | first-party crates | Use a library | Typed errors; `anyhow` stays out of first-party crates other than `sdm-testkit` |
 | `indexmap` | 2 | where output order matters | Use a library | Insertion order for anything that reaches an output; `HashMap` iteration is banned there |
-| `stacker` | 0.1 | interim parser, `sdm-core` | Use a library | Deep queries, as the archive's parser handles them; `sdm-core`'s adapter also grows the stack around parsing and the returned tree, so T1.6b tests traversal and destruction of a deep tree in a subprocess |
+| `stacker` | 0.1 | `sdm-core` | Use a library | Deep queries: `sdm-core`'s adapter grows one stack per call (`on_adapter_stack`) and parses, resolves, builds its answer and drops the tree on it; the interim parser grows none of its own since T1.7c; T1.6b tests traversal and destruction of a deep tree in a subprocess |
 | `anyhow` | 1 | `sdm-testkit` only | Use a library | Test-host plumbing only; `cargo-deny` refuses it elsewhere |
 | `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
 | `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
 | `tracing` (feature `log`) | planned (T1.8) | first-party crates | Use a library | Logging in Rust (decision H8); the `log` feature emits each event to the `log` facade when no subscriber is set, which is what `pyo3-log` reads |
-| `serde_stacker` | planned (T1.7c) | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27) |
+| `serde_stacker` | 0.1.14 | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27), through `read_validated_query`, which refuses text nested past `MAX_JSON_DEPTH` (2,008) before reading; `sdm-contract` turns on `serde_json`'s `unbounded_depth` for it, which only adds the switch that reader uses: every other read keeps the 128-level limit |
 | `pyo3-log` | planned (T1.8) | `sdm-py` only | Use a library | Bridges Rust `log` records to Python `logging`, initialized at the first core call; its level cache is reset at each run start (H8) |
 
 ## Ported algorithms and host concerns
@@ -38,7 +39,7 @@ A row changes with the dependency, in the same commit.
 | `DateOffset` month rules (PK-3) | Port a defined algorithm over `jiff` | `sdm-engine`, T1.27 | Promised; `jiff`'s civil arithmetic gives the dates, the rules come from pandas' definition, checked by the 208 T0.6 answers |
 | PQL date literals D1 to D9 | Port a defined algorithm over `jiff` | `sdm-pql-interim`, T1.6a and T1.6b | Written rules from `date-rules.md`, replacing the archive's 1,695-line clone |
 | `pyint`'s digit limit, `float_repr`, `escapes` | Emulate, allowlisted | `sdm-pql-interim` | They decide validity (A4, E9); the allowlist expires with the crate |
-| Arrow-to-Arrow admission casts | Hand-written over `arrow-cast` | `sdm-host`, T1.7 and T1.7c | `arrow-cast` casts silently where admission must refuse by name (`VALUE_OUT_OF_RANGE`) and check schemas first (H16); the kernels are used where their semantics fit |
+| Arrow-to-Arrow admission casts | Hand-written, with `arrow-select`'s `take` | `sdm-host`, T1.7 and T1.7c | `arrow-cast` casts silently where admission must refuse by name (`VALUE_OUT_OF_RANGE`), split a batch between rows at the offset capacity and check schemas first (H16); `take` decodes a dictionary and gathers a list view's values, where its semantics fit exactly |
 | Text-date shapes (DT-7) | Port a defined algorithm | `sdm-engine::time::text_shapes`, T1.25 | Only the shapes of `date-rules.md`, with its T0.6 vectors (H21) |
 | `DateOffset` month arithmetic in PQL date literals | Port a defined algorithm | `sdm-pql-interim`, `dor.rs` | pandas' definition, as the reference's parser applies it |
 | `str.isspace` | Port a defined algorithm | `sdm-pql-interim`, `syntax.rs` | Python's whitespace set decides what the parser skips before a query's first word |

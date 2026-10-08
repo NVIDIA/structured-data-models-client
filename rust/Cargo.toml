@@ -31,8 +31,8 @@ arrow-pyarrow = "58"
 arrow-schema = "58"
 arrow-select = "58"
 base64 = "0.22"
-half = "2"
 duckdb = { version = "=1.10506.0", features = ["bundled"] }
+half = "2"
 indexmap = { version = "2", features = ["serde"] }
 # The one calendar and zone library (decision A7). Zones come from the host's
 # lookup roots, passed in, then the bundled copy; never from the environment,
