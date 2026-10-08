@@ -8,15 +8,18 @@
 //!
 //! An accepted query gives the reference's validated query: its tree, read
 //! into the validated-query format, equals the adapter's, field for field,
-//! except a date literal's reading, which the date tests check. A refused
-//! query gives the same errors in count, code and span; messages are not
-//! promised. The date warnings the reference gave are compared too.
+//! and each date literal reads as the reference reads it (`reading`,
+//! recorded by `record_readings.py`). A refused query gives the same errors
+//! in count, code and span, unknown-name errors as a multiset, since the
+//! reference orders them from a Python set; messages are not promised. The
+//! date warnings the reference gave are compared by count.
 //!
-//! Until T1.6b completes the parser, not every case agrees: the test reports
-//! how many do and which differ, and fails if fewer agree than
-//! [`AGREEING_AT_LEAST`], so the count can only rise.
+//! Until T1.6b completes the parser, not every case agrees: the cases that
+//! differ, and the parts of each that do, are pinned in
+//! `tests/pql/known-differing.json`. Any other difference fails, and so does
+//! a pinned part that agrees, so the list can only shrink.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use sdm_contract::facts::PlatformFacts;
@@ -26,12 +29,33 @@ use sdm_core::pql::resolve;
 use sdm_core::profiles::Profile;
 use serde_json::{Map, Value, json};
 
-/// How many cases agreed when the parser was ported (T1.6a).
-const AGREEING_AT_LEAST: usize = 416;
+fn read(name: &str) -> Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/pql")
+        .join(name);
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
 
 fn corpus() -> Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/pql/corpus.json");
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    read("corpus.json")
+}
+
+/// The pinned differences: each case's id and the parts of it that differ.
+fn known_differing() -> BTreeMap<String, BTreeSet<String>> {
+    read("known-differing.json")["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            let parts = case["parts"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| text(p).unwrap())
+                .collect();
+            (text(&case["id"]).unwrap(), parts)
+        })
+        .collect()
 }
 
 /// The host facts of the recording: the clock in 2026.
@@ -154,7 +178,7 @@ fn unquote(text: &str) -> String {
     out
 }
 
-fn literal(value: &Value, dtype: &Value) -> Value {
+fn literal(value: &Value, dtype: &Value, reading: &Value) -> Value {
     if let Some(items) = value.as_array() {
         return json!({"type": "array", "items": items.iter().map(node).collect::<Vec<_>>()});
     }
@@ -167,7 +191,16 @@ fn literal(value: &Value, dtype: &Value) -> Value {
         }
         Some("float" | "float32" | "float64") => json!({"type": "float", "text": text}),
         Some("string" | "binary") => json!({"type": "string", "value": unquote(text)}),
-        Some("date" | "time") => json!({"type": "time", "text": text}),
+        Some("date" | "time") => {
+            // The validated-query format holds whole seconds.
+            assert_eq!(reading["nanos"], 0, "the reading of {text}");
+            json!({
+                "type": "time",
+                "text": text,
+                "value": reading["value"],
+                "offset": reading["offset"],
+            })
+        }
         Some(other) => panic!("a constant of type {other}"),
     }
 }
@@ -253,7 +286,8 @@ fn node(tree: &Value) -> Value {
             "from_like": !n["input_op"].is_null(),
         })
     } else {
-        json!({"node": "constant", "literal": literal(&n["value"], &n["dtype_maybe"])})
+        let reading = n.get("reading").cloned().unwrap_or(Value::Null);
+        json!({"node": "constant", "literal": literal(&n["value"], &n["dtype_maybe"], &reading)})
     };
     json!({
         "dtype": node_type(&n["dtype_maybe"]),
@@ -289,7 +323,8 @@ fn validated(tree: &Value) -> Value {
     })
 }
 
-/// A date literal's reading is checked by the date tests, not here.
+/// The tree without its date literals' readings, to tell a reading that
+/// differs from a tree that does.
 fn without_readings(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -330,33 +365,102 @@ fn first_difference(a: &Value, b: &Value, path: &str) -> String {
     }
 }
 
-/// How the adapter's answer differs from the reference's, if it does.
-fn difference(case: &Value, schema: &QuerySchema) -> Option<String> {
+/// Error codes the reference gives in the order of a Python set.
+fn names_unknown(code: &str) -> bool {
+    matches!(
+        code,
+        "PQL_SCHEMA_UNKNOWN_COLUMN" | "PQL_SCHEMA_UNKNOWN_TABLE"
+    )
+}
+
+/// Errors in order, each run of unknown-name errors sorted, so that run is
+/// compared as a multiset and everything else in order.
+fn in_comparable_order(mut errors: Vec<(String, Value)>) -> Vec<(String, Value)> {
+    let mut start = 0;
+    while start < errors.len() {
+        let mut end = start;
+        while end < errors.len() && names_unknown(&errors[end].0) {
+            end += 1;
+        }
+        if end > start {
+            errors[start..end].sort_by_key(|(code, span)| (code.clone(), span.to_string()));
+            start = end;
+        } else {
+            start += 1;
+        }
+    }
+    errors
+}
+
+/// How the adapter's answer differs from the reference's: each part that
+/// differs, and how.
+fn differences(case: &Value, schema: &QuerySchema) -> BTreeMap<&'static str, String> {
+    let mut out = BTreeMap::new();
     let query = case["query"].as_str().unwrap();
     let profile = profile(case["profile"].as_str().unwrap());
     let got = match resolve(query, schema, &profile, &facts()) {
         Ok(got) => got,
-        Err(error) => return Some(format!("no answer: {} {}", error.code, error.message)),
+        Err(error) => {
+            out.insert(
+                "answer",
+                format!("no answer: {} {}", error.code, error.message),
+            );
+            return out;
+        }
     };
-    if case.get("warnings").is_some() {
-        return Some("the reference's date warnings are not given yet".into());
+    // Warnings, by count, where the corpus records them all: an accepted
+    // case's tree holds the validator's warnings (none, which `validated`
+    // checks) and `warnings` the date reader's; a refused case's record
+    // holds no warnings of the validator's, so its are not compared.
+    let want_warnings = case
+        .get("warnings")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    let found_warnings = got
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Warning)
+        .count();
+    if case.get("tree").is_some() && want_warnings != found_warnings {
+        out.insert(
+            "warnings",
+            format!("{found_warnings} warnings, where the reference gives {want_warnings}"),
+        );
     }
+    let found_errors: Vec<(String, Value)> = got
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .map(|d| (d.code.clone(), serde_json::to_value(d.span).unwrap()))
+        .collect();
     if let Some(tree) = case.get("tree") {
         let Some(found) = &got.query else {
-            return Some(format!("refused: {:?}", got.diagnostics));
+            out.insert("validity", format!("refused: {found_errors:?}"));
+            return out;
         };
-        let mut want = validated(tree);
-        let mut found = serde_json::to_value(found).unwrap();
-        without_readings(&mut want);
-        without_readings(&mut found);
+        let want = validated(tree);
+        let found = serde_json::to_value(found).unwrap();
         if want != found {
-            return Some(format!("tree {}", first_difference(&want, &found, "$")));
+            let (mut bare_want, mut bare_found) = (want.clone(), found.clone());
+            without_readings(&mut bare_want);
+            without_readings(&mut bare_found);
+            if bare_want == bare_found {
+                out.insert("readings", first_difference(&want, &found, "$"));
+            } else {
+                out.insert("tree", first_difference(&bare_want, &bare_found, "$"));
+            }
         }
-        return (!got.diagnostics.is_empty())
-            .then(|| format!("diagnostics on an accepted query: {:?}", got.diagnostics));
+        if !found_errors.is_empty() {
+            out.insert(
+                "errors",
+                format!("errors on an accepted query: {found_errors:?}"),
+            );
+        }
+        return out;
     }
     if got.query.is_some() {
-        return Some("accepted, where the reference refuses".into());
+        out.insert("validity", "accepted, where the reference refuses".into());
+        return out;
     }
     let want: Vec<(String, Value)> = case["errors"]
         .as_array()
@@ -364,13 +468,27 @@ fn difference(case: &Value, schema: &QuerySchema) -> Option<String> {
         .iter()
         .map(|e| (text(&e["code"]).unwrap(), e["span"].clone()))
         .collect();
-    let found: Vec<(String, Value)> = got
-        .diagnostics
-        .iter()
-        .filter(|d| d.severity == Severity::Error)
-        .map(|d| (d.code.clone(), serde_json::to_value(d.span).unwrap()))
-        .collect();
-    (want != found).then(|| format!("errors {found:?}, where the reference gives {want:?}"))
+    if in_comparable_order(want.clone()) != in_comparable_order(found_errors.clone()) {
+        out.insert(
+            "errors",
+            format!("errors {found_errors:?}, where the reference gives {want:?}"),
+        );
+    }
+    out
+}
+
+#[test]
+fn unknown_name_errors_compare_as_a_multiset_and_the_rest_in_order() {
+    let error = |code: &str, col: u32| (code.to_owned(), json!({"start_col": col}));
+    let unknown = "PQL_SCHEMA_UNKNOWN_COLUMN";
+    let a = vec![error(unknown, 1), error(unknown, 9), error("PQL_X", 3)];
+    let b = vec![error(unknown, 9), error(unknown, 1), error("PQL_X", 3)];
+    assert_eq!(in_comparable_order(a.clone()), in_comparable_order(b));
+    let c = vec![error("PQL_X", 3), error(unknown, 1), error(unknown, 9)];
+    assert_ne!(in_comparable_order(a), in_comparable_order(c));
+    let d = vec![error("PQL_X", 3), error("PQL_Y", 1)];
+    let e = vec![error("PQL_Y", 1), error("PQL_X", 3)];
+    assert_ne!(in_comparable_order(d), in_comparable_order(e));
 }
 
 #[test]
@@ -386,25 +504,48 @@ fn the_corpus_agrees_with_the_reference() {
     assert_eq!(cases.len(), 417, "the corpus holds 417 queries");
     let accepted = cases.iter().filter(|c| c.get("tree").is_some()).count();
     assert_eq!((accepted, cases.len() - accepted), (193, 224));
-    let mut differences = Vec::new();
-    for case in cases {
-        let schema = &schemas[case["schema"].as_str().unwrap()];
-        if let Some(problem) = difference(case, schema) {
-            differences.push(format!("{}: {problem}", case["id"].as_str().unwrap()));
+    let known = known_differing();
+    let ids: BTreeSet<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
+    let mut failures = Vec::new();
+    for id in known.keys() {
+        if !ids.contains(id.as_str()) {
+            failures.push(format!("{id}: pinned as differing, and not in the corpus"));
         }
     }
-    let agreeing = cases.len() - differences.len();
-    println!(
-        "PQL corpus: {agreeing} of {} queries agree with the reference; {} differ",
-        cases.len(),
-        differences.len()
-    );
-    for difference in &differences {
-        println!("  {difference}");
+    let mut differing = 0;
+    for case in cases {
+        let id = case["id"].as_str().unwrap();
+        let schema = &schemas[case["schema"].as_str().unwrap()];
+        let found = differences(case, schema);
+        if !found.is_empty() {
+            differing += 1;
+        }
+        let pinned = known.get(id).cloned().unwrap_or_default();
+        for (part, how) in &found {
+            let status = if pinned.contains(*part) {
+                "pinned"
+            } else {
+                "NOT PINNED"
+            };
+            println!("  {id}: {part} ({status}): {how}");
+            if !pinned.contains(*part) {
+                failures.push(format!("{id}: {part} differs: {how}"));
+            }
+        }
+        for part in &pinned {
+            if !found.contains_key(part.as_str()) {
+                failures.push(format!(
+                    "{id}: {part} is pinned as differing and now agrees; remove it from \
+                     known-differing.json"
+                ));
+            }
+        }
     }
-    assert!(
-        agreeing >= AGREEING_AT_LEAST,
-        "{agreeing} corpus queries agree, fewer than the {AGREEING_AT_LEAST} of T1.6a:\n{}",
-        differences.join("\n")
+    println!(
+        "PQL corpus: {} of {} queries agree with the reference; {differing} differ, {} pinned",
+        cases.len() - differing,
+        cases.len(),
+        known.len()
     );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

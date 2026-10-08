@@ -1,5 +1,5 @@
 {
- "format": "sdm-pql-corpus/1",
+ "format": "sdm-pql-corpus/2",
  "source": "archive/rust-core-attempt-1 at 3887762, tests/parity/pql/valid.json and invalid.json: queries and the answers Python's predictive_query gave them, recorded by the first attempt; schemas are shared by name. A case has a tree (the reference's validated query, as json_serde writes it) or errors (code, span and message), and the date warnings the reference gave, if any.",
  "schemas": {
   "schema-1": {
@@ -13760,7 +13760,12 @@
           "end_col": 49,
           "data_available": true
          },
-         "value": "2024-01-01"
+         "value": "2024-01-01",
+         "reading": {
+          "value": "2024-01-01T00:00:00",
+          "offset": null,
+          "nanos": 0
+         }
         },
         "input_op": null
        }
@@ -13902,7 +13907,12 @@
           "end_col": 61,
           "data_available": true
          },
-         "value": "2024-06-30 12:00:00"
+         "value": "2024-06-30 12:00:00",
+         "reading": {
+          "value": "2024-06-30T12:00:00",
+          "offset": null,
+          "nanos": 0
+         }
         },
         "input_op": null
        }
@@ -20809,7 +20819,12 @@
           "end_col": 49,
           "data_available": true
          },
-         "value": "2024-02-29"
+         "value": "2024-02-29",
+         "reading": {
+          "value": "2024-02-29T00:00:00",
+          "offset": null,
+          "nanos": 0
+         }
         },
         "input_op": null
        }
@@ -20951,7 +20966,12 @@
           "end_col": 49,
           "data_available": true
          },
-         "value": "2024/02/29"
+         "value": "2024/02/29",
+         "reading": {
+          "value": "2024-02-29T00:00:00",
+          "offset": null,
+          "nanos": 0
+         }
         },
         "input_op": null
        }
@@ -21093,7 +21113,12 @@
           "end_col": 49,
           "data_available": true
          },
-         "value": "29.02.2024"
+         "value": "29.02.2024",
+         "reading": {
+          "value": "2024-02-29T00:00:00",
+          "offset": null,
+          "nanos": 0
+         }
         },
         "input_op": null
        }
@@ -24778,5 +24803,6 @@
     }
    ]
   }
- ]
+ ],
+ "readings": "rust-core-reference at b413e9ad6c613e82e5f1fc2ad0bc152870f59e74: each date constant of an accepted case's tree carries the reference's reading of it, recorded by record_readings.py beside this file"
 }
