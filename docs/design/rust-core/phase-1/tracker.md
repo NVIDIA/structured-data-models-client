@@ -7,7 +7,7 @@ A task's checks are active from the moment it lands, as listed in the design's t
 
 | Task | Half | Status | Evidence | Notes |
 |---|---|---|---|---|
-| T1.1 Phase documents and locked checks | 1a | not started | | Third, targeted review round, then implementation proceeds on the orchestrator decisions in [decisions.md](decisions.md); the owner confirms them later (D1) |
+| T1.1 Phase documents and locked checks | 1a | done | Reviews R1 to R3 (subagent and Codex), design at ec37923 | Third, targeted review round, then implementation proceeds on the orchestrator decisions in [decisions.md](decisions.md); the owner confirms them later (D1) |
 | T1.2 Workspace scaffold | 1a | not started | | Resolve the untracked root `uv.lock` first |
 | T1.3 Zone and calendar vectors | 1a | not started | | |
 | T1.4 `sdm-contract` types, schema and lock | 1a | not started | | |
