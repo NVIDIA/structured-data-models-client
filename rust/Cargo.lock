@@ -1358,8 +1358,11 @@ dependencies = [
 name = "sdm-core"
 version = "1.0.0"
 dependencies = [
+ "arrow-array",
+ "arrow-schema",
  "sdm-contract",
  "sdm-pql-interim",
+ "serde_json",
 ]
 
 [[package]]
