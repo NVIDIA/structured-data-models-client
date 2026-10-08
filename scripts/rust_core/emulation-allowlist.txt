@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The modules allowed to emulate Python behavior, one path per line, relative
+# to the repository root (Phase 1 design, "Interim parser"; decisions A4
+# and E9).
+# Emulation is banned everywhere else; each addition is a decision, and the
+# list expires with sdm-pql-interim. The vocabulary scan (T1.16) reads it.
+
+# Python's 4,300-digit limit on reading an integer, which decides validity.
+rust/crates/sdm-pql-interim/src/pyint.rs
+# The text Python's repr gives a float.
+rust/crates/sdm-pql-interim/src/float_repr.rs
+# How the reference reads a string literal's escapes, which decides validity
+# (Phase 1 decisions, E9).
+rust/crates/sdm-pql-interim/src/escapes.rs
