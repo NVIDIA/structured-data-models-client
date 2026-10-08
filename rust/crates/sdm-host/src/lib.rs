@@ -15,8 +15,8 @@ pub mod codec;
 pub mod runs;
 pub mod zones;
 
-pub use admission::{admit, admitted_type};
+pub use admission::{OFFSET_CAPACITY, admit, admit_with_capacity, admitted_type};
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
-pub use runs::{HostRun, contain};
+pub use runs::{Failure, HostRun, contain};
 pub use sdm_core::Attachments;
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};

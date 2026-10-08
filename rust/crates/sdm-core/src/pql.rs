@@ -76,6 +76,11 @@ pub fn validate(
 /// query touches is used.
 const STACK_BYTES: usize = 256 << 20;
 
+/// Runs `f` on the grown stack the adapter parses on.
+pub fn on_adapter_stack<R>(f: impl FnOnce() -> R) -> R {
+    stacker::grow(STACK_BYTES, f)
+}
+
 /// Validates `query` against `schema` for `profile`, and gives the
 /// validated query when it is accepted.
 ///

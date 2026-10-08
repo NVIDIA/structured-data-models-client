@@ -20,6 +20,7 @@ test-ops = ["sdm-core/test-ops"]
 arrow-array.workspace = true
 arrow-buffer.workspace = true
 arrow-schema.workspace = true
+arrow-select.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-core = { path = "../sdm-core" }
 jiff.workspace = true
@@ -28,6 +29,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+half.workspace = true
 sdm-core = { path = "../sdm-core", features = ["test-ops"] }
 regex.workspace = true
 serde.workspace = true

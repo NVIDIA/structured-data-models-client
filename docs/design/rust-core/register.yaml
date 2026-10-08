@@ -843,11 +843,18 @@ entries:
     Admission widens losslessly into the closed set (Phase 1 decisions H16
     and H27): float16, decimal32 and decimal64, duration and time32 at s or
     ms, date64 (as timestamp[us]), view types, fixed_size_binary and any
-    dictionary are admitted, keeping the received type. Proposed: what still
-    cannot convert is refused by name: a timestamp or duration at s or ms
-    whose value passes int64 microseconds, a single string or binary value
-    past int32 offsets, and any type T1.33 finds no lossless row for;
-    interval and union are refused by the reference too and need no entry.
+    dictionary are admitted, keeping the received type; a batch whose values
+    pass int32 offsets is split between rows. Proposed: what still cannot
+    convert is refused by name. Generated at T1.7c by the admission tests
+    (sdm-host tests/widening.rs, which fail if this list and the code
+    disagree), the type families still refused are `interval`,
+    `run_end_encoded` and `union`; interval and union are refused by the
+    reference too (inventory cases time.feature-interval and nested.union),
+    so run_end_encoded is the one type family that needs the owner. The
+    values still refused are a timestamp, duration or date64 at s or ms
+    whose value passes int64 microseconds, and a single string, binary or
+    list value past int32 offsets; any type T1.33 finds no lossless row for
+    joins them.
   affected_inputs: Sources returning Arrow types outside the closed set with no lossless conversion.
   cases: [T1.7c, T1.33]
   status: proposed

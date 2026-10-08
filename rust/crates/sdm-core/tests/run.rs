@@ -32,10 +32,7 @@ fn rows(n: usize) -> FetchResult {
         &arrow_array::RecordBatchOptions::new().with_row_count(Some(n)),
     )
     .unwrap();
-    FetchResult::Data(ArrowData {
-        schema,
-        batches: vec![batch],
-    })
+    FetchResult::Data(ArrowData::new(schema, vec![batch]))
 }
 
 fn failed() -> FetchResult {

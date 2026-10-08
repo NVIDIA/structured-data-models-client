@@ -27,10 +27,7 @@ use sdm_host::{admit, admitted_type};
 
 fn data(columns: Vec<(&str, ArrayRef)>) -> ArrowData {
     let batch = RecordBatch::try_from_iter(columns).unwrap();
-    ArrowData {
-        schema: batch.schema(),
-        batches: vec![batch],
-    }
+    ArrowData::new(batch.schema(), vec![batch])
 }
 
 fn text(error: &CoreError, field: &str) -> String {
@@ -225,10 +222,10 @@ fn field_and_schema_metadata_and_admitted_types_are_kept() {
         HashMap::from([("pandas".to_owned(), "{}".to_owned())]),
     ));
     let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::clone(&ints)]).unwrap();
-    let admitted = admit(&ArrowData {
-        schema: Arc::clone(&schema),
-        batches: vec![batch.clone(), batch],
-    })
+    let admitted = admit(&ArrowData::new(
+        Arc::clone(&schema),
+        vec![batch.clone(), batch],
+    ))
     .unwrap();
     assert_eq!(admitted.schema, schema);
     assert_eq!(admitted.batches.len(), 2);
@@ -279,12 +276,13 @@ fn a_value_the_admitted_type_cannot_hold_is_refused_by_name() {
         admit(&data(vec![("large", Arc::new(large) as ArrayRef)])),
         "large",
     );
+    // Two rows whose values together pass int32 split between them.
     let fixed =
         FixedSizeListArray::try_new(item, 1 << 30, Arc::new(NullArray::new(past)), None).unwrap();
-    assert_out_of_range(
-        admit(&data(vec![("fixed", Arc::new(fixed) as ArrayRef)])),
-        "fixed",
-    );
+    let admitted = admit(&data(vec![("fixed", Arc::new(fixed) as ArrayRef)])).unwrap();
+    assert_eq!(admitted.batches.len(), 2);
+    assert!(admitted.batches.iter().all(|b| b.num_rows() == 1));
+
     // Nested, the path names the child.
     let inner = Arc::new(Field::new(
         "t",
@@ -323,33 +321,33 @@ fn family(data_type: &DataType) -> (&'static str, Family) {
         DataType::UInt16 => ("uint16", Taken),
         DataType::UInt32 => ("uint32", Taken),
         DataType::UInt64 => ("uint64", Taken),
-        DataType::Float16 => ("float16", Outside),
+        DataType::Float16 => ("float16", Taken),
         DataType::Float32 => ("float32", Taken),
         DataType::Float64 => ("float64", Taken),
         DataType::Timestamp(..) => ("timestamp", Taken),
         DataType::Date32 => ("date32", Taken),
-        DataType::Date64 => ("date64", Outside),
-        DataType::Time32(_) => ("time32", Outside),
+        DataType::Date64 => ("date64", Taken),
+        DataType::Time32(_) => ("time32", Taken),
         DataType::Time64(_) => ("time64", Taken),
         DataType::Duration(_) => ("duration", Taken),
         DataType::Interval(_) => ("interval", Outside),
         DataType::Binary => ("binary", Taken),
-        DataType::FixedSizeBinary(_) => ("fixed_size_binary", Outside),
+        DataType::FixedSizeBinary(_) => ("fixed_size_binary", Taken),
         DataType::LargeBinary => ("large_binary", Taken),
-        DataType::BinaryView => ("binary_view", Outside),
+        DataType::BinaryView => ("binary_view", Taken),
         DataType::Utf8 => ("utf8", Taken),
         DataType::LargeUtf8 => ("large_utf8", Taken),
-        DataType::Utf8View => ("utf8_view", Outside),
+        DataType::Utf8View => ("utf8_view", Taken),
         DataType::List(_) => ("list", Taken),
-        DataType::ListView(_) => ("list_view", Outside),
+        DataType::ListView(_) => ("list_view", Taken),
         DataType::FixedSizeList(..) => ("fixed_size_list", Taken),
         DataType::LargeList(_) => ("large_list", Taken),
-        DataType::LargeListView(_) => ("large_list_view", Outside),
+        DataType::LargeListView(_) => ("large_list_view", Taken),
         DataType::Struct(_) => ("struct", Taken),
         DataType::Union(..) => ("union", Outside),
         DataType::Dictionary(..) => ("dictionary", Taken),
-        DataType::Decimal32(..) => ("decimal32", Outside),
-        DataType::Decimal64(..) => ("decimal64", Outside),
+        DataType::Decimal32(..) => ("decimal32", Taken),
+        DataType::Decimal64(..) => ("decimal64", Taken),
         DataType::Decimal128(..) => ("decimal128", Taken),
         DataType::Decimal256(..) => ("decimal256", Taken),
         DataType::Map(..) => ("map", Taken),
@@ -429,17 +427,13 @@ fn every_family() -> Vec<DataType> {
 fn outside_forms() -> Vec<DataType> {
     vec![
         DataType::Time64(TimeUnit::Second),
-        DataType::Duration(TimeUnit::Second),
-        DataType::Duration(TimeUnit::Millisecond),
-        DataType::Time32(TimeUnit::Millisecond),
         DataType::Interval(IntervalUnit::YearMonth),
         DataType::Interval(IntervalUnit::DayTime),
         DataType::Union(
             UnionFields::try_new(vec![0], vec![Field::new("a", DataType::Int32, true)]).unwrap(),
             UnionMode::Dense,
         ),
-        DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Int64)),
-        DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8View)),
+        DataType::Dictionary(Box::new(DataType::Float32), Box::new(DataType::LargeUtf8)),
         DataType::Decimal128(0, 0),
         DataType::Decimal256(77, 0),
     ]
@@ -454,7 +448,7 @@ fn buildable(data_type: &DataType) -> bool {
             | DataType::Time32(TimeUnit::Microsecond | TimeUnit::Nanosecond)
             | DataType::Decimal128(0, _)
             | DataType::Decimal256(77.., _)
-    )
+    ) && !matches!(data_type, DataType::Dictionary(index, _) if !index.is_integer())
 }
 
 fn assert_refused(data_type: &DataType) {
@@ -495,13 +489,18 @@ fn every_family_outside_the_set_is_refused_by_name() {
 
 #[test]
 fn a_refused_child_is_named_by_its_path() {
+    let interval = DataType::Interval(IntervalUnit::MonthDayNano);
     let nested = DataType::LargeList(Arc::new(Field::new(
         "item",
-        DataType::Struct(Fields::from(vec![Field::new("f", DataType::Float16, true)])),
+        DataType::Struct(Fields::from(vec![Field::new("f", interval.clone(), true)])),
         true,
     )));
     let err = admitted_type("col", &nested).unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedType);
     assert_eq!(text(&err, "column"), "col.item.f");
-    assert_eq!(text(&err, "arrow_type"), "Float16");
+    assert_eq!(text(&err, "arrow_type"), interval.to_string());
+    // A dictionary decoded to values the set refuses names those values.
+    let dictionary = DataType::Dictionary(Box::new(DataType::Int8), Box::new(interval.clone()));
+    let err = admitted_type("col", &dictionary).unwrap_err();
+    assert_eq!(text(&err, "arrow_type"), interval.to_string());
 }

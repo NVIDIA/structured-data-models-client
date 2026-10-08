@@ -12,7 +12,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 
 use arrow_array::{ArrayRef, LargeStringArray, RecordBatch, new_null_array};
-use arrow_schema::DataType;
+use arrow_schema::{DataType, IntervalUnit};
 use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError};
 use sdm_contract::data::{Dialect, ProviderChoice};
 use sdm_contract::facts::{PlatformFacts, ZoneRootFact};
@@ -135,6 +135,12 @@ impl IntoCore for CoreError {
     }
 }
 
+impl IntoCore for sdm_host::Failure {
+    fn into_core(self) -> CoreError {
+        self.error
+    }
+}
+
 impl IntoCore for Outgoing {
     fn into_core(self) -> CoreError {
         match read(&self).unwrap() {
@@ -230,7 +236,13 @@ fn a_panic_is_contained_and_poisons_the_run() {
         (ErrorKind::Internal, ErrorCode::InternalError)
     );
     assert!(is_panic(&err));
-    assert!(err.message.contains("boom in the body"));
+    // The location, never the panic's message (decision H17).
+    let written = serde_json::to_string(&err).unwrap();
+    assert!(!written.contains("boom"), "{written}");
+    assert!(matches!(
+        err.fields.get("location"),
+        Some(Detail::Scalar(Scalar::Utf8(at))) if at.contains("runs.rs")
+    ));
     assert_eq!(run.state().unwrap(), RunState::Poisoned);
     for err in [
         run.next().core().unwrap_err(),
@@ -240,11 +252,25 @@ fn a_panic_is_contained_and_poisons_the_run() {
     }
 
     // Outside any run, too.
-    let err = contain::<()>(|| panic!("{}", String::from("boom in the host")))
-        .core()
-        .unwrap_err();
-    assert!(is_panic(&err));
-    assert!(err.message.contains("boom in the host"));
+    let failure = contain::<()>(|| panic!("{}", String::from("boom in the host"))).unwrap_err();
+    assert!(failure.panicked);
+    assert!(is_panic(&failure.error));
+    assert!(
+        !serde_json::to_string(&failure.error)
+            .unwrap()
+            .contains("boom")
+    );
+    // An error is not a panic, whatever its fields say.
+    let failure = contain::<()>(|| {
+        Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "set by a host",
+        )
+        .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
+    })
+    .unwrap_err();
+    assert!(!failure.panicked);
 }
 
 #[test]
@@ -284,10 +310,7 @@ fn a_second_call_while_one_is_in_the_run_is_busy() {
 
 fn table(column: ArrayRef) -> ArrowData {
     let batch = RecordBatch::try_from_iter([("c", column)]).unwrap();
-    ArrowData {
-        schema: batch.schema(),
-        batches: vec![batch],
-    }
+    ArrowData::new(batch.schema(), vec![batch])
 }
 
 /// A run that fetches twice and answers with the type of each column it
@@ -438,7 +461,7 @@ fn a_reply_must_attach_exactly_what_it_names() {
 fn data_admission_refuses_ends_the_run_with_the_refusal() {
     let run = host_run(fetching_run());
     let id = fetch_id(&run.next().unwrap());
-    let half = new_null_array(&DataType::Float16, 1);
+    let half = new_null_array(&DataType::Interval(IntervalUnit::MonthDayNano), 1);
     let err = run
         .reply(
             &fetch_reply(
@@ -462,7 +485,7 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
     // data is read.
     let other = host_run(fetching_run());
     let id = fetch_id(&other.next().unwrap());
-    let half = new_null_array(&DataType::Float16, 1);
+    let half = new_null_array(&DataType::Interval(IntervalUnit::MonthDayNano), 1);
     let err = other
         .reply(
             &fetch_reply(

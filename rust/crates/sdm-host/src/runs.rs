@@ -11,8 +11,10 @@
 //! threads. Every call:
 //!
 //! - is contained: a panic anywhere below it poisons the run and comes back
-//!   as `INTERNAL_ERROR` with `fields.panic = true`, never as an unwind
-//!   through the binding;
+//!   as `INTERNAL_ERROR` with `fields.panic = true` and the panic's
+//!   location, never its message, and never as an unwind through the
+//!   binding; [`contain`] reports the panic out of band, so no error a host
+//!   hands in can poison a run (decision H17);
 //! - is refused with `RUN_BUSY` (kind `protocol`) while another call is in
 //!   the run, rather than waiting;
 //! - reads control messages through the codecs, under the control cap, and
@@ -29,9 +31,10 @@
 //! operation's input-sized fields this way (decision H5). Fetched Arrow data passes through admission on the way
 //! in; data admission refuses ends the run with that refusal.
 
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Mutex, MutexGuard, TryLockError};
+use std::sync::{Mutex, MutexGuard, Once, TryLockError};
 
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::LocalZone;
@@ -55,22 +58,82 @@ pub struct HostRun {
     zones: ZoneResolver,
 }
 
+/// What a contained call failed with: an error, or a panic, which
+/// [`contain`] reports out of band (decision H17).
+#[derive(Debug, Clone)]
+pub struct Failure {
+    pub error: CoreError,
+    /// Whether the call panicked; only [`contain`] sets it.
+    pub panicked: bool,
+}
+
+impl From<CoreError> for Failure {
+    fn from(error: CoreError) -> Self {
+        Failure {
+            error,
+            panicked: false,
+        }
+    }
+}
+
+thread_local! {
+    /// How many contained calls this thread is inside.
+    static CONTAINED: Cell<usize> = const { Cell::new(0) };
+    /// Where the last contained panic on this thread happened.
+    static LOCATION: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+static HOOK: Once = Once::new();
+
+/// Installs, once, the panic hook that writes only the location of a panic
+/// inside a contained call, never its message, which may quote input; any
+/// other panic goes to the hook that was there before.
+fn install_hook() {
+    HOOK.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if CONTAINED.with(Cell::get) == 0 {
+                previous(info);
+                return;
+            }
+            let at = info.location().map_or_else(
+                || "an unknown location".to_owned(),
+                |l| format!("{}:{}:{}", l.file(), l.line(), l.column()),
+            );
+            eprintln!("sdm core: a contained panic at {at}");
+            LOCATION.with(|location| *location.borrow_mut() = Some(at));
+        }));
+    });
+}
+
 /// Runs `call`, turning a panic into `INTERNAL_ERROR` with
-/// `fields.panic = true`.
-pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, CoreError> {
-    catch_unwind(AssertUnwindSafe(call)).unwrap_or_else(|payload| {
-        let what = payload
-            .downcast_ref::<&str>()
-            .map(|s| (*s).to_owned())
-            .or_else(|| payload.downcast_ref::<String>().cloned())
-            .unwrap_or_else(|| "a panic without a message".to_owned());
-        Err(CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            format!("the core panicked: {what}"),
-        )
-        .with_field("panic", Detail::Scalar(Scalar::Bool(true))))
-    })
+/// `fields.panic = true` and the panic's location, without its message,
+/// and reporting it as a panic in the [`Failure`]. The panic hook is
+/// installed at the first contained call, which for a binding is its first
+/// `HostRun::start`.
+pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, Failure> {
+    install_hook();
+    CONTAINED.with(|depth| depth.set(depth.get() + 1));
+    let outcome = catch_unwind(AssertUnwindSafe(call));
+    CONTAINED.with(|depth| depth.set(depth.get() - 1));
+    match outcome {
+        Ok(result) => result.map_err(Failure::from),
+        Err(_payload) => {
+            let at = LOCATION
+                .with(|location| location.borrow_mut().take())
+                .unwrap_or_else(|| "an unknown location".to_owned());
+            Err(Failure {
+                error: CoreError::new(
+                    ErrorKind::Internal,
+                    ErrorCode::InternalError,
+                    "the core panicked; the run can no longer be used",
+                )
+                .with_field("panic", Detail::Scalar(Scalar::Bool(true)))
+                .with_field("location", Detail::text(at)),
+                panicked: true,
+            })
+        }
+    }
 }
 
 fn invalid(message: impl Into<String>) -> CoreError {
@@ -123,7 +186,7 @@ impl HostRun {
             let run = sdm_core::start(root, *start, attachments)?;
             Ok(HostRun::with(run, zones))
         })
-        .map_err(|e| start_error(&e))
+        .map_err(|failure| start_error(&failure.error))
     }
 
     /// The host run of a core run built directly, as tests and the
@@ -158,14 +221,13 @@ impl HostRun {
             Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
         };
         let result = contain(|| call(&mut guard));
-        if result
-            .as_ref()
-            .is_err_and(|e| e.fields.get("panic") == Some(&Detail::Scalar(Scalar::Bool(true))))
-        {
+        // Only a panic poisons the run, as contain reports it; an error's
+        // fields, which a host can set, never do.
+        if result.as_ref().is_err_and(|failure| failure.panicked) {
             guard.poison();
         }
         drop(guard);
-        result.map_err(|e| self.error(&e))
+        result.map_err(|failure| self.error(&failure.error))
     }
 
     /// The run's next step, as a `step` control message, whole.

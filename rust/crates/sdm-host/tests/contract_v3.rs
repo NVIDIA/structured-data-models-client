@@ -281,9 +281,13 @@ fn a_fetch_step_with_a_wide_plan_arrives_whole_either_side_of_the_cap() {
         let out = run.next().unwrap();
         assert_eq!(attached(&out), past, "{size}");
         assert_eq!(read(&out).unwrap(), expected);
-        // The run goes on as usual: it is answered and finishes.
+        // The run goes on as usual: it is answered, with the 200 columns
+        // it expects back, and finishes.
         let rows = Arc::new(Int64Array::from(vec![1, 2, 3])) as ArrayRef;
-        let batch = RecordBatch::try_from_iter([("column_000", rows)]).unwrap();
+        let batch = RecordBatch::try_from_iter(
+            (0..200).map(|i| (format!("column_{i:03}"), Arc::clone(&rows))),
+        )
+        .unwrap();
         run.reply(
             &encode(&ControlMessage::FetchReply(FetchReply {
                 id: ReplyId(1),
@@ -294,10 +298,7 @@ fn a_fetch_step_with_a_wide_plan_arrives_whole_either_side_of_the_cap() {
             .unwrap(),
             Attachments::from([(
                 AttachmentId(1),
-                Attachment::Arrow(ArrowData {
-                    schema: batch.schema(),
-                    batches: vec![batch],
-                }),
+                Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
             )]),
         )
         .unwrap();

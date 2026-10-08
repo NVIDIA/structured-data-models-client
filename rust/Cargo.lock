@@ -1402,6 +1402,8 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
+ "arrow-select",
+ "half",
  "jiff",
  "jiff-tzdb",
  "regex",

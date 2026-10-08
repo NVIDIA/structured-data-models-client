@@ -18,7 +18,7 @@
 //! when its body panics: the state is set to `Poisoned` before every poll
 //! and replaced only when the poll returns.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::mem;
 use std::pin::Pin;
@@ -30,7 +30,7 @@ use arrow_schema::SchemaRef;
 use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError, SqlStatement};
 use sdm_contract::ops::OperationResult;
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
-use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
+use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
 
 /// Data that travels beside a control message.
 #[derive(Debug, Clone)]
@@ -47,6 +47,21 @@ pub type Attachments = BTreeMap<AttachmentId, Attachment>;
 pub struct ArrowData {
     pub schema: SchemaRef,
     pub batches: Vec<RecordBatch>,
+    /// The schema as the source handed it over, before admission widened
+    /// it, so inference sees what the source returned; the same as `schema`
+    /// for data nothing admitted.
+    pub received: SchemaRef,
+}
+
+impl ArrowData {
+    /// Data of `schema`, as it was received.
+    pub fn new(schema: SchemaRef, batches: Vec<RecordBatch>) -> Self {
+        ArrowData {
+            received: Arc::clone(&schema),
+            schema,
+            batches,
+        }
+    }
 }
 
 /// The host's answer to one fetch.
@@ -90,7 +105,8 @@ pub enum RunState {
 
 enum State {
     Ready,
-    AwaitingFetch(BTreeSet<ReplyId>),
+    /// Each unanswered fetch, with the schema it expects back.
+    AwaitingFetch(BTreeMap<ReplyId, ExpectedSchema>),
     AwaitingModel(ReplyId),
     Finished,
     Cancelled,
@@ -339,7 +355,7 @@ impl Run {
     pub fn state(&self) -> RunState {
         match &self.state {
             State::Ready => RunState::Ready,
-            State::AwaitingFetch(ids) => RunState::AwaitingFetch(ids.iter().copied().collect()),
+            State::AwaitingFetch(ids) => RunState::AwaitingFetch(ids.keys().copied().collect()),
             State::AwaitingModel(id) => RunState::AwaitingModel(*id),
             State::Finished => RunState::Finished,
             State::Cancelled => RunState::Cancelled,
@@ -415,7 +431,9 @@ impl Run {
                 drop(shared);
                 let step = match (fetches.is_empty(), calls.len()) {
                     (false, 0) => {
-                        self.state = State::AwaitingFetch(fetches.iter().map(|f| f.id).collect());
+                        self.state = State::AwaitingFetch(
+                            fetches.iter().map(|f| (f.id, f.expect.clone())).collect(),
+                        );
                         Step::Fetch { requests: fetches }
                     }
                     (true, 1) => {
@@ -440,13 +458,26 @@ impl Run {
         }
     }
 
-    /// The host's answer to fetch `id`.
+    /// The host's answer to fetch `id`. Data must match the schema the
+    /// request expects back, stored with the request (decision H16, check
+    /// (b)): the same columns in the same order, by name, each of the
+    /// expected closed-set type, holding the field metadata the request
+    /// requires, and no nulls where it expects none. A mismatch is
+    /// `PROVIDER_SCHEMA_MISMATCH`, and ends the run, as a refusal of data
+    /// does; nothing is dropped, relabelled or filled. A discovery request
+    /// takes the schema the data declares.
     pub fn submit_fetch(&mut self, id: ReplyId, result: FetchResult) -> Result<(), CoreError> {
         if let Some(err) = self.terminal() {
             return Err(err);
         }
         match &mut self.state {
-            State::AwaitingFetch(pending) if pending.contains(&id) => {
+            State::AwaitingFetch(pending) if pending.contains_key(&id) => {
+                if let FetchResult::Data(data) = &result
+                    && let Err(mismatch) = check_expected(&pending[&id], data)
+                {
+                    self.end()?;
+                    return Err(mismatch);
+                }
                 pending.remove(&id);
                 if pending.is_empty() {
                     self.state = State::Ready;
@@ -473,7 +504,7 @@ impl Run {
                 lock(&self.shared).replies.insert(id, Reply::Model(result));
                 Ok(())
             }
-            State::AwaitingFetch(pending) if pending.contains(&id) => Err(protocol(
+            State::AwaitingFetch(pending) if pending.contains_key(&id) => Err(protocol(
                 ErrorCode::WrongReply,
                 format!("{} is a fetch, not a model call", id.0),
             )),
@@ -525,6 +556,67 @@ impl Run {
     pub fn take_attachment(&mut self, id: AttachmentId) -> Option<Attachment> {
         lock(&self.shared).attachments.remove(&id)
     }
+}
+
+/// The refusal of fetched data whose schema is not the one asked for:
+/// `check` names which check found it, `declared` (a batch against its
+/// attachment's schema) or `expected` (the data against its request's).
+pub fn schema_mismatch(check: &str, column: Option<&str>, reason: &str) -> CoreError {
+    let mut error = CoreError::new(
+        ErrorKind::DataSource,
+        ErrorCode::ProviderSchemaMismatch,
+        format!("the provider's data does not match the {check} schema: {reason}"),
+    )
+    .with_field("check", Detail::text(check))
+    .with_field("reason", Detail::text(reason));
+    if let Some(column) = column {
+        error = error.with_field("column", Detail::text(column));
+    }
+    error
+}
+
+/// Check (b): `data` against the schema its request expects back.
+fn check_expected(expect: &ExpectedSchema, data: &ArrowData) -> Result<(), CoreError> {
+    let ExpectedSchema::Schema { fields } = expect else {
+        return Ok(());
+    };
+    let mismatch = |column: Option<&str>, reason: &str| schema_mismatch("expected", column, reason);
+    let got = data.schema.fields();
+    if got.len() != fields.len() {
+        return Err(mismatch(None, "the number of columns differs"));
+    }
+    for (index, (field, expected)) in got.iter().zip(fields).enumerate() {
+        let name = expected.name.as_str();
+        if field.name() != name {
+            return Err(mismatch(Some(name), "a column's name differs"));
+        }
+        match ColumnType::from_arrow(name, field.data_type()) {
+            Ok(column_type) if column_type == expected.column_type => {}
+            _ => return Err(mismatch(Some(name), "a column's type differs")),
+        }
+        if expected
+            .metadata
+            .iter()
+            .any(|(key, value)| field.metadata().get(key) != Some(value))
+        {
+            return Err(mismatch(
+                Some(name),
+                "a column lacks metadata the request requires",
+            ));
+        }
+        if !expected.nullable
+            && data
+                .batches
+                .iter()
+                .any(|b| b.column(index).null_count() > 0)
+        {
+            return Err(mismatch(
+                Some(name),
+                "a column holds nulls the request does not take",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn unknown(id: ReplyId) -> CoreError {

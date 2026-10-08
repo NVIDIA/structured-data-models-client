@@ -30,18 +30,32 @@ pub enum TestOperation {
     /// Gives the `CoreWarning`s a bytes attachment of a JSON list holds, in
     /// order, then finishes with no rows.
     Warn { warnings: AttachmentId },
+    /// Panics with `payload` as the panic's message, where `at` says.
+    Panic { at: PanicAt, payload: String },
+}
+
+/// Where a test-only operation panics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanicAt {
+    /// While the core builds the run, inside `HostRun::start`.
+    Start,
+    /// In the operation's body, at its first step.
+    Body,
+    /// In the body, on the grown stack the PQL adapter parses on.
+    AdapterStack,
 }
 
 impl TestOperation {
     /// The attachments a start of this operation names.
     pub fn attachments(&self) -> Vec<(AttachmentId, AttachmentKind)> {
-        let id = match self {
+        match self {
             TestOperation::Fetch { fetch: id }
             | TestOperation::Finish { result: id }
             | TestOperation::Fail { error: id }
-            | TestOperation::Warn { warnings: id } => *id,
-        };
-        vec![(id, AttachmentKind::Bytes)]
+            | TestOperation::Warn { warnings: id } => vec![(*id, AttachmentKind::Bytes)],
+            TestOperation::Panic { .. } => vec![],
+        }
     }
 }
 

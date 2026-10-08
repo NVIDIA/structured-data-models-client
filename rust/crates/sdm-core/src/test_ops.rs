@@ -6,7 +6,7 @@
 //! only with the `test-ops` feature, which a shipped build leaves off.
 
 use sdm_contract::ops::OperationResult;
-use sdm_contract::test_ops::{TestFetch, TestOperation, TestResult};
+use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
 use sdm_contract::{CoreError, CoreWarning};
 
 use crate::attached::take_json;
@@ -48,5 +48,14 @@ pub(crate) fn run(
                 Ok(OperationResult::Test(TestResult { rows: 0 }))
             })
         }
+        TestOperation::Panic { at, payload } => match at {
+            PanicAt::Start => panic!("{payload}"),
+            PanicAt::Body => Run::new(move |_| async move { panic!("{payload}") }),
+            PanicAt::AdapterStack => Run::new(move |_| async move {
+                crate::pql::on_adapter_stack(move || -> Result<OperationResult, CoreError> {
+                    panic!("{payload}")
+                })
+            }),
+        },
     })
 }

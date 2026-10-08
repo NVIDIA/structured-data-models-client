@@ -405,10 +405,10 @@ fn a_start_attaches_exactly_what_it_names_as_the_kind_it_names() {
     let mut arrow = full.clone();
     arrow.insert(
         AttachmentId(1),
-        Attachment::Arrow(sdm_core::ArrowData {
-            schema: Arc::new(arrow_schema::Schema::empty()),
-            batches: vec![],
-        }),
+        Attachment::Arrow(sdm_core::ArrowData::new(
+            Arc::new(arrow_schema::Schema::empty()),
+            vec![],
+        )),
     );
     for (attachments, named) in [(missing, 2), (extra, 9), (arrow, 1)] {
         let err = start_with(validate(), attachments).err().unwrap();
