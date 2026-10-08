@@ -69,6 +69,8 @@ INTERNAL_PATTERNS = (
     re.compile(r'gitlab-master\.nvidia\.com'),
     re.compile(r'urm\.nvidia\.com'),
     re.compile(r'\bkumo-tfm-nims\b'),
+    # A repository this one is not, and which no reader can open.
+    re.compile(r'\bkumo-relational-client\b', re.IGNORECASE),
     re.compile(r'\bnv-shared-pypi\b'),
     re.compile(r'\bnvbugs?\b', re.IGNORECASE),
     re.compile(r'\bnspect-\d', re.IGNORECASE),

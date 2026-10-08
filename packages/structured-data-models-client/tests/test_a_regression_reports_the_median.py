@@ -4,9 +4,9 @@
 
 """A relational regression reports the median of its predicted distribution.
 
-The endpoint reports the mean unless told otherwise, while the engine and
-kumo-relational-client report the median. On a right-skewed target such as a
-count the two differ, so the same question answered higher here than there.
+The endpoint reports the mean unless told otherwise, while the engine reports
+the median. On a right-skewed target such as a count the two differ, so the
+same question is answered higher here than there.
 """
 
 from __future__ import annotations
