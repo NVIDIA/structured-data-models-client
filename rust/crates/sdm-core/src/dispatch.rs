@@ -26,11 +26,12 @@ pub fn start(root: &CompositionRoot, start: StartRun) -> Result<Run, CoreError> 
         )
         .with_field("contract", Detail::Scalar(Scalar::UInt32(start.contract))));
     }
-    if !matches!(start.facts.now, Scalar::Timestamp { .. }) {
+    // The clock is an instant in UTC, under the zone's one spelling (E3).
+    if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
             codes::INVALID_REQUEST,
-            "the host's clock must be a ts scalar",
+            "the host's clock must be a ts scalar in UTC",
         )
         .with_field("field", Detail::text("facts.now")));
     }

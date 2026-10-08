@@ -488,7 +488,7 @@ fn a_transport_error_reaches_the_body() {
 #[test]
 fn a_key_set_travels_as_an_attachment() {
     let mut run = Run::new(|asker: Asker| async move {
-        let keys = asker.attach(Attachment::Bytes(vec![1, 2, 3]));
+        let keys = asker.attach(Attachment::Bytes(vec![1, 2, 3]))?;
         asker
             .fetch(
                 DataRequest::Describe {

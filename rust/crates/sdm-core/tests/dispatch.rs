@@ -93,20 +93,33 @@ fn another_contract_version_is_refused_before_a_run_exists() {
 }
 
 #[test]
-fn a_clock_that_is_not_a_timestamp_is_refused() {
-    let mut bad = facts();
-    bad.now = Scalar::Int64(0);
-    let err = start(
-        &CompositionRoot::default(),
-        StartRun {
-            contract: CONTRACT_VERSION,
-            facts: bad,
-            operation: validate(),
-        },
-    )
-    .err()
-    .unwrap();
-    assert_eq!(err.code, codes::INVALID_REQUEST);
+fn a_clock_that_is_not_a_timestamp_in_utc_is_refused() {
+    let at = |zone: Option<&str>| Scalar::Timestamp {
+        unit: Unit::Us,
+        zone: zone.map(str::to_owned),
+        value: 0,
+    };
+    for now in [
+        Scalar::Int64(0),
+        at(None),
+        at(Some("Europe/Berlin")),
+        at(Some("utc")),
+        at(Some("Etc/UTC")),
+    ] {
+        let mut bad = facts();
+        bad.now = now.clone();
+        let err = start(
+            &CompositionRoot::default(),
+            StartRun {
+                contract: CONTRACT_VERSION,
+                facts: bad,
+                operation: validate(),
+            },
+        )
+        .err()
+        .unwrap();
+        assert_eq!(err.code, codes::INVALID_REQUEST, "{now:?}");
+    }
 }
 
 #[test]

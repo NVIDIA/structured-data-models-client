@@ -99,8 +99,12 @@ enum State {
 /// What the body and the run share.
 #[derive(Default)]
 struct Shared {
+    /// The last ids given; ids start at 1 in each run.
     next_reply: u32,
     next_attachment: u32,
+    /// Set when the body asked for more ids than a `u32` holds; the run
+    /// then finishes with `INTERNAL_ERROR` at its next step.
+    exhausted: Option<CoreError>,
     /// Asked by the body since the last step.
     fetches: Vec<FetchStep>,
     calls: Vec<ModelCall>,
@@ -156,8 +160,9 @@ impl Asker {
         }
     }
 
-    /// Attaches data a request names, such as a key set, and returns its id.
-    pub fn attach(&self, attachment: Attachment) -> AttachmentId {
+    /// Attaches data a request names, such as a key set, and returns its id,
+    /// or `INTERNAL_ERROR` once the run's ids are used up.
+    pub fn attach(&self, attachment: Attachment) -> Result<AttachmentId, CoreError> {
         let mut shared = lock(&self.shared);
         attach(&mut shared, attachment)
     }
@@ -168,11 +173,21 @@ impl Asker {
     }
 }
 
-fn attach(shared: &mut Shared, attachment: Attachment) -> AttachmentId {
-    shared.next_attachment += 1;
-    let id = AttachmentId(shared.next_attachment);
+fn attach(shared: &mut Shared, attachment: Attachment) -> Result<AttachmentId, CoreError> {
+    let Some(next) = shared.next_attachment.checked_add(1) else {
+        return Err(exhausted(&mut *shared, "attachment"));
+    };
+    shared.next_attachment = next;
+    let id = AttachmentId(next);
     shared.attachments.insert(id, attachment);
-    id
+    Ok(id)
+}
+
+/// Records that the run's ids of one kind are used up, and the error.
+fn exhausted(shared: &mut Shared, what: &str) -> CoreError {
+    let err = internal(&format!("the run used up its {what} ids"));
+    shared.exhausted.get_or_insert_with(|| err.clone());
+    err
 }
 
 enum Asked {
@@ -209,8 +224,14 @@ impl Future for Ask {
         let mut shared = lock(&this.shared);
         match mem::replace(&mut this.state, AskState::Answered) {
             AskState::New(asked) => {
-                shared.next_reply += 1;
-                let id = ReplyId(shared.next_reply);
+                // Out of ids, the request is never asked; the run finishes
+                // with the error at its next step.
+                let Some(next) = shared.next_reply.checked_add(1) else {
+                    exhausted(&mut shared, "reply");
+                    return Poll::Pending;
+                };
+                shared.next_reply = next;
+                let id = ReplyId(next);
                 match asked {
                     Asked::Fetch {
                         request,
@@ -227,7 +248,9 @@ impl Future for Ask {
                         content_type,
                         body,
                     } => {
-                        let body = attach(&mut shared, Attachment::Bytes(body));
+                        let Ok(body) = attach(&mut shared, Attachment::Bytes(body)) else {
+                            return Poll::Pending;
+                        };
                         shared.calls.push(ModelCall {
                             id,
                             endpoint,
@@ -352,6 +375,11 @@ impl Run {
             }
             Poll::Pending => {
                 let mut shared = lock(&self.shared);
+                if let Some(err) = shared.exhausted.take() {
+                    drop(shared);
+                    self.state = State::Finished;
+                    return Err(err);
+                }
                 let fetches = mem::take(&mut shared.fetches);
                 let mut calls = mem::take(&mut shared.calls);
                 drop(shared);
@@ -467,4 +495,55 @@ fn unknown(id: ReplyId) -> CoreError {
 
 pub(crate) fn internal(message: &str) -> CoreError {
     CoreError::new(ErrorKind::Internal, codes::INTERNAL_ERROR, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use sdm_contract::codes;
+    use sdm_contract::data::{DataRequest, ExpectedSchema};
+    use sdm_contract::run::Endpoint;
+
+    use super::{Attachment, Run, RunState, lock};
+
+    fn describe() -> DataRequest {
+        DataRequest::Describe { tables: vec![] }
+    }
+
+    #[test]
+    fn running_out_of_reply_ids_is_an_internal_error() {
+        let mut run = Run::new(|asker| async move {
+            asker
+                .fetch(describe(), None, ExpectedSchema::Discover {})
+                .await;
+            unreachable!("never answered")
+        });
+        lock(&run.shared).next_reply = u32::MAX;
+        let err = run.next().unwrap_err();
+        assert_eq!(err.code, codes::INTERNAL_ERROR);
+        assert_eq!(run.state(), RunState::Finished);
+    }
+
+    #[test]
+    fn running_out_of_attachment_ids_is_an_internal_error() {
+        let mut run = Run::new(|asker| async move {
+            asker
+                .call_model(Endpoint::Predict, "application/json".into(), vec![])
+                .await;
+            unreachable!("never answered")
+        });
+        lock(&run.shared).next_attachment = u32::MAX;
+        let err = run.next().unwrap_err();
+        assert_eq!(err.code, codes::INTERNAL_ERROR);
+        assert_eq!(run.state(), RunState::Finished);
+
+        // Through attach, the body sees the error itself.
+        let mut run = Run::new(|asker| async move {
+            asker.attach(Attachment::Bytes(vec![1]))?;
+            unreachable!("the attach fails")
+        });
+        lock(&run.shared).next_attachment = u32::MAX;
+        let err = run.next().unwrap_err();
+        assert_eq!(err.code, codes::INTERNAL_ERROR);
+        assert_eq!(run.state(), RunState::Finished);
+    }
 }
