@@ -109,7 +109,7 @@ def architecture():
 
     # Bands. The layout keeps every vertical arrow clear of the band titles.
     c.band(30, 86, 1570, 204, "Outside sdm-client", GREY_FILL, "#999999", dashed=True)
-    c.band(30, 232, 1570, 416, "Python (main) and Java: every query and network call happens here", BLUE_FILL, BLUE)
+    c.band(30, 232, 1570, 416, "Python (primary) and Java: every query and network call happens here", BLUE_FILL, BLUE)
     c.band(30, 556, 1570, 900, "Rust core: shared logic, no database or network access", ORANGE_FILL, ORANGE)
 
     # Outside
@@ -240,12 +240,10 @@ def bindings():
 
     # Each language
     c.band(30, 90, 940, 246, "Each language", BLUE_FILL, BLUE)
-    c.box(60, 136, 330, 226, ["Python", "PyO3 binding (sdm-py),", "abi3 wheels built with maturin"], size=13)
-    c.box(350, 136, 620, 226, ["Java", "jni-rs binding (sdm-jni), loaded", "from the JAR (JDK 17 and 21);",
+    c.box(60, 136, 475, 226, ["Python", "PyO3 binding (sdm-py),", "abi3 wheels built with maturin"], size=13)
+    c.box(495, 136, 910, 226, ["Java", "jni-rs binding (sdm-jni), loaded", "from the JAR (JDK 17 and 21);",
                                "follows Python"],
           size=13)
-    c.box(640, 136, 910, 226, ["Future languages", "without a Rust binding tool:", "a C interface on top of sdm-host"],
-          stroke="#aaaaaa", size=13, dashed=True)
 
     # The shared boundary layer
     c.box(60, 310, 910, 410, ["sdm-host (plain Rust, written once)",
@@ -268,15 +266,14 @@ def bindings():
 
     # Calls
     c.arrow([(120, 226), (120, 310)], BLUE, label="Python objects, Arrow via PyCapsule", lx=128, ly=274)
-    c.arrow([(400, 226), (400, 310)], BLUE, label="Java objects, Arrow via Arrow Java C Data", lx=408, ly=274)
-    c.arrow([(775, 226), (775, 310)], GREY, dashed=True)
+    c.arrow([(555, 226), (555, 310)], BLUE, label="Java objects, Arrow via Arrow Java C Data", lx=563, ly=274)
     c.arrow([(811, 410), (811, 520)], ORANGE, label="Rust calls", lx=819, ly=450)
 
     # What ships: binding, sdm-host and the core, built into a native library per platform
     c.out.append('<path d="M948,136 L960,136 L960,686 L948,686" fill="none" stroke="#999999" '
                  'stroke-width="1.6"/>')
     c.out.append('<line x1="960" y1="411" x2="990" y2="411" stroke="#999999" stroke-width="1.6"/>')
-    c.box(990, 316, 1270, 506, ["Native libraries", "per platform", "Linux x86_64 and aarch64, macOS;",
+    c.box(990, 316, 1270, 506, ["Native libraries", "per platform,", "per the Phase 0", "support matrix;",
                                 "one in the wheel, one in the JAR,", "same sources;", "PQL's C++ linked in",
                                 "with private symbols"],
           fill=GREY_FILL, stroke="#999999", size=13, bold=2)
@@ -287,7 +284,7 @@ def bindings():
 def delivery():
     c = Canvas(1740, 620)
     c.title("Delivery: slices through the public API",
-            "Each slice goes from the public API down to the core and merges into the epic branch at its gate.")
+            "Each slice goes from the public API down to the core; each phase branch merges locally into the epic once verified.")
 
     top, bottom, mid = 148, 318, 233
 
@@ -296,16 +293,16 @@ def delivery():
            "(Java: DuckDB, SQLite, Postgres, Databricks)", BLUE_FILL, BLUE)
 
     phases = [
-        (60, 230, ["Phase 0 Prepare", "reference environment", "in its own worktree;", "bank the first attempt's",
-                   "best candidate;", "the epic branch (rust-core)"], 1),
+        (60, 230, ["Phase 0 Prepare", "epic branch (rust-core);", "reference branch", "and environment;",
+                   "archive the first", "attempt; CI on branches"], 1),
         (260, 430, ["Phase 1a Harness", "contract, test runners,", "CI guards, installed wheel;",
                     "S0 PQL validation", "in Python"], 1),
         (460, 630, ["Phase 1b Spike", "fixed case inventory", "on DuckDB, in Python", "and a pure-Rust",
                     "test host"], 1),
         (820, 990, ["Phase 2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;",
-                    "sample data provider;", "swappable data layer", "proof"], 2),
+                    "minimal non-SQL", "test provider;", "swappable data layer", "proof"], 2),
         (1020, 1190, ["Phase 3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
-                      "Python switches", "warehouse paths;", "Java follows", "on Databricks"], 2),
+                      "Python switches", "S0, S1 and S2 paths;", "Java follows", "on Databricks"], 2),
         (1220, 1390, ["Phase 4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
         (1450, 1620, ["Phase 5 Release", "PQL crate,", "delete old engine"], 1),
     ]
@@ -334,12 +331,13 @@ def delivery():
 
     # Checks strip
     c.band(30, 450, 1710, 580, "Checks that run all along", GREY_FILL, "#999999")
-    c.box(60, 490, 590, 560, ["Every PR", "unit, boundary guards, contract subset,",
+    c.box(60, 490, 590, 560, ["CI, on every push to rust-core and phase branches",
+                              "unit, boundary guards, contract subset,",
                               "SQL goldens, provider kit, conversion tables"], size=13)
-    c.box(620, 490, 1120, 560, ["Nightly", "full contract corpus, differential vs reference,",
+    c.box(620, 490, 1120, 560, ["Local, before each gate", "full contract corpus, differential vs reference,",
                                 "offline performance"],
           size=13)
-    c.box(1150, 490, 1680, 560, ["Weekly and before release", "weekly: live matrix",
+    c.box(1150, 490, 1680, 560, ["Local, before switch and release gates", "live matrix and Databricks job matrix;",
                                  "before release: all layers, packaging and safety"], size=13)
 
     c.save("delivery.svg")

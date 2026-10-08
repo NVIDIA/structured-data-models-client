@@ -70,7 +70,7 @@ Run a second language early, so Python assumptions show up while they are cheap 
 Recordings were keyed by private Python function names, and coverage was measured on private branches.
 They missed common inputs such as pyarrow-backed pandas frames, and some renames and rebases meant re-recording and re-approving hundreds of files.
 Most real bugs were found by reviewers, ad hoc probes and a late public-API generator.
-**Lesson:** the main test layer is a language-neutral corpus of public-API cases, plus a generator that compares against the old release.
+**Lesson:** the main test layer is a language-neutral corpus of public-API cases, plus a generator that compares against the reference branch (`main` plus determinism fixes).
 Algorithm unit tests stay; migration-specific tests of internals are retired once their replacements are shown to catch the same failures.
 
 ### 7. Fixes did not protect neighboring cases
@@ -89,7 +89,7 @@ About 43% of the first orchestrator's agent time was process.
 Most audits failed on wording, not code.
 Agreed acceptance checks were locked before implementation, and checks that could never pass had to be changed and locked again ("relocks"): eight times across the first orchestrator's phases, and nine times in a single later phase.
 Evidence tied to exact commits forced repeated re-validation, and approvals were per file hash, so one rename meant hundreds of re-approvals.
-The second orchestrator added rules on itself and asked the owner one question in 62 hours.
+The second orchestrator added rules on itself and asked the owner one question in its 63 hours.
 **Lesson:** cap rounds and relocks, approve by meaning (one decision covers many files), and bound phases by executable outcomes.
 Stop rules are acted on by the owner, not by the agent doing the work.
 
@@ -98,7 +98,7 @@ Stop rules are acted on by the owner, not by the agent doing the work.
 The two runs created 74 worktree directories and many branches.
 One candidate passed all 5,004 public cases and 21,388 generated ones, though its live checks had not run; it existed only as a detached commit.
 The next four fixes, composed on top of it, broke 24 cases that used to work.
-**Lesson:** keep one integration branch with at most one short-lived topic branch.
+**Lesson:** keep one integration branch with at most one short-lived topic branch per task.
 Push every candidate that passes its checks before building on it, and treat "passed these cases" as a checkpoint, not a release.
 
 ### 11. Agreements made in review were lost
@@ -123,5 +123,5 @@ After reviewing each other's reports, the second orchestrator endorsed proving t
 |---|---|---|---|
 | How deep to fix the boundary | Re-cut to an Arrow-only contract | Repair it in place; problems are "bounded" | Prove the Arrow-only contract on one hard slice first, then choose from the evidence |
 | Process | Reset it | Keep the full machinery, trim the launchers | Reset it: keep behavioral requirements and independent review, drop per-file approvals and unbounded relocks |
-| Slice order | Warehouse first, Python and Java together | Python slices first, Java later | Python leads every slice, warehouse path first; Java follows on the same contract cases |
+| Slice order | Warehouse first, Python and Java together | Python slices first, Java later | Python leads every slice: PQL, offline databases, then warehouses; Java follows |
 | Deleting internal tests | On a schedule | Only when replacements prove they catch the same issues | Replacements must show they catch what the old tests caught; then delete |
