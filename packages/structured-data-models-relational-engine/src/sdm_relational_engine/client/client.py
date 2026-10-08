@@ -116,7 +116,7 @@ def _validate_url(url: str, api_key: str | None) -> None:
         )
     # Userinfo is a credential too: `requests` turns it into an
     # `Authorization: Basic` header. Checking only api_key let
-    # `http://user:secret@host` send it in the clear.
+    # such a URL send it in the clear.
     carries_credential = bool(api_key or parsed.username or parsed.password)
     if (
         carries_credential
@@ -133,7 +133,8 @@ def _validate_url(url: str, api_key: str | None) -> None:
 def redact_url(url: str | None) -> str | None:
     r"""Strip any userinfo from ``url`` so it is safe to log or display.
 
-    ``https://user:token@host/path`` is a legal way to point the client at a
+    A URL carrying a password in its userinfo is a legal way to point the
+    client at a
     deployment, and the credential is in the URL itself. Anywhere a URL reaches
     a log line, an error message or a repr, it goes through here first.
     """

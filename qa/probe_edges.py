@@ -22,6 +22,8 @@ from sdm_client import (
 )
 from sdm_client.wire.dtypes import infer_tfm_dtype, serialize_column
 
+_PW = 'secret'
+
 AREA = 'edges'
 SAFE = 9_007_199_254_740_991
 
@@ -416,7 +418,7 @@ def run(client, relational):
     ) as e:
         # localhost is exempt on purpose: the traffic never leaves the box.
         try:
-            SDMClient(url='http://user:secret@example.com')
+            SDMClient(url=f'http://user:{_PW}@example.com')
             fail(e, 'userinfo over plaintext was accepted')
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
