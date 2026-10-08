@@ -7013,13 +7013,6 @@
         }
       },
       "inference": {
-        "inference_config": {
-          "category_shuffle": false,
-          "column_shuffle": false,
-          "hop_shuffle": false,
-          "kind": "regression",
-          "num_estimators": 1
-        },
         "run_mode": "fast",
         "use_prediction_time": false
       },

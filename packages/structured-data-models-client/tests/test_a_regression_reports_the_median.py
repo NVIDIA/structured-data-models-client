@@ -125,10 +125,32 @@ def test_a_regression_asks_for_the_median_by_default(requests_mock):
 
     assert body['task']['kind'] == 'regression'
     assert body['output']['prediction_statistic'] == 'median'
-    assert 'output_type' not in body['inference']['inference_config']
+    assert 'inference_config' not in body['inference']
     # Both transports wrap the same payload, so both ask for the same thing.
     (wrapped,) = sent_to_databricks(request)
     assert without_request_id(wrapped) == without_request_id(body)
+
+
+def test_only_the_inference_option_the_caller_set_is_sent(requests_mock):
+    request = asked(inference_config={'num_estimators': 4})
+    (body,) = sent_to_a_nim(request, requests_mock)
+    assert body['inference']['inference_config'] == {'num_estimators': 4}
+
+
+@pytest.mark.parametrize(
+    'edit', [dict.clear, lambda config: config.update(num_estimators=2)]
+)
+def test_editing_the_config_after_materialize_changes_nothing_sent(
+    edit, requests_mock
+):
+    config = {'num_estimators': 4}
+    request = asked(inference_config=config)
+    edit(config)
+    (body,) = sent_to_a_nim(request, requests_mock)
+    assert body['inference']['inference_config'] == {'num_estimators': 4}
+    assert request.requested_inference == {
+        'inference_config': {'num_estimators': 4}
+    }
 
 
 def test_the_mean_is_sent_when_it_is_asked_for(requests_mock):
