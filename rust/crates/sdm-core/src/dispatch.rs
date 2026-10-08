@@ -89,7 +89,7 @@ pub fn start(
             Run::new(|_| async { Err(not_yet("predict")) })
         }
         #[cfg(feature = "test-ops")]
-        Operation::Test(operation) => crate::test_ops::run(operation, &mut attachments)?,
+        Operation::Test(operation) => crate::test_ops::run(operation, &mut attachments, facts)?,
     })
 }
 

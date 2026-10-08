@@ -154,15 +154,26 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
     diagnostic.severity == Severity::Error
 }
 
+/// The refusal of a query the interim parser cannot read yet: where the
+/// literal is, as fields, never the literal itself (decision H17).
 fn unsupported(interrupted: interim::Interrupted) -> CoreError {
-    CoreError::new(
+    let mut error = CoreError::new(
         ErrorKind::Unsupported,
         ErrorCode::UnsupportedRequest,
         format!(
             "{}; the interim PQL parser cannot validate this query",
-            interrupted.0
+            interim::ast::DEFERRED
         ),
-    )
+    );
+    if let Some(at) = interrupted.0 {
+        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
+        error = error
+            .with_field("start_row", count(at.start_row))
+            .with_field("start_col", count(at.start_col))
+            .with_field("end_row", count(at.end_row))
+            .with_field("end_col", count(at.end_col));
+    }
+    error
 }
 
 fn internal(message: impl Into<String>) -> CoreError {
@@ -449,7 +460,9 @@ fn literal(n: &NodeRef, value: &ConstValue) -> Result<PqlLiteral, CoreError> {
         }
         ConstValue::Text(text) => text,
     };
-    let read = ast::typed_value(n).map_err(|e| internal(format!("a validated constant: {e}")))?;
+    let read = ast::typed_value(n)
+        // The reader's text may quote the constant, which is input.
+        .map_err(|_| internal("a validated constant could not be read as its type"))?;
     Ok(match read {
         Literal::Null => PqlLiteral::Null,
         Literal::Bool(value) => PqlLiteral::Bool { value },

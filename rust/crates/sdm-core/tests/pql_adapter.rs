@@ -412,5 +412,17 @@ fn a_date_the_reference_reads_and_the_interim_reader_does_not_is_pinned_as_refus
             (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest),
             "{literal}"
         );
+        // The literal is input: the refusal gives its position, never its
+        // text (decision H17).
+        let written = format!("{} {err:?}", serde_json::to_string(&err).unwrap());
+        assert!(!written.contains(literal), "{written}");
+        assert!(!written.contains(&literal[..8]), "{written}");
+        assert_eq!(
+            err.fields.get("start_row"),
+            Some(&sdm_contract::Detail::Scalar(sdm_contract::Scalar::UInt64(
+                1
+            )))
+        );
+        assert!(err.fields.contains_key("start_col"));
     }
 }

@@ -197,8 +197,25 @@ struct Parser<'a> {
 
 type Parsed<T> = Result<T, SyntaxError>;
 
+#[cfg(feature = "test-ops")]
+thread_local! {
+    static PANIC_IN_PARSE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Test-only: the next parse on this thread panics with `payload`, inside
+/// the parser, so a test can show such a panic is contained.
+#[cfg(feature = "test-ops")]
+pub fn panic_in_next_parse(payload: String) {
+    PANIC_IN_PARSE.with(|next| *next.borrow_mut() = Some(payload));
+}
+
 /// Parses the tokens of a whole query.
 pub fn parse(tokens: &[Token]) -> Parsed<Prog> {
+    #[cfg(feature = "test-ops")]
+    if let Some(payload) = PANIC_IN_PARSE.with(|next| next.borrow_mut().take()) {
+        panic!("{payload}");
+    }
     let mut parser = Parser {
         tokens,
         pos: 0,
@@ -245,7 +262,10 @@ impl Parser<'_> {
         if height <= MAX_DEPTH {
             return Ok(height);
         }
-        let row = self.tokens.get(self.pos.saturating_sub(1)).map_or(0, |t| t.line);
+        let row = self
+            .tokens
+            .get(self.pos.saturating_sub(1))
+            .map_or(0, |t| t.line);
         Err(SyntaxError(format!(
             "The query's conditions nest more than {MAX_DEPTH} levels deep near row {row}; \
              simplify it."

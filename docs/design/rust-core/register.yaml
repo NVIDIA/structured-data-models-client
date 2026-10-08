@@ -845,16 +845,18 @@ entries:
     ms, date64 (as timestamp[us]), view types, fixed_size_binary and any
     dictionary are admitted, keeping the received type; a batch whose values
     pass int32 offsets is split between rows. Proposed: what still cannot
-    convert is refused by name. Generated at T1.7c by the admission tests
-    (sdm-host tests/widening.rs, which fail if this list and the code
-    disagree), the type families still refused are `interval`,
-    `run_end_encoded` and `union`; interval and union are refused by the
-    reference too (inventory cases time.feature-interval and nested.union),
-    so run_end_encoded is the one type family that needs the owner. The
-    values still refused are a timestamp, duration or date64 at s or ms
-    whose value passes int64 microseconds, and a single string, binary or
-    list value past int32 offsets; any type T1.33 finds no lossless row for
-    joins them.
+    convert is refused by name. Generated at T1.7c from the admission
+    tests' family table (sdm-host tests/admission.rs, which fails if this
+    list and the code disagree), the type families still refused are
+    `interval`, `run_end_encoded` and `union`. The reference refuses
+    interval and union where it infers a column's type (inventory cases
+    time.feature-interval and nested.union), but a column given an
+    explicit dtype skips that inference (table.py), so the reference may
+    read all three there, and each needs the owner. The values still
+    refused are a timestamp, duration or date64 at s or ms whose value
+    passes int64 microseconds, and a single string, binary or list value
+    past int32 offsets; any type T1.33 finds no lossless row for joins
+    them.
   affected_inputs: Sources returning Arrow types outside the closed set with no lossless conversion.
   cases: [T1.7c, T1.33]
   status: proposed

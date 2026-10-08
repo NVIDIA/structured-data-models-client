@@ -504,3 +504,35 @@ fn a_refused_child_is_named_by_its_path() {
     let err = admitted_type("col", &dictionary).unwrap_err();
     assert_eq!(text(&err, "arrow_type"), interval.to_string());
 }
+
+/// The backticked names in register HOST-2's entry: the type families it
+/// lists as still refused.
+fn host_2_families() -> BTreeSet<String> {
+    let register = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../docs/design/rust-core/register.yaml"),
+    )
+    .unwrap();
+    let start = register.find("- id: HOST-2\n").expect("register HOST-2");
+    let entry = &register[start + 1..];
+    let entry = &entry[..entry.find("\n- id: ").unwrap_or(entry.len())];
+    entry
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn the_families_still_refused_are_the_ones_register_host_2_lists() {
+    // Generated from the family table above, so a widening or a new
+    // refusal changes it, and then HOST-2 must say so.
+    let refused: BTreeSet<String> = every_family()
+        .iter()
+        .map(family)
+        .filter(|(_, taken)| *taken == Family::Outside)
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    assert_eq!(refused, host_2_families());
+}

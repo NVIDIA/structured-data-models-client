@@ -46,7 +46,7 @@ impl ParseFailure {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Failure(ParseFailure),
-    Deferred(String),
+    Deferred(Option<crate::ast::Location>),
 }
 
 impl ParseError {
@@ -64,7 +64,7 @@ impl From<BuildError> for ParseError {
                 title: "Invalid constant",
                 message,
             }),
-            BuildError::Deferred(message) => ParseError::Deferred(message),
+            BuildError::Deferred(location) => ParseError::Deferred(location),
         }
     }
 }

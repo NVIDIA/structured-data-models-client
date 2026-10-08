@@ -7,7 +7,7 @@
 //! with every value and null, and with the received type kept beside it; a
 //! batch whose values pass the offset capacity is split between rows, and
 //! only a single value past it is refused, by name. What is still refused
-//! is generated here and listed in register HOST-2.
+//! is generated in `admission.rs` and listed in register HOST-2.
 
 use std::sync::Arc;
 
@@ -25,11 +25,11 @@ use arrow_array::{
     LargeStringArray, RecordBatch, StringViewArray, Time32MillisecondArray, Time32SecondArray,
 };
 use arrow_buffer::{OffsetBuffer, ScalarBuffer};
-use arrow_schema::{DataType, Field, IntervalUnit, TimeUnit};
+use arrow_schema::{DataType, Field, TimeUnit};
 use half::f16;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_core::ArrowData;
-use sdm_host::{admit, admit_with_capacity, admitted_type};
+use sdm_host::{admit, admit_with_capacity};
 
 fn data(column: ArrayRef) -> ArrowData {
     let batch = RecordBatch::try_from_iter([("c", column)]).unwrap();
@@ -337,49 +337,4 @@ fn a_single_value_past_the_offset_capacity_is_refused_by_name() {
     view.append_value("far too long");
     let err = admit_with_capacity(&data(Arc::new(view.finish())), 9).unwrap_err();
     assert_eq!(text(&err, "arrow_type"), DataType::Utf8View.to_string());
-}
-
-/// The types admission still refuses, by family: what register HOST-2
-/// lists for the owner.
-const STILL_REFUSED: [&str; 3] = ["interval", "run_end_encoded", "union"];
-
-#[test]
-fn the_types_still_refused_are_the_ones_register_host_2_lists() {
-    let refused = [
-        DataType::Interval(IntervalUnit::YearMonth),
-        DataType::Interval(IntervalUnit::DayTime),
-        DataType::Interval(IntervalUnit::MonthDayNano),
-        DataType::RunEndEncoded(
-            Arc::new(Field::new("run_ends", DataType::Int32, false)),
-            Arc::new(Field::new("values", DataType::Utf8, true)),
-        ),
-        DataType::Union(
-            arrow_schema::UnionFields::try_new(
-                vec![0],
-                vec![Field::new("a", DataType::Int32, true)],
-            )
-            .unwrap(),
-            arrow_schema::UnionMode::Sparse,
-        ),
-    ];
-    for data_type in &refused {
-        let err = admitted_type("c", data_type).unwrap_err();
-        assert_eq!(err.code, ErrorCode::UnsupportedType, "{data_type}");
-    }
-    let register = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../docs/design/rust-core/register.yaml"),
-    )
-    .unwrap();
-    let start = register.find("- id: HOST-2\n").expect("register HOST-2");
-    let entry = &register[start..];
-    let entry = &entry[..entry[1..]
-        .find("\n- id: ")
-        .map_or(entry.len(), |end| end + 1)];
-    for family in STILL_REFUSED {
-        assert!(
-            entry.contains(&format!("`{family}`")),
-            "HOST-2 does not list {family}"
-        );
-    }
 }

@@ -221,6 +221,17 @@ fn a_batch_that_does_not_match_its_declared_schema_is_refused_by_check_a() {
         ),
         "metadata",
     );
+    // Nulls in a column its attachment declares without them.
+    let nullable = batch(vec![int("a")], vec![Arc::new(Int64Array::from(vec![None]))]);
+    refused_by(
+        "declared",
+        discover(),
+        ArrowData::new(
+            schema(vec![Field::new("a", DataType::Int64, false)]),
+            vec![nullable],
+        ),
+        "nulls in a non-nullable column",
+    );
     // Another schema in a later batch.
     let good = batch(
         vec![micros.clone()],
@@ -280,6 +291,32 @@ fn data_that_does_not_match_its_request_is_refused_by_check_b() {
         ArrowData::new(other.schema(), vec![other]),
         "another type",
     );
+    // A column without the field metadata the request requires.
+    let mut required = expected(&["a"]);
+    if let ExpectedSchema::Schema { fields } = &mut required {
+        fields[0].metadata = BTreeMap::from([("role".to_owned(), "key".to_owned())]);
+    }
+    refused_by(
+        "expected",
+        required,
+        consistent(&["a"]),
+        "required metadata",
+    );
+    // Nulls where the request takes none.
+    let mut non_null = expected(&["a"]);
+    if let ExpectedSchema::Schema { fields } = &mut non_null {
+        fields[0].nullable = false;
+    }
+    let nulls = batch(
+        vec![int("a")],
+        vec![Arc::new(Int64Array::from(vec![Some(1), None]))],
+    );
+    refused_by(
+        "expected",
+        non_null,
+        ArrowData::new(nulls.schema(), vec![nulls]),
+        "nulls the request does not take",
+    );
     // The data asked for is taken.
     let run = fetching(expected(&["a", "b"]));
     reply(&run, consistent(&["a", "b"])).unwrap();
@@ -322,7 +359,13 @@ fn a_test_only_operation_that_panics_is_contained_wherever_it_panics() {
         let run = panicking(at, "in the run").unwrap();
         let err = error(run.next().unwrap_err());
         assert!(is_panic(&err), "{at:?}");
-        assert!(!text(&err, "location").is_empty());
+        let location = text(&err, "location");
+        if at == PanicAt::AdapterStack {
+            // Inside the interim parser itself.
+            assert!(location.contains("parser.rs"), "{location}");
+        } else {
+            assert!(!location.is_empty());
+        }
         assert_eq!(run.state().unwrap(), RunState::Poisoned, "{at:?}");
         assert_eq!(error(run.next().unwrap_err()).code, ErrorCode::RunPoisoned);
     }
@@ -364,14 +407,14 @@ fn canaries_reach_no_error() {
         },
     });
     let good = String::from_utf8(start_message(validate.clone())).unwrap();
-    let schema = json(&QuerySchema {
+    let query_schema = json(&QuerySchema {
         tables: vec![],
         links: vec![],
     });
     let attachments = || {
         Attachments::from([
             (AttachmentId(1), json(&"PREDICT t.c FOR EACH t.id")),
-            (AttachmentId(2), schema.clone()),
+            (AttachmentId(2), query_schema.clone()),
         ])
     };
     // Malformed control values: a version, a scalar, a tag.
@@ -405,7 +448,7 @@ fn canaries_reach_no_error() {
     for (query, schema) in [
         (
             Attachment::Bytes(format!("\"{CANARY}").into_bytes()),
-            schema.clone(),
+            query_schema.clone(),
         ),
         (
             json(&"PREDICT t.c FOR EACH t.id"),
@@ -434,13 +477,35 @@ fn canaries_reach_no_error() {
         )
         .unwrap_err(),
     ));
+    // Arrow data values, a credential among them, refused by each check.
+    let values = || -> ArrayRef {
+        Arc::new(arrow_array::StringArray::from(vec![
+            format!("{CANARY}-value"),
+            format!("postgres://user:{CANARY}@db.example/sales"),
+        ]))
+    };
+    let text_field = |name: &str| Field::new(name, DataType::Utf8, true);
+    let run = fetching(ExpectedSchema::Discover {});
+    errors.push(
+        reply(
+            &run,
+            ArrowData::new(
+                schema(vec![text_field("a")]),
+                vec![batch(vec![text_field("b")], vec![values()])],
+            ),
+        )
+        .unwrap_err(),
+    );
+    let run = fetching(expected(&["a"]));
+    let wrong = batch(vec![text_field("a")], vec![values()]);
+    errors.push(reply(&run, ArrowData::new(wrong.schema(), vec![wrong])).unwrap_err());
     // Panic payloads, wherever the panic happens.
     errors.push(panicking(PanicAt::Start, CANARY).err().unwrap());
     for at in [PanicAt::Body, PanicAt::AdapterStack] {
         let run = panicking(at, CANARY).unwrap();
         errors.push(error(run.next().unwrap_err()));
     }
-    assert_eq!(errors.len(), 11);
+    assert_eq!(errors.len(), 13);
     for err in &errors {
         let mut chain = Some(err);
         while let Some(e) = chain {

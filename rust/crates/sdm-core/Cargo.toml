@@ -14,7 +14,7 @@ publish.workspace = true
 
 [features]
 # Operations only tests reach; a shipped build leaves it off.
-test-ops = ["sdm-contract/test-ops"]
+test-ops = ["sdm-contract/test-ops", "sdm-pql-interim/test-ops"]
 
 [dependencies]
 arrow-array.workspace = true

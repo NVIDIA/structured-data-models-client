@@ -22,9 +22,10 @@ use crate::validator::predictive_query::PredictiveQueryValidator;
 use crate::visitor::{ParseError, parse_query};
 
 /// Why a call gave no answer: the query uses something the interim parser
-/// cannot read yet. This is never a diagnostic about the query.
+/// cannot read yet, and where in the query, never quoting it. This is never
+/// a diagnostic about the query.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Interrupted(pub String);
+pub struct Interrupted(pub Option<crate::ast::Location>);
 
 /// A query the grammar accepts, not yet resolved against a schema.
 #[derive(Debug)]

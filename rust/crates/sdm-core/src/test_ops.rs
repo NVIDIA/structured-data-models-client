@@ -5,17 +5,19 @@
 //! The bodies of the test-only operations (`sdm_contract::test_ops`), built
 //! only with the `test-ops` feature, which a shipped build leaves off.
 
-use sdm_contract::ops::OperationResult;
+use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
-use sdm_contract::{CoreError, CoreWarning};
+use sdm_contract::{CoreError, CoreWarning, HostFacts};
 
 use crate::attached::take_json;
+use crate::profiles::Profile;
 use crate::run::{Attachments, FetchResult, Reply, Run, internal};
 
 /// The run of a test-only operation.
 pub(crate) fn run(
     operation: TestOperation,
     attachments: &mut Attachments,
+    facts: HostFacts,
 ) -> Result<Run, CoreError> {
     Ok(match operation {
         TestOperation::Fetch { fetch } => {
@@ -51,10 +53,20 @@ pub(crate) fn run(
         TestOperation::Panic { at, payload } => match at {
             PanicAt::Start => panic!("{payload}"),
             PanicAt::Body => Run::new(move |_| async move { panic!("{payload}") }),
+            // Inside the interim parser, on the adapter's grown stack.
             PanicAt::AdapterStack => Run::new(move |_| async move {
-                crate::pql::on_adapter_stack(move || -> Result<OperationResult, CoreError> {
-                    panic!("{payload}")
-                })
+                sdm_pql_interim::parser::panic_in_next_parse(payload);
+                let profile = Profile::resolve(&ProfileSpec {
+                    name: ProfileName::Relational,
+                    model: None,
+                    capabilities: Default::default(),
+                });
+                let schema = QuerySchema {
+                    tables: vec![],
+                    links: vec![],
+                };
+                crate::pql::validate("PREDICT t.c FOR EACH t.id", &schema, &profile, &facts)
+                    .map(OperationResult::ValidateQuery)
             }),
         },
     })

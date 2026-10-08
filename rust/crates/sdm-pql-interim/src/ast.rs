@@ -262,17 +262,22 @@ pub struct Node {
 pub enum BuildError {
     Syntax(String),
     Literal(String),
-    /// A literal the interim parser cannot read yet; never a diagnostic.
-    Deferred(String),
+    /// A literal the interim parser cannot read yet, where it is; never a
+    /// diagnostic, and never quoting the literal, which is input.
+    Deferred(Option<Location>),
 }
 
 impl BuildError {
     pub fn message(&self) -> &str {
         match self {
-            BuildError::Syntax(m) | BuildError::Literal(m) | BuildError::Deferred(m) => m,
+            BuildError::Syntax(m) | BuildError::Literal(m) => m,
+            BuildError::Deferred(_) => DEFERRED,
         }
     }
 }
+
+/// What a deferred literal's refusal says, naming no input.
+pub const DEFERRED: &str = "a date literal is read by a rule the interim parser does not have yet";
 
 type Built = Result<NodeRef, BuildError>;
 
@@ -332,12 +337,7 @@ pub fn constant(
             match reader.read(text) {
                 Reading::Read(time) => Some(time),
                 Reading::Refused => None,
-                Reading::Deferred => {
-                    return Err(BuildError::Deferred(format!(
-                        "the date literal {text} is read by a rule the interim parser does not \
-                         have yet"
-                    )));
-                }
+                Reading::Deferred => return Err(BuildError::Deferred(location)),
             }
         }
         _ => None,
