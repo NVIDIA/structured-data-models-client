@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Secret-scanner allowlist, read by nSpect's Pulse scan at the repository root.
 #
 # Every entry below is a placeholder credential in a test or an example, not a
