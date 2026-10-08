@@ -8,8 +8,8 @@
 # recorded decision. Validated against register.schema.json.
 #
 # IDs by origin:
-#   PK-n   the plan's section 5 "keep" column (approved with the plan)
-#   PD-n   the plan's section 5 "drop" column (approved with the plan)
+#   PK-n   the plan's section 5 "keep" column (proposed; the owner confirms at merge)
+#   PD-n   the plan's section 5 "drop" column (proposed; the owner confirms at merge)
 #   DF-n   determinism fixes of the reference (T0.3, determinism-fixes.md)
 #   RS-n   random streams (T0.6, random-streams.md)
 #   DT-n   dates and time zones (T0.6, chrono-check.md and date-rules.md)
@@ -38,10 +38,13 @@ entries:
     default_rng means porting numpy's SeedSequence and PCG64 too.
   affected_inputs: Every seeded draw on every backend; the exact streams are RS-1 to RS-6.
   cases: [T0.6]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan. The streams themselves are pinned by RS-1 to RS-7.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. The streams themselves are
+    pinned by RS-1 to RS-7.
 
 - id: PK-2
   title: Label arithmetic as float32 Kahan sums in row order
@@ -50,10 +53,12 @@ entries:
   new_behavior: The same, so labels agree bit for bit.
   affected_inputs: Every aggregation label (sums, averages, counts over float columns).
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0.
 
 - id: PK-3
   title: DateOffset month-end rules
@@ -64,12 +69,13 @@ entries:
   new_behavior: The same.
   affected_inputs: Every time offset in a query and in sampling windows.
   cases: [T0.6]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
+  status: proposed
+  approved_by: null
+  decision_ref: null
   notes: >-
-    Approved with the plan. chrono-check.md: chrono's checked_add_months and
-    checked_sub_months agree on all 208 offset answers.
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. chrono-check.md: chrono's
+    checked_add_months and checked_sub_months agree on all 208 offset answers.
 
 - id: PK-4
   title: PQL codes, spans and grammar quirks
@@ -78,10 +84,13 @@ entries:
   new_behavior: The same, as agreed with the PQL team.
   affected_inputs: Every predictive query text.
   cases: [T0.9]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan; the agreement is tracked in phase-0/pql-asks.md.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. The agreement is tracked in
+    phase-0/pql-asks.md.
 
 - id: PK-5
   title: PQL date-literal rules, written down
@@ -92,10 +101,13 @@ entries:
   new_behavior: The same rules, written down and reproduced.
   affected_inputs: Date literals in predictive queries.
   cases: [T0.6]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan. The packed-date rule D8 is DT-5.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. The packed-date rule D8 is
+    DT-5.
 
 - id: PK-6
   title: Public exception and warning classes and codes
@@ -104,10 +116,13 @@ entries:
   new_behavior: The same classes and codes.
   affected_inputs: Every public refusal and warning.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan. Error class paths as text are dropped by PD-4.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. Error class paths as text are
+    dropped by PD-4.
 
 - id: PK-7
   title: Text-column timestamp detection under the reference pandas major
@@ -118,10 +133,13 @@ entries:
   new_behavior: The same, as the reference pandas major reads them.
   affected_inputs: Text time columns of frames and dates stored as text in Schema.from_data.
   cases: [T0.6]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan; the rules are in phase-0/date-rules.md.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. The rules are in
+    phase-0/date-rules.md.
 
 - id: PK-8
   title: Integer widths in payloads
@@ -130,10 +148,12 @@ entries:
   new_behavior: The same widths.
   affected_inputs: Every payload with integer values.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0.
 
 - id: PK-9
   title: Payload equality after parsing; SQL per database as reviewed golden files
@@ -144,10 +164,13 @@ entries:
     compared with reviewed golden files.
   affected_inputs: Every request payload and every pushed-down SQL statement.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan. A change to SQL text still needs its own entry.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. A change to SQL text still
+    needs its own entry.
 
 # --- The plan's drop column ---------------------------------------------------
 
@@ -158,10 +181,12 @@ entries:
   new_behavior: NaN ranks last.
   affected_inputs: Results whose scores include NaN.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0.
 
 - id: PD-2
   title: The size limit counted as json.dumps bytes
@@ -170,10 +195,12 @@ entries:
   new_behavior: The limit counts the bytes actually sent.
   affected_inputs: Requests near the size limit.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0.
 
 - id: PD-3
   title: Python object protocols inside the core
@@ -182,10 +209,13 @@ entries:
   new_behavior: The core never calls back into language behavior; hosts convert inputs at the boundary.
   affected_inputs: Inputs whose answer depended on a Python object protocol.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan; enforced by the L0 boundary guards.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. Enforced by the L0 boundary
+    guards.
 
 - id: PD-4
   title: Errors as Python class paths
@@ -194,10 +224,12 @@ entries:
   new_behavior: Errors carry public classes and codes only (PK-6).
   affected_inputs: Error messages and payloads that name a Python class path.
   cases: [migration-plan section 5]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
-  notes: Approved with the plan.
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0.
 
 - id: PD-5
   title: Silent nulls or internal errors for types the old code mishandled
@@ -208,13 +240,14 @@ entries:
   new_behavior: Each type is handled as the type set says, or refused with a named error.
   affected_inputs: Columns of types outside what the old code handled.
   cases: [P1B-1]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
+  status: proposed
+  approved_by: null
+  decision_ref: null
   notes: >-
-    Approved with the plan. Each concrete case still needs its own entry when
-    its outcome changes (P1B-1); a new refusal of an input Python accepted
-    needs the owner.
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. Each concrete case still needs
+    its own entry when its outcome changes (P1B-1); a new refusal of an input
+    Python accepted needs the owner.
 
 - id: PD-6
   title: Time zone rules ignored after 2037
@@ -225,12 +258,14 @@ entries:
   new_behavior: Zone rules apply after 2037.
   affected_inputs: Local wall times and localization of instants after 2037.
   cases: [T0.6]
-  status: approved
-  approved_by: owner
-  decision_ref: 4
+  status: proposed
+  approved_by: null
+  decision_ref: null
   notes: >-
-    Approved with the plan. The reference on pandas 3 (zoneinfo) already
-    follows the rules after 2037, and so does chrono-tz up to 2099 (DT-1).
+    In the plan's section 5, which the owner approved with the plan; the owner
+    confirms these entries when merging Phase 0. The reference on pandas 3
+    (zoneinfo) already follows the rules after 2037, and so does chrono-tz up to
+    2099 (DT-1).
 
 # --- Determinism fixes of the reference (T0.3) --------------------------------
 
@@ -247,15 +282,16 @@ entries:
     In-memory relational requests whose sampled neighbors tie on parent and
     timestamp, without torch installed.
   cases: [T0.3, bdc4f2d4]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     On the tie fixture, two of two scenarios send a different neighbor without
     torch; with torch 2.14.1 the old and new answers are equal. The recorded
     wire payloads have no such ties. Recommendation: approve; it removes a
     dependency on an optional install and refuses nothing, so the reviewer can
-    approve it.
+    approve it. Approved by the independent reviewer, who re-ran the evidence;
+    the entry refuses no input Python accepted.
 
 - id: DF-2
   title: Seeded SQLite entity draw
@@ -286,12 +322,13 @@ entries:
     and the random_seed docstrings in rfm.py say so.
   affected_inputs: Seeded SQLite push-down requests.
   cases: [T0.3, f0f324c]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
-    Follows from DF-2 (the warning would be false). Recommendation: approve
-    with DF-2; the reviewer can approve it.
+    Follows from DF-2 (the warning would be false). Recommendation: approve with
+    DF-2; the reviewer can approve it. Approved by the independent reviewer, who
+    re-ran the evidence; the entry refuses no input Python accepted.
 
 - id: DF-4
   title: Seeds of 2**32 and above for the SQLite draw
@@ -304,12 +341,13 @@ entries:
     first (init_by_array), so every non-negative seed is accepted on SQLite.
   affected_inputs: SQLite push-down requests with a seed of 2**32 or more.
   cases: [T0.3, f0f324c]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Accepts more, refuses nothing. Recommendation: approve; the seed range
-    across backends is RS-7.
+    across backends is RS-7. Approved by the independent reviewer, who re-ran
+    the evidence; the entry refuses no input Python accepted.
 
 - id: DF-5
   title: RandomState example shuffle (not adopted)
@@ -343,12 +381,13 @@ entries:
     above; None draws OS entropy.
   affected_inputs: Every relational request that samples training, test or forecast entities.
   cases: [T0.6, G1]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: 27
   notes: >-
     Required by D1 and PK-1; verified in plain Python against numpy 2.5.3.
-    Recommendation: approve.
+    Recommendation: approve. Approved by the independent reviewer, who re-ran
+    the evidence; the entry refuses no input Python accepted.
 
 - id: RS-2
   title: The SQLite seeded entity draw
@@ -378,12 +417,13 @@ entries:
   new_behavior: The same stream, including the modulo bias and the continuing unseeded stream.
   affected_inputs: In-memory relational requests with static hops larger than their neighbor count.
   cases: [T0.6, G4]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     std::mt19937 seeding equals numpy init_genrand, checked on raw draws.
-    Recommendation: approve.
+    Recommendation: approve. Approved by the independent reviewer, who re-ran
+    the evidence; the entry refuses no input Python accepted.
 
 - id: RS-4
   title: The in-memory entity sample (DataFrame.sample)

@@ -4,7 +4,7 @@ G1 to G14 were decided by the owner as recommended below; see [decisions.md](dec
 
 Task T0.4 of [Phase 0](design.md).
 This records what today's client supports, per distribution and extra, and proposes the native wheel coverage for the Rust core.
-Every gap between the two is listed at the end as an open owner decision with a recommendation; each belongs in [decisions.md](decisions.md) once the owner rules.
+Every gap between the two is listed at the end and decided by the owner ([decisions.md](decisions.md) rows 20 to 26).
 Plan decision 3 makes dropping a platform or version Python supports today a regression unless the owner decides it explicitly.
 
 ## Sources
@@ -113,7 +113,7 @@ The Rust core ships inside the `structured-data-models-client` wheel (plan secti
 | Build and test | Native Arm runners instead of QEMU for aarch64; each wheel installed and loaded in a clean container per platform (L8) |
 | Java JAR | Native libraries for linux-x86_64 and linux-aarch64 (same glibc floor as the Python wheel) and macOS x86_64 and arm64, on JDK 17 and 21; Windows only if the Java consumer needs it (G13) |
 
-Each platform added here must also be in the PQL asks ([pql-asks.md](pql-asks.md)), which today name only Linux x86_64 and aarch64 (manylinux) and macOS.
+Each platform added here must also be in the PQL asks ([pql-asks.md](pql-asks.md)).
 
 What the proposal gains over today: `kumo-relational` and `Schema.from_source` on Python 3.14 and later, and on macOS, Windows and musl if those are built; none of these is a decision, but each needs L8 coverage before it is claimed.
 

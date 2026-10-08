@@ -7,7 +7,7 @@
 # The fixed set of cases the Phase 1b spike runs: DuckDB Schema.from_source ->
 # PredictiveQuery.materialize -> SDMClient.predict -> PredictionResult, in Python
 # and through the pure-Rust test host, against a scripted model endpoint.
-# 40 cases; all of them run against the reference in about two seconds.
+# 40 cases; all of them run against the reference in about 1.4 seconds.
 #
 # Each case is:
 #   id           stable case ID (scope-format.md "Case IDs" pattern)

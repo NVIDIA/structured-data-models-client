@@ -85,7 +85,7 @@ uvx --from jsonschema --with pyyaml python -c "import json,sys,yaml,jsonschema; 
 
 ## What the first manifests contain
 
-Python has 281 paths (S0 2, S1 58, S2 61, S3 160) and Java 66 (S0 2, S1 46, S2 18); each has 140 cells.
+Python has 281 paths (S0 2, S1 73, S2 85, S3 121) and Java 66 (S0 2, S1 46, S2 18); each has 140 cells.
 The operations come from `sdm_client.__all__`, `sdm_connectors.__all__` and `sdm_connectors.databricks.__all__`, as recorded in `tests/golden/public_api.json`.
 Python covers every backend of plan decision 2: DuckDB, SQLite, Postgres, Lakebase, Databricks over a warehouse and over Spark with metric views, Snowflake with semantic views, in-memory frames, and files read from Amazon S3.
 Java covers DuckDB, SQLite, Postgres and Databricks over a SQL warehouse, with no frames, sessions, tabular requests or S3 paths, since those wait until the owner adds Java scope.
@@ -95,7 +95,7 @@ Choices worth a second look:
 - `query.validate` has no public method behind it: today PQL is validated inside `materialize()`, so S0 observes validation as the refusal raised before data is read, or as the resolved query.
 - Classification is split into `binary` and `multiclass`, because the jobs ask both (`inactivity_90d` and `product_color`) and their results have different columns.
 - `predict` and `fit` paths are per backend, following the plan's example path ("`predict` of a regression query on Snowflake").
-- Ranking and forecasting on Databricks and Lakebase are S3, as the plan says, but the S2 job matrix needs them; those paths carry a note pointing at [databricks-jobs.md](databricks-jobs.md), and the owner decides (J1 there).
+- Ranking and forecasting on Databricks and Lakebase moved into S1 (offline backends) and S2 (warehouses) by owner decision J1 ([databricks-jobs.md](databricks-jobs.md)).
 - Java's metric-view paths and its `databricks-serving` connection are assumptions, noted on each path, until the owner and the Java consumer confirm them.
 - A custom (non-SQL) data provider is not a path in either manifest: the S1 test provider and the swapped data layer are Rust-level checks, and a public provider API in Java is a question for when Java's API is designed.
 - Most cells outside the obvious ones are `unknown`; Phase 1b's case inventory (T0.7) and Phase 1a's runners resolve them against the reference.

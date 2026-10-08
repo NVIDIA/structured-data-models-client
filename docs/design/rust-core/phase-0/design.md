@@ -89,6 +89,8 @@ Every task's exit met, CI green on the phase branch, a fresh-agent review of the
 ## Not in this phase
 
 Any Rust code on the branch, the contract, test runners (Phase 1a), and Java work.
+Phase 1a's first deliverables are the L2 contract case format (beyond the case IDs in [scope-format.md](scope-format.md)) and a schema for the Phase 1b inventory.
+The Phase 1b runner takes [phase-1b-inventory.yaml](phase-1b-inventory.yaml) as written.
 
 ## Risks
 

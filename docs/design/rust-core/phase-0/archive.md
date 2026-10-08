@@ -1,15 +1,14 @@
 # T0.2 archive snapshot and scan results
 
-This records how the archive of the first attempt was built and what the scans found, for the owner to review before anything is pushed.
-Nothing has been pushed.
+This records how the archive of the first attempt was built, what the scans found, and what was pushed.
 
 ## The branch
 
-The local branch is `archive/rust-core-attempt-1` in the GitHub clone `~/code/structured-data-models-client`.
-Its single commit is `6e25769feda20c3f0c9104753b7fd6699160d191` (tree `cf13d19b54cb07a2ad9cb414a0a0b383ce06d241`), with no parent.
-It is checked out in its own worktree at `~/code/structured-data-models-client-wt/archive-rust-core-attempt-1`, so the main checkout was not touched.
-The commit is authored as Adi Wadaskar, carries a DCO sign-off, and has no co-author trailer.
-The commit message names the source commit, the old GitLab repository by its group and project path without a hostname, says the branch is a read-only source to port from and never merged, and lists the two removals.
+The branch is pushed to GitHub as `archive/rust-core-attempt-1` at commit `3887762`.
+It holds that one commit, with no parent and no earlier history.
+It was built in its own worktree of the GitHub clone, so the main checkout was not touched.
+The commit is authored by the owner, carries a DCO sign-off, and has no co-author trailer.
+The commit message names the source commit, says the branch is a read-only source to port from and never merged, and lists the removals and redactions.
 
 ## How it was built
 
@@ -26,8 +25,10 @@ The files total about 217 MB (223 MB on disk), and no file is over 50 MB.
 
 ## Redactions
 
-None.
-No scan found a real credential, so nothing was redacted; every hit below is left for the owner to accept or redact.
+No scan found a real credential.
+The internal sandbox catalog name was replaced with `example-catalog`, and the workspace name with "the Databricks validation workspace", in 45 files.
+The stored hashes in those files (recordings, transcripts and reference policies) are now stale, because they were computed over the unredacted text.
+Every other scan hit below was accepted by the owner as listed (decision 16 in [decisions.md](decisions.md)).
 
 ## Scan 1: hygiene check
 
@@ -49,7 +50,7 @@ Every tracked text file was scanned (binary files skipped), with case-insensitiv
 
 | Pattern | Hits | Files | Example paths | Recommendation |
 |---|---|---|---|---|
-| Internal sandbox catalog name (the Databricks catalog the parity runs used) | 1,978 | 46 | `tests/parity/dialects/databricks.json`, `tests/parity/requests/databricks/*/calls.json`, `tests/parity/sampling/databricks/*`, `tests/parity/transcripts/databricks/*`, `scripts/parity/_parity/live.py`, `tests/rust_core/schema/_views.py` | Accept as internal (redacting would invalidate the recordings and their hashes); if not accepted, rewrite the catalog name consistently across these 46 files and re-hash |
+| Internal sandbox catalog name (the Databricks catalog the parity runs used) | 1,978 | 46 | `tests/parity/dialects/databricks.json`, `tests/parity/requests/databricks/*/calls.json`, `tests/parity/sampling/databricks/*`, `tests/parity/transcripts/databricks/*`, `scripts/parity/_parity/live.py`, `tests/rust_core/schema/_views.py` | Redacted to `example-catalog` (see Redactions); the stored hashes are stale |
 | Same name in prose ("the ... notebooks", "Phase 9.5's ... jobs") | 5 | 4 | `scripts/parity/_parity/scenarios.py`, `tests/parity/acceptance/accept_matrix.py`, `tests/rust_core/switch/CONTRACT.md` | Accept as internal |
 | Old GitLab host, old GitLab group, internal bug tracker, wiki, artifact mirror, cluster and sibling-repository names | 9 | 1 | `scripts/check_repo_hygiene.py` (the pattern list itself) | Accept; they define the check |
 | `nemotron` | 7 | 4 | `scripts/check_repo_hygiene.py`, `packages/structured-data-models-client/tests/test_local_notebooks.py`, `tests/rust_core/switch/base.json`, `packages/structured-data-models-relational-engine/tests/test_vendored_mermaid.py` | Accept; a retired interface name (`a retired predict helper`) and test ids, not a Lakebase instance |
@@ -67,8 +68,8 @@ Every tracked text file was scanned (binary files skipped), with case-insensitiv
 | Private IPs (`10.x`) | 16 | 4 | `rust/crates/schema/src/engine/result.rs`, `tests/fixes/test_fix_pg_read.py` | Accept; test values |
 | Slack links, internal tickets, `/Users/<name>` or `/home/<name>` paths, AWS account ids, workspace org ids (`?o=`) | 0 | 0 | | None |
 
-## Overall recommendation
+## Outcome
 
-No file needs removing and nothing needs redacting for an internal repository.
-The one group the owner should decide on deliberately is the internal sandbox catalog name in the parity recordings, because it appears 1,978 times and redacting it means regenerating hashes.
-The commit message itself names the old GitLab group and project path, as the task asked; reword it before pushing if that path should not appear on GitHub.
+No file needed removing.
+The owner chose to redact the internal catalog and workspace names (45 files) and to accept every other hit as listed (decision 16).
+The commit message was reworded before pushing.

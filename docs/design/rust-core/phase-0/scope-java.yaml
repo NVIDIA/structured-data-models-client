@@ -11,6 +11,7 @@
 
 format: sdm-scope/1
 language: java
+# The slice descriptions are the plan's; Java's scope has no ranking or forecasting paths yet (J2).
 slices:
   S0: PQL validation
   S1: Schema from a source, materialize, predict on DuckDB, SQLite and Postgres, offline, including ranking and forecasting

@@ -2,7 +2,7 @@
 
 The reference is the branch `rust-core-reference` of `NVIDIA/structured-data-models-client`, checked out as a worktree at `~/code/sdmc-reference`.
 It is `main` at `fa0637d` plus the fixes listed in [determinism-fixes.md](determinism-fixes.md); its head is `70aa159`.
-The unpatched baseline is tagged locally as `reference-baseline-fa0637d` (`fa0637d495b5098e1cf7295e46ac7546dc0bcb01`); the tag is not pushed, and its GitHub ruleset is still to be made.
+The unpatched baseline is tagged locally as `reference-baseline-fa0637d` (`fa0637d495b5098e1cf7295e46ac7546dc0bcb01`); the tag is pushed and protected by the GitHub tag ruleset "Protect Rust core reference baselines", which blocks deletion and update.
 
 ## Versions
 

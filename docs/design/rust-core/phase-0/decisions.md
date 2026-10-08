@@ -20,7 +20,7 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 13 | The first attempt is archived on GitHub as `archive/rust-core-attempt-1`, as one squashed snapshot commit with no earlier history | Decision 13, T0.2 |
 | 14 | Phases are named Phase 0 to Phase 5; each has a design doc and tracker in the branch | Plan section 9 |
 | 15 | The old engine is deleted when the epic is ready to merge, with no switch-back release | Plan section 7 |
-| 16 | The archive redacts the internal catalog and workspace names and has a reworded commit message; it is pushed as `archive/rust-core-attempt-1` (commit `3887762`) | Decision 13, T0.2, [archive.md](archive.md) |
+| 16 | The archive redacts the internal catalog and workspace names and has a reworded commit message; it is pushed as `archive/rust-core-attempt-1` (commit `3887762`); all other scan hits listed in archive.md accepted as listed | Decision 13, T0.2, [archive.md](archive.md) |
 | 17 | J1: ranking and forecasting on the SQL backends move from S3 into S1 (offline backends) and S2 (live backends), because every Databricks job cell asks them; on in-memory frames they stay in S3 | Plan section 4, scope manifests, [databricks-jobs.md](databricks-jobs.md) |
 | 18 | J2: Java's S2 agreement with Python covers 4 of the 6 base questions (no ranking or forecasting) for now | Plan section 4, `scope-java.yaml`, databricks-jobs.md |
 | 19 | J3: the 20 job cells stay the minimum, plus one warehouse-route cell on Databricks Runtime 17.3 or later | databricks-jobs.md, L6 |
@@ -46,4 +46,5 @@ The other proposed entries can be approved by the independent reviewer.
 - DT-3: dropping the int64 wrap at `Timestamp.min` (recommended: drop, after the Phase 1 check of the sentinel).
 - DT-5: PQL packed dates, which go to the PQL asks (recommended: keep unless the agreed dialect drops them).
 - DT-6: free-form values in per-row time columns, if the core refuses them instead of reading them (recommended: keep reading them).
+- Confirm the plan's section 5 keep and drop entries (PK-1 to PK-9, PD-1 to PD-6) as approved register entries.
 - P1B-1: any Phase 1b case whose new outcome refuses an input Python accepted.
