@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Scope manifest for the Python binding (Phase 0, T0.5).
 # Format: scope-format.md; schema: scope.schema.json.
 # Built from the plan's decisions 2 and 3 and section 4, and from sdm_client.__all__,

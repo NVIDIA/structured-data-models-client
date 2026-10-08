@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Scope manifest for the Java binding (Phase 0, T0.5).
 # Format: scope-format.md; schema: scope.schema.json.
 # Java starts with DuckDB, SQLite, Postgres and Databricks (plan decision 2); S3 only as the owner adds scope.
