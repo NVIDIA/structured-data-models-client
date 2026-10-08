@@ -83,6 +83,7 @@ Phase 0 sends these asks and tracks them in `phase-0/pql-asks.md`; agreement is 
   There is no general Python scalar or object model.
 - **Errors and warnings:** `{kind, code, message, fields, cause}` with a closed list of kinds, one channel for each, and warnings kept in order.
   Each language maps kinds to its own exception and warning classes.
+  Codes are a closed, listed enum with a `retryable` flag, and each language's mapping is tested exhaustively, never reading message text (Phase 1 decision H6, approved by owner 2026-10-08).
 - **Host facts:** clock, time zone, locale, the tzdata version and similar facts are passed in explicitly, so tests can pin them.
 - **State and memory:** typed, versioned values the host holds; Arrow buffers and runs have defined owners and release rules; no handles into host objects.
 
@@ -99,6 +100,7 @@ Phase 0 sends these asks and tracks them in `phase-0/pql-asks.md`; agreement is 
 | Other | bool, null (all-null columns) |
 
 Every accepted type is preserved or refused with a named error, never silently turned into nulls.
+Arrow-to-Arrow admission into this set is one lossless table in `sdm-host`, shared by every language; a value the admitted type cannot hold is refused by name (Phase 1 decisions B-D6 and E13, pending owner confirmation).
 Phase 1b validates this set against its case inventory before it is final.
 
 ### What lives where
@@ -163,6 +165,7 @@ The core is plain Rust and doesn't know which language loads it.
 Each language uses its standard binding tool, over one shared Rust layer:
 
 - **`sdm-host`**, plain Rust, written once: encodes control messages as versioned JSON, hands data over as Arrow, owns native resource lifetimes, contains panics, and sets the threading rules; it schedules no domain work.
+  Its calls take and give control messages as bytes with the attachments each names (Phase 1 decision E13, pending owner confirmation).
 - **Python:** a thin PyO3 binding built with maturin as `abi3` wheels; it converts types, maps errors to Python classes, releases the GIL while the core runs, and passes Arrow through the standard PyCapsule interface without copying.
   For pyarrow older than 14, Arrow crosses through `_export_to_c` instead of PyCapsule.
 - **Java:** a thin `jni-rs` binding loaded from the JAR (JDK 17 and 21); it maps errors to Java classes and passes Arrow through Arrow Java's C Data module without copying.
@@ -189,6 +192,7 @@ The core keeps the round trips as they are and should cut the CPU, as long as th
 - Data providers hand the driver's Arrow straight to the core, with no pandas round trip; drivers without Arrow build Arrow columns from rows directly.
 - Tables cross zero-copy through the Arrow C Data Interface.
 - JSON is only for small control messages, capped (for example at 64 KB); anything row-shaped travels as Arrow.
+  Byte buffers and Arrow tables cross as attachments named by id (Phase 1 decision E2, pending owner confirmation), and so does every field whose size grows with user input, such as query text and schemas, so the cap never refuses an input (Phase 1 decision H5, approved by owner 2026-10-08).
 - The host never parses or re-encodes the model request or response body; it passes the bytes on.
 - Data requests are batched per hop, with no chatty per-row or per-entity steps.
 - Object columns convert column-wise, never cell by cell.
@@ -208,7 +212,7 @@ The names and boundaries below are the target ownership, not a reason to rename 
 | `sdm-schema` | Canonical schema, inference over Arrow, source-neutral metric and semantic view interpretation | Keep the engine; move catalog SQL to `sdm-data`; drop the pandas column models and dtype parsing; YAML through a library |
 | `sdm-engine` | Modules for time (one calendar, the date parsing rules recorded in Phase 0, `DateOffset`, time zones), random streams, sampling (plan, neighbor sampler, graph store) and labels (kernels and windows) | Merges today's time, random, sampling and label code with one value model; time on a library, not a pandas date-inference clone; Arrow compute where answers allow |
 | `sdm-request` | Modules for materialization, session state, decomposition, limits, payload encoding, response decoding and result layout | Keep the logic; drop the CPython sort and `json.dumps` size emulation |
-| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the interim PQL parser behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
+| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the interim PQL parser (crate `sdm-pql-interim`, Phase 1 decision A3, pending owner confirmation) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
 | `sdm-testkit` | Contract runner, provider conformance kit, fixtures | Dev-only; nothing in the shipped crates |
 | `sdm-host` | Control-message codecs, Arrow handoff, native resource lifetime, panic containment, threading; no domain scheduling | New, written once |
 | `sdm-py`, `sdm-jni` | Thin PyO3 and `jni-rs` bindings over `sdm-host`: convert types, map errors, release the GIL | Rewrite `sdm-py` much slimmer; new `sdm-jni` |
@@ -222,11 +226,11 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 | Columnar data and kernels | `arrow` crates, including `arrow-cast`, `arrow-ord`, `arrow-arith`, `arrow-select`, `arrow-row` and `arrow-ipc` |
 | Decimals and big integers | Arrow's decimal types and `arrow-buffer`'s `i256`, under the contract's exact-encoding policy |
 | PQL parsing | The PQL team's Rust crate over its C++ core (so every build also compiles and links C++) |
-| Dates, times, zones | `chrono` with `chrono-tz` (`arrow-cast` already uses it), checked against the date corpus including zone rules after 2037; the tzdata version is recorded as a host fact; `chrono` confirmed in Phase 0 for parsing, unit conversion and month arithmetic, because the Phase 1b spike needs it; the zone implementation must meet DT-1 (rules after 2099) and DT-2 (host tz database with bundled fallback), checked in Phase 1 before relying on zone semantics |
+| Dates, times, zones | `jiff`, with the host's ordered zone lookup roots and a bundled fallback, the source and version recorded per zone; `chrono` only as Arrow's transitive dependency and `chrono-tz` banned (Phase 1 decision A7, pending owner confirmation): it met DT-1 and DT-2 on every T0.6 zone and `DateOffset` answer, where `chrono-tz` failed. Instants past `jiff`'s range use civil arithmetic and are never refused for that reason (Phase 1 decision E6, pending owner confirmation). Inside the core, one instant and one span type in nanoseconds, columns kept as Arrow arrays, conversions checked (Phase 1 decision F3, approved by owner 2026-10-08) |
 | YAML (metric and semantic views) | A maintained YAML 1.2 crate such as `saphyr` or `yaml-rust2` (not the archived `serde_yaml`); behavior differences go through the register |
 | JSON | `serde`, `serde_json` |
 | Error types | `thiserror`; no `anyhow` in core crates |
-| Logging | `tracing`, bridged to Python `logging` and SLF4J |
+| Logging | `tracing`, bridged to Python `logging` by `pyo3-log` with the GIL released during core calls and a deadlock regression test (Phase 1 decision H8, approved by owner 2026-10-08), and to SLF4J, decided in the Java phase |
 | Output order | `indexmap` or `BTreeMap` for anything that affects output order; `HashMap` iteration in outputs is banned through clippy's `disallowed_types` |
 | Encoding and hashing | `base64`, `regex` and `sha2` where needed |
 | Bindings | `pyo3` with `maturin` (abi3 wheels); `jni` (`jni-rs`); the Arrow C Data Interface in `arrow`, `pyarrow` and Arrow Java |
@@ -235,7 +239,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 **Policy:** `Cargo.lock` is committed and the toolchain is pinned; the pinned toolchain is the minimum supported Rust version.
 `cargo-deny` checks advisories, licenses, bans and sources in L0, starting from the first attempt's `deny.toml` and toolchain file.
 The wheel and JAR ship third-party notices, including for statically linked C++.
-Dependency updates are reviewed changes made only at slice gates, with `arrow`, `pyo3` and `jni` updated together.
+Dependency updates are reviewed changes made only at slice gates, with `arrow`, `pyo3` and `jni` updated together (today Arrow 58, `pyo3` 0.28 and `duckdb` 1.10506.0: Phase 1 decision B-D2, pending owner confirmation).
 The PQL crate and its C++ artifact are pinned by version and digest.
 
 On the Python side, pandas and pyarrow stay as host dependencies, and the old engine is deleted on the epic branch in Phase 5.
@@ -268,28 +272,29 @@ Every entry names the old and new behavior, the affected inputs and contract cas
 
 | Keep (part of the promise) | Drop (by recorded decision) |
 |---|---|
-| The random streams of the reference (numpy `RandomState` and `default_rng` where it uses them, `std::mt19937` for neighbor draws), pinned in Phase 0; keeping `default_rng` means porting its generator too | CPython's sort order around NaN scores (NaN ranks last) |
+| The random streams of the reference (numpy `RandomState` and `default_rng` where it uses them, `std::mt19937` for neighbor draws), pinned in Phase 0; keeping `default_rng` means porting its generator too; their vectors are never re-recorded to pass a dependency bump (Phase 1 decision F4, approved by owner 2026-10-08) | CPython's sort order around NaN scores (NaN ranks last) |
 | Label arithmetic as today: float32 Kahan sums in row order | The size limit counted as `json.dumps` bytes (count the bytes sent) |
 | `DateOffset` month-end rules | Python object protocols inside the core |
 | PQL codes, spans and grammar quirks, as agreed with the PQL team | Errors as Python class paths |
 | PQL date-literal rules, written down | Silent nulls or internal errors for types the old code mishandled |
 | Today's public exception and warning classes and codes | Time zone rules ignored after 2037 |
-| Text-column timestamp detection, under the reference pandas major | |
+| Text-column timestamp detection, under the reference pandas major (pandas 3: Phase 1 decision H1, approved by owner 2026-10-08) | |
 | Integer widths in payloads | |
 | Payload equality after parsing; SQL per database as reviewed golden files | |
 
 Each needs its own decision, not a blanket rule: answers that differ between pandas 1.5, 2 and 3, SQL text changes, and YAML 1.1 values such as `yes` and `on`.
+A difference only one runtime shows is a register entry naming that runtime, never an exclusion (Phase 1 decision H1, approved by owner 2026-10-08).
 
 ## 6. Testing
 
 | Layer | What it checks | When |
 |---|---|---|
-| L0 Boundary guards | First-party domain crates forbid `unsafe` and their production dependency graph has no `pyo3`, `jni` or `arrow-pyarrow` (only the binding crates may use them); the run steps are only data and model steps (no requests for language behavior such as truthiness, sorting or dtype inference); a pure-Rust test host passes the contract subset; the contract's JSON Schema, run steps and the PQL validated-query format don't change without an owner-approved version bump; `cargo-deny` and clippy's disallowed types | CI, on every push to `rust-core` and phase branches |
+| L0 Boundary guards | First-party domain crates forbid `unsafe` and their production dependency graph has no `pyo3`, `jni` or `arrow-pyarrow` (only the binding crates may use them); the run steps are only data and model steps (no requests for language behavior such as truthiness, sorting or dtype inference); a pure-Rust test host passes the contract subset; the contract's JSON Schema, run steps and the PQL validated-query format don't change without an owner-approved version bump (within a phase, each bump is a decisions row and the phase lands as one bump per merge into `rust-core`: Phase 1 decision H4, approved by owner 2026-10-08); `cargo-deny` and clippy's disallowed types | CI, on every push to `rust-core` and phase branches |
 | L1 Unit and property tests | Algorithms in each crate, with every past mismatch seed; the shared PQL conformance suite; fuzzing of the PQL, YAML and contract-JSON decoders | CI, on every push to `rust-core` and phase branches |
-| L2 Contract corpus | One shared list of cases, run in each language: a public call and its inputs in; ordered data requests, SQL and typed parameters, payload, result, warnings and error kind, code, details and cause out; row order compared only where the operation defines it; SQL traces compared only for SQL providers, and data-request traces checked against their own contract; pickles written by the reference load in the new client, and new state carries a version; a coverage matrix is generated from the scope manifest (per language) over the case inventory for the current slice, with representative nested shapes and one generated refusal case per unsupported type, and an empty cell fails | CI on every push (subset, for feedback); local, before each slice gate (all) |
+| L2 Contract corpus | One shared list of cases, run in each language: a public call and its inputs in; ordered data requests, SQL and typed parameters, payload, result, warnings and error kind, code, details and cause out; row order compared only where the operation defines it; SQL traces compared only for SQL providers, and data-request traces checked against their own contract (against the reference, statement count, typed parameters and consumed batches gate and raw SQL text is diagnostic; the core's SQL is pinned by goldens: Phase 1 decision H9, approved by owner 2026-10-08); pickles written by the reference load in the new client, and new state carries a version; a coverage matrix is generated from the scope manifest (per language) over the case inventory for the current slice, with representative nested shapes and one generated refusal case per unsupported type, and an empty cell fails | CI on every push (subset, for feedback); local, before each slice gate (all) |
 | L3 Differential generator | Random public-API inputs compared with the reference (decision 5), installed in its own environment, before and after the old code is deleted | Local, before each slice gate |
 | L4 SQL goldens and provider kit | Reviewed SQL per database, executed on DuckDB, SQLite and Postgres; the local providers pass the conformance kit | CI, on every push to `rust-core` and phase branches |
-| L5 Conversion tables | Each language's native-to-Arrow table, on pandas 1.5, 2 and 3; the same tables loaded into DuckDB, SQLite and Postgres reach the core with identical Arrow schemas, values, null masks, order and required metadata from Python's drivers and Java's JDBC, checked against expected values (large integers, decimal scale, timestamp units, nested nulls, list widths, dictionaries) | CI, on every push to `rust-core` and phase branches |
+| L5 Conversion tables | Each language's native-to-Arrow table, on pandas 1.5, 2 and 3, in CI cells named by runtime from `phase-0/support-matrix.md` (Phase 1 decision H1, approved by owner 2026-10-08); the same tables loaded into DuckDB, SQLite and Postgres reach the core with identical Arrow schemas, values, null masks, order and required metadata from Python's drivers and Java's JDBC, checked against expected values (large integers, decimal scale, timestamp units, nested nulls, list widths, dictionaries) | CI, on every push to `rust-core` and phase branches |
 | L6 Live matrix | The scenarios in the scope manifest (per language) over the case inventory, on Databricks, Snowflake and Lakebase (Databricks' managed Postgres), plus the Databricks job matrix (one-time jobs across Databricks runtimes, compared with the reference's results); old versus new, and Python versus Java on the same data | Local, before the S2 slice gate and the switch, epic merge and release gates |
 | L7 Performance | Offline, on recorded runs: query counts equal; CPU per scenario at most today's (aim well below; the first attempt measured about half), no scenario above 1.1 times; boundary overhead per in-memory run within a small fixed bound; the control-message size cap; zero-copy and "no pandas in providers" checks; import time and native library size within set limits; live: push-down median over at least five interleaved runs, caches off, within 10% on Databricks and Snowflake | Local: offline before each slice gate; live at switch and release gates only |
 | L8 Packaging and safety | The real wheel and JAR install and load in clean containers (JDK 17 and 21, every platform in the declared support matrix); exported symbols, private C++ symbols and minimum system library versions checked; a Python process loading both this client and the PQL team's package; `sdm-host` under sanitizers; panic, C++ error, crash and leak tests in each language; HTTP retry, timeout and redaction tests | Focused checks whenever bindings or native dependencies change; the full platform matrix before the epic merges |
@@ -299,6 +304,9 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 - **Ratchet:** the checks compare every case's full observed outcome with the last-green baseline (CI for the L2 subset, locally for the full corpus), so a changed answer, a new refusal or a removed case fails unless a register entry states that case's exact old and new outcome.
   The baseline is updated as part of each merge into the epic branch.
   This replaces choosing "neighboring cases" by hand.
+  Each gate run uses the harness, comparator, ratchet, guards and expectations of the last green checkpoint, not the candidate's; protected paths change only with a naming register entry or decision; a field a runner cannot observe never passes (Phase 1 decision H2, approved by owner 2026-10-08).
+- **Runners:** the reference is the oracle; the old client on the working branch is a smoke runner and the comparison base on runtimes other than the reference's (Phase 1 decisions H1 and H10, approved by owner 2026-10-08).
+  About 40 seeded cases unseen by the implementer run once per phase gate for information, with a no-go threshold (Phase 1 decision H11, approved by owner 2026-10-08; the threshold value pending owner confirmation).
 - **Run time:** keep the CI checks fast and run slow ones locally before each gate; run time is something to optimize, never a reason to skip cases.
 - **Test the tests:** before the L2 runners count for acceptance, show they fail on a corrupted expectation, a missing case, a skipped call and a missing native library.
 - **Local first:** reproduce a failure from the installed package before spending a remote run on it; a failure that only happens remotely gets one bounded diagnostic run.
@@ -342,7 +350,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | At most two review rounds per change; one independent reviewer checks code and behavior, not prose; a third round goes to the owner | Recorded in the phase's tracker |
 | A phase's acceptance checks are locked before implementation; each change states what and why; a third change to a phase's locked acceptance checks goes to the owner | Locked files change only with the owner's approval |
 | Approval by meaning: one decision approves all the files it explains | Register entries and owner decisions; no per-file hashes |
-| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved_by: owner` |
+| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported; each phase names owner check-ins, with a five-line report, past which work waits for the owner's answer (Phase 1 decision H12, approved by owner 2026-10-08) | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved_by: owner` |
 | One status page: candidate commit, gates passed, open failures, decisions needed | Generated from CI and git, not written by the executor |
 | Anything that changes behavior or scope goes to the owner straight away | Register entries and the status page |
 | New acceptance infrastructure beyond the agreed test runner needs the owner's approval | Listed on the status page |
