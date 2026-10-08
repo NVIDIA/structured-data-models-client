@@ -151,7 +151,13 @@ together.
   `None`, as in `time_columns={'users': None}`, to say a table has no time
   column. Naming no column was refused before.
 
-### Fixed
+### Fixed before the first release
+
+1.0.0 is the first release of these distributions, so nothing below is a fix
+to a version anyone could have installed. These entries record what changed
+while the packages were being built, and are kept because they say why the
+behaviour is what it is; where one reads "than before" or "no longer", the
+comparison is to an earlier point in that work.
 
 - **A schema may infer a different time column than before.** `from_data`
   and `from_source` now choose it by one internal rule, so the same rows get
