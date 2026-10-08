@@ -12,13 +12,6 @@
 version = "1.0.0"
 
 [[pulse-trufflehog.files]]
-file = ".gitlab-ci.yml"
-
-[[pulse-trufflehog.files.secrets]]
-type = "Postgres"
-values = [ "postgresql://postgres:********@postgres:5432" ]
-
-[[pulse-trufflehog.files]]
 file = "packages/structured-data-models-client/src/sdm_client/core/transport.py"
 
 [[pulse-trufflehog.files.secrets]]
