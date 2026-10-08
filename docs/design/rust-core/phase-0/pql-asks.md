@@ -15,7 +15,8 @@ To do that safely we'd like to agree on:
 4. **Matching releases:** the same version on crates.io and PyPI, pinned by version and digest on our side.
 5. **Safe behavior in a host process:** no aborts, signal handlers or console output from the library, and a recursion limit on nesting.
 6. **One PQL dialect** agreed between your core and our current grammar, and a shared conformance suite (we can contribute 417 cases) run in your CI.
-7. **When the Rust crate will be available,** so we know how long to keep our interim parser.
+7. **Packed date literals:** whether the agreed dialect keeps PQL's packed date literals (for example `20240102`); we keep them unless it drops them.
+8. **When the Rust crate will be available,** so we know how long to keep our interim parser.
 
 ## Answers
 

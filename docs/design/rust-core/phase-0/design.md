@@ -68,7 +68,7 @@ No product code changes on `rust-core` in this phase.
 
 ### T0.8 Register and decision record
 
-- Create `docs/design/rust-core/register.yaml` with its schema (old behavior, new behavior, affected inputs, case or task IDs, approved-by) and the entries produced by T0.3 and T0.6.
+- Create `docs/design/rust-core/register.yaml` with its schema (old behavior, new behavior, affected inputs, case or task IDs, approved_by) and the entries produced by T0.3 and T0.6.
 - Keep [decisions.md](decisions.md) current with every owner decision, including those made before this phase.
 - Exit: `register.yaml` validates against its JSON Schema, and `decisions.md` is current.
 

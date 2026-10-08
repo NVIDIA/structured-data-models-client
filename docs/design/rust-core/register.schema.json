@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NVIDIA/structured-data-models-client/docs/design/rust-core/register.schema.json",
+  "title": "sdm-client Rust core quirk register",
+  "description": "Every behavior of the reference the Rust core keeps, drops or changes by recorded decision. See migration-plan.md section 5.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "entries"],
+  "properties": {
+    "format": {"const": "sdm-register/1"},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/entry"}
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "old_behavior",
+        "new_behavior",
+        "affected_inputs",
+        "cases",
+        "status",
+        "approved_by",
+        "decision_ref",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable identifier, unique in the file; never reused.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$"
+        },
+        "title": {"type": "string", "minLength": 1},
+        "kind": {
+          "description": "keep: the core reproduces the reference; drop: the core stops reproducing a reference accident; change: the core (or the reference) answers differently from the old behavior.",
+          "enum": ["keep", "drop", "change"]
+        },
+        "old_behavior": {"type": "string", "minLength": 1},
+        "new_behavior": {"type": "string", "minLength": 1},
+        "affected_inputs": {"type": "string", "minLength": 1},
+        "cases": {
+          "description": "Contract case IDs; issue, task or Phase 1b inventory IDs until Phase 1a creates contract case IDs.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "status": {"enum": ["proposed", "approved", "rejected"]},
+        "approved_by": {
+          "description": "Who approved the entry, or for a rejected entry who rejected it; null while proposed. An entry that refuses an input Python accepted needs owner.",
+          "enum": ["owner", "reviewer", null]
+        },
+        "decision_ref": {
+          "description": "Row number in phase-0/decisions.md, if an owner decision covers the entry.",
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "notes": {"type": "string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "proposed"}}},
+          "then": {"properties": {"approved_by": {"const": null}}}
+        },
+        {
+          "if": {"properties": {"status": {"enum": ["approved", "rejected"]}}},
+          "then": {"properties": {"approved_by": {"enum": ["owner", "reviewer"]}}}
+        }
+      ]
+    }
+  }
+}

@@ -33,3 +33,17 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 26 | G14: only environments the job matrix and L8 test are claimed as supported | support-matrix.md, installation guide, L6, L8 |
 | 27 | D1: the RandomState shuffle (`508845fe`, with `f2f5b86c` and `c9695f3c`) is not adopted; the reference keeps `default_rng` | [determinism-fixes.md](determinism-fixes.md), T0.3 |
 | 28 | D2: the new seeded SQLite draw is accepted; it becomes a register entry and a random stream the core must reproduce | determinism-fixes.md, `register.yaml` (T0.8), T0.6 |
+
+## Open decisions
+
+Proposed entries in [`register.yaml`](../register.yaml) that wait for the owner; each has a recommendation in its notes.
+The other proposed entries can be approved by the independent reviewer.
+
+- RS-4: what an unseeded in-memory entity sample draws from (recommended: OS entropy).
+- RS-7: whether in-memory and DuckDB keep refusing seeds from `2**31` on (recommended: keep the refusals).
+- DT-1: daylight saving time after 2099, which `chrono-tz` does not apply (recommended: a zone library that applies the last rule, else register the cutoff).
+- DT-2: a bundled, pinned zone database or the host's (recommended: bundled and pinned, version recorded).
+- DT-3: dropping the int64 wrap at `Timestamp.min` (recommended: drop, after the Phase 1 check of the sentinel).
+- DT-5: PQL packed dates, which go to the PQL asks (recommended: keep unless the agreed dialect drops them).
+- DT-6: free-form values in per-row time columns, if the core refuses them instead of reading them (recommended: keep reading them).
+- P1B-1: any Phase 1b case whose new outcome refuses an input Python accepted.

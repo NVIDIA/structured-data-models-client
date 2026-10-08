@@ -59,8 +59,8 @@ The owner made these before any code:
     Merging the epic into `main` is the owner's decision at the end; until then the work is experimental.
 12. **People:** one developer works with agents.
     The independent reviewer is a fresh agent that did not implement the change; the owner is the only human approver.
-    The owner approves by merging a verified phase or slice branch locally, by decisions recorded in the phase's decisions file, and by register entries marked `approved-by: owner`.
-    An agent never approves its own exception or marks anything `approved-by: owner`.
+    The owner approves by merging a verified phase or slice branch locally, by decisions recorded in the phase's decisions file, and by register entries marked `approved_by: owner`.
+    An agent never approves its own exception or marks anything `approved_by: owner`.
 13. **The first attempt:** its best candidate (commit `ab85a056`, tag `pm/2026-10-07/all-public-cases-pass`) is archived on GitHub as `archive/rust-core-attempt-1` (commit `3887762`, internal catalog and workspace names redacted), a source to port from that is never merged.
 
 Still to agree with the PQL team: one PQL dialect, the versioned validated-query format, the conformance suite, platform builds, and when the Rust crate ships.
@@ -264,7 +264,7 @@ Python sets the pace: a slice ships for Python when its Python gates pass, and J
 
 The register is a machine-readable file at `docs/design/rust-core/register.yaml`.
 Entries follow common sense, with a small bias towards today's Python behavior but without catering to its accidents.
-Every entry names the old and new behavior, the affected inputs and contract case IDs (or issue or task IDs until Phase 1a creates case IDs), and who approved it: the independent reviewer approves entries, and an entry that refuses an input Python accepted needs the owner's approval (`approved-by: owner`), since that is a regression.
+Every entry names the old and new behavior, the affected inputs and contract case IDs (or issue or task IDs until Phase 1a creates case IDs), and who approved it: the independent reviewer approves entries, and an entry that refuses an input Python accepted needs the owner's approval (`approved_by: owner`), since that is a regression.
 
 | Keep (part of the promise) | Drop (by recorded decision) |
 |---|---|
@@ -338,11 +338,11 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 |---|---|
 | The epic branch holds the only candidate; work on the next slice starts only after this slice's gate passes; independent tasks within a slice may run in parallel | CI fast checks on the epic and phase branches; the status page lists open branches |
 | Each phase's work happens on its own branch off `rust-core` (for example `rust-core-phase-0`), pushed to GitHub so nothing is lost; a candidate that passes its checks is pushed before more work builds on it; phase branches never merge into `main`; the epic branch is updated from `main` at each slice gate | Once verified (CI fast checks, local gate checks, a fresh-agent review), the phase or slice branch is merged locally into `rust-core` and `rust-core` is pushed; there are no pull requests |
-| Acceptance is what CI and the local gate checks run, plus one independent reviewer per change (a fresh agent that did not implement it), the owner's decisions, and one independent release audit of the existing evidence | The owner's approval is the local merge of a verified phase or slice branch, plus decisions in `phase-N/decisions.md` and register entries marked `approved-by: owner` |
+| Acceptance is what CI and the local gate checks run, plus one independent reviewer per change (a fresh agent that did not implement it), the owner's decisions, and one independent release audit of the existing evidence | The owner's approval is the local merge of a verified phase or slice branch, plus decisions in `phase-N/decisions.md` and register entries marked `approved_by: owner` |
 | At most two review rounds per change; one independent reviewer checks code and behavior, not prose; a third round goes to the owner | Recorded in the phase's tracker |
 | A phase's acceptance checks are locked before implementation; each change states what and why; a third change to a phase's locked acceptance checks goes to the owner | Locked files change only with the owner's approval |
 | Approval by meaning: one decision approves all the files it explains | Register entries and owner decisions; no per-file hashes |
-| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved-by: owner` |
+| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved_by: owner` |
 | One status page: candidate commit, gates passed, open failures, decisions needed | Generated from CI and git, not written by the executor |
 | Anything that changes behavior or scope goes to the owner straight away | Register entries and the status page |
 | New acceptance infrastructure beyond the agreed test runner needs the owner's approval | Listed on the status page |
