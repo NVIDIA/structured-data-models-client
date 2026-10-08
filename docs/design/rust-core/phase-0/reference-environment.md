@@ -1,7 +1,7 @@
 # Reference environment (T0.3)
 
 The reference is the branch `rust-core-reference` of `NVIDIA/structured-data-models-client`, checked out as a worktree at `~/code/sdmc-reference`.
-It is `main` at `fa0637d` plus the fixes listed in [determinism-fixes.md](determinism-fixes.md); its head is `70aa159`.
+It is `main` at `fa0637d` plus the fixes listed in [determinism-fixes.md](determinism-fixes.md) and the guard; its head is `b413e9a`.
 The unpatched baseline is tagged locally as `reference-baseline-fa0637d` (`fa0637d495b5098e1cf7295e46ac7546dc0bcb01`); the tag is pushed and protected by the GitHub tag ruleset "Protect Rust core reference baselines", which blocks deletion and update.
 
 ## Versions
@@ -53,9 +53,26 @@ Run it at the start of every reference session:
 ~/code/sdmc-reference/.venv/bin/python ~/code/sdmc-reference/scripts/reference_guard.py
 ```
 
-It was shown to work as follows:
+Probing a package-qualified name such as `sdm_api._native` imports its parent package, and that package's initialization can load a top-level native module whose name the guard has already checked.
+The guard at `70aa159` missed that case; since `b413e9a` it checks the whole candidate set in `sys.modules` again after every probe has run, and reports such a module as imported while the guard ran.
 
-- In the clean environment it prints `reference guard: none of 24 names load` and exits 0.
+A harness that calls the reference in-process, as Phase 1a's runners will, also calls `require_isolation()` from the guard in that same interpreter, which raises `RuntimeError` if any name loads.
+A preflight in a separate process is not enough on its own, since it does not see what the harness itself imports.
+The native-name list is kept aligned with the binding's actual module name once that is fixed.
+
+`--self-test` runs three controls, each in a fresh interpreter with a temporary directory on `PYTHONPATH`, and exits 0 only when each gives its expected status:
+
+```bash
+~/code/sdmc-reference/.venv/bin/python ~/code/sdmc-reference/scripts/reference_guard.py --self-test
+```
+
+- Clean run: nothing added; it prints `reference guard: none of 24 names load` and exits 0.
+- Importable stub: an empty `sdm_core.py`; it reports `sdm_core is importable from <path>` and exits 1.
+- Parent import: a synthetic `sdm_api/__init__.py` that puts a module object named `sdm_core` into `sys.modules`; it reports `sdm_core was imported while the guard ran` and exits 1.
+  The guard at `70aa159` exits 0 on this control.
+
+Earlier manual checks also showed:
+
 - With a stub package `sdm_core/__init__.py` on `PYTHONPATH` it reports `sdm_core is importable from <path>` and exits 1.
 - With a stub `_native.py` on `PYTHONPATH` it reports `_native` and exits 1.
 - With an empty `sdm_relational_engine/_native.py` placed in the engine's source for the test, then removed, it reports `sdm_relational_engine._native` and exits 1.

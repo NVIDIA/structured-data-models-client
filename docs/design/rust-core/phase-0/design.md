@@ -75,7 +75,7 @@ No product code changes on `rust-core` in this phase.
 ### T0.9 PQL asks
 
 - Draft the asks to the PQL team (section 3 of the plan) in [pql-asks.md](pql-asks.md) for the owner to send, and track their answers there.
-- Exit: the asks are sent; agreement is not a Phase 0 exit.
+- Exit: the asks are drafted; the owner sends them (deferral recorded in decisions.md); agreement is not a Phase 0 exit.
 
 ## Order
 

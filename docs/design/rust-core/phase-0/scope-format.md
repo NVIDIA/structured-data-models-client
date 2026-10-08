@@ -57,6 +57,11 @@ Roles are the parts a column plays in a request: `primary-key`, `foreign-key`, `
 Host-side conversions (`large_utf8`, `timestamp[s]`, `large_list` and the like) are checked by L5 against the conversion tables, not here: a cell names the type the core receives.
 Every cell applies from S1, since S0 reads no data.
 
+A cell is a core coverage obligation, not a claim about every backend.
+An outcome expectation belongs to a concrete case, which names its backend, its input and the public path it runs through.
+The cell's `expect` summarizes those cases, and a refusal or acceptance seen through one backend is not evidence for the same type and role through another.
+For host-only routes introduced in S3, a case that characterizes the core type is distinct from one that proves the host's conversion and public path; each route needs the second kind as well.
+
 ### Case IDs
 
 Case IDs are the IDs of the shared L2 contract corpus, so one ID means the same case in every language.
@@ -74,8 +79,9 @@ These referential rules are checked by the coverage generator Phase 1a writes (t
 3. Every declared operation, mode and backend appears in at least one path.
 4. From Phase 1a on, every case ID resolves to a case in the L2 corpus.
 5. At a slice gate, every path of that slice or an earlier one has at least one case, and so does every cell whose `expect` is not `unknown`.
-6. No cell is `unknown` at the S1 gate: Phase 1a and Phase 1b record the reference's outcome for each one, and a cell the core refuses where the reference accepted needs an owner-approved register entry.
-7. A path or cell is removed only with an owner decision, since dropping one is the kind of regression decision 3 names.
+6. A case listed under a cell is checked against its own backend, input and public path; the generator validates those associations and does not treat one case under a cell as proof for every backend.
+7. No cell is `unknown` at the S1 gate: the Phase 1b inventory stays bounded and settles only the cells it touches, and Phase 2 characterizes the remaining S1 cells against the reference before the S1 gate; a cell the core refuses where the reference accepted needs an owner-approved register entry.
+8. A path or cell is removed only with an owner decision, since dropping one is the kind of regression decision 3 names.
 
 Validate the shape with:
 
@@ -98,4 +104,4 @@ Choices worth a second look:
 - Ranking and forecasting on Databricks and Lakebase moved into S1 (offline backends) and S2 (warehouses) by owner decision J1 ([databricks-jobs.md](databricks-jobs.md)).
 - Java's metric-view paths and its `databricks-serving` connection are assumptions, noted on each path, until the owner and the Java consumer confirm them.
 - A custom (non-SQL) data provider is not a path in either manifest: the S1 test provider and the swapped data layer are Rust-level checks, and a public provider API in Java is a question for when Java's API is designed.
-- Most cells outside the obvious ones are `unknown`; Phase 1b's case inventory (T0.7) and Phase 1a's runners resolve them against the reference.
+- Most cells outside the obvious ones are `unknown`; Phase 1b's bounded case inventory (T0.7) resolves the cells it touches, and Phase 2 characterizes the remaining S1 cells against the reference before the S1 gate.

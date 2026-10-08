@@ -35,7 +35,9 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 28 | D2: the new seeded SQLite draw is accepted; it becomes a register entry and a random stream the core must reproduce | determinism-fixes.md, `register.yaml` (T0.8), T0.6 |
 | 29 | The plan's section 5 keep and drop entries (PK-1 to PK-9, PD-1 to PD-6) are approved register entries | register.yaml |
 | 30 | Recommendations accepted: RS-4 (an unseeded in-memory sample uses fresh operating-system randomness), RS-7 (keep refusing seeds of 2**31 and above), DT-1 (zone rules keep applying after 2099), DT-2 (use the host's zone database as today, with a bundled fallback and versions pinned in tests), DT-3 (don't copy the wrap at `Timestamp.min`; handle the no-time marker explicitly), DT-5 (keep packed PQL dates unless the agreed dialect drops them), DT-6 (keep reading free-form text in per-row time columns) | register.yaml |
+| 31 | Phase 0 merges with the PQL asks drafted but not yet sent; sending them is tracked as an open item and does not block Phase 1. | T0.9, [pql-asks.md](pql-asks.md) |
 
 ## Open decisions
 
+- T0.9: the owner sends the PQL asks in [pql-asks.md](pql-asks.md) (decision 31); this does not block Phase 1.
 - P1B-1: any Phase 1b case whose new outcome refuses an input Python accepts comes to the owner case by case.

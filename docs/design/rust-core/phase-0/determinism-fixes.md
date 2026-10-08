@@ -70,7 +70,8 @@ The outputs compared were:
 Results on the reference:
 
 - The wire payloads are byte-identical in all four configurations (sha256 `c180149d…`), and match the golden file.
-- The ported checks give byte-identical result lists in all four configurations (54 passed each).
+- The ported checks give byte-identical result lists in all four configurations (54 passed each in the original T0.3 run; the reference revision of that run was not recorded with the count, and it is kept as a historical figure).
+- The same selection now collects 63 tests; on the reference at `70aa159`, 63 passed under both `PYTHONHASHSEED=0` and `=1` (no torch).
 - The tie, SQLite and DuckDB payloads, compared parsed, are identical in all four configurations, and the tie payloads are also identical with the fake torch whose unstable sort breaks ties the other way.
 
 Results on unpatched `main`:

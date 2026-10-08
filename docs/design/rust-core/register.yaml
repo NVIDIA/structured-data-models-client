@@ -434,8 +434,8 @@ entries:
     draws from numpy's process-wide global RandomState, which np.random.seed
     moves.
   new_behavior: >-
-    Seeded: the same permutation, in drawn order. None: proposed to draw from
-    OS entropy, since the core cannot see numpy's global stream.
+    Seeded: the same permutation, in drawn order. None: draws from OS
+    entropy, since the core cannot see numpy's global stream.
   affected_inputs: >-
     In-memory relational requests without entity ids on tables larger than the
     sample; the change concerns only random_seed=None.
@@ -444,9 +444,9 @@ entries:
   approved_by: owner
   decision_ref: 30
   notes: >-
-    Owner decision for None: OS entropy (recommended; the only loss is that a
-    user's np.random.seed no longer makes an unseeded request repeatable) or
-    refusing to match the reference. The seeded part is a plain keep.
+    Owner decision 30 chose OS entropy for None; the only loss is that a
+    user's np.random.seed no longer makes an unseeded request repeatable. The
+    seeded part is a plain keep.
 
 - id: RS-5
   title: The tabular context sample
@@ -482,8 +482,14 @@ entries:
   decision_ref: null
   notes: >-
     The draws themselves belong to each database; Snowflake, Databricks LIMIT
-    and PostgreSQL across servers are known non-repeatable and compared by
-    shape. Recommendation: approve, formatting p as Python does rather than
+    and PostgreSQL across servers are known non-repeatable. Independently
+    executed nondeterministic draws are not required to select identical rows.
+    Compare SQL, bound parameters and warnings exactly where specified, and
+    check membership, cardinality and sampling invariants on the draws. Compare
+    inference, payloads and results using the same captured or scripted input
+    rows on both implementations; restrict exclusions to explicitly named
+    nondeterministic fields. This is a Phase 1a comparator requirement.
+    Recommendation: approve, formatting p as Python does rather than
     registering a SQL text change.
 
 - id: RS-7
@@ -496,30 +502,30 @@ entries:
     non-negative integer; Snowflake ignores the seed; Databricks not checked
     live.
   new_behavior: >-
-    Proposed: keep the same ranges, refusing seeds from 2**31 on in-memory and
-    DuckDB with a named INVALID_REQUEST.
+    Keep the same ranges, refusing seeds from 2**31 on in-memory and DuckDB
+    with a named INVALID_REQUEST.
   affected_inputs: Requests with random_seed of 2**31 or more on in-memory frames or DuckDB.
   cases: [T0.6]
   status: approved
   approved_by: owner
   decision_ref: 30
   notes: >-
-    Owner decision: keep today's refusals (recommended, no regression and no
-    new stream to define) or accept larger seeds, which needs a defined stream
-    for them on in-memory and DuckDB. The refusal message changes from
-    pybind11's or pandas' text to a named one either way.
+    Owner decision 30 keeps today's refusals, with no regression and no new
+    stream to define. The refusal message changes from pybind11's or pandas'
+    text to a named one.
 
 # --- Dates and time zones (T0.6) ----------------------------------------------
 
 - id: DT-1
-  title: Daylight saving time after 2099 (chrono-tz)
-  kind: change
+  title: Zone rules keep applying after 2099
+  kind: keep
   old_behavior: >-
     pandas 3 with zoneinfo applies each zone's rule for every later year, so
     New York on 2100-07-01 12:00 UTC is 08:00 at UTC-4.
   new_behavior: >-
-    With chrono-tz 0.10.4 each zone's rules stop at 2099, so the same instant is
-    07:00 at UTC-5.
+    The core continues applying each zone's recurring rules after 2099,
+    including gaps and folds, as the reference using zoneinfo does; the 2099
+    cutoff of the tested chrono-tz version is not accepted.
   affected_inputs: >-
     Local wall times and localization of instants from 2100 on (128 of 1,404
     zone answers in the check).
@@ -528,11 +534,8 @@ entries:
   approved_by: owner
   decision_ref: 30
   notes: >-
-    Owner decision. Recommendation: prefer a zone library that applies a
-    zone's last rule indefinitely, if the same probe confirms it agrees
-    elsewhere; otherwise accept the 2099 cutoff as a registered change next to
-    PD-6. The reference makes no zone calls on its public paths beyond
-    showing and localizing wall times.
+    Owner decision 30 requires continuation; the tested chrono-tz
+    implementation does not satisfy this requirement.
 
 - id: DT-2
   title: Zone database from the host, as today, with a bundled fallback
@@ -619,17 +622,15 @@ entries:
     (format='mixed'), a value outside the accepted shapes is read by dateutil,
     so ['15/03/2024', 'March 3 2020'] reads both.
   new_behavior: >-
-    Proposed: the core implements the dateutil readings such columns reach, or
-    this entry changes to a refusal approved by the owner.
+    The core implements the dateutil readings such columns reach.
   affected_inputs: Frame time columns mixing a decided shape with free-form date text.
   cases: [T0.6]
   status: approved
   approved_by: owner
   decision_ref: 30
   notes: >-
-    date-rules.md, "Per-row reading". Refusing would refuse input Python
-    accepts, so a change needs the owner. Recommendation: keep, scoped by
-    Phase 1 cases.
+    date-rules.md, "Per-row reading". Owner decision 30 keeps it, scoped by
+    Phase 1 cases; refusing would refuse input Python accepts.
 
 - id: DT-7
   title: The engine's text-date reading on SQL sources

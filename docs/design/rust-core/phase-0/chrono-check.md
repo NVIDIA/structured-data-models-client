@@ -51,9 +51,9 @@ Month arithmetic with `checked_add_months` and `checked_sub_months` agrees every
 |---|---|---|---|---|
 | M1 | pandas 3 reads year-first text as year, day, month under `dayfirst=True` | 225 single values | `2024-01-02` with `dayfirst=True` is the 1st of February in pandas, the 2nd of January in the probe | Expected: the time-column path never passes `dayfirst` for a year-first column, and the column reads all agree; the only other caller (`reads_as_a_date`) asks whether a value reads, not which date; proposed: the core always reads year-first as year, month, day, with no register entry since no public answer changes |
 | M2 | PQL packed dates (rule D8) | 2 | `230203-06-09` is `2003-02-23T06:00:00-09:00` in pandas | Not a `chrono` limit: the probe does not model `dateutil`'s packed reading, and PQL literals come from the PQL team's crate (owner decision 6), so this goes to the PQL asks |
-| M3 | int64 wrap at the smallest timestamp | 1 | `-9223372036854775807` ns (`pd.Timestamp.min`): pandas' seconds round trip wraps to `2262-04-11T23:47:16.709551616`, the probe gives `1677-09-21T00:12:43` | Decision: the core should not reproduce the wrap; it touches only the `Timestamp.min` sentinel that `packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/inference/payload.py:469-471` on the reference compares against, so whether that comparison still sees the sentinel after the sampler's round trip needs a look in Phase 1 |
-| M4 | No daylight saving time from 2100 on | 128 zone answers | New York on 2100-07-01 12:00 UTC: pandas 3 gives 08:00 at UTC-4, the probe 07:00 at UTC-5 | Decision: `chrono-tz` 0.10.4 expands each zone's rules only to 2099 (New York, Berlin and Lord Howe all show their last summer offset in 2099), while `zoneinfo` applies the zone's rule for every later year |
-| M5 | Zone database version | 88 zone answers, all Africa/Casablanca, in every tested year from 2036 on | 2036-01-15 12:00 UTC is 12:00 (UTC+0) with the host's 2026c and pytz 2026.5, 13:00 (UTC+1) with `chrono-tz`'s 2025b; Python's `zoneinfo` over the `tzdata` 2025b package gives 13:00 too | Decision: which database the core uses, and whether its version is a pinned build fact or follows the host as today |
+| M3 | int64 wrap at the smallest timestamp | 1 | `-9223372036854775807` ns (`pd.Timestamp.min`): pandas' seconds round trip wraps to `2262-04-11T23:47:16.709551616`, the probe gives `1677-09-21T00:12:43` | Decided by owner decision 30 (DT-3): the core does not reproduce the wrap; it touches only the `Timestamp.min` sentinel that `packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/inference/payload.py:469-471` on the reference compares against, so whether that comparison still sees the sentinel after the sampler's round trip needs a look in Phase 1 |
+| M4 | No daylight saving time from 2100 on | 128 zone answers | New York on 2100-07-01 12:00 UTC: pandas 3 gives 08:00 at UTC-4, the probe 07:00 at UTC-5 | Decided by owner decision 30 (DT-1): the core keeps applying each zone's recurring rules after 2099, as `zoneinfo` does; `chrono-tz` 0.10.4 expands each zone's rules only to 2099 (New York, Berlin and Lord Howe all show their last summer offset in 2099), so the tested version does not meet DT-1 |
+| M5 | Zone database version | 88 zone answers, all Africa/Casablanca, in every tested year from 2036 on | 2036-01-15 12:00 UTC is 12:00 (UTC+0) with the host's 2026c and pytz 2026.5, 13:00 (UTC+1) with `chrono-tz`'s 2025b; Python's `zoneinfo` over the `tzdata` 2025b package gives 13:00 too | Decided by owner decision 30 (DT-2): the core reads the host's zone database as today, with a bundled fallback where the host has none, and tests pin and record the version; `chrono-tz` embeds its database at build time, so the tested version does not meet DT-2 |
 
 Within 2038 to 2099, outside Casablanca, the probe agrees with pandas 3 on all 816 zone answers.
 The same 408 instant-to-local answers agree with pandas 2 (pytz) on 278, and with pyarrow's `local_timestamp` on 278: both keep the offset of the last transition their files list, which is standard time from November 2037 on.
@@ -69,9 +69,17 @@ The nine wall times in a gap or fold that pandas refuses (`ValueError`) before 2
 - `dateutil`'s free-form reading, reached by per-row columns (see date-rules.md) and by PQL's packed literals, has no `chrono` counterpart.
 - pandas 1.5 was not run.
 
-## Decisions needed
+## Decisions
 
-1. M3: drop the int64 wrap, after checking the `Timestamp.min` sentinel in Phase 1.
-2. M4: accept that zone rules stop after 2099 (a register entry next to the post-2037 one), or choose a zone library that applies the rule of a zone's last year indefinitely.
-3. M5: the zone database's source and version: `chrono-tz`'s built-in copy (pinned, 2025b today) or the host's, recorded as a host fact either way.
-4. M2 goes to the PQL asks; M1 needs no entry.
+Owner decision 30 settled these classes; the register entries are in `register.yaml`.
+
+1. M3 (DT-3): the core does not reproduce the int64 wrap; Phase 1 checks the `Timestamp.min` sentinel and handles the no-time marker explicitly.
+2. M4 (DT-1): zone rules keep applying after 2099; the 2099 cutoff of `chrono-tz` 0.10.4 is not accepted.
+3. M5 (DT-2): the core uses the host's zone database with a bundled fallback, and tests pin and record its version.
+4. M2 (DT-5) goes to the PQL asks; M1 needs no entry.
+
+## What remains for Phase 1
+
+`chrono` is confirmed for parsing, unit conversion and month arithmetic.
+The tested `chrono-tz` meets neither DT-1 nor DT-2.
+Phase 1 chooses or adapts a zone implementation and checks it against DT-1 and DT-2, with this probe's zone inputs, before any code relies on zone semantics.

@@ -2,7 +2,7 @@
 
 This lists every random draw the reference makes, where it is, what it draws, and how the public seed reaches it.
 The reference is `rust-core-reference` at `70aa159`, with the owner's decisions D1 (the example shuffle stays on `default_rng`; `508845fe` is not adopted) and D2 (the seeded SQLite draw of `f0f324c` is accepted).
-Entries marked "Register" are proposed for `register.yaml` in T0.8: the Rust core must reproduce them exactly.
+Entries marked "Register" have entries in `register.yaml` (T0.8): the Rust core must reproduce them exactly.
 Entries marked "Known non-repeatable" are draws the reference itself does not repeat, because their fixes were dropped in T0.3.
 
 Paths are relative to `packages/` on the reference.
@@ -29,7 +29,7 @@ The single-table (tabular) path takes no options at all (`client/query.py:298`),
 |---|---|---|---|---|---|---|
 | G1 | numpy `default_rng` (PCG64) | `engine/rfm/base/sampler.py:644`, shuffle at `:728` | The order of candidate entity positions, one Fisher-Yates shuffle per call of `get_valid_entity_index` | `random_seed` | Fresh OS entropy on every `sample_target` call | Register |
 | G2 | numpy `RandomState` (MT19937) through `random_state` | `engine/rfm/base/utils.py:184-208`, used at `engine/rfm/backend/sqlite/sampler.py:88` | The four coefficients of the SQLite row hash | `random_seed` | Not called; the unseeded SQLite path uses `RANDOM()` | Register (D2) |
-| G3 | pandas `DataFrame.sample` (legacy `RandomState`) | `engine/rfm/backend/local/sampler.py:188-192` | Which entity rows, and in which order, the in-memory backend returns | `random_seed` | numpy's global `RandomState`: the process-wide stream, seeded from the OS at import and moved by any `np.random.seed` call | Register, with a decision for `None` |
+| G3 | pandas `DataFrame.sample` (legacy `RandomState`) | `engine/rfm/backend/local/sampler.py:188-192` | Which entity rows, and in which order, the in-memory backend returns | `random_seed` | numpy's global `RandomState`: the process-wide stream, seeded from the OS at import and moved by any `np.random.seed` call | Register; `None` per decision 30 |
 | G4 | C++ `std::mt19937` in `relationallib.NeighborSampler` | `engine/csrc/neighbor_sampler.cpp:108-139`, `:282-312`, `:534`; seeded from `engine/rfm/backend/local/sampler.py:98-99` | Which neighbors a static hop keeps, in the in-memory backend | `random_seed`, re-applied at every subgraph (every batch) | The sampler's own stream continues from wherever the previous call left it; it starts at seed `123` | Register |
 | G5 | pandas `DataFrame.sample` | `client/materializers/tabular.py:28`, `:288` | Which context rows a single-table request keeps when there are more than the endpoint accepts | Always `42`; `random_seed` does not reach it | Not applicable | Register |
 
@@ -60,7 +60,7 @@ NEP 19 freezes this stream across numpy releases.
 `pkey_map.sample(n=num_rows, random_state=random_seed, ignore_index=True)` runs only when no entity ids are given and the table has more rows than asked for.
 It equals `RandomState(seed).permutation(len(pkey_map))[:n]`: the legacy Fisher-Yates over `arange`, with the same MT19937 and bounded draws as G2, kept in drawn order.
 pandas raises `ValueError` for a seed of `2**32` or more.
-With `None`, pandas uses the global numpy stream, which the core cannot see; reproducing it is not possible, so the proposed entry is that `None` draws from OS entropy, which differs only in that a user's `np.random.seed` no longer makes it repeatable.
+With `None`, pandas uses the global numpy stream, which the core cannot see; reproducing it is not possible, so `None` draws from OS entropy (owner decision 30), which differs only in that a user's `np.random.seed` no longer makes it repeatable.
 
 ### G4, the native neighbor draw
 
@@ -138,17 +138,26 @@ Every SQL backend reads at most `_NUM_SAMPLE_ROWS = 1_000` rows (`engine/rfm/bas
 SQLite orders them by `rowid` (`engine/rfm/backend/sqlite/table.py:153`), and DuckDB returns a table in insertion order, so both repeat.
 PostgreSQL, Snowflake and Databricks use a bare `LIMIT 1000` (`postgres/table.py:327`, `snow/table.py:197`, `databricks/table.py:338`), which is known non-repeatable (`f15d5bf4`, `440b8d60`, `572085ad` and their follow-ups dropped).
 
-## Proposed register entries
+## Register entries
+
+The register holds the status of each; RS-4 and RS-7 are approved by owner decision 30.
 
 1. RS-1, the example shuffle (G1): `default_rng(seed)` with `SeedSequence`, PCG64 and numpy's bounded Fisher-Yates, in `sample_target`'s call order; `None` draws OS entropy.
 2. RS-2, the SQLite seeded entity draw (G2 and the SQLite hash): the coefficients, the SQL text, and the key or `rowid` fallback; seeds of any size.
 3. RS-3, the in-memory neighbor draw (G4): MT19937 `init_genrand`, default seed `123`, reseeded per subgraph when seeded, continuing when not, Floyd's draw with `rng() % (i + 1)`, draws only on static hops.
-4. RS-4, the in-memory entity sample (G3): legacy `RandomState(seed).permutation(len)[:n]` in drawn order; for `None`, the owner decides between OS entropy (proposed) and refusing to match the reference.
+4. RS-4, the in-memory entity sample (G3): legacy `RandomState(seed).permutation(len)[:n]` in drawn order; for `None`, OS entropy (decision 30).
 5. RS-5, the tabular context sample (G5): `RandomState(42).permutation(len)[:wanted]`, returned in table order.
 6. RS-6, warehouse SQL text: DuckDB `reservoir ... REPEATABLE`, the PostgreSQL `setseed` mapping, Snowflake `SAMPLE ROW` with its warning, and the Databricks percentage formatted as Python's `repr`.
-7. RS-7, the seed range: whether the core keeps the in-memory and DuckDB refusals of seeds from `2**31` on (today's behavior) or accepts them; accepting them needs a defined stream for those seeds, so this is an owner decision.
+7. RS-7, the seed range: the core keeps the in-memory and DuckDB refusals of seeds from `2**31` on, as today (decision 30).
 
-Known non-repeatable in the reference, and therefore compared by shape and not by rows: unseeded draws everywhere, the Snowflake sample, which rows Databricks's `LIMIT` keeps, the PostgreSQL draw across servers, and the inference reads of PostgreSQL, Snowflake and Databricks.
+Known non-repeatable in the reference: unseeded draws everywhere, the Snowflake sample, which rows Databricks's `LIMIT` keeps, the PostgreSQL draw across servers, and the inference reads of PostgreSQL, Snowflake and Databricks.
+
+## Comparing non-repeatable draws
+
+This is a Phase 1a comparator requirement.
+Independently executed nondeterministic draws are not required to select identical rows.
+Compare SQL, bound parameters and warnings exactly where specified, and check membership, cardinality and sampling invariants on the draws.
+Compare inference, payloads and results using the same captured or scripted input rows on both implementations; restrict exclusions to explicitly named nondeterministic fields.
 
 ## A neighbouring ordering question
 

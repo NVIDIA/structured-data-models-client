@@ -69,22 +69,26 @@ These are the 20 cells of the job matrix ([databricks-jobs.md](databricks-jobs.m
 
 | Runtime | Architectures in the matrix | Python | pandas shipped | pandas after install | pyarrow shipped | pyarrow after install | NumPy |
 |---|---|---|---|---|---|---|---|
-| DBR 14.3 LTS | x86_64, aarch64 | 3.10.12 | Below 2.0 (inferred: the install upgraded it) | 2.3.3 | 8 (setup.py, CHANGELOG) | 25.0.1 | 1.23.5 |
-| DBR 15.4 LTS | x86_64, aarch64 | 3.11.11 | Below 2.0 (inferred) | 2.3.3 or 3.0.6 | 14.0.1 (kept) | 14.0.1 | 1.23.5 (1.26.4 in runs without the pin) |
-| DBR 16.4 LTS | x86_64, aarch64 | 3.12.3 | Below 2.0 (inferred) | 3.0.6 | 15.0.2 (kept) | 15.0.2 | 1.26.4 |
-| DBR 17.3 LTS | x86_64, aarch64 | 3.12.3 | 2.2.3 (kept) | 2.2.3 | 19.0.1 (kept) | 19.0.1 | 2.1.3 |
-| Serverless env 1 | x86_64 observed | 3.10.12 | Below 2.0 (inferred) | 2.3.3 | 8 (setup.py) | 25.0.1 | 1.23.5 |
-| Serverless env 2 | x86_64, aarch64 observed | 3.11.10 | Below 2.0 (inferred) | 2.3.3 or 3.0.6 | 14.0.1 (kept) | 14.0.1 | 1.23.5 (1.26.4 without the pin) |
-| Serverless env 3 | x86_64, aarch64 observed | 3.12.3 | Below 2.0 (inferred) | 3.0.6 | 15.0.2 (kept) | 15.0.2 | 1.26.4 |
-| Serverless env 4 | x86_64, aarch64 observed | 3.12.3 | 2.2.3 (kept) | 2.2.3 | 19.0.1 (kept) | 19.0.1 | 2.1.3 |
-| Serverless env 5 | x86_64, aarch64 observed | 3.12.3 | 2.2.3 (kept) | 2.2.3 | 21.0.0 (kept) | 21.0.0 | 2.1.3 |
-| Serverless env 6 | x86_64, aarch64 observed | 3.12.3 | Unknown, 2.0 or later | 2.3.3 | 21.0.0 (kept) | 21.0.0 | 2.3.4 |
+| DBR 14.3 LTS | x86_64, aarch64 | 3.10.12 | Hypothesis: below 2.0 (the install upgraded it) | 2.3.3 | 8 (setup.py, CHANGELOG) | 25.0.1 | 1.23.5 |
+| DBR 15.4 LTS | x86_64, aarch64 | 3.11.11 | Hypothesis: below 2.0 | 2.3.3 or 3.0.6 | Hypothesis: 14.0.1 (kept) | 14.0.1 | 1.23.5 (1.26.4 in runs without the pin) |
+| DBR 16.4 LTS | x86_64, aarch64 | 3.12.3 | Hypothesis: below 2.0 | 3.0.6 | Hypothesis: 15.0.2 (kept) | 15.0.2 | 1.26.4 |
+| DBR 17.3 LTS | x86_64, aarch64 | 3.12.3 | Hypothesis: 2.2.3 (kept) | 2.2.3 | Hypothesis: 19.0.1 (kept) | 19.0.1 | 2.1.3 |
+| Serverless env 1 | x86_64 observed | 3.10.12 | Hypothesis: below 2.0 | 2.3.3 | 8 (setup.py) | 25.0.1 | 1.23.5 |
+| Serverless env 2 | x86_64, aarch64 observed | 3.11.10 | Hypothesis: below 2.0 | 2.3.3 or 3.0.6 | Hypothesis: 14.0.1 (kept) | 14.0.1 | 1.23.5 (1.26.4 without the pin) |
+| Serverless env 3 | x86_64, aarch64 observed | 3.12.3 | Hypothesis: below 2.0 | 3.0.6 | Hypothesis: 15.0.2 (kept) | 15.0.2 | 1.26.4 |
+| Serverless env 4 | x86_64, aarch64 observed | 3.12.3 | Hypothesis: 2.2.3 (kept) | 2.2.3 | Hypothesis: 19.0.1 (kept) | 19.0.1 | 2.1.3 |
+| Serverless env 5 | x86_64, aarch64 observed | 3.12.3 | Hypothesis: 2.2.3 (kept) | 2.2.3 | Hypothesis: 21.0.0 (kept) | 21.0.0 | 2.1.3 |
+| Serverless env 6 | x86_64, aarch64 observed | 3.12.3 | Unknown, 2.0 or later | 2.3.3 | Hypothesis: 21.0.0 (kept) | 21.0.0 | 2.3.4 |
 
-"Inferred" means the version after install is higher and pip only upgrades an unmet requirement (`pandas>=2.0` from the connectors), so the shipped one was below 2.0; the exact shipped version is not recorded here.
-"Kept" means the version after install satisfies every requirement, so pip left the shipped one in place.
+The "after install" columns and NumPy are observations.
+No pre-install output is recorded for these cells, so every shipped version marked "Hypothesis" is inferred from post-install resolution alone and is not an observation.
+"Hypothesis: below 2.0" rests on the version after install being higher while pip only upgrades an unmet requirement (`pandas>=2.0` from the connectors); the exact shipped version is not recorded here.
+"Hypothesis: ... (kept)" rests on the version after install satisfying every requirement, so pip probably left the shipped one in place; since the transitive dependency set was not frozen, another requirement may have changed it.
+The pyarrow 8 entries come from documentation (setup.py, CHANGELOG), not from a job's output.
+A job that prints versions before `%pip install` turns these hypotheses into observations.
 Every observed cell installed the engine's `manylinux_2_28` wheel, so every runtime above has glibc 2.28 or later.
 The Spark route needs DBR 17.3 LTS or serverless env 4 or later (`DataFrame.toArrow()`); older runtimes use a SQL warehouse.
-A tabular-only install (no extras) on DBR 14.3 to 16.4 or serverless env 1 to 3 keeps pandas below 2.0 and, on 14.3 and env 1, pyarrow 8, so pandas 1.x and pyarrow 8 are live configurations for `kumo-tabular` users there.
+By the hypotheses above, a tabular-only install (no extras) on DBR 14.3 to 16.4 or serverless env 1 to 3 keeps pandas below 2.0 and, on 14.3 and env 1, pyarrow 8, so pandas 1.x and pyarrow 8 are probably live configurations for `kumo-tabular` users there.
 
 Unknown, and not claimed by the docs: DBR 13.3 LTS and older (the docs start at 14.3), non-LTS runtimes, ML and GPU runtimes, DBR 18 and later, serverless env 7 and later, and the exact architecture of serverless env 1 on aarch64.
 
@@ -160,7 +164,7 @@ Recommendation: require `pyarrow>=10.0.1`, the engine's floor today, so one floo
 The alternative is to support pyarrow 8 through `_export_to_c` and test it in L5, which keeps tabular users on those runtimes from upgrading.
 
 **G10. pandas 1.5.**
-The client declares `pandas>=1.5`, and pandas below 2.0 is what a tabular-only install keeps on DBR 14.3 to 16.4 and serverless env 1 to 3, but the plan's L5 tests only pandas 2 and 3.
+The client declares `pandas>=1.5`, and pandas below 2.0 is, by hypothesis, what a tabular-only install keeps on DBR 14.3 to 16.4 and serverless env 1 to 3, but the plan's L5 tests only pandas 2 and 3.
 Recommendation: keep `pandas>=1.5` and add pandas 1.5 to L5 as a third major; raising the base floor to 2.0 (the connectors' floor) would be a regression for those users.
 
 **G11. The `relational` extra and the engine distribution after Phase 5.**

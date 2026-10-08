@@ -64,7 +64,7 @@ All refusals are `StructuredDataError` with code `INVALID_REQUEST`.
 
 Per-row reading exists for warehouse output that writes a zone on some rows and not others.
 It also reads a value outside the accepted shapes, by `dateutil`, if the rest of the column is one decided shape: for example `['15/03/2024', 'March 3 2020']` reads both.
-The core must either implement `dateutil`'s reading for such values or register their refusal.
+The core implements `dateutil`'s reading for such values (DT-6, owner decision 30).
 
 ### Two-digit years
 
@@ -137,5 +137,6 @@ The client never passes `dayfirst` for a column that is all year-first, since `d
 - The current year decides two-digit years, in the client's columns and in PQL literals.
 - The host's local zone abbreviations are read differently from other abbreviations (see the table).
 - The zone database: pandas 3 reads the host's `/usr/share/zoneinfo` (version 2026c on the reference host) and falls back to the `tzdata` package only when the host has none; the reference environment has no `tzdata` or `pytz` installed.
+  The core does the same, with a bundled fallback (DT-2, owner decision 30), and keeps applying each zone's rules after 2099 (DT-1).
 - Linux and macOS differ in whether pandas warns for a day-first PQL literal with a zero-padded year below 1000, because `strftime` pads `%Y` differently (the first attempt's `DATES.md`, "Linux and macOS"); the date read is the same.
 - No locale dependence was found: the accepted shapes are numeric, and no path reads month or day names except the per-row `dateutil` fallback, which uses English names regardless of locale.
