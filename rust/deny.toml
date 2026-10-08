@@ -15,9 +15,12 @@ all-features = true
 ignore = [
     # pyo3 0.28 is pinned because arrow-pyarrow 58 needs it (decision B-D2);
     # both are fixed in pyo3 0.29, which arrives with the next Arrow bump.
-    # sdm-py never calls nth or nth_back on a list or tuple iterator with a
-    # caller-controlled step, and never builds a PyCFunction from a closure;
-    # the wheel targets the GIL-enabled abi3 build only (decision E1).
+    # The only mitigation is not calling the affected code: sdm-py's
+    # clippy.toml bans PyCFunction::new_closure and nth, nth_back, skip and
+    # step_by, and clippy runs with -D warnings in CI. Building for the
+    # GIL-enabled interpreter does not help with 0177: the GIL serializes
+    # calls, but a closure without Sync can still be called from more than
+    # one thread (decision E1).
     { id = "RUSTSEC-2026-0176", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; nth/nth_back on list and tuple iterators unused (E1)" },
     { id = "RUSTSEC-2026-0177", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; PyCFunction::new_closure unused (E1)" },
 ]

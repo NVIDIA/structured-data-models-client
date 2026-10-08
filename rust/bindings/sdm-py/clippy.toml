@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Clippy's configuration for sdm-py alone; clippy reads the nearest file, so
+# this one repeats the workspace's (../../clippy.toml) and adds the bans
+# below.
+msrv = "1.97"
+
+# pyo3 0.28 has two advisories that rust/deny.toml ignores until the next
+# pyo3 bump (decision E1), so the calls they need are banned here:
+# RUSTSEC-2026-0177 needs PyCFunction::new_closure; RUSTSEC-2026-0176 needs
+# nth or nth_back on a list or tuple iterator, which skip and step_by call
+# too. A call through a trait resolves to the trait's method, so the
+# iterator methods are banned for every iterator in this crate.
+disallowed-methods = [
+    { path = "pyo3::types::PyCFunction::new_closure", reason = "RUSTSEC-2026-0177 in pyo3 0.28 (decision E1)" },
+    { path = "core::iter::Iterator::nth", reason = "RUSTSEC-2026-0176 in pyo3 0.28's list and tuple iterators (decision E1)" },
+    { path = "core::iter::DoubleEndedIterator::nth_back", reason = "RUSTSEC-2026-0176 in pyo3 0.28's list and tuple iterators (decision E1)" },
+    { path = "core::iter::Iterator::skip", reason = "calls nth; RUSTSEC-2026-0176 in pyo3 0.28 (decision E1)" },
+    { path = "core::iter::Iterator::step_by", reason = "calls nth; RUSTSEC-2026-0176 in pyo3 0.28 (decision E1)" },
+]
