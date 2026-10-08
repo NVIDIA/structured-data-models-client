@@ -97,26 +97,35 @@ pub enum CondLhs {
 }
 
 #[derive(Debug)]
+///
+/// Each condition carries its height: the levels of the tree it is the
+/// root of, counting its constant's array nesting and an aggregation's
+/// filter. No condition is built taller than [`MAX_DEPTH`], whatever mix of
+/// NOT, parentheses, AND, OR and arrays makes it tall (decision H27).
 pub enum Cond {
     Rel {
         lhs: CondLhs,
         op: usize,
         constant: Const,
         span: Span,
+        height: usize,
     },
     Not {
         inner: Box<Cond>,
         span: Span,
+        height: usize,
     },
     Binary {
         left: Box<Cond>,
         op: usize,
         right: Box<Cond>,
         span: Span,
+        height: usize,
     },
     Paren {
         inner: Box<Cond>,
         span: Span,
+        height: usize,
     },
 }
 
@@ -136,6 +145,16 @@ pub enum Const {
 }
 
 impl Cond {
+    /// The levels of the tree this condition is the root of.
+    pub fn height(&self) -> usize {
+        match self {
+            Cond::Rel { height, .. }
+            | Cond::Not { height, .. }
+            | Cond::Binary { height, .. }
+            | Cond::Paren { height, .. } => *height,
+        }
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Cond::Rel { span, .. }
@@ -147,6 +166,14 @@ impl Cond {
 }
 
 impl Const {
+    /// The levels of nested arrays and their items, 1 for a plain constant.
+    pub fn height(&self) -> usize {
+        match self {
+            Const::Token(_) | Const::Datetime { .. } => 1,
+            Const::Array { items, .. } => 1 + items.iter().map(Const::height).max().unwrap_or(0),
+        }
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Const::Token(t) => Span {
@@ -209,6 +236,20 @@ impl Parser<'_> {
         } else {
             Err(self.error(expected))
         }
+    }
+
+    /// `height`, if a tree of it is within [`MAX_DEPTH`]: the height of
+    /// what the parser builds is bounded, not only how deep it recurses,
+    /// since AND and OR chains grow a tree to the left without recursing.
+    fn within(&self, height: usize) -> Parsed<usize> {
+        if height <= MAX_DEPTH {
+            return Ok(height);
+        }
+        let row = self.tokens.get(self.pos.saturating_sub(1)).map_or(0, |t| t.line);
+        Err(SyntaxError(format!(
+            "The query's conditions nest more than {MAX_DEPTH} levels deep near row {row}; \
+             simplify it."
+        )))
     }
 
     fn descend(&mut self) -> Parsed<()> {
@@ -428,6 +469,16 @@ impl Parser<'_> {
         };
         let op = self.expect(Kind::RelOp, "an operator such as =, >, IN or LIKE")?;
         let constant = self.constant()?;
+        let lhs_height = match &lhs {
+            CondLhs::Aggr(Aggr {
+                target: AggrTarget::Filtered(filtered),
+                ..
+            }) => filtered.condition.height() + 1,
+            CondLhs::Aggr(_) | CondLhs::Column(_) => 0,
+        };
+        // A comparison is one level; a filtered aggregation's condition and
+        // a nested array's levels are below it.
+        let height = self.within(1 + lhs_height.max(constant.height() - 1))?;
         Ok(Cond::Rel {
             lhs,
             op,
@@ -436,6 +487,7 @@ impl Parser<'_> {
                 start,
                 stop: self.pos - 1,
             },
+            height,
         })
     }
 
@@ -454,7 +506,9 @@ impl Parser<'_> {
                 let start = self.pos;
                 self.pos += 1;
                 let inner = self.condition(4)?;
+                let height = self.within(inner.height() + 1)?;
                 Cond::Not {
+                    height,
                     inner: Box::new(inner),
                     span: Span {
                         start,
@@ -467,7 +521,9 @@ impl Parser<'_> {
                 self.pos += 1;
                 let inner = self.condition(0)?;
                 let stop = self.expect(Kind::Close, "')' to close the parenthesis")?;
+                let height = self.within(inner.height() + 1)?;
                 Cond::Paren {
+                    height,
                     inner: Box::new(inner),
                     span: Span { start, stop },
                 }
@@ -524,7 +580,9 @@ impl Parser<'_> {
                 start: left_start,
                 stop: self.pos - 1,
             };
+            let height = self.within(left.height().max(right.height()) + 1)?;
             left = Cond::Binary {
+                height,
                 left: Box::new(left),
                 op,
                 right: Box::new(right),

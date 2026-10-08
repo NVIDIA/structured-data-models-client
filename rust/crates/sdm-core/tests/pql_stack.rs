@@ -134,6 +134,20 @@ fn deepest_queries() -> Vec<String> {
             "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE users.age > 3{}",
             " OR users.age > 3".repeat(998)
         ),
+        // Mixed: NOTs under a chain, and chains nested in groups, each as
+        // tall as the parser takes.
+        format!(
+            "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE ({}users.age > 3){}",
+            "NOT ".repeat(500),
+            " AND users.age > 3".repeat(498)
+        ),
+        {
+            let mut condition = "users.age > 3".to_owned();
+            for _ in 0..10 {
+                condition = format!("({condition}{})", " OR users.age > 3".repeat(98));
+            }
+            format!("PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE {condition}")
+        },
     ]
 }
 

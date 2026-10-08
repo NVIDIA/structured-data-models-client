@@ -281,6 +281,64 @@ fn a_long_and_or_or_chain_is_refused_at_the_depth_limit_in_bounded_time() {
         .expect("answered");
 }
 
+/// A filter whose tree is tall although the parser never nests deeply:
+/// `(NOT ... NOT c) AND c AND ...`, the first operand below every link.
+fn negated_chain(nots: usize, links: usize) -> String {
+    format!(
+        "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE ({}users.age > 3){}",
+        "NOT ".repeat(nots),
+        " AND users.age > 3".repeat(links)
+    )
+}
+
+/// `groups` parenthesized chains of `links` links, each the first operand
+/// of the next: tall by `groups * (links + 1)` levels.
+fn nested_groups(groups: usize, links: usize) -> String {
+    let mut condition = "users.age > 3".to_owned();
+    for _ in 0..groups {
+        condition = format!("({condition}{})", " AND users.age > 3".repeat(links));
+    }
+    format!("PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id WHERE {condition}")
+}
+
+#[test]
+fn a_tree_taller_than_the_limit_is_refused_whatever_its_shape_in_bounded_time() {
+    // The tree's height is bounded, not only the parser's nesting: these
+    // nest the parser at most about 1,000 levels, and build trees of about
+    // 2,000 and 19,500 (the reference gives up near 500 ANDs or 400 NOTs,
+    // so this refuses nothing it accepts).
+    std::thread::Builder::new()
+        .stack_size(256 << 10)
+        .spawn(|| {
+            let relational = profile(ProfileName::Relational, &[]);
+            for query in [
+                negated_chain(998, 998),
+                nested_groups(20, 975),
+                negated_chain(500, 499),
+            ] {
+                let started = std::time::Instant::now();
+                let validation = validate(&query, &shop(), &relational, &facts()).unwrap();
+                assert!(!validation.accepted);
+                assert_eq!(validation.diagnostics.len(), 1);
+                assert_eq!(validation.diagnostics[0].code, "PQL_PARSE_SYNTAX");
+                assert!(
+                    started.elapsed() < std::time::Duration::from_secs(30),
+                    "{:?}",
+                    started.elapsed()
+                );
+            }
+            // At the limit (1,000 levels; one more is refused above), of
+            // either shape, accepted.
+            for query in [negated_chain(500, 498), nested_groups(10, 98)] {
+                let validation = validate(&query, &shop(), &relational, &facts()).unwrap();
+                assert!(validation.accepted, "{:?}", validation.diagnostics);
+            }
+        })
+        .unwrap()
+        .join()
+        .expect("answered");
+}
+
 #[test]
 fn resolution_s_capability_diagnostics_come_in_the_reference_s_order() {
     // E11: the two filter capabilities are consulted during resolution, as

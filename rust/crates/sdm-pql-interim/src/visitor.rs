@@ -274,7 +274,7 @@ impl Visitor<'_> {
 
     fn condition(&self, cond: &Cond) -> Visited<NodeRef> {
         match cond {
-            Cond::Not { inner, span } => {
+            Cond::Not { inner, span, .. } => {
                 let nested = self.condition(inner)?;
                 Ok(ast::logical(
                     nested,
@@ -288,6 +288,7 @@ impl Visitor<'_> {
                 op,
                 right,
                 span,
+                ..
             } => {
                 let left = self.condition(left)?;
                 let right = self.condition(right)?;
@@ -304,6 +305,7 @@ impl Visitor<'_> {
                 op,
                 constant,
                 span,
+                ..
             } => {
                 let rel_op = self.text(*op).to_uppercase();
                 let value = self.constant(constant)?;
