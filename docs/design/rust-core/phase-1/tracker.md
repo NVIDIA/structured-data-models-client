@@ -16,10 +16,10 @@ A task's checks are active from the moment it lands, as listed in the design's t
 | T1.7 `sdm-host` | 1a | not started | | |
 | T1.8 `sdm-py`, the client wheel and CI rewiring | 1a | not started | | |
 | T1.9 Python host and routing seam | 1a | not started | | |
-| T1.10 First S0 case on every runner | 1a | not started | | Guard name list updated on `rust-core-reference` before any reference observation is recorded |
+| T1.10 First S0 case on every runner | 1a | not started | | Guard name list updated on `rust-core-reference` before any reference observation is recorded; records through `run_python.py` in `python-ref` mode until T1.14 lands `gate.sh` |
 | T1.11 First DuckDB journey: `base.regression` | 1b | not started | | Must reach the result on `python-core` and `rust-host` with no old-engine delegation; diagnostic until T1.29; demonstrates the driver capture or records its infeasibility for the owner (Q2) |
 | T1.12 S0 case corpus | 1a | not started | | |
-| T1.13 S0 reference observations | 1a | not started | | |
+| T1.13 S0 reference observations | 1a | not started | | Records through `run_python.py` in `python-ref` mode until T1.14 lands `gate.sh` |
 | T1.14 Ratchet, register v2 and bootstrap checkpoint | 1a | not started | | The bootstrap checkpoint is independently reviewed once |
 | T1.15 Coverage generator for S0 | 1a | not started | | |
 | T1.16 L0 guards | 1a | not started | | |
