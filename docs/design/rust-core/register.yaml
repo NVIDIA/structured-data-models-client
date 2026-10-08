@@ -706,6 +706,28 @@ entries:
     reproduce it if Phase 1 shows it reaches a payload; otherwise register a
     stable order as a change.
 
+- id: ORD-2
+  title: NULL times and emit order of the latest-neighbor fetch
+  kind: keep
+  old_behavior: >-
+    The reference's two samplers disagree: the SQL push-down drops rows whose
+    time is NULL and returns neighbors newest first (ties by time, then
+    primary key); the in-memory sampler keeps NULL-time rows and returns them
+    oldest first in stable row order.
+  new_behavior: >-
+    Proposed: each path keeps its own reference policy until the disagreement
+    is settled. Phase 1 runs only the SQL path; its policy is stated in the
+    Neighbors request's TimeRule and TieBreak and pinned by L1 vectors in
+    T1.26.
+  affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
+  cases: [T1.26]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Phase 1 decisions F2 and H15. Settling which policy both paths follow is
+    S3 work in Phase 4, as its own change entry.
+
 # --- Phase 1b ------------------------------------------------------------------
 
 - id: P1B-1
@@ -766,10 +788,14 @@ entries:
     S0 on the core route (materialize's validation) with very wide schemas or
     very long query text; later operations whose requests carry schemas.
   cases: [T1.7]
-  status: proposed
-  approved_by: null
+  status: rejected
+  approved_by: owner
   decision_ref: null
   notes: >-
+    Rejected by the owner on 2026-10-08 (answers to Phase 1 re-review round 1):
+    the refusal is not adopted; contract v3 moves every field whose size grows
+    with user input into an attachment (Phase 1 decisions H5, superseding E14),
+    and T1.7b's exit proves a start past 64 KB is accepted. As first proposed:
     Phase 1 decisions row E14. This refuses input the reference accepts, so
     it waits for the owner (P1B-1 process); no inventory case or corpus query
     reaches it. Recommendation: do not approve the refusal; before S0 switches
