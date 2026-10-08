@@ -112,7 +112,9 @@ impl HostRun {
             let ControlMessage::Start(start) = decode(message)? else {
                 return Err(invalid("a run starts with a start message"));
             };
-            check_attachments(&start.operation.attachments(), &attachments)?;
+            // The version first: no other field means anything under
+            // another contract (H25). The core checks the attachments.
+            sdm_core::dispatch::check_contract(start.contract)?;
             check_local_zone(start.facts.local_zone.as_ref())?;
             let zones = ZoneResolver::new(start.facts.zone_roots.iter().map(|root| ZoneRoot {
                 path: root.path.clone().into(),

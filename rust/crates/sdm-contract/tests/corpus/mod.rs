@@ -211,7 +211,6 @@ pub fn messages() -> Vec<ControlMessage> {
         ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {
                 result: AttachmentId(10),
-                columns: vec!["ENTITY".into(), "TARGET_PRED".into()],
             }),
         }),
         ControlMessage::Attached {

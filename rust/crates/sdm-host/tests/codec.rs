@@ -197,6 +197,7 @@ fn description_of(size: usize) -> Vec<u8> {
 fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
     // The description is input-sized, so it is an attachment of its JSON
     // beside a Done that names it (decision H5); the Done stays small.
+    let mut lengths = std::collections::BTreeSet::new();
     for size in [
         CONTROL_CAP - 1,
         CONTROL_CAP,
@@ -210,6 +211,7 @@ fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
             }),
         });
         let mut out = written_whole(&done, false);
+        lengths.insert(out.control.len());
         out.attachments
             .insert(AttachmentId(4), Attachment::Bytes(description.clone()));
         let ControlMessage::Step(Step::Done {
@@ -224,6 +226,8 @@ fn a_done_carrying_a_source_description_arrives_whole_either_side_of_the_cap() {
         let back: SourceDescription = serde_json::from_slice(bytes).unwrap();
         assert_eq!(serde_json::to_vec(&back).unwrap(), description);
     }
+    // The control message is the same whatever the description's size.
+    assert_eq!(lengths.len(), 1, "{lengths:?}");
 }
 
 #[test]

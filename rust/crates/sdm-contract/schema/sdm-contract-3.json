@@ -2247,18 +2247,11 @@
           ]
         },
         {
-          "description": "The prediction: an Arrow attachment and how its columns are laid out.",
+          "description": "The prediction: an Arrow attachment, whose schema names its columns in\norder; nothing inline grows with the result's width (decision H5).",
           "type": "object",
           "properties": {
             "result": {
               "$ref": "#/$defs/AttachmentId"
-            },
-            "columns": {
-              "description": "The result's columns, in order.",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             },
             "op": {
               "type": "string",
@@ -2268,8 +2261,7 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "result",
-            "columns"
+            "result"
           ]
         }
       ]

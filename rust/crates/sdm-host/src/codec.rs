@@ -133,7 +133,7 @@ pub fn write_error(
                 "the error could not be written",
             ),
         })
-        .unwrap_or_default()
+        .expect("a short internal error is within the cap and of the contract")
     });
     Outgoing {
         control,

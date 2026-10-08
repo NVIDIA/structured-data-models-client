@@ -528,3 +528,36 @@ fn a_local_zone_may_be_an_iana_name_or_a_posix_tz_string() {
     );
     assert_eq!(err.fields["field"], Detail::text("facts.local_zone"));
 }
+
+#[test]
+fn a_start_from_another_contract_version_is_refused_for_its_version_first() {
+    // Bad attachments (none of the two named) and a bad local zone too: the
+    // version is what the refusal names (decision H25).
+    let mut message = start_message(
+        validate(None),
+        Some(LocalZone::Posix("not a TZ string".into())),
+    );
+    let ControlMessage::Start(start) = &mut message else {
+        unreachable!()
+    };
+    start.contract = CONTRACT_VERSION + 1;
+    let err = error(
+        HostRun::start(
+            &CompositionRoot::default(),
+            &encode(&message).unwrap(),
+            Attachments::from([(AttachmentId(9), json(&"stray"))]),
+        )
+        .err()
+        .unwrap(),
+    );
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::Protocol, ErrorCode::InvalidMessage)
+    );
+    assert_eq!(
+        err.fields.get("contract"),
+        Some(&Detail::Scalar(Scalar::UInt32(CONTRACT_VERSION + 1)))
+    );
+    assert!(!err.fields.contains_key("attachment"));
+    assert!(!err.fields.contains_key("field"));
+}

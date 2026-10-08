@@ -13,7 +13,7 @@ use std::task::Poll;
 use arrow_array::RecordBatch;
 use arrow_schema::Schema;
 use sdm_contract::data::{DataRequest, ExpectedSchema, ProviderError};
-use sdm_contract::ops::{OperationResult, Predicted, QueryValidation};
+use sdm_contract::ops::{OperationResult, QueryValidation};
 use sdm_contract::run::{Endpoint, ReplyId};
 use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
 use sdm_core::{ArrowData, Asker, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
@@ -70,10 +70,19 @@ fn warning(code: &str) -> CoreWarning {
     }
 }
 
-fn done(columns: Vec<String>) -> OperationResult {
-    OperationResult::Predict(Predicted {
-        result: sdm_contract::data::AttachmentId(0),
-        columns,
+/// A result carrying what the body saw, as diagnostic codes.
+fn done(seen: Vec<String>) -> OperationResult {
+    OperationResult::ValidateQuery(sdm_contract::ops::QueryValidation {
+        accepted: true,
+        diagnostics: seen
+            .into_iter()
+            .map(|code| sdm_contract::ops::PqlDiagnostic {
+                code,
+                message: String::new(),
+                severity: sdm_contract::ops::Severity::Warning,
+                span: None,
+            })
+            .collect(),
     })
 }
 

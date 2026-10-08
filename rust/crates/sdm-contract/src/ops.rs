@@ -384,7 +384,7 @@ pub struct Materialize {
 /// zeros (`0x0`, `0x2a`, `-0x400000000000000000`), so no language's integer
 /// parser meets a digit limit; how large a seed the core takes is the
 /// core's rule, not the decoder's (decision H7).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Seed {
     negative: bool,
@@ -502,11 +502,10 @@ pub struct Predict {
     pub model: String,
 }
 
-/// The prediction: an Arrow attachment and how its columns are laid out.
+/// The prediction: an Arrow attachment, whose schema names its columns in
+/// order; nothing inline grows with the result's width (decision H5).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predicted {
     pub result: AttachmentId,
-    /// The result's columns, in order.
-    pub columns: Vec<String>,
 }

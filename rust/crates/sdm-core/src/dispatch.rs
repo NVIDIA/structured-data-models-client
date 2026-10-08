@@ -13,6 +13,22 @@ use crate::compose::CompositionRoot;
 use crate::profiles::Profile;
 use crate::run::{Attachments, Run};
 
+/// Refuses a start from a host speaking another contract version, before
+/// anything else of the message is read (decision H25): host and core ship
+/// together, and no other version's fields mean anything here.
+pub fn check_contract(contract: u32) -> Result<(), CoreError> {
+    if contract == CONTRACT_VERSION {
+        return Ok(());
+    }
+    Err(CoreError::protocol(
+        ErrorCode::InvalidMessage,
+        format!(
+            "the host speaks contract version {contract}, and this core version {CONTRACT_VERSION}"
+        ),
+    )
+    .with_field("contract", Detail::Scalar(Scalar::UInt32(contract))))
+}
+
 /// The run of `start`'s operation, with the attachments the start names.
 /// A contract version other than this build's, host facts the contract
 /// does not allow, or attachments other than the ones the operation names,
@@ -23,16 +39,7 @@ pub fn start(
     start: StartRun,
     attachments: Attachments,
 ) -> Result<Run, CoreError> {
-    if start.contract != CONTRACT_VERSION {
-        return Err(CoreError::protocol(
-            ErrorCode::InvalidMessage,
-            format!(
-                "the host speaks contract version {}, and this core version {CONTRACT_VERSION}",
-                start.contract
-            ),
-        )
-        .with_field("contract", Detail::Scalar(Scalar::UInt32(start.contract))));
-    }
+    check_contract(start.contract)?;
     // The clock is an instant in UTC, spelled as the contract spells it (E5).
     if !matches!(&start.facts.now, Scalar::Timestamp { zone: Some(zone), .. } if zone == "UTC") {
         return Err(CoreError::new(
