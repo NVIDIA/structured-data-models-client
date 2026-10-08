@@ -55,4 +55,6 @@ The independent review of T1.2 to T1.5 (batch 1) found seven should-fix items an
 - `sdm-py`'s clippy bans the pyo3 calls of the two ignored advisories, and the `deny.toml` comment no longer claims the GIL mitigates RUSTSEC-2026-0177 (E1); 270d519.
 - `contract_lock.py` fails on an unreadable earlier lock and checks the lock at the merge base with `rust-core`; 418c426.
 - The zone vectors tell a gap from a fold; `t06-vectors.json` records the probe's source checksums; 644b332.
-- E2 says who numbers attachments in each direction, their scope and release, and how request state crosses runs; E6 records the `jiff` year-9999 rule; doc comments in the schema hash are an open decision; notes on T1.6a, T1.16 and T1.25.
+- E2 says who numbers attachments in each direction, their scope and release, and how request state crosses runs; E6 records the `jiff` year-9999 rule; doc comments in the schema hash are an open decision; notes on T1.6a, T1.16 and T1.25; 7e916b6.
+
+CI run 37793542647 on 7e916b6 green, every job; `rust-lint` ran the lock check against the merge base with `rust-core`.
