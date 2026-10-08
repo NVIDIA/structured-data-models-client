@@ -1,0 +1,2567 @@
+{
+ "format": "sdm-pql-journey/1",
+ "source": "rust-core-reference at b413e9ad6c613e82e5f1fc2ad0bc152870f59e74: PQL validation of each Phase 1b inventory query against its Schema.from_source schema, recorded by record_journey.py beside this file",
+ "cases": [
+  {
+   "id": "base.regression",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "base.binary",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "base.multiclass",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "feature.bool",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       {
+        "name": "f",
+        "dtype": "bool",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.declared-int32",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "oid",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "buyer",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "oid",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "uid",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "uid",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "buyer"
+      },
+      {
+       "table": "users",
+       "column": "uid"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.uint8",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.uint64-small",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.uint64-above-int64-max",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.hugeint",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.varchar",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "string",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "string",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.varchar-large-buffers",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "string",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "string",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.decimal-18-0",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "key.decimal-38-10",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "float",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "float",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "null.some-foreign-keys",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "decimal.feature-38-0-wide",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       {
+        "name": "f",
+        "dtype": "int",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "decimal.target-38-18",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "decimal.class-target-38-18",
+   "query": "PREDICT users.tier FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       {
+        "name": "tier",
+        "dtype": "float",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "nested.list-int",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "null.feature-all-null",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       {
+        "name": "f",
+        "dtype": "int",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "null.target-all-null",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "null.some-times",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "empty.indices",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "empty.entity-without-facts",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.date",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.timestamp-ns",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.timestamp-s",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.timestamptz",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.text-iso-date",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "string",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.text-us-date",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "string",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.text-one-bad-value",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "string",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.text-declared",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "happened",
+        "dtype": "string",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "happened",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.feature-date-and-timestamp-with-null",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       {
+        "name": "f_date",
+        "dtype": "time",
+        "stype": "timestamp"
+       },
+       {
+        "name": "f_ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": "f_date",
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "time.feature-time-of-day",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       },
+       {
+        "name": "f",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "refuse.unknown-column",
+   "query": "PREDICT SUM(orders.cost, 0, 30, days) FOR EACH users.user_id",
+   "profile": "RELATIONAL",
+   "schema": {
+    "tables": [
+     {
+      "name": "orders",
+      "columns": [
+       {
+        "name": "order_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "price",
+        "dtype": "float",
+        "stype": "numerical"
+       },
+       {
+        "name": "ts",
+        "dtype": "time",
+        "stype": "timestamp"
+       }
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts",
+      "end_time_column": null
+     },
+     {
+      "name": "users",
+      "columns": [
+       {
+        "name": "user_id",
+        "dtype": "int",
+        "stype": "ID"
+       },
+       {
+        "name": "age",
+        "dtype": "int",
+        "stype": "numerical"
+       },
+       {
+        "name": "country",
+        "dtype": "string",
+        "stype": "categorical"
+       }
+      ],
+      "primary_key": "user_id",
+      "time_column": null,
+      "end_time_column": null
+     }
+    ],
+    "links": [
+     [
+      {
+       "table": "orders",
+       "column": "user_id"
+      },
+      {
+       "table": "users",
+       "column": "user_id"
+      }
+     ]
+    ]
+   },
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_SCHEMA_UNKNOWN_COLUMN",
+     "span": {
+      "start_row": 1,
+      "start_col": 12,
+      "end_row": 1,
+      "end_col": 12
+     }
+    }
+   ]
+  }
+ ]
+}
