@@ -15,6 +15,7 @@
 #   DT-n   dates and time zones (T0.6, chrono-check.md and date-rules.md)
 #   ORD-n  orderings found in Phase 0 that are not random streams
 #   P1B-n  Phase 1b inventory cases flagged `register` (T0.7)
+#   HOST-n the host layer's own limits (Phase 1, T1.7)
 #
 # Status: proposed entries wait for the independent reviewer, or for the owner
 # when they refuse an input Python accepted or the owner has to choose; the
@@ -744,3 +745,34 @@ entries:
     and internal errors; per-case entries name the new answer. A new success
     can be approved by the reviewer; turning an accepted input into a refusal
     needs the owner.
+
+# --- The host layer -------------------------------------------------------------
+
+- id: HOST-1
+  title: A request whose control message passes the 64 KB cap
+  kind: change
+  old_behavior: >-
+    The reference validates a query of any length against a schema of any
+    width: there is no limit on the query's text or on the number of tables
+    and columns materialize resolves it against.
+  new_behavior: >-
+    sdm-host refuses a control message past 64 KB with INVALID_MESSAGE before
+    reading it (design, "Core, host and binding"; decision E2). validate_query
+    carries the query text and its schema in the start message, so a query
+    whose text and schema pass about 64 KB of JSON cannot be validated on the
+    core route: roughly a thousand columns, or a query of tens of thousands
+    of characters.
+  affected_inputs: >-
+    S0 on the core route (materialize's validation) with very wide schemas or
+    very long query text; later operations whose requests carry schemas.
+  cases: [T1.7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Phase 1 decisions row E14. This refuses input the reference accepts, so
+    it waits for the owner (P1B-1 process); no inventory case or corpus query
+    reaches it. Recommendation: do not approve the refusal; before S0 switches
+    (Phase 3), move a start message's schema (and query text past a bound)
+    into an attachment, as data already travels, with a contract version
+    bump, and keep the cap for control JSON proper.
