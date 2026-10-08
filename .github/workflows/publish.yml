@@ -222,6 +222,25 @@ jobs:
           name: distributions
           path: dist/
 
+      - uses: actions/checkout@v7
+
+      # The release's notes are the changelog's entry for this version, not a
+      # list of the commits that happen to be in it. RELEASING.md already
+      # requires the entry, so a tag without one is a release mistake, and
+      # failing here is cheaper than a release that reads like a diff.
+      - name: Take the release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 == "## " v || index($0, "## " v " - ") == 1 { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || {
+            echo "CHANGELOG.md has no '## $version' entry" >&2
+            exit 1
+          }
+
       # Pushing a tag creates a tag, not a Release, and `gh release upload`
       # needs the Release to exist. Creating it here rather than asking the
       # releaser to do it by hand keeps RELEASING.md's promise that the tag is
@@ -237,7 +256,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" \
               --verify-tag \
-              --generate-notes
+              --notes-file notes.md
           fi
           gh release upload "$GITHUB_REF_NAME" dist/sbom.cyclonedx.json \
             --repo "$GITHUB_REPOSITORY" --clobber
