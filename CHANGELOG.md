@@ -5,7 +5,7 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
-## 1.0.0 - 2026-10-06
+## 1.0.0 - 2026-10-08
 
 The first release. All five distributions declare `1.0.0` and are published
 together.
@@ -441,7 +441,6 @@ together.
   The engine raises the new `MetricViewAsTableError`, a `ValueError`, pointing to `Graph.from_databricks_metric_view`.
 - **Every `KumoRelational` request carried the engine's default `inference_config`, which SDM-backed deployments refuse.**
   The request now sends `inference.inference_config` with the options the caller set alone, and omits it when there are none.
-  A deployment that reads the field applies the same defaults to a request that carries none.
 
 ### Behaviour worth knowing before you rely on it
 
