@@ -217,8 +217,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Before the artifact, not after: checkout empties a workspace it does
-      # not own, which would take `dist/` with it.
       - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
@@ -226,10 +224,6 @@ jobs:
           name: distributions
           path: dist/
 
-      # The release's notes are the changelog's entry for this version, not a
-      # list of the commits that happen to be in it. RELEASING.md already
-      # requires the entry, so a tag without one is a release mistake, and
-      # failing here is cheaper than a release that reads like a diff.
       - name: Take the release notes from the changelog
         run: |
           version="${GITHUB_REF_NAME#v}"
