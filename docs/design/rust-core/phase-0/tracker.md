@@ -5,8 +5,8 @@ Each row links its evidence when done.
 
 | Task | Status | Evidence | Notes |
 |---|---|---|---|
-| T0.1 CI on the migration branches | not started | | |
-| T0.2 Archive the first attempt | not started | | Snapshot, scanned before push |
+| T0.1 CI on the migration branches | done | CI run 37710872493 green on `rust-core-phase-0` | Also formatted the diagram script for ruff |
+| T0.2 Archive the first attempt | in progress | [archive.md](archive.md) | Built and scanned locally; waiting on the owner's call on the catalog name and commit message before pushing |
 | T0.3 Reference branch and environment | not started | | Minimum determinism fixes only |
 | T0.4 Support matrix | not started | | Gaps need owner decisions |
 | T0.5 Scope manifests and case inventory format | not started | | Includes the Databricks job-to-path map |
