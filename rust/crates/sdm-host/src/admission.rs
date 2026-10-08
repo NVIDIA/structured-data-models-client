@@ -19,6 +19,7 @@
 //! | `large_list<T>`, `fixed_size_list<T, n>`, `list_view<T>`, `large_list_view<T>` | `list<T>` |
 //! | `dictionary<K, large_utf8>`, `dictionary<K, utf8_view>` | `dictionary<K, utf8>` |
 //! | `dictionary<K, V>`, any other `V` | `V`, admitted, the dictionary decoded |
+//! | `run_end_encoded<R, V>` | `V`, admitted, the runs decoded |
 //!
 //! Before anything is admitted, each batch must match the schema its
 //! attachment declares (check (a) of decision H16): the same number of
@@ -49,15 +50,15 @@ use std::sync::Arc;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
     Date64Type, Decimal32Type, Decimal64Type, DurationMillisecondType, DurationSecondType,
-    Float16Type, Time32MillisecondType, Time32SecondType, TimestampMillisecondType,
-    TimestampSecondType,
+    Float16Type, Int16Type, Int32Type, Int64Type, RunEndIndexType, Time32MillisecondType,
+    Time32SecondType, TimestampMillisecondType, TimestampSecondType,
 };
 use arrow_array::{
     Array, ArrayRef, BinaryArray, Decimal128Array, DurationMicrosecondArray, Float32Array,
-    ListArray, MapArray, RecordBatch, StringArray, StructArray, Time64MicrosecondArray,
+    ListArray, MapArray, RecordBatch, RunArray, StringArray, StructArray, Time64MicrosecondArray,
     TimestampMicrosecondArray, UInt64Array,
 };
-use arrow_buffer::{NullBuffer, OffsetBuffer, ScalarBuffer};
+use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
 use sdm_core::ArrowData;
@@ -137,6 +138,8 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
         }
         // Any other dictionary is decoded to its values.
         D::Dictionary(_, values) => convert_type(column, values)?,
+        // A run-end array is decoded to its values (E17).
+        D::RunEndEncoded(_, values) => convert_type(column, values.data_type())?,
         other => other.clone(),
     };
     if !is_nested(&admitted) {
@@ -220,7 +223,8 @@ fn check_declared(declared: &Schema, batch: &RecordBatch) -> Result<(), CoreErro
         if field.metadata() != wanted.metadata() {
             return Err(mismatch(Some(name), "a column's metadata differs"));
         }
-        if !wanted.is_nullable() && batch.column(index).null_count() > 0 {
+        // Logical nulls: a run-end array's nulls are its values'.
+        if !wanted.is_nullable() && batch.column(index).logical_null_count() > 0 {
             return Err(mismatch(
                 Some(name),
                 "a column declared without nulls holds nulls",
@@ -265,6 +269,41 @@ fn rebase(offsets: &[i64], capacity: usize) -> Option<(usize, OffsetBuffer<i32>)
         .collect::<Option<Vec<i32>>>()?;
     // The offsets of a valid array rise; rebasing keeps their order.
     Some((start, OffsetBuffer::new(ScalarBuffer::from(rebased))))
+}
+
+/// The physical index of each row of a run-end array, in row order: a
+/// run's index once for each of its rows the array's slice covers, or
+/// `None` if the run ends do not cover those rows.
+fn run_indices<R: RunEndIndexType>(run: &RunArray<R>) -> Option<Vec<u64>> {
+    let ends = run.run_ends();
+    let stop = ends.offset().checked_add(ends.len())?;
+    let mut row = ends.offset();
+    let mut indices = Vec::with_capacity(ends.len());
+    for (physical, end) in ends.values().iter().enumerate() {
+        if row >= stop {
+            break;
+        }
+        let end = end.to_usize()?.min(stop);
+        if end > row {
+            let index = u64::try_from(physical).ok()?;
+            indices.extend(std::iter::repeat_n(index, end.checked_sub(row)?));
+            row = end;
+        }
+    }
+    (row == stop).then_some(indices)
+}
+
+/// A run-end array decoded: each row its run's value, a null run's rows
+/// null.
+fn decode_runs<R: RunEndIndexType>(
+    run: &RunArray<R>,
+) -> Result<ArrayRef, arrow_schema::ArrowError> {
+    let indices = run_indices(run).ok_or_else(|| {
+        arrow_schema::ArrowError::InvalidArgumentError(
+            "a run-end array's run ends do not cover its rows".into(),
+        )
+    })?;
+    arrow_select::take::take(run.values().as_ref(), &UInt64Array::from(indices), None)
 }
 
 fn widen_offsets(offsets: &[i32]) -> Vec<i64> {
@@ -594,6 +633,18 @@ impl Admit {
                 let decoded =
                     arrow_select::take::take(dictionary.values().as_ref(), dictionary.keys(), None)
                         .map_err(rebuilt)?;
+                self.array(column, &decoded, admitted)?
+            }
+            (DataType::RunEndEncoded(run_ends, _), _) => {
+                let decoded = match run_ends.data_type() {
+                    DataType::Int16 => decode_runs(array.as_run::<Int16Type>()),
+                    DataType::Int32 => decode_runs(array.as_run::<Int32Type>()),
+                    DataType::Int64 => decode_runs(array.as_run::<Int64Type>()),
+                    other => Err(arrow_schema::ArrowError::CastError(format!(
+                        "run ends of type {other}"
+                    ))),
+                }
+                .map_err(rebuilt)?;
                 self.array(column, &decoded, admitted)?
             }
             _ => {

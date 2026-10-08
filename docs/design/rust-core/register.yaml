@@ -843,16 +843,18 @@ entries:
     Admission widens losslessly into the closed set (Phase 1 decisions H16
     and H27): float16, decimal32 and decimal64, duration and time32 at s or
     ms, date64 (as timestamp[us]), view types, fixed_size_binary and any
-    dictionary are admitted, keeping the received type; a batch whose values
-    pass int32 offsets is split between rows. Proposed: what still cannot
-    convert is refused by name. Generated at T1.7c from the admission
-    tests' family table (sdm-host tests/admission.rs, which fails if this
-    list and the code disagree), the type families still refused are
-    `interval`, `run_end_encoded` and `union`. The reference refuses
-    interval and union where it infers a column's type (inventory cases
+    dictionary are admitted, keeping the received type, and from T1.7d
+    (decision E17) a run_end_encoded column is decoded to its value type;
+    a batch whose values pass int32 offsets is split between rows.
+    Proposed: what still cannot convert is refused by name. Generated at
+    T1.7d from the admission tests' family table (sdm-host
+    tests/admission.rs, which fails if this list and the code disagree),
+    the type families still refused are `interval` and `union`. The
+    reference refuses both where it infers a column's type (inventory cases
     time.feature-interval and nested.union), but a column given an
     explicit dtype skips that inference (table.py), so the reference may
-    read all three there, and each needs the owner. The values still
+    read both there; they stay proposed until T1.33 shows whether it does,
+    and each needs the owner. The values still
     refused are a timestamp, duration or date64 at s or ms whose value
     passes int64 microseconds, and a single string, binary or list value
     past int32 offsets; any type T1.33 finds no lossless row for joins

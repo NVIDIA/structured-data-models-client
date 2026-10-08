@@ -4,26 +4,38 @@
 
 //! The admission table: each rule keeps every value, null and field, an
 //! overflowing value is refused by name, and every Arrow type family outside
-//! the set is refused by name, a bounded representative of each.
+//! the set is refused by name, a bounded representative of each. A run-end
+//! array of every family the set takes is decoded through `HostRun` (E17).
 
-use std::collections::{BTreeSet, HashMap};
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::{Arc, mpsc};
 
-use arrow_array::builder::{Int64Builder, LargeStringBuilder, MapBuilder};
+use arrow_array::builder::{Int64Builder, LargeStringBuilder, MapBuilder, StringBuilder};
 use arrow_array::cast::AsArray;
-use arrow_array::types::{Int8Type, Int32Type};
-use arrow_array::{
-    Array, ArrayRef, DictionaryArray, FixedSizeListArray, Int32Array, Int64Array, LargeBinaryArray,
-    LargeListArray, LargeStringArray, NullArray, RecordBatch, StructArray,
-    TimestampMillisecondArray, TimestampSecondArray, new_empty_array,
+use arrow_array::types::{
+    Int8Type, Int16Type, Int32Type, Int64Type, RunEndIndexType, UInt8Type, UInt16Type, UInt32Type,
+    UInt64Type,
 };
-use arrow_buffer::{OffsetBuffer, ScalarBuffer};
+use arrow_array::{
+    Array, ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Date32Array, Date64Array,
+    Decimal32Array, Decimal64Array, Decimal128Array, Decimal256Array, DictionaryArray,
+    DurationNanosecondArray, FixedSizeBinaryArray, FixedSizeListArray, Float16Array, Float32Array,
+    Float64Array, Int32Array, Int64Array, LargeBinaryArray, LargeListArray, LargeListViewArray,
+    LargeStringArray, ListArray, ListViewArray, NullArray, PrimitiveArray, RecordBatch, RunArray,
+    StringArray, StringViewArray, StructArray, Time32SecondArray, Time64MicrosecondArray,
+    TimestampMillisecondArray, TimestampSecondArray, UInt64Array, new_empty_array,
+};
+use arrow_buffer::{OffsetBuffer, ScalarBuffer, i256};
 use arrow_schema::{
     DataType, Field, Fields, IntervalUnit, Schema, TimeUnit, UnionFields, UnionMode,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
-use sdm_core::ArrowData;
-use sdm_host::{admit, admitted_type};
+use half::f16;
+use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema};
+use sdm_contract::ops::{OperationResult, QueryValidation};
+use sdm_contract::run::{FetchOutcome, FetchReply};
+use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Step};
+use sdm_core::{ArrowData, Attachment, FetchResult, Reply, Run};
+use sdm_host::{HostRun, ZoneResolver, admit, admit_with_capacity, admitted_type, encode, read};
 
 fn data(columns: Vec<(&str, ArrayRef)>) -> ArrowData {
     let batch = RecordBatch::try_from_iter(columns).unwrap();
@@ -351,7 +363,7 @@ fn family(data_type: &DataType) -> (&'static str, Family) {
         DataType::Decimal128(..) => ("decimal128", Taken),
         DataType::Decimal256(..) => ("decimal256", Taken),
         DataType::Map(..) => ("map", Taken),
-        DataType::RunEndEncoded(..) => ("run_end_encoded", Outside),
+        DataType::RunEndEncoded(..) => ("run_end_encoded", Taken),
     }
 }
 
@@ -499,9 +511,17 @@ fn a_refused_child_is_named_by_its_path() {
     assert_eq!(err.code, ErrorCode::UnsupportedType);
     assert_eq!(text(&err, "column"), "col.item.f");
     assert_eq!(text(&err, "arrow_type"), interval.to_string());
-    // A dictionary decoded to values the set refuses names those values.
+    // A dictionary or run-end array decoded to values the set refuses
+    // names those values.
     let dictionary = DataType::Dictionary(Box::new(DataType::Int8), Box::new(interval.clone()));
     let err = admitted_type("col", &dictionary).unwrap_err();
+    assert_eq!(text(&err, "arrow_type"), interval.to_string());
+    let runs = DataType::RunEndEncoded(
+        Arc::new(Field::new("run_ends", DataType::Int64, false)),
+        Arc::new(Field::new("values", interval.clone(), true)),
+    );
+    let err = admitted_type("col", &runs).unwrap_err();
+    assert_eq!(err.code, ErrorCode::UnsupportedType);
     assert_eq!(text(&err, "arrow_type"), interval.to_string());
 }
 
@@ -535,4 +555,335 @@ fn the_families_still_refused_are_the_ones_register_host_2_lists() {
         .map(|(name, _)| name.to_owned())
         .collect();
     assert_eq!(refused, host_2_families());
+}
+
+/// Three values of each family the set takes, the middle one null: one
+/// sample array per family, and a dictionary of values it decodes.
+fn samples() -> Vec<ArrayRef> {
+    let ints = || vec![Some(1), None, Some(-2)];
+    let lists = || {
+        vec![
+            Some(vec![Some(1), None]),
+            None,
+            Some(vec![Some(3), Some(4)]),
+        ]
+    };
+    let bytes = || vec![Some(&b"\x00\xff"[..]), None, Some(&b""[..])];
+    let words = || vec![Some("a"), None, Some("a string longer than twelve bytes")];
+    let mut map = MapBuilder::new(None, StringBuilder::new(), Int64Builder::new());
+    map.keys().append_value("k");
+    map.values().append_null();
+    map.append(true).unwrap();
+    map.append(false).unwrap();
+    map.append(true).unwrap();
+    vec![
+        Arc::new(NullArray::new(3)),
+        Arc::new(BooleanArray::from(vec![Some(true), None, Some(false)])),
+        Arc::new(PrimitiveArray::<Int8Type>::from(vec![
+            Some(1),
+            None,
+            Some(-2),
+        ])),
+        Arc::new(PrimitiveArray::<Int16Type>::from(vec![
+            Some(1),
+            None,
+            Some(-2),
+        ])),
+        Arc::new(Int32Array::from(ints())),
+        Arc::new(Int64Array::from(vec![Some(i64::MAX), None, Some(i64::MIN)])),
+        Arc::new(PrimitiveArray::<UInt8Type>::from(vec![
+            Some(1),
+            None,
+            Some(2),
+        ])),
+        Arc::new(PrimitiveArray::<UInt16Type>::from(vec![
+            Some(1),
+            None,
+            Some(2),
+        ])),
+        Arc::new(PrimitiveArray::<UInt32Type>::from(vec![
+            Some(1),
+            None,
+            Some(2),
+        ])),
+        Arc::new(PrimitiveArray::<UInt64Type>::from(vec![
+            Some(u64::MAX),
+            None,
+            Some(0),
+        ])),
+        Arc::new(Float16Array::from(vec![
+            Some(f16::from_f32(1.5)),
+            None,
+            Some(f16::NEG_INFINITY),
+        ])),
+        Arc::new(Float32Array::from(vec![Some(1.5), None, Some(-0.0)])),
+        Arc::new(Float64Array::from(vec![Some(1.5), None, Some(f64::NAN)])),
+        Arc::new(
+            TimestampMillisecondArray::from(vec![Some(1), None, Some(-1500)]).with_timezone("UTC"),
+        ),
+        Arc::new(Date32Array::from(ints())),
+        Arc::new(Date64Array::from(vec![Some(86_400_000), None, Some(-1)])),
+        Arc::new(Time32SecondArray::from(vec![Some(1), None, Some(86_399)])),
+        Arc::new(Time64MicrosecondArray::from(vec![Some(1), None, Some(2)])),
+        Arc::new(DurationNanosecondArray::from(vec![Some(1), None, Some(-2)])),
+        Arc::new(BinaryArray::from(bytes())),
+        Arc::new(
+            FixedSizeBinaryArray::try_from_sparse_iter_with_size(
+                vec![Some(b"abcd"), None, Some(b"\x00\x00\x00\xff")].into_iter(),
+                4,
+            )
+            .unwrap(),
+        ),
+        Arc::new(LargeBinaryArray::from(bytes())),
+        Arc::new(BinaryViewArray::from(bytes())),
+        Arc::new(StringArray::from(words())),
+        Arc::new(LargeStringArray::from(words())),
+        Arc::new(StringViewArray::from(words())),
+        Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(lists())),
+        Arc::new(ListViewArray::from_iter_primitive::<Int32Type, _, _>(
+            lists(),
+        )),
+        Arc::new(FixedSizeListArray::from_iter_primitive::<Int32Type, _, _>(
+            lists(),
+            2,
+        )),
+        Arc::new(LargeListArray::from_iter_primitive::<Int32Type, _, _>(
+            lists(),
+        )),
+        Arc::new(LargeListViewArray::from_iter_primitive::<Int32Type, _, _>(
+            lists(),
+        )),
+        Arc::new(
+            StructArray::try_new(
+                Fields::from(vec![Field::new("a", DataType::Int32, true)]),
+                vec![Arc::new(Int32Array::from(vec![Some(1), Some(2), None]))],
+                Some(vec![true, false, true].into()),
+            )
+            .unwrap(),
+        ),
+        Arc::new(
+            DictionaryArray::<Int32Type>::try_new(
+                Int32Array::from(vec![Some(1), None, Some(1)]),
+                Arc::new(LargeStringArray::from(vec!["p", "q"])),
+            )
+            .unwrap(),
+        ),
+        // A dictionary of other values, decoded under the runs.
+        Arc::new(
+            DictionaryArray::<Int8Type>::try_new(
+                PrimitiveArray::<Int8Type>::from(vec![Some(0), Some(1), None]),
+                Arc::new(Float16Array::from(vec![f16::from_f32(0.5), f16::ZERO])),
+            )
+            .unwrap(),
+        ),
+        Arc::new(
+            Decimal32Array::from(ints())
+                .with_precision_and_scale(9, 2)
+                .unwrap(),
+        ),
+        Arc::new(
+            Decimal64Array::from(vec![Some(1), None, Some(-2)])
+                .with_precision_and_scale(18, 2)
+                .unwrap(),
+        ),
+        Arc::new(
+            Decimal128Array::from(vec![Some(1), None, Some(-2)])
+                .with_precision_and_scale(38, 10)
+                .unwrap(),
+        ),
+        Arc::new(
+            Decimal256Array::from(vec![Some(i256::ONE), None, Some(i256::MINUS_ONE)])
+                .with_precision_and_scale(76, 0)
+                .unwrap(),
+        ),
+        Arc::new(map.finish()),
+        // Runs under runs, decoded twice.
+        Arc::new(
+            RunArray::<Int16Type>::try_new(
+                &PrimitiveArray::<Int16Type>::from(vec![1, 2, 3]),
+                &Int32Array::from(ints()),
+            )
+            .unwrap(),
+        ),
+    ]
+}
+
+/// One nullable column, as a source declares it: `RecordBatch::try_from_iter`
+/// would read a run-end array, whose nulls are its values', as having none.
+fn column_c(array: ArrayRef) -> ArrowData {
+    let batch = RecordBatch::try_from_iter_with_nullable([("c", array, true)]).unwrap();
+    ArrowData::new(batch.schema(), vec![batch])
+}
+
+/// `values` in runs of one, two (the null) and three rows, with run ends
+/// of type `R`.
+fn runs<R: RunEndIndexType>(values: &ArrayRef) -> ArrayRef
+where
+    R::Native: From<i16>,
+{
+    let ends = PrimitiveArray::<R>::from_iter_values([1i16, 3, 6].map(R::Native::from));
+    Arc::new(RunArray::<R>::try_new(&ends, values.as_ref()).unwrap())
+}
+
+/// The rows of `values` at `indices`, as plain values.
+fn plain(values: &ArrayRef, indices: &[u64]) -> ArrayRef {
+    arrow_select::take::take(values.as_ref(), &UInt64Array::from(indices.to_vec()), None).unwrap()
+}
+
+/// `data` handed to a run as fetched data through `HostRun`, as the run
+/// receives it, admitted.
+fn through_host_run(data: ArrowData) -> ArrowData {
+    let (send, receive) = mpsc::channel();
+    let run = HostRun::with(
+        Run::new(move |asker| async move {
+            let reply = asker
+                .fetch(
+                    DataRequest::Describe { tables: vec![] },
+                    None,
+                    ExpectedSchema::Discover {},
+                )
+                .await;
+            if let Reply::Fetch(FetchResult::Data(data)) = reply {
+                send.send(data).unwrap();
+            }
+            Ok(OperationResult::ValidateQuery(QueryValidation {
+                accepted: true,
+                diagnostics: vec![],
+            }))
+        }),
+        ZoneResolver::new([]),
+    );
+    let ControlMessage::Step(Step::Fetch { requests }) = read(&run.next().unwrap()).unwrap() else {
+        panic!("the run fetches");
+    };
+    let reply = ControlMessage::FetchReply(FetchReply {
+        id: requests[0].id,
+        outcome: FetchOutcome::Data {
+            data: AttachmentId(1),
+        },
+    });
+    run.reply(
+        &encode(&reply).unwrap(),
+        BTreeMap::from([(AttachmentId(1), Attachment::Arrow(data))]),
+    )
+    .unwrap();
+    assert!(matches!(
+        read(&run.next().unwrap()).unwrap(),
+        ControlMessage::Step(Step::Done { .. })
+    ));
+    receive.recv().unwrap()
+}
+
+/// Whether each row is valid, its logical nulls read.
+fn validity(array: &ArrayRef) -> Vec<bool> {
+    let nulls = array.logical_nulls();
+    (0..array.len())
+        .map(|row| nulls.as_ref().is_none_or(|n| n.is_valid(row)))
+        .collect()
+}
+
+/// A run-end column through `HostRun` matches its plain rows admitted:
+/// the same admitted type, values and validity, the received type kept.
+fn assert_decoded(ree: ArrayRef, rows: ArrayRef) {
+    let received = column_c(Arc::clone(&ree));
+    let out = through_host_run(received.clone());
+    let expected = admit(&column_c(rows)).unwrap();
+    let what = ree.data_type().to_string();
+    assert_eq!(out.received, received.schema, "{what}: the received type");
+    assert_eq!(out.schema, expected.schema, "{what}: the admitted type");
+    assert_eq!(out.batches.len(), 1, "{what}");
+    let (got, want) = (out.batches[0].column(0), expected.batches[0].column(0));
+    assert_eq!(validity(got), validity(&ree), "{what}: validity");
+    assert_eq!(got.as_ref(), want.as_ref(), "{what}: values");
+}
+
+#[test]
+fn a_run_end_column_of_every_family_taken_is_decoded_through_host_run() {
+    let taken: BTreeSet<&str> = every_family()
+        .iter()
+        .map(family)
+        .filter(|(_, taken)| *taken == Family::Taken)
+        .map(|(name, _)| name)
+        .collect();
+    let sampled: BTreeSet<&str> = samples()
+        .iter()
+        .map(|values| family(values.data_type()).0)
+        .collect();
+    assert_eq!(sampled, taken, "a sample of every family the set takes");
+    for values in samples() {
+        // Rows 0, 1 1 (null), 2 2 2; sliced, from inside the first long run
+        // to inside the last.
+        let rows = [0, 1, 1, 2, 2, 2];
+        for ree in [
+            runs::<Int16Type>(&values),
+            runs::<Int32Type>(&values),
+            runs::<Int64Type>(&values),
+        ] {
+            assert_decoded(Arc::clone(&ree), plain(&values, &rows));
+            assert_decoded(ree.slice(2, 3), plain(&values, &rows[2..5]));
+            assert_decoded(ree.slice(6, 0), plain(&values, &[]));
+        }
+    }
+}
+
+#[test]
+fn a_sliced_run_end_column_keeps_only_its_rows() {
+    let values: ArrayRef = Arc::new(LargeStringArray::from(vec![
+        Some("a"),
+        None,
+        Some("b"),
+        Some("c"),
+    ]));
+    let ends = Int64Array::from(vec![2, 3, 7, 8]);
+    let ree = RunArray::<Int64Type>::try_new(&ends, values.as_ref()).unwrap();
+    // Rows a a null b b b b c; the slice starts in a's run and ends in b's.
+    let sliced: ArrayRef = Arc::new(ree.slice(1, 4));
+    let out = through_host_run(column_c(sliced));
+    assert_eq!(out.schema.field(0).data_type(), &DataType::Utf8);
+    assert_eq!(
+        out.batches[0]
+            .column(0)
+            .as_string::<i32>()
+            .iter()
+            .collect::<Vec<_>>(),
+        [Some("a"), None, Some("b"), Some("b")]
+    );
+
+    // A batch past the offset capacity splits between rows, each part a
+    // slice of the runs.
+    let ree: ArrayRef = Arc::new(ree);
+    let out = admit_with_capacity(&column_c(ree), 3).unwrap();
+    assert!(out.batches.len() > 1);
+    let read: Vec<Option<String>> = out
+        .batches
+        .iter()
+        .flat_map(|b| {
+            let column = b.column(0).as_string::<i32>();
+            assert!(*column.offsets().last().unwrap() <= 3);
+            column
+                .iter()
+                .map(|v| v.map(str::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let expected = ["a", "a", "", "b", "b", "b", "b", "c"];
+    let expected: Vec<Option<String>> = expected
+        .iter()
+        .map(|v| (!v.is_empty()).then(|| (*v).to_owned()))
+        .collect();
+    assert_eq!(read, expected);
+}
+
+#[test]
+fn a_run_end_column_declared_without_nulls_may_not_hold_a_null_run() {
+    let values = Int32Array::from(vec![Some(1), None]);
+    let ree = RunArray::<Int32Type>::try_new(&Int32Array::from(vec![1, 2]), &values).unwrap();
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        "c",
+        ree.data_type().clone(),
+        false,
+    )]));
+    let batch = RecordBatch::try_new(Arc::clone(&schema), vec![Arc::new(ree)]).unwrap();
+    let err = admit(&ArrowData::new(schema, vec![batch])).unwrap_err();
+    assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{err:?}");
 }
