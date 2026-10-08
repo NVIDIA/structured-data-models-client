@@ -21,6 +21,9 @@ A row changes with the dependency, in the same commit.
 | `indexmap` | 2 | where output order matters | Use a library | Insertion order for anything that reaches an output; `HashMap` iteration is banned there |
 | `stacker` | 0.1 | interim parser | Use a library | Deep queries, as the archive's parser handles them |
 | `anyhow` | 1 | `sdm-testkit` only | Use a library | Test-host plumbing only; `cargo-deny` refuses it elsewhere |
+| `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
+| `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
+| `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
 
 ## Zone and calendar vectors (T1.3)
 

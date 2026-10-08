@@ -28,7 +28,8 @@ arrow-buffer = "58"
 arrow-data = "58"
 arrow-ipc = { version = "58", default-features = false }
 arrow-pyarrow = "58"
-arrow-schema = { version = "58", features = ["serde"] }
+arrow-schema = "58"
+base64 = "0.22"
 duckdb = { version = "=1.10506.0", features = ["bundled"] }
 indexmap = { version = "2", features = ["serde"] }
 # The one calendar and zone library (decision A7). Zones come from the host's
@@ -36,11 +37,13 @@ indexmap = { version = "2", features = ["serde"] }
 # so `tz-system` stays off.
 jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-zoneinfo", "tzdb-bundle-always"] }
 jiff-tzdb = "0.1.9"
+proptest = { version = "1", default-features = false, features = ["std"] }
 pyo3 = { version = "0.28", features = ["abi3-py310"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 regex = "1"
+sha2 = "0.10"
 stacker = "0.1"
 thiserror = "2"
 anyhow = "1"
