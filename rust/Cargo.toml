@@ -58,6 +58,11 @@ all = { level = "warn", priority = -1 }
 # Stated, not assumed: sdm-host contains panics with catch_unwind.
 panic = "unwind"
 
+# No debug info for dependencies: the bundled DuckDB's debug build otherwise
+# fills a CI runner's disk, and nobody steps through it.
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 panic = "unwind"
 lto = "thin"
