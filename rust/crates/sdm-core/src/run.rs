@@ -465,6 +465,20 @@ impl Run {
         Ok(())
     }
 
+    /// Ends the run because the host cannot hand it what it asked for, such
+    /// as data the admission table refuses: its body is dropped, the
+    /// replies it holds are discarded, and every later call is refused with
+    /// `RUN_FINISHED`. Attachments it made stay until the host takes them.
+    pub fn end(&mut self) -> Result<(), CoreError> {
+        if let Some(err) = self.terminal() {
+            return Err(err);
+        }
+        self.body = None;
+        self.state = State::Finished;
+        lock(&self.shared).replies.clear();
+        Ok(())
+    }
+
     /// Marks the run unusable after a panic the host contained outside it.
     pub fn poison(&mut self) {
         self.body = None;

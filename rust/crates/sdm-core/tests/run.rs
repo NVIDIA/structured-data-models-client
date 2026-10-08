@@ -338,6 +338,36 @@ fn cancelling_before_the_first_step_or_while_awaiting_a_model_call() {
 }
 
 #[test]
+fn the_host_can_end_a_run_it_cannot_answer() {
+    let dropped = Arc::new(AtomicBool::new(false));
+    let mut run = droppable(Arc::clone(&dropped));
+    let ids = fetch_ids(&run.next().unwrap());
+    run.end().unwrap();
+    assert!(dropped.load(Ordering::SeqCst));
+    assert_eq!(run.state(), RunState::Finished);
+    for err in [
+        run.next().unwrap_err(),
+        run.submit_fetch(ids[0], rows(0)).unwrap_err(),
+        run.end().unwrap_err(),
+    ] {
+        assert_eq!(
+            (err.kind, err.code.as_str()),
+            (ErrorKind::Protocol, codes::RUN_FINISHED)
+        );
+    }
+    // The attachments the run made stay until the host takes them.
+    let mut run = scripted();
+    for id in fetch_ids(&run.next().unwrap()) {
+        run.submit_fetch(id, rows(0)).unwrap();
+    }
+    let Step::CallModel(call) = run.next().unwrap() else {
+        panic!()
+    };
+    run.end().unwrap();
+    assert!(run.take_attachment(call.body).is_some());
+}
+
+#[test]
 fn an_operation_error_finishes_the_run() {
     let mut run = Run::new(|asker: Asker| async move {
         let reply = asker
