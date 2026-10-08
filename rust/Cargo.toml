@@ -40,6 +40,7 @@ pyo3 = { version = "0.28", features = ["abi3-py310"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+regex = "1"
 stacker = "0.1"
 thiserror = "2"
 anyhow = "1"

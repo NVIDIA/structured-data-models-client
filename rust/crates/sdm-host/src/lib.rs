@@ -5,3 +5,5 @@
 //! The host layer every binding shares: control codecs, the 64 KB control cap, Arrow admission, panic containment and run ownership.
 
 #![forbid(unsafe_code)]
+
+pub mod zones;
