@@ -1515,9 +1515,14 @@ class _NameScan:
         ``EXTRACT(DOW FROM d)`` or the unit of ``dateadd(DAY, 1, d)``. Either
         may be quoted, and as Databricks' parser, which refuses a unit it
         does not know only later, any lone name there is one.
+
+        A qualified name calls a function someone wrote, never the builtin,
+        so nothing in its call is a field or a unit, as for a cast.
         """
         opener = state.groups[-1].opener
         if self.tokens[at - 1].text != '(':
+            return False
+        if self.tokens[at - 3].text == '.':
             return False
         if opener == 'extract':
             return True

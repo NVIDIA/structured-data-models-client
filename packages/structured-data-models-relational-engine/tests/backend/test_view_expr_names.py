@@ -114,6 +114,12 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ('extract(`DOW` FROM ts)', {'ts'}),
         ('date_add(`DAY`, 1, d) + timestampdiff(`HOUR`, d, ts)', {'d', 'ts'}),
         ('trim(`BOTH` FROM s)', {'BOTH', 's'}),
+        ('cat.sch.date_add(d, n, ts)', {'d', 'n', 'ts'}),
+        ('`cat`.`sch`.extract(d, ts)', {'d', 'ts'}),
+        (
+            'sch.timestampdiff(u, n, ts) + timestampdiff(DAY, d, ts)',
+            {'u', 'n', 'ts', 'd'},
+        ),
         # A JSON path's base, and a column in a lambda.
         ('all:a', {'all'}),
         ('transform(arr, (z, i) -> all || i)', {'arr', 'all'}),
