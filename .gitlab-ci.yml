@@ -83,9 +83,6 @@ test:
   variables:
     POSTGRES_DB: sdm_test
     POSTGRES_PASSWORD: postgres
-    # Out of the DSN and into libpq's own variable: a connection string with a
-    # password in it is a secret-scanner finding on every scan, and this one is
-    # created by the line above, for a host that exists only inside this job.
     PGPASSWORD: postgres
     SDM_POSTGRES_TEST_DSN: postgresql://postgres@postgres:5432/sdm_test
     SDM_REQUIRE_POSTGRES: "1"
@@ -130,9 +127,6 @@ engine:
   variables:
     POSTGRES_DB: sdm_test
     POSTGRES_PASSWORD: postgres
-    # Out of the DSN and into libpq's own variable: a connection string with a
-    # password in it is a secret-scanner finding on every scan, and this one is
-    # created by the line above, for a host that exists only inside this job.
     PGPASSWORD: postgres
     SDM_POSTGRES_TEST_DSN: postgresql://postgres@postgres:5432/sdm_test
     SDM_REQUIRE_POSTGRES: "1"
