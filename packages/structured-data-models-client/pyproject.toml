@@ -51,6 +51,7 @@ dependencies = [
 Homepage = "https://github.com/NVIDIA/structured-data-models-client"
 Source = "https://github.com/NVIDIA/structured-data-models-client"
 Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
+Changelog = "https://github.com/NVIDIA/structured-data-models-client/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 # A model that does heavy client-side work brings its own runtime; a warehouse

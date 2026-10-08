@@ -69,6 +69,8 @@ INTERNAL_PATTERNS = (
     re.compile(r'gitlab-master\.nvidia\.com'),
     re.compile(r'urm\.nvidia\.com'),
     re.compile(r'\bkumo-tfm-nims\b'),
+    # A repository this one is not, and which no reader can open.
+    re.compile(r'\bkumo-relational-client\b', re.IGNORECASE),
     re.compile(r'\bnv-shared-pypi\b'),
     re.compile(r'\bnvbugs?\b', re.IGNORECASE),
     re.compile(r'\bnspect-\d', re.IGNORECASE),
@@ -174,8 +176,6 @@ RETIRED_ALLOWLIST = {
             'nemotron_predict',
         }
     ),
-    # Why the engine's ported examples were removed.
-    'CHANGELOG.md': frozenset({'RelationalClient', 'client.relational('}),
     # The design rule that the model is an argument, never a method.
     'docs/about/architecture.md': frozenset({'client.relational('}),
 }

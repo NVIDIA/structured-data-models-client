@@ -61,8 +61,8 @@ RELATIONAL_LIMITS = {
 }
 
 # A relational regression is answered from a predicted distribution, and the
-# endpoint reports its mean unless told otherwise; the engine and
-# kumo-relational-client report the median, so that is asked for by default.
+# endpoint reports its mean unless told otherwise; the engine reports the
+# median, so that is asked for by default.
 DEFAULT_PREDICTION_STATISTIC = 'median'
 PREDICTION_STATISTICS = frozenset({'mean', 'median'})
 SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
