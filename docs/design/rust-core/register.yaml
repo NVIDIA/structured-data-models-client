@@ -43,7 +43,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. The streams themselves are
+    confirmed these entries (decisions row 29). The streams themselves are
     pinned by RS-1 to RS-7.
 
 - id: PK-2
@@ -58,7 +58,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0.
+    confirmed these entries (decisions row 29).
 
 - id: PK-3
   title: DateOffset month-end rules
@@ -74,7 +74,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. chrono-check.md: chrono's
+    confirmed these entries (decisions row 29). chrono-check.md: chrono's
     checked_add_months and checked_sub_months agree on all 208 offset answers.
 
 - id: PK-4
@@ -89,7 +89,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. The agreement is tracked in
+    confirmed these entries (decisions row 29). The agreement is tracked in
     phase-0/pql-asks.md.
 
 - id: PK-5
@@ -106,7 +106,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. The packed-date rule D8 is
+    confirmed these entries (decisions row 29). The packed-date rule D8 is
     DT-5.
 
 - id: PK-6
@@ -121,7 +121,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. Error class paths as text are
+    confirmed these entries (decisions row 29). Error class paths as text are
     dropped by PD-4.
 
 - id: PK-7
@@ -138,7 +138,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. The rules are in
+    confirmed these entries (decisions row 29). The rules are in
     phase-0/date-rules.md.
 
 - id: PK-8
@@ -153,7 +153,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0.
+    confirmed these entries (decisions row 29).
 
 - id: PK-9
   title: Payload equality after parsing; SQL per database as reviewed golden files
@@ -169,7 +169,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. A change to SQL text still
+    confirmed these entries (decisions row 29). A change to SQL text still
     needs its own entry.
 
 # --- The plan's drop column ---------------------------------------------------
@@ -186,7 +186,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0.
+    confirmed these entries (decisions row 29).
 
 - id: PD-2
   title: The size limit counted as json.dumps bytes
@@ -200,7 +200,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0.
+    confirmed these entries (decisions row 29).
 
 - id: PD-3
   title: Python object protocols inside the core
@@ -214,7 +214,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. Enforced by the L0 boundary
+    confirmed these entries (decisions row 29). Enforced by the L0 boundary
     guards.
 
 - id: PD-4
@@ -229,7 +229,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0.
+    confirmed these entries (decisions row 29).
 
 - id: PD-5
   title: Silent nulls or internal errors for types the old code mishandled
@@ -245,7 +245,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. Each concrete case still needs
+    confirmed these entries (decisions row 29). Each concrete case still needs
     its own entry when its outcome changes (P1B-1); a new refusal of an input
     Python accepted needs the owner.
 
@@ -263,7 +263,7 @@ entries:
   decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirms these entries when merging Phase 0. The reference on pandas 3
+    confirmed these entries (decisions row 29). The reference on pandas 3
     (zoneinfo) already follows the rules after 2037, and so does chrono-tz up to
     2099 (DT-1).
 
