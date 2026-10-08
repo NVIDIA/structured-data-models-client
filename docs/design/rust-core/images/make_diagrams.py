@@ -307,7 +307,7 @@ def delivery():
         (1020, 1190, ["R3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
                       "Python switches", "warehouse paths;", "Java follows", "on Databricks"], 2),
         (1220, 1390, ["R4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
-        (1450, 1620, ["R5 Release", "PQL crate; old engine kept", "one release as fallback"], 1),
+        (1450, 1620, ["R5 Release", "PQL crate,", "delete old engine"], 1),
     ]
     for x1, x2, lines, bold in phases:
         c.box(x1, top, x2, bottom, lines, size=13, bold=bold)

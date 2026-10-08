@@ -248,7 +248,7 @@ A path is one public operation with one input mode on one backend (for example `
 Python switches a path on the epic branch only after its slice passes all its gates, live ones included: S0 (PQL validation), S1 and S2 paths together after S2, so no call mixes old and new code, and S3 paths (ranking, forecasting, sessions, on any backend) after S3.
 R0 maps every Databricks job in the matrix to its paths, so S2 includes what its jobs need.
 Each slice merges into the epic branch at its gate, never into `main`; the epic branch is updated from `main` at each gate, and merging it into `main` is the owner's decision at the end.
-The old paths stay behind a switch-back for one release after the epic merges and are then deleted; the reference (decision 5) stays available after that.
+The old engine is deleted when the epic merges into `main`; the reference (decision 5) stays available after that.
 Python sets the pace: a slice ships for Python when its Python gates pass, and Java follows on the same contract cases without holding it back.
 
 ## 5. The quirk register
@@ -304,12 +304,11 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | Slice done (merges into the epic branch) | The epic branch updated from `main` and the reference rerun on it; the full L2 for the slice green in Python (Java must be green for its own scope before it ships that slice); L3 on the agreed seed sets with no unexplained divergence; every difference has an approved register entry; for S2, L6 green for its scenarios |
 | Python switch for a path (on the epic branch) | Its slice done; L6 green for it; the Databricks job matrix equal to the baseline; L7 within its limits, live timing included |
 | Epic merges into `main` (the owner's decision) | Every slice done and switched; the full L8 platform matrix green; L6 and the job matrix green on the epic commit; the existing Python test suites green |
-| Release | Every applicable layer green on the release commit, including L6 and the job matrix; the same again when the old engine is deleted; live test resources cleaned up |
+| Release | Every applicable layer green on the release commit, with the old engine deleted, including L6 and the job matrix; live test resources cleaned up |
 
 **Release and versioning:**
 - The native core ships inside the structured-data-models-client wheel, so users still install one package, unless a later decision says otherwise.
 - The contract version is independent of the package version.
-- For one release after the epic merges, users can switch back to the old engine (for example with an environment variable); the old engine is deleted after that.
 - Error codes and classes are promised; error message text is not.
 
 ## 8. Phases
@@ -322,7 +321,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | R2 | The dataframe-engine comparison at entry; S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit, the minimal non-SQL test provider and the swapped data layer | Slice gate |
 | R3 | S2 and the Python switch for warehouse paths, on the epic branch | Switch gate |
 | R4 | S3, moving the rest of the code as its paths need it | Slice gate and switch gate |
-| R5 | Switch to the PQL crate release; delete the interim parser; release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
+| R5 | Switch to the PQL crate release; delete the interim parser and the old engine; release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
 
 ## 9. Process rules
 
