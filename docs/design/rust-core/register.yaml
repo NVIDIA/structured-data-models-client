@@ -686,8 +686,6 @@ entries:
     nothing, so it is for the independent reviewer, not the owner. The
     inventory cases that reach it, if any, are listed here when T1.33 runs.
 
-# --- Orderings ----------------------------------------------------------------
-
 - id: DT-9
   title: PQL date literals with a field of five or more digits (interim)
   kind: change
@@ -700,7 +698,9 @@ entries:
     digits: validate_query ends with kind unsupported, UNSUPPORTED_REQUEST
     (Phase 1 decision E10). T1.6b reads them, and a reference-accepted query
     in the adapter tests, pinned as refused now, must flip to accepted.
-  affected_inputs: S0 on the core route with packed or five-digit date fields.
+  affected_inputs: >-
+    S0 on the core route with packed or long zero-padded date fields that
+    decode to a valid date (years above 9999 stay refused, date-rules.md).
   cases: [T1.6a, T1.6b]
   status: proposed
   approved_by: null
@@ -708,8 +708,10 @@ entries:
   notes: >-
     Phase 1 decisions E10 and H27, from the batch 2 code review. This
     refuses input the reference accepts, so it needs the owner while it
-    stands; no path switches before T1.6b removes it, and the entry is
-    withdrawn when T1.6b lands.
+    stands; no path switches before T1.6b removes it, and T1.6b sets this
+    entry to rejected. T1.12's D8 and DT-9 cases stay diagnostic until then.
+
+# --- Orderings ----------------------------------------------------------------
 
 - id: ORD-1
   title: Tie order of the shared train set by entity time
@@ -740,8 +742,8 @@ entries:
   new_behavior: >-
     Proposed: each path keeps its own reference policy until the disagreement
     is settled. Phase 1 runs only the SQL path; its policy is stated in the
-    Neighbors request's TimeRule and TieBreak and pinned by L1 vectors in
-    T1.26.
+    Neighbors request's window (NULL window times not returned) and TieBreak,
+    and pinned by L1 vectors in T1.26.
   affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
   cases: [T1.26]
   status: proposed
@@ -834,19 +836,21 @@ entries:
     (to_pandas with pd.ArrowDtype) and maps float16, any timedelta unit and
     any categorical, among others.
   new_behavior: >-
-    Admission widens losslessly into the closed set (Phase 1 decision H27):
-    float16, decimal32 and decimal64, duration and time32 at s or ms, date64
-    of whole days, view types, fixed_size_binary and any dictionary are
-    admitted. Proposed: what still cannot convert without loss (for example
-    date64 values that are not whole days, and any type T1.34 finds no
-    lossless row for) is refused by name; interval and union are refused by
-    the reference too and need no entry.
+    Admission widens losslessly into the closed set (Phase 1 decisions H16
+    and H27): float16, decimal32 and decimal64, duration and time32 at s or
+    ms, date64 (as timestamp[us]), view types, fixed_size_binary and any
+    dictionary are admitted, keeping the received type. Proposed: what still
+    cannot convert is refused by name: a timestamp or duration at s or ms
+    whose value passes int64 microseconds, a single string or binary value
+    past int32 offsets, and any type T1.33 finds no lossless row for;
+    interval and union are refused by the reference too and need no entry.
   affected_inputs: Sources returning Arrow types outside the closed set with no lossless conversion.
-  cases: [T1.7c, T1.34]
+  cases: [T1.7c, T1.33]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
     From the batch 2 code review. Each remaining refusal of a type the
-    reference accepts needs the owner (P1B-1 process); T1.34 lists them by
-    type with a case where the inventory reaches one.
+    reference accepts needs the owner (P1B-1 process); T1.7c writes the
+    generated list here and T1.33 marks each type reference-accepted or not,
+    with a case where the inventory reaches one.
