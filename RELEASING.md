@@ -71,12 +71,13 @@ the engine's `[tool.cibuildwheel]`), and then refuses to
 continue unless **all five** are present and agree with the tag. That check is
 not ceremony: `structured-data-models-client[relational]` pins the engine by exact version, so a
 release missing it publishes an extra nobody can install. It then generates the
-SBOM and uploads through PyPI Trusted Publishing with PEP 740 attestations.
-Finally it creates the GitHub Release for the tag, with the changelog's entry
-for that version as its notes, and attaches the SBOM to it, so the dependency
-inventory outlives the ninety days an Actions artifact gets. A tag whose
-version has no changelog entry fails there rather than publishing a release
-that reads like a diff.
+SBOM, and takes the release's notes from the changelog's entry for that
+version, refusing a tag that has none: notes that read like a diff are fixable
+afterwards and a distribution on PyPI is not, so both happen before anything is
+uploaded. It uploads through PyPI Trusted Publishing with PEP 740 attestations,
+then creates the GitHub Release for the tag with those notes and attaches the
+SBOM to it, so the dependency inventory outlives the ninety days an Actions
+artifact gets.
 
 **There is no PyPI token.** Publishing authenticates with the workflow's OIDC
 identity, which is why the `publish` job is the only one holding `id-token:

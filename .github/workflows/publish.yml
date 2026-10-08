@@ -179,6 +179,20 @@ jobs:
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors','structured-data-models-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
+      - name: Take the release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            { line = $0; sub(/[ \t\r]+$/, "", line) }
+            line == "## " v || index(line, "## " v " - ") == 1 { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > dist/notes.md
+          test -s dist/notes.md || {
+            echo "CHANGELOG.md has no '## $version' entry" >&2
+            exit 1
+          }
+
       - uses: actions/upload-artifact@v7
         with:
           name: distributions
@@ -198,7 +212,7 @@ jobs:
 
       # The SBOM is a release asset, not something to upload to the index.
       - name: Keep only the distributions
-        run: rm -f dist/sbom.cyclonedx.json
+        run: rm -f dist/sbom.cyclonedx.json dist/notes.md
 
       - name: Publish with Trusted Publishing and attest the artifacts
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -217,25 +231,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
-
       - uses: actions/download-artifact@v8
         with:
           name: distributions
           path: dist/
-
-      - name: Take the release notes from the changelog
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
-            $0 == "## " v || index($0, "## " v " - ") == 1 { inside = 1; next }
-            inside && /^## / { exit }
-            inside { print }
-          ' CHANGELOG.md > notes.md
-          test -s notes.md || {
-            echo "CHANGELOG.md has no '## $version' entry" >&2
-            exit 1
-          }
 
       # Pushing a tag creates a tag, not a Release, and `gh release upload`
       # needs the Release to exist. Creating it here rather than asking the
@@ -252,7 +251,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" \
               --verify-tag \
-              --notes-file notes.md
+              --notes-file dist/notes.md
           fi
           gh release upload "$GITHUB_REF_NAME" dist/sbom.cyclonedx.json \
             --repo "$GITHUB_REPOSITORY" --clobber
