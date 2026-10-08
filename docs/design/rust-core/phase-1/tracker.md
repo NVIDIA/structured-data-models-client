@@ -76,7 +76,7 @@ Each sends the five-line report of the design's "Owner check-ins" section (H12).
 |---|---|---|---|
 | Re-review round 1 | Before T1.7b | answered | Owner answers of 2026-10-08, recorded as H1, H2, H4 to H6, H8 to H13, H15 (the request), F1 to F6 and register HOST-1 |
 | Re-review round 2 | Before T1.7b | answered | Owner answers of 2026-10-08, recorded by revising H1, H2, H9, H11, H12 and H13 |
-| Contract v3 | T1.7b | report written outside the repository, at `~/.local/share/sdm-dbx/phase-1-rereview/checkin-T1.7b.md` on the owner's machine; awaiting the owner | |
+| Contract v3 | T1.7b | report kept outside the repository; awaiting the owner | |
 | Journey | T1.11e | not reached | |
 | Phase 1a | T1.20 | not reached | |
 | Baseline cases | T1.29 | not reached | |
