@@ -156,3 +156,33 @@ fn an_unknown_zone_is_refused_by_name_and_not_recorded() {
     assert!(err.to_string().contains("Mars/Olympus_Mons"));
     assert!(resolver.sources().is_empty());
 }
+
+#[test]
+fn only_the_canonical_spelling_resolves() {
+    // The root holds the zone, and so does the bundled database; jiff would
+    // find both under any case, and neither is taken.
+    let only = fixture(&[("America/New_York", "America/New_York")]);
+    let resolver = ZoneResolver::new([root(&only, "2026c")]);
+    for name in [
+        "america/new_york",
+        "AMERICA/NEW_YORK",
+        "utc",
+        "Utc",
+        "etc/unknown",
+    ] {
+        assert_eq!(
+            resolver.resolve(name).unwrap_err(),
+            ZoneError::Unknown { name: name.into() },
+            "{name}"
+        );
+    }
+    // A zone only the bundled database has is refused the same way.
+    assert!(resolver.resolve("asia/tokyo").is_err());
+    assert!(resolver.sources().is_empty());
+
+    resolver.resolve("America/New_York").unwrap();
+    resolver.resolve("Asia/Tokyo").unwrap();
+    resolver.resolve("UTC").unwrap();
+    let names: Vec<String> = resolver.sources().into_keys().collect();
+    assert_eq!(names, ["America/New_York", "Asia/Tokyo", "UTC"]);
+}
