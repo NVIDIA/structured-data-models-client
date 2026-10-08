@@ -90,7 +90,7 @@ Still to agree with the PQL team: one PQL dialect, the versioned validated-query
 | Other | bool, null (all-null columns) |
 
 Every accepted type is preserved or refused with a named error, never silently turned into nulls.
-R1b validates this set against its case inventory before it is final.
+Phase 1b validates this set against its case inventory before it is final.
 
 ### What lives where
 
@@ -142,7 +142,7 @@ The drift risk is less in the grammar than in the code around it (tree building,
 - **One conformance suite** of valid and invalid queries with expected codes and spans, seeded with this client's 417 cases, run by every consumer.
 - **Until the Rust crate is published,** this client's Python and Java both use the first attempt's hand-written Rust parser as an interim parser, behind one adapter in `sdm-core` and held to the shared suite; today's ANTLR grammar stays as a CI reference.
 - **As soon as the PQL team's artifact exists,** it is exercised behind the same adapter in the active slice: build, load, validated-query format, codes and spans, and coexistence with its Python package in one process.
-  Before R5 this client switches to a pinned release of the crate and deletes the interim parser; deferring that is an explicit scope decision.
+  Before Phase 5 this client switches to a pinned release of the crate and deletes the interim parser; deferring that is an explicit scope decision.
 - **What to ask the PQL team for:** a C interface or a Rust crate that never lets a C++ exception cross into Rust, builds for every platform this client ships with private C++ symbols, so two copies can live in one process, a versioned validated-query format with a JSON Schema, and the conformance suite in their repository.
 - **This client keeps** only the model capability checks on top of the validated query.
 
@@ -165,8 +165,8 @@ Each language uses its standard binding tool, over one shared Rust layer:
   Memory has one owner and an explicit release, and the threading model is written down.
 - **Java runtime flags:** users run with `--enable-native-access` (Java warns without it from JDK 24 and will later refuse) and the flag Arrow Java needs; the Java consumer's environment must allow both.
 - **PQL's C++ is linked into both native libraries** with its symbols kept private, so a Python process that also loads the PQL team's own package gets no clashes.
-- **Platforms and versions:** R0 records today's support: the pure-Python client installs anywhere for Python 3.10 or later, with pandas 1.5 or later and any pyarrow, and the relational extra has its existing wheels.
-  R0 also records the proposed native wheel coverage.
+- **Platforms and versions:** Phase 0 records today's support: the pure-Python client installs anywhere for Python 3.10 or later, with pandas 1.5 or later and any pyarrow, and the relational extra has its existing wheels.
+  Phase 0 also records the proposed native wheel coverage.
   Dropping any platform or version (for example Windows, musllinux, or an old pyarrow such as Databricks Runtime 14.3's pyarrow 8) is an explicit owner decision, never a side effect.
 
 Considered and not chosen: one C interface (`extern "C"`) with generic glue per language, because it means maintaining our own unsafe boundary where PyO3 and `jni-rs` already provide tested ones.
@@ -197,7 +197,7 @@ The names and boundaries below are the target ownership, not a reason to rename 
 | `pql` (from the PQL team) | Rust crate wrapping the C++ PQL core | External dependency, pinned by version and digest; replaces the interim parser |
 | `sdm-data` | Catalog queries and view retrieval per source, typed data requests, SQL for each dialect, provider capabilities, the in-memory fallback | Keep the dialect backends behind a provider interface; drop the capture and render scaffolding |
 | `sdm-schema` | Canonical schema, inference over Arrow, source-neutral metric and semantic view interpretation | Keep the engine; move catalog SQL to `sdm-data`; drop the pandas column models and dtype parsing; YAML through a library |
-| `sdm-engine` | Modules for time (one calendar, the date parsing rules recorded in R0, `DateOffset`, time zones), random streams, sampling (plan, neighbor sampler, graph store) and labels (kernels and windows) | Merges today's time, random, sampling and label code with one value model; time on a library, not a pandas date-inference clone; Arrow compute where answers allow |
+| `sdm-engine` | Modules for time (one calendar, the date parsing rules recorded in Phase 0, `DateOffset`, time zones), random streams, sampling (plan, neighbor sampler, graph store) and labels (kernels and windows) | Merges today's time, random, sampling and label code with one value model; time on a library, not a pandas date-inference clone; Arrow compute where answers allow |
 | `sdm-request` | Modules for materialization, session state, decomposition, limits, payload encoding, response decoding and result layout | Keep the logic; drop the CPython sort and `json.dumps` size emulation |
 | `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the interim PQL parser behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
 | `sdm-testkit` | Contract runner, provider conformance kit, fixtures | Dev-only; nothing in the shipped crates |
@@ -213,7 +213,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 | Columnar data and kernels | `arrow` crates, including `arrow-cast`, `arrow-ord`, `arrow-arith`, `arrow-select`, `arrow-row` and `arrow-ipc` |
 | Decimals and big integers | Arrow's decimal types and `arrow-buffer`'s `i256`, under the contract's exact-encoding policy |
 | PQL parsing | The PQL team's Rust crate over its C++ core (so every build also compiles and links C++) |
-| Dates, times, zones | `chrono` with `chrono-tz` (`arrow-cast` already uses it), checked against the date corpus including zone rules after 2037; the tzdata version is recorded as a host fact; chosen before R1b, because the spike needs it |
+| Dates, times, zones | `chrono` with `chrono-tz` (`arrow-cast` already uses it), checked against the date corpus including zone rules after 2037; the tzdata version is recorded as a host fact; chosen before Phase 1b, because the spike needs it |
 | YAML (metric and semantic views) | A maintained YAML 1.2 crate such as `saphyr` or `yaml-rust2` (not the archived `serde_yaml`); behavior differences go through the register |
 | JSON | `serde`, `serde_json` |
 | Error types | `thiserror`; no `anyhow` in core crates |
@@ -221,7 +221,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 | Output order | `indexmap` or `BTreeMap` for anything that affects output order; `HashMap` iteration in outputs is banned through clippy's `disallowed_types` |
 | Encoding and hashing | `base64`, `regex` and `sha2` where needed |
 | Bindings | `pyo3` with `maturin` (abi3 wheels); `jni` (`jni-rs`); the Arrow C Data Interface in `arrow`, `pyarrow` and Arrow Java |
-| Dataframe engine | Decided at R2 entry: compare plain Arrow kernels with DataFusion on one label aggregation and one sampling join; correct answers are required, then weigh hand-written code, maintenance, speed, binary size and JNI loading; record the results (Polars is out: it uses its own Arrow implementation, not arrow-rs) |
+| Dataframe engine | Decided at Phase 2 entry: compare plain Arrow kernels with DataFusion on one label aggregation and one sampling join; correct answers are required, then weigh hand-written code, maintenance, speed, binary size and JNI loading; record the results (Polars is out: it uses its own Arrow implementation, not arrow-rs) |
 
 **Policy:** `Cargo.lock` is committed and the toolchain is pinned; the pinned toolchain is the minimum supported Rust version.
 `cargo-deny` checks advisories, licenses, bans and sources in L0, starting from the first attempt's `deny.toml` and toolchain file.
@@ -246,7 +246,7 @@ Amazon S3 is unrelated to slice S3: `sdm_connectors.read` reading CSV or Parquet
 
 A path is one public operation with one input mode on one backend (for example `predict` of a regression query on Snowflake), and one routing boundary chooses the old implementation or the core for each path.
 Python switches a path on the epic branch only after its slice passes all its gates, live ones included: S0 (PQL validation), S1 and S2 paths together after S2, so no call mixes old and new code, and S3 paths (ranking, forecasting, sessions, on any backend) after S3.
-R0 maps every Databricks job in the matrix to its paths, so S2 includes what its jobs need.
+Phase 0 maps every Databricks job in the matrix to its paths, so S2 includes what its jobs need.
 Each slice merges into the epic branch at its gate, never into `main`; the epic branch is updated from `main` at each gate, and merging it into `main` is the owner's decision at the end.
 The old engine is deleted when the epic merges into `main`; the reference (decision 5) stays available after that.
 Python sets the pace: a slice ships for Python when its Python gates pass, and Java follows on the same contract cases without holding it back.
@@ -259,7 +259,7 @@ Every entry names the old and new behavior, the affected inputs and contract cas
 
 | Keep (part of the promise) | Drop (by recorded decision) |
 |---|---|
-| The random streams of the reference (numpy `RandomState` and `default_rng` where it uses them, `std::mt19937` for neighbor draws), pinned in R0; keeping `default_rng` means porting its generator too | CPython's sort order around NaN scores (NaN ranks last) |
+| The random streams of the reference (numpy `RandomState` and `default_rng` where it uses them, `std::mt19937` for neighbor draws), pinned in Phase 0; keeping `default_rng` means porting its generator too | CPython's sort order around NaN scores (NaN ranks last) |
 | Label arithmetic as today: float32 Kahan sums in row order | The size limit counted as `json.dumps` bytes (count the bytes sent) |
 | `DateOffset` month-end rules | Python object protocols inside the core |
 | PQL codes, spans and grammar quirks, as agreed with the PQL team | Errors as Python class paths |
@@ -315,13 +315,13 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 
 | Phase | Work | Exit |
 |---|---|---|
-| R0 | Create the epic branch; create the reference branch and environment (decision 5) in its own worktree, with its guard and an immutable copy of the original baseline; compare each determinism fix with unpatched Python and record changed outcomes in the register; record today's platform and version support and the proposed wheel coverage; record the accepted text-date formats and inference rules; choose the time library; agree the PQL crate's interface and platform builds with the PQL team; verify branch protection, CI and the owner's approval route; push the first attempt's best candidate as a named branch and run CI once, as a fallback; archive the rest | Reference branch and its guard work; decisions recorded; CI and approval route verified |
-| R1a | `sdm-contract`, `sdm-testkit`, L0 guards, L2 runners for Python and the reference, CI tiers; build and clean-install a real abi3 wheel in CI | S0 green in Python; the runners fail on seeded faults; the wheel installs and loads in a clean container |
-| R1b | Spike, fixed in scope: DuckDB `from_source` → `materialize` → `predict` → result through the new contract and the data provider interface, in Python and through the pure-Rust test host (which shows the contract needs nothing from Python), against a scripted model endpoint; a fixed case inventory, chosen before R1b, covers the hard seams: keys, decimal precision, nested values, empty and all-null data, and time inference; the text-date rules recorded in R0 checked against the reference | Matches the reference on that inventory (inferred types, keys, time columns, data requests and SQL, payloads, results, warnings and refusals); the owner decides go or no-go (go: R1a and R1b merge into the epic branch and Java's S0 work starts; no-go: repair the first attempt in place, or stop) |
-| R2 | The dataframe-engine comparison at entry; S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit, the minimal non-SQL test provider and the swapped data layer | Slice gate |
-| R3 | S2 and the Python switch for warehouse paths, on the epic branch | Switch gate |
-| R4 | S3, moving the rest of the code as its paths need it | Slice gate and switch gate |
-| R5 | Switch to the PQL crate release; delete the interim parser and the old engine; release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
+| Phase 0 | Create the epic branch; create the reference branch and environment (decision 5) in its own worktree, with its guard and an immutable copy of the original baseline; compare each determinism fix with unpatched Python and record changed outcomes in the register; record today's platform and version support and the proposed wheel coverage; record the accepted text-date formats and inference rules; choose the time library; agree the PQL crate's interface and platform builds with the PQL team; verify branch protection, CI and the owner's approval route; push the first attempt's best candidate as a named branch and run CI once, as a fallback; archive the rest | Reference branch and its guard work; decisions recorded; CI and approval route verified |
+| Phase 1a | `sdm-contract`, `sdm-testkit`, L0 guards, L2 runners for Python and the reference, CI tiers; build and clean-install a real abi3 wheel in CI | S0 green in Python; the runners fail on seeded faults; the wheel installs and loads in a clean container |
+| Phase 1b | Spike, fixed in scope: DuckDB `from_source` → `materialize` → `predict` → result through the new contract and the data provider interface, in Python and through the pure-Rust test host (which shows the contract needs nothing from Python), against a scripted model endpoint; a fixed case inventory, chosen before Phase 1b, covers the hard seams: keys, decimal precision, nested values, empty and all-null data, and time inference; the text-date rules recorded in Phase 0 checked against the reference | Matches the reference on that inventory (inferred types, keys, time columns, data requests and SQL, payloads, results, warnings and refusals); the owner decides go or no-go (go: Phase 1a and Phase 1b merge into the epic branch and Java's S0 work starts; no-go: repair the first attempt in place, or stop) |
+| Phase 2 | The dataframe-engine comparison at entry; S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit, the minimal non-SQL test provider and the swapped data layer | Slice gate |
+| Phase 3 | S2 and the Python switch for warehouse paths, on the epic branch | Switch gate |
+| Phase 4 | S3, moving the rest of the code as its paths need it | Slice gate and switch gate |
+| Phase 5 | Switch to the PQL crate release; delete the interim parser and the old engine; release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
 
 ## 9. Process rules
 
@@ -333,7 +333,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | At most two review rounds per change; one independent reviewer checks code and behavior, not prose; a third round goes to the owner | Recorded on the pull request |
 | A phase's acceptance checks are locked before implementation; each change states what and why; a third change in one phase goes to the owner | Locked files change only with the owner's approval |
 | Approval by meaning: one decision approves all the files it explains | Register entries and pull request approvals; no per-file hashes |
-| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's approval on the record; an agent never approves its own exception under the owner's account (R0 verifies the approval route, or the owner checks it by hand) |
+| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's approval on the record; an agent never approves its own exception under the owner's account (Phase 0 verifies the approval route, or the owner checks it by hand) |
 | One status page: candidate commit, gates passed, open failures, decisions needed | Generated from CI and git, not written by the executor |
 | Anything that changes behavior or scope goes to the owner straight away | Register entries and the status page |
 | New acceptance infrastructure beyond the agreed test runner needs the owner's approval | Listed on the status page |
@@ -353,8 +353,8 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | The Java consumer's environment can't load a native library | Check it with the consumer before Java packaging; if it can't, the owner decides Java's scope |
 | The PQL Rust crate isn't ready when needed | The interim parser, held to the shared conformance suite |
 | The C++ PQL core complicates every build and can crash across the boundary | Ask the PQL team for a C interface that never lets exceptions escape, static libraries per platform built for manylinux with private symbols, matching crate and PyPI releases, no aborts or console output, a recursion limit, and the conformance suite in their CI; exercise their artifact as soon as it exists; load and crash tests in L8 |
-| A native library builds but doesn't load on some platform | R1a installs a real wheel; L8 installs the real artifacts in clean containers whenever native code changes, and for every platform before the epic merges |
-| Native wheels silently drop a platform or version Python supports today | R0 records today's support; any drop is an explicit owner decision |
+| A native library builds but doesn't load on some platform | Phase 1a installs a real wheel; L8 installs the real artifacts in clean containers whenever native code changes, and for every platform before the epic merges |
+| Native wheels silently drop a platform or version Python supports today | Phase 0 records today's support; any drop is an explicit owner decision |
 | The Java consumer's environment disallows the needed runtime flags | Confirm `--enable-native-access` and Arrow Java's flag with the consumer before Java packaging |
 | A team swapping the data layer for Pyramid finds the interface insufficient | The interface is documented, a minimal non-SQL provider and a swapped data layer prove it in S1, and the conformance kit defines what a replacement must do |
 | Host conversion tables drift between Python and Java | L5 checks both languages convert the same table to the same Arrow types |

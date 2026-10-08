@@ -296,24 +296,24 @@ def delivery():
            "(Java: DuckDB, SQLite, Postgres, Databricks)", BLUE_FILL, BLUE)
 
     phases = [
-        (60, 230, ["R0 Prepare", "reference environment", "in its own worktree;", "bank the first attempt's",
+        (60, 230, ["Phase 0 Prepare", "reference environment", "in its own worktree;", "bank the first attempt's",
                    "best candidate;", "the epic branch (rust-core)"], 1),
-        (260, 430, ["R1a Harness", "contract, test runners,", "CI guards, installed wheel;",
+        (260, 430, ["Phase 1a Harness", "contract, test runners,", "CI guards, installed wheel;",
                     "S0 PQL validation", "in Python"], 1),
-        (460, 630, ["R1b Spike", "fixed case inventory", "on DuckDB, in Python", "and a pure-Rust",
+        (460, 630, ["Phase 1b Spike", "fixed case inventory", "on DuckDB, in Python", "and a pure-Rust",
                     "test host"], 1),
-        (820, 990, ["R2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;",
+        (820, 990, ["Phase 2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;",
                     "sample data provider;", "swappable data layer", "proof"], 2),
-        (1020, 1190, ["R3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
+        (1020, 1190, ["Phase 3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
                       "Python switches", "warehouse paths;", "Java follows", "on Databricks"], 2),
-        (1220, 1390, ["R4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
-        (1450, 1620, ["R5 Release", "PQL crate,", "delete old engine"], 1),
+        (1220, 1390, ["Phase 4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
+        (1450, 1620, ["Phase 5 Release", "PQL crate,", "delete old engine"], 1),
     ]
     for x1, x2, lines, bold in phases:
         c.box(x1, top, x2, bottom, lines, size=13, bold=bold)
 
     c.box(655, 188, 795, 278, ["owner decides", "go / no-go"], shape="diamond", size=12, bold=0)
-    c.text_lines(725, 302, ["go: merge R1a", "and R1b into epic"], size=12, bold=0)
+    c.text_lines(725, 302, ["go: merge Phase 1a", "and Phase 1b into epic"], size=12, bold=0)
 
     # Sequence arrows
     for x1, x2 in ((230, 260), (430, 460), (630, 655), (795, 820), (990, 1020), (1190, 1220), (1390, 1450)):
