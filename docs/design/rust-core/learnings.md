@@ -1,6 +1,6 @@
 # Rust core migration: what we learned
 
-In early October 2026, two AI agent orchestrators worked to move this client's logic into a shared Rust core, over about 132 elapsed hours in total.
+Two AI agent orchestrators worked to move this client's logic into a shared Rust core, over about 132 elapsed hours in total.
 None of the Rust core work merged to `main`.
 This page sums up two independent postmortems of that attempt, one by each orchestrator, and where they agreed.
 The new plan is in [migration-plan.md](migration-plan.md).
@@ -90,7 +90,7 @@ Most audits failed on wording, not code.
 Agreed acceptance checks were locked before implementation, and checks that could never pass had to be changed and locked again ("relocks"): eight times across the first orchestrator's phases, and nine times in a single later phase.
 Evidence tied to exact commits forced repeated re-validation, and approvals were per file hash, so one rename meant hundreds of re-approvals.
 The second orchestrator added rules on itself and asked the owner one question in 62 hours.
-**Lesson:** cap rounds and relocks, approve by meaning (one decision covers many files), and size phases in days.
+**Lesson:** cap rounds and relocks, approve by meaning (one decision covers many files), and bound phases by executable outcomes.
 Stop rules are acted on by the owner, not by the agent doing the work.
 
 ### 10. Work fragmented instead of integrating

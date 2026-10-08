@@ -138,12 +138,11 @@ def architecture():
     c.box(450, 604, 600, 850, ["Core operations", "typed operations,", "run loop"], size=13)
     c.box(60, 604, 420, 704, ["PQL", "from the PQL team's Rust crate (C++ core):",
                               "parser, validator, error codes"])
-    c.box(60, 750, 420, 850, ["Labels"])
     c.box(740, 604, 940, 704, ["Request builder", "payload, response,", "result"], size=13)
     c.box(970, 604, 1540, 704, ["Data access", "typed data requests; built-in SQL dialects compile them to SQL;",
                                 "capability flags; in-memory fallback"])
     c.box(970, 750, 1220, 850, ["Schema inference", "keys, time columns, links,", "over typed Arrow"], size=13)
-    c.box(1260, 750, 1540, 850, ["Sampling", "plan, neighbor sampler,", "random streams"], size=13)
+    c.box(1260, 750, 1540, 850, ["Engine", "sampling, labels, time,", "random streams"], size=13)
 
     # Outside <-> language
     c.arrow([(840, 278), (840, 190)], GREY, both=True, label="HTTP(S)", lx=848, ly=224)
@@ -164,7 +163,6 @@ def architecture():
 
     # Inside the core
     c.arrow([(450, 654), (420, 654)], GREY)
-    c.arrow([(450, 800), (420, 800)], GREY)
     c.arrow([(525, 850), (525, 878), (1400, 878), (1400, 850)], GREY)
     c.arrow([(1095, 878), (1095, 850)], GREY)
     c.arrow([(1095, 750), (1095, 704)], GREY, both=True, label="catalog", lx=1103, ly=732)
@@ -236,7 +234,7 @@ def pql():
 
 
 def bindings():
-    c = Canvas(1300, 710)
+    c = Canvas(1300, 730)
     c.title("Bindings: standard tools per language, over one shared Rust layer",
             "The core is plain Rust and never knows who loads it; the boundary logic is written once in sdm-host.")
 
@@ -251,20 +249,22 @@ def bindings():
 
     # The shared boundary layer
     c.box(60, 310, 910, 410, ["sdm-host (plain Rust, written once)",
-                              "run protocol; versioned JSON messages;",
+                              "control-message codecs; versioned JSON messages;",
                               "Arrow streams (zero-copy, Arrow C Data Interface);",
-                              "catches panics; error kinds; threading rules"],
+                              "catches panics; native resource lifetime; threading rules"],
           stroke="#555", size=13)
 
     # Rust core
-    c.band(30, 480, 940, 666, "Rust core (plain Rust, no unsafe)", ORANGE_FILL, ORANGE)
+    c.band(30, 480, 940, 686, "Rust core (safe first-party Rust)", ORANGE_FILL, ORANGE)
     w, gap = 197.5, 20
-    for i, name in enumerate(["Data access", "Schema", "Sampling", "Contract"]):
+    for i, name in enumerate(["Contract", "Data access", "Schema"]):
         x1 = 60 + i * (w + gap)
-        c.box(x1, 520, x1 + w, 572, [name])
-    c.box(60, 588, 60 + w, 644, ["Labels"])
-    c.box(60 + w + gap, 588, 60 + 2 * w + gap, 644, ["Request builder"])
-    c.box(60 + 2 * (w + gap), 588, 910, 644, ["PQL", "the PQL team's Rust crate over its C++ core"], size=13)
+        c.box(x1, 520, x1 + w, 580, [name])
+    c.box(60 + 3 * (w + gap), 520, 910, 580, ["Core operations", "sdm-core: run state machine"], size=13)
+    c.box(60, 596, 60 + w, 664, ["Engine", "sampling, labels,", "time, random"], size=13)
+    c.box(60 + w + gap, 596, 60 + 2 * w + gap, 664, ["Request builder"])
+    c.box(60 + 2 * (w + gap), 596, 910, 664, ["PQL", "external native dependency:",
+                                               "the PQL team's Rust crate over C++"], size=13, dashed=True)
 
     # Calls
     c.arrow([(120, 226), (120, 310)], BLUE, label="Python objects, Arrow via PyCapsule", lx=128, ly=274)
@@ -273,10 +273,10 @@ def bindings():
     c.arrow([(811, 410), (811, 520)], ORANGE, label="Rust calls", lx=819, ly=450)
 
     # What ships: binding, sdm-host and the core, built into a native library per platform
-    c.out.append('<path d="M948,136 L960,136 L960,666 L948,666" fill="none" stroke="#999999" '
+    c.out.append('<path d="M948,136 L960,136 L960,686 L948,686" fill="none" stroke="#999999" '
                  'stroke-width="1.6"/>')
-    c.out.append('<line x1="960" y1="401" x2="990" y2="401" stroke="#999999" stroke-width="1.6"/>')
-    c.box(990, 306, 1270, 496, ["Native libraries", "per platform", "Linux x86_64 and aarch64, macOS;",
+    c.out.append('<line x1="960" y1="411" x2="990" y2="411" stroke="#999999" stroke-width="1.6"/>')
+    c.box(990, 316, 1270, 506, ["Native libraries", "per platform", "Linux x86_64 and aarch64, macOS;",
                                 "one in the wheel, one in the JAR,", "same sources;", "PQL's C++ linked in",
                                 "with private symbols"],
           fill=GREY_FILL, stroke="#999999", size=13, bold=2)
@@ -285,9 +285,9 @@ def bindings():
 
 
 def delivery():
-    c = Canvas(1720, 590)
+    c = Canvas(1740, 620)
     c.title("Delivery: slices through the public API",
-            "Each slice goes from the public API down to the core and merges to main at its gate.")
+            "Each slice goes from the public API down to the core and merges into the epic branch at its gate.")
 
     top, bottom, mid = 148, 318, 233
 
@@ -297,45 +297,49 @@ def delivery():
 
     phases = [
         (60, 230, ["R0 Prepare", "reference environment", "in its own worktree;", "bank the first attempt's",
-                   "best candidate;", "one integration branch"], 1),
-        (260, 430, ["R1a Harness", "contract, test runners,", "CI guards;", "S0 PQL validation",
-                    "in Python, running in Java"], 1),
-        (460, 630, ["R1b Spike", "DuckDB from_source", "to predict in Python", "and a pure-Rust",
+                   "best candidate;", "the epic branch (rust-core)"], 1),
+        (260, 430, ["R1a Harness", "contract, test runners,", "CI guards, installed wheel;",
+                    "S0 PQL validation", "in Python"], 1),
+        (460, 630, ["R1b Spike", "fixed case inventory", "on DuckDB, in Python", "and a pure-Rust",
                     "test host"], 1),
         (820, 990, ["R2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;",
-                    "sample data provider"], 2),
+                    "sample data provider;", "swappable data layer", "proof"], 2),
         (1020, 1190, ["R3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
                       "Python switches", "warehouse paths;", "Java follows", "on Databricks"], 2),
         (1220, 1390, ["R4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
-        (1450, 1620, ["R5 Release", "PQL crate,", "delete old engine"], 1),
+        (1450, 1620, ["R5 Release", "PQL crate; old engine kept", "one release as fallback"], 1),
     ]
     for x1, x2, lines, bold in phases:
         c.box(x1, top, x2, bottom, lines, size=13, bold=bold)
 
     c.box(655, 188, 795, 278, ["owner decides", "go / no-go"], shape="diamond", size=12, bold=0)
-    c.text_lines(725, 302, ["go: merge R1a", "and R1b to main"], size=12, bold=0)
+    c.text_lines(725, 302, ["go: merge R1a", "and R1b into epic"], size=12, bold=0)
 
     # Sequence arrows
     for x1, x2 in ((230, 260), (430, 460), (630, 655), (795, 820), (990, 1020), (1190, 1220), (1390, 1450)):
         c.arrow([(x1, mid), (x2, mid)], GREY)
 
-    # Merges to main: after the spike's go, after each slice gate, and at release
+    # Merges into the epic branch: after the spike's go, after each slice gate, and at release
     main_y = 394
     c.out.append(f'<line x1="60" y1="{main_y}" x2="1620" y2="{main_y}" stroke="{GREY}" stroke-width="4"/>')
-    c.note(60, main_y - 10, "main", size=14, bold=True, color=GREY)
-    for x, y, label in ((807, mid, "merge to main"), (1005, mid, "merge to main"), (1205, mid, "merge to main"),
-                        (1420, mid, "merge to main"), (1535, bottom, "merge to main (release)")):
+    c.note(60, main_y - 10, "epic branch (rust-core)", size=14, bold=True, color=GREY)
+    c.note(60, main_y + 24, "main stays pure Python and is merged into the epic at each slice gate; "
+           "the epic merges into main only when the owner decides")
+    for x, y, label in ((807, mid, "merge into epic"), (1005, mid, "merge into epic"),
+                        (1205, mid, "merge into epic"), (1420, mid, "merge into epic"),
+                        (1535, bottom, "owner merges epic into main")):
         c.arrow([(x, y), (x, main_y - 3)], ORANGE, width=2)
         c.out.append(f'<circle cx="{x}" cy="{y}" r="4.5" fill="{ORANGE}"/>')
         c.note(x + 7, 372, label, size=12, color=ORANGE)
 
     # Checks strip
-    c.band(30, 430, 1690, 560, "Checks that run all along", GREY_FILL, "#999999")
-    c.box(60, 470, 590, 540, ["Every PR", "unit, boundary guards, contract subset,",
+    c.band(30, 450, 1710, 580, "Checks that run all along", GREY_FILL, "#999999")
+    c.box(60, 490, 590, 560, ["Every PR", "unit, boundary guards, contract subset,",
                               "SQL goldens, provider kit, conversion tables"], size=13)
-    c.box(620, 470, 1120, 540, ["Nightly", "full contract corpus, differential vs old release,", "performance"],
+    c.box(620, 490, 1120, 560, ["Nightly", "full contract corpus, differential vs reference,",
+                                "offline performance"],
           size=13)
-    c.box(1150, 470, 1660, 540, ["Weekly and before release", "weekly: live matrix",
+    c.box(1150, 490, 1680, 560, ["Weekly and before release", "weekly: live matrix",
                                  "before release: all layers, packaging and safety"], size=13)
 
     c.save("delivery.svg")
