@@ -33,6 +33,7 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 26 | G14: only environments the job matrix and L8 test are claimed as supported | support-matrix.md, installation guide, L6, L8 |
 | 27 | D1: the RandomState shuffle (`508845fe`, with `f2f5b86c` and `c9695f3c`) is not adopted; the reference keeps `default_rng` | [determinism-fixes.md](determinism-fixes.md), T0.3 |
 | 28 | D2: the new seeded SQLite draw is accepted; it becomes a register entry and a random stream the core must reproduce | determinism-fixes.md, `register.yaml` (T0.8), T0.6 |
+| 29 | The plan's section 5 keep and drop entries (PK-1 to PK-9, PD-1 to PD-6) are approved register entries | register.yaml |
 
 ## Open decisions
 
@@ -46,5 +47,4 @@ The other proposed entries can be approved by the independent reviewer.
 - DT-3: dropping the int64 wrap at `Timestamp.min` (recommended: drop, after the Phase 1 check of the sentinel).
 - DT-5: PQL packed dates, which go to the PQL asks (recommended: keep unless the agreed dialect drops them).
 - DT-6: free-form values in per-row time columns, if the core refuses them instead of reading them (recommended: keep reading them).
-- Confirm the plan's section 5 keep and drop entries (PK-1 to PK-9, PD-1 to PD-6) as approved register entries.
 - P1B-1: any Phase 1b case whose new outcome refuses an input Python accepted.

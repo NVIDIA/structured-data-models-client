@@ -8,8 +8,8 @@
 # recorded decision. Validated against register.schema.json.
 #
 # IDs by origin:
-#   PK-n   the plan's section 5 "keep" column (proposed; the owner confirms at merge)
-#   PD-n   the plan's section 5 "drop" column (proposed; the owner confirms at merge)
+#   PK-n   the plan's section 5 "keep" column (approved by the owner)
+#   PD-n   the plan's section 5 "drop" column (approved by the owner)
 #   DF-n   determinism fixes of the reference (T0.3, determinism-fixes.md)
 #   RS-n   random streams (T0.6, random-streams.md)
 #   DT-n   dates and time zones (T0.6, chrono-check.md and date-rules.md)
@@ -38,9 +38,9 @@ entries:
     default_rng means porting numpy's SeedSequence and PCG64 too.
   affected_inputs: Every seeded draw on every backend; the exact streams are RS-1 to RS-6.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. The streams themselves are
@@ -53,9 +53,9 @@ entries:
   new_behavior: The same, so labels agree bit for bit.
   affected_inputs: Every aggregation label (sums, averages, counts over float columns).
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0.
@@ -69,9 +69,9 @@ entries:
   new_behavior: The same.
   affected_inputs: Every time offset in a query and in sampling windows.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. chrono-check.md: chrono's
@@ -84,9 +84,9 @@ entries:
   new_behavior: The same, as agreed with the PQL team.
   affected_inputs: Every predictive query text.
   cases: [T0.9]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. The agreement is tracked in
@@ -101,9 +101,9 @@ entries:
   new_behavior: The same rules, written down and reproduced.
   affected_inputs: Date literals in predictive queries.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. The packed-date rule D8 is
@@ -116,9 +116,9 @@ entries:
   new_behavior: The same classes and codes.
   affected_inputs: Every public refusal and warning.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. Error class paths as text are
@@ -133,9 +133,9 @@ entries:
   new_behavior: The same, as the reference pandas major reads them.
   affected_inputs: Text time columns of frames and dates stored as text in Schema.from_data.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. The rules are in
@@ -148,9 +148,9 @@ entries:
   new_behavior: The same widths.
   affected_inputs: Every payload with integer values.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0.
@@ -164,9 +164,9 @@ entries:
     compared with reviewed golden files.
   affected_inputs: Every request payload and every pushed-down SQL statement.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. A change to SQL text still
@@ -181,9 +181,9 @@ entries:
   new_behavior: NaN ranks last.
   affected_inputs: Results whose scores include NaN.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0.
@@ -195,9 +195,9 @@ entries:
   new_behavior: The limit counts the bytes actually sent.
   affected_inputs: Requests near the size limit.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0.
@@ -209,9 +209,9 @@ entries:
   new_behavior: The core never calls back into language behavior; hosts convert inputs at the boundary.
   affected_inputs: Inputs whose answer depended on a Python object protocol.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. Enforced by the L0 boundary
@@ -224,9 +224,9 @@ entries:
   new_behavior: Errors carry public classes and codes only (PK-6).
   affected_inputs: Error messages and payloads that name a Python class path.
   cases: [migration-plan section 5]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0.
@@ -240,9 +240,9 @@ entries:
   new_behavior: Each type is handled as the type set says, or refused with a named error.
   affected_inputs: Columns of types outside what the old code handled.
   cases: [P1B-1]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. Each concrete case still needs
@@ -258,9 +258,9 @@ entries:
   new_behavior: Zone rules apply after 2037.
   affected_inputs: Local wall times and localization of instants after 2037.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: 29
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirms these entries when merging Phase 0. The reference on pandas 3
