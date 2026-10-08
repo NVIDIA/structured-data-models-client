@@ -15,12 +15,24 @@ Run it at the start of every reference session, with the reference's own
 interpreter:
 
     .venv/bin/python scripts/reference_guard.py
+
+A harness that calls the reference in-process should also call
+``require_isolation()`` in that same interpreter, so that the check covers
+what the harness itself has imported.
+
+``--self-test`` runs the guard against a clean path and against two
+negative controls, each in a fresh interpreter, and exits non-zero unless
+the clean run passes and both controls fail.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 # Top-level names the Rust core's Python bindings may take.
 _TOP_LEVEL = ('sdm_core', 'sdm_py', '_native', 'sdm_core_py')
@@ -45,16 +57,22 @@ def _candidates() -> list[str]:
 
 def _importable(name: str) -> bool:
     parent, _, _ = name.rpartition('.')
-    if parent and importlib.util.find_spec(parent) is None:
-        return False
     try:
+        if parent and importlib.util.find_spec(parent) is None:
+            return False
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
         return False
 
 
 def problems() -> list[str]:
-    r"""Every Rust core module that is imported or importable here."""
+    r"""Every Rust core module that is imported or importable here.
+
+    Probing a package-qualified name imports its parent package, and that
+    package's initialisation can load a module whose name was already
+    checked.  So once every probe has run, the whole candidate set is
+    checked against ``sys.modules`` again.
+    """
     found = []
     for name in _candidates():
         if name in sys.modules:
@@ -63,7 +81,21 @@ def problems() -> list[str]:
             spec = importlib.util.find_spec(name)
             origin = spec.origin if spec is not None else None
             found.append(f'{name} is importable from {origin}')
+    reported = {line.split(' ', 1)[0] for line in found}
+    for name in _candidates():
+        if name in sys.modules and name not in reported:
+            found.append(f'{name} was imported while the guard ran')
     return found
+
+
+def require_isolation() -> None:
+    r"""Raise ``RuntimeError`` if this interpreter can load the Rust core."""
+    found = problems()
+    if found:
+        raise RuntimeError(
+            'the reference environment can load the Rust core: '
+            + '; '.join(found)
+        )
 
 
 def main() -> int:
@@ -77,5 +109,53 @@ def main() -> int:
     return 0
 
 
+# Each control: (name, files to write on PYTHONPATH, expected exit status).
+_CONTROLS = (
+    ('clean run', {}, 0),
+    ('importable stub', {'sdm_core.py': ''}, 1),
+    (
+        'parent import',
+        {
+            'sdm_api/__init__.py': (
+                'import sys, types\n'
+                "sys.modules['sdm_core'] = types.ModuleType('sdm_core')\n"
+            ),
+        },
+        1,
+    ),
+)
+
+
+def self_test() -> int:
+    r"""Run the guard on a clean path and on two negative controls."""
+    failures = 0
+    for name, files, expected in _CONTROLS:
+        with tempfile.TemporaryDirectory() as tmp:
+            for rel, text in files.items():
+                path = Path(tmp, rel)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            env = dict(os.environ)
+            env['PYTHONPATH'] = os.pathsep.join(
+                p for p in (tmp, env.get('PYTHONPATH', '')) if p
+            )
+            run = subprocess.run(
+                [sys.executable, __file__],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        ok = run.returncode == expected
+        failures += not ok
+        status = 'ok' if ok else 'FAILED'
+        print(f'{status}: {name}: exit {run.returncode}, expected {expected}')
+        for line in run.stdout.splitlines():
+            print(f'    {line}')
+    return 1 if failures else 0
+
+
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--self-test']:
+        raise SystemExit(self_test())
     raise SystemExit(main())
