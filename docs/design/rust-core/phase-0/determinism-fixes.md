@@ -1,7 +1,7 @@
 # Determinism fixes for the reference (T0.3)
 
 This records which of the first attempt's 27 commits on `rust-core/p1-determinism` (GitLab layout, `packages/sdm-*`) were ported to `rust-core-reference`, and why.
-The reference is `main` at `fa0637d` (tagged locally as `reference-baseline-fa0637d`) plus the kept fixes, on the GitHub layout (`packages/structured-data-models-*`).
+The reference is `main` at `fa0637d` (tagged locally as `reference-baseline-fa0637d`) plus the kept fixes, on the GitHub layout (`packages/structured-data-models-client` and its siblings).
 
 ## Categories
 
@@ -17,14 +17,14 @@ The reference is `main` at `fa0637d` (tagged locally as `reference-baseline-fa06
 |---|---|---|---|---|
 | `3003ed1f` | Lock phase 1 acceptance checks | p | The first attempt's acceptance harness, not a fix; its payload runner was used, uncommitted, for the repeatability check below. | Dropped |
 | `bdc4f2d4` | Sort each neighborhood stably, whether or not torch is installed | a | The in-memory graph store sorted with torch when importable and numpy quicksort otherwise, so installing torch changed sampled neighbors at timestamp ties; confirmed on `main` with the fake torch. | Kept as `d1590a1` |
-| `508845fe` | Draw every client-side random choice from a RandomState stream | b | Moves the example shuffle from `default_rng` to `RandomState`, which reorders the recorded relational payload under a fixed seed. Only its `random_state` helper was ported, inside `f0f324c`, without the shuffle change. | Owner decision |
+| `508845fe` | Draw every client-side random choice from a RandomState stream | b | Moves the example shuffle from `default_rng` to `RandomState`, which reorders the recorded relational payload under a fixed seed. Only its `random_state` helper was ported, inside `f0f324c`, without the shuffle change. | Not adopted (D1) |
 | `935cf99f` | Refuse a repeated batch index instead of sorting it into some order | d | Adds a refusal; with unique positions the old sort already gives one order. | Dropped |
-| `f2f5b86c` | Re-pin the engine tests the RandomState shuffle moved | b | Test pins that follow `508845fe`. | Owner decision, with `508845fe` |
+| `f2f5b86c` | Re-pin the engine tests the RandomState shuffle moved | b | Test pins that follow `508845fe`. | Not adopted, with `508845fe` (D1) |
 | `300bab01` | Order every SQL result whose order reaches a request | c | Adds `ORDER BY` to every SQL backend and replaces the Databricks oversample `LIMIT` with a seeded `xxhash64`, changing warehouse SQL. Its DuckDB and SQLite parts were not needed: the DuckDB and SQLite push-down payloads were repeatable without them. | Dropped |
 | `2e48359f` | Seed the SQLite and Snowflake entity samples | a (SQLite), c (Snowflake) | A seeded SQLite request drew different context rows on every call (`ORDER BY RANDOM()`), confirmed on `main`; the Snowflake half changes warehouse sampling. | SQLite part kept in `f0f324c`; Snowflake part dropped |
 | `da7e1dec` | Name where each SQL backend's seed goes in random_state's list | c | Documents seed routes of warehouse changes that were dropped; the ported helper has its own accurate docstring. | Dropped |
 | `369bf44c` | Probe a SQLite time column's spelling on its first stored row | d | The probe is already deterministic for a given database file; not needed for repeatable runs. | Dropped |
-| `c9695f3c` | Re-record the wire payloads for the RandomState shuffle | b | Golden re-record and changelog for `508845fe`. | Owner decision, with `508845fe` |
+| `c9695f3c` | Re-record the wire payloads for the RandomState shuffle | b | Golden re-record and changelog for `508845fe`. | Not adopted, with `508845fe` (D1) |
 | `6d1e013b` | Ask a backend once which of a sampler's keys it enforces | c | Supports the warehouse ordering of `300bab01`. | Dropped |
 | `7a01cd89` | Hash a Snowflake key in a form no session setting formats | c | Snowflake seeded draw. | Dropped |
 | `100872a9` | Hash a SQLite integer key, not its rowid, for a seeded draw | a | Makes the seeded SQLite draw follow the data rather than physical rowids, which `VACUUM` may renumber. Ported with one adaptation: rows sharing an unenforced key are ordered by key and rowid, since the column tie-break of `300bab01` was not ported. | Kept in `f0f324c` |
@@ -43,7 +43,7 @@ The reference is `main` at `fa0637d` (tagged locally as `reference-baseline-fa06
 | `70688f26` | Spread an unkeyed PostgreSQL table's inference sample by a hash of its text when it has no column the backend reads | c | Postgres inference sample. | Dropped |
 | `890e8fe3` | Say that an unkeyed PostgreSQL table's binary sample order follows the client encoding | c | Postgres docstring for dropped changes. | Dropped |
 
-Counts: 3 in (a), with `2e48359f` kept only in its SQLite part; 3 in (b); 16 in (c); 4 in (d); 1 process commit.
+Counts: 3 in (a), with `2e48359f` kept only in its SQLite part; 3 in (b), none adopted; 16 in (c); 4 in (d); 1 process commit.
 
 ## What is on `rust-core-reference`
 
@@ -97,17 +97,19 @@ These go into `register.yaml` in T0.8.
    New: the rows whose integer primary key, or else rowid, hashes lowest under a cubic polynomial modulo `2**31 - 1`, with coefficients `random_state(seed).randint(0, 2**31 - 1, size=4)`; ties by key, then rowid.
    Affected inputs: SQLite push-down requests with a seed and without explicit entity ids; unseeded requests are unchanged.
    There was no repeatable old answer to preserve, but the new draw defines a stream the core must reproduce (T0.6).
+   Accepted by the owner (D2).
 3. SQLite seed warning (`f0f324c`).
    Old: a seeded SQLite sample warned once that `random_seed` is ignored.
    New: SQLite does not warn; Snowflake still does, and the two `random_seed` docstrings in `rfm.py` say so.
 4. Seeds of `2**32` and above for the SQLite draw (`f0f324c`).
    New: `random_state` seeds `RandomState` with the seed's 32-bit words, least significant first, where `RandomState(seed)` would raise.
 
-## Owner decisions needed
+## Owner decisions
 
-- Whether to adopt `508845fe` with `f2f5b86c` and `c9695f3c`: the example shuffle moves from `default_rng` to `RandomState`, which reorders the `relational/pql-count-aggregation` golden payload (same examples, labels and subgraphs, different order and renumbered ids).
-  Until decided, the reference keeps `default_rng`.
-- Whether to accept entry 2 as the reference's seeded SQLite draw, or to drop `f0f324c` and leave SQLite seeded draws unrepeatable in the reference.
+Recorded in [decisions.md](decisions.md).
+
+- **D1, not adopted:** `508845fe`, `f2f5b86c` and `c9695f3c` stay out, so the example shuffle keeps `default_rng` and the `relational/pql-count-aggregation` golden payload keeps its order.
+- **D2, accepted:** entry 2 is the reference's seeded SQLite draw; it becomes a register entry and a random stream the core must reproduce (T0.6).
 
 ## Known nondeterminism left in the reference
 

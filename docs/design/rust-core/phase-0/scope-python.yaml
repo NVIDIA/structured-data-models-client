@@ -12,9 +12,9 @@ format: sdm-scope/1
 language: python
 slices:
   S0: PQL validation
-  S1: Schema from a source, materialize, predict on DuckDB, SQLite and Postgres, offline
-  S2: The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase, plus the Databricks job matrix
-  S3: In-memory frames (including files read from Amazon S3), ranking, forecasting, link prediction, sessions, tabular requests
+  S1: Schema from a source, materialize, predict on DuckDB, SQLite and Postgres, offline, including ranking and forecasting
+  S2: The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase, including ranking and forecasting, plus the Databricks job matrix
+  S3: In-memory frames (including files read from Amazon S3) with their ranking and forecasting, link prediction, sessions, tabular requests
 backends:
 - id: duckdb
   what: DuckDBSource over a duckdb connection
@@ -335,10 +335,10 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/duckdb
-  slice: S3
+  slice: S1
   cases: []
 - id: query.materialize/indices-forecast/duckdb
-  slice: S3
+  slice: S1
   cases: []
 - id: query.materialize/indices-binary/sqlite
   slice: S1
@@ -353,10 +353,10 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/sqlite
-  slice: S3
+  slice: S1
   cases: []
 - id: query.materialize/indices-forecast/sqlite
-  slice: S3
+  slice: S1
   cases: []
 - id: query.materialize/indices-binary/postgres
   slice: S1
@@ -371,10 +371,10 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/postgres
-  slice: S3
+  slice: S1
   cases: []
 - id: query.materialize/indices-forecast/postgres
-  slice: S3
+  slice: S1
   cases: []
 - id: query.materialize/indices-binary/lakebase
   slice: S2
@@ -389,13 +389,13 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/lakebase
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-forecast/lakebase
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-binary/databricks-sql
   slice: S2
   cases: []
@@ -409,13 +409,13 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/databricks-sql
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-forecast/databricks-sql
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-binary/databricks-spark
   slice: S2
   cases: []
@@ -429,13 +429,13 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/databricks-spark
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-forecast/databricks-spark
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-binary/snowflake
   slice: S2
   cases: []
@@ -449,10 +449,10 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/snowflake
-  slice: S3
+  slice: S2
   cases: []
 - id: query.materialize/indices-forecast/snowflake
-  slice: S3
+  slice: S2
   cases: []
 - id: query.materialize/indices-binary/databricks-metric-view
   slice: S2
@@ -467,13 +467,13 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/databricks-metric-view
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-forecast/databricks-metric-view
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: query.materialize/indices-binary/snowflake-semantic-view
   slice: S2
   cases: []
@@ -487,10 +487,10 @@ paths:
   slice: S3
   cases: []
 - id: query.materialize/indices-ranking/snowflake-semantic-view
-  slice: S3
+  slice: S2
   cases: []
 - id: query.materialize/indices-forecast/snowflake-semantic-view
-  slice: S3
+  slice: S2
   cases: []
 - id: query.materialize/indices-binary/frames
   slice: S3
@@ -554,10 +554,10 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/duckdb
-  slice: S3
+  slice: S1
   cases: []
 - id: client.predict/forecast/duckdb
-  slice: S3
+  slice: S1
   cases: []
 - id: client.predict/binary/sqlite
   slice: S1
@@ -572,10 +572,10 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/sqlite
-  slice: S3
+  slice: S1
   cases: []
 - id: client.predict/forecast/sqlite
-  slice: S3
+  slice: S1
   cases: []
 - id: client.predict/binary/postgres
   slice: S1
@@ -590,10 +590,10 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/postgres
-  slice: S3
+  slice: S1
   cases: []
 - id: client.predict/forecast/postgres
-  slice: S3
+  slice: S1
   cases: []
 - id: client.predict/binary/lakebase
   slice: S2
@@ -608,13 +608,13 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/lakebase
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/forecast/lakebase
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/binary/databricks-sql
   slice: S2
   cases: []
@@ -628,13 +628,13 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/databricks-sql
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/forecast/databricks-sql
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/binary/databricks-spark
   slice: S2
   cases: []
@@ -648,13 +648,13 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/databricks-spark
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/forecast/databricks-spark
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/binary/snowflake
   slice: S2
   cases: []
@@ -668,10 +668,10 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/snowflake
-  slice: S3
+  slice: S2
   cases: []
 - id: client.predict/forecast/snowflake
-  slice: S3
+  slice: S2
   cases: []
 - id: client.predict/binary/databricks-metric-view
   slice: S2
@@ -686,13 +686,13 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/databricks-metric-view
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/forecast/databricks-metric-view
-  slice: S3
+  slice: S2
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: client.predict/binary/snowflake-semantic-view
   slice: S2
   cases: []
@@ -706,10 +706,10 @@ paths:
   slice: S3
   cases: []
 - id: client.predict/ranking/snowflake-semantic-view
-  slice: S3
+  slice: S2
   cases: []
 - id: client.predict/forecast/snowflake-semantic-view
-  slice: S3
+  slice: S2
   cases: []
 - id: client.predict/binary/frames
   slice: S3
@@ -934,13 +934,13 @@ paths:
   slice: S3
   cases: []
 - id: result.read/ranking/any
-  slice: S3
+  slice: S1
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: result.read/forecast/any
-  slice: S3
+  slice: S1
   cases: []
-  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); owner decision J1
+  note: Needed by the S2 Databricks job matrix (databricks-jobs.md); moved from S3 by owner decision J1
 - id: result.read/tabular/any
   slice: S3
   cases: []
@@ -951,8 +951,9 @@ paths:
   slice: S1
   cases: []
 - id: result.inspect/unscored-candidates/any
-  slice: S3
+  slice: S1
   cases: []
+  note: A ranking result attribute; moved from S3 by owner decision J1
 - id: result.merge/merge/any
   slice: S3
   cases: []

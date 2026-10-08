@@ -5,6 +5,7 @@
 # Scope manifest for the Java binding (Phase 0, T0.5).
 # Format: scope-format.md; schema: scope.schema.json.
 # Java starts with DuckDB, SQLite, Postgres and Databricks (plan decision 2); S3 only as the owner adds scope.
+# Ranking and forecasting stay out of Java until the owner adds them, so Java's S2 covers 4 of the 6 base job questions (owner decision J2).
 # Operation ids are shared with Python; Java API names are filled in when Java S0 work starts.
 # Case lists stay empty until Phase 1a.
 
@@ -12,9 +13,9 @@ format: sdm-scope/1
 language: java
 slices:
   S0: PQL validation
-  S1: Schema from a source, materialize, predict on DuckDB, SQLite and Postgres, offline
-  S2: The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase, plus the Databricks job matrix
-  S3: In-memory frames (including files read from Amazon S3), ranking, forecasting, link prediction, sessions, tabular requests
+  S1: Schema from a source, materialize, predict on DuckDB, SQLite and Postgres, offline, including ranking and forecasting
+  S2: The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase, including ranking and forecasting, plus the Databricks job matrix
+  S3: In-memory frames (including files read from Amazon S3) with their ranking and forecasting, link prediction, sessions, tabular requests
 backends:
 - id: duckdb
   what: DuckDB over its JDBC driver

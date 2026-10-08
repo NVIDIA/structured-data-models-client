@@ -1,5 +1,7 @@
 # Support matrix
 
+G1 to G14 were decided by the owner as recommended below; see [decisions.md](decisions.md), rows 20 to 26.
+
 Task T0.4 of [Phase 0](design.md).
 This records what today's client supports, per distribution and extra, and proposes the native wheel coverage for the Rust core.
 Every gap between the two is listed at the end as an open owner decision with a recommendation; each belongs in [decisions.md](decisions.md) once the owner rules.
