@@ -33,6 +33,8 @@ The owner made these before any code:
    Java is a second binding on the same core, built so the core stays language-neutral, never at Python's expense.
 2. **Scope:** Python supports every backend it supports today (Databricks, Snowflake, Lakebase, Postgres, SQLite, DuckDB and in-memory frames, including files read from Amazon S3).
    Java starts with DuckDB, SQLite, Postgres and Databricks.
+   Platforms: the client becomes one CPython `abi3` wheel per platform (3.10 and later, no sdist) for Linux x86_64 and aarch64 (`manylinux2014`, and `musllinux_1_2` if the PQL C++ builds there), macOS (10.12 x86_64, 11.0 arm64) and Windows x86_64, with `pyarrow>=10.0.1` and `pandas>=1.5`.
+   Dropped by the owner: 32-bit, Windows on Arm, other architectures, PyPy, GraalPy and free-threaded CPython; Java natives are Linux x86_64 and aarch64 plus macOS, and only tested environments are claimed (`phase-0/support-matrix.md`, decisions G1 to G14).
 3. **Regressions:** refusing an input the old Python client accepted is a regression, and so is dropping a platform or version Python supports today, unless the owner decides it explicitly.
    Java on Snowflake is not prioritized, so it is not held to this yet.
 4. **Python quirks:** the register (section 5) follows common sense, with a small bias towards today's Python behavior but without catering to its accidents.
@@ -57,9 +59,9 @@ The owner made these before any code:
     Merging the epic into `main` is the owner's decision at the end; until then the work is experimental.
 12. **People:** one developer works with agents.
     The independent reviewer is a fresh agent that did not implement the change; the owner is the only human approver.
-    The owner approves by merging a verified phase or slice branch locally, by decisions recorded in the phase's decisions file, and by register entries marked `approved-by: owner`.
-    An agent never approves its own exception or marks anything `approved-by: owner`.
-13. **The first attempt:** its best candidate (commit `ab85a056`, tag `pm/2026-10-07/all-public-cases-pass`) is archived on GitHub as `archive/rust-core-attempt-1`, a source to port from that is never merged.
+    The owner approves by merging a verified phase or slice branch locally, by decisions recorded in the phase's decisions file, and by register entries marked `approved_by: owner`.
+    An agent never approves its own exception or marks anything `approved_by: owner`.
+13. **The first attempt:** its best candidate (commit `ab85a056`, tag `pm/2026-10-07/all-public-cases-pass`) is archived on GitHub as `archive/rust-core-attempt-1` (commit `3887762`, internal catalog and workspace names redacted), a source to port from that is never merged.
 
 Still to agree with the PQL team: one PQL dialect, the versioned validated-query format, the conformance suite, platform builds, and when the Rust crate ships.
 Phase 0 sends these asks and tracks them in `phase-0/pql-asks.md`; agreement is not a Phase 0 exit.
@@ -150,7 +152,7 @@ The drift risk is less in the grammar than in the code around it (tree building,
 - **Until the Rust crate is published,** this client's Python and Java both use the first attempt's hand-written Rust parser as an interim parser, behind one adapter in `sdm-core` and held to the shared suite; today's ANTLR grammar stays as a CI reference.
 - **As soon as the PQL team's artifact exists,** it is exercised behind the same adapter in the active slice: build, load, validated-query format, codes and spans, and coexistence with its Python package in one process.
   In Phase 5 this client switches to a pinned release of the crate and deletes the interim parser; deferring that is an explicit scope decision.
-- **What to ask the PQL team for (the PQL asks):** a C interface or a Rust crate that never lets a C++ exception cross into Rust; static libraries for every platform this client ships, built for manylinux, with private C++ symbols so two copies can live in one process; matching crate and PyPI releases; no aborts or console output, and a recursion limit; a versioned validated-query format with a JSON Schema; and the conformance suite in their repository, run in their CI.
+- **What to ask the PQL team for (the PQL asks):** a C interface or a Rust crate that never lets a C++ exception cross into Rust; static libraries for every platform this client ships (Linux x86_64 and aarch64 as `manylinux2014`, and `musllinux_1_2` if feasible; macOS x86_64 and arm64; Windows x86_64), with private C++ symbols so two copies can live in one process; matching crate and PyPI releases; no aborts or console output, and a recursion limit; a versioned validated-query format with a JSON Schema; and the conformance suite in their repository, run in their CI.
 - **This client keeps** only the model capability checks on top of the validated query.
 
 ### Bindings
@@ -172,9 +174,9 @@ Each language uses its standard binding tool, over one shared Rust layer:
   Memory has one owner and an explicit release, and the threading model is written down.
 - **Java runtime flags:** users run with `--enable-native-access` (Java warns without it from JDK 24 and will later refuse) and the flag Arrow Java needs; the Java consumer's environment must allow both.
 - **PQL's C++ is linked into both native libraries** with its symbols kept private, so a Python process that also loads the PQL team's own package gets no clashes.
-- **Platforms and versions:** Phase 0 records today's support: the pure-Python client installs anywhere for Python 3.10 or later, with pandas 1.5 or later and any pyarrow, and the relational extra has its existing wheels.
-  Phase 0 also records the proposed native wheel coverage.
-  Dropping any platform or version (for example Windows, musllinux, or an old pyarrow such as Databricks Runtime 14.3's pyarrow 8) is an explicit owner decision, never a side effect.
+- **Platforms and versions:** the owner decided the native coverage in Phase 0 (decision 2 and `phase-0/support-matrix.md`): Python wheels as above, and Java natives for Linux x86_64 and aarch64 plus macOS, to confirm with the Java consumer.
+  pyarrow 8, as Databricks Runtime 14.3 ships, is upgraded by the `pyarrow>=10.0.1` floor.
+  Dropping any further platform or version, or moving to `manylinux_2_28`, is an explicit owner decision, never a side effect.
 
 Considered and not chosen: one C interface (`extern "C"`) with generic glue per language, because it means maintaining our own unsafe boundary where PyO3 and `jni-rs` already provide tested ones.
 Other binding tools and running the core in a separate process are out of scope unless the owner changes it.
@@ -220,7 +222,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 | Columnar data and kernels | `arrow` crates, including `arrow-cast`, `arrow-ord`, `arrow-arith`, `arrow-select`, `arrow-row` and `arrow-ipc` |
 | Decimals and big integers | Arrow's decimal types and `arrow-buffer`'s `i256`, under the contract's exact-encoding policy |
 | PQL parsing | The PQL team's Rust crate over its C++ core (so every build also compiles and links C++) |
-| Dates, times, zones | `chrono` with `chrono-tz` (`arrow-cast` already uses it), checked against the date corpus including zone rules after 2037; the tzdata version is recorded as a host fact; confirmed in Phase 0, because the Phase 1b spike needs it |
+| Dates, times, zones | `chrono` with `chrono-tz` (`arrow-cast` already uses it), checked against the date corpus including zone rules after 2037; the tzdata version is recorded as a host fact; `chrono` confirmed in Phase 0 for parsing, unit conversion and month arithmetic, because the Phase 1b spike needs it; the zone implementation must meet DT-1 (rules after 2099) and DT-2 (host tz database with bundled fallback), checked in Phase 1 before relying on zone semantics |
 | YAML (metric and semantic views) | A maintained YAML 1.2 crate such as `saphyr` or `yaml-rust2` (not the archived `serde_yaml`); behavior differences go through the register |
 | JSON | `serde`, `serde_json` |
 | Error types | `thiserror`; no `anyhow` in core crates |
@@ -245,14 +247,14 @@ On the Python side, pandas and pyarrow stay as host dependencies, and the old en
 | Slice | Public path | Languages |
 |---|---|---|
 | S0 | PQL validation | Python; Java follows |
-| S1 | `Schema.from_source` → `materialize` → `predict` on DuckDB, SQLite and Postgres, offline; a minimal non-SQL test provider passes the conformance kit, and an alternate data layer swapped in at the composition root runs the same prediction with no domain edits | Python; Java follows |
-| S2 | The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase; the Databricks job matrix across runtimes; Python and Java agree on the same Databricks data | Python on all three; Java follows on Databricks |
-| S3 | In-memory frames (including files read from Amazon S3), ranking, forecasting, link prediction, sessions, tabular requests | Python; Java as the owner adds scope |
+| S1 | `Schema.from_source` → `materialize` → `predict` on DuckDB, SQLite and Postgres, offline, including ranking and forecasting; a minimal non-SQL test provider passes the conformance kit, and an alternate data layer swapped in at the composition root runs the same prediction with no domain edits | Python; Java follows |
+| S2 | The same live on Databricks (with a metric view), Snowflake (with a semantic view) and Lakebase, including ranking and forecasting; the Databricks job matrix across runtimes; Python and Java agree on the same Databricks data (for Java, the questions without ranking or forecasting) | Python on all three; Java follows on Databricks |
+| S3 | In-memory frames (including files read from Amazon S3) with their ranking and forecasting, link prediction, sessions, tabular requests | Python; Java as the owner adds scope |
 
 Amazon S3 is unrelated to slice S3: `sdm_connectors.read` reading CSV or Parquet from `s3://` into pandas stays in the host, and its frames are covered as S3's in-memory frames.
 
 A path is one public operation with one input mode on one backend (for example `predict` of a regression query on Snowflake), and one routing boundary chooses the old implementation or the core for each path.
-Python switches a path on the epic branch only after its slice passes all its gates, live ones included: S0 (PQL validation), S1 and S2 paths switch together after S2, in Phase 3, so no call mixes old and new code, and S3 paths (ranking, forecasting, sessions, on any backend) switch after S3.
+Python switches a path on the epic branch only after its slice passes all its gates, live ones included: S0 (PQL validation), S1 and S2 paths switch together after S2, in Phase 3, so no call mixes old and new code, and S3 paths (frames, link prediction, sessions, tabular requests) switch after S3.
 Phase 0 maps every Databricks job in the matrix to its paths, so S2 includes what its jobs need.
 Each phase's branch merges locally into the epic branch once verified, never into `main`; the epic branch is updated from `main` at each gate, and merging it into `main` is the owner's decision at the end.
 The old engine is deleted on the epic branch in Phase 5; the reference (decision 5) stays available after that.
@@ -262,7 +264,7 @@ Python sets the pace: a slice ships for Python when its Python gates pass, and J
 
 The register is a machine-readable file at `docs/design/rust-core/register.yaml`.
 Entries follow common sense, with a small bias towards today's Python behavior but without catering to its accidents.
-Every entry names the old and new behavior, the affected inputs and contract case IDs (or issue or task IDs until Phase 1a creates case IDs), and who approved it: the independent reviewer approves entries, and an entry that refuses an input Python accepted needs the owner's approval (`approved-by: owner`), since that is a regression.
+Every entry names the old and new behavior, the affected inputs and contract case IDs (or issue or task IDs until Phase 1a creates case IDs), and who approved it: the independent reviewer approves entries, and an entry that refuses an input Python accepted needs the owner's approval (`approved_by: owner`), since that is a regression.
 
 | Keep (part of the promise) | Drop (by recorded decision) |
 |---|---|
@@ -276,7 +278,7 @@ Every entry names the old and new behavior, the affected inputs and contract cas
 | Integer widths in payloads | |
 | Payload equality after parsing; SQL per database as reviewed golden files | |
 
-Each needs its own decision, not a blanket rule: answers that differ between pandas 2 and 3, SQL text changes, and YAML 1.1 values such as `yes` and `on`.
+Each needs its own decision, not a blanket rule: answers that differ between pandas 1.5, 2 and 3, SQL text changes, and YAML 1.1 values such as `yes` and `on`.
 
 ## 6. Testing
 
@@ -287,7 +289,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 | L2 Contract corpus | One shared list of cases, run in each language: a public call and its inputs in; ordered data requests, SQL and typed parameters, payload, result, warnings and error kind, code, details and cause out; row order compared only where the operation defines it; SQL traces compared only for SQL providers, and data-request traces checked against their own contract; pickles written by the reference load in the new client, and new state carries a version; a coverage matrix is generated from the scope manifest (per language) over the case inventory for the current slice, with representative nested shapes and one generated refusal case per unsupported type, and an empty cell fails | CI on every push (subset, for feedback); local, before each slice gate (all) |
 | L3 Differential generator | Random public-API inputs compared with the reference (decision 5), installed in its own environment, before and after the old code is deleted | Local, before each slice gate |
 | L4 SQL goldens and provider kit | Reviewed SQL per database, executed on DuckDB, SQLite and Postgres; the local providers pass the conformance kit | CI, on every push to `rust-core` and phase branches |
-| L5 Conversion tables | Each language's native-to-Arrow table, both pandas majors; the same tables loaded into DuckDB, SQLite and Postgres reach the core with identical Arrow schemas, values, null masks, order and required metadata from Python's drivers and Java's JDBC, checked against expected values (large integers, decimal scale, timestamp units, nested nulls, list widths, dictionaries) | CI, on every push to `rust-core` and phase branches |
+| L5 Conversion tables | Each language's native-to-Arrow table, on pandas 1.5, 2 and 3; the same tables loaded into DuckDB, SQLite and Postgres reach the core with identical Arrow schemas, values, null masks, order and required metadata from Python's drivers and Java's JDBC, checked against expected values (large integers, decimal scale, timestamp units, nested nulls, list widths, dictionaries) | CI, on every push to `rust-core` and phase branches |
 | L6 Live matrix | The scenarios in the scope manifest (per language) over the case inventory, on Databricks, Snowflake and Lakebase (Databricks' managed Postgres), plus the Databricks job matrix (one-time jobs across Databricks runtimes, compared with the reference's results); old versus new, and Python versus Java on the same data | Local, before the S2 slice gate and the switch, epic merge and release gates |
 | L7 Performance | Offline, on recorded runs: query counts equal; CPU per scenario at most today's (aim well below; the first attempt measured about half), no scenario above 1.1 times; boundary overhead per in-memory run within a small fixed bound; the control-message size cap; zero-copy and "no pandas in providers" checks; import time and native library size within set limits; live: push-down median over at least five interleaved runs, caches off, within 10% on Databricks and Snowflake | Local: offline before each slice gate; live at switch and release gates only |
 | L8 Packaging and safety | The real wheel and JAR install and load in clean containers (JDK 17 and 21, every platform in the declared support matrix); exported symbols, private C++ symbols and minimum system library versions checked; a Python process loading both this client and the PQL team's package; `sdm-host` under sanitizers; panic, C++ error, crash and leak tests in each language; HTTP retry, timeout and redaction tests | Focused checks whenever bindings or native dependencies change; the full platform matrix before the epic merges |
@@ -322,7 +324,7 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 
 | Phase | Work | Exit |
 |---|---|---|
-| Phase 0 | Create the epic branch `rust-core` and the phase branch `rust-core-phase-0`; extend `.github/workflows/ci.yml` to run the fast checks on pushes to `rust-core` and phase branches; create and push `rust-core-reference` (decision 5) with the fixes listed in `phase-0/determinism-fixes.md`, set up its worktree and environment at `~/code/sdmc-reference` with its guard, and tag the baseline `reference-baseline-<sha>`; compare each kept fix with unpatched Python and register changed outcomes; record today's platform and version support and the proposed wheel coverage; record the accepted text-date formats and inference rules; confirm `chrono` with `chrono-tz` against the date corpus; pin the random streams; map every Databricks job to its paths; choose the Phase 1b case inventory; send the PQL asks (section 3) and track them in `phase-0/pql-asks.md`; archive the first attempt (decision 13) | The reference branch, baseline tag and guard work; decisions recorded in `phase-0/decisions.md`; CI runs on `rust-core` and phase branches; the PQL asks sent (agreement is not a Phase 0 exit) |
+| Phase 0 | Create the epic branch `rust-core` and the phase branch `rust-core-phase-0`; extend `.github/workflows/ci.yml` to run the fast checks on pushes to `rust-core` and phase branches; create and push `rust-core-reference` (decision 5) with the fixes listed in `phase-0/determinism-fixes.md`, set up its worktree and environment at `~/code/sdmc-reference` with its guard, and tag the baseline `reference-baseline-<sha>`; compare each kept fix with unpatched Python and register changed outcomes; record today's platform and version support and the proposed wheel coverage; record the accepted text-date formats and inference rules; check `chrono` with `chrono-tz` against the date corpus; pin the random streams; map every Databricks job to its paths; choose the Phase 1b case inventory; send the PQL asks (section 3) and track them in `phase-0/pql-asks.md`; archive the first attempt (decision 13) | The reference branch, baseline tag and guard work; decisions recorded in `phase-0/decisions.md`; CI runs on `rust-core` and phase branches; the PQL asks drafted, with sending deferred by the owner (`phase-0/decisions.md` row 31; agreement is not a Phase 0 exit) |
 | Phase 1a | `sdm-contract`, `sdm-testkit`, L0 guards, L2 runners for Python and the reference, the CI fast checks and the local gate checks; build and clean-install a real abi3 wheel in CI | S0 green in Python; the runners fail on seeded faults; the wheel installs and loads in a clean container |
 | Phase 1b | Spike, fixed in scope: DuckDB `from_source` → `materialize` → `predict` → result through the new contract and the data provider interface, in Python and through the pure-Rust test host (which shows the contract needs nothing from Python), against a scripted model endpoint; the case inventory chosen in Phase 0 covers the hard seams: keys, decimal precision, nested values, empty and all-null data, and time inference; the text-date rules recorded in Phase 0 checked against the reference | Matches the reference on that inventory (inferred types, keys, time columns, data requests and SQL, payloads, results, warnings and refusals); the owner decides go or no-go (go: Phase 1a and Phase 1b merge into the epic branch and Java's S0 work starts; no-go: repair the first attempt in place, or stop) |
 | Phase 2 | The dataframe-engine comparison at entry; S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit, the minimal non-SQL test provider and the swapped data layer | Slice gate |
@@ -336,11 +338,11 @@ Each needs its own decision, not a blanket rule: answers that differ between pan
 |---|---|
 | The epic branch holds the only candidate; work on the next slice starts only after this slice's gate passes; independent tasks within a slice may run in parallel | CI fast checks on the epic and phase branches; the status page lists open branches |
 | Each phase's work happens on its own branch off `rust-core` (for example `rust-core-phase-0`), pushed to GitHub so nothing is lost; a candidate that passes its checks is pushed before more work builds on it; phase branches never merge into `main`; the epic branch is updated from `main` at each slice gate | Once verified (CI fast checks, local gate checks, a fresh-agent review), the phase or slice branch is merged locally into `rust-core` and `rust-core` is pushed; there are no pull requests |
-| Acceptance is what CI and the local gate checks run, plus one independent reviewer per change (a fresh agent that did not implement it), the owner's decisions, and one independent release audit of the existing evidence | The owner's approval is the local merge of a verified phase or slice branch, plus decisions in `phase-N/decisions.md` and register entries marked `approved-by: owner` |
+| Acceptance is what CI and the local gate checks run, plus one independent reviewer per change (a fresh agent that did not implement it), the owner's decisions, and one independent release audit of the existing evidence | The owner's approval is the local merge of a verified phase or slice branch, plus decisions in `phase-N/decisions.md` and register entries marked `approved_by: owner` |
 | At most two review rounds per change; one independent reviewer checks code and behavior, not prose; a third round goes to the owner | Recorded in the phase's tracker |
 | A phase's acceptance checks are locked before implementation; each change states what and why; a third change to a phase's locked acceptance checks goes to the owner | Locked files change only with the owner's approval |
 | Approval by meaning: one decision approves all the files it explains | Register entries and owner decisions; no per-file hashes |
-| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved-by: owner` |
+| Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved_by: owner` |
 | One status page: candidate commit, gates passed, open failures, decisions needed | Generated from CI and git, not written by the executor |
 | Anything that changes behavior or scope goes to the owner straight away | Register entries and the status page |
 | New acceptance infrastructure beyond the agreed test runner needs the owner's approval | Listed on the status page |

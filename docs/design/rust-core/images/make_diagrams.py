@@ -16,9 +16,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
-ORANGE, BLUE, GREY = "#c9781c", "#3d72b8", "#666666"
-ORANGE_FILL, BLUE_FILL, GREY_FILL = "#fdf3e6", "#eaf2fc", "#f7f7f7"
-MARK = {ORANGE: "o", BLUE: "b", GREY: "g"}
+ORANGE, BLUE, GREY = '#c9781c', '#3d72b8', '#666666'
+ORANGE_FILL, BLUE_FILL, GREY_FILL = '#fdf3e6', '#eaf2fc', '#f7f7f7'
+MARK = {ORANGE: 'o', BLUE: 'b', GREY: 'g'}
 
 
 class Canvas:
@@ -30,320 +30,960 @@ class Canvas:
         self.late = []
 
     def title(self, text, subtitle=None):
-        self.out.append(f'<text x="{self.w / 2}" y="38" font-size="22" font-weight="bold" text-anchor="middle" '
-                        f'fill="#111">{escape(text)}</text>')
+        self.out.append(
+            f'<text x="{self.w / 2}" y="38" font-size="22" font-weight="bold" text-anchor="middle" '
+            f'fill="#111">{escape(text)}</text>'
+        )
         if subtitle:
-            self.out.append(f'<text x="{self.w / 2}" y="64" font-size="14" text-anchor="middle" fill="#444">'
-                            f'{escape(subtitle)}</text>')
+            self.out.append(
+                f'<text x="{self.w / 2}" y="64" font-size="14" text-anchor="middle" fill="#444">'
+                f'{escape(subtitle)}</text>'
+            )
 
-    def note(self, x, y, text, size=13, bold=False, color="#444"):
-        weight = ' font-weight="bold"' if bold else ""
-        self.out.append(f'<text x="{x}" y="{y}" font-size="{size}"{weight} fill="{color}">{escape(text)}</text>')
+    def note(self, x, y, text, size=13, bold=False, color='#444'):
+        weight = ' font-weight="bold"' if bold else ''
+        self.out.append(
+            f'<text x="{x}" y="{y}" font-size="{size}"{weight} fill="{color}">{escape(text)}</text>'
+        )
 
-    def text_lines(self, x, y, lines, size=14, anchor="middle", bold=1):
+    def text_lines(self, x, y, lines, size=14, anchor='middle', bold=1):
         for i, line in enumerate(lines):
-            weight = "bold" if i < bold else "normal"
-            self.out.append(f'<text x="{x}" y="{y + i * (size + 5)}" font-size="{size}" font-weight="{weight}" '
-                            f'text-anchor="{anchor}" fill="#222">{escape(line)}</text>')
+            weight = 'bold' if i < bold else 'normal'
+            self.out.append(
+                f'<text x="{x}" y="{y + i * (size + 5)}" font-size="{size}" font-weight="{weight}" '
+                f'text-anchor="{anchor}" fill="#222">{escape(line)}</text>'
+            )
 
-    def box(self, x1, y1, x2, y2, lines, fill="#ffffff", stroke="#777", shape="rect", size=14, bold=1,
-            dashed=False):
-        dash = ' stroke-dasharray="6,4"' if dashed else ""
-        if shape == "cyl":
+    def box(
+        self,
+        x1,
+        y1,
+        x2,
+        y2,
+        lines,
+        fill='#ffffff',
+        stroke='#777',
+        shape='rect',
+        size=14,
+        bold=1,
+        dashed=False,
+    ):
+        dash = ' stroke-dasharray="6,4"' if dashed else ''
+        if shape == 'cyl':
             rx, ry = (x2 - x1) / 2, 9
-            self.out.append(f'<path d="M{x1},{y1 + ry} A{rx},{ry} 0 0,1 {x2},{y1 + ry} L{x2},{y2 - ry} '
-                            f'A{rx},{ry} 0 0,1 {x1},{y2 - ry} Z" fill="{fill}" stroke="{stroke}"/>')
-            self.out.append(f'<path d="M{x1},{y1 + ry} A{rx},{ry} 0 0,0 {x2},{y1 + ry}" fill="none" '
-                            f'stroke="{stroke}"/>')
-        elif shape == "diamond":
+            self.out.append(
+                f'<path d="M{x1},{y1 + ry} A{rx},{ry} 0 0,1 {x2},{y1 + ry} L{x2},{y2 - ry} '
+                f'A{rx},{ry} 0 0,1 {x1},{y2 - ry} Z" fill="{fill}" stroke="{stroke}"/>'
+            )
+            self.out.append(
+                f'<path d="M{x1},{y1 + ry} A{rx},{ry} 0 0,0 {x2},{y1 + ry}" fill="none" '
+                f'stroke="{stroke}"/>'
+            )
+        elif shape == 'diamond':
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-            self.out.append(f'<path d="M{cx},{y1} L{x2},{cy} L{cx},{y2} L{x1},{cy} Z" fill="{fill}" '
-                            f'stroke="{stroke}" stroke-width="1.3"/>')
+            self.out.append(
+                f'<path d="M{cx},{y1} L{x2},{cy} L{cx},{y2} L{x1},{cy} Z" fill="{fill}" '
+                f'stroke="{stroke}" stroke-width="1.3"/>'
+            )
         else:
-            self.out.append(f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" rx="10" '
-                            f'fill="{fill}" stroke="{stroke}" stroke-width="1.3"{dash}/>')
+            self.out.append(
+                f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" rx="10" '
+                f'fill="{fill}" stroke="{stroke}" stroke-width="1.3"{dash}/>'
+            )
         n = len(lines)
         cy = (y1 + y2) / 2 - (n - 1) * (size + 5) / 2 + 5
         self.text_lines((x1 + x2) / 2, cy, lines, size=size, bold=bold)
 
     def band(self, x1, y1, x2, y2, title, fill, stroke, dashed=False):
-        dash = ' stroke-dasharray="8,5"' if dashed else ""
-        self.out.append(f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" rx="14" '
-                        f'fill="{fill}" stroke="{stroke}" stroke-width="1.6"{dash}/>')
+        dash = ' stroke-dasharray="8,5"' if dashed else ''
+        self.out.append(
+            f'<rect x="{x1}" y="{y1}" width="{x2 - x1}" height="{y2 - y1}" rx="14" '
+            f'fill="{fill}" stroke="{stroke}" stroke-width="1.6"{dash}/>'
+        )
         halo = f'stroke="{fill}" stroke-width="6" stroke-linejoin="round" paint-order="stroke"'
-        self.late.append(f'<text x="{x1 + 16}" y="{y1 + 24}" font-size="16" font-weight="bold" fill="{stroke}" '
-                         f'{halo}>{escape(title)}</text>')
+        self.late.append(
+            f'<text x="{x1 + 16}" y="{y1 + 24}" font-size="16" font-weight="bold" fill="{stroke}" '
+            f'{halo}>{escape(title)}</text>'
+        )
 
-    def arrow(self, points, color=GREY, both=False, label=None, lx=None, ly=None, anchor="start", width=2.2,
-              dashed=False, head=True):
+    def arrow(
+        self,
+        points,
+        color=GREY,
+        both=False,
+        label=None,
+        lx=None,
+        ly=None,
+        anchor='start',
+        width=2.2,
+        dashed=False,
+        head=True,
+    ):
         m = MARK[color]
-        d = "M" + " L".join(f"{x},{y}" for x, y in points)
-        start = f' marker-start="url(#s{m})"' if both else ""
-        end = f' marker-end="url(#e{m})"' if head else ""
-        dash = ' stroke-dasharray="7,5"' if dashed else ""
-        self.out.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{width}"{end}{start}{dash}/>')
+        d = 'M' + ' L'.join(f'{x},{y}' for x, y in points)
+        start = f' marker-start="url(#s{m})"' if both else ''
+        end = f' marker-end="url(#e{m})"' if head else ''
+        dash = ' stroke-dasharray="7,5"' if dashed else ''
+        self.out.append(
+            f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{width}"{end}{start}{dash}/>'
+        )
         if label:
-            self.late.append(f'<text x="{lx}" y="{ly}" font-size="14" fill="{color}" text-anchor="{anchor}" '
-                             f'font-style="italic" stroke="#ffffff" stroke-opacity="0.9" stroke-width="3" '
-                             f'paint-order="stroke">{escape(label)}</text>')
+            self.late.append(
+                f'<text x="{lx}" y="{ly}" font-size="14" fill="{color}" text-anchor="{anchor}" '
+                f'font-style="italic" stroke="#ffffff" stroke-opacity="0.9" stroke-width="3" '
+                f'paint-order="stroke">{escape(label)}</text>'
+            )
 
     def save(self, name):
         defs = []
-        for key, color in (("o", ORANGE), ("b", BLUE), ("g", GREY)):
-            defs.append(f'<marker id="e{key}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
-                        f'markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="{color}"/></marker>')
-            defs.append(f'<marker id="s{key}" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" '
-                        f'markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="{color}"/></marker>')
-        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" '
-               f'viewBox="0 0 {self.w} {self.h}" font-family="Helvetica, Arial, sans-serif">'
-               f'<defs>{"".join(defs)}</defs><rect width="{self.w}" height="{self.h}" fill="#ffffff"/>'
-               + "".join(self.out) + "".join(self.late) + "</svg>\n")
+        for key, color in (('o', ORANGE), ('b', BLUE), ('g', GREY)):
+            defs.append(
+                f'<marker id="e{key}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" '
+                f'markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="{color}"/></marker>'
+            )
+            defs.append(
+                f'<marker id="s{key}" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" '
+                f'markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="{color}"/></marker>'
+            )
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{self.h}" '
+            f'viewBox="0 0 {self.w} {self.h}" font-family="Helvetica, Arial, sans-serif">'
+            f'<defs>{"".join(defs)}</defs><rect width="{self.w}" height="{self.h}" fill="#ffffff"/>'
+            + ''.join(self.out)
+            + ''.join(self.late)
+            + '</svg>\n'
+        )
         (HERE / name).write_text(svg)
 
 
 def architecture():
     c = Canvas(1600, 1075)
-    c.title("New plan: one Rust core behind a typed contract",
-            "The core decides what data it needs; each language fetches it, converts it to Arrow, "
-            "and shows the result its own way.")
+    c.title(
+        'New plan: one Rust core behind a typed contract',
+        'The core decides what data it needs; each language fetches it, converts it to Arrow, '
+        'and shows the result its own way.',
+    )
 
     # Bands. The layout keeps every vertical arrow clear of the band titles.
-    c.band(30, 86, 1570, 204, "Outside sdm-client", GREY_FILL, "#999999", dashed=True)
-    c.band(30, 232, 1570, 416, "Python (primary) and Java: every query and network call happens here", BLUE_FILL, BLUE)
-    c.band(30, 556, 1570, 900, "Rust core: shared logic, no database or network access", ORANGE_FILL, ORANGE)
+    c.band(
+        30,
+        86,
+        1570,
+        204,
+        'Outside sdm-client',
+        GREY_FILL,
+        '#999999',
+        dashed=True,
+    )
+    c.band(
+        30,
+        232,
+        1570,
+        416,
+        'Python (primary) and Java: every query and network call happens here',
+        BLUE_FILL,
+        BLUE,
+    )
+    c.band(
+        30,
+        556,
+        1570,
+        900,
+        'Rust core: shared logic, no database or network access',
+        ORANGE_FILL,
+        ORANGE,
+    )
 
     # Outside
-    c.box(690, 122, 950, 190, ["Model endpoint", "NIM or Databricks Model Serving"])
-    c.box(970, 118, 1210, 194, ["Databases", "Databricks, Snowflake, Postgres, ..."], shape="cyl")
-    c.box(1230, 122, 1410, 190, ["Other data sources", "e.g. Pyramid"])
+    c.box(
+        690,
+        122,
+        950,
+        190,
+        ['Model endpoint', 'NIM or Databricks Model Serving'],
+    )
+    c.box(
+        970,
+        118,
+        1210,
+        194,
+        ['Databases', 'Databricks, Snowflake, Postgres, ...'],
+        shape='cyl',
+    )
+    c.box(1230, 122, 1410, 190, ['Other data sources', 'e.g. Pyramid'])
 
     # Each language
-    c.box(60, 278, 300, 398, ["User API", "Schema.from_source / from_data", "PredictiveQuery.materialize,",
-                              "predict"], size=13)
-    c.box(330, 278, 600, 398, ["Errors and results", "maps error kinds to native exceptions;",
-                               "turns Arrow results into pandas", "or Java objects"], size=13)
-    c.box(700, 278, 940, 398, ["Model transport", "HTTP(S)"])
-    c.box(970, 278, 1300, 398, ["Data providers", "SQL connector: runs the core's SQL", "with the vendor driver",
-                                "custom provider: answers data", "requests itself, e.g. Pyramid"])
-    c.box(1330, 278, 1540, 398, ["Type conversion", "native types to Arrow,", "through a reviewed table:",
-                                 "pandas in Python,", "JDBC in Java"], size=13)
+    c.box(
+        60,
+        278,
+        300,
+        398,
+        [
+            'User API',
+            'Schema.from_source / from_data',
+            'PredictiveQuery.materialize,',
+            'predict',
+        ],
+        size=13,
+    )
+    c.box(
+        330,
+        278,
+        600,
+        398,
+        [
+            'Errors and results',
+            'maps error kinds to native exceptions;',
+            'turns Arrow results into pandas',
+            'or Java objects',
+        ],
+        size=13,
+    )
+    c.box(700, 278, 940, 398, ['Model transport', 'HTTP(S)'])
+    c.box(
+        970,
+        278,
+        1300,
+        398,
+        [
+            'Data providers',
+            "SQL connector: runs the core's SQL",
+            'with the vendor driver',
+            'custom provider: answers data',
+            'requests itself, e.g. Pyramid',
+        ],
+    )
+    c.box(
+        1330,
+        278,
+        1540,
+        398,
+        [
+            'Type conversion',
+            'native types to Arrow,',
+            'through a reviewed table:',
+            'pandas in Python,',
+            'JDBC in Java',
+        ],
+        size=13,
+    )
 
     # The typed contract between the language and the core
-    c.out.append('<line x1="30" y1="500" x2="1570" y2="500" stroke="#555" stroke-width="1.2" '
-                 'stroke-dasharray="3,3"/>')
-    c.box(1090, 472, 1410, 528, ["Typed contract", "Arrow types, typed operations, error kinds;",
-                                 "no calls back into the language"], stroke="#555", size=13)
+    c.out.append(
+        '<line x1="30" y1="500" x2="1570" y2="500" stroke="#555" stroke-width="1.2" '
+        'stroke-dasharray="3,3"/>'
+    )
+    c.box(
+        1090,
+        472,
+        1410,
+        528,
+        [
+            'Typed contract',
+            'Arrow types, typed operations, error kinds;',
+            'no calls back into the language',
+        ],
+        stroke='#555',
+        size=13,
+    )
 
     # Rust core: the entry point in the middle, the services around it
-    c.box(450, 604, 600, 850, ["Core operations", "typed operations,", "run loop"], size=13)
-    c.box(60, 604, 420, 704, ["PQL", "from the PQL team's Rust crate (C++ core):",
-                              "parser, validator, error codes"])
-    c.box(740, 604, 940, 704, ["Request builder", "payload, response,", "result"], size=13)
-    c.box(970, 604, 1540, 704, ["Data access", "typed data requests; built-in SQL dialects compile them to SQL;",
-                                "capability flags; in-memory fallback"])
-    c.box(970, 750, 1220, 850, ["Schema inference", "keys, time columns, links,", "over typed Arrow"], size=13)
-    c.box(1260, 750, 1540, 850, ["Engine", "sampling, labels, time,", "random streams"], size=13)
+    c.box(
+        450,
+        604,
+        600,
+        850,
+        ['Core operations', 'typed operations,', 'run loop'],
+        size=13,
+    )
+    c.box(
+        60,
+        604,
+        420,
+        704,
+        [
+            'PQL',
+            "from the PQL team's Rust crate (C++ core):",
+            'parser, validator, error codes',
+        ],
+    )
+    c.box(
+        740,
+        604,
+        940,
+        704,
+        ['Request builder', 'payload, response,', 'result'],
+        size=13,
+    )
+    c.box(
+        970,
+        604,
+        1540,
+        704,
+        [
+            'Data access',
+            'typed data requests; built-in SQL dialects compile them to SQL;',
+            'capability flags; in-memory fallback',
+        ],
+    )
+    c.box(
+        970,
+        750,
+        1220,
+        850,
+        ['Schema inference', 'keys, time columns, links,', 'over typed Arrow'],
+        size=13,
+    )
+    c.box(
+        1260,
+        750,
+        1540,
+        850,
+        ['Engine', 'sampling, labels, time,', 'random streams'],
+        size=13,
+    )
 
     # Outside <-> language
-    c.arrow([(840, 278), (840, 190)], GREY, both=True, label="HTTP(S)", lx=848, ly=224)
-    c.arrow([(1090, 278), (1090, 194)], GREY, both=True, label="SQL, rows", lx=1098, ly=224)
-    c.arrow([(1260, 278), (1260, 190)], GREY, both=True, label="its own API", lx=1268, ly=224)
+    c.arrow(
+        [(840, 278), (840, 190)],
+        GREY,
+        both=True,
+        label='HTTP(S)',
+        lx=848,
+        ly=224,
+    )
+    c.arrow(
+        [(1090, 278), (1090, 194)],
+        GREY,
+        both=True,
+        label='SQL, rows',
+        lx=1098,
+        ly=224,
+    )
+    c.arrow(
+        [(1260, 278), (1260, 190)],
+        GREY,
+        both=True,
+        label='its own API',
+        lx=1268,
+        ly=224,
+    )
 
     # Inside the language: provider rows go through conversion
     c.arrow([(1300, 338), (1330, 338)], GREY)
 
     # Entry and exit
-    c.arrow([(180, 398), (180, 450), (490, 450), (490, 604)], BLUE, label="1  query, Arrow tables", lx=192,
-            ly=442)
-    c.arrow([(575, 604), (575, 398)], ORANGE, label="7  typed result", lx=583, ly=532)
+    c.arrow(
+        [(180, 398), (180, 450), (490, 450), (490, 604)],
+        BLUE,
+        label='1  query, Arrow tables',
+        lx=192,
+        ly=442,
+    )
+    c.arrow(
+        [(575, 604), (575, 398)],
+        ORANGE,
+        label='7  typed result',
+        lx=583,
+        ly=532,
+    )
 
     # Data round trip
-    c.arrow([(1050, 604), (1050, 398)], ORANGE, label="2  SQL, or a typed request", lx=1058, ly=444, width=2.8)
-    c.arrow([(1440, 398), (1440, 604)], BLUE, label="3  rows as Arrow", lx=1432, ly=444, anchor="end", width=2.8)
+    c.arrow(
+        [(1050, 604), (1050, 398)],
+        ORANGE,
+        label='2  SQL, or a typed request',
+        lx=1058,
+        ly=444,
+        width=2.8,
+    )
+    c.arrow(
+        [(1440, 398), (1440, 604)],
+        BLUE,
+        label='3  rows as Arrow',
+        lx=1432,
+        ly=444,
+        anchor='end',
+        width=2.8,
+    )
 
     # Inside the core
     c.arrow([(450, 654), (420, 654)], GREY)
     c.arrow([(525, 850), (525, 878), (1400, 878), (1400, 850)], GREY)
     c.arrow([(1095, 878), (1095, 850)], GREY)
-    c.arrow([(1095, 750), (1095, 704)], GREY, both=True, label="catalog", lx=1103, ly=732)
-    c.arrow([(1400, 750), (1400, 704)], GREY, both=True, label="data for each hop", lx=1408, ly=732)
+    c.arrow(
+        [(1095, 750), (1095, 704)],
+        GREY,
+        both=True,
+        label='catalog',
+        lx=1103,
+        ly=732,
+    )
+    c.arrow(
+        [(1400, 750), (1400, 704)],
+        GREY,
+        both=True,
+        label='data for each hop',
+        lx=1408,
+        ly=732,
+    )
 
     # Model request and response
-    c.arrow([(600, 640), (740, 640)], GREY, label="4  samples, labels", lx=670, ly=630, anchor="middle")
-    c.arrow([(740, 680), (600, 680)], GREY, label="result", lx=670, ly=670, anchor="middle")
-    c.arrow([(780, 604), (780, 398)], ORANGE, label="5  request", lx=788, ly=444)
-    c.arrow([(900, 398), (900, 604)], BLUE, label="6  response", lx=908, ly=444)
+    c.arrow(
+        [(600, 640), (740, 640)],
+        GREY,
+        label='4  samples, labels',
+        lx=670,
+        ly=630,
+        anchor='middle',
+    )
+    c.arrow(
+        [(740, 680), (600, 680)],
+        GREY,
+        label='result',
+        lx=670,
+        ly=670,
+        anchor='middle',
+    )
+    c.arrow(
+        [(780, 604), (780, 398)], ORANGE, label='5  request', lx=788, ly=444
+    )
+    c.arrow([(900, 398), (900, 604)], BLUE, label='6  response', lx=908, ly=444)
 
-    c.note(60, 928, "Steps 2 and 3 repeat per table and per sampling hop.")
+    c.note(60, 928, 'Steps 2 and 3 repeat per table and per sampling hop.')
 
     # Example strip
-    c.note(60, 966, "Example: who handles what", size=15, bold=True, color="#222")
-    c.box(60, 980, 540, 1046, ["Rust core", "writes Databricks SQL, or a typed data request",
-                               "for a swapped-in data layer"],
-          fill=ORANGE_FILL, stroke=ORANGE, size=13)
-    c.box(570, 980, 1040, 1046, ["Python", "runs it with databricks-sql-connector or Spark"],
-          fill=BLUE_FILL, stroke=BLUE, size=13)
-    c.box(1070, 980, 1540, 1046, ["Java", "runs it with the Databricks JDBC driver,",
-                                 "or a custom data provider (e.g. Pyramid)"],
-          fill=BLUE_FILL, stroke=BLUE, size=13)
+    c.note(
+        60, 966, 'Example: who handles what', size=15, bold=True, color='#222'
+    )
+    c.box(
+        60,
+        980,
+        540,
+        1046,
+        [
+            'Rust core',
+            'writes Databricks SQL, or a typed data request',
+            'for a swapped-in data layer',
+        ],
+        fill=ORANGE_FILL,
+        stroke=ORANGE,
+        size=13,
+    )
+    c.box(
+        570,
+        980,
+        1040,
+        1046,
+        ['Python', 'runs it with databricks-sql-connector or Spark'],
+        fill=BLUE_FILL,
+        stroke=BLUE,
+        size=13,
+    )
+    c.box(
+        1070,
+        980,
+        1540,
+        1046,
+        [
+            'Java',
+            'runs it with the Databricks JDBC driver,',
+            'or a custom data provider (e.g. Pyramid)',
+        ],
+        fill=BLUE_FILL,
+        stroke=BLUE,
+        size=13,
+    )
 
-    c.save("architecture.svg")
+    c.save('architecture.svg')
 
 
 def pql():
     c = Canvas(1300, 750)
-    c.title("One PQL implementation, used everywhere (target)",
-            "The PQL team owns one C++ core and publishes it as a Rust crate and a Python package; "
-            "every consumer uses one of those.")
+    c.title(
+        'One PQL implementation, used everywhere (target)',
+        'The PQL team owns one C++ core and publishes it as a Rust crate and a Python package; '
+        'every consumer uses one of those.',
+    )
 
     # The PQL team's repository sits outside sdm-client
-    c.band(30, 90, 620, 530, "Shared PQL repository (PQL team)", GREY_FILL, "#999999")
-    c.box(70, 134, 580, 224, ["PQL core (C++)", "grammar, parser, validator, error codes and spans,",
-                              "validated query as versioned JSON"])
-    c.box(70, 290, 310, 360, ["Python package", "PyPI"])
-    c.box(340, 290, 580, 360, ["Rust crate", "wraps the C++ core"])
-    c.box(70, 430, 580, 500, ["Conformance suite", "shared valid and invalid queries, run by every consumer"])
+    c.band(
+        30,
+        90,
+        620,
+        530,
+        'Shared PQL repository (PQL team)',
+        GREY_FILL,
+        '#999999',
+    )
+    c.box(
+        70,
+        134,
+        580,
+        224,
+        [
+            'PQL core (C++)',
+            'grammar, parser, validator, error codes and spans,',
+            'validated query as versioned JSON',
+        ],
+    )
+    c.box(70, 290, 310, 360, ['Python package', 'PyPI'])
+    c.box(340, 290, 580, 360, ['Rust crate', 'wraps the C++ core'])
+    c.box(
+        70,
+        430,
+        580,
+        500,
+        [
+            'Conformance suite',
+            'shared valid and invalid queries, run by every consumer',
+        ],
+    )
     c.arrow([(190, 224), (190, 290)], GREY)
     c.arrow([(460, 224), (460, 290)], GREY)
-    c.late.append('<text x="325" y="262" font-size="14" fill="#666666" text-anchor="middle" font-style="italic">'
-                  'published as</text>')
+    c.late.append(
+        '<text x="325" y="262" font-size="14" fill="#666666" text-anchor="middle" font-style="italic">'
+        'published as</text>'
+    )
 
     # Consumers
-    c.box(700, 130, 960, 210, ["Kumo Java", "via the C++ core", "(when Kumo adopts it)"], fill=BLUE_FILL,
-          stroke=BLUE)
-    c.box(700, 272, 960, 352, ["sdm-client Rust core", "uses the Rust crate"], fill=ORANGE_FILL, stroke=ORANGE)
-    c.box(1020, 272, 1270, 352, ["sdm-client", "Python and Java"], fill=BLUE_FILL, stroke=BLUE, bold=2)
-    c.box(700, 414, 960, 494, ["Kumo Python", "uses the Python package"], fill=BLUE_FILL, stroke=BLUE)
+    c.box(
+        700,
+        130,
+        960,
+        210,
+        ['Kumo Java', 'via the C++ core', '(when Kumo adopts it)'],
+        fill=BLUE_FILL,
+        stroke=BLUE,
+    )
+    c.box(
+        700,
+        272,
+        960,
+        352,
+        ['sdm-client Rust core', 'uses the Rust crate'],
+        fill=ORANGE_FILL,
+        stroke=ORANGE,
+    )
+    c.box(
+        1020,
+        272,
+        1270,
+        352,
+        ['sdm-client', 'Python and Java'],
+        fill=BLUE_FILL,
+        stroke=BLUE,
+        bold=2,
+    )
+    c.box(
+        700,
+        414,
+        960,
+        494,
+        ['Kumo Python', 'uses the Python package'],
+        fill=BLUE_FILL,
+        stroke=BLUE,
+    )
 
     c.arrow([(580, 170), (700, 170)], GREY)
     c.arrow([(580, 325), (700, 325)], ORANGE)
     c.arrow([(190, 360), (190, 395), (640, 395), (640, 454), (700, 454)], GREY)
-    c.arrow([(960, 312), (1020, 312)], GREY, label="serves", lx=990, ly=302, anchor="middle")
+    c.arrow(
+        [(960, 312), (1020, 312)],
+        GREY,
+        label='serves',
+        lx=990,
+        ly=302,
+        anchor='middle',
+    )
 
     # Interim parser, held to the same conformance queries
-    c.box(70, 574, 580, 672, ["Until the Rust crate is published",
-                              "sdm-client uses the first attempt's hand-written Rust parser",
-                              "as an interim parser, held to the shared conformance suite;",
-                              "today's ANTLR grammar stays a CI reference"],
-          fill=GREY_FILL, stroke="#999999", size=13, dashed=True)
-    c.arrow([(325, 500), (325, 574)], GREY, dashed=True, label="same queries", lx=335, ly=556)
+    c.box(
+        70,
+        574,
+        580,
+        672,
+        [
+            'Until the Rust crate is published',
+            "sdm-client uses the first attempt's hand-written Rust parser",
+            'as an interim parser, held to the shared conformance suite;',
+            "today's ANTLR grammar stays a CI reference",
+        ],
+        fill=GREY_FILL,
+        stroke='#999999',
+        size=13,
+        dashed=True,
+    )
+    c.arrow(
+        [(325, 500), (325, 574)],
+        GREY,
+        dashed=True,
+        label='same queries',
+        lx=335,
+        ly=556,
+    )
 
-    c.note(60, 712, "sdm-client adds only model capability checks on top of the validated query.")
+    c.note(
+        60,
+        712,
+        'sdm-client adds only model capability checks on top of the validated query.',
+    )
 
-    c.save("pql.svg")
+    c.save('pql.svg')
 
 
 def bindings():
     c = Canvas(1300, 730)
-    c.title("Bindings: standard tools per language, over one shared Rust layer",
-            "The core is plain Rust and never knows who loads it; the boundary logic is written once in sdm-host.")
+    c.title(
+        'Bindings: standard tools per language, over one shared Rust layer',
+        'The core is plain Rust and never knows who loads it; the boundary logic is written once in sdm-host.',
+    )
 
     # Each language
-    c.band(30, 90, 940, 246, "Each language", BLUE_FILL, BLUE)
-    c.box(60, 136, 475, 226, ["Python", "PyO3 binding (sdm-py),", "abi3 wheels built with maturin"], size=13)
-    c.box(495, 136, 910, 226, ["Java", "jni-rs binding (sdm-jni), loaded", "from the JAR (JDK 17 and 21);",
-                               "follows Python"],
-          size=13)
+    c.band(30, 90, 940, 246, 'Each language', BLUE_FILL, BLUE)
+    c.box(
+        60,
+        136,
+        475,
+        226,
+        ['Python', 'PyO3 binding (sdm-py),', 'abi3 wheels built with maturin'],
+        size=13,
+    )
+    c.box(
+        495,
+        136,
+        910,
+        226,
+        [
+            'Java',
+            'jni-rs binding (sdm-jni), loaded',
+            'from the JAR (JDK 17 and 21);',
+            'follows Python',
+        ],
+        size=13,
+    )
 
     # The shared boundary layer
-    c.box(60, 310, 910, 410, ["sdm-host (plain Rust, written once)",
-                              "control-message codecs; versioned JSON messages;",
-                              "Arrow streams (zero-copy, Arrow C Data Interface);",
-                              "catches panics; native resource lifetime; threading rules"],
-          stroke="#555", size=13)
+    c.box(
+        60,
+        310,
+        910,
+        410,
+        [
+            'sdm-host (plain Rust, written once)',
+            'control-message codecs; versioned JSON messages;',
+            'Arrow streams (zero-copy, Arrow C Data Interface);',
+            'catches panics; native resource lifetime; threading rules',
+        ],
+        stroke='#555',
+        size=13,
+    )
 
     # Rust core
-    c.band(30, 480, 940, 686, "Rust core (safe first-party Rust)", ORANGE_FILL, ORANGE)
+    c.band(
+        30,
+        480,
+        940,
+        686,
+        'Rust core (safe first-party Rust)',
+        ORANGE_FILL,
+        ORANGE,
+    )
     w, gap = 197.5, 20
-    for i, name in enumerate(["Contract", "Data access", "Schema"]):
+    for i, name in enumerate(['Contract', 'Data access', 'Schema']):
         x1 = 60 + i * (w + gap)
         c.box(x1, 520, x1 + w, 580, [name])
-    c.box(60 + 3 * (w + gap), 520, 910, 580, ["Core operations", "sdm-core: run state machine"], size=13)
-    c.box(60, 596, 60 + w, 664, ["Engine", "sampling, labels,", "time, random"], size=13)
-    c.box(60 + w + gap, 596, 60 + 2 * w + gap, 664, ["Request builder"])
-    c.box(60 + 2 * (w + gap), 596, 910, 664, ["PQL", "external native dependency:",
-                                               "the PQL team's Rust crate over C++"], size=13, dashed=True)
+    c.box(
+        60 + 3 * (w + gap),
+        520,
+        910,
+        580,
+        ['Core operations', 'sdm-core: run state machine'],
+        size=13,
+    )
+    c.box(
+        60,
+        596,
+        60 + w,
+        664,
+        ['Engine', 'sampling, labels,', 'time, random'],
+        size=13,
+    )
+    c.box(60 + w + gap, 596, 60 + 2 * w + gap, 664, ['Request builder'])
+    c.box(
+        60 + 2 * (w + gap),
+        596,
+        910,
+        664,
+        [
+            'PQL',
+            'external native dependency:',
+            "the PQL team's Rust crate over C++",
+        ],
+        size=13,
+        dashed=True,
+    )
 
     # Calls
-    c.arrow([(120, 226), (120, 310)], BLUE, label="Python objects, Arrow via PyCapsule", lx=128, ly=274)
-    c.arrow([(555, 226), (555, 310)], BLUE, label="Java objects, Arrow via Arrow Java C Data", lx=563, ly=274)
-    c.arrow([(811, 410), (811, 520)], ORANGE, label="Rust calls", lx=819, ly=450)
+    c.arrow(
+        [(120, 226), (120, 310)],
+        BLUE,
+        label='Python objects, Arrow via PyCapsule',
+        lx=128,
+        ly=274,
+    )
+    c.arrow(
+        [(555, 226), (555, 310)],
+        BLUE,
+        label='Java objects, Arrow via Arrow Java C Data',
+        lx=563,
+        ly=274,
+    )
+    c.arrow(
+        [(811, 410), (811, 520)], ORANGE, label='Rust calls', lx=819, ly=450
+    )
 
     # What ships: binding, sdm-host and the core, built into a native library per platform
-    c.out.append('<path d="M948,136 L960,136 L960,686 L948,686" fill="none" stroke="#999999" '
-                 'stroke-width="1.6"/>')
-    c.out.append('<line x1="960" y1="411" x2="990" y2="411" stroke="#999999" stroke-width="1.6"/>')
-    c.box(990, 316, 1270, 506, ["Native libraries", "per platform,", "per the Phase 0", "support matrix;",
-                                "one in the wheel, one in the JAR,", "same sources;", "PQL's C++ linked in",
-                                "with private symbols"],
-          fill=GREY_FILL, stroke="#999999", size=13, bold=2)
+    c.out.append(
+        '<path d="M948,136 L960,136 L960,686 L948,686" fill="none" stroke="#999999" '
+        'stroke-width="1.6"/>'
+    )
+    c.out.append(
+        '<line x1="960" y1="411" x2="990" y2="411" stroke="#999999" stroke-width="1.6"/>'
+    )
+    c.box(
+        990,
+        316,
+        1270,
+        506,
+        [
+            'Native libraries',
+            'per platform,',
+            'per the Phase 0',
+            'support matrix;',
+            'one in the wheel, one in the JAR,',
+            'same sources;',
+            "PQL's C++ linked in",
+            'with private symbols',
+        ],
+        fill=GREY_FILL,
+        stroke='#999999',
+        size=13,
+        bold=2,
+    )
 
-    c.save("bindings.svg")
+    c.save('bindings.svg')
 
 
 def delivery():
     c = Canvas(1740, 620)
-    c.title("Delivery: slices through the public API",
-            "Each slice goes from the public API down to the core; each phase branch merges locally into the epic once verified.")
+    c.title(
+        'Delivery: slices through the public API',
+        'Each slice goes from the public API down to the core; each phase branch merges locally into the epic once verified.',
+    )
 
     top, bottom, mid = 148, 318, 233
 
-    c.band(245, 106, 1405, 346,
-           "Python leads every slice; Java follows on the same contract cases "
-           "(Java: DuckDB, SQLite, Postgres, Databricks)", BLUE_FILL, BLUE)
+    c.band(
+        245,
+        106,
+        1405,
+        346,
+        'Python leads every slice; Java follows on the same contract cases '
+        '(Java: DuckDB, SQLite, Postgres, Databricks)',
+        BLUE_FILL,
+        BLUE,
+    )
 
     phases = [
-        (60, 230, ["Phase 0 Prepare", "epic branch (rust-core);", "reference branch", "and environment;",
-                   "archive the first", "attempt; CI on branches"], 1),
-        (260, 430, ["Phase 1a Harness", "contract, test runners,", "CI guards, installed wheel;",
-                    "S0 PQL validation", "in Python"], 1),
-        (460, 630, ["Phase 1b Spike", "fixed case inventory", "on DuckDB, in Python", "and a pure-Rust",
-                    "test host"], 1),
-        (820, 990, ["Phase 2", "S1 offline warehouses", "DuckDB, SQLite, Postgres;",
-                    "minimal non-SQL", "test provider;", "swappable data layer", "proof"], 2),
-        (1020, 1190, ["Phase 3", "S2 live warehouses", "Databricks, Snowflake,", "Lakebase;",
-                      "Python switches", "S0, S1 and S2 paths;", "Java follows", "on Databricks"], 2),
-        (1220, 1390, ["Phase 4", "S3", "in-memory frames,", "ranking, forecasting,", "sessions"], 2),
-        (1450, 1620, ["Phase 5 Release", "PQL crate,", "delete old engine"], 1),
+        (
+            60,
+            230,
+            [
+                'Phase 0 Prepare',
+                'epic branch (rust-core);',
+                'reference branch',
+                'and environment;',
+                'archive the first',
+                'attempt; CI on branches',
+            ],
+            1,
+        ),
+        (
+            260,
+            430,
+            [
+                'Phase 1a Harness',
+                'contract, test runners,',
+                'CI guards, installed wheel;',
+                'S0 PQL validation',
+                'in Python',
+            ],
+            1,
+        ),
+        (
+            460,
+            630,
+            [
+                'Phase 1b Spike',
+                'fixed case inventory',
+                'on DuckDB, in Python',
+                'and a pure-Rust',
+                'test host',
+            ],
+            1,
+        ),
+        (
+            820,
+            990,
+            [
+                'Phase 2',
+                'S1 offline warehouses',
+                'DuckDB, SQLite, Postgres;',
+                'minimal non-SQL',
+                'test provider;',
+                'swappable data layer',
+                'proof',
+            ],
+            2,
+        ),
+        (
+            1020,
+            1190,
+            [
+                'Phase 3',
+                'S2 live warehouses',
+                'Databricks, Snowflake,',
+                'Lakebase;',
+                'Python switches',
+                'S0, S1 and S2 paths;',
+                'Java follows',
+                'on Databricks',
+            ],
+            2,
+        ),
+        (
+            1220,
+            1390,
+            [
+                'Phase 4',
+                'S3',
+                'in-memory frames,',
+                'ranking, forecasting,',
+                'sessions',
+            ],
+            2,
+        ),
+        (1450, 1620, ['Phase 5 Release', 'PQL crate,', 'delete old engine'], 1),
     ]
     for x1, x2, lines, bold in phases:
         c.box(x1, top, x2, bottom, lines, size=13, bold=bold)
 
-    c.box(655, 188, 795, 278, ["owner decides", "go / no-go"], shape="diamond", size=12, bold=0)
-    c.text_lines(725, 302, ["go: merge Phase 1a", "and Phase 1b into epic"], size=12, bold=0)
+    c.box(
+        655,
+        188,
+        795,
+        278,
+        ['owner decides', 'go / no-go'],
+        shape='diamond',
+        size=12,
+        bold=0,
+    )
+    c.text_lines(
+        725,
+        302,
+        ['go: merge Phase 1a', 'and Phase 1b into epic'],
+        size=12,
+        bold=0,
+    )
 
     # Sequence arrows
-    for x1, x2 in ((230, 260), (430, 460), (630, 655), (795, 820), (990, 1020), (1190, 1220), (1390, 1450)):
+    for x1, x2 in (
+        (230, 260),
+        (430, 460),
+        (630, 655),
+        (795, 820),
+        (990, 1020),
+        (1190, 1220),
+        (1390, 1450),
+    ):
         c.arrow([(x1, mid), (x2, mid)], GREY)
 
     # Merges into the epic branch: after the spike's go, after each slice gate, and at release
     main_y = 394
-    c.out.append(f'<line x1="60" y1="{main_y}" x2="1620" y2="{main_y}" stroke="{GREY}" stroke-width="4"/>')
-    c.note(60, main_y - 10, "epic branch (rust-core)", size=14, bold=True, color=GREY)
-    c.note(60, main_y + 24, "main stays pure Python and is merged into the epic at each slice gate; "
-           "the epic merges into main only when the owner decides")
-    for x, y, label in ((807, mid, "merge into epic"), (1005, mid, "merge into epic"),
-                        (1205, mid, "merge into epic"), (1420, mid, "merge into epic"),
-                        (1535, bottom, "owner merges epic into main")):
+    c.out.append(
+        f'<line x1="60" y1="{main_y}" x2="1620" y2="{main_y}" stroke="{GREY}" stroke-width="4"/>'
+    )
+    c.note(
+        60,
+        main_y - 10,
+        'epic branch (rust-core)',
+        size=14,
+        bold=True,
+        color=GREY,
+    )
+    c.note(
+        60,
+        main_y + 24,
+        'main stays pure Python and is merged into the epic at each slice gate; '
+        'the epic merges into main only when the owner decides',
+    )
+    for x, y, label in (
+        (807, mid, 'merge into epic'),
+        (1005, mid, 'merge into epic'),
+        (1205, mid, 'merge into epic'),
+        (1420, mid, 'merge into epic'),
+        (1535, bottom, 'owner merges epic into main'),
+    ):
         c.arrow([(x, y), (x, main_y - 3)], ORANGE, width=2)
         c.out.append(f'<circle cx="{x}" cy="{y}" r="4.5" fill="{ORANGE}"/>')
         c.note(x + 7, 372, label, size=12, color=ORANGE)
 
     # Checks strip
-    c.band(30, 450, 1710, 580, "Checks that run all along", GREY_FILL, "#999999")
-    c.box(60, 490, 590, 560, ["CI, on every push to rust-core and phase branches",
-                              "unit, boundary guards, contract subset,",
-                              "SQL goldens, provider kit, conversion tables"], size=13)
-    c.box(620, 490, 1120, 560, ["Local, before each gate", "full contract corpus, differential vs reference,",
-                                "offline performance"],
-          size=13)
-    c.box(1150, 490, 1680, 560, ["Local, before switch and release gates", "live matrix and Databricks job matrix;",
-                                 "before release: all layers, packaging and safety"], size=13)
+    c.band(
+        30, 450, 1710, 580, 'Checks that run all along', GREY_FILL, '#999999'
+    )
+    c.box(
+        60,
+        490,
+        590,
+        560,
+        [
+            'CI, on every push to rust-core and phase branches',
+            'unit, boundary guards, contract subset,',
+            'SQL goldens, provider kit, conversion tables',
+        ],
+        size=13,
+    )
+    c.box(
+        620,
+        490,
+        1120,
+        560,
+        [
+            'Local, before each gate',
+            'full contract corpus, differential vs reference,',
+            'offline performance',
+        ],
+        size=13,
+    )
+    c.box(
+        1150,
+        490,
+        1680,
+        560,
+        [
+            'Local, before switch and release gates',
+            'live matrix and Databricks job matrix;',
+            'before release: all layers, packaging and safety',
+        ],
+        size=13,
+    )
 
-    c.save("delivery.svg")
+    c.save('delivery.svg')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     architecture()
     pql()
     bindings()

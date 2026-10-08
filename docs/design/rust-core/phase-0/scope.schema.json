@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NVIDIA/structured-data-models-client/docs/design/rust-core/phase-0/scope.schema.json",
+  "title": "sdm-client Rust core scope manifest",
+  "description": "One file per language: the public paths and type x role cells in scope, and the contract case IDs covering each. See scope-format.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "language", "slices", "backends", "operations", "paths", "cells"],
+  "properties": {
+    "format": {"const": "sdm-scope/1"},
+    "language": {"enum": ["python", "java"]},
+    "slices": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["S0", "S1", "S2", "S3"],
+      "properties": {
+        "S0": {"type": "string"},
+        "S1": {"type": "string"},
+        "S2": {"type": "string"},
+        "S3": {"type": "string"}
+      }
+    },
+    "backends": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "what"],
+        "properties": {
+          "id": {"$ref": "#/$defs/backend"},
+          "what": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "api", "layer", "modes"],
+        "properties": {
+          "id": {"$ref": "#/$defs/token"},
+          "api": {"type": ["string", "null"]},
+          "layer": {"enum": ["core", "host"]},
+          "modes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"$ref": "#/$defs/token"}
+          },
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "paths": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "slice", "cases"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.-]*/[a-z0-9][a-z0-9.-]*/(duckdb|sqlite|postgres|lakebase|databricks-sql|databricks-spark|databricks-metric-view|snowflake|snowflake-semantic-view|frames|local-file|s3|any)$"
+          },
+          "slice": {"$ref": "#/$defs/slice"},
+          "cases": {"$ref": "#/$defs/cases"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "cells": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "expect", "cases"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(int8|int16|int32|int64|uint8|uint16|uint32|uint64|float32|float64|decimal128|decimal256|utf8|binary|date32|timestamp-ns|timestamp-us|timestamp-ns-tz|timestamp-us-tz|duration-ns|duration-us|time64|list|struct|map|dictionary-utf8|bool|null)/(primary-key|foreign-key|time-column|feature|target)$"
+          },
+          "expect": {"enum": ["accept", "refuse", "unknown"]},
+          "cases": {"$ref": "#/$defs/cases"},
+          "note": {"type": "string"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "token": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+    "slice": {"enum": ["S0", "S1", "S2", "S3"]},
+    "backend": {
+      "enum": [
+        "duckdb", "sqlite", "postgres", "lakebase",
+        "databricks-sql", "databricks-spark", "databricks-metric-view",
+        "snowflake", "snowflake-semantic-view",
+        "frames", "local-file", "s3", "any"
+      ]
+    },
+    "cases": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"}
+    }
+  }
+}

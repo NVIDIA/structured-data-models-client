@@ -13,7 +13,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # The Rust core migration's epic branch and its phase branches run the
+    # same gates as main; the reference and archive branches deliberately
+    # do not.
+    branches: [main, rust-core, 'rust-core-phase-*']
 
 permissions:
   contents: read
