@@ -13,11 +13,11 @@ use sdm_contract::data::{
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    Capability, DescribeSource, Operation, ProfileName, ProfileSpec, QuerySchema, Span,
-    ValidateQuery,
+    Capability, DescribeSource, Operation, OperationResult, ProfileName, ProfileSpec, QuerySchema,
+    Span, ValidateQuery,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, CoreError, ErrorKind, HostFacts, Scalar, Unit, codes};
+use sdm_contract::{CONTRACT_VERSION, CoreError, ErrorKind, HostFacts, Scalar, Step, Unit, codes};
 use sdm_core::compose::{DataAccess, SqlCompiler};
 use sdm_core::profiles::{Mode, Profile, QueryFeatures, check_capabilities, codes as model};
 use sdm_core::{CompositionRoot, RunState, start};
@@ -127,12 +127,15 @@ fn every_operation_dispatches_to_a_run() {
     let root = CompositionRoot::default();
     let mut run = run_of(&root, validate()).unwrap();
     assert_eq!(run.state(), RunState::Ready);
-    // No parser is behind the adapter in this task; the run says so.
-    let err = run.next().unwrap_err();
-    assert_eq!(
-        (err.kind, err.code.as_str()),
-        (ErrorKind::Unsupported, codes::UNSUPPORTED_REQUEST)
-    );
+    // The schema has no table t, which the parser behind the adapter says.
+    let Step::Done {
+        result: OperationResult::ValidateQuery(validation),
+    } = run.next().unwrap()
+    else {
+        panic!("validate_query did not finish with its result");
+    };
+    assert!(!validation.accepted);
+    assert_eq!(validation.diagnostics[0].code, "PQL_SCHEMA_UNKNOWN_TABLE");
     assert_eq!(run.state(), RunState::Finished);
 
     let host = ProviderChoice::Host {
@@ -326,7 +329,7 @@ fn each_missing_capability_gives_its_code_in_order() {
             start_row: 1,
             start_col: 8,
             end_row: 1,
-            end_col: 17
+            end_col: 17,
         })
     );
     assert!(diagnostics[0].message.contains("a time-series model"));

@@ -184,8 +184,33 @@ fn and_list(names: &[&String]) -> String {
     }
 }
 
+/// What a model refuses before a query is resolved: a target with a time
+/// range, when the model predicts values as they stand. No schema makes such
+/// a query answerable, so this is asked first, before resolution can fail
+/// for a reason that hides it (`check_parsed_capabilities` in the
+/// reference's `validator/capability.py`).
+pub fn check_parsed_capabilities(temporal_target: bool, profile: &Profile) -> Vec<PqlDiagnostic> {
+    let can = &profile.capabilities;
+    let model = &can.model;
+    if temporal_target && !can.temporal {
+        return vec![PqlDiagnostic {
+            code: codes::MODEL_NO_TEMPORAL_TARGET.to_owned(),
+            message: format!(
+                "The target carries a time range, and {model} predicts a value as it stands. No \
+                 schema makes this answerable by {model}; ask for the column itself, or use a \
+                 model that reads relationships."
+            ),
+            severity: Severity::Error,
+            span: None,
+        }];
+    }
+    Vec::new()
+}
+
 /// One refusal per capability the query needs and the profile lacks, in a
-/// fixed order.
+/// fixed order. The two filter capabilities are not asked here: resolution
+/// consults them, as the reference's model validator does, and the adapter
+/// passes them in.
 pub fn check_capabilities(query: &QueryFeatures, profile: &Profile) -> Vec<PqlDiagnostic> {
     let can = &profile.capabilities;
     let model = &can.model;
